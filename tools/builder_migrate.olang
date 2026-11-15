@@ -171,7 +171,7 @@ fn eligible(decls Array<ast.Decl&>&, names source.Names&, out mut Map<String, Bo
     for d in decls {
         match d {
             case ast.Decl.Type(_, td) {
-                if td.Body is null { continue }
+                if td.Body == null { continue }
                 match td.Body {
                     case ast.TypeBody.Struct(_), ast.TypeBody.Enum(_, _), ast.TypeBody.Over(_, _) { out.Put($names.Text(td.Name), true) }
                     case _ { }
@@ -184,9 +184,9 @@ fn eligible(decls Array<ast.Decl&>&, names source.Names&, out mut Map<String, Bo
 }
 
 fn eligibleIf(ti ast.TopIf?&, names source.Names&, out mut Map<String, Bool>&) {
-    if ti is null { return }
-    if ti.Then is not null { eligible(ti.Then!.Decls, names, out) }
-    if ti.Else is not null { eligible(ti.Else!.Decls, names, out) }
+    if ti == null { return }
+    if ti.Then != null { eligible(ti.Then!.Decls, names, out) }
+    if ti.Else != null { eligible(ti.Else!.Decls, names, out) }
     eligibleIf(ti.ElseIf, names, out)
 }
 
@@ -212,9 +212,9 @@ fn collectDecls(m mut Mod&, decls Array<ast.Decl&>&, names source.Names&, types 
 }
 
 fn collectIf(m mut Mod&, ti ast.TopIf?&, names source.Names&, types Map<String, Bool>&) {
-    if ti is null { return }
-    if ti.Then is not null { collectDecls(m, ti.Then!.Decls, names, types) }
-    if ti.Else is not null { collectDecls(m, ti.Else!.Decls, names, types) }
+    if ti == null { return }
+    if ti.Then != null { collectDecls(m, ti.Then!.Decls, names, types) }
+    if ti.Else != null { collectDecls(m, ti.Else!.Decls, names, types) }
     collectIf(m, ti.ElseIf, names, types)
 }
 
@@ -285,7 +285,7 @@ fn leftName(name String&, left String&) String {
 
 # an enum's cases and a trait's methods are names of their own, never a use of a function's
 fn skipMembers(m mut Mod&, td ast.TypeDecl&, names source.Names&) {
-    if td.Body is null { return }
+    if td.Body == null { return }
     ty := names.Text(td.Name)
     match td.Body {
         case ast.TypeBody.Enum(cases, _) {
@@ -311,7 +311,7 @@ fn judge(m mut Mod&, f ast.Func&, names source.Names&, types Map<String, Bool>&)
         m.every.Push(mv)
         return
     }
-    if f.Recv is not null {
+    if f.Recv != null {
         m.skips.Put(nameAfter(m, f.Recv!.Sp.End), true)
         m.locals.Put($names.Text(f.Recv!.Name), true)
         return
@@ -320,7 +320,7 @@ fn judge(m mut Mod&, f ast.Func&, names source.Names&, types Map<String, Bool>&)
     m.tops.Put(name.Copy(), true)
     if f.Export or name == "main" or f.S.Results.Len() != 1 or ast.FirstYield(f.Body).Start >= I32(0) { return }
     base := plain(f.S.Results[0])
-    if base is null { return }
+    if base == null { return }
     match base {
         case ast.TypeRef.Named(sp, path, args) {
             if path.Len() != 1 { return }
@@ -335,7 +335,7 @@ fn judge(m mut Mod&, f ast.Func&, names source.Names&, types Map<String, Bool>&)
             err := false
             for tp in f.TypeParams {
                 ps.Push($names.Text(tp.Name))
-                moved.Push(tp.Ty is null and tp.Also.Len() == 0 and mentions(base, tp.Name))
+                moved.Push(tp.Ty == null and tp.Also.Len() == 0 and mentions(base, tp.Name))
                 if tp.ErrSet { err = true }
             }
             generic := false
@@ -388,7 +388,7 @@ fn nameAfter(m Mod&, from I32) I64 {
 
 # a result's type less its reference marker and permission
 fn plain(t ast.TypeRef?&) ast.TypeRef?& {
-    if t is null { return null }
+    if t == null { return null }
     match t {
         case ast.TypeRef.Ref(_, of, _, _) { return plain(of) }
         case ast.TypeRef.Perm(_, of, _) { return plain(of) }
@@ -398,7 +398,7 @@ fn plain(t ast.TypeRef?&) ast.TypeRef?& {
 
 # whether a written type names n anywhere in it
 fn mentions(t ast.TypeRef?&, n source.NameId) Bool {
-    if t is null { return false }
+    if t == null { return false }
     match t {
         case ast.TypeRef.Named(_, path, args) {
             if path.Len() == 1 and path[0] == n { return true }

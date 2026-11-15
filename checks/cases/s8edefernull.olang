@@ -6,7 +6,7 @@ import "std/io"
 type Node struct(V I64) { V }
 
 fn show(p Node?&) {
-    if p is not null {
+    if p != null {
         defer io.PutLine("deferred reads " $p.V)!
         p = null
         io.PutLine("assigned null")!

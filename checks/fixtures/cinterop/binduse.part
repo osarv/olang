@@ -18,7 +18,7 @@ fn main() {
     io.PutLine("grown " $bind_area(r) " " $r.label[0])!
     io.PutLine("sum " $bind_sum(Array<I32>[1, 2, 3, 4], 4) " length " $bind_length("abcdef".ToC()))!
     g := bind_greeting()
-    if g is not null { io.PutLine(String.FromC(g, 100))! }
+    if g != null { io.PutLine(String.FromC(g, 100))! }
     out := Array<bind_counter?&>(1)
     if bind_open("c".ToC(), out) != 0 { return }
     c := out[0]

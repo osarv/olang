@@ -416,7 +416,7 @@ fn (e Eval&) isLocal(n source.NameId) Bool {
 # whether a condition names a local anywhere - the evaluator stops at the first thing it cannot read, so one further
 # on was never seen
 fn (e Eval&) mentionsLocal(c ast.Expr?&) Bool {
-    if c is null { return false }
+    if c == null { return false }
     return match c {
         case ast.Expr.Name(_, n): e.isLocal(n)
         case ast.Expr.Paren(_, x), ast.Expr.Named(_, _, x), ast.Expr.Spread(_, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _): e.mentionsLocal(x)
@@ -425,9 +425,9 @@ fn (e Eval&) mentionsLocal(c ast.Expr?&) Bool {
         case ast.Expr.Index(_, x, items): e.mentionsLocal(x) or e.anyLocal(items)
         case ast.Expr.Chain(_, ch): e.anyLocal(ch.Xs)
         case ast.Expr.Cond(_, a, k, b): e.mentionsLocal(a) or e.mentionsLocal(k) or e.mentionsLocal(b)
-        case ast.Expr.Postfix(_, _, x), ast.Expr.IsType(_, x, _, _), ast.Expr.As(_, x, _), ast.Expr.Generic(_, x, _)
+        case ast.Expr.Postfix(_, _, x), ast.Expr.As(_, x, _), ast.Expr.Generic(_, x, _)
              ast.Expr.Try(_, x, _): e.mentionsLocal(x)
-        case ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _): e.mentionsLocal(a) or e.mentionsLocal(b)
+        case ast.Expr.NotIn(_, a, b): e.mentionsLocal(a) or e.mentionsLocal(b)
         case ast.Expr.Slice(_, x, lo, hi): e.mentionsLocal(x) or e.mentionsLocal(lo) or e.mentionsLocal(hi)
         case ast.Expr.Axis(_, lo, hi): e.mentionsLocal(lo) or e.mentionsLocal(hi)
         case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items): e.anyLocal(items)
@@ -451,7 +451,7 @@ fn (e Eval&) first(x ast.Expr&) source.Span {
         case ast.Expr.Chain(_, ch): e.first(ch.Xs[0])
         case ast.Expr.Cond(_, a, _, _): e.first(a)
         case ast.Expr.Call(_, f, _), ast.Expr.Member(_, f, _), ast.Expr.Index(_, f, _): e.first(f)
-        case ast.Expr.Is(_, f, _, _), ast.Expr.IsType(_, f, _, _), ast.Expr.As(_, f, _): e.first(f)
+        case ast.Expr.As(_, f, _): e.first(f)
         case ast.Expr.Lit(sp, _), ast.Expr.Name(sp, _): sp
         case _: e.tokenAt(x.Span().Start)
     }
@@ -502,7 +502,7 @@ fn (e mut Eval&) name(sp source.Span, n source.NameId) Value {
     t := e.names.Text(n)
     # B10c: the module's own declaration of the name first - a build constant's default, or B10's error
     g := try e.scope.find(t) catch default null
-    if g is not null { return e.global(sp, g) }
+    if g != null { return e.global(sp, g) }
     i := try e.consts.find(t) catch default -1
     if i >= 0 {
         if e.consts.big[i] or not e.consts.known[i] { return e.defer(sp) }

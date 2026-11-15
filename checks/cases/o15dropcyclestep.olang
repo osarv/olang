@@ -6,7 +6,7 @@ type Hold unique struct(id I64) {
     list Refs?& = null
     back Hold?& = null
 } destruct {
-    if back is not null: Ended += back!.id
+    if back != null: Ended += back!.id
 }
 type Refs struct() {
     items := Vec<Hold&>()

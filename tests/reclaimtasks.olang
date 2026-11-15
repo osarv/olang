@@ -21,7 +21,7 @@ fn churned(n I64) I64 {
         nd := Node(i)
         h := l.head
         nd.next = h
-        if h is not null: h.prev = nd
+        if h != null: h.prev = nd
         l.head = nd
     }
     top := l.head!
@@ -32,11 +32,11 @@ fn churned(n I64) I64 {
     }
     s := 0
     at Node?& = l.head
-    for at is not null {
+    for at != null {
         s += at.v
         at = at.next
     }
-    flags := (1 if second.prev is null else 0) + (2 if l.head!.next!.prev is not null else 0)
+    flags := (1 if second.prev == null else 0) + (2 if l.head!.next!.prev != null else 0)
     return s * 10 + flags + 0 * top.v
 }
 

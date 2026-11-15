@@ -20,7 +20,7 @@ type DList struct() {
 fn (l mut DList&) PushBack(v I64) {
     nd := Node(v)
     t := l.tail
-    if t is null {
+    if t == null {
         l.head = nd
     } else {
         t.next = nd
@@ -35,7 +35,7 @@ fn (l mut DList&) PopFront() I64 {
     v := h.v
     q := h.next
     l.head = q
-    if q is null { l.tail = null } else { q.prev = null }
+    if q == null { l.tail = null } else { q.prev = null }
     l.n--
     return v
 }

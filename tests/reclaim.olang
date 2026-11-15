@@ -22,7 +22,7 @@ type DList struct() {
 fn (l mut DList&) PushBack(v I64) {
     nd := Node(v)
     t := l.tail
-    if t is null { l.head = nd } else {
+    if t == null { l.head = nd } else {
         t.next = nd
         nd.prev = t
     }
@@ -35,7 +35,7 @@ fn (l mut DList&) PopFront() mut Node& {
     h := l.head!
     q := h.next
     l.head = q
-    if q is null { l.tail = null } else { q.prev = null }
+    if q == null { l.tail = null } else { q.prev = null }
     l.n--
     return h
 }
@@ -43,7 +43,7 @@ fn (l mut DList&) PopFront() mut Node& {
 fn (l DList&) Forward() I64 {
     s := 0
     at Node?& = l.head
-    for at is not null {
+    for at != null {
         s = s * 10 + at.v
         at = at.next
     }
@@ -53,7 +53,7 @@ fn (l DList&) Forward() I64 {
 fn (l DList&) Backward() I64 {
     s := 0
     at Node?& = l.tail
-    for at is not null {
+    for at != null {
         s = s * 10 + at.v
         at = at.prev
     }
@@ -84,7 +84,7 @@ fn digits(xs Array<Seen>&) I64 {
     s := 0
     for x in xs {
         at := x.w
-        s = s * 10 + (at.v if at is not null else 0)
+        s = s * 10 + (at.v if at != null else 0)
     }
     return s
 }
@@ -110,7 +110,7 @@ fn orphan() I64 {
     h := l.PopFront()
     w := Seen(h)
     scratch.churn(40)
-    v := h.v * 10 + (1 if w.w is null else 0)
+    v := h.v * 10 + (1 if w.w == null else 0)
     return v * 1000 + l.Forward()
 }
 
@@ -143,7 +143,7 @@ fn cycle() I64 {
     scratch := DList()
     scratch.churn(40)
     at := s.w
-    return (at.v * 10 + at.next!.v) if at is not null else -1
+    return (at.v * 10 + at.next!.v) if at != null else -1
 }
 
 # a generational type with a destructor: never reclaimed early - its destructor runs once, as its scope closes
@@ -171,7 +171,7 @@ fn ended() I64 {
         r.next!.back = r
         k := Seen2(r)
         h.first = null
-        gone := k.w is null
+        gone := k.w == null
         h.first = Res(3)
         Ended = Ended + (100 if gone else 0)
     }

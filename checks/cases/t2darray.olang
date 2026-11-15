@@ -3,4 +3,4 @@
 type Box struct() {
     xs weak Array<I64>?& = null
 }
-fn main() { assert Box().xs is null }
+fn main() { assert Box().xs == null }

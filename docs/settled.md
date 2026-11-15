@@ -156,8 +156,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   value (`case Point(1, 2)`) is gone.
 - **Expressions read as words (E28-E30, E32, the user's designs).** `a if c else b`; `x in c`/`x not in c` call
   `Has`/`Contains`; comparison chains for `< <= > >=` only; `x as E.Case` gives the payload (fails with
-  `CaseError.WrongCase`, so `try e as C` or `(e as C)!`). `is` tests for null and nothing else: `x is null`, `x is not
-  null` (E10c, the user's decision 2026-10-24); `x == null`, `a is b` and `x is E.Case` are errors.
+  `CaseError.WrongCase`, so `try e as C` or `(e as C)!`).
+- **The null test is `==` (E10c, the user's decision 2026-11-15: "I will just remove the is check. It should just be a
+  normal equals if that doesn't collide with some semantic meaning", reversing the `is null` of 2026-10-24).** A
+  comparison with the `null` literal, `x == null` / `x != null` (either side), is whether a `?&` reference, a function
+  value or an error value holds none; it never calls `Eq` (mine). On an operand that cannot be null, and `null == null`,
+  it is an error; narrowing keys on it as on any test. `is` is no keyword; `tools/nulltest_migrate` rewrites old code.
 - **Case tests and narrowing (E32, S8d, the user's decision 2026-10-24: "I want == always. It generalizes better into
   the payload case").** `e == Shape.Circle` tests the case, `e == Shape.Circle(3.0)` compares its payload, `_` matches
   any part. After a case test a local or parameter is narrowed so `e.r` reads the payload field; a field read where
@@ -211,7 +215,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Removed spellings, for anyone tempted to bring them back:** struct literals `T{...}` and field-list structs (T13);
   `T[]`/`T[N]`/`T[expr]` arrays and 2-D arrays (`Array<T>`); `len(a)` (`a.Len()`); scope names `&s` and scope
   declarations; UFCS method calls (M19); `same(a, b)` and the `atomicLoad`-style builtins; `compif` (B9); `while`
-  (S9); `a is b` identity, `x is E.Case` and `x == null`; the helpers `Any`/`All` (`Some`/`Every`); a `size()` builtin;
+  (S9); `is` (`a is b` identity, `x is E.Case`, and `x is null` - the null test is `x == null` again); the helpers `Any`/`All` (`Some`/`Every`); a `size()` builtin;
   an `Iterable` interface (T35b: `xs.Iter()`); labeled break; interface switch dispatch (dropped by the user, "it gains
   very little and causes a lot of problems"); Str purity (E11c); `done`, `fail`, `abort` (QU); `own` and `take`
   (`docs/memory.md` round 3); `Array<T, N>`, constant type parameters `<N I64>` and `x as Array<T, N>&` views (QP1-

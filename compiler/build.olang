@@ -743,7 +743,7 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
         args.Push($"-Wl,-plugin-opt,cache-dir=" $c.Dir "/thinlto")
         args.Push($"-Wl,-plugin-opt,-import-instr-limit=" $ImportLimit)
     }
-    if exports is not null {
+    if exports != null {
         # X14: a shared library showing its export fns' entries and nothing else
         args.Push("-shared")
         vs := $bin ".map"

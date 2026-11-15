@@ -17,7 +17,7 @@ fn f(e Shape) I64 {
     return 0
 }
 fn h(q N?&) I64 {
-    if q is not null {
+    if q != null {
         sink(Array<I64>[try g() catch { q = null } default 0])
         return q.v
     }

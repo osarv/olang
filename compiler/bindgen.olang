@@ -142,7 +142,7 @@ fn member(j json.Json&, key String&) json.Json?& {
 
 fn text(j json.Json&, key String&) String {
     m := member(j, key)
-    if m is null { return "" }
+    if m == null { return "" }
     match m {
         case json.Json.Str(s) { return $s }
         case _ { return "" }
@@ -151,7 +151,7 @@ fn text(j json.Json&, key String&) String {
 
 fn flag(j json.Json&, key String&) Bool {
     m := member(j, key)
-    if m is null { return false }
+    if m == null { return false }
     match m {
         case json.Json.Bool(v) { return v }
         case _ { return false }
@@ -161,14 +161,14 @@ fn flag(j json.Json&, key String&) Bool {
 # the type a declaration has, as clang spells it, its typedef names kept
 fn typeOf(j json.Json&) String {
     t := member(j, "type")
-    if t is null { return "" }
+    if t == null { return "" }
     return text(t, "qualType")
 }
 
 # a node's children
 fn inner(j json.Json&) Array<json.Json&> {
     m := member(j, "inner")
-    if m is not null {
+    if m != null {
         match m {
             case json.Json.Arr(items) { return items }
             case _ { }
@@ -231,11 +231,11 @@ fn noReturnOf(t String&) String {
 fn (g mut gen&) read(root json.Json&, probe String&) {
     for n in inner(root) {
         loc := member(n, "loc")
-        if loc is not null { g.track(loc, probe) }
+        if loc != null { g.track(loc, probe) }
         where := g.file
         for k in Array<String&>["range", "type", "inner"] {
             m := member(n, k)
-            if m is not null { g.track(m, probe) }
+            if m != null { g.track(m, probe) }
         }
         kind := text(n, "kind")
         name := text(n, "name")
@@ -245,7 +245,7 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
             # an unnamed struct a typedef names takes the typedef's name: "typedef struct { ... } Pair"
             for x in inner(n) {
                 owned := member(x, "ownedTagDecl")
-                if owned is null { continue }
+                if owned == null { continue }
                 r := try g.unnamed.Get(text(owned, "id")) catch default -1
                 if r >= 0 and (t.StartsWith("struct ") or t.StartsWith("union ")) {
                     g.recIndex.Put(t, r)

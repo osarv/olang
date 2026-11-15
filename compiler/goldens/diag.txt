@@ -1458,19 +1458,17 @@ e10bhashshape.olang:8:11: note: 'Hash' is declared here, with another signature
       |           ^~~~
 e10bhashshape.olang:11:14: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
-=== e10ciscase.olang
-e10ciscase.olang:6:19: error[E10c, E32]: a case is tested with '==': 's == Shape.Dot'
-    6 |     assert not (s is Shape.Dot)
-      |                   ^~
-compilation failed with 1 error
-=== e10cnullcompared.olang
-e10cnullcompared.olang:6:14: error[E10c]: null is tested with 'is', never compared - write 'p is null'
-    6 |     assert p == null
-      |              ^~
+=== e10cnevernull.olang
+e10cnevernull.olang:5:10: error[T2c]: 'p' is a P&, never null, so this is always false
+    5 |     if p == null: return 0
+      |          ^~
+e10cnevernull.olang:4:13: note: the type is written here - write '?&' for '&' where it may be null
+    4 | fn first(p P&) I32 {
+      |             ^
 compilation failed with 1 error
 === e10cnullvalue.olang
-e10cnullvalue.olang:5:14: error[E10c]: only a reference or a function value can be null, and this is I64
-    5 |     assert x is not null
+e10cnullvalue.olang:5:14: error[E10c]: only a reference, a function value or an error value can be null, and this is I64
+    5 |     assert x != null
       |              ^~
 compilation failed with 1 error
 === e11bafterrendering.olang
@@ -2457,14 +2455,6 @@ eqwrites.olang:6:16: error[E10a, E11c]: Eq takes what it is given read-only - ne
     6 | fn (p mut Pt&) Eq(q Pt&) Bool { return p.n == q.n }
       |                ^~
 compilation failed with 1 error
-=== errvalnullcompare.olang
-errvalnullcompare.olang:7:12: error[E10c]: null is tested with 'is', never compared - write 'e is null'
-    7 |     a := e == null
-      |            ^~
-errvalnullcompare.olang:8:12: error[E10c]: null is tested with 'is', never compared - write 'e is not null'
-    8 |     b := e != null
-      |            ^~
-compilation failed with 2 errors
 === extendsstruct.olang
 extendsstruct.olang:3:8: error[T29f]: only a type over a number or an array extends its base
     3 | type P extends struct(x I32) {
@@ -2974,20 +2964,10 @@ inttoowideu64.olang:4:13: error[T6]: '99999999999999999999999' does not fit U64
     4 |     z U64 = 99999999999999999999999
       |             ^~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
-=== isasoperand.olang
-isasoperand.olang:5:10: error[E10c]: 'is' tests for null and nothing else - compare with '=='
-    5 |     if x is I32 { }
-      |          ^~
-compilation failed with 1 error
 === isnulls.olang
-isnulls.olang:4:17: error[E10c]: 'null is null' tests nothing - 'is null' follows a reference or a function value
-    4 |     assert null is null
+isnulls.olang:4:17: error[E10c]: 'null == null' tests nothing - '== null' compares a reference, a function value or an error value with null
+    4 |     assert null == null
       |                 ^~
-compilation failed with 1 error
-=== istwotypes.olang
-istwotypes.olang:8:14: error[E10c]: 'is' tests for null and nothing else - compare with '!='
-    8 |     assert p is not q
-      |              ^~
 compilation failed with 1 error
 === itnotmut.olang
 itnotmut.olang:7:14: error[S9a]: C& cannot be walked
@@ -3796,15 +3776,15 @@ o17aparamref.olang:38:10: help: use 'v' itself, or take its value where it is me
 compilation failed with 1 error
 === o17permute6.olang
 o17permute6.olang:27:14: error[T25c]: this lambda cannot be a function value
-   27 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
-      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   27 |     each(ns, fn(x RecN) { if x.nd != null { x.nd!.next = N2(5) } })
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 o17permute6.olang:27:14: note: it writes through or keeps its by-value parameter 'x', and a caller of a function value may pass a read-only copy
 o17permute6.olang:27:14: help: work on one of its own, made from its parts
 compilation failed with 1 error
 === o17permute6b.olang
 o17permute6b.olang:31:12: error[T25c]: this lambda cannot be a function value
-   31 |     run(h, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
-      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   31 |     run(h, fn(x RecN) { if x.nd != null { x.nd!.next = N2(5) } })
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 o17permute6b.olang:31:12: note: it writes through or keeps its by-value parameter 'x', and a caller of a function value may pass a read-only copy
 o17permute6b.olang:31:12: help: work on one of its own, made from its parts
 compilation failed with 1 error
@@ -5144,7 +5124,7 @@ s8dassignclause.olang:15:18: help: read it where a test narrows a local or a par
 s8dassignclause.olang:22:16: error[T2c]: 'q' is a N?&, which may be null
    22 |         return q.v
       |                ^
-s8dassignclause.olang:22:16: help: read through it where a test says it is not ('if x is not null'), or write 'q!'
+s8dassignclause.olang:22:16: help: read through it where a test says it is not ('if x != null'), or write 'q!'
 compilation failed with 2 errors
 === s8dassigned.olang
 s8dassigned.olang:9:22: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
@@ -5214,18 +5194,13 @@ compilation failed with 1 error
 s8edefernull.olang:10:45: error[T2c]: 'p' is a Node?&, which may be null
    10 |         defer io.PutLine("deferred reads " $p.V)!
       |                                             ^
-s8edefernull.olang:10:45: help: read through it where a test says it is not ('if x is not null'), or write 'p!'
+s8edefernull.olang:10:45: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === s8eerrdefernull.olang
 s8eerrdefernull.olang:10:44: error[T2c]: 'p' is a Node?&, which may be null
    10 |     errdefer io.PutLine("errdefer reads " $p.V)!
       |                                            ^
-s8eerrdefernull.olang:10:44: help: read through it where a test says it is not ('if x is not null'), or write 'p!'
-compilation failed with 1 error
-=== samevalue.olang
-samevalue.olang:6:14: error[E10c]: 'is' tests for null and nothing else - compare with '=='
-    6 |     assert a is b
-      |              ^~
+s8eerrdefernull.olang:10:44: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === satadd01outside.olang
 satadd01outside.olang:5:12: error[M19]: I16 has no method 'satAdd'
@@ -5954,7 +5929,7 @@ compilation failed with 1 error
 t21callmaybenull.olang:8:12: error[T2c]: 'b.on' is a fn?&(n I64) I64, which may be null
     8 |     assert b.on(1) == 1
       |            ^~~~
-t21callmaybenull.olang:8:12: help: read through it where a test says it is not ('if x is not null'), or write 'b.on!'
+t21callmaybenull.olang:8:12: help: read through it where a test says it is not ('if x != null'), or write 'b.on!'
 compilation failed with 1 error
 === t21cborrowsboth.olang
 t21cborrowsboth.olang:4:23: error[T21c]: 'noborrow' and 'borrows' say opposite things
@@ -6042,7 +6017,7 @@ t21ctwice.olang:4:13: error[D8c]: '_' discards a value and names nothing, so it 
 compilation failed with 2 errors
 === t21isnullnever.olang
 t21isnullnever.olang:5:19: error[T2c]: 'f' is a fn&(x I64) I64, never null, so this is always false
-    5 |     assert not (f is null)
+    5 |     assert not (f == null)
       |                   ^~
 t21isnullnever.olang:4:9: note: the type is written here - write '?&' for '&' where it may be null
     4 |     f fn&(x I64) I64 = fn(x): return x
@@ -6565,7 +6540,7 @@ t29overstruct.olang:5:8: help: hold it in a struct's field instead
 compilation failed with 1 error
 === t2carrayisnull.olang
 t2carrayisnull.olang:3:41: error[T2c]: an array written '&' is never null
-    3 | fn empty(a Array<I64>&) Bool { return a is null }
+    3 | fn empty(a Array<I64>&) Bool { return a == null }
       |                                         ^~
 t2carrayisnull.olang:3:41: help: test whether it is empty: write 'a.Len() == 0', or '?&' where it may be null
 compilation failed with 1 error
@@ -6578,13 +6553,13 @@ compilation failed with 1 error
 t2carraynullable.olang:3:35: error[T2c]: 's' is a String?&, which may be null
     3 | fn count(s String?&) I64 { return s.Len() }
       |                                   ^
-t2carraynullable.olang:3:35: help: read through it where a test says it is not ('if x is not null'), or write 's!'
+t2carraynullable.olang:3:35: help: read through it where a test says it is not ('if x != null'), or write 's!'
 compilation failed with 1 error
 === t2cbreakloop.olang
 t2cbreakloop.olang:12:12: error[T2c]: 'p' is a N?&, which may be null
    12 |     return p.v
       |            ^
-t2cbreakloop.olang:12:12: help: read through it where a test says it is not ('if x is not null'), or write 'p!'
+t2cbreakloop.olang:12:12: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === t2cdefaultnull.olang
 t2cdefaultnull.olang:4:13: error[T2c]: N& is never null - a reference that may be is written N?&
@@ -6595,7 +6570,7 @@ compilation failed with 1 error
 t2cfieldnarrow.olang:6:12: error[T2c]: 'h.next' is a N?&, which may be null
     6 |     return h.next.v
       |            ^~~~~~
-t2cfieldnarrow.olang:6:12: help: read through it where a test says it is not ('if x is not null'), or write 'h.next!'
+t2cfieldnarrow.olang:6:12: help: read through it where a test says it is not ('if x != null'), or write 'h.next!'
 compilation failed with 1 error
 === t2cmapkey.olang
 t2cmapkey.olang:5:14: error[T2c]: String?& may be null, so it meets no trait
@@ -6608,17 +6583,17 @@ compilation failed with 1 error
 t2cmaybenull.olang:5:34: error[T2c]: 'm' is a N?&, which may be null, and N& never is
     5 | fn give(m N?&) I64 { return take(m) }
       |                                  ^
-t2cmaybenull.olang:5:34: help: test it first ('if x is not null'), or write 'm!'
+t2cmaybenull.olang:5:34: help: test it first ('if x != null'), or write 'm!'
 compilation failed with 1 error
 === t2cnarrowkill.olang
 t2cnarrowkill.olang:8:12: error[T2c]: 'p' is a N?&, which may be null
     8 |     return p.v
       |            ^
-t2cnarrowkill.olang:8:12: help: read through it where a test says it is not ('if x is not null'), or write 'p!'
+t2cnarrowkill.olang:8:12: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === t2cnevernull.olang
 t2cnevernull.olang:5:10: error[T2c]: 'n' is a N&, never null, so this is always false
-    5 |     if n is null { return 0 }
+    5 |     if n == null { return 0 }
       |          ^~
 t2cnevernull.olang:4:11: note: the type is written here - write '?&' for '&' where it may be null
     4 | fn get(n N&) I64 {
@@ -6647,7 +6622,7 @@ compilation failed with 1 error
 t2creadmaybenull.olang:4:28: error[T2c]: 'm' is a N?&, which may be null
     4 | fn get(m N?&) I64 { return m.v }
       |                            ^
-t2creadmaybenull.olang:4:28: help: read through it where a test says it is not ('if x is not null'), or write 'm!'
+t2creadmaybenull.olang:4:28: help: read through it where a test says it is not ('if x != null'), or write 'm!'
 compilation failed with 1 error
 === t2dany.olang
 t2dany.olang:8:7: error[T2d]: a weak reference names a struct or an enum, and any Shape is an any
@@ -6717,7 +6692,7 @@ t2dnotnull.olang:6:10: help: write 'weak mut Node?&'
 compilation failed with 1 error
 === t2dparam.olang
 t2dparam.olang:8:12: error[T2d]: 'weak' is written only where a value is stored
-    8 | fn first(n weak Node?&) I64 { return 0 if n is null else n.v }
+    8 | fn first(n weak Node?&) I64 { return 0 if n == null else n.v }
       |            ^~~~
 t2dparam.olang:8:12: note: a field, a payload, an element or a type argument a type stores, or a global - never a local, a parameter, a result or a function type's
 t2dparam.olang:8:12: help: write 'Node?&' here

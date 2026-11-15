@@ -871,7 +871,7 @@ fn (e mut Effects&) fieldSlotOf(w I64, k I64, path Vec<I64>&) I64 {
 # assigned again in the constructor
 fn (e Effects&) ctorArg(cb I64, i I64) I64 {
     body := e.Bodies[cb]
-    if i >= body.Fields.Len() or body.Root is null: return -1
+    if i >= body.Fields.Len() or body.Root == null: return -1
     f := body.Fields[i]
     k := -1
     for st in body.Root!.Stmts {
@@ -949,7 +949,7 @@ fn (e mut Effects&) classifyInst(x typed.Expr&, path Vec<I64>&, ty types.TypeId,
         case typed.Expr.Promote(_, _, pr) { e.classifyInst(pr.X, path, ty, depth + 1) }
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { e.classifyField(p, path, ty, depth + 1) }
         case typed.Expr.Cond(_, _, cd) {
-            if cd.A is null { e.parts.Push(part(GivBound, 0, ty, null)) } else { e.classifyInst(cd.A!, path, ty, depth + 1) }
+            if cd.A == null { e.parts.Push(part(GivBound, 0, ty, null)) } else { e.classifyInst(cd.A!, path, ty, depth + 1) }
             e.classifyInst(cd.B, path, ty, depth + 1)
         }
         case typed.Expr.Call(_, _, cl) { e.classifyCallInst(cl, path, ty, depth) }
@@ -1086,12 +1086,12 @@ fn (e mut Effects&) resPart(b I64, g given&, pt part&, out mut Vec<part>&, depth
 fn (e mut Effects&) scanAssigned() {
     e.assignedOk = true
     for b in e.Bodies {
-        if b.Root is not null: e.scanBlock(b.Root)
+        if b.Root != null: e.scanBlock(b.Root)
     }
 }
 
 fn (e mut Effects&) scanBlock(bl typed.Block?&) {
-    if bl is null: return
+    if bl == null: return
     for st in bl.Stmts: e.scanStmt(st)
 }
 
@@ -1124,7 +1124,7 @@ fn (e mut Effects&) scanStmt(st typed.Stmt&) {
         }
         case typed.Stmt.Spawn(_, sw) {
             for t in sw.Targets {
-                if t is not null: e.scanTarget(t)
+                if t != null: e.scanTarget(t)
             }
             e.scanExpr(sw.Task)
         }
@@ -1143,7 +1143,7 @@ fn (e mut Effects&) scanTarget(p typed.Lvalue&) {
 
 # the statements an expression holds, and the places it reads through
 fn (e mut Effects&) scanExpr(x typed.Expr?&) {
-    if x is null: return
+    if x == null: return
     match x {
         case typed.Expr.Seq(_, _, q) {
             for st in q.Stmts: e.scanStmt(st)
@@ -1152,7 +1152,7 @@ fn (e mut Effects&) scanExpr(x typed.Expr?&) {
         case typed.Expr.Match(_, _, m) {
             for st in m.Held: e.scanStmt(st)
             for a in m.Arms: e.scanArm(a)
-            if m.NoMatch is not null: e.scanArm(m.NoMatch!)
+            if m.NoMatch != null: e.scanArm(m.NoMatch!)
         }
         case typed.Expr.Collect(_, _, cl) {
             e.scanExpr(cl.Reserve)
@@ -1286,7 +1286,7 @@ fn (e mut Effects&) walkBody(b I64) {
     e.dropsRun = typed.DropsRun(body)
     e.curBody = b
     e.curMod = try e.fileMod.Get(body.File) catch default -1
-    if body.Root is null {
+    if body.Root == null {
         # a payload's constructor has no code (T17c); a function, a constructor or a test with none did not check
         match body.Of {
             case typed.BodyOf.Case(_, _), typed.BodyOf.Slot(_, _) { }
@@ -1351,7 +1351,7 @@ fn (e mut Effects&) resolve(p pend&) {
 
 # the parts a value holding a function may be, into parts
 fn (e mut Effects&) classify(x typed.Expr?&, depth I64) {
-    if x is null: return
+    if x == null: return
     if depth > 16 {
         e.parts.Push(part(GivBound, 0, x.Type(), null))
         return
@@ -1363,12 +1363,12 @@ fn (e mut Effects&) classify(x typed.Expr?&, depth I64) {
             else: e.parts.Push(part(GivBound, 0, x.Type(), null))
         }
         case typed.Expr.Cond(_, _, cd) {
-            if cd.A is null { e.parts.Push(part(GivBound, 0, x.Type(), null)) } else { e.classify(cd.A!, depth + 1) }
+            if cd.A == null { e.parts.Push(part(GivBound, 0, x.Type(), null)) } else { e.classify(cd.A!, depth + 1) }
             e.classify(cd.B, depth + 1)
         }
         case typed.Expr.Match(_, _, m) {
             for a in m.Arms: e.classify(a.Value, depth + 1)
-            if m.NoMatch is not null: e.classify(m.NoMatch!.Value, depth + 1)
+            if m.NoMatch != null: e.classify(m.NoMatch!.Value, depth + 1)
         }
         case typed.Expr.Try(_, _, tr) {
             e.classify(tr.X, depth + 1)
@@ -1377,7 +1377,7 @@ fn (e mut Effects&) classify(x typed.Expr?&, depth I64) {
             }
         }
         case typed.Expr.Seq(_, _, q) {
-            if q.X is null { e.parts.Push(part(GivBound, 0, x.Type(), null)) } else { e.classify(q.X!, depth + 1) }
+            if q.X == null { e.parts.Push(part(GivBound, 0, x.Type(), null)) } else { e.classify(q.X!, depth + 1) }
         }
         case typed.Expr.Fn(_, _, f) { e.parts.Push(e.fnPart(f, x)) }
         case typed.Expr.Read(_, ty, typed.Lvalue.Local(_, _, id), _) { e.classifyLocal(I64(id), ty, depth) }
@@ -1472,7 +1472,7 @@ fn (e Effects&) ctorCall(cl typed.Call&) Bool {
 }
 
 fn (e mut Effects&) block(b typed.Block?&) {
-    if b is null { return }
+    if b == null { return }
     for st in b.Stmts {
         if e.whyWord == 0 { e.stmt(st) } else { e.whyStmt(st) }
     }
@@ -1527,7 +1527,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Return(_, v) {
             e.expr(v)
-            if (e.retFn or e.retInst) and v is not null: e.curRets.Push(v)
+            if (e.retFn or e.retInst) and v != null: e.curRets.Push(v)
         }
         case typed.Stmt.Suspend(_, v) { e.expr(v) }
         case typed.Stmt.Reraise(_, code, _) { e.expr(code) }
@@ -1558,7 +1558,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
             e.cur.Spawns = true
             e.cap(CapThreads)
             for t in s.Targets {
-                if t is null: continue
+                if t == null: continue
                 e.place(t, true)
                 if t == typed.Lvalue.Local: e.spawnedInto(I64(t.id))
             }
@@ -1592,7 +1592,7 @@ fn (e mut Effects&) clause(cl typed.Clause&) {
 }
 
 fn (e mut Effects&) expr(x typed.Expr?&) {
-    if x is null { return }
+    if x == null { return }
     match x {
         case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { e.place(p, false) }
@@ -1640,7 +1640,7 @@ fn (e mut Effects&) expr(x typed.Expr?&) {
         case typed.Expr.Match(_, _, m) {
             for st in m.Held { e.stmt(st) }
             for a in m.Arms { e.arm(a) }
-            if m.NoMatch is not null { e.arm(m.NoMatch!) }
+            if m.NoMatch != null { e.arm(m.NoMatch!) }
         }
         case typed.Expr.Try(_, _, tr) {
             if tr.Ends: e.cur.Ends = true    # "!" (E35)
@@ -1830,13 +1830,13 @@ fn (e mut Effects&) rootBits(x typed.Expr&, depth I64) I64 {
     if depth > 16: return 0
     match x {
         case typed.Expr.Cond(_, _, cd) {
-            a := e.rootBits(cd.A!, depth + 1) if cd.A is not null else 0
+            a := e.rootBits(cd.A!, depth + 1) if cd.A != null else 0
             return a | e.rootBits(cd.B, depth + 1)
         }
         case typed.Expr.Match(_, _, m) {
             bits I64 = 0
             for a in m.Arms {
-                if a.Value is not null: bits = bits | e.rootBits(a.Value!, depth + 1)
+                if a.Value != null: bits = bits | e.rootBits(a.Value!, depth + 1)
             }
             return bits
         }
@@ -1900,7 +1900,7 @@ fn (e mut Effects&) exprRoot(x typed.Expr&) I64 {
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { return e.placeRoot(p).Local }
         case typed.Expr.Away(_, _, y) { return e.exprRoot(y) }
-        case typed.Expr.Seq(_, _, q) { return e.exprRoot(q.X!) if q.X is not null else -1 }    # "x!" (E35)
+        case typed.Expr.Seq(_, _, q) { return e.exprRoot(q.X!) if q.X != null else -1 }    # "x!" (E35)
         case _ { return -1 }
     }
 }

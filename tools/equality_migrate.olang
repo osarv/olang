@@ -1,8 +1,8 @@
 # equality_migrate - the equality round (E10, E10c, E32, 2026-10-24): "is" tests for null and nothing else, "==" compares
 # what a reference names by identity unless its type declares Eq, and a case is tested with "==". This rewrites olang
 # sources written under the old rules:
-#   - "x == null" becomes "x is null", "x != null" becomes "x is not null" (and "null == x", "null != x" likewise, the
-#     null moved after);
+#   - (until 2026-11-15 also "x == null" became "x is null"; the null test is "== null" again since (E10c), so a comparison
+#     with null is left as it is, and "x is null" is nulltest_migrate's);
 #   - "x is E.Case" becomes "x == E.Case", "x is not E.Case" becomes "x != E.Case" - a dotted name after "is" whose
 #     last word is capitalized, as a case is written;
 #   - "a is b" and "a is not b" on two references (identity) become "a == b" and "a != b", where b is a plain lowercase
@@ -36,7 +36,6 @@ fn vtokens(src String&) Vec<VT> {
 }
 
 type Counts struct() {
-    nulls I64 = 0
     cases I64 = 0
     identities I64 = 0
     listed Vec<String&>
@@ -63,26 +62,8 @@ fn migrate(src String&, n mut Counts&, path String&) String {
     edits Vec<Edit>
     for i in range v.Len() {
         t := v[i]
-        if (t.k == token.Tok.EqEq or t.k == token.Tok.NotEq) and i + 1 < v.Len() and v[i + 1].k == token.Tok.NullLit {
-            # "x == null": the operator becomes "is" or "is not"
-            edits.Push(Edit(t.start, t.end, "is" if t.k == token.Tok.EqEq else "is not"))
-            n.nulls++
-            continue
-        }
-        if t.k == token.Tok.NullLit and i + 2 < v.Len() and (v[i + 1].k == token.Tok.EqEq or v[i + 1].k == token.Tok.NotEq) {
-            # "null == x": x moved first, when it is a plain name or path
-            e := pathEnd(v, i + 2)
-            if e > 0 {
-                x := src[v[i + 2].start:v[e - 1].end]
-                op := "is" if v[i + 1].k == token.Tok.EqEq else "is not"
-                edits.Push(Edit(t.start, v[e - 1].end, $x " " $op " null"))
-                n.nulls++
-            } else {
-                n.listed.Push($path ": null compared first, by hand: " $src[t.start:(v[i + 2].end).Min(src.Len())])
-            }
-            continue
-        }
-        if t.k != token.Tok.Is { continue }
+        # "is", a keyword until 2026-11-15 and a name since, never a member's
+        if src[t.start:t.end] != "is" or (i > 0 and v[i - 1].k == token.Tok.Dot) { continue }
         at := i + 1
         negated := at < v.Len() and v[at].k == token.Tok.Not
         if negated { at++ }
@@ -182,16 +163,13 @@ fn main() ? {
     }
     for l in total.listed { srcmask.Say(l) }
     verb := "would change " if check else "changed "
-    srcmask.Say(($verb $changed " files: " $total.nulls " null tests, " $total.cases " case tests, " $total.identities
-                 " identities"))
+    srcmask.Say($verb $changed " files: " $total.cases " case tests, " $total.identities " identities")
     if check and changed > 0 { os.Exit(1) }
 }
 
-test "null tests are 'is null', case tests and identity '=='" {
+test "case tests and identity are '==', null tests left for nulltest_migrate" {
     n := Counts()
-    assert migrate("    if x == null { }\n", n, "f") == "    if x is null { }\n"
-    assert migrate("    if x.next != null and y { }\n", n, "f") == "    if x.next is not null and y { }\n"
-    assert migrate("    b := null == p.q\n", n, "f") == "    b := p.q is null\n"
+    assert migrate("    if x == null { }\n", n, "f") == "    if x == null { }\n"
     assert migrate("    b := e is Shape.Circle\n", n, "f") == "    b := e == Shape.Circle\n"
     assert migrate("    b := e is not Shape.Circle\n", n, "f") == "    b := e != Shape.Circle\n"
     assert migrate("    b := a is b.c\n", n, "f") == "    b := a == b.c\n"
@@ -202,6 +180,6 @@ test "null tests are 'is null', case tests and identity '=='" {
 
 test "what is already new is left as it is" {
     n := Counts()
-    src := "fn f(x Node&) Bool {\n    return x is null or x == y\n}\n"
+    src := "fn f(x Node&) Bool {\n    return x == null or x == y\n}\n"
     assert migrate(src, n, "f") == src
 }

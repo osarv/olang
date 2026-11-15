@@ -22,8 +22,8 @@ type Lru struct(cap I64) {
 fn (c mut Lru&) unlink(n mut Node&) {
     p := n.prev
     q := n.next
-    if p is null { c.head = q } else { p.next = q }
-    if q is null { c.tail = p } else { q.prev = p }
+    if p == null { c.head = q } else { p.next = q }
+    if q == null { c.tail = p } else { q.prev = p }
     n.prev = null
     n.next = null
 }
@@ -31,7 +31,7 @@ fn (c mut Lru&) unlink(n mut Node&) {
 fn (c mut Lru&) pushFront(n mut Node&) {
     h := c.head
     n.next = h
-    if h is null { c.tail = n } else { h.prev = n }
+    if h == null { c.tail = n } else { h.prev = n }
     c.head = n
 }
 

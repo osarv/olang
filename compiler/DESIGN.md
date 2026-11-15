@@ -109,7 +109,7 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
 - **Statements and declarations** are parsed by recursive descent. **Expressions** use Pratt precedence climbing
   over E5's table, with:
   - `not` at its own level (E7a);
-  - comparison chains (E30) and the infix `is`, `is not` and `not in` forms as their own nodes;
+  - comparison chains (E30) and the infix `not in` form as their own nodes (the null test is a plain `==`, E10c);
   - the conditional `a if c else b` (E28) at the lowest level, with L18b's rule about a line-initial `if`.
 - **Lookahead.** The parser looks one token ahead, plus a few bounded peeks at the sites listed in section 2. It
   never backtracks and never memoizes.
@@ -1013,8 +1013,6 @@ repository (25.7k lines of corpus and std). "study2 uses" counts how often study
    - **`T[...]` is deferred, Go-style.** `Name[ ... ]` parses as one index-or-literal node; the resolver makes it an
      array literal when `Name` is a type. A comprehension inside one is valid only for a literal. `Name&[` is always
      a literal, since no expression begins with `[`.
-   - **`x is T` is deferred.** After `is` or `is not`, the operand is a type when it begins with `mut` or `fn`, or
-     carries type arguments or a marker. Otherwise a bare path stays undecided for the resolver.
    - **`Name<` uses the oracle.** It cannot be deferred: `a < b > (c)` is a legal comparison chain (E30) with the
      same tokens as a generic constructor call.
      - The oracle holds the type and error names declared in the module (in any branch), in the prelude and in

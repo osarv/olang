@@ -410,7 +410,7 @@ type worker struct(s Server&, Cfg mut build.Config&, In I32, Out I32) {
 
 # the analysis of the open file in slot k as the files are now: the last one where it is that file's
 fn (w mut worker&) analysis(k I64, d mut diag.Diagnostics&) mut session.Analysis& {
-    if k == w.lastSlot and w.last is not null { return w.last! }
+    if k == w.lastSlot and w.last != null { return w.last! }
     a := session.Analysis.Analyze(w.s.Docs[k].Path, w.Cfg, d, w.overlay, kept = true)
     w.last = a
     w.lastSlot = k

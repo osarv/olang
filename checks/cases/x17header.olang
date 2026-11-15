@@ -29,7 +29,7 @@ fn main() {
     n := s.snprintf(buf, 32, "%d-%s-%.1f".ToC(), 42, "x".ToC(), 2.5)
     assert n == 8 and String(buf[:8]) == "42-x-2.5"
     home := l.getenv("PATH".ToC())
-    assert home is not null and c.strlen(home) > 0
+    assert home != null and c.strlen(home) > 0
     assert e.EDOM == 33 and s.EOF == -1 and s.BUFSIZ > 0
     assert st.S_IRWXU == 448
     assert l.abs(-4) == 4

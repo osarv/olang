@@ -762,7 +762,7 @@ type Grip unique struct(id I64) {
     id
     held Lamp?& = null
 } destruct {
-    if held is not null: held!.log.seen.Push(id * 10 + (1 if held!.open else 0))
+    if held != null: held!.log.seen.Push(id * 10 + (1 if held!.open else 0))
 }
 
 fn (g mut Grip&) Hold(l Lamp&) { g.held = l }
@@ -772,7 +772,7 @@ type Rack unique struct(id I64) {
     id
     shelf Lamps?& = null
 } destruct {
-    if shelf is null: return
+    if shelf == null: return
     for l in shelf!.items { l.log.seen.Push(id * 10 + (1 if l.open else 0)) }
 }
 
@@ -785,7 +785,7 @@ type Hook unique struct(id I64) {
     id
     then fn?&() = null
 } destruct {
-    if then is not null: then!()
+    if then != null: then!()
 }
 
 # can hold no reference at all: given beside a Lamp, it holds none

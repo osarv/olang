@@ -51,7 +51,7 @@ test "the C library: functions, a C string back, pointer arguments of any array"
     assert ns[0] == 0 and ns[1] == 3
     assert c.strlen("hello".ToC()) == 5
     p := l.getenv("PATH".ToC())
-    assert p is not null and c.strlen(p) > 0
+    assert p != null and c.strlen(p) > 0
     assert l.abs(-4) == 4
 }
 

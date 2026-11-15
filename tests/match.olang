@@ -56,7 +56,7 @@ type Node struct(v I64, next Node?&) { v, next }
 fn second(n Node&) I64 {
     p := n.next
     return match n.v {
-        case _ if p is not null: p.v
+        case _ if p != null: p.v
         case _: -1
     }
 }

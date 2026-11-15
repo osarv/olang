@@ -21,7 +21,7 @@ type Grip unique struct(id I64) {
     id
     held Lamp?& = null
 } destruct {
-    if held is not null {
+    if held != null {
         assert held!.alive, "a Grip read its Lamp ended"
         held!.log.n += held!.data[3] * 10
     }

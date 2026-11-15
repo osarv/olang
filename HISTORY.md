@@ -37322,6 +37322,61 @@ with `"`; a rendering of any other value (`$alpha`, an F64) followed by a parent
 not a function". It now also says E11b where the callee is directly after `$` and the `(` that follows opens with a text
 literal (`textArgFollows`). checks/cases/e11bjoinfloat.olang; goldens/diag.txt gained its entry.
 
+## 2026-11-15: E28, T2c - a conditional of a reference and null given to a generic type's method
+
+`known if lacking else null` passed to a parameter `Array<Bool>?&` of a method of a generic type (or of a generic
+function) failed with `E12: expected Array<Bool>, found null`, while a plain function's parameter and a local of that type
+took it. Cause: a call whose callee has type variables checks each argument while inferring (check.olang, invoke ->
+argForInference), against `boundParam`, which gave the parameter's referent (`c.deref(t)`) so a value argument is not
+turned into a reference; for `Array<Bool>?&` that wanted `Array<Bool>`, the conditional took it as its own type and its
+`null` branch had nothing to be. `boundParam` now returns a nullable reference whole (beside the destructor and `any`
+cases that already do), so the conditional meets `null` at the type the parameter says. tests/condnull.olang: a method of
+a generic type, a generic function, a plain function and a typed local, both branches, decided while compiling
+(S17a assert, a baked global) beside the run time.
+
+## The null test is `==` again; `is` removed (E10c; 2026-11-15, wt-eqnull)
+
+The user, 2026-11-15: "I will just remove the is check. It should just be a normal equals if that doesn't collide with
+some semantic meaning." This reverses E10c of 2026-10-24, which had made `x is null` / `x is not null` the one null test
+and `x == null` an error naming it (the equality round, tools/equality_migrate). By then `is` asked nothing but null -
+identity was `==` (E10) and a case test `==` (E32) - so the word carried one question that `==` could ask as well, at
+the cost of a keyword, a precedence level and a form of its own in every pass.
+
+The rule that keeps `==` coherent (mine): a comparison whose operand is the `null` literal is the null test - whether a
+`?&` reference, a function value (`fn?&`) or an error value (T20) holds none - and never calls a type's `Eq`/`eq`
+(E10a). Asked of a reference, `==` compares identity anyway and an `Eq` is never called with a null (E10), so the only
+meaning the literal could change is that it never reaches an `Eq` at all; that is now said in E10c. Everything else
+carried over: the test is an error on an operand that cannot be null (a number, a struct or enum value, an array not
+marked `?&`, a reference or function value never null, an error value known to hold one) and on `null == null`; the
+narrowing walk (S8e, the one walk of 2026-10-26) keys on `== null` / `!= null` with the literal on either side,
+through `and`/`or`/`not`, conditionals, asserts and loops; `case null` in a match builds the same `==`; a null array
+is still not the empty array. `is`, `is not` and `x is T` are simply unknown now - no diagnostic names them (the user's
+"a spelling that is removed is simply gone") - and `is` names a local, a field or a function like any word.
+
+Precedence: `is` stood at the comparisons' level (5, with `<` and `in`), `==` one looser (4). `not x is null` and
+`not x == null` read alike (`not` is looser than both), and nothing else in the repository depended on the difference.
+The migration parenthesizes where it would matter: an `is` test that was the right operand of `==`/`!=` (`a == b is
+null` -> `a == (b == null)`), or one an ordering or `in` followed.
+
+In the compiler: `Tok.Is`, `Expr.Is` and `Expr.IsType` are gone from the scanner, the parser (with `startsType`, its
+form test after `is`), names, needs, cond, unparse and the dump tool; `Checker.binary` sends a comparison with the null
+literal to `nullTest` (the old `identity`) before the error-value comparison (R11b); `nullTests` reads `Binary`; the
+`case null` alternative builds `==`; `generic.Infer` types every comparison `Bool` before its operands, so `x := p ==
+null` in a global's or field's `:=` is typed. Messages: `NullCompared`, `IsOnlyNull` and `IsCaseWritten` removed;
+`NullTestOfNull`/`NullTestOfValue` reworded (an error value can be null too); the hints say `'if x != null'`. The
+language server's completion words and the Neovim syntax drop `is`. The move was staged: the checker first accepted
+both spellings (one commit), the new compiler then built the migrated source, and the seed was written again since the
+compiler's own source needs `== null`.
+
+The migration is `tools/nulltest_migrate.olang` (text, on the compiler's scanner, idempotent, last in `olang fix`'s
+table): 1,926 tests in 160 files (code and Markdown's olang blocks and code spans), plus programs inside strings (the
+scope fuzzer's generator, the prompt's cell loader, checks' C fixtures) and comments that read as code, by hand.
+`tools/equality_migrate` no longer turns `x == null` into `x is null` (that half of it is now the language's own form)
+and reads `is` by its text. The checks cases about `is` itself (`a is b`, `x is E.Case`, `x is T`) went with it; those
+that asserted `== null` was an error became run cases; new: `e10cnevernull` (a never-null reference), `isname` (`is` as
+a local's name), `tests/nulltest.olang` (never Eq, either side, error and function values, narrowing; a baked global
+and a top-level assert the evaluator decides). PRINCIPLES.md no longer lists `x is null` among the word forms.
+
 ## 2026-11-15: B3e - `interpret` builds and runs; the evaluator is `-evaluate`
 
 The user, 2026-11-15: "make olang interpret fast as well, we might run some data science work in it." `olang interpret

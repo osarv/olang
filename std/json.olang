@@ -1192,7 +1192,7 @@ fn (w mut writer&) any<T>(v T, depth I64) {
                 w.fields(v, T.Fields.Len(), depth)
             } else if T.Kind == TypeKind.Error {
                 # an error value (T20) as "$" writes it, "io.Error.Failed"; null for none
-                if v is null { w.out.Push("null") } else { w.text($v) }
+                if v == null { w.out.Push("null") } else { w.text($v) }
             } else if T.Kind == TypeKind.Enum {
                 k := policy<T>(w.keys)
                 for c in T.Cases {
@@ -1688,8 +1688,8 @@ if TestBuild {
         want := "{\"N\":3,\"E\":\"" $jsErr.Bad "\",\"A\":\"" $jsAny.Timeout "\",\"Seen\":[\"" $jsErr.Bad "\",null]}"
         assert errText == want and errBack == jsErr.Bad
         r := try Decode<jsRec>(Encode(jsRec(4, null, jsAny.Timeout, jsSeen())))
-        assert r.N == 4 and r.E is null and r.A == jsAny.Timeout and r.Seen.Len() == 2 and r.Seen[0] == jsErr.Bad
-        assert r.Seen[1] is null and $r.A == "jsAny.Timeout"
+        assert r.N == 4 and r.E == null and r.A == jsAny.Timeout and r.Seen.Len() == 2 and r.Seen[0] == jsErr.Bad
+        assert r.Seen[1] == null and $r.A == "jsAny.Timeout"
         # T19b: an error carrying a payload is written as "$" writes it - read back only where its word carries none
         assert Encode(jsRec(5, null, os.Error.Denied("p"), jsSeen())).Contains("os.Error.Denied(\\\"p\\\")")
         assert (try Decode<jsAny>("\"os.Error.Denied(\\\"p\\\")\"") catch Error.WrongKind default jsAny.Timeout) == jsAny.Timeout

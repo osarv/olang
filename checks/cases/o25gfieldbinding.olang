@@ -27,6 +27,6 @@ fn main() ? {
         c.cur.next!.v = 5
     }
     churn()
-    assert g.next is not null
+    assert g.next != null
     assert g.next!.v == 5
 }

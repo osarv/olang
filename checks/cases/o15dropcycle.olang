@@ -5,7 +5,7 @@ type Node unique struct(id I64) {
     id
     other Node?& = null
 } destruct {
-    if other is not null: Ended += other!.id
+    if other != null: Ended += other!.id
 }
 fn link(a mut Node&, b Node&) { a.other = b }
 fn main() {

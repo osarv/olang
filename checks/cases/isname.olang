@@ -1,0 +1,6 @@
+# check: run
+# L9, E10c: "is" is no keyword since 2026-11-15 - the null test is "== null" - so it names a local like any word
+fn main() {
+    is := 3
+    assert is + 1 == 4
+}

@@ -75,7 +75,7 @@ fn chosen(n I64, keep Bool) I64 {
     h := link if keep else setv
     h(x, N(n))
     churn()
-    return x.next!.v if x.next is not null else x.v
+    return x.next!.v if x.next != null else x.v
 }
 
 # a function-valued local given another value in a loop: each version reaching the call judged (O25i)
@@ -87,7 +87,7 @@ fn cursor(n I64) I64 {
         op = link
     }
     churn()
-    return x.v * 100 + (x.next!.v if x.next is not null else -1)
+    return x.v * 100 + (x.next!.v if x.next != null else -1)
 }
 
 # an adapter held in a local whose written type is no boundary: 's(...)' is the direct call to Keeper.Call, so the

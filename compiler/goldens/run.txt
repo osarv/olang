@@ -111,6 +111,9 @@
 | ok - comptime gives constant data
 | ok - comptime for unrolls
 | ok - the evaluator agrees
+=== test tests/condnull.olang
+| status 0
+| ok - all: the null branch arrives as null, the other branch as the array, through every kind of callee
 === test tests/copy.olang
 | status 0
 | ok - an assignment copies by the declared Copy
@@ -402,6 +405,10 @@
 | ok - captured: captures the version reaching the lambda
 | ok - afterLoop: reads after the loop what the last turn gave
 | ok - twoOfOne: builds through versions of one scope
+=== test tests/nulltest.olang
+| status 0
+| ok - the null test is '== null' and '!= null', never Eq, at run time and while compiling
+| ok - a test that holds narrows: after an assert, a leaving if, inside and/or, through a loop
 === test tests/packed.olang
 | status 0
 | ok - Header: fields read and written by their bits alone, computed while compiling as at run time
@@ -922,7 +929,7 @@
 | ok - E31/E16d/S9e: a type's own fallible methods under try; try on a store or an increment; for x in try c
 | ok - E29/S9e: try reaches a fallible Has, and a comprehension's own calls
 | ok - E32: is and as on enum values
-| ok - E10, E10c: a reference compares by identity unless its type declares Eq, and 'is null' asks for none, while compiling and at run time
+| ok - E10, E10c: a reference compares by identity unless its type declares Eq, and '== null' asks for none, while compiling and at run time
 | ok - M19d: a prelude generic type is named bare with its arguments written, as an expression too
 | ok - T35a: Iterator<T> is built in, and a type satisfying it is walked by for-in
 | ok - E11b: a returned join survives later allocations
@@ -2256,6 +2263,8 @@
 === run derivedpassedtemp.olang
 | status 0
 | 103 103 0
+=== run e10cnullcompared.olang
+| status 0
 === run e11ctwolevelfield.olang
 | status 0
 === run e13cfloat.olang
@@ -2335,6 +2344,8 @@
 | status 0
 === run errcomma.olang
 | status 0
+=== run errvalnullcompare.olang
+| status 0
 === run externruntime.olang
 | status 0
 === run externruntime2.olang
@@ -2366,6 +2377,8 @@
 === run globalvaluecopy.olang
 | status 0
 | 1-title-built-at-run-time
+=== run isname.olang
+| status 0
 === run joinwritesafter.olang
 | status 0
 === run keywordfield.olang

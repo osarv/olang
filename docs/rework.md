@@ -1960,7 +1960,7 @@ seventh (F7), found after it, is fixed too.
   `try` and an instance's call to the read-only argument it copies from, so the bare parameter is named: of the
   T25c rows on compiler/'s root, 132 of 173 name one now (5 of 65 before).
 - **A local made from a choice reaches what its read-only alternative does** (`roTrack`'s `Cond`, `roAlt`): `x :=
-  filled if filled is not null else c.exprTo(...)` then `c.exprs.Push(x)` widens the nullable `filled`, as storing
+  filled if filled != null else c.exprTo(...)` then `c.exprs.Push(x)` widens the nullable `filled`, as storing
   `filled` itself does (wantWritable). And a value a plain function returns read out of a match on a call's result -
   through the match's held subject - follows what that call follows (`paramsOf` through `refCalls`).
 - **An atomic read through a `&` parameter's reach is a D9d use**: it is there to see another thread's write, which

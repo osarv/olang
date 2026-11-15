@@ -47,7 +47,7 @@ fn same(a LoadErr, b AnyErr) Bool { return a == b }
 
 # a held error raised again, held to the set what a test leaves of it
 fn reraised(e LoadErr) I64 ? ParseErr {
-    if e is null { return 0 }
+    if e == null { return 0 }
     if e != ParseErr { return 1 }
     error e
 }
@@ -79,7 +79,7 @@ fn kinds(from I64, count I64) Vec<I64> {
 fn counted(from I64, count I64) I64 {
     m Map<LoadErr, I64>
     for o in outcomes(from, count) {
-        if o.err is null { continue }
+        if o.err == null { continue }
         m.Put(o.err, (try m.Get(o.err) catch default 0) + 1)
     }
     return m.Len()
@@ -95,7 +95,7 @@ fn firstBad(from I64) I64 {
     es := Array<LoadErr>[ParseErr.Empty, null, os.Error.Denied("d")]
     k I64 = 0
     for e in es {
-        if e is not null and e != ParseErr.Empty { return k }
+        if e != null and e != ParseErr.Empty { return k }
         k++
     }
     return -1 + from
@@ -115,10 +115,10 @@ test "an error value is stored in a field, a local and a Vec, null where nothing
     assert BakedRendered == want
     assert rendered(Live, 4) == want
     last LoadErr
-    assert last is null
+    assert last == null
     assert $last == "null"
     for o in outcomes(Live, 3) { last = o.err }
-    assert last is not null and last == os.Error.Denied
+    assert last != null and last == os.Error.Denied
 }
 
 test "an error value is matched, null among the cases" {

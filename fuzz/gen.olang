@@ -1767,7 +1767,7 @@ fn (g Gen&) repointable(dst I64, src I64) Bool {
     return a >= 4100 or b < 4100
 }
 
-# another reference of dst's kind that "is" may compare it with: any permission, the same element or struct
+# another reference of dst's kind that "==" may compare it with: any permission, the same element or struct
 fn (g mut Gen&) kin(dst I64) I64 {
     a := g.vt[dst]
     n I64 = 0

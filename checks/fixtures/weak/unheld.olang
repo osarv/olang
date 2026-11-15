@@ -5,5 +5,5 @@ import "back"
 fn main() {
     b := back.Back()
     b.Point(node.Node(1))
-    assert b.At is not null
+    assert b.At != null
 }

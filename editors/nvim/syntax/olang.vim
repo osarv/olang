@@ -8,7 +8,7 @@ syn keyword olangStatement return break continue error defer errdefer assert unr
 syn keyword olangConditional if else match case
 syn keyword olangRepeat for in range do
 syn keyword olangException try catch default
-syn keyword olangOperator and or not xor is as embed
+syn keyword olangOperator and or not xor as embed
 syn keyword olangStorage mut any unique immut packed commutes
 syn keyword olangKeyword returns noalloc noblock nospawn norecurse noextern pure keeps borrows noborrow weak
 syn keyword olangBoolean true false

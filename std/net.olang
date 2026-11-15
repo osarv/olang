@@ -379,19 +379,19 @@ fn Lookup(host String&) Array<IP> ? Error.UnknownHost, Error.Unreachable, Error.
     head := out[0]
     ips := Vec<IP>()
     p := head
-    for p is not null {
+    for p != null {
         f := netdb.addrinfo()
         cstring.memcpy(f, p, 48)
         sa := Array<U8>(28)
         a := f.ai_addr
-        if a is not null and (f.ai_family == afInet or f.ai_family == afInet6) {
+        if a != null and (f.ai_family == afInet or f.ai_family == afInet6) {
             cstring.memmove(sa, a, U64(f.ai_addrlen.Min(28)))
             ip := Addr.fromSockaddr(sa).Host
             if ip not in ips { ips.Push(ip) }
         }
         p = f.ai_next
     }
-    if head is not null { netdb.freeaddrinfo(head) }
+    if head != null { netdb.freeaddrinfo(head) }
     if ips.Len() == 0 { error Error.UnknownHost(host) }
     return ips.ToArray()
 }

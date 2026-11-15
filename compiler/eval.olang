@@ -5596,7 +5596,7 @@ fn (m mut Machine&) payDrop(base I64) {
 # and goes on to the next look where not
 fn (m mut Machine&) overBudget() Bool {
     w := m.Watch
-    if w is not null {
+    if w != null {
         if not w() {
             m.StepBudget = m.Steps + WatchSteps
             return false

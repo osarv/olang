@@ -605,13 +605,10 @@ type Diag enum {
     SpreadNotHere
     SpreadAlone
     VariadicArgCount
-    IsOnlyNull
-    IsCaseWritten
-    IsNullOfValue
-    IsNullOfNull
+    NullTestOfValue
+    NullTestOfNull
     CaseTestNotEnum
     CaseTestOther
-    NullCompared
     FieldOfEnum
     CallDoesNothing
     NarrowedWrite
@@ -1616,24 +1613,21 @@ fn WholeCaseNamed(text String&, ty String&) r.Msg { return r.Msg(Diag.WholeCaseN
 fn MatchLengthUncovered(ty String&, what String&) r.Msg { return r.Msg(Diag.MatchLengthUncovered, "S13h", "a match over " $ty " gives a value only when its cases cover every value", "none matches an array of " $what, "add a case for it, or 'case _: v'") }
 fn PowNone(ty String&, hint String&) r.Msg { return r.Msg(Diag.PowNone, "E5a", "'**' calls Pow, which " $ty " has none of" $hint) }
 fn OperatorCallFails(text String&) r.Msg { return r.Msg(Diag.OperatorCallFails, "E31", "this operator calls " $text ", which can fail - write 'try' before the expression") }
-fn IsOnlyNull(op String&) r.Msg { return r.Msg(Diag.IsOnlyNull, "E10c", $"'is' tests for null and nothing else - compare with '" $op "'") }
-fn IsCaseWritten(op String&, x String&, y String&) r.Msg { return r.Msg(Diag.IsCaseWritten, "E10c, E32", $"a case is tested with '" $op "': '" $x " " $op " " $y "'") }
 fn CaseTestNotEnum(text String&, ty String&) r.Msg { return r.Msg(Diag.CaseTestNotEnum, "E32", $text " is a case of an enum, and this is " $ty) }
 fn CaseTestOther(text String&, ty String&) r.Msg { return r.Msg(Diag.CaseTestOther, "E32", $text " is no case of " $ty ", the type this tests") }
-fn IsNullOfNull() r.Msg { return r.Msg(Diag.IsNullOfNull, "E10c", "'null is null' tests nothing - 'is null' follows a reference or a function value") }
-fn IsNullOfValue(ty String&) r.Msg { return r.Msg(Diag.IsNullOfValue, "E10c", $"only a reference or a function value can be null, and this is " $ty) }
-fn MayBeNull(text String&, ty1 String&, ty2 String&, bang String&) r.Msg { return r.Msg(Diag.MayBeNull, "T2c", "'" $text "' is a " $ty1 ", which may be null, and " $ty2 " never is", "", "test it first ('if x is not null'), or write '" $bang "!'") }
+fn NullTestOfNull() r.Msg { return r.Msg(Diag.NullTestOfNull, "E10c", "'null == null' tests nothing - '== null' compares a reference, a function value or an error value with null") }
+fn NullTestOfValue(ty String&) r.Msg { return r.Msg(Diag.NullTestOfValue, "E10c", $"only a reference, a function value or an error value can be null, and this is " $ty) }
+fn MayBeNull(text String&, ty1 String&, ty2 String&, bang String&) r.Msg { return r.Msg(Diag.MayBeNull, "T2c", "'" $text "' is a " $ty1 ", which may be null, and " $ty2 " never is", "", "test it first ('if x != null'), or write '" $bang "!'") }
 fn NullToNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NullToNonNull, "T2c", $ty1 " is never null - a reference that may be is written " $ty2) }
 fn NoteNullableDecl() r.Msg { return r.Msg(Diag.NoteNullableDecl, "", "the type is written here - write '?&' for '&' where it may be null") }
 fn NeverNull(text String&, ty String&, val String&) r.Msg { return r.Msg(Diag.NeverNull, "T2c", "'" $text "' is a " $ty ", never null, so this is always " $val) }
 fn NoZeroNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NoZeroNonNull, "T2c", $ty1 " is never null, so it has no zero value - give it a value, or write " $ty2) }
-fn ReadMaybeNull(text String&, ty String&, bang String&) r.Msg { return r.Msg(Diag.ReadMaybeNull, "T2c", "'" $text "' is a " $ty ", which may be null", "", "read through it where a test says it is not ('if x is not null'), or write '" $bang "!'") }
+fn ReadMaybeNull(text String&, ty String&, bang String&) r.Msg { return r.Msg(Diag.ReadMaybeNull, "T2c", "'" $text "' is a " $ty ", which may be null", "", "read through it where a test says it is not ('if x != null'), or write '" $bang "!'") }
 fn NullToArray(ty String&, empty String&) r.Msg { return r.Msg(Diag.NullToArray, "T2c", "an array written '&' is never null", "", "write '" $empty "' for an empty " $ty ", or '?&' where it may be null") }
 fn ArrayIsNull(text String&, empty String&) r.Msg { return r.Msg(Diag.ArrayIsNull, "T2c", "an array written '&' is never null", "", "test whether it is empty: write '" $text $empty "', or '?&' where it may be null") }
 fn NarrowedWrite(local String&, kase String&) r.Msg { return r.Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written or lent writably", "'" $local "' is narrowed to " $kase ", and what it reads there is a copy of the payload", "assign the whole case, '" $local " = " $kase "(...)', or change a copy a match binds and assign the case back") }
 fn CallDoesNothing(call String&) r.Msg { return r.Msg(Diag.CallDoesNothing, "S3", "'" $call "' gives a value and does nothing else", "", "use the value (assign it, pass it on), or leave the call out") }
 fn FieldOfEnum(ty String&, f String&) r.Msg { return r.Msg(Diag.FieldOfEnum, "S8d", $ty " is an enum, and its payload's '" $f "' is read through a case", "", "read it where a test narrows a local or a parameter to the case, 'if e == Case { e." $f " }', until it is assigned") }
-fn NullCompared(x String&, form String&) r.Msg { return r.Msg(Diag.NullCompared, "E10c", $"null is tested with 'is', never compared - write '" $x " " $form "'") }
 fn AsNeedsCase(ty String&, text String&) r.Msg { return r.Msg(Diag.AsNeedsCase, "E32", "after 'as' comes a case of " $ty ", found " $text) }
 fn PatternType(ty String&, text String&) r.Msg { return r.Msg(Diag.PatternType, "S13b", "a pattern here names a case of " $ty ", found " $text) }
 fn CaseIsPrivate(tok String&) r.Msg { return r.Msg(Diag.CaseIsPrivate, "M6a", "case " $tok " is private to its module") }

@@ -95,7 +95,7 @@ fn Analysis.Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&
 
 # a checked analysis held to section 8 - its scope errors reported - and made evaluable (explain's values)
 fn Hold(a mut Analysis&, cfg mut build.Config&) {
-    if a.C is null or a.Sc is not null or a.L.Diags.HasFatal() { return }
+    if a.C == null or a.Sc != null or a.L.Diags.HasFatal() { return }
     t0 := time.Now()
     c := a.C
     sc mut scope.Scoper& = scoper(c!)
@@ -190,7 +190,7 @@ type Found struct(Text String&, Real String&, At I64) {
 # its doc comment) and where it is declared
 fn (a Analysis&) Lookup(real String&, at I64) Found ? Nothing {
     mi := a.ModuleOf(real)
-    if mi < 0 or a.C is null { error Nothing.Here }
+    if mi < 0 or a.C == null { error Nothing.Here }
     text := a.TextOf(mi)
     w := WordAt(text, at)
     if w.Start == w.End { error Nothing.Here }
@@ -223,7 +223,7 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
     for e in r.Tables[mi].Entries {
         if e.Sp.Start == w.Start and e.Kind != names.What.Import {
             f := c!.P.FnNamed(mi, e.Name)
-            if e.Kind == names.What.Func and (f < 0 or c!.P.FnDecl(f).Recv is not null) { break }   # a method's, a builder's
+            if e.Kind == names.What.Func and (f < 0 or c!.P.FnDecl(f).Recv != null) { break }   # a method's, a builder's
             return Target.Item(mi, name)
         }
     }
@@ -238,7 +238,7 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
            I64(w.Start) < I64(decl.Sp.End) and (decl.Body.Len() == 0 or I64(w.Start) < I64(decl.Body[0].Span().Start)) {
             return Target.Method(f)   # D19: a builder's name where it is declared
         }
-        if decl.Recv is null or c!.P.L.Names.Text(decl.Name) != name { continue }
+        if decl.Recv == null or c!.P.L.Names.Text(decl.Name) != name { continue }
         if I64(decl.Sp.Start) <= I64(w.Start) and I64(w.Start) < I64(decl.Sp.End) and
            (decl.Body.Len() == 0 or I64(w.Start) < I64(decl.Body[0].Span().Start)) {
             return Target.Method(f)
@@ -247,7 +247,7 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
     # what the checked bodies say of the name: a field read, a method called, a global
     f := finder(I64(w.Start), I64(w.End), name, c!)
     for b in c!.Bodies {
-        if b.File != file or b.Root is null { continue }
+        if b.File != file or b.Root == null { continue }
         if I64(b.Sp.End) < I64(w.Start) or I64(b.Sp.Start) > I64(w.End) { continue }
         f.body = I64(b.Id)
         f.block(b.Root)
@@ -395,12 +395,12 @@ fn (f mut finder&) take(sp source.Span, tg Target) {
 }
 
 fn (f mut finder&) block(b typed.Block?&) {
-    if b is null { return }
+    if b == null { return }
     for s in b.Stmts { f.stmt(s) }
 }
 
 fn (f mut finder&) stmt(s typed.Stmt?&) {
-    if s is null { return }
+    if s == null { return }
     match s {
         case typed.Stmt.Let(_, _, init) { f.expr(init) }
         case typed.Stmt.Assign(_, p, v) {
@@ -435,7 +435,7 @@ fn (f mut finder&) stmt(s typed.Stmt?&) {
 }
 
 fn (f mut finder&) place(p typed.Lvalue?&) {
-    if p is null { return }
+    if p == null { return }
     match p {
         case typed.Lvalue.Global(sp, _, mi, n) {
             if I64(sp.End) == f.e and f.c.P.L.Names.Text(n) == f.name { f.take(sp, Target.Item(mi, f.name)) }
@@ -456,7 +456,7 @@ fn (f mut finder&) place(p typed.Lvalue?&) {
 }
 
 fn (f mut finder&) expr(x typed.Expr?&) {
-    if x is null { return }
+    if x == null { return }
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { f.place(p) }
         case typed.Expr.Promote(_, _, pr) { f.expr(pr.X) }
@@ -497,7 +497,7 @@ fn (f mut finder&) expr(x typed.Expr?&) {
                 f.block(arm.Code)
                 f.expr(arm.Value)
             }
-            if m.NoMatch is not null {
+            if m.NoMatch != null {
                 f.block(m.NoMatch!.Code)
                 f.expr(m.NoMatch!.Value)
             }
@@ -515,7 +515,7 @@ fn (f mut finder&) expr(x typed.Expr?&) {
                 case typed.FnVal.Lambda(bid, caps, _) {
                     for cp in caps: f.expr(cp.Outer)
                     lb := f.c.Bodies[I64(bid)]
-                    if lb.Root is not null: f.block(lb.Root)
+                    if lb.Root != null: f.block(lb.Root)
                 }
                 case typed.FnVal.Adapter(_, recv, _) { f.expr(recv) }
             }
@@ -551,7 +551,7 @@ fn (f mut finder&) bodyCallee(sp source.Span, of typed.BodyOf) {
                 return
             }
             if f.c.P.L.Names.Text(f.c.P.FnDecl(fi).Name) != f.name { return }
-            if f.c.P.FnDecl(fi).Recv is not null { f.take(sp, Target.Method(fi)) } else { f.take(sp, Target.Item(f.c.P.FnModule(fi), f.name)) }
+            if f.c.P.FnDecl(fi).Recv != null { f.take(sp, Target.Method(fi)) } else { f.take(sp, Target.Item(f.c.P.FnModule(fi), f.name)) }
         }
         case typed.BodyOf.Ctor(ct, _) {
             if f.c.P.T.KindOf(ct) != types.Kind.Named { return }
@@ -707,20 +707,20 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             name := nm.Text(f.Name)
             s := nameIn(t, I64(f.Sp.Start), name)
             detail := ""
-            if f.Recv is not null and f.Recv!.Ty is not null { detail = $t[I64(f.Recv!.Ty!.Span().Start):I64(f.Recv!.Ty!.Span().End)] }
+            if f.Recv != null and f.Recv!.Ty != null { detail = $t[I64(f.Recv!.Ty!.Span().Start):I64(f.Recv!.Ty!.Span().End)] }
             if f.IsBuilder() {
                 # D19: a builder, named after its owner's "."; its owner the detail, as a method's receiver is
                 detail = $t[I64(f.Owner!.Span().Start):I64(f.Owner!.Span().End)]
                 name = nm.Text(f.Member)
                 s = nameIn(t, I64(f.Owner!.Span().End), name)
             }
-            w.leaf(b, name, KindMethod if f.Recv is not null or f.IsBuilder() else KindFunction, I64(f.Sp.Start), I64(f.Sp.End), s, s + name.Len(), detail)
+            w.leaf(b, name, KindMethod if f.Recv != null or f.IsBuilder() else KindFunction, I64(f.Sp.Start), I64(f.Sp.End), s, s + name.Len(), detail)
         }
         case ast.Decl.Type(sp, td) {
             name := nm.Text(td.Name)
             s := nameIn(t, I64(sp.Start), name)
             kind := KindClass
-            if td.Body is not null {
+            if td.Body != null {
                 kind = match td.Body {
                     case ast.TypeBody.Struct(_): KindStruct
                     case ast.TypeBody.Enum(_, _): KindEnum
@@ -730,7 +730,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             }
             w.open(b, name, kind, I64(sp.Start), I64(sp.End), s, s + name.Len(), "")
             inner := symWriter(w.p)
-            if td.Body is not null { inner.members(b, td.Body!, nm) }
+            if td.Body != null { inner.members(b, td.Body!, nm) }
             b.Push("]}")
         }
         case ast.Decl.Global(sp, v) {
@@ -794,12 +794,12 @@ fn (w mut symWriter&) members(b mut StringBuilder&, body ast.TypeBody&, nm sourc
 }
 
 fn (w mut symWriter&) topIf(b mut StringBuilder&, ti ast.TopIf?&, nm source.Names&) {
-    if ti is null { return }
-    if ti.Then is not null and ti.Then!.Decls.Len() > 0 {
+    if ti == null { return }
+    if ti.Then != null and ti.Then!.Decls.Len() > 0 {
         for d in ti.Then!.Decls { w.decl(b, d, nm) }
     }
     w.topIf(b, ti.ElseIf, nm)
-    if ti.Else is not null and ti.Else!.Decls.Len() > 0 {
+    if ti.Else != null and ti.Else!.Decls.Len() > 0 {
         for d in ti.Else!.Decls { w.decl(b, d, nm) }
     }
 }
@@ -897,7 +897,7 @@ fn (it mut Items&) AddDep(label String&, kind I64, detail String&, dep Bool) {
 # fields and methods of x's type
 fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
     mi := a.ModuleOf(real)
-    if mi < 0 or a.C is null { return }
+    if mi < 0 or a.C == null { return }
     c := a.C
     text := a.TextOf(mi)
     file := a.L.Mods[mi].File
@@ -930,7 +930,7 @@ fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
 # whether the declaration at offset at of module mi carries a "Deprecated:" note in its doc comment (L4b); a member or a
 # global may carry it as its trailing comment
 fn (a Analysis&) deprecatedAt(mi I64, at I64, member Bool) Bool {
-    if mi < 0 or at < 0 or a.L.Mods[mi].Src is null { return false }
+    if mi < 0 or at < 0 or a.L.Mods[mi].Src == null { return false }
     return doc.Deprecation(doc.Comment(a.TextOf(mi), at, member)) != ""
 }
 
@@ -942,7 +942,7 @@ type Use struct(Start I64, End I64, Note String&) { Start, End, Note }
 fn (a Analysis&) Placed(real String&) Vec<Use> {
     out Vec<Use>
     mi := a.ModuleOf(real)
-    if mi < 0 or a.Sc is null { return out }
+    if mi < 0 or a.Sc == null { return out }
     file := a.L.Mods[mi].File
     for p in a.Sc!.Placements() {
         if p.File != file { continue }
@@ -958,10 +958,10 @@ fn (a Analysis&) Placed(real String&) Vec<Use> {
 fn (a Analysis&) DeprecatedUses(real String&) Vec<Use> {
     out Vec<Use>
     mi := a.ModuleOf(real)
-    if mi < 0 or a.C is null { return out }
+    if mi < 0 or a.C == null { return out }
     deprecated Vec<String&>
     for k in range a.L.Mods.Len() {
-        if a.L.Mods[k].Src is null { continue }
+        if a.L.Mods[k].Src == null { continue }
         for n in doc.DeprecatedNames(a.TextOf(k)) { deprecated.Push(n) }
     }
     if deprecated.Len() == 0 { return out }
@@ -1025,7 +1025,7 @@ fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
         if name.Contains("$") { continue }              # an error type's hidden payload enum (T19b)
         if e.Kind == names.What.Func {
             f := c!.P.FnNamed(mi, e.Name)
-            if f < 0 or c!.P.FnDecl(f).Recv is not null { continue }
+            if f < 0 or c!.P.FnDecl(f).Recv != null { continue }
             it.AddDep(name, CompFunction, c!.Ty(c!.P.Sig(f)), a.deprecatedAt(mi, I64(e.Sp.Start), false))
         } else if e.Kind == names.What.Type {
             it.AddDep(name, CompStruct, "", a.deprecatedAt(mi, I64(e.Sp.Start), false))
@@ -1042,7 +1042,7 @@ fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
 fn (a Analysis&) typeEndingAt(file I64, end I64) types.TypeId {
     tf := typeFinder(end)
     for b in a.C!.Bodies {
-        if b.File != file or b.Root is null { continue }
+        if b.File != file or b.Root == null { continue }
         tf.block(b.Root)
     }
     if tf.found != types.UnknownT { return tf.found }
@@ -1086,7 +1086,7 @@ fn (a Analysis&) typeMembers(it mut Items&, t types.TypeId) {
     c!.P.AllFns()
     for f in range c!.P.FnCount() {
         decl := c!.P.FnDecl(f)
-        if decl.Recv is null { continue }
+        if decl.Recv == null { continue }
         recv := c!.P.T.Items(c!.P.T.Params(c!.P.Sig(f)))[0]
         if c!.P.T.KindOf(recv) == types.Kind.Ref { recv = c!.P.T.Referent(recv) }
         if not sameShape(c!, recv, tt) { continue }
@@ -1127,12 +1127,12 @@ fn (f mut typeFinder&) take(sp source.Span, t types.TypeId) {
 }
 
 fn (f mut typeFinder&) block(b typed.Block?&) {
-    if b is null { return }
+    if b == null { return }
     for s in b.Stmts { f.stmt(s) }
 }
 
 fn (f mut typeFinder&) stmt(s typed.Stmt?&) {
-    if s is null { return }
+    if s == null { return }
     match s {
         case typed.Stmt.Let(_, _, init) { f.expr(init) }
         case typed.Stmt.Assign(_, p, v) {
@@ -1161,7 +1161,7 @@ fn (f mut typeFinder&) stmt(s typed.Stmt?&) {
 }
 
 fn (f mut typeFinder&) place(p typed.Lvalue?&) {
-    if p is null { return }
+    if p == null { return }
     f.take(p.Span(), p.Type())
     match p {
         case typed.Lvalue.Deref(_, _, r) { f.expr(r) }
@@ -1177,7 +1177,7 @@ fn (f mut typeFinder&) place(p typed.Lvalue?&) {
 }
 
 fn (f mut typeFinder&) expr(x typed.Expr?&) {
-    if x is null { return }
+    if x == null { return }
     f.take(x.Span(), x.Type())
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { f.place(p) }
@@ -1215,7 +1215,7 @@ fn (f mut typeFinder&) expr(x typed.Expr?&) {
 # imports, the prelude's exported names, and the keywords
 fn (a Analysis&) Names(it mut Items&, real String&, at I64) {
     mi := a.ModuleOf(real)
-    if mi < 0 or a.C is null { return }
+    if mi < 0 or a.C == null { return }
     # the parameters and locals declared before at, in the bodies around it
     file := a.L.Mods[mi].File
     for b in a.C!.Bodies {
@@ -1238,7 +1238,7 @@ fn (a Analysis&) Names(it mut Items&, real String&, at I64) {
 Keywords Array<String&> = Array<String&>["fn", "type", "struct", "enum", "trait", "extends", "import", "test", "extern", "if"
     "else", "for", "do", "in", "range", "match", "case", "return", "break", "continue", "error", "try", "catch"
     "default", "join", "spawn", "defer", "errdefer", "embed", "yield", "become", "comptime", "assert", "unreachable", "noreturn", "mut"
-    "and", "or", "not", "xor", "is", "as", "null", "true", "false", "destruct", "any", "unique", "immut", "packed", "commutes"
+    "and", "or", "not", "xor", "as", "null", "true", "false", "destruct", "any", "unique", "immut", "packed", "commutes"
     "returns", "noalloc", "noblock", "nospawn", "norecurse", "noextern", "pure", "keeps", "borrows", "noborrow", "weak"]
 
 # ---- formatting ----
@@ -1257,7 +1257,7 @@ fn Format(path String&, text String&) String ? fmt.Unparsable {
 fn CapsMode(file String&, cfg mut build.Config&) I32 {
     d mut diag.Diagnostics& = diag.Diagnostics(diag.ColorWanted())
     a := Analysis.Analyze(file, cfg, d, Map<String&, String&>(), false)
-    if d.Errors() > 0 or a.C is null {
+    if d.Errors() > 0 or a.C == null {
         say(d.Render())
         say(d.Summary())
         return 1
@@ -1275,7 +1275,7 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
     if html == "" {
         d mut diag.Diagnostics& = diag.Diagnostics(diag.ColorWanted())
         a := Analysis.Analyze(files[0], cfg, d, Map<String&, String&>())
-        if d.Errors() > 0 or a.C is null or a.Sc is null {
+        if d.Errors() > 0 or a.C == null or a.Sc == null {
             say(d.Render())
             say(d.Summary())
             return 1
@@ -1325,7 +1325,7 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
 fn docPage(root String&, cfg mut build.Config&, html String&) I32 {
     d mut diag.Diagnostics& = diag.Diagnostics(diag.ColorWanted())
     a := Analysis.Analyze(root, cfg, d, Map<String&, String&>())
-    if d.Errors() > 0 or a.C is null or a.Sc is null {
+    if d.Errors() > 0 or a.C == null or a.Sc == null {
         say(d.Render())
         return 1
     }

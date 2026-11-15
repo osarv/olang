@@ -1,6 +1,0 @@
-# check: fail error[E10c]: 'is' tests for null and nothing else - compare with '=='
-# E10c: is with a type
-fn main() ? {
-    x := 5
-    if x is I32 { }
-}

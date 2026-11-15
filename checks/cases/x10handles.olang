@@ -23,6 +23,6 @@ fn main() ? {
         l.Push(d)
         G = d
     }
-    assert c.db is null and l[2] is null and G == l[0]
+    assert c.db == null and l[2] == null and G == l[0]
     assert $c == "Conn(null, 1)"
 }

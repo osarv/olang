@@ -18,7 +18,7 @@ type Tree struct() {
 }
 
 fn (t mut Tree&) Insert(k I64) {
-    if t.root is null {
+    if t.root == null {
         t.root = Node(k, null)
         t.n++
         return
@@ -27,7 +27,7 @@ fn (t mut Tree&) Insert(k I64) {
     for {
         if k < at.key {
             l := at.left
-            if l is null {
+            if l == null {
                 at.left = Node(k, at)
                 t.n++
                 return
@@ -35,7 +35,7 @@ fn (t mut Tree&) Insert(k I64) {
             at = l
         } else {
             r := at.right
-            if r is null {
+            if r == null {
                 at.right = Node(k, at)
                 t.n++
                 return
@@ -50,7 +50,7 @@ fn leftmost(n mut Node&) mut Node& {
     at := n
     for {
         l := at.left
-        if l is null: return at
+        if l == null: return at
         at = l
     }
 }
@@ -58,8 +58,8 @@ fn leftmost(n mut Node&) mut Node& {
 # n's place in its parent (or the root) given c
 fn (t mut Tree&) replace(n mut Node&, c mut Node?&) {
     p := n.parent
-    if c is not null: c.parent = p
-    if p is null {
+    if c != null: c.parent = p
+    if p == null {
         t.root = c
     } else if p.left == n {
         p.left = c

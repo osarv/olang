@@ -129,7 +129,7 @@ test "values compare and hash by word and payload" {
     w LoadErr = a
     assert w == ParseErr.Bad(1, 2) and $w == "ParseErr.Bad(1, 2)"
     z LoadErr = null
-    assert z is null and z != w
+    assert z == null and z != w
 }
 
 test "a payload rides from a task to its join, the earliest-spawned failure's kept" {

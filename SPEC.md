@@ -141,7 +141,7 @@ spelling: see §4.3 (visibility).
 ```
 if        else    try     catch   return  assert  noreturn
 for       do      in      range   match   case    break   continue
-is        as
+as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
 trait     spawn   join    defer   errdefer yield   become
@@ -162,7 +162,7 @@ any of the words above is a method's name there: `fn (w mut World&) spawn() I32`
 
 A field may be named by a word above that is a whole statement by itself - `break`, `continue`, `unreachable`,
 after which nothing can follow on its line - or that begins no statement and no value: `in`,
-`is`, `as`, `and`, `or`, `xor`, `range`, `case`, `type`, `struct`, `enum`, `trait`, `extends`, `import`,
+`as`, `and`, `or`, `xor`, `range`, `case`, `type`, `struct`, `enum`, `trait`, `extends`, `import`,
 `test`, `extern`, `default`, and the words `any`, `unique`, `immut`, `packed`, `commutes`, `returns`, `noalloc`,
 `noblock`, `nospawn`, `norecurse`, `noextern`, `pure`, `keeps`, `borrows`, `noborrow`, `weak` (each stands only in the
 one place its rule gives it: `any` before a type's name where a type is written, `weak` before a reference type (T2d), `immut`, `unique` and `packed` before a type
@@ -484,9 +484,9 @@ written `&` or held by value, it is one naming the empty array and the nullable 
 `T&` fits wherever a `T?&` is wanted (E12), and a `T?&` fits a `T&` only where it is known not to be null - narrowed
 by a test (S8e), or unwrapped by `x!` (E35), which ends the program on a null. Through a `T?&` nothing is read or written
 - no field, element, slice, method call or `Len()` - and it is not passed for a `T&` parameter, until it is known not to be
-null; `==`, `is null`, assignment and passing it on as a `T?&` need nothing. So a `T?&` meets no trait (G19): bound to a
+null; `==` (`== null` among them, E10c), assignment and passing it on as a `T?&` need nothing. So a `T?&` meets no trait (G19): bound to a
 type variable a trait constrains (`Map<String?&, V>`, whose key must be `Hashable`), it is a compile-time error at that
-binding naming the type that is never null. `x is null` and `x is not null` on a
+binding naming the type that is never null. `x == null` and `x != null` on a
 reference that is never null are compile-time errors (always false, always true). Where `null` and a `T&` meet - the
 values of a conditional or a match (E28, S12b), a `catch default null` beside a call giving `T&` (R11) - the result is
 `T?&`. A function value follows the same rules where its type is written `fn?&(...)`, and is never null where it is
@@ -495,23 +495,23 @@ first case carries one, a struct whose constructor has no value for one - has no
 
 **An array may be null only where its type says so.** An array written `&` - and an array held by value - is never
 null: its zero value is the empty array. One written `?&` - `Array<T>?&`, `String?&`, `Array<Node&>?&` - may be absent,
-and its null is not the empty array: `x is null` is false of an empty one, a null renders as `null` and an empty one as
+and its null is not the empty array: `x == null` is false of an empty one, a null renders as `null` and an empty one as
 `""` or `Array<I64>[]` (E11a), and a null equals only a null (E10). It follows every rule of a `T?&` above: nothing is read
 through it - no element, slice, `Len()` or method - until it is known not to be null (S8e, or `x!`, E35). Its **zero
 value is null**, as every `?&`'s is (D13): a declaration with no value starts as null - a local, a global, a field, a
 constructor parameter's zero, each element of an `Array<T>(n)` with no fill (written there, since null is not its
 all-zero bits) - where an array written `&`, and one held by value, starts empty. `null` given for an array written `&` is a compile-time error naming its empty array
-(`""` for a `String`, `Array<T>(0)` otherwise) and `?&`, and `x is null` / `x is not null` on one is an error naming
+(`""` for a `String`, `Array<T>(0)` otherwise) and `?&`, and `x == null` / `x != null` on one is an error naming
 `x.Len() == 0` / `x.Len() > 0` and `?&`.
 
 Its representation is **all-zero bits**, at every nullable type but an array. For a single-pointer type that is the null
 pointer; for a function value the pair of words zeroed. An array's all-zero bits are its zero value, the empty array
 `{ 0, null }` — `Len()` (E23) of it is `0` and it reads as genuinely empty - so a null array is the length `-1` with no
-storage, `{ -1, null }`, which `x is null` tests; a null array, text included, renders `null` wherever it stands, an
+storage, `{ -1, null }`, which `x == null` tests; a null array, text included, renders `null` wherever it stands, an
 element of another's rendering too (E11a).
 
 `null` carries **no scope** (§8): there is nothing for it to outlive, so it flows into a target of any
-scope without a containment check. Whether a reference holds none is asked with `p is null` (E10c). A null equals
+scope without a containment check. Whether a reference holds none is asked with `p == null` (E10c). A null equals
 only a null (E10).
 
 **T2b (memory safety).** A reference is null only where its type says it may be (T2c), and the compiler holds every
@@ -1273,8 +1273,7 @@ took (R11b), and it is used in these ways and no others:
 - `==` and `!=` with a word (`e == ParseError.Empty`), with an error type or a named set (`e == ParseError`: true
   where it holds a word of that type, or of what the set stands for), and with another error value (the same word and,
   where it carries one, an equal payload - E10, text by its contents);
-  whether it holds no error is `e is null` (`e is not null` its negation), the one null test (E10c) - `e == null` is
-  E10c's error, naming it. Each side names something the
+  whether it holds no error is `e == null` (`e != null` its negation), the null test (E10c). Each side names something the
   other can be, else the test is a compile-time error (it could never hold); two error types or sets are never
   compared. A number, a text or any other value compared with a word or an error type is a compile-time error;
 - narrowing (S8d): where a condition `e == X` holds (an `if`'s block, the right of `and`, after `assert`, after `if e
@@ -1323,7 +1322,7 @@ the function together with whatever a lambda captured (D16c), and §8's rules fo
 before it is read (D13d) - and a `fn?&` value may be, with every rule a `T?&` has (T2c): `null` is its zero value, a
 `fn&` fits wherever a `fn?&` is wanted, a `fn?&` fits a `fn&` only where it is known not to be null - narrowed by a test
 (S8e) or unwrapped by `f!` (E35) - and nothing is called through it before (`f!(x)` calls one, ending the program on a
-null); `f is null` on a `fn&` is a compile-time error (always false). The two are different types of one
+null); `f == null` on a `fn&` is a compile-time error (always false). The two are different types of one
 representation - two words, the code and the environment, a null one's code null. `==` compares by identity: a named function is one value however
 often it is named, and each evaluation of a capturing lambda makes a new one. A **global** of function type is a
 variable like any other, holding a function value: `F(x)` calls the function `F` holds, `F` read is that value, and
@@ -2100,7 +2099,7 @@ dispatched through the table. A default of `R` introducing type variables of its
 its constrained variable bound to the `any`.
 
 **T33 (identity and text).** `a == b` on two values of one `any` type is **identity**: the same instance, whatever `Eq`
-the instance's type declares (E10's "any other reference"); `s is null` asks whether a nullable one holds none
+the instance's type declares (E10's "any other reference"); `s == null` asks whether a nullable one holds none
 (E10c). `$s` renders the instance, as `$` renders a value of its type (E11a) - a `Str` it declares included. An `any`
 has no `Hash` (E10b): it is no `Map` key.
 
@@ -3719,7 +3718,7 @@ operators groups left-to-right):
 | 3 | `and` |
 | 3½ | prefix `not` (E7a) |
 | 4 | `==` `!=` |
-| 5 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30), `is null` `is not null` (E10c) |
+| 5 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30) |
 | 6 | `\|` |
 | 7 | `^` |
 | 8 | `&` |
@@ -3796,7 +3795,7 @@ its pieces side by side (E11b). `+` with two array operands is a compile-time er
 **E7.** `and or xor` require both operands to be `Bool` and produce `Bool`. `and` and `or`
 **short-circuit**: the left operand is evaluated first, and the right one only when the left has not
 already decided the result — `and` stops at a false left operand, `or` at a true one. So
-`p is not null and p.x > 0` never reads through a null `p`. `xor` always evaluates both operands, since its
+`p != null and p.x > 0` never reads through a null `p`. `xor` always evaluates both operands, since its
 result depends on both.
 
 **E7a.** `not-expr ::= "not" binary` (its operand at the precedence of `==` and tighter). `not` requires a
@@ -3854,8 +3853,8 @@ numeric-literal adaptation) and produce `Bool`; `a != b` is always `not (a == b)
 
 A reference compared with a value of its referent's type (`r == N(1)`) compares the value it names with that value, by
 the rules above - a value has no storage of its own to be the same as (E12's copy out). A case written as an operand
-(`e == Shape.Circle`) is a test of the case, not a value (E32). The `null` literal is no
-operand: a null test is written `x is null` (E10c).
+(`e == Shape.Circle`) is a test of the case, not a value (E32), and a comparison with the `null` literal is the null
+test (E10c), never a comparison by these rules.
 
 The comparison takes no shortcut through identity, and it walks only what these rules say: a value whose parts reach
 values of its own type through what declares `Eq` - a struct holding an array of its own type, `type S struct(xs
@@ -3865,16 +3864,14 @@ comparison evaluated while compiling (K1), or under `interpret -evaluate`, stops
 counting as a call does against the evaluator's depth limit. A struct or enum reference with no `Eq` (identity) ends any
 such walk.
 
-**E10c (`is null`).** `x is null` is whether a reference, or a function value, holds none, or whether an error
-value (T20) holds no error; `x is not null` is its negation, and `not x is null` the same question (E7a).
-
-```
-is-expr ::= operand "is" [ "not" ] "null"
-```
-
-`is` asks nothing else: `a is b` for any `b` but `null`, a case or a type after it, `null is null`, and `x is null` for an
-`x` that cannot be null (a number, a struct value, an array - T2c, a reference not marked `?&`) are compile-time errors - a value and a case are compared with `==`
-(E10, E32). Comparing with the `null` literal, `x == null` or `x != null`, is an error naming `x is null`.
+**E10c (the null test).** A comparison whose operand is the `null` literal is the **null test**: `x == null` is whether
+a reference, or a function value, holds none, or whether an error value (T20) holds no error; `x != null` is its
+negation, `null == x` and `null != x` the same tests, and `not x == null` the same question (E7a). It is an ordinary
+`==` or `!=` (precedence 4, E5) and never calls a type's `Eq` or `eq` (E10a): it compares what the operand stores with
+null, whatever the type declares. The null test of an `x` that cannot be null - a number, a `Bool`, a struct or enum
+value, an array not marked `?&` (T2c), a reference or a function value never null (T2c, T21), an error value a test
+or a word written says holds one (T20) - and `null == null` are compile-time errors. Where it holds, or fails, it
+narrows a local or a parameter (S8e).
 
 **E10a (`Eq`).** A type takes over `==` by declaring the method `Eq`, or `eq` to keep it to its own module (M6b): then
 `==` on it is an error anywhere else, the prelude's `Map` and an array's `Has` included. It takes one parameter, of the
@@ -4811,7 +4808,7 @@ is added to: `x[i]++` is `x[i] += 1` and `x[i]--` is `x[i] -= 1` (`x` and `i` ev
 `==` and `!=` are a type's `Eq` (E10a) and `$` its `Str` (E11c); `and`, `or`, `not` (they short-circuit, E7), `=`,
 `.`, `try` and `match` are never declared.
 
-### 5.17 `is` and `as`
+### 5.17 Case tests and `as`
 
 **E32.** A **case written** as an operand of `==` or `!=` - `Type.Case`, or `Type.Case(...)` with a part for each of its
 payload's fields - is a **test** of the case the other operand holds, an enum value or a reference to one, read through
@@ -5230,13 +5227,13 @@ assignment, `++`/`--`, atomic operation or spawn target names it. Such a local h
 wherever it can be read, so a condition reading it reads that value. A parameter is never fixed.
 
 **S8d (narrowing).** A condition says things of the locals and parameters it tests: `e == Shape.Circle` (a case
-written, E32, `e` on either side) that `e` holds that case; `p is not null` that `p` is not null (S8e); an error
-value compared with a word, a type or a set what of its set it holds (R11b, T20). `!=` and `is null` say the same where
-the condition is false; `not` turns a condition round; `a and b` says what both say where it holds, `a or b` what both
+written, E32, `e` on either side) that `e` holds that case; `p != null` that `p` is not null (S8e); an error
+value compared with a word, a type or a set what of its set it holds (R11b, T20). `e != Shape.Circle` and `p == null`
+say the same where the condition is false; `not` turns a condition round; `a and b` says what both say where it holds, `a or b` what both
 say where it fails; parentheses change nothing; anything else says nothing. One walk reads every condition for all
 three, so they hold in the same places. What a condition says holds:
 - in the block of an `if` whose condition it is, and where it fails in the `else` (an `else if` included);
-- after `if c { ... }` with no `else` whose block never reaches what follows it - it leaves (D10a: `if n is null:
+- after `if c { ... }` with no `else` whose block never reaches what follows it - it leaves (D10a: `if n == null:
   return 0`), or a `break` or `continue` takes it out of a loop around it - where `c` fails, to the end of the block
   the `if` stands in;
 - after `assert c`, where it holds;
@@ -5245,14 +5242,14 @@ three, so they hold in the same places. What a condition says holds:
 - in the first value of `x if c else y` where `c` holds, the second where it fails;
 - in a loop's body when it is its condition (`for e == Tree.Node { }`, the three-clause form's condition), and in its
   post clause where the body assigns the local nowhere;
-- after a loop whose condition it is and which holds no `break`, where it fails (`for p is null { p = next() }`): it is
+- after a loop whose condition it is and which holds no `break`, where it fails (`for p == null { p = next() }`): it is
   left only by that condition failing;
 - and, for null alone, after a statement assigning the local a value never null (`p = Node(1)`, S8e).
 It holds from there until a statement assigns the local (an assignment, a compound one, an increment, a target - `p =
 p.next` reading `p.next` before the store), and so inside a loop only up to where the loop assigns it; never inside a
 lambda written there. Deferred code (S19, S19e) runs as its block closes, after the block's later statements: it is
 checked under a narrowing only where no statement after it in its block assigns the local. Only a local or a parameter narrows - a field never does, a call may change it: a field is tested
-through a local (`n := s.head; if n is not null { n.v }`) or unwrapped (`s.head!.v`).
+through a local (`n := s.head; if n != null { n.v }`) or unwrapped (`s.head!.v`).
 
 Where `e` is known to hold a case, `e.r` reads the payload field `r`. Where the case's payload is one type written whole
 (T17a, `Round Circle`), `e` is that payload there: `e.r`, `e.Area()`, and `e` passed on is the `Circle`. The payload's
@@ -5548,7 +5545,7 @@ expression, which may read them) is evaluated; when it is false the match goes o
 pattern had not matched. A guard is evaluated only for a clause whose pattern matched, at most once per match. A
 guarded clause covers nothing for S13a. What a guard says holds in its clause's body or value, as an `if`'s condition
 does in its block (S8d, S8e): `case Wrap.One(s) if s == Shape.Circle: s.r` reads the payload of the bound `s`, and
-`case _ if p is not null: p.v` reads through `p` - the same narrowing walk, so `and`, `or` and `not` combine as they do
+`case _ if p != null: p.v` reads through `p` - the same narrowing walk, so `and`, `or` and `not` combine as they do
 there. A type match (G13) takes no guard: its arm is chosen while compiling.
 
 **S13g (cases with no values).** A case whose payload holds a value of an enum declaring no case (T18) - by value, or
@@ -8645,7 +8642,7 @@ of it - a generic instantiated with the program's types - is the program's, sinc
 it is used: it is reported at that use, the innermost one in the program's own files, with a note at the library's line
 (`in the standard library's code, here`) and the notes of the uses around it. Where the use names the type argument
 the error is about (a zero value the library needs, D13c), it is reported at that argument, with a note naming the
-reference to hold instead (`'Chan<Ticket&>' holds it by reference, whose zero value is null`).
+reference to hold instead (`'Chan<Ticket&>' holds it by reference, whose zero value == null`).
 Every diagnostic is written to standard output. Colour is used only when standard output is a terminal, and not when
 `NO_COLOR` is set or `TERM` is `dumb`, so a file, a pipe or a program reading the output gets plain text.
 
@@ -9257,7 +9254,7 @@ element given as an out-parameter (`out Array<Db?&>&`, read back as `out[0]`). W
 `List<Db>`) it is a compile-time error naming `Db&`, and so is constructing one (`Db()`): only C makes one. Such a
 reference is never read through and nothing is written through it: it has no fields, no methods unless the program
 declares them (M19), and its permission says nothing - `Db&` and `mut Db&` fit each other. `==` and `!=` compare two
-by identity (E10), and `is null`/`is not null` test one for null; `$` renders one as its type's name, or `null`.
+by identity (E10), and `== null`/`!= null` test one for null; `$` renders one as its type's name, or `null`.
 What it points to belongs to C, never to a scope of the program: such a reference lives in no scope of olang's
 (section 8 takes it, and a value holding only such references, for a value holding none), so it may be stored
 anywhere and outlives everything as far as the scope check is concerned. Whether C has freed what it names - after a

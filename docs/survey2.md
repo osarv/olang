@@ -442,7 +442,7 @@ For the announcement's "if you know ..." notes. The olang column is what to writ
 | Rust | olang |
 |---|---|
 | `enum` with data, `match`, exhaustiveness | `type E enum { ... }`, `match`, S13a (Maranget) |
-| `if let` / `let ... else` | `if e == Shape.Circle { e.r }`; after `if e != C { return }` the value is narrowed (S8d); for null `if p is null: return` (S8e) |
+| `if let` / `let ... else` | `if e == Shape.Circle { e.r }`; after `if e != C { return }` the value is narrowed (S8d); for null `if p == null: return` (S8e) |
 | let-chains (1.88) | for null, the right of `and`; for cases, recommendation 1.1 |
 | `?` operator | `try f()` (covers the whole expression after it) |
 | `.unwrap()` / `.expect()` | `f()!`, `x!` |

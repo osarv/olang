@@ -81,7 +81,7 @@ fn hit(root mut Widget&, px I64, py I64) mut Widget& {
                 break
             }
         }
-        if next is null: return at
+        if next == null: return at
         at = next
     }
 }
@@ -95,7 +95,7 @@ fn click(w mut Widget&) I64 {
     }
     if w.kind == Kind.Panel: w.clicks++
     p := w.parent
-    if p is null: return 1
+    if p == null: return 1
     return 1 + click(p)
 }
 
@@ -117,7 +117,7 @@ fn (r mut Rand&) panel(root mut Widget&) mut Widget& {
 
 fn detach(w mut Widget&) {
     p := w.parent
-    if p is null: return
+    if p == null: return
     i := try p.kids.IndexOf(w) catch { return }
     try p.kids.RemoveAt(i) catch { return }
     w.parent = null
@@ -145,7 +145,7 @@ fn main() ? {
     for _ in range clicks: depth += click(hit(root, r.roll(4096), r.roll(4096)))
     for _ in range rounds {
         w := r.pick(root)
-        if w.parent is null: continue
+        if w.parent == null: continue
         m := count(w)
         detach(w)
         grow(r, r.panel(root), m)

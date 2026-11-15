@@ -34,7 +34,7 @@ fn (l mut KList&) PushBack(i I64) {
     for k in range i % 5 + 1 { xs.Push(i * 10 + k) }
     nd := KNode("key-" $i, xs, Tag("tag" $(i * 7), i))
     t := l.tail
-    if t is null { l.head = nd } else {
+    if t == null { l.head = nd } else {
         t.next = nd
         nd.prev = t
     }
@@ -46,7 +46,7 @@ fn (l mut KList&) PopFront() {
     h := l.head!
     q := h.next
     l.head = q
-    if q is null { l.tail = null } else { q.prev = null }
+    if q == null { l.tail = null } else { q.prev = null }
     l.n--
 }
 
@@ -65,7 +65,7 @@ fn (nd KNode&) Sum() I64 {
 fn (l KList&) Total() I64 {
     s := 0
     at KNode?& = l.head
-    for at is not null {
+    for at != null {
         s += at.Sum()
         at = at.next
     }
@@ -100,7 +100,7 @@ fn (l mut KList&) Drop() {
     h := l.head!
     q := h.next
     l.head = q
-    if q is null { l.tail = null } else { q.prev = null }
+    if q == null { l.tail = null } else { q.prev = null }
     l.n--
 }
 
@@ -192,7 +192,7 @@ fn weakNull(extra I64) Bool {
     l.PopFront()
     churn(20)
     l.PushBack(9)
-    return s.w is null and l.tail!.key == "key-9" and l.tail!.xs.Len() == 5
+    return s.w == null and l.tail!.key == "key-9" and l.tail!.xs.Len() == 5
 }
 
 assert reused(0)

@@ -1,0 +1,60 @@
+# a conditional of an array reference and null (E28, T2c) given as an argument of a generic type's method, or of a
+# generic function, whose parameter is Array<Bool>?& - as it is to a plain function's, and to a local of that type:
+# the null branch arrives as null, the other as the array. Decided while compiling beside the run time
+
+type Box<T> struct(n I64) {
+    Seen mut Array<T>& = Array<T>(n)
+}
+
+fn (b mut Box<T>&) Take(obs Array<T>&, terminal Bool = false
+        known Array<Bool>?& = null) I64 {
+    if known == null: return -1
+    return known.Len() + obs.Len()
+}
+
+fn lenOf(known Array<Bool>?&) I64 {
+    if known == null: return -1
+    return known.Len()
+}
+
+fn tagged<T>(x T, known Array<Bool>?&) I64 {
+    if known == null: return -1
+    return known.Len()
+}
+
+fn viaMethod(have Bool) I64 {
+    b := Box<F32>(3)
+    known mut Array<Bool>& = Array<Bool>(4)
+    return b.Take(b.Seen, true, known if have else null)
+}
+
+fn viaFunction(have Bool) I64 {
+    known mut Array<Bool>& = Array<Bool>(4)
+    return lenOf(known if have else null)
+}
+
+fn viaGeneric(have Bool) I64 {
+    known mut Array<Bool>& = Array<Bool>(4)
+    return tagged(1, known if have else null)
+}
+
+fn viaLocal(have Bool) I64 {
+    known mut Array<Bool>& = Array<Bool>(4)
+    chosen Array<Bool>?& = known if have else null
+    return lenOf(chosen)
+}
+
+fn all(have Bool) String {
+    return $viaMethod(have) " " $viaFunction(have) " " $viaGeneric(have) " " $viaLocal(have)
+}
+
+assert all(true) == "7 4 4 4", "decided while compiling (S17a)"
+assert all(false) == "-1 -1 -1 -1", "decided while compiling (S17a)"
+
+Baked := all(false)
+
+test all "the null branch arrives as null, the other branch as the array, through every kind of callee" {
+    assert all(true) == "7 4 4 4"
+    assert all(false) == "-1 -1 -1 -1"
+    assert Baked == all(false)
+}

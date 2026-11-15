@@ -213,7 +213,7 @@ type Writer struct(fd I32, size I64 = 65536) {
 
 # t, after what is written already
 fn (w mut Writer&) Write(t Array<U8>&) {
-    if w.refused is not null { return }
+    if w.refused != null { return }
     n := t.Len()
     if n > w.buf.Len() - w.used {
         w.drain()
@@ -230,7 +230,7 @@ fn (w mut Writer&) Write(t Array<U8>&) {
 # one character, after what is written already
 fn (w mut Writer&) WriteChar(c Char) {
     if w.used == w.buf.Len() { w.drain() }
-    if w.refused is not null { return }
+    if w.refused != null { return }
     w.buf[w.used] = c
     w.used++
 }
@@ -239,12 +239,12 @@ fn (w mut Writer&) WriteChar(c Char) {
 fn (w mut Writer&) Flush() ? Error {
     w.drain()
     refused := w.refused
-    if refused is not null { error refused }
+    if refused != null { error refused }
 }
 
 # what waits in the buffer, to the descriptor - or dropped, once a write has failed
 fn (w mut Writer&) drain() {
-    if w.used > 0 and w.refused is null { w.send(w.buf[:w.used]) }
+    if w.used > 0 and w.refused == null { w.send(w.buf[:w.used]) }
     w.used = 0
 }
 
