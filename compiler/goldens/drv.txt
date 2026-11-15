@@ -273,7 +273,7 @@
 |   FILE.olang  builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file (B3g)
 |   build       builds one program, FILE.olang its root module, into build/ (B3)
 |   compile     compiles one module to an object, linking nothing (B2)
-|   test        runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked (B3a, E16g)
+|   test        runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked, the tests that start a task under the race detector (B3a, E16g, P7a)
 |   run         builds the program as build does, into build/ (B3), and runs it with the arguments after the file (B3e)
 |   format      rewrites each file in olang's one layout (B13)
 |   explain     prints a rule of the specification (B11a), a top-level item as the compiler sees it (B11b), or a function's code as build compiles it (B11d)
@@ -298,6 +298,7 @@
 |   OLANG_CLANG=PATH   names the clang a build uses (B12d)
 |   OLANG_OBJECTS=DIR  a directory of objects builds share (B3j)
 |   OLANG_CELLS=interpret  the prompt's and notebooks' cells interpreted, not compiled (B22)
+|   OLANG_AUTORACE=0   test builds no race-detector build of the tests that start a task (P7a)
 | stderr:
 | status 0
 === olang help build
@@ -308,7 +309,7 @@
 | options:
 |   -output PATH       writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
-|   -race              builds with the data race detector (B2b)
+|   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
@@ -326,7 +327,7 @@
 | 
 | options:
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
-|   -race              builds with the data race detector (B2b)
+|   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
@@ -344,7 +345,7 @@
 | options:
 |   -output PATH       writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
-|   -race              builds with the data race detector (B2b)
+|   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
@@ -356,11 +357,11 @@
 === olang help test
 | stdout:
 | usage: olang test [OPTION...] FILE.olang...
-| runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked (B3a, E16g)
+| runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked, the tests that start a task under the race detector (B3a, E16g, P7a)
 | 
 | options:
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
-|   -race              builds with the data race detector (B2b)
+|   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
@@ -381,7 +382,7 @@
 | options:
 |   -output PATH       writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
-|   -race              builds with the data race detector (B2b)
+|   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
@@ -505,8 +506,8 @@
 | |---|---|---|
 | | `-output PATH` | build, compile, run, bindgen, profile, notebook | B3h, §11 X16, B20, B24 |
 | | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test, run | B2c, B2b, B2f |
-| | `-quick` | running a file, build, compile, test, profile, explain, run, the prompt, jupyter, notebook | B2g, B20, B11d |
-| | `-checked` | running a file, build, compile, test, run, the prompt, jupyter, notebook | E16g |
+| | `-quick` | running a file, build, compile, test, profile, explain, run, jupyter, notebook | B2g, B20, B11d |
+| | `-checked` | running a file, build, compile, test, run, jupyter, notebook | E16g |
 | | `-target NAME` | running a file, build, compile, test, run, explain, doc, lsp, mcp | B12 |
 | | `-define Name=value`, `-update` | running a file, build, compile, test, run, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
 | | `-check` | format, fix | B13, B17 |

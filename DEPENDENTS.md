@@ -118,6 +118,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `compiler/olang.olang` `Passes.Interpret`, `build.olang` `Interpret`, `InterpretTests` | running a file (B3g) builds as `build` does into `build.CacheDir("run")` (`-checked`: `Config.Checked`, the Lowerer's checks, the emitter's trace, the record key and the `.checked` name); `run` (B3e) is `build` plus running; `OLANG_EVALUATE` (read in `CommandLine.Parse`) runs the evaluator; the checks scenarios `interp` (the evaluator) and `interpbuilt` |
 | `editors/nvim/` (`compiler/olang.vim` makeprg, `lua/olang/init.lua`), `editors/README.md` | commands the plugin runs |
 | `docs/profiling.md`, `docs/install.md`, `makefile` | commands they quote |
+| the test runner's two builds (P7a): `build.olang` (`TestFile`, `testBinary`, `raceBinary`, `runParts`, `racesSpawners`, `TestFiles`), `olang.olang` (`partOf`, `testBodies`, `emitter`), `emit.olang` (`harness`, `InPart`, the race hook), `target.olang` (`HasRaceRuntime`), `cond.olang` (`SetBool`) | which tests start a task (`effects.Facts.Spawns`), how the harness counts a part (`OLANG_TEST_COUNTS`) and fails a test a race was reported in; SPEC P7a, B3a; `docs/settled.md` "Concurrency"; the checks scenario `racetests` (`checks/fixtures/racetests/`); `makefile` `race`; tests of a file that read what an earlier test left in a global must start a task as it does (`tests/shared.olang`'s pair) |
 
 ## An environment variable the compiler reads
 
@@ -129,6 +130,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `SPEC.md` (B3j, B3m, B12d) | the normative text |
 | `compiler/olang.olang` `help` ("environment:"), `compiler/goldens/drv.txt` (`make drvgold`) | `olang help` lists the build's variables |
 | `README.md`, `docs/install.md`, `makefile` (the bootstrap sets `OLANG_TIMES`) | where users are told of it |
+| `OLANG_AUTORACE`: `compiler/build.olang` (`racesSpawners`), `olang.olang` `help` ("environment:"), SPEC P7a, `checks/checks.olang` (`racetests`) | `olang test`'s race build of the tests that start a task, turned off by 0 |
 | `OLANG_SPINNER`: `compiler/spin.olang` (`Enabled`), `makefile` (`bootstrap`'s loop around clang), `checks/checks.olang` (the prompt's pty scenario sets it to 0; the `spinner` scenario drives it) | the busy indicator (B25) |
 
 The busy indicator's frames are `Frames` in `compiler/spin.olang`; `makefile`'s `bootstrap` loop repeats them (a shell cannot import them).

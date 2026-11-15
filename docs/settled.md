@@ -819,6 +819,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`join { }` with `spawn` calls inside (P1-P1b).** Binding is lexical, one level; the join waits on every way out; a
   task's arguments must outlive the join block (P2), storage declared inside it built at its level (R4). P3/P5 (no shared writes) were withdrawn - a spawning program owns
   its races, which `-race` (ThreadSanitizer, P7) detects - Go's position.
+- **`olang test` catches data races by itself (P7a, B3a, the user's decision 2026-11-15: "do it only for calls that
+  actually use spawn, not the other calls in files that use spawn").** The tests whose bodies can reach a `spawn` -
+  the function fact `Spawns` (G42) of the test's body, through anything it calls - run in a `-race` build of the file;
+  the others in the ordinary test build, as before. A file with such a test is built twice, each binary's harness
+  holding only its share of the tests (`Config.TestPart`: 1 the others, found by the facts; 2 the spawning ones, named
+  by their numbers among the file's tests - `RaceBuild` being true in the second, the facts could differ); the driver
+  runs the first, then the second, and says one `N passed, M failed` (each binary writes its counts to the file
+  `OLANG_TEST_COUNTS` names). A race ThreadSanitizer reports fails the test it was reported in (`FAIL - NAME: data
+  race`, counted by a `__tsan_on_report` the race harness defines). A file whose tests start no task is built once.
+  Without clang's TSan runtime (`libclang_rt.tsan-ARCH.a`) the note is said once and everything runs plain;
+  `OLANG_AUTORACE=0` turns it off; `-race`, `-sanitize`, `-fuzz`, `-bench`, another target and `-evaluate` leave it
+  alone (`test -race` still means everything under `-race`). A call through a function value or an `any` the effects
+  do not follow does not make a test one that spawns (`Unknown` is not read), so a task started only behind one is
+  not looked at. Tests run plain-first, then race-build, not in file order.
 - **`spawn x = f()` binds a result (P1g)**; parallel map is `spawn out[i] = f(i)`.
 - **A spawned call may fail (P4-P4d, decision 50, the user approved).** `spawn try f()`, clauses run on the task's
   thread; `try join { } catch ...` fails with the earliest-spawned failure; a failing task's target is unwritten.

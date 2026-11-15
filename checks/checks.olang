@@ -3007,7 +3007,9 @@ test "tests that fail on purpose, and where an error went" { assert passed("test
 fn testends(r mut report&) ? Failed {
     dir := fresh("testends")
     os.Run("cp checks/fixtures/testends/* " $os.Quote(dir))
-    try r.expect(sh(dir, "\"$OLANG\" test ends.olang > out.txt 2>&1") != 0, "ends", dir)
+    # (OLANG_AUTORACE=0: some of these tests read what the one before left in a global - one that starts a task and the next - and
+    # the evaluator's run below keeps the file's order, which the want file holds; the race build is the racetests scenario's, P7a)
+    try r.expect(sh(dir, "OLANG_AUTORACE=0 \"$OLANG\" test ends.olang > out.txt 2>&1") != 0, "ends", dir)
     try r.expect(sh(dir, "cmp -s out.txt ends.want") == 0, "ends output", dir)
     # B3e, P1d: test -evaluate leaves them as their binary does (bulk review 8: it had run no destructor, joined no task)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" test ends.olang > out.txt 2>&1") != 0, "ends -evaluate", dir)
@@ -3038,7 +3040,7 @@ fn racetests(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/racetests/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" test race.olang > out.txt 2>&1") == 1, "a race fails the file", dir)
     out := outOf(dir)
-    try r.expect(out.Contains("plain: race build false\nok - plain\n") and out.Contains("after: race build false\nok - after\n")
+    try r.expect(out.Contains("plain: race build false\nok - plain\n") and out.Contains("after: race build false\nok - after the race\n")
                  "the others in the ordinary build", dir)
     try r.expect(out.Contains("own: race build true\nok - tasks writing counters of their own\n") and
                  out.Contains("through a call: race build true\nok - a call reaching a task\n"), "those that start a task, in the race build", dir)
