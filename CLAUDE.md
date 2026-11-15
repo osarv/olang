@@ -49,7 +49,7 @@ Go through this for every change to what olang means - a rule added, revised or 
 2. **Checker and codegen**: implement it so the code conforms to what was just written.
 3. **Compile-time evaluator** (`compiler/eval.olang`, K1): give it the same semantics - never leave it refusing or diverging
    from the run time. Prove the two agree with a test the evaluator actually runs (an `assert` it can decide, S18c,
-   or a global it bakes, K2) beside the run-time test. `interpret` runs every test file and run case the build runs
+   or a global it bakes, K2) beside the run-time test. `interpret -evaluate` runs every test file and run case the build runs
    (`interp@FILE` in the suite, compiler/tools/evaldiff.olang): it stays green, a difference the interpreter must have
    listed there by name with its reason.
 4. **Tests**: corpus tests for what now works (read back after an arena churn where scopes are involved), and

@@ -118,7 +118,8 @@ type Config struct() {
     ListName String& = ""   # and the function it shows, the front end giving its code's symbols (Program.Named)
     Update Bool = false
     Tests Bool = false
-    Interpreted Bool = false    # test -interpret: the tests run by the evaluator instead of built (B3e)
+    Checked Bool = false        # interpret's build (B3e): -quick, checked as test and -debug are (E16g), the trace kept (S18d)
+    Evaluated Bool = false      # -evaluate: interpret's program or test's tests run by the evaluator instead of built (B3e)
     TestWords Vec<String&>      # and their targets and descriptions, where the words named none (B7a's did-you-mean)
     Jobs I64 = 0
     Color Bool = false
@@ -202,7 +203,7 @@ fn (c Config&) paint(code String&, text String&) String {
 # ".race", ".debug", ".quick", ".san" - which modes an object or a binary was built for, for a reader (its hash says it
 # anyway)
 fn (c Config&) modeSuffix() String {
-    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "") $(".cell" if c.Cell else "") $(".fuzz" if c.Fuzz != "" else "") $(".prof" if c.Profile else "") $(".listing" if c.Listing else "") $(".bench" if c.Bench else "")
+    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "") $(".cell" if c.Cell else "") $(".fuzz" if c.Fuzz != "" else "") $(".prof" if c.Profile else "") $(".listing" if c.Listing else "") $(".bench" if c.Bench else "") $(".checked" if c.Checked else "")
 }
 
 # what every function of the build carries (B12): the target's CPU and features, and in a profile build (B20) a frame
@@ -1088,7 +1089,7 @@ fn (c Config&) TestHeader(file String&) {
     if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
 }
 
-# test -interpret FILE with one file: its tests run by the front end's evaluator, as interpret runs a program (B3e) -
+# test -evaluate FILE with one file: its tests run by the front end's evaluator, as interpret runs a program (B3e) -
 # said as TestFile says them; 0 when every test passed, 3 where the words name none of its tests
 fn InterpretTests<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&
     filters Array<String&>& = Array<String&>(0)) I32 {
@@ -1103,9 +1104,42 @@ fn InterpretTests<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag
     return 0 if status == 0 else 1
 }
 
-# interpret FILE ARGS: the program run by the front end (B3e); the status it ends with
+# interpret FILE ARGS (B3e): the program built as a file run builds it (-quick) but checked (E16g) and keeping the error
+# trace (S18d), into the cache - every object reused while current (B3i), the binary named by the file and where it is
+# run from - what is only untidy said as a warning (D3b, M5a), then run in this process's place with ARGS (FILE as
+# written first, B3f) as its command line, its status the program's own. Under -evaluate the front end's evaluator
+# runs it instead (the prelude's C imports need clang either way, so there is no running without one to fall back on)
 fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&) I32 {
-    return try fe.Interpret(file, args, c, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
+    if c.Evaluated {
+        return try fe.Interpret(file, args, c, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
+    }
+    c.Quiet = true
+    c.Quick = true
+    c.Checked = true
+    c.Dir = CacheDir("run")
+    real := try os.RealPath(file) catch default $file
+    where Vec<String&>
+    where.Push(real)
+    where.Push(try os.Cwd() catch default "")
+    c.Output = $c.Dir "/" $Readable(filepath.Base(file)) "-" $HashOf(where)[:16] $c.modeSuffix()
+    status := BuildProgram(fe, c, file, d)
+    if status != 0 { return status }
+    sayErr(d.Warnings())
+    try os.ExecInPlace(c.Built, ...args) catch os.Error {
+        d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
+        return finish(d)
+    }
+    unreachable
+}
+
+# where olang keeps what it builds for itself from one run to the next - interpret's programs ("run"), the prompt's
+# cells ("cells"): $XDG_CACHE_HOME/olang/WHAT, else ~/.cache's
+fn CacheDir(what String&) String {
+    x := try os.Env("XDG_CACHE_HOME") catch os.Error default ""
+    if x != "": return $x "/olang/" $what
+    h := try os.Env("HOME") catch os.Error default ""
+    if h != "": return $h "/.cache/olang/" $what
+    return $"/tmp/olang-" $what "-" $unistd.getuid()
 }
 
 # explain FILE NAME (B11b): the item, as the front end sees it, on the standard output; a program with errors says them
