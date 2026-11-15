@@ -235,6 +235,14 @@ A change to the diagnostic row format, a mode name used there, or a keyword touc
 package and its `syntax/olang.vim` and `compiler/olang.vim` for Vim, with a filetype rule of its own that follows
 `ftdetect/olang.lua`'s: a new Vimscript file, or a change to what ftdetect recognises, changes it.
 
+`editors/debug/olang_lldb.py` and `olang_gdb.py` read the layouts `-debug` describes (compiler/emit.olang, "debug
+information": a run-time array's `{len, data}`, an enum's `{case, payload}` union, `Vec`'s `data`/`n`, `Map`'s
+`ents`/`next`/`buckets`/`n`, MapEntry's `Key`/`Value`, the `olang.table.` symbol of an `any`): a change to one of them,
+or to those prelude types' fields, changes the formatters and the `dwarf` check (checks/fixtures/dwarf).
+`editors/nvim/lua/olang/debug.lua` finds `olang_lldb.py` beside the plugin or beside the `olang` on PATH (`make install`
+copies `editors/debug` there) and builds into the name `olang build -debug` gives (`build/NAME.debug`) and `olang test
+-debug`'s binary (`build/NAME_test.debug`).
+
 olang's palette is one: `compiler/paint.olang`'s shades (the prompt, 24-bit and 256-colour) and
 `editors/nvim/syntax/olang.vim`'s `s:palette` hold the same colours for the same kinds of token; a colour changed in one
 changes in the other.

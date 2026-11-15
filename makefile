@@ -582,7 +582,8 @@ clean:
 	rm -rf build
 
 # install: olang copied to a place of its own, independent of the checkout - PREFIX/lib/olang holds the compiler
-# (bin/olang), the standard library (std/, its runtime and prelude) and SPEC.md (explain RULE), laid out as in the
+# (bin/olang), the standard library (std/, its runtime and prelude), SPEC.md (explain RULE) and editors/debug (the
+# debuggers' formatters, which the Neovim plugin finds beside the olang on PATH), laid out as in the
 # checkout, since the compiler finds std and the spec from where its file is (load.StdDir, diag.SpecPath: "../std" and
 # "../SPEC.md" from its directory) - and PREFIX/bin/olang links to it. Installing again replaces what was there (by way
 # of PREFIX/lib/olang.new, renamed into place). Where PREFIX/bin is not on PATH, one line putting it there is added to
@@ -605,6 +606,7 @@ VIM_PACK = $(HOME)/.vim/pack/olang
 install: build/olang install-editors
 	@d=$(INSTALL_DIR); rm -rf $$d.new && mkdir -p $$d.new/bin $(abspath $(PREFIX))/bin && \
 	cp build/olang $$d.new/bin/olang && cp -R std $$d.new/std && cp SPEC.md $$d.new/SPEC.md && \
+	mkdir -p $$d.new/editors && cp -R editors/debug $$d.new/editors/debug && \
 	rm -rf $$d && mv $$d.new $$d && ln -sfn $$d/bin/olang $(abspath $(PREFIX))/bin/olang && \
 	echo "install: olang copied into $$d, $(abspath $(PREFIX))/bin/olang links to it"
 	@bin=$(abspath $(PREFIX))/bin; line="export PATH=\"$$bin:\$$PATH\""; \

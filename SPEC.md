@@ -8090,14 +8090,18 @@ do, so it is a compile-time error beside either of them. Running a file (B3g), `
 `.quick`. Nothing else changes: the program means what it means in the default build.
 
 **B2e.** Under `-debug` the build also carries **source-level debug information** (DWARF): every function
-of the program has a source location and its own name, every statement a line, and every parameter and local
-its name and value - a number, a `Bool`, a reference (a pointer to what it names), a struct, a tuple or a record
-(its fields by name), a fixed array (its elements), a run-time-length array or text (its length and a pointer to
-its elements), an enum (its case, and the words of its payload where one carries a payload) and a function value
-(its code and environment). A debugger can therefore break on a function or a `file:line`, step by statement,
-show arguments and locals, and print a backtrace in source terms. A local held in an arena (over 64KB, T7c, or
-homed in a scope variable, O26a) is not described, and a test build's `test` blocks share one function scope.
-Outside `-debug` no debug information is emitted.
+of the program has a source location and its own name (a test `test TARGET: DESCRIPTION`), every statement a line -
+code built for a default argument (D8a) the line of the call leaving it off - and every parameter and local its name,
+its type by the name the program writes it (`I64`, `String`, `Point&`, a declared type's own name) and its value:
+a number, a `Bool`, a reference (a pointer to what it names), a struct, a tuple or a record (its fields by name), a
+fixed array (its elements), a run-time-length array or text (its length and a pointer to its elements), an enum (its
+case, and where one carries a payload each case's fields by name), an error value (its word, or `null`), an `any`
+(its instance and table) and a function value (its code and environment). A local held in an arena (homed in a scope
+variable, O26a) is described where its storage is. Each block, loop body and `join` written in the source is a
+lexical block, so a local is shown only where it is in scope. A debugger can therefore break on a function or a
+`file:line`, step by statement, show arguments and locals, and print a backtrace in source terms; the formatters of
+`editors/debug` (lldb, gdb) show run-time arrays, text, payload cases, `Vec` and `Map` as `$` writes them. A local over
+64KB (T7c) is not described. Outside `-debug` no debug information is emitted.
 
 A debug object is a distinct artifact from an optimized one and is named accordingly (B4) — without that,
 a `-debug` build would silently reuse optimized objects and be exactly what was not asked for.
