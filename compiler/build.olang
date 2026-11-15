@@ -67,6 +67,8 @@ type Program struct() {
     Header String& = ""      # and its C header's text
     FuzzCorpus String& = ""  # B19: where the fuzzed test's failing inputs are saved
     TestWords Vec<String&>   # B7a: the root's tests' targets and descriptions, for a filter naming none
+    Spawning Vec<I64>        # B3a, P7: the root's tests that start a task (their places among its tests), where asked
+    PartTests I64 = 0        # and how many tests this build runs
     Named Vec<Code>          # B11d: the code Config.ListName names - each instance's, a generic's in turn
 }
 
@@ -122,6 +124,11 @@ type Config struct() {
     Checked Bool = false        # interpret's build (B3e): -quick, checked as test and -debug are (E16g), the trace kept (S18d)
     Evaluated Bool = false      # OLANG_EVALUATE: a file's program or test's tests run by the evaluator instead of built (B3e)
     TestWords Vec<String&>      # and their targets and descriptions, where the words named none (B7a's did-you-mean)
+    # B3a, P7: test run in two parts, the tests that start a task under -race: TestPart is 1 for a build of the others,
+    # that also reports which tests spawn (Program.Spawning), 2 for the race build of those named by SpawnTests, 0 for
+    # every test
+    TestPart I64 = 0
+    SpawnTests Vec<I64>
     Jobs I64 = 0
     Color Bool = false
     Quiet Bool = false  # no "built ..." lines: for tests of the build itself, and running a file
@@ -948,41 +955,147 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
     unreachable
 }
 
+# B3a, P7: whether test runs a file's tests that start a task in a build of the race detector, the others as usual: not
+# where the build has modes of its own to give them (-race, -sanitize, -fuzz, the benchmark), is for another machine or
+# evaluated, or OLANG_AUTORACE=0 turns it off
+fn (c Config&) racesSpawners() Bool {
+    if c.Race or c.San or c.Fuzz != "" or c.Bench or c.Evaluated or c.Memory or c.Listing or c.Profile or c.Target.Foreign: return false
+    return (try os.Env("OLANG_AUTORACE") catch default "") != "0"
+}
+
+# the note said, once for a run of tests, where the race detector's runtime is not installed
+fn (c Config&) noRaceRuntime() String {
+    return c.paint("33", $"olang: tests that start a task run under the race detector (P7), but clang's ThreadSanitizer runtime is not installed (libclang_rt.tsan-" $c.Target.Arch ".a, in Debian and Ubuntu libclang-rt-N-dev): they run without it")
+}
+
+# whether this run of tests is cut in two (B3a, P7): the detector's runtime found, else the note said once
+fn (c Config&) splitsTests() Bool {
+    if not c.racesSpawners(): return false
+    if target.HasRaceRuntime(c.Clang, c.Target.Arch): return true
+    sayln(c.noRaceRuntime())
+    return false
+}
+
+# one test build, the file analyzed and its objects made and linked: -1 and its binary, or the status the file ends with.
+# Where its other part has all the tests (spare), -2 once analyzed: there is nothing to build
+fn (c mut Config&) testBinary<F Frontend>(fe mut F&, file String&, d mut diag.Diagnostics&, prog mut Program&, spare Bool) I32, String {
+    try fe.Analyze(file, Kind.Tests, c, prog, d) catch Failed.Reported { return c.skipped(file, d), "" } catch Failed.Unbuilt { return unbuilt(), "" }
+    if d.Errors() > 0 or prog.Units.Len() == 0 { return c.skipped(file, d), "" }
+    if spare and prog.PartTests == 0 and prog.Spawning.Len() > 0 { return -2, "" }
+    try c.ensureDir(d) catch Failed { return finish(d), "" }
+    objs := try c.Objects(prog, d) catch Failed { return finish(d), "" }
+    Phase("compile")
+    bin := $c.Dir "/" $Readable(prog.rootIdentity()) "_test" $c.modeSuffix()
+    try c.Link(objs, bin, prog.Dyncall != "", prog.Links) catch Failed {
+        sayln(c.paint("31", $file ": native compilation failed"))
+        return 1, ""
+    }
+    Phase("link")
+    return -1, bin
+}
+
+# the test binary bin run, its output straight to this process's: its status, with 0 for a pass, 1 for what failed (a
+# signal said) and 3 where the words name none of its tests. counts names the file its counts of passed and failed tests go to
+# instead of the line they are said in ("" for the line)
+fn (c Config&) runTests(run Array<String&>&, bin String&, file String&, filters Array<String&>&, counts String&) I32 {
+    cmd Vec<String&>
+    if counts != "" {
+        try os.Remove(counts) catch os.Error { }
+        cmd.Push("env")
+        cmd.Push($"OLANG_TEST_COUNTS=" $counts)
+    }
+    for w in run { cmd.Push(w) }
+    cmd.Push(Shown(bin))
+    # B7a: the words naming the tests to run, read by the test binary's harness
+    for w in filters { cmd.Push(w) }
+    out := try os.Output.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
+    if out.Status > 128: sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
+    if out.Status == 3 and filters.Len() > 0 { return 3 }
+    return 0 if out.Status == 0 else 1
+}
+
 # test FILE with one file: its test binary built and run here (B3a). 0 when every test passed
 fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&, filters Array<String&>& = Array<String&>(0)) I32 {
     info := try os.FileInfo.Stat(file) catch os.Error { return c.unusable(file, msgs.CannotOpen(), d) }
     if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
+    split := c.splitsTests()
+    c.TestPart = 1 if split else 0
     prog := Program()
-    try fe.Analyze(file, Kind.Tests, c, prog, d) catch Failed.Reported { return c.skipped(file, d) } catch Failed.Unbuilt { return unbuilt() }
-    if d.Errors() > 0 or prog.Units.Len() == 0 { return c.skipped(file, d) }
-    try c.ensureDir(d) catch Failed { return finish(d) }
-    objs := try c.Objects(prog, d) catch Failed { return finish(d) }
-    Phase("compile")
-    bin := $c.Dir "/" $Readable(prog.rootIdentity()) "_test" $c.modeSuffix()
-    try c.Link(objs, bin, prog.Dyncall != "", prog.Links) catch Failed {
-        sayln(c.paint("31", $file ": native compilation failed"))
-        return 1
+    status, bin := c.testBinary(fe, file, d, prog, split)
+    if status >= 0: return status
+    # B3a, P7: no test starts a task - the one binary has them all, as a build always had
+    split = split and prog.Spawning.Len() > 0
+    if not split { c.TestPart = 0 }
+    race := ""
+    if split {
+        c.Race = true
+        raceProg := Program()
+        raceD := diag.Diagnostics(c.Color)
+        status, race = c.raceBinary(fe, file, raceD, raceProg, prog.Spawning)
+        if status >= 0: return status
     }
-    Phase("link")
     spin.End()
     c.TestHeader(file)
     run := try c.runner(d) catch Failed { return finish(d) }
-    cmd Vec<String&>
-    for w in run { cmd.Push(w) }
-    cmd.Push(Shown(bin))
-    if c.Fuzz != "" { return c.fuzzRun(cmd, prog) }
-    # B7a: the words naming the tests to run, read by the test binary's harness
-    for w in filters { cmd.Push(w) }
-    out := try os.Output.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
-    if out.Status > 128: sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
-    # B3a: words naming none of this file's tests - said, and the status 3 TestFiles reads: a run fails by them only
-    # where no listed file has a test they name
-    if out.Status == 3 and filters.Len() > 0 {
-        sayln(noTestNamed(file, filters, prog.TestWords))
-        return 3
+    if c.Fuzz != "" {
+        cmd Vec<String&>
+        for w in run { cmd.Push(w) }
+        cmd.Push(Shown(bin))
+        return c.fuzzRun(cmd, prog)
     }
-    return 0 if out.Status == 0 else 1
+    if not split { return c.testsEnded(c.runTests(run, bin, file, filters, ""), file, filters, prog.TestWords) }
+    return c.runParts(run, bin, race, file, filters, prog.TestWords)
+}
+
+# B3a, P7: the race build of a file whose tests start tasks, spawning their numbers (Program.Spawning): its binary, or the
+# status the file ends with. The build's own modes are put back
+fn (c mut Config&) raceBinary<F Frontend>(fe mut F&, file String&, d mut diag.Diagnostics&, prog mut Program&
+    spawning Vec<I64>&) I32, String {
+    quick := c.Quick
+    c.Race = true
+    c.Quick = false
+    c.TestPart = 2
+    c.SpawnTests = spawning
+    c.Consts.SetBool("RaceBuild", true)
+    status, bin := c.testBinary(fe, file, d, prog, false)
+    c.Race = false
+    c.Quick = quick
+    c.Consts.SetBool("RaceBuild", false)
+    return status, bin
+}
+
+# the two parts of a file's tests run, the ones that start no task and then those that do (under the race detector), their
+# counts said as one: the status the file ends with
+fn (c Config&) runParts(run Array<String&>&, plain String&, race String&, file String&, filters Array<String&>&
+    words Vec<String&>&) I32 {
+    first I32 = 3
+    counts Vec<String&>
+    if plain != "" {
+        counts.Push($plain ".counts")
+        first = c.runTests(run, plain, file, filters, counts[0])
+    }
+    second := c.runTests(run, race, file, filters, $race ".counts")
+    counts.Push($race ".counts")
+    passed I64 = 0
+    failed I64 = 0
+    for f in counts {
+        text := try os.ReadFile(f) catch os.Error { continue }
+        fields := text.Trim().Split(" ")
+        if fields.Len() != 2 { continue }
+        passed += try fields[0].ParseInt() catch default 0
+        failed += try fields[1].ParseInt() catch default 0
+    }
+    if first != 3 or second != 3 { sayln($passed " passed, " $failed " failed") }
+    if first == 1 or second == 1: return 1
+    return c.testsEnded(3 if first == 3 and second == 3 else 0, file, filters, words)
+}
+
+# the status a file's tests end with (0, 1, or 3 where its words name none of them), the words said when none is named
+fn (c Config&) testsEnded(status I32, file String&, filters Array<String&>&, words Vec<String&>&) I32 {
+    if status != 3: return status
+    sayln(noTestNamed(file, filters, words))
+    return 3
 }
 
 # B7a: what a test run says when its words name none of its tests - the words, and the nearest target or description
@@ -1067,8 +1180,15 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
     spin.End()         # each file's own build draws its spinner (the children's standard error is this one's)
     failed := false
     named := false     # B3a: some listed file has a test the words name (its run did not end with 3)
+    # P7: without the race detector's runtime, said once here, each file's own run then not saying it again
+    unraced := c.racesSpawners() and not target.HasRaceRuntime(c.Clang, c.Target.Arch)
+    if unraced { sayln(c.noRaceRuntime()) }
     for f in files {
         args Vec<String&>
+        if unraced {
+            args.Push("env")
+            args.Push("OLANG_AUTORACE=0")
+        }
         args.Push(exe)
         args.Push("test")
         for p in passed { args.Push(p) }
