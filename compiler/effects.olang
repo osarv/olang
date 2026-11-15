@@ -40,7 +40,8 @@ fn CapName(k I64) String {
 
 # what a body may do, its own and through what it may call
 type Facts struct() {
-    Allocates Bool = false      # asks the runtime for storage in some scope, its frame's included
+    Allocates Bool = false      # asks the runtime for storage in some scope, its frame's included, on a way that runs on
+    FailAllocates Bool = false  # ... only on a way that fails: an error raised, the program ended (G42's cold ways)
     Blocks Bool = false         # may wait: a join, a lock, a channel, a sleep, C not known to return at once
     WritesGlobals Bool = false  # stores into a global
     ReadsGlobals Bool = false   # reads a mutable global
@@ -93,13 +94,16 @@ fn (f Facts&) Evaluable() Bool {
 
 # whether it does nothing but compute its result
 fn (f Facts&) Idle() Bool {
-    if f.Allocates or f.Blocks or f.WritesGlobals or f.CallsC or f.Spawns or f.Unknown or f.Grows or f.Unchecked { return false }
+    if f.Allocates or f.FailAllocates or f.Blocks or f.WritesGlobals or f.CallsC or f.Spawns or f.Unknown or f.Grows or f.Unchecked { return false }
     return not f.Exits and f.Caps == 0 and f.Writes == 0 and f.Calls == 0
 }
 
-# the facts of B1.1 a program reads through a function's name (G42), by name; Unknown for none
+# the facts of B1.1 a program reads through a function's name (G42), by name; Unknown for none. Running is G42's
+# Allocates, the ways that run on; Allocates is every way's, failing ones included - what a task's scopes are decided
+# by (P2)
 type Fact enum {
     Allocates
+    Running
     Blocks
     WritesGlobals
     CallsC
@@ -113,7 +117,7 @@ type Fact enum {
 
 fn Fact.Named(name String&) Fact {
     return match name {
-        case "Allocates": Fact.Allocates
+        case "Allocates": Fact.Running
         case "Blocks": Fact.Blocks
         case "WritesGlobals": Fact.WritesGlobals
         case "CallsC": Fact.CallsC
@@ -130,7 +134,8 @@ fn Fact.Named(name String&) Fact {
 # and Returns false)
 fn (f Facts&) Holds(k Fact) Bool {
     return match k {
-        case Fact.Allocates: f.Allocates or f.Unknown or f.Unchecked
+        case Fact.Allocates: f.Allocates or f.FailAllocates or f.Unknown or f.Unchecked
+        case Fact.Running: f.Allocates or f.Unknown or f.Unchecked
         case Fact.Blocks: f.Blocks or f.Unknown or f.Unchecked
         case Fact.WritesGlobals: f.WritesGlobals or f.Unknown or f.Unchecked
         case Fact.CallsC: f.CallsC or f.Unknown or f.Unchecked
@@ -163,6 +168,7 @@ fn Facts.Bound(t types.Table&, ty types.TypeId) Facts {
     clean := w & types.PromPure != 0
     noC := clean or w & types.PromNoextern != 0
     f.Allocates = w & types.PromNoalloc == 0
+    f.FailAllocates = true    # (noalloc promises the ways that run on: one failing may still build)
     f.Grows = f.Allocates
     f.Blocks = not ret and w & types.PromNoblock == 0
     f.Spawns = w & types.PromNospawn == 0
@@ -187,7 +193,7 @@ fn Facts.Bound(t types.Table&, ty types.TypeId) Facts {
 # where the bound is being judged
 fn Breaks(f Facts&, word I64) String {
     if f.Unchecked: return "reach code that did not check"
-    if word == types.PromNoalloc: return "allocate" if f.Holds(Fact.Allocates) else ""
+    if word == types.PromNoalloc: return "allocate" if f.Holds(Fact.Running) else ""
     if word == types.PromNoblock: return "block" if f.Holds(Fact.Blocks) else ""
     if word == types.PromNospawn: return "start a task" if f.Holds(Fact.Spawns) else ""
     if word == types.PromNoextern: return "call C" if f.Holds(Fact.CallsC) or f.Caps & ~CapThreads != 0 else ""
@@ -295,6 +301,7 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     WantPure Bool = false
     own Vec<Facts>       # by body: what it does itself, once walked
     calls Vec<Vec<I64>>  # by body: the bodies it calls, makes as lambdas or gives a slot that is called through
+    colds Vec<Vec<I64>>  # by body: the indices into its calls made only on a way that fails (G42's cold ways)
     links Vec<Vec<link>> # by body: its arguments rooted at its slots
     givs Map<I64, Vec<given>> # by body giving any: what it gives the slots holding function values of what it calls
     rets Map<I64, Vec<I64>>   # by body giving a function value whose returns give only named functions and null: those
@@ -317,6 +324,8 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # the body walked
     cur Facts = Facts()
     curCalls Vec<I64>
+    curColds Vec<I64>
+    cold I64 = 0                  # how deep the walk is in code that runs only on a way that fails
     curLinks Vec<link>
     curGivs Vec<given>
     paramAt Map<I64, I64>         # by local: its slot (a parameter's, a capture's)
@@ -369,6 +378,7 @@ fn (e mut Effects&) grow() {
     for e.state.Len() < e.Bodies.Len() {
         e.own.Push(Facts())
         e.calls.Push(Vec<I64>())
+        e.colds.Push(Vec<I64>())
         e.links.Push(Vec<link>())
         e.whole.Push(Facts())
         e.callsOf.Push(0)
@@ -606,13 +616,20 @@ fn (e mut Effects&) settle(comp Vec<I64>&) {
     e.stamp++
     for b in comp {
         Merge(all, e.own[b])
-        for w in e.calls[b] {
+        for i in range e.calls[b].Len() {
+            w := e.calls[b][i]
             if w == b { cyclic = true }
             if w < 0 or w >= e.Bodies.Len() {
                 all.Unchecked = true
                 continue
             }
-            if e.merged[w] == e.stamp or inComp.Has(w) { continue }
+            if inComp.Has(w): continue
+            # G42: a call made only on a way that fails - what it builds is the failure's
+            if e.colds[b].Has(i) {
+                MergeCold(all, e.whole[w])
+                continue
+            }
+            if e.merged[w] == e.stamp: continue
             e.merged[w] = e.stamp
             Merge(all, e.whole[w])
         }
@@ -746,6 +763,7 @@ fn hasBit(set I64, k I64) Bool { return set & paramBit(k) != 0 }
 # what from does added to into: every fact, and each class's first module
 fn Merge(into mut Facts&, from Facts&) {
     into.Allocates = into.Allocates or from.Allocates
+    into.FailAllocates = into.FailAllocates or from.FailAllocates
     into.Blocks = into.Blocks or from.Blocks
     into.WritesGlobals = into.WritesGlobals or from.WritesGlobals
     into.ReadsGlobals = into.ReadsGlobals or from.ReadsGlobals
@@ -768,6 +786,13 @@ fn Merge(into mut Facts&, from Facts&) {
     for k in range CapCount {
         if into.Via[k] < 0 { into.Via[k] = from.Via[k] }
     }
+}
+
+# what from does added to into, as a call made only on a way that fails does it (G42): what it allocates, only there
+fn MergeCold(into mut Facts&, from Facts) {
+    from.FailAllocates = from.FailAllocates or from.Allocates
+    from.Allocates = false
+    Merge(into, from)
 }
 
 # ---- fixed fields (T22d) ----
@@ -1238,6 +1263,7 @@ fn (e mut Effects&) walk(b I64) {
     # a body's lambdas are its own: what they do is what making and calling them may do
     e.own[b] = e.cur
     e.calls[b] = e.curCalls
+    e.colds[b] = e.curColds
     e.links[b] = e.curLinks
     if e.curGivs.Len() > 0: e.givs.Put(b, e.curGivs)
     e.gives[b] = e.giving or e.curGivs.Len() > 0
@@ -1252,6 +1278,8 @@ fn (e mut Effects&) walkBody(b I64) {
     body := e.Bodies[b]
     e.cur = Facts()
     e.curCalls = Vec<I64>()
+    e.curColds = Vec<I64>()
+    e.cold = 0
     e.curLinks = Vec<link>()
     if e.curGivs.Len() > 0: e.curGivs.Clear()
     if e.pends.Len() > 0: e.pends.Clear()
@@ -1473,9 +1501,48 @@ fn (e Effects&) ctorCall(cl typed.Call&) Bool {
 
 fn (e mut Effects&) block(b typed.Block?&) {
     if b == null { return }
-    for st in b.Stmts {
-        if e.whyWord == 0 { e.stmt(st) } else { e.whyStmt(st) }
+    # G42: a block every way through which fails - an error raised, the program ended - is walked as cold code
+    if e.cold == 0 and typed.Fails(b) {
+        e.coldBlock(b)
+        return
     }
+    for st in b.Stmts {
+        if e.whyWord == 0 or e.cold > 0 { e.stmt(st) } else { e.whyStmt(st) }
+    }
+}
+
+# G42's cold ways: code that runs only where its body fails or the program ends - what it allocates there is the
+# failure's (FailAllocates), as are the calls it makes; every other fact counts as anywhere
+type coldMark struct(From I64, Was Bool) {
+    From    # the calls made before it
+    Was     # whether the body allocated before it
+}
+
+fn (e mut Effects&) coldOpen() coldMark {
+    e.cold++
+    return coldMark(e.curCalls.Len(), e.cur.Allocates)
+}
+
+fn (e mut Effects&) coldClose(m coldMark) {
+    e.cold--
+    for i in range m.From, e.curCalls.Len(): e.curColds.Push(i)
+    if m.Was or not e.cur.Allocates: return
+    e.cur.Allocates = false
+    e.cur.FailAllocates = true
+}
+
+fn (e mut Effects&) coldBlock(b typed.Block&) {
+    m := e.coldOpen()
+    for st in b.Stmts: e.stmt(st)
+    e.coldClose(m)
+}
+
+# an ending's message, built only where it ends the program (S16d, S17)
+fn (e mut Effects&) coldExpr(x typed.Expr?&) {
+    if x == null: return
+    m := e.coldOpen()
+    e.expr(x)
+    e.coldClose(m)
 }
 
 # Why: the innermost statement of a block making the body break the word - a call of what breaks it, or its own doing
@@ -1541,13 +1608,13 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Exit(_, _, msg) {
             e.cur.Ends = true
-            e.expr(msg)
+            e.coldExpr(msg)
         }
         case typed.Stmt.Assert(_, cond, msg) {
             # (an assert decided true while compiling is no ending, but that is decided after the facts - S18c)
             if not litTrue(cond): e.cur.Ends = true
             e.expr(cond)
-            e.expr(msg)
+            e.coldExpr(msg)
         }
         case typed.Stmt.Join(_, j) {
             e.cur.Blocks = true
@@ -1617,8 +1684,8 @@ fn (e mut Effects&) expr(x typed.Expr?&) {
             if ty == types.NoreturnT: e.cur.Ends = true
             e.call(cl)
         }
-        case typed.Expr.Make(_, _, m) {
-            if I64(m.Site) >= 0 { e.cur.Allocates = true }
+        case typed.Expr.Make(_, ty, m) {
+            if I64(m.Site) >= 0 and not e.inPlace(ty, m) { e.cur.Allocates = true }
             e.expr(m.Length)
             for y in m.Items { e.expr(y) }
         }
@@ -1663,6 +1730,19 @@ fn (e mut Effects&) arm(a typed.Arm&) {
     e.expr(a.Guard)
     e.block(a.Code)
     e.expr(a.Value)
+}
+
+# whether a Make with a site builds nothing: an array of a length known while compiling held by value, laid out in
+# place (T7c) - its elements but a fill's own copies of what owns storage (QCE), which are made where it is
+fn (e mut Effects&) inPlace(ty types.TypeId, m typed.Make&) Bool {
+    if m.Kind != typed.MakeKind.Fill and m.Kind != typed.MakeKind.Array: return false
+    r := e.P.T.Repr(ty)
+    if e.P.T.IsRef(r) or e.P.T.KindOf(r) != types.Kind.Array: return false
+    n := e.P.T.Length(r)
+    if n == types.TypeId(0) or e.P.T.KindOf(n) != types.Kind.Const: return false
+    if m.Kind == typed.MakeKind.Array or m.Items.Len() == 0: return true
+    el := e.P.T.Elem(r)
+    return not (e.P.T.OwnedPart(el) or e.P.T.OwnsParts(el))
 }
 
 # a function made a value: a lambda's environment is storage, and what the lambda does may happen wherever it is
@@ -2080,7 +2160,7 @@ fn Describe(f Facts&, names Array<String&>&) String {
     }
     if cs.Len() > 0 { parts.Push($"calls through " + $cs.Join(", ")) }
     if f.WritesGlobals { parts.Push("writes a global") }
-    parts.Push("allocates" if f.Allocates else "allocates nothing")
+    parts.Push("allocates" if f.Allocates else "allocates only where it fails" if f.FailAllocates else "allocates nothing")
     if f.Grows { parts.Push("may grow a Vec") }
     if f.Spawns { parts.Push("starts tasks") }
     reach := capText(f)

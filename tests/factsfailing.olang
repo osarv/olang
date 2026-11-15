@@ -1,0 +1,59 @@
+# G42's precision (oann's allocfacts and methodfacts): a fixed array held in place allocates nothing; what a failing
+# way builds - an error's text, an unreachable's or an assert's message - is the failure's; a method is named through
+# its type, a generic type's instance included. Pinned by top-level asserts (S17a, decided while compiling)
+import "std/io"
+
+type Vec2 struct(X F64, Y F64) { X, Y }
+fn Lane8(x Array<F32>&) F32 {
+    acc := Array<F32>(8)
+    for j in range 8: acc[j] = x[j] * 2.0
+    return acc[3]
+}
+
+type Mismatch error { Shape(what String) }
+
+fn Checked(x I64) I64 ? Mismatch {
+    if x < 0: error Mismatch.Shape("negative " + $x)
+    return x
+}
+
+fn Settled8(x I64) I64 {
+    if x > 100 {
+        io.PutErrLine("too far: " + $x)!
+        unreachable "lost " + $x
+    }
+    return x * 2
+}
+
+fn Joined(x I64) I64 {
+    assert x >= 0, "a count of " + $x
+    return x + Checked(x)!
+}
+
+type Holder<T> struct(n I64) {
+    n
+    data mut Array<T>& = Array<T>(0)
+}
+
+fn (h mut Holder<T>&) Fill() { h.data = Array<T>(h.n) }
+fn (h Holder<T>&) Size() I64 { return h.n }
+
+fn (v Vec2&) Dot(w Vec2&) F64 { return v.X * w.X + v.Y * w.Y }
+
+assert not Lane8.Allocates, "a fixed array laid out in place allocates nothing"
+assert not Checked.Allocates and not Settled8.Allocates and not Joined.Allocates, "a failing way's text is the failure's"
+assert Holder<I64>.Fill.Allocates and not Holder<I64>.Size.Allocates and not Vec2.Dot.Allocates
+fn Label(n I64) String { return "#" + $n }
+
+assert Label.Allocates
+
+test Checked "a failing way still builds its text, and the error carries it" {
+    assert Checked(3)! == 3 and Settled8(4) == 8 and Joined(2) == 4 and Label(2) == "#2"
+    seen := ""
+    try Checked(-2) catch Mismatch.Shape e { seen = e.what }
+    assert seen == "negative -2"
+    assert Lane8(Array<F32>[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]) == 8.0
+    h := Holder<I64>(3)
+    h.Fill()
+    assert h.data.Len() == 3 and h.Size() == 3 and Vec2(1.0, 2.0).Dot(Vec2(3.0, 4.0)) == 11.0
+}

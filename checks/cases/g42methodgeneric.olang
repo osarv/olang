@@ -1,0 +1,14 @@
+# check: fail error[G42]: Fill is generic, and each of its instances has facts of its own
+# also: help: name one with its type arguments: 'Box<T>.Fill.Allocates'
+# G42: a method named through a generic type written bare has no facts - an instance's has
+type Box<T> struct(n I64) {
+    n
+    data mut Array<T>& = Array<T>(0)
+}
+
+fn (b mut Box<T>&) Fill() { b.data = Array<T>(b.n) }
+
+assert Box<I64>.Fill.Allocates
+assert Box.Fill.Allocates
+
+fn main() { }

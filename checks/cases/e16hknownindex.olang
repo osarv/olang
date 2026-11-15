@@ -1,0 +1,14 @@
+# check: fail error[E16h]: index 'Lanes' is 8, outside the array's 8 elements
+# also: help: index within 0 to 7, or write '.Get(i)' to have it checked where it runs
+# never: 'Lanes - 1'
+# E16h: an index known while compiling - an immutable global's value - outside an array of a known length is an
+# error where it is written, as a literal one is (E16); one inside is not
+Lanes I64 = 8
+
+fn last(xs Array<F32>&) F32 {
+    acc := Array<F32>(Lanes)
+    for i in range Lanes: acc[i] = xs[i]
+    return acc[Lanes - 1] + acc[Lanes]
+}
+
+fn main() { }

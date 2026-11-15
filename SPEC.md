@@ -1376,7 +1376,7 @@ declaration's), a line's end. They hold no comma, so they never make a type need
 | word | every function a value of the type can call ... | a call through the type relies on |
 |---|---|---|
 | `returns` | always comes back to its caller, with a value or an error: G42's `Terminates` (every loop counted, not recursive, waits for nothing, calls no C not known to return), and no ending it writes - no `noreturn` call, no `unreachable`, no `!`, no `assert` (but one whose condition is the literal `true`); the language's own checks aside (a slice or an array length out of range, running out of memory or stack: E16b, D14b, D14c) | the call comes back (G42's `Returns`) |
-| `noalloc` | asks the runtime for no storage (G42's `Allocates` false) | no allocation |
+| `noalloc` | asks the runtime for no storage on a way that runs on (G42's `Allocates` false: an error's or an ending's own may) | no allocation where it comes back |
 | `noblock` | waits for nothing (`Blocks` false) | no wait |
 | `nospawn` | starts no task (`Spawns` false) | no task |
 | `norecurse` | never calls itself, directly or through others (`Recursive` false) | no re-entry |
@@ -3749,7 +3749,8 @@ at run time in a release build (a checked build stops on both, E16g):
   type's maximum. `%` is included: its result is mathematically `0`, but the instruction is the same one.
 
 Where the divisor is a literal, or a literal-only expression (E4a), whose value is zero the check is made at
-compile time and is an error there, which costs nothing to apply. Float `/` is not undefined at all: IEEE 754 defines division by zero as an
+compile time and is an error there, which costs nothing to apply; so is one known zero while compiling otherwise
+(E16h). Float `/` is not undefined at all: IEEE 754 defines division by zero as an
 infinity and `0.0/0.0` as a NaN, which are values.
 
 Unlike E8a and E26a, both shapes here fault on common hardware — `#DE` on x86, reported as SIGFPE — so
@@ -3801,7 +3802,7 @@ the result is the shifted operand's own type.
 **E8a.** A shift amount outside `[0, w)`, where `w` is the **shifted** operand's width in bits, is
 **undefined behaviour** — the two operands need not share a type (E5), and it is the left one's width that
 bounds the right one. Nothing is checked at run time in a release build (a checked build stops on it, E16g). Where the amount is a literal or a literal-only expression
-(E4a) the check is made at compile time and an out-of-range one is a compile-time error, which costs nothing to
+(E4a) - or any value known while compiling, E16h - the check is made at compile time and an out-of-range one is a compile-time error, which costs nothing to
 apply - at every width (T4a: `u << 7` on a `U7`, `x >> 128` on an `I128`), in a compound assignment (`x <<= 9`) and
 lane by lane (E39) alike. The one exception is a shift that is itself part of a literal-only expression something adapts (E4a): it is
 computed exactly while compiling, so only its result must fit (`x I64 = 1 << 40`); a negative amount is still an error,
@@ -4190,7 +4191,7 @@ the same reading C gives it, and one of exactly two places in this language wher
 storage it does not own (the other is `extern fn`, §11 X1a).
 
 Where the index and the length are **both known at compile time** — a constant index into an array whose length is
-known (T7c) — an out-of-range index is a **compile-time error**. That check costs nothing at run time and is not
+known (T7c), or a range's variable every turn reaches (E16h) — an out-of-range index is a **compile-time error**. That check costs nothing at run time and is not
 affected by the above. `base.Get(index)` (E16d) is the checked form, whose failure is defined: it compiles, and fails
 with `OutOfRange` where it runs - in a function over a by-value array (`fn third(a Array<I32>) I32 { return try
 a.Get(2) catch default -1 }`) one instance (G29) may have the element and another not.
@@ -4232,6 +4233,32 @@ comprehension (E27), a lane operation (E39), an array pattern (S13h), a type's `
 `-library`, `compile` without `-debug` - checks none of them and costs nothing for them: the operations are undefined
 there, as E6a, E8a and E16 say. `-checked` beside `-debug`, or given to `test`, is allowed and says nothing more (those builds are checked already). A checked build changes no program's meaning: what it stops is undefined in a release
 build. The compile-time evaluator (K1) refuses the same operations as undefined.
+
+**E16h (proven undefined while compiling).** Where the compiler proves from values known while compiling that an
+operation the program writes is undefined (E6a, E8a, E16), it is a **compile-time error** where it is written - the
+literal cases of E6a, E8a and E16 widened to the integers known while compiling as T7c's lengths are: a literal-only
+expression (E4a), an immutable global whose value folds (K2; a build constant as the build gives it, B10c), a `comptime
+for` copy's variable (K3a), and arithmetic on these - the same in every instance of the body it is written in, so not
+a by-value array's length (G29), which an instance of one length is often guarded against by what the others need. It
+is an error where
+
+- **an index** `base[index]` into an array whose length is known (T7c) is known, and outside `[0, base.Len())`
+  (`acc[Size]` with `acc := Array<F32>(Size)`);
+- **an index by a range's variable** is outside it on some turn: `index` is the variable of a `for x in range ...`
+  whose bounds are all known, plus or minus a value known (`i`, `i + 1`, `k - i` is not one), the array's length is
+  known, and some value the variable takes puts it outside - where every turn of the loop reaches the index: it is
+  written at the top level of the loop's body or of a block in it (never under an `if`, in a conditional's branch, an
+  arm, a clause, a nested loop or a lambda), and the body cuts no turn short (no `break`, `continue`, `return`,
+  `error`, `yield`, a `try` passing an error on, or an ending: an `assert`, `unreachable`, `!`, a `noreturn` call) and
+  never assigns the variable (`for i in range 9: s += acc[i]` with 8 elements);
+- **a divisor** of an integer `/`, `%`, `/=` or `%=` is known to be zero;
+- **a shift amount** of `<<`, `>>`, `<<=` or `>>=` on an integer is known to be outside `[0, w)`, `w` the shifted
+  operand's width.
+
+Only what is proven counts: an operand or a bound not known while compiling, an index under a condition or in a loop
+that may stop early, is left as written - unchecked in a release build, stopped in a checked one (E16g) - and no
+run-time check is added for it. An index of a type's `At` (E31) and a lane operation (E39) are no operation this rule
+judges. A literal-only operand stays E6a's, E8a's and E16's error.
 
 **E16a.** `base "[" [ lo ] ":" [ hi ] "]"` is a **slice**. `base` must be an array, value or reference, of any
 length; `lo` and `hi` must be integer types, and either may be omitted, defaulting to `0` and
@@ -8762,7 +8789,7 @@ tells the two forms apart: `explain` with a word ending in `.olang` and a name i
 Under a function's signature (and each instance's, and each method's under its type) a line `# effects: ...` says what a
 call may do beyond computing its result, read off its body and every body it may call: `none`, or each of - the
 parameters it writes through (`writes through 'out'`), those it calls through (`calls through 'f'`, each such call
-counted by what the parameter's type promises, G42), `writes a global`, `allocates` or `allocates nothing`, `may grow a
+counted by what the parameter's type promises, G42), `writes a global`, `allocates`, `allocates only where it fails` (G42's failing ways) or `allocates nothing`, `may grow a
 Vec`, `starts tasks`, the classes of B11c it reaches (`files`, `network`, `processes`, `environment`, `threads`, `C`),
 else `calls C`, `may end the program`, `may block` or `never blocks`, `recursive`, `always ends` (G42's `Terminates`),
 and `may be computed while compiling` (K1a: no C but C's math, no mutable global read or written) - a destructor the body
@@ -10229,7 +10256,8 @@ fn routes() Map<String&, fn&(r Request&) Response> {
 
 **G42 (function facts).** What a function may do is read while compiling, through its name - `mix.Allocates`,
 `dsp.mix.Allocates` through an import's alias, `pick<I64>.Allocates` for a generic's instance, `Color.FromHex.Allocates`
-for a builder (D19) and `Box<I64>.Of.Allocates` for an instance of one over a generic owner (a generic named without
+for a builder (D19) and `Box<I64>.Of.Allocates` for an instance of one over a generic owner, `Point.Move.Allocates` for a
+method named through its type and `Box<I64>.Fill.Allocates` through a generic type's instance (a generic named without
 its type arguments has no facts: an error naming that form) - and on a function's descriptor (G41, `f.Allocates` in a
 walk of `m.Functions` or `T.Methods`, each copy its own function's). Each is a `Bool`, true where the function or any
 body it may call - a destructor among them where a body registers one (a constructor of a type with one, a value of one
@@ -10239,7 +10267,7 @@ none at its end, while one an error may leave with before the hand-on does):
 
 | fact | holds where it may |
 |---|---|
-| `Allocates` | ask the runtime for storage in any scope, its frame's included: a text, an array, a comprehension, a temporary given storage, a lambda's environment (a value in place, a fixed array in place does not count) |
+| `Allocates` | ask the runtime for storage in any scope, its frame's included, on a way that runs on: a text, an array, a comprehension, a temporary given storage, a lambda's environment (a value in place, a fixed array in place - `Array<F32>(8)` held by value, but for a fill's own copies of what owns storage - does not count, nor does a failing way's, below) |
 | `Blocks` | wait: a join, a lock, a channel, a sleep, a C function not known to return at once |
 | `WritesGlobals` | store into a global's storage, or through a reference a global holds - itself, or by a callee lent it (`G.Push(x)`) |
 | `CallsC` | call an extern or a C import's function, C's math functions (X8) and the runtime's own aside |
@@ -10248,6 +10276,14 @@ none at its end, while one an error may leave with before the hand-on does):
 | `Terminates` | **always end**: every loop of it is a for-in over an array or a range (a count known before the loop starts), it is not recursive, and nothing of it waits or calls C not known to return |
 | `Pure` | **write nothing but through its `mut` reference parameters**, as T21c's `pure` says |
 | `Returns` | **always come back**: `Terminates`, and no ending it writes (a `noreturn` call, `unreachable`, `!`, an `assert`), as T21c's `returns` says |
+
+**`Allocates` counts the ways that run on, never a failing one**: code that runs only where the function fails - a
+block every way through which ends in an error raised (R3, R3a) or an ending (`unreachable`, a `noreturn` call), or
+the message of an `unreachable` or an `assert` - and every call made there, allocates for the failure, not for the
+work: an error's text payload (`error Bad.Mismatch("negative " + $x)`), an `unreachable "lost $n"`. Such a way leaves
+the work, as the error or the ending does, so `assert not step.Allocates` pins what every call that comes back with
+a result asks for; a caller that catches the error and goes on may still have had it allocate. Every other fact
+counts a failing way as any other.
 
 `Terminates`, `Pure` and `Returns` are the facts true where nothing is known against them. A call through a function
 value does what the functions it may call do, where they are followed (T22a, T22b): a named function, a lambda or an

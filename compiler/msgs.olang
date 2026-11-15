@@ -568,6 +568,10 @@ type Diag enum {
     LiteralDoesNotMeet
     ShiftOutOfRange
     DivideByZero
+    IndexProven
+    IndexReaches
+    ShiftProven
+    DivisorProven
     NumbersDoNotMeet
     OperandsDiffer
     FloatLiteralRange
@@ -1576,6 +1580,10 @@ fn LiteralNoOwnType(what String&) r.Msg { return r.Msg(Diag.LiteralNoOwnType, "T
 fn LiteralDoesNotMeet(ty1 String&, ty2 String&, ty3 String&) r.Msg { return r.Msg(Diag.LiteralDoesNotMeet, "E6d", "this literal does not fit " + $ty1 + ", and " + $ty2 + " does not flow into " + $ty3 + " - convert one") }
 fn ShiftOutOfRange(ty String&, n1 I64, n2 I64) r.Msg { return r.Msg(Diag.ShiftOutOfRange, "E8a", "shifting " + $ty + " by " + $n1 + " is outside its width of " + $n2 + " bits") }
 fn DivideByZero() r.Msg { return r.Msg(Diag.DivideByZero, "E6a", "division by zero") }
+fn IndexProven(text String&, n1 I64, n2 I64) r.Msg { return r.Msg(Diag.IndexProven, "E16h", "index '" + $text + "' is " + $n1 + ", outside the array's " + $n2 + " elements", "its value is known while compiling", "index within 0 to " + $(n2 - 1) + ", or write '.Get(i)' to have it checked where it runs") }
+fn IndexReaches(text String&, n1 I64, n2 I64) r.Msg { return r.Msg(Diag.IndexReaches, "E16h", "index '" + $text + "' reaches " + $n1 + " in this loop, outside the array's " + $n2 + " elements", "every turn of the loop reaches it, and its range is known while compiling", "bound the range by the array's length ('range a.Len()'), or test the index first") }
+fn ShiftProven(ty String&, text String&, n1 I64, n2 I64) r.Msg { return r.Msg(Diag.ShiftProven, "E16h", "shifting " + $ty + " by '" + $text + "', which is " + $n1 + ", is outside its width of " + $n2 + " bits", "the amount is known while compiling", "shift by 0 to " + $(n2 - 1) + ", or convert the value to a wider type first") }
+fn DivisorProven(text String&) r.Msg { return r.Msg(Diag.DivisorProven, "E16h", "'" + $text + "' is zero, so this division is undefined", "the divisor is known while compiling", "divide by a value that is not zero, or test it first") }
 fn NumbersDoNotMeet(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NumbersDoNotMeet, "T6b", $ty1 + " and " + $ty2 + " do not meet - neither flows into the other; convert one") }
 fn OperandsDiffer(tok String&, ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.OperandsDiffer, "", $tok + " takes operands of one type, found " + $ty1 + " and " + $ty2) }
 fn FloatLiteralRange(tok String&) r.Msg { return r.Msg(Diag.FloatLiteralRange, "L12b", $tok + " is beyond F64's range") }
@@ -1997,7 +2005,7 @@ fn ConversionDoesNotFit(value String&, ty String&) r.Msg { return r.Msg(Diag.Con
 fn NoteContractCondition() r.Msg { return r.Msg(Diag.NoteContractCondition, "", "the condition") }
 fn GenericNeeds(text String&, need String&, ty String&) r.Msg { return r.Msg(Diag.GenericNeeds, "G18", $text + " needs " + $need + ", and " + $ty + " has none", "", "declare it for " + $ty + ", or call " + $text + " with a type that has it") }
 fn NoteGenericNeeds(text String&, need String&) r.Msg { return r.Msg(Diag.NoteGenericNeeds, "", $text + " needs " + $need + " here") }
-fn FactOfGeneric(text String&, fact String&) r.Msg { return r.Msg(Diag.FactOfGeneric, "G42", $text + " is generic, and each of its instances has facts of its own", "", "name one with its type arguments: '" + $text + "<T>." + $fact + "'") }
+fn FactOfGeneric(text String&, form String&) r.Msg { return r.Msg(Diag.FactOfGeneric, "G42", $text + " is generic, and each of its instances has facts of its own", "", "name one with its type arguments: '" + $form + "'") }
 fn FactUndecided(text String&) r.Msg { return r.Msg(Diag.FactUndecided, "G42", "'" + $text + "' cannot be decided", "the code it reads it from changes with its value", "read it outside what it decides") }
 fn FactNoFunction(fact String&) r.Msg { return r.Msg(Diag.FactNoFunction, "G42", $fact + " is read through a function", "", "write it through a function's name or a function's descriptor ('f." + $fact + "', 'd." + $fact + "' in a walk of 'm.Functions')") }
 fn CapsOneFile() r.Msg { return r.Msg(Diag.CapsOneFile, "B11c", "explain -caps takes one program's file, as 'olang explain -caps main.olang'") }

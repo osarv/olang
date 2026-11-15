@@ -1,0 +1,55 @@
+# E16h: an index, divisor or shift amount proven undefined while compiling is an error; what is not proven stays as
+# written - an index under a condition, in a loop that may stop early, by a range not known, by a value not known.
+# Each shape below is legal; the globals are baked while compiling (K2) and the asserts decided there (S17a), beside
+# the same functions run
+Lanes I64 = 8
+Zero I64 = 0
+Width I64 = 31
+
+fn guarded(xs Array<F32>&) F32 {
+    acc := Array<F32>(Lanes)
+    for i in range Lanes: acc[i] = xs[i]
+    s := F32(0)
+    for i in range Lanes + 2 {
+        if i < Lanes: s += acc[i]
+    }
+    for i in range Lanes + 2 {
+        if i >= Lanes: break
+        s += acc[i]
+    }
+    for i in range 1, Lanes + 1: s += acc[i - 1]
+    for i in range 0, Lanes, 3: s += acc[i + 1]
+    return s
+}
+
+fn pairs() I64 {
+    a := Array<I64>(Lanes)
+    for i in range Lanes: a[i] = i
+    total := 0
+    for i in range Lanes + 1 {
+        if i == Lanes: continue
+        total += a[i]
+    }
+    n := Lanes + 1
+    for i in range n {
+        if i < a.Len(): total += a[i]
+    }
+    return total
+}
+
+fn divide(x I64, d I64) I64 { return x / d if d != Zero else 0 }
+
+fn shifted(x I32) I32 { return x << Width }
+
+Guarded := guarded(Array<F32>[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+Pairs := pairs()
+
+assert Guarded == 27.0, "8 + 8 + 8 + 3 lanes"
+assert Pairs == 56
+assert divide(7, 0) == 0 and divide(7, 2) == 3
+assert shifted(1) == I32.Min
+
+test "what is not proven stays legal, and runs as written" {
+    assert guarded(Array<F32>[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]) == Guarded and pairs() == Pairs
+    assert divide(9, 3) == 3 and shifted(1) == I32.Min
+}

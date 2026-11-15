@@ -55,6 +55,16 @@ server's completion (`session.olang` `PromiseTargets`), `api.olang` (`EffectWord
 compared with their variance) and `checks/fixtures/apicaps`. **[checked]** by `make consistency`: every effect word of
 `types.olang`'s `PromiseNames` has its fact in `effects.olang`'s `Fact.Named` and a row in SPEC's T21c and G42 tables
 (`compiler/tools/consistency.olang` `PromiseFacts`).
+A kind of code G42 counts as a failing way (`typed.Fails`, `effects.olang`'s `coldBlock`/`coldExpr`) changes SPEC G42's
+paragraph on failing ways, `tests/factsfailing.olang` and the `noalloc` row of T21c; `Fact.Allocates` (every way, read by
+lowering's task scopes) and `Fact.Running` (G42's) must stay apart.
+
+## What folds while compiling
+
+`generic.olang`'s `FoldKnown` (through `check.olang`'s `knownInt`) decides T7c's lengths and E16h's proofs alike: widening
+what folds widens which indexes, divisors and shift amounts are errors - SPEC E16h's list, `tests/proven.olang` (what stays
+legal) and the checks cases `e16h*`. A way to cut a loop's turn short (`typed.CutsShort`) or a place an index is reached on
+every turn (`typed.EveryTurn`) is E16h's too.
 
 ## An operator or punctuation
 

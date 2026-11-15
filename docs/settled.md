@@ -298,6 +298,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   lowered to a guaranteed check only when the Lowerer is `Checked`, so the evaluator stops with the built text.
   **Release stays unchecked (the user, 2026-11-14: "Keep it unchecked")**, after measuring every index checked in every
   build (docs/checks-measure.md): bench/ 4% slower on average, sorts 40-60%, and the checks moved out of loops did not pay.
+- **Proven undefined while compiling is an error (E16h, the user's yes 2026-11-15; built 2026-11-15).** E16's, E6a's
+  and E8a's literal checks widened to every integer known while compiling as T7c's lengths are (literal-only
+  expressions, immutable globals and build constants that fold, `comptime for` variables - not a by-value array's
+  length, which differs per instance and is often guarded): a
+  known index outside a known length, a known zero divisor (`/`, `%`, `/=`, `%=`), a known shift amount outside the
+  width. And an index by a `for i in range` variable with known bounds (`i`, `i + k`, `k + i`, `i - k`) that some turn
+  puts outside, where every turn reaches it (the body's top level, no condition; no break, continue, return, error,
+  yield, passed-on try or ending in the body; the variable never assigned). Only the proven: nothing else is checked
+  and no run-time check is added. Mine: the rule number, the turn-reaching condition, `x /= 0` now E6a's error too.
 - **Subscripts by axes, NumPy's (E16f, the user's "yes, do them" 2026-11-13, for ML; built 2026-11-13).** `m[0:2, :]`,
   `m[..., 1]`, `c[0, :, 1:]`: a range (`lo:hi`, either end off, bare `:`) or `...` among the items calls the type's
   `Slice` with one prelude `Axis` per item - `Index(i)`, `Range(lo, hi)` (an end off: 0, `I64.Max`), `Rest`; the
@@ -608,6 +617,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a parameter what each call gives it (`Twice(inc, x)` is `inc`'s), else what its type's effect words promise (no word:
   anything); read through the name, a parameter by its written type. The effect words are judged where a value comes to
   be held (T22b), `returns` and `norecurse` with no call through an unfollowed value relied on.
+  **Precision (2026-11-15, oann's allocfacts/methodfacts; mine, by the user's "decide whether ... it should")**:
+  `Allocates` counts the ways that run on - a block every way through which raises an error or ends the program, an
+  `unreachable`'s or an `assert`'s message, and the calls made there allocate for the failure, not the work (the
+  build's own bookkeeping still counts them: a task's scopes, `Fact.Allocates` in effects.olang, `Running` is G42's);
+  a fixed array held in place (`Array<F32>(8)`) allocates nothing; a method is named through its type,
+  `Point.Move.Allocates`, `Box<I64>.Fill.Allocates`. explain prints `allocates only where it fails`.
 
 ### Errors
 

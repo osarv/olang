@@ -212,7 +212,7 @@ fn checkPromises(p mut Problems&) {
     for pf in PromiseFacts {
         parts := pf.Split(" ")
         if not has(names, parts[0]) { p.Add($"PromiseNames lacks " + $parts[0] + ", which PromiseFacts has") }
-        if not effects.Contains($"case \"" + $parts[1] + "\": Fact." + $parts[1]) { p.Add($"effects.olang's Fact.Named lacks " + $parts[1] + ", the fact " + $parts[0] + " promises") }
+        if not effects.Contains($"case \"" + $parts[1] + "\": Fact.") { p.Add($"effects.olang's Fact.Named lacks " + $parts[1] + ", the fact " + $parts[0] + " promises") }
         if not spec.Contains($"| `" + $parts[0] + "` |") { p.Add($"SPEC's T21c table has no row for " + $parts[0]) }
         if not spec.Contains($"| `" + $parts[1] + "` |") { p.Add($"SPEC's G42 table has no row for " + $parts[1] + ", the fact " + $parts[0] + " promises") }
     }

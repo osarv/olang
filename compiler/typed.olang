@@ -3981,24 +3981,124 @@ fn holds(b Block?&, sp source.Span) Bool {
 }
 
 # a walk asking whether a statement may leave the block it is in other than by ending: inner the blocks opened inside the
-# walk so far, whose own breaks and continues leave nothing. A lambda's body is another body
+# walk so far, whose own breaks and continues leave nothing. A lambda's body is another body. Normal: only a way out
+# that does not fail counts (a return, a jump, a yield), an error passed on not; ends: an ending counts too (a noreturn
+# call, an unreachable, an assert, a "!")
 type leaveWalk struct() {
     inner Vec<BlockId>
+    normal Bool = false
+    ends Bool = false
+}
+
+# G42: whether every way through b fails - it ends in an error raised or an ending (a noreturn call, an unreachable), or
+# a block or branches doing so, and nothing before leaves it otherwise (a return, a jump, a yield)
+fn Fails(b Block?&) Bool {
+    if b == null or b.Stmts.Len() == 0: return false
+    if not stmtFails(b.Stmts[b.Stmts.Len() - 1]): return false
+    w := leaveWalk()
+    w.normal = true
+    for i in range b.Stmts.Len() - 1 {
+        if w.stmtLeaves(b.Stmts[i]): return false
+    }
+    return true
+}
+
+fn assertTrue(c Expr&) Bool {
+    return match c {
+        case Expr.Lit(_, t, v): t == types.BoolT and v == 1
+        case _: false
+    }
+}
+
+fn stmtFails(s Stmt&) Bool {
+    return match s {
+        case Stmt.Raise(_, _, _), Stmt.Reraise(_, _, _), Stmt.Exit(_, _, _): true
+        case Stmt.Eval(_, Expr.Call(_, t, _)): t == types.NoreturnT
+        case Stmt.Block(_, b): Fails(b)
+        case Stmt.If(_, i): Fails(i.Then) and Fails(i.Else)
+        case _: false
+    }
+}
+
+# E16h: whether the element at sp - an index written in a loop's body - is reached on every turn of it: among its
+# statements at their top level, or in a block of theirs, in what every run of them evaluates - never under a
+# condition, in an arm, a clause, a nested loop or a lambda
+fn EveryTurn(b Block&, sp source.Span) Bool {
+    for st in b.Stmts {
+        if turnStmt(st, sp): return true
+    }
+    return false
+}
+
+fn turnStmt(st Stmt&, sp source.Span) Bool {
+    return match st {
+        case Stmt.Let(_, _, x), Stmt.Eval(_, x): turnExpr(x, sp)
+        case Stmt.Assign(_, p, x): turnPlace(p, sp) or turnExpr(x, sp)
+        case Stmt.Block(_, b): EveryTurn(b, sp)
+        case _: false
+    }
+}
+
+fn turnExprs(xs Array<Expr&>&, sp source.Span) Bool {
+    for x in xs {
+        if turnExpr(x, sp): return true
+    }
+    return false
+}
+
+fn turnExpr(x Expr?&, sp source.Span) Bool {
+    if x == null: return false
+    return match x {
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): turnPlace(p, sp)
+        case Expr.Promote(_, _, pr): turnExpr(pr.X, sp)
+        case Expr.Call(_, _, k): turnExprs(k.Args, sp)
+        case Expr.Make(_, _, m): turnExprs(m.Items, sp) or turnExpr(m.Length, sp)
+        case Expr.Prim(_, _, _, _, args): turnExprs(args, sp)
+        case Expr.Slice(_, _, sl): turnPlace(sl.Base, sp) or turnExpr(sl.Lo, sp) or turnExpr(sl.Hi, sp)
+        case Expr.Cond(_, _, k): turnExpr(k.C, sp)
+        case Expr.Away(_, _, y): turnExpr(y, sp)
+        case Expr.Try(_, _, t): turnExpr(t.X, sp)
+        case _: false
+    }
+}
+
+fn turnPlace(p Lvalue&, sp source.Span) Bool {
+    return match p {
+        case Lvalue.Elem(esp, _, el): (esp.Start == sp.Start and esp.End == sp.End) or turnPlace(el.Base, sp) or turnExpr(el.Index, sp)
+        case Lvalue.Deref(_, _, r): turnExpr(r, sp)
+        case Lvalue.Field(_, _, base, _): turnPlace(base, sp)
+        case Lvalue.Payload(_, _, pl): turnPlace(pl.Base, sp)
+        case Lvalue.Temp(_, _, v, _): turnExpr(v, sp)
+        case _: false
+    }
+}
+
+# E16h: whether a counted loop's body may cut a turn short or end the loop other than by its own guard (its first
+# statement) - a break or continue of it, a way out, an error passed on, an ending
+fn CutsShort(body Block&) Bool {
+    w := leaveWalk()
+    w.ends = true
+    for i in range 1, body.Stmts.Len() {
+        if w.stmtLeaves(body.Stmts[i]): return true
+    }
+    return false
 }
 
 # whether s may leave the block it is in other than by ending
 fn (w mut leaveWalk&) stmtLeaves(s Stmt&) Bool {
     return match s {
-        case Stmt.Return(_, _), Stmt.Raise(_, _, _), Stmt.Reraise(_, _, _), Stmt.Suspend(_, _): true
+        case Stmt.Return(_, _), Stmt.Suspend(_, _): true
+        case Stmt.Raise(_, _, _), Stmt.Reraise(_, _, _): not w.normal
         case Stmt.Jump(_, _, l): not w.inner.Has(l)
         case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x): w.exprLeaves(x)
         case Stmt.Assign(_, p, x): w.placeLeaves(p) or w.exprLeaves(x)
         case Stmt.If(_, i): w.exprLeaves(i.Test) or w.blockLeaves(i.Then) or w.blockLeaves(i.Else)
         case Stmt.Loop(_, body, post): w.loopLeaves(body, post)
-        case Stmt.Exit(_, _, _), Stmt.Assert(_, _, _): false
+        case Stmt.Exit(_, _, _): w.ends
+        case Stmt.Assert(_, c, _): w.ends and not assertTrue(c)
         case Stmt.Block(_, b): w.openLeaves(b)
         case Stmt.Defer(_, b): w.blockLeaves(b)
-        case Stmt.Join(_, j): (j.Tried and not clausesTakeAll(j.Clauses)) or w.blockLeaves(j.Code) or
+        case Stmt.Join(_, j): (j.Tried and not w.normal and not clausesTakeAll(j.Clauses)) or w.blockLeaves(j.Code) or
                                 w.clausesLeave(j.Clauses)
         case Stmt.Spawn(_, sp): w.exprLeaves(sp.Task)
     }
@@ -4047,7 +4147,7 @@ fn (w mut leaveWalk&) exprLeaves(x Expr?&) Bool {
         case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): w.placeLeaves(p)
         case Expr.Promote(_, _, pr): w.exprLeaves(pr.X)
         # a call of a noreturn function leaves (D8e), as D10a counts it
-        case Expr.Call(_, t, k): t == types.NoreturnT or w.calleeLeaves(k.Target) or w.exprsLeave(k.Args)
+        case Expr.Call(_, t, k): (t == types.NoreturnT and (w.ends or not w.normal)) or w.calleeLeaves(k.Target) or w.exprsLeave(k.Args)
         case Expr.Make(_, _, m): w.exprsLeave(m.Items) or w.exprLeaves(m.Length)
         case Expr.Collect(_, _, c): w.exprLeaves(c.Reserve) or w.loopLeaves(c.Loop, null)
         case Expr.Prim(_, _, _, _, args): w.exprsLeave(args)
@@ -4057,7 +4157,8 @@ fn (w mut leaveWalk&) exprLeaves(x Expr?&) Bool {
         case Expr.Match(_, _, m): w.stmtsLeave(m.Held) or w.armsLeave(m.Arms) or
                                     (m.NoMatch != null and w.armLeaves(m.NoMatch!))
         # what no clause takes is passed on - out of the body, or to the try around it, which is in the walk too
-        case Expr.Try(_, _, t): (not t.Ends and not t.Passes and t.Left and not clausesTakeAll(t.Clauses)) or
+        case Expr.Try(_, _, t): (not w.normal and not t.Ends and not t.Passes and t.Left and not clausesTakeAll(t.Clauses)) or
+                                  (w.ends and t.Ends) or
                                   w.exprLeaves(t.X) or w.clausesLeave(t.Clauses)
         case Expr.Text(_, _, t): w.piecesLeave(t.Pieces)
         case Expr.Away(_, _, y): w.exprLeaves(y)
