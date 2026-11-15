@@ -583,6 +583,10 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(outOf(dir).EndsWith("flat 200000\n"), "joins kept what its joins made", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=20 joins.olang > out.txt 2>&1") == 0, "joins interpreted", dir)
     try r.expect(outOf(dir) == "flat 200\n", "joins interpreted output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -check tempref.olang > out.txt 2>&1") == 0, "tempref", dir)
+    try r.expect(outOf(dir).EndsWith("flat flat 0\n"), "tempref kept its calls' temporaries", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=100 tempref.olang > out.txt 2>&1") == 0, "tempref interpreted", dir)
+    try r.expect(outOf(dir) == "flat flat 0\n", "tempref interpreted output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -check texts.olang > out.txt 2>&1") == 0, "texts", dir)
     try r.expect(outOf(dir).EndsWith("flat 3097784\n"), "texts kept what its tasks built", dir)
     for p in Array<String&>["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec"
