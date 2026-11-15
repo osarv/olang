@@ -1238,7 +1238,7 @@ type opShape struct(Name String&, Operands I64, Result Bool, MayFail Bool) {
 OpShapes Array<opShape> = Array<opShape>[opShape("Plus", 1, true, true), opShape("Minus", 1, true, true)
     opShape("Mul", 1, true, true), opShape("Div", 1, true, true), opShape("Rem", 1, true, true)
     opShape("MatMul", 1, true, true), opShape("Neg", 0, true, true), opShape("Less", 1, true, true)
-    opShape("At", 1, true, true), opShape("SetAt", 2, false, true), opShape("Slice", 2, true, true)
+    opShape("At", 1, true, true), opShape("SetAt", 2, false, true), opShape("Slice", 2, true, true), opShape("SetSlice", 2, false, true)
     opShape("BitAnd", 1, true, true), opShape("BitOr", 1, true, true), opShape("BitXor", 1, true, true)
     opShape("ShiftLeft", 1, true, true), opShape("ShiftRight", 1, true, true), opShape("BitNot", 0, true, true)
     opShape("Inc", 0, true, true), opShape("Dec", 0, true, true), opShape("Len", 0, true, false)
@@ -1707,13 +1707,16 @@ fn (c mut Checker&) operatorMethod(f I64) {
     sig := c.P.Sig(f)
     ps := c.P.T.Items(c.P.T.Params(sig))
     got := ps.Len() - 1
-    atLeast := cap == "At" or cap == "SetAt"
+    atLeast := cap == "At" or cap == "SetAt" or cap == "SetSlice"
     if not (got >= sh.Operands if atLeast else got == sh.Operands) { return }
     mi := c.P.FnModule(f)
     c.push(-1, mi, types.VoidT, types.ListId(0))
     at := c.nameSpan(fd)
     res := c.P.T.Result(sig)
-    if res == types.NoreturnT {
+    sa := c.P.T.SpreadAt(sig)
+    if (cap == "SetAt" or cap == "SetSlice") and sa >= 0 and sa != ps.Len() - 2 {
+        c.shapeErr(at, fd, cap, msgs.SetValueLast(cap))      # E31e
+    } else if res == types.NoreturnT {
         c.shapeErr(at, fd, cap, msgs.NoreturnHere("an operator's method"))
     } else if sh.Result and (res == types.VoidT or c.P.T.KindOf(res) == types.Kind.Tuple) {
         c.shapeErr(at, fd, cap, msgs.OperatorResult(sh.Name))
@@ -9378,10 +9381,22 @@ fn (c mut Checker&) commuteParam(t types.TypeId, op token.Tok) types.TypeId {
 # role's shape - n parameters besides the receiver; another shape is an ordinary method; -1 for none
 fn (c mut Checker&) roleMethod(t types.TypeId, name String&, n I64) I64 {
     m := c.P.MethodOf(t, c.P.L.Names.Intern(name))
-    if m >= 0 and c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() == n + 1 { return m }
+    if m >= 0 and c.takesOperands(m, name, n) { return m }
     m = c.P.MethodOf(t, c.P.L.Names.Intern(lowerFirst(name)))
-    if m >= 0 and c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() == n + 1 { return m }
+    if m >= 0 and c.takesOperands(m, name, n) { return m }
     return -1
+}
+
+# whether the method m of the role name takes n operands besides its receiver: exactly its parameters - or, for At,
+# SetAt and SetSlice, with a variadic parameter, that many or more (E31e: the variadic one takes the indexes, a SetAt's
+# or SetSlice's value its last parameter after them)
+fn (c mut Checker&) takesOperands(m I64, name String&, n I64) Bool {
+    sig := c.P.Sig(m)
+    have := c.P.T.Items(c.P.T.Params(sig)).Len() - 1
+    sa := c.P.T.SpreadAt(sig)
+    if sa < 0 or not (name == "At" or name == "SetAt" or name == "SetSlice") { return have == n }
+    if name != "At" and sa != have - 1 { return false }      # the value is the last parameter, after the variadic one
+    return (n if name == "At" else n - 1) >= (sa - 1).Max(1)
 }
 
 # a protocol method an operation found, by role: one of its private spelling, declared in another module than the code
@@ -10164,8 +10179,7 @@ fn (c mut Checker&) axisCall(sp source.Span, base typed.Lvalue&, t types.TypeId,
     }
     args := vals
     if c.P.T.SpreadAt(sig) >= 0 {
-        at := c.P.T.Array(c.axisType(), c.P.T.Const(c.i64(), vals.Len()))
-        args = c.one(typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Array, 0, vals, null, c.site(typed.SiteKind.Make, sp), typed.Check.None)))
+        args = c.one(c.axisArray(sp, vals))
     }
     return c.invoke(sp, sp, m, c.read(sp, base), Array<ast.Expr&>(0), args)
 }
@@ -12582,7 +12596,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         return c.unknown(sp)
     }
     # D8g: a variadic parameter's arguments gathered into one, before any are put where their parameters are
-    args = c.gatherVariadic(c.P.T.SpreadAt(c.P.Sig(f)) - (1 if recv != null else 0), args, sp)
+    args = c.gatherVariadic(c.P.T.SpreadAt(c.P.Sig(f)) - (1 if recv != null else 0), args, sp, c.valueAfter(f))
     # E14b: arguments by name put where their parameters are
     ord := Array<I64>(0)
     if hasNamed(args) {
@@ -12997,7 +13011,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     }
     # D8g: a variadic parameter's arguments gathered into one (a call through a function value; invoke did it for a
     # function's), the parameter taken as the read-only array it is
-    if pre.Len() == 0 and not invokedCallee(target) { args = c.gatherVariadic(c.P.T.SpreadAt(sig) - (1 if recv != null else 0), args, sp) }
+    if pre.Len() == 0 and not invokedCallee(target) { args = c.gatherVariadic(c.P.T.SpreadAt(sig) - (1 if recv != null else 0), args, sp, 0) }
     spreadParam := c.P.T.SpreadAt(sig)
     ps := c.unspreadAll(c.P.T.Items(c.P.T.Params(sig)))
     sfrom := c.stmts.Len()
@@ -13222,6 +13236,45 @@ fn heldTry(sp source.Span, tr typed.Try&) typed.Expr?& {
 
 # whether a callee is a function's - reached through invoke, which gathered a variadic parameter's arguments already,
 # before arguments by name were put in place
+# a method's arguments after its receiver, each given on its own, as its parameters take them (E31e): those a variadic
+# parameter takes - from its place up to the tail the parameters after it take - made one array, built where the call is;
+# unchanged where m has none, or the arguments are in that form already (an array in its place). pts the parameter types
+fn (c mut Checker&) packed(sp source.Span, m I64, pts Array<types.TypeId>&, args Array<typed.Expr&>&) Array<typed.Expr&>& {
+    sig := c.P.Sig(m)
+    sa := c.P.T.SpreadAt(sig)
+    if sa < 0 or sa >= pts.Len() { return args }
+    f := sa - 1
+    k := args.Len() - c.valueAfter(m)
+    if k < f { return args }
+    if k == f + 1 and c.arrayOf(c.deref(typeOf(args[f]))) != types.UnknownT { return args }
+    et := c.P.T.Elem(c.deref(pts[sa]))
+    out := Vec<typed.Expr&>()
+    for i in range f { out.Push(args[i]) }
+    items := Vec<typed.Expr&>()
+    for i in range f, k { items.Push(c.fit(args[i], et, args[i].Span())) }
+    at := c.P.T.Array(et, c.P.T.Const(c.i64(), items.Len()))
+    out.Push(typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Array, 0, items.ToArray(), null, c.site(typed.SiteKind.Make, sp), typed.Check.None)))
+    for i in range k, args.Len() { out.Push(args[i]) }
+    return out.ToArray()
+}
+
+# the type an index at position i of a SetAt (or At) binds, given its parameters' types pts: its own, or the element of
+# the variadic parameter reached (E31e)
+fn (c mut Checker&) indexParam(m I64, pts Array<types.TypeId>&, i I64) types.TypeId {
+    sa := c.P.T.SpreadAt(c.P.Sig(m))
+    if sa >= 0 and sa < pts.Len() and 1 + i >= sa { return c.P.T.Elem(c.deref(pts[sa])) }
+    return pts[1 + i] if 1 + i < pts.Len() else types.UnknownT
+}
+
+# the number of required parameters after f's variadic one (E31e: a SetAt's or SetSlice's value, 1), else 0
+fn (c mut Checker&) valueAfter(f I64) I64 {
+    sig := c.P.Sig(f)
+    sa := c.P.T.SpreadAt(sig)
+    ps := c.P.FnDecl(f).S.Params
+    if sa < 0 or sa >= c.P.T.Items(c.P.T.Params(sig)).Len() - 1 or ps.Len() == 0 { return 0 }
+    return 1 if ps[ps.Len() - 1].Dflt == null else 0
+}
+
 fn invokedCallee(t typed.Callee&) Bool {
     match t {
         case typed.Callee.Body(_), typed.Callee.Extern(_) { return true }
@@ -13230,13 +13283,14 @@ fn invokedCallee(t typed.Callee&) Bool {
 }
 
 # a call's arguments with those its variadic parameter, at si among them, is given gathered into one: a "...a" alone
-# passing an array on, else a Variadic of them all - every argument by position from si on, up to the first by name.
+# passing an array on, else a Variadic of them all - every argument by position from si on, up to the first by name or
+# the tail arguments the parameters after it take (E31e: a SetAt's value).
 # Unchanged where there is none (si -1), they are gathered already, or fewer are given than the parameters before it
-fn (c mut Checker&) gatherVariadic(si I64, args Array<ast.Expr&>&, sp source.Span) Array<ast.Expr&>& {
-    if si < 0 or args.Len() < si { return args }
+fn (c mut Checker&) gatherVariadic(si I64, args Array<ast.Expr&>&, sp source.Span, tail I64) Array<ast.Expr&>& {
+    if si < 0 or args.Len() < si + tail { return args }
     if args.Len() > si and args[si].IsGathered() and not args[si].IsSpread() { return args }
     end := si
-    for end < args.Len() and not args[end].IsNamed() { end++ }
+    for end < args.Len() - tail and not args[end].IsNamed() { end++ }
     items := args[si:end]
     if items.Len() == 1 and items[0].IsSpread() { return args }
     for it in items {
@@ -19324,6 +19378,83 @@ fn (c mut Checker&) assignAt(sp source.Span, op token.Tok, target ast.Expr&, val
     }
 }
 
+# x[a:b, :] = v, x[a:b] = v (E31e): the type's SetSlice called with the axes the subscript writes, then the value; false
+# where the target is no slice, or its type declares no SetSlice taking Axis values (E16a's error then)
+fn (c mut Checker&) assignSlice(sp source.Span, target ast.Expr&, value ast.Expr&) Bool {
+    match target {
+        case ast.Expr.Index(isp, x, items) if ast.Slicing(items) { return c.storeAxes(sp, isp, x, items, value) }
+        case ast.Expr.Slice(ssp, y, lo, hi) { return c.storeAxes(sp, ssp, y, Array<ast.Expr&>[ast.Expr.Axis(ssp, lo, hi)], value) }
+        case _ { return false }
+    }
+}
+
+fn (c mut Checker&) storeAxes(sp source.Span, isp source.Span, x ast.Expr&, items Array<ast.Expr&>&, value ast.Expr&) Bool {
+    if c.typeNamed(x) >= types.TypeId(0) { return false }
+    base := c.place(x)
+    if base == null { return false }
+    dt := c.deref(base.Type())
+    if dt == types.UnknownT or c.arrayOf(dt) != types.UnknownT or not c.isNamed(dt) { return false }
+    m := c.setSliceMethod(dt)
+    if m < 0 { return false }
+    c.privateRole(m, dt, "SetSlice", c.bracketIn(isp), "'['")
+    sig := c.P.Sig(m)
+    want := c.P.T.Items(c.P.T.Params(sig)).Len() - 2
+    if c.P.T.SpreadAt(sig) < 0 and want != items.Len() {
+        c.err(c.bracketIn(isp), msgs.SetSliceAxis(c.ty(dt), want, items.Len()))
+        c.expr(value, types.UnknownT)
+        return true
+    }
+    from := c.exprs.Len()
+    for it in items { c.exprs.Push(c.axisValue(it)) }
+    vals := gather(c.exprs, from)
+    # the value at its parameter's type - a reference parameter takes it as a reference (E12c)
+    pts := c.paramsOn(m, base.Type())
+    last := pts.Len() - 1
+    pt := pts[last]
+    rt := c.paramOn(m, base.Type(), last)
+    if rt != types.UnknownT and c.isRef(rt) { pt = rt }
+    v := c.exprTo(value, pt)
+    if pt == c.textType() and c.isRef(typeOf(v)) { v = c.read(sp, typed.Lvalue.Deref(sp, pt, v)) }
+    args := vals
+    if c.P.T.SpreadAt(sig) >= 0 { args = c.one(c.axisArray(isp, vals)) }
+    f2 := c.exprs.Len()
+    for a in args { c.exprs.Push(a) }
+    c.exprs.Push(v)
+    c.emit(typed.Stmt.Eval(sp, c.invoke(sp, isp, m, c.read(isp, base), Array<ast.Expr&>(0), gather(c.exprs, f2))))
+    return true
+}
+
+# the array of Axis values a variadic parameter is given (E16f)
+fn (c mut Checker&) axisArray(sp source.Span, vals Array<typed.Expr&>&) typed.Expr& {
+    at := c.P.T.Array(c.axisType(), c.P.T.Const(c.i64(), vals.Len()))
+    return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Array, 0, vals, null, c.site(typed.SiteKind.Make, sp), typed.Check.None))
+}
+
+# t's SetSlice taking Axis values, then the value - one parameter per axis, or one variadic "...Axis" - by either
+# spelling (M6b); -1 for none
+fn (c mut Checker&) setSliceMethod(t types.TypeId) I64 {
+    for name in Array<String&>["SetSlice", "setSlice"] {
+        m := c.P.MethodOf(t, c.P.L.Names.Intern(name))
+        if m >= 0 and c.setsByAxes(m) { return m }
+    }
+    return -1
+}
+
+fn (c mut Checker&) setsByAxes(m I64) Bool {
+    sig := c.P.Sig(m)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    if ps.Len() < 3: return false
+    sa := c.P.T.SpreadAt(sig)
+    if sa >= 0 and sa != ps.Len() - 2: return false
+    ax := c.axisType()
+    for i in range 1, ps.Len() - 1 {
+        p := c.P.T.Unspread(ps[i])
+        if sa == i: p = c.P.T.Elem(c.deref(p))
+        if not c.P.T.Same(c.P.T.Plain(c.deref(p)), ax): return false
+    }
+    return true
+}
+
 # t1, t2 := v / t1, t2 = v (D8c): several results destructured, each target given its own; a, b = b, a (S4c): every
 # value evaluated before any target is written
 fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
@@ -19419,13 +19550,13 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
         if st != null {
             args := Vec<typed.Expr&>()
             for k, it in st.Items {
-                v := c.exprTo(it, st.Params[k + 1] if k + 1 < st.Params.Len() else types.UnknownT)
+                v := c.exprTo(it, c.indexParam(st.M, st.Params, k))
                 h := c.local(source.NameId(0), it.Span(), typeOf(v), typed.LocalKind.Held, typed.Mark.None)
                 c.emit(typed.Stmt.Let(it.Span(), typed.LocalId(I32(h)), v))
                 args.Push(c.readLocal(sp, h))
             }
             args.Push(c.readLocal(sp, held[i]))
-            c.emit(typed.Stmt.Eval(sp, c.invoke(sp, st.Sp, st.M, c.read(st.Sp, st.Base), Array<ast.Expr&>(0), args.ToArray())))
+            c.emit(typed.Stmt.Eval(sp, c.invoke(sp, st.Sp, st.M, c.read(st.Sp, st.Base), Array<ast.Expr&>(0), c.packed(sp, st.M, st.Params, args.ToArray()))))
         } else if places[i] != null {
             c.emit(typed.Stmt.Assign(sp, places[i]!, c.readLocal(sp, held[i])))
         }
@@ -19454,7 +19585,7 @@ fn (c mut Checker&) setAtTarget(target ast.Expr&) setAt?& {
             # (x[i] read through At, E31b: its write-back is the single form's, writeBack)
             if m < 0 or c.valueTemp(base) >= 0 { return null }
             ps := c.paramsOn(m, base.Type())
-            return setAt(base, m, items, ps, isp, ps[items.Len() + 1] if items.Len() + 1 < ps.Len() else types.UnknownT)
+            return setAt(base, m, items, ps, isp, ps[ps.Len() - 1] if ps.Len() > 0 else types.UnknownT)
         }
         case _ { return null }
     }
@@ -19633,6 +19764,7 @@ fn (c mut Checker&) storeInto(sp source.Span, p typed.Lvalue&, value ast.Expr&, 
 }
 
 fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value ast.Expr&) {
+    if op == token.Tok.Assign and c.assignSlice(sp, target, value) { return }
     if slicedTarget(target) {
         # E16f: what Slice gives has no place of its own
         c.err(target.Span(), msgs.SliceNoPlace())
@@ -19787,15 +19919,17 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
     recs Vec<I64>
     elTys Vec<types.TypeId>
     calls mut Vec<Array<typed.Expr&>&>& = Vec<Array<typed.Expr&>&>()
+    seqs mut Vec<Array<typed.Stmt&>&>& = Vec<Array<typed.Stmt&>&>()   # what held a variadic At's indexes (E31e)
     at := p
     for ri >= 0 {
-        args := c.callArgs(c.tempValue(at))
+        tv := c.tempValue(at)
+        args := c.callArgs(seqInner(tv))
         if args.Len() == 0 {
             c.gap(sp, "a store through an element read of this kind (E31b)")
             return true
         }
         recs.Push(ri)
-        tv := c.tempValue(at)
+        seqs.Push(seqStmts(tv))
         elTys.Push(typeOf(tv) if tv != null else types.UnknownT)
         calls.Push(args)
         at = c.atRecs[ri].Base
@@ -19820,6 +19954,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
     for kk in range nl {
         l := nl - 1 - kk
         args := calls[l]
+        for st in seqs[l]: c.emit(st)
         hs mut Array<I64>& = Array<I64>(args.Len() - 1)
         for i in range args.Len() - 1 {
             a := args[i + 1]
@@ -19836,7 +19971,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
         pts := c.paramsOn(setM, pt)
         for i in range setItems.Len() {
             it := setItems[i]
-            a := c.value(c.expr(it, pts[1 + i] if 1 + i < pts.Len() else types.UnknownT), it.Span())
+            a := c.value(c.expr(it, c.indexParam(setM, pts, i)), it.Span())
             h := c.local(source.NameId(0), it.Span(), typeOf(a), typed.LocalKind.Held, typed.Mark.None)
             c.emit(typed.Stmt.Let(it.Span(), typed.LocalId(I32(h)), a))
             setHeld.Push(h)
@@ -19920,7 +20055,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
         sa mut Array<typed.Expr&>& = Array<typed.Expr&>(setHeld.Len() + 1, c.hole(sp))
         for i in range setHeld.Len() { sa[i] = c.readLocal(sp, setHeld[i]) }
         sa[setHeld.Len()] = v!
-        c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, setM, c.read(sp, p2), Array<ast.Expr&>(0), sa)))
+        c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, setM, c.read(sp, p2), Array<ast.Expr&>(0), c.packed(sp, setM, c.paramsOn(setM, p2.Type()), sa))))
     } else if laneK >= 0 {
         c.laneStore(sp, osp, compoundOp(op), pt, c.laneTarget(sp, p2), laneK, lanePre)
     } else {
@@ -19937,7 +20072,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
         sargs mut Array<typed.Expr&>& = Array<typed.Expr&>(hs.Len() + 1, c.hole(sp))
         for i in range hs.Len() { sargs[i] = c.readLocal(sp, hs[i]) }
         sargs[hs.Len()] = c.readLocal(sp, temps[l])
-        c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, sms[l], c.read(sp, bases[l]!), Array<ast.Expr&>(0), sargs)))
+        c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, sms[l], c.read(sp, bases[l]!), Array<ast.Expr&>(0), c.packed(sp, sms[l], c.paramsOn(sms[l], bases[l]!.Type()), sargs))))
     }
     return true
 }
@@ -20061,6 +20196,24 @@ fn (c mut Checker&) tempValue(p typed.Lvalue&) typed.Expr?& {
         case typed.Lvalue.Payload(_, _, pl): c.tempValue(pl.Base)
         case typed.Lvalue.Temp(_, _, x, _): x
         case _: null
+    }
+}
+
+# the call a Seq of statements and a call gives, the call itself otherwise; the statements (E31e: a variadic At's held
+# index array)
+fn seqInner(x typed.Expr?&) typed.Expr?& {
+    if x == null: return null
+    return match x {
+        case typed.Expr.Seq(_, _, sq): sq.X
+        case _: x
+    }
+}
+
+fn seqStmts(x typed.Expr?&) Array<typed.Stmt&>& {
+    if x == null: return Array<typed.Stmt&>(0)
+    return match x {
+        case typed.Expr.Seq(_, _, sq): sq.Stmts
+        case _: Array<typed.Stmt&>(0)
     }
 }
 
