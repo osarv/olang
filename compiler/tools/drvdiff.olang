@@ -32,9 +32,8 @@ Cases Array<String&> = Array<String&>[
     # options for other modes, and options needing a value
     "test -output o main.olang"
     "format -debug a.olang"
-    "interpret -race p.olang"
+    "run -race p.olang"
     "build -bench main.olang"
-    "test -bench -evaluate main.olang"
     "test -bench -fuzz x main.olang"
     "help -debug"
     "explain -check B1"
@@ -53,7 +52,8 @@ Cases Array<String&> = Array<String&>[
     # another architecture: what is said whichever clang this machine has (B12a - building for it depends on clang)
     "compile -target aarch64-linux-gnu:native main.olang"
     "build -target aarch64-linux-gnu:native main.olang"
-    "interpret -target aarch64-linux-gnu main.olang"
+    "-target aarch64-linux-gnu main.olang"
+    "run -target aarch64-linux-gnu:native main.olang"
     # -define
     "build -define X main.olang"
     "build -define X=1 -define X=2 main.olang"
@@ -71,7 +71,7 @@ Cases Array<String&> = Array<String&>[
     "compile"
     "compile a.olang b.olang"
     "test"
-    "interpret"
+    "run"
     "format"
     "bogus"
     "main.txt"
@@ -80,10 +80,10 @@ Cases Array<String&> = Array<String&>[
     # help
     "help"
     "help build"
-    "help run"
+    "help file"
     "help compile"
     "help test"
-    "help interpret"
+    "help run"
     "help format"
     "help explain"
     "help help"
@@ -113,7 +113,7 @@ Cases Array<String&> = Array<String&>[
     "test W/none.olang W/adir /dev/null"
     "build W/none.olang"
     "compile W/none.olang"
-    "interpret W/none.olang a b"
+    "run W/none.olang a b"
     "W/none.olang a b"
 ]
 
@@ -142,8 +142,8 @@ Builds Array<String&> = Array<String&>[
     "test tests.olang"
     "build bad.olang"
     "-define N=7 defs.olang"
-    "interpret args.olang x y"
-    "interpret exit.olang"
+    "run args.olang x y"
+    "run exit.olang"
     "format -check ugly.olang hello.olang"
 ]
 

@@ -8,6 +8,6 @@ fn main() ? io.Error {
     try io.PutLine()
     try io.PutErr("to the ")
     try io.PutErrLine("standard error")
-    say := io.PutLine                # a function value, as any function is
+    say := io.PutLine<String>        # a function value, as any function is - a generic one named by its instance (G12)
     try say("through a value")
 }

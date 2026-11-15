@@ -223,7 +223,7 @@ fn runSeed(seed I64, dir String&) ? io.Error {
     st := sh(dir, "timeout 120 ./build/p > b.txt 2> berr.txt")
     try compare(dir, seed, out, read(dir, "b.txt"), "-b")
     if st != 0 { try finding(dir, seed, -1, "-b run failed", read(dir, "berr.txt")) }
-    st = sh(dir, "timeout 600 nice -n 19 \"$OLANG\" interpret -evaluate p.olang > i.txt 2> ierr.txt")
+    st = sh(dir, "timeout 600 nice -n 19 env OLANG_EVALUATE=1 \"$OLANG\" p.olang > i.txt 2> ierr.txt")
     try compare(dir, seed, out, read(dir, "i.txt"), "-i")
     if st != 0 { try finding(dir, seed, -1, "-i run failed", read(dir, "ierr.txt")) }
 }
@@ -404,7 +404,7 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
     } else {
         # dead-region mode: a read of storage a release reclaimed stops -i at once (exit 70, an internal error)
         dead := "env OLANG_DEADREGIONS=1 " if FreeMode else ""
-        ist := sh(dir, $"timeout 600 nice -n 19 " + $dead + "\"$OLANG\" interpret -evaluate p.olang > i.txt 2> ierr.txt")
+        ist := sh(dir, $"timeout 600 nice -n 19 " + $dead + "env OLANG_EVALUATE=1 \"$OLANG\" p.olang > i.txt 2> ierr.txt")
         if ist != 0 {
             try scopeFinding(dir, seed, -1, "-i failed", read(dir, "ierr.txt"))
             return
@@ -459,7 +459,7 @@ fn splitSeed(seed I64, dir String&, want String&) ? io.Error {
         try scopeFinding(dir, seed, -1, "the split form disagrees with the one-module form (a use after a scope closed)", read(dir, "serr.txt"))
         return
     }
-    if sh(dir, "timeout 600 nice -n 19 env OLANG_DEADREGIONS=1 \"$OLANG\" interpret -evaluate r.olang > i.txt 2> ierr.txt") != 0 or read(dir, "i.txt") != want {
+    if sh(dir, "timeout 600 nice -n 19 env OLANG_DEADREGIONS=1 OLANG_EVALUATE=1 \"$OLANG\" r.olang > i.txt 2> ierr.txt") != 0 or read(dir, "i.txt") != want {
         try scopeFinding(dir, seed, -1, "the split form interpreted disagrees, or read a freed region", read(dir, "ierr.txt"))
     }
 }

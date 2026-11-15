@@ -77,6 +77,7 @@ slimming of 2026-11-08").
   agent's own worktree; merge promptly. `make race` needs `libclang-rt-18-dev` (`apt-get install`).
 
 # How to decide and record
+- **Once decided, build it (the user, 2026-11-15: "dont me ask if you get to build something, when we decided what to build, just build it")**: a decided feature, fix or plan is built and merged without asking for a go-ahead; questions go to the user only for open decisions.
 
 - **Decide details myself** (spellings, edge cases, API names, error words, which of two reasonable semantics), by
   direction.md, and record them in settled.md/HISTORY.md as decisions. Ask only about direction: what changes the
@@ -113,6 +114,8 @@ slimming of 2026-11-08").
 - **Every language change goes through the checklist** at the top of CLAUDE.md. The compile-time evaluator stays current:
   an exclusion needs a real reason, "not built yet" is a gap; it should run everything it can, and designs reach for
   compile-time evaluation and inference wherever they can stand in for a run-time check or written annotation.
+
+- **No warnings on legal code (the user, 2026-11-15: "the programmer decides what is worth catching and what isnt"; "it's legal code, so don't warn on it")**: no lints or editor warnings for constructs the language allows (`!`, a spawned task writing a global); the compiler either rejects a program or accepts it, the one exception being unused names shown as W while editing.
 
 # Code rules
 

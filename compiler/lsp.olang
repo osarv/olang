@@ -565,6 +565,9 @@ fn (w worker&) textOf(a session.Analysis&, real String&) String {
     return $a.TextOf(mi) if mi >= 0 else ""
 }
 
+# LSP's severity of a diagnostic of this rule: 2 (warning) for what only untidy (D3b, M5a - warnings of `olang FILE`), else 1 (error)
+fn severityOf(rule String&) I64 { return 2 if diag.Untidy(rule) else 1 }
+
 # items[i], an error, as an LSP Diagnostic: its range in its file, its rule as its code, and its notes and helps (written "help: ...") as
 # related information
 fn (w mut worker&) diagnostic(b mut StringBuilder&, a session.Analysis&, d mut diag.Diagnostics&, items Vec<diag.Item>&
@@ -573,7 +576,7 @@ fn (w mut worker&) diagnostic(b mut StringBuilder&, a session.Analysis&, d mut d
     p := session.Positions(w.textOf(a, real), w.s.Utf8)
     b.Push("{\"range\":")
     w.rangeOf(b, p, it)
-    b.Push(",\"severity\":1,\"source\":\"olang\"")
+    b.Push(",\"severity\":" + $(severityOf(it.Rule)) + ",\"source\":\"olang\"")
     if it.Rule != "" {
         b.Push(",\"code\":")
         session.JsonStr(b, it.Rule)
@@ -932,7 +935,7 @@ fn lspSaid(dir String&, main String&) String, String {
         ds := try params["diagnostics"].AsArr() catch json.Error { continue }
         for d in ds {
             line := try d["range"]["start"]["line"].AsInt() catch json.Error default -1
-            if (try d["severity"].AsInt() catch json.Error default 1) == 1: lines.Push($file + ":" + $(line + 1) + ":" + $str(d, "code"))
+            if (try d["severity"].AsInt() catch json.Error default 1) <= 2: lines.Push($file + ":" + $(line + 1) + ":" + $str(d, "code"))
         }
     }
     lines.Sort(fn(x String&, y String&) Bool { return x < y })
@@ -1055,6 +1058,28 @@ test "a deprecated item: hover shows the note, completion tags it, its uses get 
     assert diags.Contains("\"severity\":4") and diags.Contains("\"tags\":[2]"), diags
     assert diags.Contains("\"start\":{\"line\":4,\"character\":9}") and not diags.Contains("\"line\":1,"), diags
     assert not diags.Contains("\"severity\":1"), diags
+}
+
+test "unused names are warnings, other rules errors (B15, D3b, M5a)" {
+    assert severityOf("D3b") == 2 and severityOf("M5a") == 2
+    assert severityOf("T6") == 1 and severityOf("") == 1
+    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    defer try os.RemoveAll(dir) catch os.Error { }
+    path := $dir + "/u.olang"
+    src := "fn main() {\n    x := 1\n}\n"
+    try os.WriteFile(path, src) catch os.Error { unreachable "no file" }
+    uri := UriOf(path)
+    t := StringBuilder()
+    session.JsonStr(t, src)
+    b := StringBuilder()
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" + $uri + $
+                  "\",\"languageId\":\"olang\",\"version\":1,\"text\":" + $t.ToString() + "}}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    assert out.Stdout.Contains("\"code\":\"D3b\"") and out.Stdout.Contains("\"severity\":2"), out.Stdout
+    assert not out.Stdout.Contains("\"severity\":1"), out.Stdout
 }
 
 FitsSrc String& = """

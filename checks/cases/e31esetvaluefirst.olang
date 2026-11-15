@@ -1,0 +1,12 @@
+# check: fail error[E31e]: SetAt's value is its last parameter, after a variadic one
+# also: write 'fn (x mut T&) SetAt(i ...I64, v E)'
+# E31e: a SetAt's or SetSlice's value is its last parameter; with a variadic one the value follows it, so a method
+# written value first is no operator
+type Box struct(n I64) { n }
+fn (b Box&) At(i ...I64) I64 { return b.n }
+fn (b mut Box&) SetAt(v I64, i ...I64) { b.n = v }
+
+fn main() {
+    b := Box(1)
+    assert b[1, 2] == 1
+}

@@ -27,8 +27,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   there is an error naming the block form. `else`/`catch` may begin the next line. Not for the forever `for` or a `do`
   loop. **A lambda's body too (D16, the user's decision 2026-10-24):** `xs.Count(fn(x): return x > 3)`.
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build compile
-  test interpret format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target
-  -define -update -check -quick -html -library -memory -fuzz -fuzztime -caps -asm -ir -evaluate -bench`, each checked against
+  test run format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target
+  -define -update -check -quick -checked -html -library -memory -fuzz -fuzztime -caps -asm -ir -bench`, each checked against
   the modes it applies to; old flags are gone.
 - **`-quick` (B2g, the user's call 2026-10-24).** `-O2` without link-time optimization; an error beside `-debug` or
   `-race`. The default stays `-O3` + LTO (B2c).
@@ -52,7 +52,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   declared function type's or a field's words changing is breaking either way. `make consistency` checks that every
   effect word has its fact in `Fact.Named` and its rows in SPEC's T21c and G42 tables.
 - **The busy indicator (B25, the user's request 2026-11-15: "Wherever we wait on something those dots should be there").**
-  On a terminal's standard error, after a 300 ms wait, six dots (three columns by two rows, braille `U+2803` each) with
+  On a terminal's standard error, after a 300 ms wait, six dots (three columns by two rows, braille `U+2806` each, the middle rows so they sit centred like `:::`) with
   the gap going clockwise, beside `compiling`/`linking`/`fetching X`/`running`; erased before any other output.
   `compiler/spin.olang`; `OLANG_SPINNER=0` turns it off; the seed's clang loop in the makefile draws the same frames.
 - **`explain -asm FILE NAME` and `explain -ir FILE NAME` (B11d, QBP 7, the user's "build it" 2026-10-27; built
@@ -71,10 +71,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   non-breaking row); the compiler gives it no meaning. Removing between versions stays the main way.
 - **`olang lsp` (B15) and `olang mcp` (B16), 2026-10-24 (the user: "we need this, both for MCP and neovim
   integration").** LSP over stdio (diagnostics, hover, definition, symbols, completion, formatting); MCP over stdio
-  (`check`, `explain`, `doc`, `format`, `test`). The Neovim plugin and notes are `editors/`.
-- **A file is built and run (B3g):** `olang [options] f.olang args...` builds as `build` does, then runs it (its
-  status, `#!/usr/bin/env olang` scripts); `-output PATH` names the output (B3h). **Built as `-quick` builds unless
-  `-debug` or `-race` is given (2026-11-13, the user's ease items)**; an unchanged program is not built again (B3i).
+  (`check`, `explain`, `doc`, `format`, `test`). Unused names (D3b, M5a) are sent as warnings (severity 2), every other rule as an error (2026-11-15). The Neovim plugin and notes are `editors/`.
+- **A file is built and run (B3g; merged with `interpret`, the user 2026-11-15: "merge them. we dont need to reach the
+  interpreter from CLI its more an internal compilation thing after all. make olang FILE not create a build directory and
+  then olang run FILE builds and runs").** `olang [options] f.olang args...` builds as `build` does by default (unchecked,
+  -O3, LTO - reversing 2026-11-13's -quick; `-quick` and `-checked` are options, as of build, compile, run, the prompt and the
+  kernel) into `$XDG_CACHE_HOME/olang/run` (objects reused, B3i; nothing in the working directory; kept within 1 GiB, the
+  oldest files going first), unread locals and unused imports warnings (D3b/M5a), then runs it (its status,
+  `#!/usr/bin/env olang` scripts). **`olang run f.olang args...`** builds exactly as `build` does, into `build/`, `-output`
+  (B3h) allowed, and runs it. The `interpret` mode and `-evaluate` are gone from the command line (B3e).
 - **`olang format [-check]` (B13)** rewrites files in one gofmt-style layout, no options; only whitespace changes.
 - **The bitwise operators bind tighter than the comparisons (E5, mine 2026-10-24).** `x & 1 == 0` is `(x & 1) == 0`:
   `| ^ &` sit between the comparisons and the shifts.
@@ -96,8 +101,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Every local is read and every import used (D3b, M5a, 2026-10-26, the user: "extend this to unused variables
   too").** A read is any appearance but as an assignment target (Go's rule); a place never read is written `_`.
   Exempt: parameters, constructor fields, catch names, destructor-typed locals, names in branches the build leaves out.
-  Said only of a program with no other error. **Under `interpret` both are warnings (`warning[D3b]: ...` on the
-  standard error) and the program runs (B3e, 2026-11-13, the user's ease items)**; `test -evaluate` keeps them errors.
+  Said only of a program with no other error. **Running a file, both are warnings (`warning[D3b]: ...` on the
+  standard error) and the program runs (B3e, 2026-11-13, the user's ease items)**; the evaluator's `test` keeps them errors.
 - **Assignment (S4, S4a, S4c, S4d).** Left to right: the target's place, then the value; a compound place is evaluated
   once. Assignment to a reference repoints (S4a). Parallel assignment `a, b = b, a` evaluates every value first;
   `a, b := 1, 2` and `x, y I32` declare several names (S4c/D12b, the user's call); `x[i] = v` on a type declaring
@@ -278,12 +283,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   base's scope and permission; `try a.Get(i)`, `try a.Set(i, v)`, `try a.SliceOf(lo, hi)` fail with
   `ArrayError.OutOfRange`. An out-of-range index, a wrong `extern` prototype and a data race are the three unchecked
   holes, stated.
-- **Checked builds (E16g, the user's decision 2026-11-14; built 2026-11-14).** `test`, `-debug`, `interpret`, `test
-  -evaluate`, the prompt and the notebook kernel stop, as a failed assert does, on an index, an integer `/` or `%`
+- **Checked builds (E16g, the user's decision 2026-11-14; built 2026-11-14).** `test`, `-debug`, the evaluator (`OLANG_EVALUATE`) and any build or run given `-checked` (`build`, `compile`, `test`, `run`, running a file, the
+  prompt, the kernel; the user, 2026-11-15: "checked and quick as options but not as default") stop, as a failed assert does, on an index, an integer `/` or `%`
   (a zero divisor, the least value by -1) and a shift (amount outside the width) the program wrote, printing
   `FILE:LINE:COLUMN: index out of range` (`division by zero`, `division overflows: the least value by -1`, `shift
   amount outside the width`). Indexes the language makes (for-in walks, comprehensions, lanes, patterns) and lane
-  operations' divisions and shifts are never checked. Release builds (`build`, running a file, `-quick`, `-library`)
+  operations' divisions and shifts are never checked. Release builds (`build`, `run`, running a file, the prompt and the kernel by default, `-quick`, `-library`)
   are byte-identical to before: no check, no cost. Mine: the column (several per line), a check kind `typed.Check.Debug`
   lowered to a guaranteed check only when the Lowerer is `Checked`, so the evaluator stops with the built text.
   **Release stays unchecked (the user, 2026-11-14: "Keep it unchecked")**, after measuring every index checked in every
@@ -293,7 +298,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Slice` with one prelude `Axis` per item - `Index(i)`, `Range(lo, hi)` (an end off: 0, `I64.Max`), `Rest`; the
   type decides the meaning (`a.Bounds(n)` helps). Mine: one enum rather than a struct; a Slice of all-`Axis` parameters
   or one `...Axis`, which then takes `x[lo:hi]` as one Axis too; plain `x[i, j]` stays At; an array has one axis (an
-  error); a slice result is never stored into (`m[0:2, :] = v` an error - no SetSlice yet).
+  error); a slice result is never stored into (`m[0:2, :] = v` an error unless the type declares a `SetSlice`, E31e).
 - **Structures of arrays: `Columns<T>` and `ColumnVec<T>` (T7e, QCS 3 and QCU, the user's decisions 2026-11-06/07:
   "Do the columns solution", "two column types", no computed types).** `Columns<T>` is laid out as one `Array<F>` per
   field of the record `T` (`c.x` is a column, lane operators apply); `ColumnVec<T>` grows like a Vec. T must be a
@@ -393,7 +398,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   variable; one result, a value of the owner; never inherited through `extends`. **D19a**: a top-level function
   returning a type its module declares with no parameter naming it is an error naming `fn T.Name`. **T30b**: a trait
   may require a builder. `T.Functions` walks them. The prelude: `String.FromC(p, max)` (X15), `F64.FromBits(u)` (E33),
-  `T.Parse(t, base)`.
+  `T.Parse(t, base)` (integers), `T.Parse(t)` for every float and the F8 types (rounded to the type, `Overflow` where a finite
+  number does not fit), `Bool.Parse(t)`.
 - **Methods are declared with a receiver clause and called only as methods (M19, the user's call).** A method may not
   share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21).
 - **A number written as a literal is a receiver like any other value (E13c, 2026-10-18, the user: "2.0.Sqrt() should
@@ -407,7 +413,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   ... Inc Dec At SetAt Slice Call`, lowercase being module-private (M6b); `> <= >=` derive from `Less`. Any operator's
   method but `Len`/`Eq`/`Str` may declare errors (E31a). `x[i, j]` calls `At(i, j)`. **`commutes` (E31c, the user's
   decision 2026-10-25)** after an operator's result lets `2.0 * v` call `v.Mul(2.0)`. A store through `x[i]` uses
-  `SetAt` (E31b). No user-declared operator symbols; `==` and `$` overridable only by `Eq`/`Str`.
+  `SetAt` (E31b). **Any number of indexes (E31e, 2026-11-15, for oann's rank-N Tensor)**: `At(i ...I64)` and `SetAt(i ...I64,
+  v T)` are the operators for `x[i]`, `x[i, j]`, `x[i, j, k]` ... (the indexes the variadic array, nothing allocated); a
+  SetAt's value is its last parameter, after the variadic one (the one parameter D8g lets follow it). **`SetSlice`
+  (E31e)**: a store into a slice, `x[0:2, :] = v`, calls `SetSlice(axes ...Axis, v)` (or one `Axis` per axis, then the
+  value); none declared keeps E16a's error, which names it. No user-declared operator symbols; `==` and `$` overridable only by `Eq`/`Str`.
 - **Several results, no tuples (D8c/D8d, the user's call).** `return a, b`, `q, r := f()`, `f(g())`; `Pair<A, B>` in
   `std/pair`. **Results and error sets are written bare** (the user's call 2026-10-24): `fn divmod(a I64, b I64) I64,
   I64 ? A, B`. **Whole-item grouping (L18c, the user's call)**: a list item holding a top-level comma is parenthesized
@@ -839,7 +849,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   pkg` takes the newest same-major version and records it in olang.lock; `-update` moves all; `pkg@v1.2` pins.
 - **Separate compilation; facts with readers (B1-B8, B3i; the user's decision 2026-11-08 evening, docs/wholeprog.md:
   "If we are going to do it eventually, just do it now").** `compile` one module, `build` build and link, `test` each
-  file's tests in a process of its own (B3a), `interpret` built checked into the cache and run (B3e). Imports are resolved from source;
+  file's tests in a process of its own (B3a), a file built into the cache and run (B3g). Imports are resolved from source;
   globals initialize imports first, then in dependency order (B5a). No interface file: records are a cache of what
   the source says. **Decided, being built** (docs/wholeprog.md section 10): facts with readers replace "one module at a
   time" - the front end may use whole-program facts, each recording the modules that read it, reaching code as a
@@ -868,8 +878,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `olang lsp` and `olang mcp` keep and take the same front and scope records as `olang test` in their directory. **At a precompiled module's boundary the defining module decides (B3i)**: its decisions from its own
   code, a store of the program's widening its field refused at that store. Compiling the program as one unit:
   declined.
-- **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 8 MB of IR or more); `-debug` is
-  `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize` the scope sanitizer (B2f).
+- **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 8 MB of IR or more); under full
+  LTO a module's own compile neither vectorizes nor unrolls a loop by a factor, so the link inlines across modules before
+  it vectorizes (2026-11-15);
+  `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize` the scope sanitizer (B2f).
 - **Compiles at once and the bootstrap (B3m, the user's approval 2026-11-14, before v1.0.0).** A build runs
   `OLANG_JOBS` compiles at once, else one per core but no more than `MemAvailable` holds at 512 MB each (at least
   one); a ThinLTO link's back ends as many. `OLANG_TIMES` says each phase with its time and the compiler's memory, and
@@ -917,13 +929,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   endings, undefined behaviour, destructor-bearing values outside a global's own frame (K2c), anything past the step
   and 256MB budgets; tasks run in sequence at the join. Every disagreement with the run time is a bug fixed in the
   evaluator. Tests the evaluator runs sit beside run-time tests for every language change (the checklist above).
-- **`interpret` builds and runs; `-evaluate` runs the evaluator (B3e, the user 2026-11-15: "make olang interpret fast
-  as well, we might run some data science work in it"; built 2026-11-15).** `olang interpret FILE` builds as a file run
-  does (-quick) but checked (E16g) with the error trace (S18d), into `$XDG_CACHE_HOME/olang/run` (objects reused, B3i;
-  nothing beside the program), D3b/M5a warnings, then execs it: a 1e8-iteration loop 56 s -> 0.5 s, a 200x200 matmul
+- **Running a file builds and runs; the evaluator is internal (B3e, B3g, the user 2026-11-15: "make olang interpret fast
+  as well, we might run some data science work in it"; built 2026-11-15; `interpret` merged into running a file the same day).** `olang FILE` builds as `build` does
+  (unchecked, -O3 and LTO; `-quick` and `-checked` are its options, as of the prompt's and the kernel's - 2026-11-15) with the error trace (S18d) under `-checked`, into `$XDG_CACHE_HOME/olang/run` (objects reused, B3i;
+  nothing beside the program; the cache is kept within 1 GiB, the oldest files going first), D3b/M5a warnings, then execs it: a 1e8-iteration loop 56 s -> 0.5 s, a 200x200 matmul
   11.4 s -> 0.09 s; hello world 0.05 s -> 0.08 s cached, ~1.2 s on a cold cache. Mine: no fallback without clang (the
-  prelude's C imports need it either way); interpret's options stay -target/-define/-update. **`interpret -evaluate`
-  and `test -evaluate` (formerly `test -interpret`)** run programs and tests through the evaluator as before (M8;
+  prelude's C imports need it either way); **`OLANG_EVALUATE=1`** (environment only, the testing tools': evaldiff, the fuzzers, the checks scenarios; no option, not in help) runs a file's program or `test`'s tests
+  through the evaluator as before (M8;
   compared in the suite 2026-11-07, interp@FILE). Scopes reclaimed as they close, destructors run where holders let go; tasks run one after another at
   their join. Every test file and the checks' run cases are compared with the built runs; listed differences only
   (std/chan's waits for a task, std/net's getaddrinfo, memory-measuring cases, an export fn handed to C).
@@ -998,9 +1010,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Put`, `io.PutLine(t = "")`,
   `io.PutErr`, `io.PutErrLine` fail with `io.Error` and are written with `try`. `io.Show<T>(v T, at Place =
   Place.Here) T` (QBP 4) writes `FILE:LINE:COLUMN: $v` to the standard error and gives `v` back. `io.Writer` buffers
-  (errors at `Flush`); `io.Lines` reads lines. **`Print(x)` and `Println(x = "")` (M19d, the user's "make the language
+  (errors at `Flush`); `io.Lines` reads lines; **`io.Reader(fd, size)` (M19f, the user's request 2026-11-15)** is the buffered read counterpart of `Writer`, sharing Lines' buffer: `Line`, `Word`, `Next<T>` (integers by `T.Parse`, floats, Bool; errors `io.Error`, `Exhausted`, `ParseError`), `Bytes(n)`, `All`. **`Print(x)` and `Println(x = "")` (M19d, the user's "make the language
   as easy to use as python", 2026-11-13; capitalized 2026-11-13, "no carveout for them")**: the prelude's two exported functions reached bare, any value as `$x` renders it, no
-  `try` - a failed write ends the program as `!` does, reported at the caller's place (`at Place = Place.Here`; in a test, fails it); reserved by D3a. **std/io's printing functions renamed (M19f, mine 2026-11-13, for the user's no-carveout and no-shadowing rules - D3a would reject `io.Put` beside the prelude's `Print`)**: `io.Put`, `io.PutLine`, `io.PutErr`, `io.PutErrLine`, same signatures, still `? io.Error` (`io.Write`, the coordinator's first choice, is the raw `Write(fd, data)`); tools/io_rename migrates.
+  `try` - a failed write ends the program as `!` does, reported at the caller's place (`at Place = Place.Here`; in a test, fails it); reserved by D3a. **std/io's printing functions renamed (M19f, mine 2026-11-13, for the user's no-carveout and no-shadowing rules - D3a would reject `io.Put` beside the prelude's `Print`)**: `io.Put`, `io.PutLine`, `io.PutErr`, `io.PutErrLine`, same signatures, still `? io.Error`; **they take any value (the user, 2026-11-15: "any printable type really")**, written as `$` renders it, as Print does; the buffered `io.Writer` has `Put`/`PutLine` of any value too (`io.Write`, the coordinator's first choice, is the raw `Write(fd, data)`); tools/io_rename migrates.
 - **Libraries:** `std/os`, `std/json` (immutable recursive enum tree), `std/http` (over curl), `std/csv`, `std/stats`, `std/plot` (SVG charts, 2026-11-14: line, scatter, histogram, heatmap on a `Plot` value built by calls, `Svg()`/`Save`, `Display()` for notebooks; errors `plot.Error`),
   `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi), `std/sync` (`Mutex<T>` reached
   only in `m.With(fn(v mut T&) { })`, `RWLock`, `Once`), `std/net` (blocking TCP and UDP), `std/set`, `std/deque`, `std/pool` (a slotmap of generational handles: `Add`, `try p.Get(h)`/`Ref`/`RefMut`/`Remove` failing with `pool.Error.Stale`; the user 2026-11-08),
@@ -1063,7 +1075,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   bootstrap`, with clang alone - the user, 2026-10-18). The compiler is `build/olang`. No splitting files for size (the
   user).
 - **The port is a redesign (the user's rule):** a hand-written scanner, recursive descent with Pratt expressions, a
-  demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `interpret -evaluate`, LLVM
+  demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and the evaluator, LLVM
   IR emission per module (`compiler/DESIGN.md`). Acceptance is the test suite plus stage 1 rebuilding itself. Compile
   speed is a first-class goal (the user, 2026-10-23). The port builds itself (stage 1 == 2 == 3).
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Closed prelude traits

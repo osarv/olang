@@ -40,7 +40,8 @@ fn Config(from build.Config&) build.Config {
     c.Consts = from.Consts
     c.Update = from.Update
     c.Jobs = from.Jobs
-    c.Quick = true
+    c.Quick = from.Quick
+    c.Checked = from.Checked
     c.Cell = true
     c.Quiet = true
     c.Dir = CacheDir()
@@ -205,6 +206,7 @@ type Worker struct(Relay Bool) {
     Out I32 = -1
     Std I32 = -1
     Err I32 = -1
+    Printed Bool = false     # something was relayed since the prompt last asked: a newline is due before it asks again (the prompt's)
     buf Vec<U8>
 }
 
@@ -377,6 +379,7 @@ fn (w mut Worker&) relay(which I64) Bool {
     if n > 0 {
         spin.End()     # the cell's own output is never beside the spinner
         try io.Write(I32(which), chunk[:n]) catch io.Error { }
+        w.Printed = true
         return true
     }
     session.CloseFd(fd)

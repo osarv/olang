@@ -427,12 +427,13 @@ fn civil(days I64) I64, I64, I64 {
 
 # "olang jupyter -install": the kernel's spec written where Jupyter looks for a user's kernels - $JUPYTER_DATA_DIR,
 # else ~/.local/share/jupyter - as kernels/olang/kernel.json, running this olang
-fn Install(exe String&) I32 {
+fn Install(exe String&, c build.Config&) I32 {
     base := try os.Env("JUPYTER_DATA_DIR") catch default ""
     if base == "": base = $(try os.Env("HOME") catch default ".") + "/.local/share/jupyter"
     dir := $base + "/kernels/olang"
     try os.MkDirAll(dir) catch os.Error e { return fail($"cannot make " + $dir + ": " + $e) }
-    spec := $"{\n  \"argv\": [" + $Q(exe) + ", \"jupyter\", \"{connection_file}\"],\n  \"display_name\": \"olang\",\n" + $
+    opts := $(", \"-quick\"" if c.Quick else "") + $(", \"-checked\"" if c.Checked else "")     # (B23: the kernel's own options)
+    spec := $"{\n  \"argv\": [" + $Q(exe) + ", \"jupyter\"" + $opts + ", \"{connection_file}\"],\n  \"display_name\": \"olang\",\n" + $
         "  \"language\": \"olang\",\n  \"interrupt_mode\": \"message\"\n}\n"
     try os.WriteFile($dir + "/kernel.json", spec) catch os.Error e { return fail($"cannot write " + $dir + "/kernel.json: " + $e) }
     try io.Put($"olang jupyter: the kernel is installed at " + $dir + "/kernel.json - pick \"olang\" in a notebook\n") catch io.Error { }

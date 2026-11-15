@@ -370,3 +370,49 @@ test "text goes to C NUL-terminated and comes back copied (X15)" {
     assert String.FromC(e, 2) == "No" and String.FromC(e, 0) == ""
     assert ("hi".ToC()).Len() == 3
 }
+
+# T.Parse for the floats and Bool (D19)
+fn parseWord<T>(t String&) String {
+    try T.Parse(t) catch ParseError.Empty { return "EMPTY" } catch ParseError.Invalid { return "INVALID" } catch ParseError.Overflow { return "OVERFLOW" }
+    return "ok"
+}
+
+assert F64.Parse("2.5")! == 2.5          # decided while compiling (K1)
+assert Bool.Parse("true")!
+
+test "F64.Parse and the narrower floats round to the type" {
+    assert try F64.Parse("-0.25") == -0.25
+    assert try F32.Parse("0.1") == F32(0.1)
+    assert try F16.Parse("1e4") == F16(10000.0)
+    assert try BF16.Parse("1.5") == BF16(1.5)
+    assert try F64.Parse("inf") == F64.Inf
+    assert try F32.Parse("-inf") == -F32.Inf
+    assert try F16.Parse("inf") == F16.Inf
+    x := try F64.Parse("nan")
+    assert x != x
+}
+
+test "Float Parse names what was wrong" {
+    assert parseWord<F64>("") == "EMPTY"
+    assert parseWord<F64>("1x") == "INVALID"
+    assert parseWord<F64>("1e999") == "OVERFLOW"
+    assert parseWord<F32>("1e39") == "OVERFLOW"
+    assert parseWord<F16>("1e5") == "OVERFLOW"
+    assert parseWord<F16>("65504") == "ok"
+    assert parseWord<F32>("1e-60") == "ok"
+}
+
+test "Bool.Parse reads true and false exactly" {
+    assert try Bool.Parse("true")
+    assert not (try Bool.Parse("false"))
+    assert parseWord<Bool>("") == "EMPTY"
+    assert parseWord<Bool>("True") == "INVALID"
+    assert parseWord<Bool>(" true") == "INVALID"
+    assert parseWord<Bool>("1") == "INVALID"
+}
+
+test "the F8 types parse as the float they round" {
+    assert try F8E4M3.Parse("1.0") == F8E4M3(1.0)
+    assert try F8E5M2.Parse("2") == F8E5M2(2.0)
+    assert parseWord<F8E4M3>("x") == "INVALID"
+}

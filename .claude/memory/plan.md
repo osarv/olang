@@ -30,6 +30,7 @@ MNIST first, NLP and robotics later; genetic algorithms are allowed. Done in oan
   spikes (address-event routing), weights in on-chip memory, time-stepped leaky integrate-and-fire updates. The other
   route - a circuit-describing library run by the compile-time evaluator emitting Verilog (Chisel/Clash style) - kept
   as the alternative for timing-critical parts.
+- **`olang debug FILE` / `olang debug -dap` - on hold (the user, 2026-11-15: "if that is the case, then hold debug off")**: Neovim debugging goes through nvim-dap and lldb-dap with full DWARF (wt-dwarf), which stands alone; olang's own adapter (values as `$x` renders them, olang expressions at a breakpoint, a terminal debugger) waits until lldb-dap proves too C-like in use.
 - Serialization (JSON and a compact binary encoder in std, walking fields - never a memory dump) on top of
   compile-time reflection (one generic iterating a type's fields, like `match <T>`); also restores what removing
   struct literals lost - rebuilding a valid value without its validating constructor.
@@ -83,3 +84,4 @@ on 2026-11-07. The remaining work is /home/user/review/remaining/LIST.md.)
 - 2026-11-15: oann started (the user: "If we are ready for v1, start building oann whilst I test it out"). Round 1 brings oann up to olang v1 (worktree /home/user/wt/oannport, branch wt-oannport, compiler pinned at /home/user/wt/olangv1, 374c1e3c); the v1.0.0 tag still waits on the user's local try of the user-interface work.
   Round 1 done 2026-11-15: oann master a084560 - every module, example and bench program compiles under olang 374c1e3c, `make test` 173 passed; the data-free examples reproduce docs/settling.md's numbers. Round 2: measure MNIST/transformer/INT8 once data is fetched (INT8 5x slower: olang inlining, wt-int8), then the redesign per oann's PROGRESS.md.
 - Last full verify: master 374c1e3c (2026-11-14, wt-testmem). Changes merged since go into the next weekly one.
+- Queued after text join lands (2026-11-15): compile-time range and constant analysis (the user's yes: a provably out-of-range index, constant shift past the width or provably zero divisor is a compile error); the AI study's bugs (recursive lambda's own capture, json.Encode of private fields, chan.Chan needing Init, quadratic memory of a self-append loop, five misleading diagnostics); std/bench's two loose ends (argv[0] under -bench, an evaluator disagreement); olang fix's Clone->Copy tool renaming a type's own declared Clone() (oann's Tensor/Matrix - must skip types declaring Clone); one-line-body conversion over the repository.

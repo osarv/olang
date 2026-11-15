@@ -164,7 +164,7 @@ emitdiff: build/compiler_tools_emitdump build/compiler_tools_emitdiff
 	grep '^== total' build/emitdiff.txt
 
 # B3e, in the suite: the evaluator held to the built programs - each file of tests of the corpus and std run by
-# "olang test -evaluate" (interp@FILE), the checks' run cases by "olang interpret -evaluate" in four parts (interp@casesK), each
+# "OLANG_EVALUATE=1 olang test" (interp@FILE), the checks' run cases by "OLANG_EVALUATE=1 olang FILE" in four parts (interp@casesK), each
 # compared with the built run compiler/goldens/run.txt stores (compiler/tools/evaldiff.olang, which lists by name the
 # differences the interpreter is known to have and the tests it is not given). A difference not listed is a failure,
 # named in build/failed.txt. "make evaldiff" runs the whole comparison alone, its rows in build/evaldiff.txt
@@ -285,7 +285,7 @@ prereq:
 bootstrap: prereq
 	@t=$$(date +%s); echo "bootstrap: clang compiles the seed into build/olang.seed ..."; \
 	sp=; q=; if [ -t 2 ] && [ "$$TERM" != dumb ] && [ "$$OLANG_SPINNER" != 0 ]; then q=-s; \
-		( sleep 0.3; while :; do for f in "⠂⠃⠃" "⠃⠂⠃" "⠃⠃⠂" "⠃⠃⠁" "⠃⠁⠃" "⠁⠃⠃"; do \
+		( sleep 0.3; while :; do for f in "⠄⠆⠆" "⠆⠄⠆" "⠆⠆⠄" "⠆⠆⠂" "⠆⠂⠆" "⠂⠆⠆"; do \
 			printf '\r%s clang compiling the seed\033[K' "$$f" >&2; sleep 0.09; done; done ) & sp=$$!; fi; \
 	$(MAKE) $$q -j$(PARALLEL) build/olang.seed; rc=$$?; \
 	if [ -n "$$sp" ]; then kill $$sp 2> /dev/null; wait $$sp 2> /dev/null; printf '\r\033[K' >&2; fi; \

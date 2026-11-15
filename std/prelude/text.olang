@@ -700,6 +700,24 @@ fn (t String&) ParseFloat() F64 ? ParseError {
     return try toF64(man, dp - taken, trunc, neg, body)
 }
 
+# the number text t writes, as a T - every float type's builder (D19): F32.Parse("0.1") is the F32 nearest 0.1, read as
+# ParseFloat reads text ("inf" and "nan" too), failing with its errors, and with Overflow where a finite number is too
+# large for T (F16.Parse("1e5")); "inf" stays infinite. One too small for T is a zero of its sign
+fn T.Parse<T Float>(t String&) T ? ParseError {
+    d := try t.ParseFloat()
+    r := T(d)
+    if d == d and d - d == 0 and r - r != 0 { error ParseError.Overflow }
+    return r
+}
+
+# the Bool text t writes: "true" or "false", exactly - Empty for no text, Invalid for anything else
+fn Bool.Parse(t String&) Bool ? ParseError {
+    if t.Len() == 0 { error ParseError.Empty }
+    if t == "true" { return true }
+    if t == "false" { return false }
+    error ParseError.Invalid
+}
+
 # whether t is the lower-case letters "lower", in any case
 fn sameLetters(t String&, lower String&) Bool {
     if t.Len() != lower.Len() { return false }

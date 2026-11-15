@@ -34,7 +34,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `lanes.olang` - lane-by-lane array operators, totals, lane comparisons and masks (E39), baked and decided while
   compiling beside the run time.
 - `axes.olang` - subscripts by axes (`m[0:2, :]`, `m[..., 1]`, E16f) and nested literals (`Matrix[[1, 2], [3, 4]]`,
-  E21) on a matrix, a cube and a generic tensor, decided while compiling beside the run time.
+  E21) on a matrix, a cube and a generic tensor, and indexing by any number of indexes with stores into slices (E31e: a
+  variadic `At`/`SetAt`, `SetSlice`), decided while compiling beside the run time.
 - `barelits.olang` - literals with no type before them (E19-E21, E27, S13h, E20): made as the type expected where they
   stand, else their own (`[1, 2]` an `Array<I64>`, `["a": 1]` a `Map<String, I64>`), beside the type-in-front form;
   generic calls, patterns, baked and decided while compiling beside the run time.

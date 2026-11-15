@@ -19,7 +19,7 @@ only depends on concepts already introduced by earlier ones:
 | 7 Error Handling | Error sets, the error-union return convention, try/catch |
 | 8 Scopes | Scopes, scope tags, reference markers, results, the static scope checker, letting go |
 | 9 Constructors and Destructors | Constructor-bearing struct types, bare-pun fields, destructors |
-| 10 Compilation Model | Compilation units, the `compile`/`build`/`test`/`interpret` modes, `main`, the command line, test blocks, process exit, targets |
+| 10 Compilation Model | Compilation units, the `compile`/`build`/`test`/`run` modes, `main`, the command line, test blocks, process exit, targets |
 | 11 External Functions | `extern fn` declarations, linkage, the restricted C-ABI type boundary, and the runtime's own functions |
 | 12 Generics | Type parameters on functions and struct types, inference, `match` over a type, monomorphization, instances per array length |
 | 13 Compile-time evaluation | What the compiler computes while compiling, what it refuses, constant contexts |
@@ -522,7 +522,7 @@ per access: null is the all-zero representation and the lowest addresses are nev
 faults, and the compiler never assumes that a reference it sees read through is not null, so it never deletes or
 moves code on that assumption. A field further into a struct than the unmapped range reaches (64KB on Linux) is
 not covered, and reading it through null is undefined as an index out of range is (E16e); an element of a null
-array is out of range already, its length being 0. While compiling (K1) and under `interpret -evaluate` (§10 B3e), a read through
+array is out of range already, its length being 0. While compiling (K1) and under the evaluator (§10 B3e), a read through
 null is reported where it is written. This is the cost of `null`: §8 continues to guarantee that a reference
 never outlives what it points at, and no longer guarantees that it points at anything. A weak place (T2d) also reads
 `null` once no owning place holds its referent (O8e), with no store to it: read it into a local and test that (S8e).
@@ -2189,7 +2189,7 @@ local whose type has a destructor (C7) - the close of its scope is what it is he
 check (its error said already), and a local of a body nothing checks (a branch the build leaves out, a generic never
 instantiated). A name in the text of a branch the build leaves out (S8b) counts as read. These errors are said only of a
 program in which no other error is found - by the checker or by a later pass (section 8's, M19g's): a read may be what another mistake left out, or sit in code that mistake
-keeps from being checked. Under `interpret` (B3e) one is a warning instead, and the program runs.
+keeps from being checked. Under running a file (B3g) one is a warning instead, and the program runs.
 
 ### 3.3 Type and error declarations
 
@@ -2341,7 +2341,8 @@ of type `T`, none included - `fn sum(xs ...I64) I64` is called `sum()`, `sum(1)`
 `xs` is a read-only `Array<T>&` holding them in order (T25b), its length the count given. It is the last of its
 function's parameters but the defaulted ones (D8b), which then follow it and are given by name (E14b) -
 `fn Exec(args ...String&, dir String& = "")` is called `Exec("ls", "-l", dir = "/tmp")` - so a function has at most one,
-it has no default, and the parameters before it are required. Every argument by position from its place on, up to the
+it has no default, and the parameters before it are required. (The one parameter that may follow it without a default is
+the value of a `SetAt` or `SetSlice`, E31e: `fn (t mut T&) SetAt(i ...I64, v E)`, called `t.SetAt(1, 2, v)`.) Every argument by position from its place on, up to the
 first argument by name, is one of its arguments; each is checked against `T` as an argument is (E12, a literal adapting
 as it would there, T6). They are evaluated in the order written, after the arguments before them and before those by
 name (S4, E14b), and held as a **fixed array in the caller's frame** (T7c) - no storage made, lent to the call (E12) for
@@ -3048,7 +3049,7 @@ is reached transitively through re-export (§4.5) — see §4.6.
 or error written with it, the text of a top-level or local branch the build leaves out (B9, S8b) included - is a
 compile-time error naming it, saying to remove it. An import re-exported (its alias capitalized, M14) is its importers'
 and never one. The imports of a module with a top-level condition only evaluation decides (B9c) are not judged. Under
-`interpret` (B3e) one is a warning instead, and the program runs.
+running a file (B3g) one is a warning instead, and the program runs.
 
 ### 4.3 Visibility
 
@@ -3143,7 +3144,7 @@ caller's place, the trailing parameter `at Place = Place.Here`, E40; in a test, 
 `std/io`'s `Put` and `PutLine` (M19f), which fail with `io.Error`. They are the only modules that may declare methods on a built-in type, which is how the built-in
 types get their methods; those methods are visible in every module. So with builders (D19): the prelude declares those
 of the built-in types and of its own - `String.FromC(p, max)` (X15), the floats' `FromBits` (E33), every integer type's
-`Parse` (`I64.Parse(t)`, `U8.Parse(t, 16)`) - visible in every module. The prelude's traits are `Iterator` and `Indexable`
+`Parse` (`I64.Parse(t)`, `U8.Parse(t, 16)`), every float's and the F8 types' (`F32.Parse(t)`, as `ParseFloat` reads, rounded to the type, `Overflow` where a finite number does not fit) and `Bool.Parse(t)` ("true" or "false" exactly) - visible in every module. The prelude's traits are `Iterator` and `Indexable`
 (T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c); its `Axis` enum is what a subscript by axes passes to `Slice` (E16f); its `TypeKind` enum is what
 reflection's `T.Kind` gives (G32), and its `FieldInfo`, `CaseInfo`, `ParamInfo` and `ResultInfo` are the types of
 reflection's descriptors (G34), made only by the compiler. Its collections are `Vec` (the growable array), `Map`,
@@ -3453,22 +3454,30 @@ Every float type has `x.Fixed(n)`: `x` as text with `n` digits after the point (
 program where a write fails - with no words of the compiler's own:
 
 ```
-fn Put(t String&) ? io.Error            # t, to the standard output
-fn PutLine(t String& = "") ? io.Error     # t and a line end, to the standard output
-fn PutErr(t String&) ? io.Error         # t, to the standard error
-fn PutErrLine(t String& = "") ? io.Error  # t and a line end, to the standard error
+fn Put<T>(x T) ? io.Error             # x as $ renders it, to the standard output
+fn PutLine<T>(x T = "") ? io.Error     # x as $ renders it and a line end, to the standard output
+fn PutErr<T>(x T) ? io.Error          # x as $ renders it, to the standard error
+fn PutErrLine<T>(x T = "") ? io.Error  # x as $ renders it and a line end, to the standard error
 ```
 
-Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `try io.PutLine("n is " + $n)`.
+Each takes one value of any type and writes it as `$` renders it (E11a) - text as it is, `try io.PutLine(n)`, `try
+io.PutLine("n is " + $n)` - as the prelude's `Print` and `Println` do.
 `PutLine` and `PutErrLine` write the text and its line end as one write. Each call writes at once, with nothing held
 back - a buffered writer for much output is `std/io`'s `Writer`. A write the system does not complete fails with
 `io.Error`, as `io.Write` does, and is written with `try` like any other fallible call. A write is an effect, so a call
-of one is never evaluated while compiling (K1) and is performed under `interpret -evaluate` (B3e).
+of one is never evaluated while compiling (K1) and is performed under the evaluator (B3e).
 
 Beside them, `fn Show<T>(v T, at Place = Place.Here) T` writes `FILE:LINE:COLUMN: $v` - the place of the call (E40)
 and the value rendered (E11a) - and its line end to the standard error, then gives `v` back, so a value is looked at
 where it stands: `y := io.Show(f(x)) + 1`. A failed write is ignored, the one call of std that does not report one:
 a look that could fail would need a `try` at every use, and a lost look changes nothing the program computes.
+
+The read counterpart of `Writer` is `io.Reader(fd, size = 65536)`, a buffered input also behind `Lines`: `Line()` (the next
+line, as `Lines.Next` gives it), `Word()` (the next run of non-whitespace, line ends skipped), `Next<T>()` (the next word as
+a `T`: an integer by `T.Parse`, a float by `ParseFloat`, a `Bool` from `true`/`false`; failing with `io.Error`, `Exhausted`
+or the prelude's `ParseError`), `Bytes(n)` (exactly `n` bytes; `Exhausted` if the input ends first, the bytes read
+dropped) and `All()` (everything left). A read that fails is `io.Error.Failed`; the end of the input is `Exhausted`, as it
+is now, so a later call reads again.
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
@@ -3629,7 +3638,7 @@ primary  ::= literal | try-expr | comptime-expr | call-expr | struct-literal
 
 `match-expr` is a `match` used as a value (§6.4 S12b); `unreachable-expr` is `unreachable` where a value is expected
 (§6.6 S16e); `comptime-expr ::= "comptime" expr` is a value computed while compiling (§13 K3). `index ::= "[" sub-item { sep sub-item } [ line-sep ] "]"`
-with `sub-item ::= expr | [ expr ] ":" [ expr ] | "..."` (several indices only for a type's `At`/`SetAt`, E31; one
+with `sub-item ::= expr | [ expr ] ":" [ expr ] | "..."` (several indices only for a type's `At`/`SetAt`, E31, E31e; one
 range alone is a slice, E16a; a range or `...` among several items a subscript by axes, E16f), `member ::= "." IDEN [ "(" list(arg) ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
 `call-on ::= "(" list(arg) ")"` calls the function value everything to its left gives (E13b). Every one of these lists
@@ -3858,7 +3867,7 @@ The comparison takes no shortcut through identity, and it walks only what these 
 values of its own type through what declares `Eq` - a struct holding an array of its own type, `type S struct(xs
 Array<S>&)` - is compared level by level, to whatever depth the data has. Data that holds **itself** that way (an element
 naming the array it is in) is compared without end, as any unbounded recursion runs, until the stack is exhausted; a
-comparison evaluated while compiling (K1), or under `interpret -evaluate`, stops with a message instead, each level it descends
+comparison evaluated while compiling (K1), or under the evaluator (B3e), stops with a message instead, each level it descends
 counting as a call does against the evaluator's depth limit. A struct or enum reference with no `Eq` (identity) ends any
 such walk.
 
@@ -4224,8 +4233,8 @@ containment above all — is stated as holding for programs that do not index ou
 checked costs nothing or is asked for: a constant index is a compile-time error (E16), a slice is always
 checked (E16b), and `a.Get(i)` (E16d) checks where the program asks it to.
 
-**E16g (checked builds).** A **checked build** - `test` (B3a), a `-debug` build (B2c), `interpret` and `test
--evaluate` (B3e), the prompt (B22) and the notebook kernel (B23, B24) - stops where these operations the program wrote are undefined, as a failed
+**E16g (checked builds).** A **checked build** - `test` (B3a), a `-debug` build (B2c), the evaluator (B3e), and any build or run given `-checked` (`build` B3, `run` B3e, running a file B3g, the prompt B22, the notebook kernel
+B23, B24) - stops where these operations the program wrote are undefined, as a failed
 `assert` stops it (S18a: a test fails, any other run aborts), printing `FILE:LINE:COLUMN: ` (where the operation's
 expression starts) and what failed:
 
@@ -4238,9 +4247,9 @@ expression starts) and what failed:
 
 Only an operation the program writes is checked: an index the language makes - a `for ... in` walk (S9), a
 comprehension (E27), a lane operation (E39), an array pattern (S13h), a type's `At` (E31) - and a lane operation's `/`,
-`%` and shifts are never checked, in any build. A **release build** - `build`, running a file (B3g), `-quick`,
+`%` and shifts are never checked, in any build. A **release build** - `build`, `run`, running a file (B3g), the prompt and the kernel without `-checked`, `-quick`,
 `-library`, `compile` without `-debug` - checks none of them and costs nothing for them: the operations are undefined
-there, as E6a, E8a and E16 say. A checked build changes no program's meaning: what it stops is undefined in a release
+there, as E6a, E8a and E16 say. `-checked` beside `-debug`, or given to `test`, is allowed and says nothing more (those builds are checked already). A checked build changes no program's meaning: what it stops is undefined in a release
 build. The compile-time evaluator (K1) refuses the same operations as undefined.
 
 **E16a.** `base "[" [ lo ] ":" [ hi ] "]"` is a **slice**. `base` must be an array, value or reference, of any
@@ -4303,7 +4312,8 @@ variadic `...Axis`** (D8g) taking any number; such a type slices by axes everywh
 compile-time error naming both counts; a type with no such `Slice` is an error naming the forms it may declare. A plain
 `x[i, j]` with no range and no `...` is `At` as before (E31). An **array has one axis**: a subscript by axes of an array
 is a compile-time error naming `a[lo:hi]`. What `Slice` gives is a value with no place of its own (E16a): it is read,
-indexed, called on and passed on, never assigned or stored into - `m[0:2, :] = v` is an error. It composes as any call
+indexed, called on and passed on, never assigned or stored into - `m[0:2, :] = v` is an error naming `SetSlice`, unless the
+type declares one, which a store into a slice calls (E31e). It composes as any call
 does: under `try` where `Slice` can fail (E31), through a type variable as a need (G18a), and in the compile-time
 evaluator (K1).
 
@@ -4606,8 +4616,9 @@ type declares one:
 | `a ** b` | `Pow` | one operand, a result (E5a) |
 | `-a` | `Neg` | none, a result |
 | `a < b` | `Less` | one operand, a `Bool` |
-| `x[i]`, `x[i, j, ...]` | `At` | one operand per index (at least one), a result |
-| `x[i] = v`, `x[i, j, ...] = v` | `SetAt` | the indices, then the value; no result |
+| `x[i]`, `x[i, j, ...]` | `At` | one operand per index (at least one), or one variadic parameter taking them (E31e), a result |
+| `x[i] = v`, `x[i, j, ...] = v` | `SetAt` | the indices, then the value (the indices one variadic parameter, E31e); no result |
+| `x[lo:hi, :] = v`, `x[lo:hi] = v` (E31e) | `SetSlice` | one `Axis` per item (or one `...Axis`), then the value; no result |
 | `x[lo:hi]` | `Slice` | two operands, a result |
 | `x[i, lo:hi, :, ...]` (E16f) | `Slice` | one `Axis` per item (or one `...Axis`), a result |
 | `a & b`, `a \| b`, `a ^ b`, `a << b`, `a >> b` | `BitAnd`, `BitOr`, `BitXor`, `ShiftLeft`, `ShiftRight` | one operand, a result |
@@ -4663,6 +4674,33 @@ slots past its count, a Map's empty slots, held as zeros (M19d) - holds no eleme
 declared Copy is never run on a value whose first never-null reference there is null. Where a type's copy runs a
 declared Copy, the copy is made wherever the program copies a value of it - none is left out (D9h, D9i); the
 compile-time evaluator makes the same calls (K1).
+
+**E31e (indexing by any number of indexes, and storing into a slice).** A type's `At` and `SetAt` may take their indexes
+as **one variadic parameter** (D8g) instead of one parameter each: `fn (t Tensor<T>&) At(i ...I64) T`, `fn (t mut
+Tensor<T>&) SetAt(i ...I64, v T)`. They are then the operators for any number of indexes, one or more: `t[i]`, `t[i, j]`,
+`t[i, j, k]` call `At` with the indexes, each of the parameter's element type (E12, a literal adapting as in an
+argument), held as D8g holds a variadic parameter's arguments - a fixed array in the caller's frame, nothing allocated -
+so a tensor whose rank is data, not type, is indexed as a fixed-arity type is. A parameter or two before the variadic
+one are indexes too (`At(i I64, rest ...I64)`). The element type is any type an index may be; the compiler gives the
+indexes and nothing else. The `SetAt` of a type takes the **value as its last parameter, after the variadic one** - the
+one parameter that may follow it (D8g); a `SetAt` with its variadic parameter anywhere else is an error naming that.
+Everything else is as for a fixed number of indexes: the indexes are evaluated left to right and then the value (S4); a
+compound store `t[i, j] += v` and an increment read through `At` and store through `SetAt` with the place held once
+(E31b), which needs both declared in the same form - a variadic `At` with a `SetAt` of a fixed number of indexes is the
+operator for that many only; either may declare errors (E31a); `t.At(i, j)` called by name gathers its arguments as
+any call does (D8g). The operators are named by their roles, so the private spellings `at` and `setAt` do likewise
+(M6b).
+
+A store into a slice - `x[lo:hi, :] = v`, `x[..., 0] = v`, and `x[lo:hi] = v` where the type declares a `SetSlice` taking `Axis` values - is the call
+of the type's **`SetSlice`**, the store counterpart of `Slice` (E16f): its parameters besides the receiver are **one
+`Axis` per axis written, then the value**, or **one variadic `...Axis`, then the value** (the value last, as `SetAt`'s
+is): `fn (t mut Tensor<T>&) SetSlice(axes ...Axis, v T)`, `fn (m mut Matrix&) SetSlice(r Axis, c Axis, v Matrix)`. The
+items are made `Axis` values as E16f says, evaluated left to right, then the value, which fits the last parameter as a
+`SetAt`'s does. The written items must be as many as a fixed list of `Axis` parameters, else a compile-time error naming
+both counts. A type declaring no such `SetSlice` keeps the error E16a gives for a store into a slice, which now names
+`SetSlice`. A compound store into a slice, `x[a:b, :] += v`, is that error as before: `SetSlice` is a store, and a slice
+is no place to read-modify-write. `SetSlice` may declare errors (E31a) and is covered by `try` as any operator method is
+(R21), through a type variable it is a need (G18a), and the compile-time evaluator runs it as a call (K1).
 
 **E31b (writing through `x[i]`).** `x[i]` on a type declaring `At` gives a copy of the element - but an element of a
 unique type (T13b), never copied, is the element where the collection holds it: `x[i]` is `x.RefMut(i)`'s referent where
@@ -5698,7 +5736,7 @@ reads a view of a Vec that grew (M19g). One the evaluator **cannot decide** - it
 `extern fn` but C's math (X8), fails with an error nothing handles, or passes the evaluator's budgets - is a
 compile-time error too, naming what stops it: a top-level assert holds of every program the build makes, or it is
 not one; an assert to be checked at run time is written in a function or a test. Every module's top-level asserts
-are decided in every build of a program reaching it - `build`, `test`, `interpret`, a module compiled alone - and a
+are decided in every build of a program reaching it - `build`, `test`, running a file, a module compiled alone - and a
 branch a build leaves out is not read (B9). What is wrong with its condition (it does not check, or is no `Bool`) is
 said where it is, and it then asks nothing of the evaluator.
 
@@ -5723,7 +5761,7 @@ error, or while a test is running to standard output, before the test's `FAIL` l
 `FILE:LINE: unreachable reached` (S16d, and a value `match` no clause selects,
 S12b), `FILE:LINE: slice bounds out of range`, `FILE:LINE: array length out of range`, `FILE:LINE: lane lengths differ`, `FILE:LINE: 'as' named what the
 value is not`, `FILE:LINE: a generator asked for its next value inside its own walk` (S20). An assert's or an `unreachable`'s message (S17, S16d) follows, after
-`: `. A program run with `interpret` (B3e) prints the same.
+`: `. A program run as a file (B3g) prints the same.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
 values are fixed (S8c) and lengths known while compiling (T7c) - in an instance (G29), its by-value array parameters'
@@ -5760,7 +5798,7 @@ function and the condition as written, at the condition:
 
 In a build that keeps no trace the last two print `(build with -debug to see where it came from)` instead (a false
 requirement's condition is said there all the same: it is its error's payload, D17a). A program run
-with `interpret` (B3e) prints the trace as a debug build does.
+run as a file (B3g) under `-checked` prints the trace as a debug build does.
 
 **S18b.** Leaving a test early — by a failed assert, a failed runtime check, `unreachable`, a `!` or an
 error leaving the test (S16) — runs the
@@ -6270,7 +6308,7 @@ the function ends - every scope it has open closed, as a `return` closes them - 
 its result the function's result and its failure the function's failure, with no frame of the function left while
 it runs. So a chain of becomes runs in constant stack however long it is (`become sum(n - 1, acc + n)` over ten million
 steps, two functions becoming each other, a state machine of functions), in a built program (the call is LLVM's
-`musttail`) and in the compile-time evaluator and `interpret -evaluate` alike (a frame replaced, never one added). `become` is
+`musttail`) and in the compile-time evaluator and the evaluator (B3e) alike (a frame replaced, never one added). `become` is
 a statement that leaves (D10a), and may stand in a one-line body (S1b): `else: become step(s, i + 1)`.
 
 Its operand is a **call of a function or a method declared with `fn`** - a generic's instance included - written
@@ -8019,16 +8057,16 @@ other entry point; or it names a file, which is built and run (B3g):
 
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
-mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
+mode-word ::= "build" | "compile" | "test" | "run" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
             | "bindgen" | "profile" | "api" | "jupyter" | "notebook"
-option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
+option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-evaluate" | "-bench" | "-install" | "-continue"
+            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-install" | "-continue"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
-an error listing the modes. Nothing at all after `olang` opens the prompt (B22). After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
-`explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
+an error listing the modes. Nothing at all after `olang` opens the prompt (B22). After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `run` (B3e), `format` (B13),
+`explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help file` running a file's), `doc`
 (B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20), `api` (B21), `jupyter` (B23) and `notebook` (B24). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
@@ -8036,26 +8074,26 @@ beginning with `-` that is no option is an error:
 
 | option | applies to | rule |
 |---|---|---|
-| `-output PATH` | build, compile, bindgen, profile, notebook | B3h, §11 X16, B20, B24 |
-| `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
-| `-quick` | running a file, build, compile, test, profile, explain | B2g, B20, B11d |
-| `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
-| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
+| `-output PATH` | build, compile, run, bindgen, profile, notebook | B3h, §11 X16, B20, B24 |
+| `-debug`, `-race`, `-sanitize` | running a file, build, compile, test, run | B2c, B2b, B2f |
+| `-quick` | running a file, build, compile, test, profile, explain, run, jupyter, notebook | B2g, B20, B11d |
+| `-checked` | running a file, build, compile, test, run, jupyter, notebook | E16g |
+| `-target NAME` | running a file, build, compile, test, run, explain, doc, lsp, mcp | B12 |
+| `-define Name=value`, `-update` | running a file, build, compile, test, run, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
 | `-check` | format, fix | B13, B17 |
 | `-html DIR` | doc | B14 |
 | `-library` | build | §11 X14 |
-| `-memory` | running a file, build, test | B18 |
+| `-memory` | running a file, build, test, run | B18 |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
-| `-evaluate` | test, interpret | B3e |
 | `-bench` | test | B19b |
 | `-caps` | explain | B11c |
 | `-asm`, `-ir` | explain | B11d |
 | `-install` | jupyter | B23 |
 | `-continue` | notebook | B24 |
 
-`build`, `compile`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
+`build`, `compile`, `run`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
 file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
-`-html`) any number, `lsp` and `mcp` none; for running a file, for `interpret` and for `profile`
+`-html`) any number, `lsp` and `mcp` none; for running a file, for `run` and for `profile`
 every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
 spellings: a flag of one character is an unknown option.
 
@@ -8086,7 +8124,7 @@ builds differs - unobservable but in speed and size.
 module compiled to native code of its own, so a build - and above all a rebuild after an edit to code many modules
 inline - takes a fraction of the default's time, and the program runs somewhat slower (about a fifth, measured on the
 compiler itself). It is an option of the modes that build (B1); it says how much to optimize, as `-debug` and `-race`
-do, so it is a compile-time error beside either of them. Running a file (B3g) builds at this level by default. A quick object is a distinct artifact (B4), named with
+do, so it is a compile-time error beside either of them. Running a file (B3g), `run` (B3e), the prompt (B22) and the kernel (B23) build at this level where `-quick` is given. A quick object is a distinct artifact (B4), named with
 `.quick`. Nothing else changes: the program means what it means in the default build.
 
 **B2e.** Under `-debug` the build also carries **source-level debug information** (DWARF): every function
@@ -8112,7 +8150,7 @@ of it, or allocating a length read out of it is reported as `use after scope clo
 failed check does (S18): a test fails and the others run, and outside a test the process aborts. A fault that is not one
 of these ends the program as it would without `-sanitize` (an `os.OnCrash` message included). A program that obeys §8 behaves
 under `-sanitize` as without it, but for time and memory. It is a **detector, not a proof**: it sees the uses a run made, and
-a use of storage no longer held back reads whatever the allocator has put there since. Under `interpret` it changes nothing,
+a use of storage no longer held back reads whatever the allocator has put there since. Under the evaluator it changes nothing,
 since the evaluator never reclaims storage. A sanitized object is a distinct artifact (B4), named with `.san`.
 
 A **Vec's replaced buffer** (M19d), or a Map's, is treated the same way before its scope closes - however the buffer
@@ -8189,30 +8227,33 @@ about a third of the word), the nearest target or description: `f.olang: no test
 'Box'?`, and that file's run ends with the status 3. Over several files such a file is no failure where another listed
 file has a test the words name; where none has, the run fails, its last line `no listed file has a test named by 'Bax'`.
 
-**B3e.** `interpret <file>`: builds the program whose root module is `<file>` as running a file does (B3g: at `-quick`'s
-level, B2g) but as a **checked build** (E16g) that keeps the error return trace (S18d), into olang's own cache - the
-directory `olang/run` of `$XDG_CACHE_HOME`, else of `~/.cache` - rather than into `build/`, every module's object
-reused there while current (B3i) and nothing written beside the program, and then runs it in the compiler's place:
-its command line is B3f's, its standard input, output and error are the compiler's, and the status it ends with -
-128 and the signal's number where a signal ends it, as a shell says - is the mode's. The program is analyzed as under
-`build`, `main` required (B4), but for an unread local (D3b) and an unused import (M5a), which are only untidy: each
-is a **warning**, a row `path:line:column: warning[RULE]: message` with its source, written to the standard error
-before the program runs, which runs as it would without it. An error escaping `main` is reported as a `-debug` build
-reports it (B5, S18d), and an index, a division or a shift the program wrote stops it as E16g says.
+**B3e.** `run <file> [<argument> ...]`: builds the program whose root module is `<file>` as `build` does (B3: into `build/`
+beside the working directory, objects reused while current, `main` required, `-output` (B3h) naming the executable), with
+the options it is given (`-quick`, B2g; `-checked`, E16g; `-debug`, `-race`, `-sanitize`, `-memory`; `-target`, `-define`,
+`-update`), saying nothing when the build succeeds, and then runs it in the compiler's place, as B3g says: its command
+line is B3f's, its standard input, output and error are the compiler's, and the status it ends with - 128 and the signal's
+number where a signal ends it, as a shell says - is the mode's. A compile-time error is reported as `build` reports it, with
+status 1, and nothing is run. Another architecture's program (B12a) runs in an emulator, given the program's path.
 
-`interpret -evaluate <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
+The **evaluator** - the compile-time evaluator (K1) run over a whole program - is not a mode of the command line. A program of
+the compiler's own testing sets the environment variable `OLANG_EVALUATE` (to any value), and then running a file (B3g)
+**interprets** the program whose root module is `<file>` instead of building it, and `test` runs each file's tests the same
+way (below); no option is read for how to build, and `-target` sets the build constants it decides (B10a) and names this
+machine only. What follows says what the evaluator does.
+
+Under it, the program whose root module is `<file>` is interpreted instead of built. The
 program is analyzed exactly as under `build` - `main` is required (B4), and every compile-time error is reported the
 same way, section 8's included (where values live is the same scope pass's, so a program the build refuses is not
 run, a construct this compiler does not check yet among what it refuses), but for an unread local (D3b) and an unused
 import (M5a), which are only untidy: each is a **warning**, a row `path:line:column: warning[RULE]: message` with its
-source, written to the standard error before the program runs, which runs as it would without it (`test -evaluate`
+source, written to the standard error before the program runs, which runs as it would without it (the evaluator's `test`
 keeps them errors, as `test` does) - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
 nothing is generated, nothing is linked and no file is written. It behaves as the built program would run (B5):
 globals are initialized imports first (B5a) and may be read and written, an `extern` function (§11) is called in
 the interpreting process, `os.Exit` ends it with its status, an error escaping `main` is reported as B5
 says, an atomic operation is performed, and a check the language guarantees - a failed `assert`,
 `unreachable`, a slice out of range (E16b), an array length out of range (D14b), lanes of different lengths (E39),
-an `as` that does not hold (E32) - aborts with the message the built program prints; `interpret` is a checked build
+an `as` that does not hold (E32) - aborts with the message the built program prints; the evaluator (B3e) is a checked build
 (E16g), so an index out of range, a division by zero or of the least value by `-1` and a shift out of range the program
 wrote abort the same way, with the message a checked build prints. Where the built program's behaviour is otherwise **undefined** - an index
 the language makes out of range, a conversion out of range - or where it traps reading through a null
@@ -8236,15 +8277,15 @@ why. Whenever the interpreter
 stops a program on something it does not run, the blocks it is in are still left as the built program, which would
 go on, leaves them: their deferred code (§6.9) runs, innermost first, before the stop is reported. Where the built
 program itself ends - `os.Exit`, a check failing - deferred code runs only where the built program's
-does (S19c), and an error leaving `main` runs it on the way out, as in the built program. `-race`, `-debug` and `-sanitize` choose how code is generated, and `interpret` builds as this rule says, so they are not its
-options (B1); `-update` and `-define` apply as to any build, and `-target` sets the build constants it decides (B10a) - naming this machine's architecture
+does (S19c), and an error leaving `main` runs it on the way out, as in the built program. `-race`, `-debug` and `-sanitize` choose how code is generated, and the evaluator builds nothing, so they are not its
+options; `-update` and `-define` apply as to any build, and `-target` sets the build constants it decides (B10a) - naming this machine's architecture
 and system (B12a). The runtime's own functions (§11 X6) are provided by the interpreter itself, over the
 interpreted program's command line (B3f). Interpreting is much slower than running the built program, and each frame
-costs the interpreter more memory than the built program's stack does, so `-evaluate` suits short runs. Recursing deeper
+costs the interpreter more memory than the built program's stack does, so it suits short runs. Recursing deeper
 than the interpreter's stack holds stops it, naming the call, with status 1 - never a crash; so does a comparison of
 data that holds itself (E10).
 
-`test -evaluate <file> [<file> ...] [<word> ...]` runs each file's tests by the same evaluation instead of building
+Under the evaluator, `test <file> [<file> ...] [<word> ...]` runs each file's tests by the same evaluation instead of building
 them: the file analyzed as `test` analyzes it (`TestBuild` true, its tests checked), then its tests the words name (B7a,
 every test where none is given) run as its test binary runs them (B3a) - each global set first, each test `ok - NAME`
 or what stopped it and `FAIL - NAME` (`FAIL - NAME: T.W` and the trace where an error left it, S16, S18d), then the
@@ -8254,24 +8295,29 @@ harness gives them (B19), and no fuzzer runs (`std/fuzz`'s input is the empty on
 left as the harness leaves it (P1d): every scope still open, in every frame, closed innermost first and its
 destructors run - no deferred code; a `!` that failed it is followed by its error's trace (E35, S18d); words that name
 none of a file's tests are said as `test` says them, the nearest target or description suggested (B7a). A forked child that takes its
-test's recovery point away ends on a failed check as the built child does. `-define` and `-update` apply; an option
-saying how to build - `-debug`, `-race`, `-sanitize`, `-quick`, `-memory`, `-fuzz` - is an error beside it, and so is a
-`-target` naming another machine (B12a).
+test's recovery point away ends on a failed check as the built child does. `-define` and `-update` apply; the options
+saying how to build are not read, and a `-target` naming another machine is an error (B12a).
 
-**B3f.** `interpret <file> [<argument> ...]`: every argument after `<file>` belongs to the interpreted program and is
+**B3f.** `<file> [<argument> ...]` and `run <file> [<argument> ...]`: every argument after `<file>` belongs to the program and is
 passed on to it as written — one beginning with `-` included, which is never read as a flag of the compiler's. The
 program's command line (B4a) is `<file>`, as written, followed by those arguments.
 
 **B3g (running a file).** `olang [<option> ...] <file> [<argument> ...]` - a file ending in `.olang` where the mode
-would stand - builds the program whose root module is `<file>` as `build` does (B3: into `build/` beside the
-working directory, objects reused while current, `main` required) but at `-quick`'s level (B2g) unless `-debug` or
-`-race` gives another - start-up is what running a file waits on, and an unchanged program is not built again -
-saying nothing when the build succeeds, and then runs
-it in the compiler's place: its standard input, output and error are the compiler's, its command line (B4a) is `<file>`
-as written followed by every argument after it - one beginning with `-` included - and its exit status is the
-compiler's (a signal that ends it ends the process, which a shell reports as 128 plus its number). A compile-time error
-is reported as `build` reports it, with status 1, and nothing is run. Since a line starting with `#` is a comment (L4), a
-file whose first line is `#!/usr/bin/env olang` runs as a script.
+would stand - builds the program whose root module is `<file>` as `build` does by default (unchecked, `-O3`, link-time
+optimization, B2d; `-quick`, B2g, and `-checked`, E16g, are its options, and `-debug`, `-race`, `-sanitize` and `-memory` apply as
+to `build`) but **into olang's own cache** - the directory `olang/run` of `$XDG_CACHE_HOME`, else of `~/.cache` - rather
+than into `build/`: every module's object is reused there while current (B3i), the binary is named by the file and where
+it is run from, and nothing is written beside the program or in the working directory. The cache is kept within 1 GiB,
+the files written longest ago going first, never the program just built. The program is analyzed as under `build`, `main`
+required (B4), but for an unread local (D3b) and an unused import (M5a), which are only untidy: each is a **warning**, a
+row `path:line:column: warning[RULE]: message` with its source, written to the standard error before the program runs,
+which runs as it would without it. The build says nothing when it succeeds, and the program is then run in the compiler's
+place: its standard input, output and error are the compiler's, its command line (B4a) is `<file>` as written followed by
+every argument after it - one beginning with `-` included - and its exit status is the compiler's (a signal that ends it
+ends the process, which a shell reports as 128 plus its number). An error escaping `main` is reported as B5 says, with the
+error return trace (S18d) where the build is checked. A compile-time error is reported as `build` reports it, with status 1,
+and nothing is run. Since a line starting with `#` is a comment (L4), a file whose first line is `#!/usr/bin/env olang`
+runs as a script. A program for another architecture is no file to run - `run` (B3e) builds and runs it in an emulator, B12a.
 
 **B3h (the output).** `-output PATH` names what `build` or `compile` writes: `build`'s executable is linked at `PATH`
 instead of `build/<name>`; `compile`'s object is built in `build/` as before (so it is reused while current, B3) and
@@ -8378,14 +8424,14 @@ memory, now and at most. Neither changes what is built.
 **B25 (the busy indicator).** Where a compiler process waits - on the front end, clang's compiles, the link, a fetch of a
 remote package, a prompt cell's build and run - and its standard error is a terminal (and `TERM` is not `dumb`), it draws on
 that line, once the wait has lasted 300 ms, six dots in three columns by two rows (each column the braille character
-`U+2803`) with the gap going clockwise around them, a frame every 90 ms, beside what is waited on (`compiling`,
+`U+2806`, the middle two rows of a cell) with the gap going clockwise around them, a frame every 90 ms, beside what is waited on (`compiling`,
 `linking`, `fetching OWNER/REPO`, `running`). It is redrawn in place and erased as the wait ends, and before anything
 else is written to the terminal - a diagnostic, a program's output, a test's - so the output is what it would be
 without it. It is never drawn where the standard error is a file or a pipe, and `OLANG_SPINNER=0` turns it off.
 
 ### 10.2 Program entry
 
-**B4.** In `build`, `profile` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
+**B4.** In `build`, `profile` and `run` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
 no parameters and no success type - with no error set (`fn main() { ... }`, which then cannot fail, R1d), or one
 written (`fn main() ? SomeError, ... { ... }`) or inferred (`fn main() ? { ... }`, §7 R1a, which may come out empty). Any other shape (parameters,
 a `ret-type`) is a compile-time error. There is no
@@ -8394,12 +8440,12 @@ other valid `main` signature; in particular, there is no "return an int/bool sta
 **B4a (the command line and the environment).** A program's command line and environment are not passed to `main`.
 The runtime keeps them from the moment the process starts — before any global is initialized (B5a), so a global's
 initializer may read them — and a program reaches them through the runtime's functions (§11 X6). The command line is
-the program's own name first, as the operating system gave it (under `interpret`, B3f, the file being interpreted), then
+the program's own name first, as the operating system gave it (running a file or `run`, B3f, the file as written), then
 each argument in order. A test binary's command line is its own name alone.
 
 ### 10.3 Process exit
 
-**B5.** Running the compiled program (`build` mode), or interpreting it (`interpret`, B3e), invokes `main`. If it returns normally (falls off
+**B5.** Running the compiled program (`build` mode), or running it as a file (B3g, `run` B3e), invokes `main`. If it returns normally (falls off
 the end, or a bare `return`), the process exits with status `0`. If an error (§7) escapes `main`
 uncaught, it leaves `main`'s blocks as it leaves any function's - their deferred code, errdefers and destructors run
 (S19, S19e, O15), whether or not its word carries a payload (T19b) - and then the process prints `unhandled error:
@@ -8559,7 +8605,7 @@ own CPU with every instruction set extension it has, as clang's `-march=native` 
 The architectures are `x86_64` and `aarch64`, the operating system Linux with the GNU C library. A CPU and its
 extensions are what clang resolves `-march=CPU` (`-mcpu=CPU` for `aarch64`) to. Any other target, a CPU its
 architecture does not have, or `native` after another architecture's triple is a command-line error. Without clang -
-which `interpret -evaluate` otherwise does not need - `interpret` takes `native`, on x86-64, to be the x86-64 level this processor has.
+which the evaluator (B3e) otherwise does not need - running a file takes `native`, on x86-64, to be the x86-64 level this processor has.
 
 The target decides the build constants `TargetOs`, `TargetArch`, `TargetCpu`, `TargetVectorBits` and `TargetHasFma`
 (B10a), so a program chooses code for its target with an ordinary `if` on them (B9, S8b) - and the compile-time
@@ -8573,7 +8619,7 @@ finds where the system keeps a cross C library (`/usr/aarch64-linux-gnu`, say) o
 `OLANG_SYSROOT` names; `test` and running a file (B3g) build the same way and run what they built through an
 **emulator** - `OLANG_EMULATOR`, a command whose words are split at spaces, else `qemu-ARCH` or `qemu-ARCH-static` found
 on `PATH`, told where the target's C library is (`OLANG_SYSROOT`, else `/usr/ARCH-linux-gnu` where that exists) - and
-where there is none, that is an error naming what to install. `interpret`, which runs the program on this machine, and
+where there is none, that is an error naming what to install. running a file, which runs the program on this machine, and
 the tools that analyze for an editor are for this machine only: another machine's target is a command-line error for
 them. An object holds the target's intermediate form (B2d), compiled to the machine's code at the link, so another
 machine is built for only where the clang found can compile all the code the runtime holds for it: LLVM 18's AArch64
@@ -8595,7 +8641,7 @@ target never reuses an object built for another, and changing the target back fi
 `native` is resolved before the name is made, so a build directory taken to a machine with another CPU is rebuilt.
 What clang resolves a target to, and clang's version, are kept under `OLANG_CACHE` (`probe/`, beside M23a's checkouts),
 keyed by clang's own file (where it is, its size and its time), the question asked and this processor's model and
-extensions, so a build asks clang once rather than every time; `interpret -evaluate` keeps nothing.
+extensions, so a build asks clang once rather than every time; the evaluator (B3e) keeps nothing.
 
 **B12c (one result on every target).** The target changes how fast a program runs, never what it computes - except
 where the program itself asks, through the build constants. The generated code never fuses a multiplication and an
@@ -8618,7 +8664,7 @@ before it (where something was declared, which instantiation of a generic was be
 the same form with `note` in place of `error[RULE]`, followed by its source. The error's own line is its **headline**,
 what is wrong in about 80 characters; a message with more to say splits it Rust-style into rows of the same form that
 follow it with no source of their own, at the error's place: a `note:` row saying why it is wrong, and a `help:` row,
-after every other note, saying what to write instead. A message that says it all in its headline has neither. A **warning** - what `interpret` says in place of an error that
+after every other note, saying what to write instead. A message that says it all in its headline has neither. A **warning** - what running a file says in place of an error that
 is only untidy (B3e) - is a line in the same form with `warning[RULE]` in its place, followed by its source. The message names what it is about - the
 name, the types, the counts involved - and says what to write instead where that is plain, in a few words; the
 explanation of the rule is the rule itself (B11a). Errors are reported in source order - by file, then line - whatever
@@ -8881,7 +8927,7 @@ standard output before the test's own line, `bench NAME  N ops  T ns/op  A alloc
 its run reports it and `/LABEL` after it where `Run` is given a label, T the nanoseconds of one call on the monotonic
 clock, A and B the allocations and bytes of one call rounded down, and `  I instr/op` after them where the machine and
 the kernel give a counter of the instructions the thread retires. What the test does outside `f` is not measured. In
-every other build, and under `-evaluate` (where `-bench` is an error, B3e), `Run` calls `f` once and writes nothing,
+every other build, and under the evaluator (where `-bench` is an error, B3e), `Run` calls `f` once and writes nothing,
 so a benchmark is a test as well; no other build counts allocations or holds the counting code. `bench.Keep(v)` hands
 a value to code the optimizer cannot see through, so work whose result is otherwise unused is done: a number, `Char`
 or `Bool` by its bits, any other value through its `Hash` (whose cost the measurement includes).
@@ -8899,8 +8945,8 @@ on every path through it; the debug information holds each function's lines and 
 the runtime's sampler is linked in. No other build holds any of the three - the sampler's code, its symbols, the frame
 pointers or the line tables - so a program costs nothing for being profilable. The program is then run with the
 arguments after FILE as its own (B3f), its standard streams and the status it ends with the mode's own - 128 and the
-signal for one that ends by a signal, as a shell says - and the mode writes its report (B20b). `interpret` is not
-profiled: its build is a checked one (E16g), and under `-evaluate` its time is the evaluator's, not the program's.
+signal for one that ends by a signal, as a shell says - and the mode writes its report (B20b). running a file is not
+profiled: it runs from olang's cache (B3g), and under the evaluator its time is the evaluator's, not the program's.
 
 The sampler takes the CPU time of each thread the runtime runs - the program's, each task's worker (§6 P1e), each
 `os.RunOnStack` thread - in periods of one millisecond, by a timer of the thread's own CPU clock signalling that thread
@@ -8956,12 +9002,12 @@ not: a name added - a function, a type, a method, a field, a global; an error se
 trait newly met.
 
 **B22 (the prompt).** `olang` with nothing after it reads **entries** from its standard input - each a **cell** - and
-runs them in one **session**, each built as a file run is built (B3g: `-quick`, no check the run form leaves out) and run
+runs them in one **session**, each built as a file run is built (B3g: as `build` does, `-quick` and `-checked` as the prompt's options - `olang -quick`, `olang -checked` - and the kernel's, B23) and run
 in a process the session keeps; with `OLANG_CELLS=interpret` set, or where no cell can be built (no clang, a target that
-is not this machine), they are interpreted as `interpret -evaluate` runs a program (B3e), said once. Where the input is a terminal
+is not this machine), they are interpreted as the evaluator (B3e) runs a program (B3e), said once. Where the input is a terminal
 it asks with `>>> `, and
 `... ` while an entry is open: an entry goes on over the next line while a bracket of it, a raw text (L14a) or a block
-comment (L4a) is not closed. The session ends at the end of the input or at `:quit`, with status 0.
+comment (L4a) is not closed. On a terminal, a cell that wrote anything to the standard output or error is followed by one newline before the next prompt, whatever its output ended with, so that the prompt never draws over the line a cell left unfinished. The session ends at the end of the input or at `:quit`, with status 0.
 
 A cell is top-level declarations and statements in any order, split where a line ends with no bracket open (an `else` or
 `catch` beginning the next line goes on with the statement before it, S1b, R9b). Its declarations - `fn`, `type`,
@@ -8974,7 +9020,7 @@ and assign it by name as a mutable global of the session, of the type the cell g
 front of it (an exception to D3a). A cell whose last statement is an expression giving a value - not an assignment, a
 step or a call giving nothing - shows the value as `$` renders it (E11a).
 
-Every cell is checked with the session as one program - its diagnostics as `interpret` gives them (B11), its lines named
+Every cell is checked with the session as one program - its diagnostics as running a file gives them (B11), its lines named
 `cellN:LINE:COLUMN` (N counting the entries), a loaded file's by its path; unused locals and unread imports of the cell
 itself are warnings, an import nothing reaches yet none. A cell with errors changes nothing. A cell that checks is run:
 what stops it in order - an error leaving it, a failed assert, `unreachable`, a `!` - is said and the session goes on,
@@ -9191,8 +9237,8 @@ must state exactly the prototype below (X1a).
 | `__olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64` | `path` made absolute with every symbolic link, `.` and `..` resolved, as `__olang_arg` gives an entry — `-1` when that fails |
 | `__olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32` | starts the program the first of the `count` zero-terminated entries of `args` names - looked up through `PATH` unless it holds a `/` - with all of them as its command line and no shell between, and the descriptors `stdin`, `stdout` and `stderr` (each `-1` for this process's own) as its standard input, output and error, in the zero-terminated directory `dir` (empty: this process's own; a relative program path is found from it); returns its process id, or `-1` when it cannot be started (`__olang_err` says why). The caller waits for it (`waitpid`, an ordinary C function). Where the C library cannot change a spawned program's directory itself, the program is run through `/bin/sh` with the directory and the arguments as the shell's arguments, never its script |
 | `__olang_mkdtemp(template Array<U8>) I32` | makes a new directory, readable, writable and enterable by this user alone, named by the zero-terminated `template` with its last six characters - six `X`s - replaced by ones that make the name unused, written over the template's; returns `0`, or `-1` when it fails (`__olang_err` says why) |
-| `__olang_run_on_stack(bytes I64, f fn&())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, `unreachable` or a failing `!` inside `f` ends the test as it would have had `f` been called directly (S16, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under `interpret -evaluate` as the call `f()`, the evaluator's own limits on depth standing for the stack |
-| `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under `interpret -evaluate` the message is written first when the interpreter's process crashes |
+| `__olang_run_on_stack(bytes I64, f fn&())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, `unreachable` or a failing `!` inside `f` ends the test as it would have had `f` been called directly (S16, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under the evaluator (B3e) as the call `f()`, the evaluator's own limits on depth standing for the stack |
+| `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under the evaluator (B3e) the message is written first when the interpreter's process crashes |
 | `__olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32` | whether the function the zero-terminated `name` names - in what the process has loaded, or in the C math library - can be called as `kinds` and `ret` describe: `0` it can, `1` there is no such function, `2` a kind is one that cannot be passed. `kinds` holds a byte per argument and a `0` after the last: a number type's code - `I8` 1, `I16` 2, `I32` 3, `I64` 4, `U8` 5, `U16` 6, `U32` 7, `U64` 8, `F16` 9, `BF16` 10, `F32` 11, `F64` 12 - with `0x80` added for an array of that type; `ret` is the result's code, `0` for none. A 16-bit float is passed only in an array, and an array is never a result |
 | `__olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64` | calls that function with the arguments `words` holds, in order: a number is one word, its bits from the lowest; an array is one word holding its length, then its elements' bytes packed into as many words as they fill, the function handed a pointer to those bytes, so what it writes there is in `words` after the call. Returns the result's bits, an integer extended to 64 bits as its type extends. A call `__olang_dyncall_check` would refuse stops the program as a failed check does. The runtime's part over the C library's `dlsym` and `libffi` that these two are is in a program, and linked, only when a module of it declares one of them |
 
@@ -9222,7 +9268,7 @@ and with its prototype - every parameter and the result `F64`, or every one `F32
   multiply-add, B12c), and otherwise the library's function.
 - **Any other** is always a call of the library's function, never replaced by another function or by an expression
   that may round differently (`pow(x, 2.0)` by `x * x`), so its result is the library's wherever it is computed: while
-  compiling, by the built program, or under `interpret`. Which value that is, beyond what IEEE 754 requires, is the library's
+  compiling, by the built program, or under the evaluator. Which value that is, beyond what IEEE 754 requires, is the library's
   (implementation-defined).
 
 A declaration naming one of these with any other prototype is an ordinary external function.
@@ -9429,7 +9475,7 @@ static or inline in it, calling it - is compiled by the build beside the program
 same form, under the same optimizer: so a C function and an olang one may each be inlined into the other where the
 optimizer judges it worth doing. Its functions are given the target attributes the program's own carry (B12), whatever
 the C compiler would have chosen. A source file's static functions are its own (C's file scope) and are not
-declared. `interpret -evaluate` (B3e) compiles that C into a shared library and loads it as it loads a library a link names;
+declared. the evaluator (B3e) compiles that C into a shared library and loads it as it loads a library a link names;
 `compile` (B2) writes the module's own object only.
 
 **X21 (variadic calls).** A variadic extern function (X1) takes, after the arguments for its parameters, any number of
@@ -10178,7 +10224,7 @@ error as they would at run time. It is **not** possible when evaluation would:
 - read the bits (E33) of a NaN an operation made, or of a signalling NaN, which E33a leaves unspecified - a NaN made
   from bits that is quiet is read exactly;
 - run longer, recurse deeper or take more memory than an implementation-defined budget - which is never a crash or
-  a hang: evaluation that would run out of the stack it runs on stops there, refused (under `interpret -evaluate`, with that message),
+  a hang: evaluation that would run out of the stack it runs on stops there, refused (under the evaluator (B3e), with that message),
   every turn of a loop counts toward the first, each level `==` descends into a value (E10) toward the second, and an
   array too long for the memory budget is refused before it is made.
 
@@ -10207,14 +10253,14 @@ A **stale view** - a read or write through a view of a `Vec`'s elements (`View()
 replaced its buffer, or through a slice of one - ends the evaluation there too, with both places named: the use, and
 the growth (the program's call, where the growth is made inside the prelude). At run time such a view reads the retired
 buffer - the old elements' plain data, the ones owning storage emptied (M19d) - which no program means, so where a value is required it is a compile-time error as reaching an abort is, and
-under `interpret -evaluate` the program stops there.
+under the evaluator (B3e) the program stops there.
 
 A length known while compiling (T7c) is a constant whatever holds it, so reading it - `a.Len()` on a by-value
 parameter in an instance (G29), say - reads nothing that varies and can always be evaluated. A contract's conditions
 are evaluated as a function's body is (D17e): decided at a call whose arguments are computed, and checked on entry at
 every call the evaluator runs.
 
-Under `interpret` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
+Under the evaluator (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
 refused - tasks run one after another at their join, as while compiling (B3e).
 
 **K1a.** Whether a call of a function can ever be evaluated is a property of the **function**, not of the

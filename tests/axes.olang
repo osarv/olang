@@ -150,3 +150,164 @@ assert Matrix[[1, 2], [3, 4]][..., 1][1, 0] == 4.0
 assert Cube(2)[..., 1] == 1 + 3 + 5 + 7
 assert Array<Array<I64>>[[1, 2], [3, 4]][1][0] == 3
 assert Tensor<I64>[[1, 2], [3, 4]][..., 0][1] == 3
+
+# a rank-3 cube whose At, SetAt and SetSlice take any number of indexes or axes (E31e): the variadic parameter holds
+# them, a SetAt's and SetSlice's value follows it
+type Voxels struct(n I64) {
+    n
+    data := Vec<I64>()
+    for _ in range n * n * n: data.Push(0)
+}
+
+# the offset of a (possibly short) index, the first index the outermost
+fn offsetOf(n I64, idx Array<I64>&) I64 {
+    o I64 = 0
+    for i in idx: o = o * n + i
+    return o
+}
+
+fn (v Voxels&) At(i ...I64) I64 { return v.data[offsetOf(v.n, i)] }
+fn (v mut Voxels&) SetAt(i ...I64, x I64) { v.data[offsetOf(v.n, i)] = x }
+
+# every element the axes select set to x; an axis not written is whole
+fn (v mut Voxels&) SetSlice(axes ...Axis, x I64) {
+    lo := Array<I64>[0, 0, 0]
+    hi := Array<I64>[v.n, v.n, v.n]
+    d I64 = 0
+    for i, a in axes {
+        if a == Axis.Rest {
+            d = 3 - (axes.Len() - i - 1)
+            continue
+        }
+        l, h := a.Bounds(v.n)
+        lo[d] = l
+        hi[d] = h
+        d++
+    }
+    for i in range lo[0], hi[0] {
+        for j in range lo[1], hi[1] {
+            for k in range lo[2], hi[2]: v.data[(i * v.n + j) * v.n + k] = x
+        }
+    }
+}
+
+fn (v Voxels&) total() I64 {
+    t I64 = 0
+    for x in v.data: t += x
+    return t
+}
+
+# a SetSlice taking one Axis per axis, the value after them
+type Plane struct(w I64) {
+    w
+    cells := Vec<I64>()
+    for _ in range w * w: cells.Push(0)
+}
+fn (p mut Plane&) SetSlice(r Axis, c Axis, x I64) {
+    r0, r1 := r.Bounds(p.w)
+    c0, c1 := c.Bounds(p.w)
+    for i in range r0, r1 {
+        for j in range c0, c1: p.cells[i * p.w + j] = x
+    }
+}
+
+test Voxels.At "one to three indexes, read and stored" {
+    v := Voxels(3)
+    v[1] = 5
+    assert v[1] == 5 and v.data[1] == 5
+    v[1, 2] = 7
+    assert v[1, 2] == 7 and v.data[5] == 7
+    v[1, 2, 0] = 9
+    assert v[1, 2, 0] == 9 and v.data[15] == 9
+}
+
+# the indexes are evaluated once, left to right, and before the value (S4)
+fn tick(log mut Vec<I64>&, k I64) I64 {
+    log.Push(k)
+    return k
+}
+
+test Voxels.At "indexes and value evaluated in order" {
+    v := Voxels(4)
+    log := Vec<I64>()
+    v[tick(log, 1), tick(log, 2)] = tick(log, 3)
+    assert log.Len() == 3 and log[0] == 1 and log[1] == 2 and log[2] == 3
+    assert v[1, 2] == 3
+    v[tick(log, 1), tick(log, 2)] += tick(log, 1)
+    assert log.Len() == 6 and v[1, 2] == 4
+}
+
+test Voxels.SetAt "compound stores and parallel assignment" {
+    v := Voxels(3)
+    v[1, 2] = 7
+    v[1, 2] += 3
+    assert v[1, 2] == 10
+    v[1, 2, 0] = 4
+    v[1, 2, 0] *= 2
+    assert v[1, 2, 0] == 8
+    v[2]++
+    assert v[2] == 1
+    v[0, 1], v[1, 2], v[2, 2, 2] = 1, 2, 3
+    assert v[0, 1] == 1 and v[1, 2] == 2 and v[2, 2, 2] == 3
+    v[0, 1], v[1, 2] = v[1, 2], v[0, 1]
+    assert v[0, 1] == 2 and v[1, 2] == 1
+}
+
+test Voxels.SetSlice "a store into a slice takes the axes, then the value" {
+    v := Voxels(3)
+    v[0:2, :, 1] = 4
+    assert v.total() == 4 * 6 and v[1, 2, 1] == 4 and v[2, 0, 1] == 0
+    v[..., 0] = 1
+    assert v[2, 2, 0] == 1 and v[0, 0, 1] == 4
+    v[1:2] = 8
+    assert v[1, 2, 2] == 8 and v[2, 2, 2] == 0
+    p := Plane(3)
+    p[1:, :2] = 6
+    assert p.cells[3] == 6 and p.cells[7] == 6 and p.cells[2] == 0 and p.cells[5] == 0
+}
+
+# a generic tensor whose indexing fails (E31a): a variadic At and SetAt may declare errors
+type Cells<T> struct(n I64) {
+    n
+    data := Vec<T>()
+    for _ in range n * n * n {
+        z T
+        data.Push(z)
+    }
+}
+fn (c Cells<T>&) At(i ...I64) T ? OutOfRange {
+    if i.Len() > 3: error OutOfRange
+    return c.data[offsetOf(c.n, i)]
+}
+fn (c mut Cells<T>&) SetAt(i ...I64, x T) ? OutOfRange {
+    if i.Len() > 3: error OutOfRange
+    c.data[offsetOf(c.n, i)] = x
+}
+
+test Cells.At "fallible, generic and nested in a Vec" {
+    c := Cells<F32>(2)
+    try c[1, 1] = 2.5
+    try c[1, 1] += 1.0
+    assert (try c[1, 1]) == 3.5
+    try c.SetAt(0, 1, 6.0)
+    assert (try c.At(0, 1)) == 6.0
+    r := try c[1, 1, 1, 1] catch default -1.0
+    assert r == -1.0
+    vs := Vec<Cells<I64>>()
+    vs.Push(Cells<I64>(2))
+    try vs[0][1, 1] = 4
+    try vs[0][1, 1] += 1
+    assert (try vs[0][1, 1]) == 5
+}
+
+fn voxelSum() I64 {
+    v := Voxels(2)
+    v[0, 1] = 5
+    v[1, 1, 1] = 7
+    v[1, 1, 1] += 1
+    v[:, 0, 0] = 3
+    return v[0, 1] + v[1, 1, 1] + v.total()
+}
+
+# the compile-time evaluator agrees (K1, S17a): the same stores and reads, decided while compiling
+assert voxelSum() == 5 + 8 + (6 + 5 + 8)

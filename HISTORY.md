@@ -37404,6 +37404,147 @@ either. Measured (4 cores, lightly loaded): a 1e8-iteration float loop 55.9 s ->
 cache (std's objects once). Left: the cache is never pruned (as build/ is not), and E16g's list names the prompt and
 kernel as checked builds while B22's cells are built release (-quick, unchecked) - an older disagreement, not changed here.
 
+### 2026-11-15, the spinner's dots moved to the middle rows
+
+The user: the spinner "is the top of a 4*3 and it really doesnt look centered". The frames used each braille cell's top two
+dots (`U+2803`), which sit high on the line beside `:::`; they now use the middle two (`U+2806`, a gap `U+2804` or
+`U+2802`): ⠄⠆⠆ ⠆⠄⠆ ⠆⠆⠄ ⠆⠆⠂ ⠆⠂⠆ ⠂⠆⠆. Same three characters' width as `:::`. compiler/spin.olang's Frames and the
+makefile's clang loop.
+## 2026-11-15: B2d - under full LTO a module's compile leaves vectorizing to the link
+
+oann's INT8 benchmark (bench/int8.olang) ran its products at 10-12 GOPS against the 55-60 its DESIGN.md recorded:
+`quant.rowStep`, the one-row step of the INT8 micro-kernels (a five-line loop), stayed 54 calls in `quant.rowPanel`, the
+tile's accumulators going through memory, and no `vpdpwssd` was made. The cause was the order of LLVM's work across our
+units: every module is compiled `-O3 -flto` on its own, and clang's full-LTO pre-link pipeline runs the loop and SLP
+vectorizers; `rowStep` lives in quant's unit while the micro-kernels, generic over the tile, are instances in the root's
+unit (B3d), so no compile saw both, and by the link `rowStep` was its vectorized form (a 64-wide main loop, an 8-wide
+epilogue, the run-time checks - 224 lines of IR), past the link inliner's threshold. A one-file reproducer inlined because
+there caller and callee shared a unit and the pre-link inliner ran before vectorizing. Fix (build.olang, CompileFlags):
+under full LTO a module's compile adds `-fno-vectorize -fno-slp-vectorize`; the link's LTO pipeline inlines, then
+vectorizes the whole program as before. ThinLTO's pre-link pipeline already vectorizes nothing, so it is unchanged, as are
+`-debug`, `-race` and `-quick`. The flags are in each object's hash, so cached objects are compiled again once.
+Measured (load average 19-23 on 4 cores, interleaved runs): bench_int8 512^3 11.5 -> 77-94 GOPS, 1024^3 11.8 -> 82-88,
+128x784x128 11.4 -> 79-88, 1x1024x1024 12.6 -> 59; rowStep calls 54 -> 0, calls into quant 66 -> 12 (`store`, `Linear`),
+`vpdpwssd` 0 -> 80; the F32 GEMM beside it unchanged (~110-120 GFLOPS). olang's bench/ against C (nbody, spectral,
+mandelbrot, fannkuch, matmul, sha256, lanes) the same or slightly better, olang/C 0.93-1.13 before and after. Check: the
+`linkinline` scenario (checks/fixtures/linkinline: a step function in one module, a kernel in another calling it four times
+per iteration - fails with the old flags). `explain -ir` (B11d) showed the IR the LTO plugin writes under
+`-plugin-opt=emit-llvm`, which is the merged module before the link optimizes it - vectorized only because each module's
+compile had been; its `listing` check failed on the change. The listing link now keeps the link's temporaries
+(`-plugin-opt=save-temps`) and shows each task's `.5.precodegen.bc`, the IR as the link optimized it and handed to the
+code generator, the other temporaries removed - truer than before, and with the link's remarks, which emit-llvm never
+ran. Proved by targeted runs (the coordinator's brief: no full verify): the bootstrap and `make fixedpoint`, checkir,
+build.olang's tests, the `listing`, `target`, `objnames`, `cinterop` and `linkinline` scenarios, tests/lanes, axes,
+bench, cimport, fnvalues and std/sha256, stats, regex.
+
+Taken further the same day, after a container restart: the F32 products beside the INT8 ones had not been unchanged -
+measured shape by shape (load average 5-6), linalg's thin products had lost up to half their speed (100352 x 9 x 16 with
+its bias and ReLU, a convolution's: 32 -> 17 GFLOPS; 1024 x 128 x 512: 138 -> 105), the square ones within noise. The
+profile put it in linalg's `storeTile` and `epilogueAs` loops (`for j in range w`, instances in the root's object), which
+the link now left scalar. The cause: with the vectorizers off, a module's compile still ran LLVM's late `LoopUnroll`,
+which unrolls a loop by a factor with a remainder loop - a step meant to follow the vectorizer, not to precede it - and
+the link's vectorizer then found the unrolled body not worth vectorizing and the remainder too short to version
+(`CantVersionLoopWithOptForSize`, its trip count under 16). Neither a weaker link pipeline (`opt -passes=default<O3>` over
+the merged module was as slow, a loop rotation added no help) nor the inliner. Tried and dropped: vectorizing in the
+root's objects only (main, tests, instances), which restored the F32 products but halved the batch-1 INT8 ones (1 x 1024 x
+1024: ~60 -> ~25 GOPS - the root's micro1 summed its tile with vectors before the link inlined the step writing it).
+Fix: under full LTO every object's compile also passes `-mllvm -unroll-runtime=false -mllvm -unroll-allow-partial=false`;
+unrolling a loop whole stays (before the vectorizer, as it always ran), and the link unrolls by a factor after it
+vectorizes - what ThinLTO's compile, which runs no late unroller, does already. Measured (bench_int8, built with the
+compiler before B2d and with this one, interleaved, load average 17-24): INT8 products 4-9 -> 45-78 GOPS (1 x 1024 x 1024
+8 -> 33-61), F32 the same within the noise (thin 9 x 16: 15-21 both; the isolated thin product 1300-1500 us against
+1300-1600, where the first fix took 2100-2900); `quant.rowStep` calls 54 -> 0, calls into quant 66 -> 4, `vpdpwssd` 0 ->
+80. olang's bench/ against C, before and after (`OLANG_CLANG` a wrapper restoring the old flags): every olang/C ratio the
+same within the noise. Targeted runs: the bootstrap's fixed point, build.olang's tests, the `linkinline`, `listing`,
+`objnames` and `target` scenarios.
+## The run cache is bounded (B3e, 2026-11-15)
+`$XDG_CACHE_HOME/olang/run` grew by a root's objects with every edit of an interpreted program and was never pruned. After
+a successful build `interpret` now touches the program's binary and `prune`s the directory to a cap of 1 GiB
+(`RunCacheCap`): the files written longest ago go first, never the program just built. The cache stays a cache - an
+object that goes is built again where wanted. The B3i module store (`Config.Store`) is not pruned by this; it has no cap.
+
+## interpret, the prompt, the kernel and running a file build as build does; `-checked` and `-quick` are options (E16g, B3e, B3g, B22, 2026-11-15)
+The user: "I want checked and quick as options but not as default. there should be no real difference in performance to the
+build run" (then: "make running a file build like build"; `-checked` on `build` and `compile` too). Reversed: B3g's "running a
+file compiles quick" (2026-11-13) and E16g's list naming `interpret`, the prompt and the kernel as checked builds (2026-11-14).
+All of them now build as `build` does (unchecked, -O3, link-time optimization). `-quick` (B2g) and the new `-checked` (E16g) are
+options of build, compile, running a file, interpret, the prompt (`olang -checked`, `olang -quick` with no file), `jupyter` and
+`notebook` (cells.Config takes both from the session's configuration; `jupyter -install -checked` writes them into the kernelspec's
+argv); `-checked` beside `-debug` or on `test` is allowed and redundant. A checked build stays the default of `test`, `-debug`, and the
+evaluator's runs (`interpret -evaluate`, `test -evaluate`). The interpret checks scenarios now pass `-checked`.
+
+## `interpret` merged into running a file; `run` builds into build/; the evaluator is internal (B1, B3e, B3g, 2026-11-15)
+The user: "merge them. we dont need to reach the interpreter from CLI its more an internal compilation thing after all. make
+olang FILE not create a build directory and then olang run FILE builds and runs". So: `olang FILE args...` is what
+`olang interpret FILE` was - built as `build` builds (unchecked, -O3, LTO; `-quick`/`-checked` options), into
+`$XDG_CACHE_HOME/olang/run`, nothing in the working directory, D3b/M5a warnings, the cache bounded to 1 GiB - and the new mode
+`olang run FILE args...` is what running a file was: built exactly as `build` does into `build/` (`-output` allowed) and run (B12a's
+emulator included; running a file is for this machine only). The `interpret` mode and the options `-evaluate` and
+`test -evaluate` are removed (no diagnostic kept). The evaluator stays, reached by the testing tools through the environment
+variable `OLANG_EVALUATE=1` (read in `CommandLine.Parse`, for running a file and `test` only; the options saying how to build are
+ignored under it, so `buildWord` and `InterpretBuilds` went): compiler/tools/evaldiff.olang, the fuzzers and the checks scenarios
+set it. `olang help file` shows running a file's options (formerly `help run`). Measured (4 cores, loaded by other jobs, so
+indicative): hello world through `olang FILE` 1.6-2.0 s cold cache, 0.24 s cached, 0.4-0.55 s after an edit (before, as -quick: 1.6 s,
+0.2 s, 0.35-0.9 s); `olang run FILE` 2.2 s first, 0.06 s unchanged, 0.35 s after an edit. A prompt of five small cells took 6.0 s
+cold and 1.7 s on the warm cache, with or without `-quick` and (before) with it unconditionally: link-time optimization costs
+the small cells nothing measurable.
+
+## The prompt's newline after a cell's output (B22, 2026-11-15)
+`Print("hello")` at the terminal prompt showed nothing: the line editor's redraw (`\r\x1b[J>>> `) erased the unfinished line.
+On a terminal the session's worker output is now relayed through this process (`Worker.Relay`, as the kernel's is), which
+remembers whether a cell wrote anything (`Worker.Printed`); the prompt then writes one newline before the next `>>>`, whatever
+the output ended with (the user: `Print(5)` shows `5` and the prompt on the next line, `Println(5)` shows `5`, an empty line, and
+the prompt). A cell that wrote nothing adds nothing. Checked in the `promptkeys` scenario with `Print("hello")` and `Println("hi")`.
+Cells interpreted through `OLANG_CELLS=interpret` write in this process and are not covered.
+
+### 2026-11-15, std/io's printing takes any value
+
+The user, on `io.PutLine(x)` refusing an I64 that `Print(x)` takes: "they should all take integers as well as strings",
+then "any printable type really". `io.Put`, `PutLine`, `PutErr` and `PutErrLine` are generic over the value, written as
+`$` renders it (a String as its text), as the prelude's `Print`/`Println` are; still `? io.Error`. Every existing caller
+passed a String and writes the same bytes. M19f in SPEC, std/io.olang's test "writes any value as $ renders it".
+
+The language server sends the diagnostics of D3b (a local never read) and M5a (an import never used) with severity 2, a warning, as `olang FILE` reports them, and every other rule with severity 1 (B15, 2026-11-15, the user: "show unused as W in the editor"). The rule is the diagnostic's `code`; `severityOf` in compiler/lsp.olang asks diag.Untidy, so the two lists cannot drift. The MCP server is unchanged.
+The same day (the user, "yes, add it to the Writer"): `io.Writer` gains `Put<T>` and `PutLine<T>`, writing any value as
+`$` renders it into the buffer (PutLine with a line end, written as a second byte so nothing is joined first).
+
+M19f, 2026-11-15 (the user's request): `io.Reader(fd, size = 65536)`, the read counterpart of `Writer`. Lines' buffer logic moved
+into a private `source` (fd, buffer, start, end; `fill` compacts, doubles and reads; `line`, `word`, `text`), which Lines and
+Reader both hold, so Lines behaves as before (its tests unchanged). Reader: `Line`, `Word` (whitespace is space, tab, CR, LF),
+`Next<T>`, `Bytes(n)`, `All`. Decisions: `Next<T>` fails with the one set `Error, Exhausted, ParseError` whatever T is - the
+prelude has `T.Parse` for integers only, so a `match T` reads floats by `ParseFloat` and Bool from `true`/`false`, all failing
+with `ParseError`, and any other T is G18a's error at the call naming `Parse`; no error-set parameter was needed. A word that
+fails to parse is consumed. `Bytes` on a short input consumes and drops what it read, then fails Exhausted (keeping it would
+make the buffer grow to n); `All` grows the buffer to the rest. Tests in std/io.olang: words across refills of 1-3 bytes, CRLF,
+numbers of several types, the count-then-numbers sample, ParseError and Exhausted, Bytes at the end, failing reads.
+
+D19: the floats (F16, BF16, F32, F64), the F8 types and Bool got `T.Parse(t)` builders in the prelude (2026-11-15, the user's go-ahead), beside the integers'. A float reads the text as `ParseFloat` does and rounds to the type, failing with Overflow where a finite number becomes infinite in it; Bool reads "true" or "false" exactly (Empty for no text, else Invalid). std/csv's `value<V>`, which special-cased Bool and floats (there is no `Reader.Next<T>` in std/io; csv held the match), now calls `Parse` for Bool and every number. Tests in std/prelude/tests/text.olang, with top-level asserts the evaluator decides.
+### 2026-11-15, any number of indexes: variadic At and SetAt, and SetSlice (E31e)
+
+Found building oann's Tensor<T> (rank up to 6, so a rank known only at run time): `At(i ...I64)` was the operator for
+`x[i]` only, and `x[i, j]` on it was "declares SetAt but not At", so the tensor read with `t.Get(i, j)` and wrote with
+`t.Set(v, i, j)`. Decided (mine, within the user's indexing direction): a type's `At` and `SetAt` may take their indexes as
+one variadic parameter, and are then the operators for one or more indexes; a store into a slice calls a new `SetSlice`.
+The value of a `SetAt` stays its last parameter (the existing order), which D8g's "the variadic parameter is last but the
+defaulted ones" does not allow, so D8g gained exactly one exception - a method named `SetAt`/`SetSlice` may have its value
+after the variadic parameter (the parser decides by the method's name; `gatherVariadic` leaves that tail argument out of
+the variadic ones). Value-first (`SetAt(v T, i ...I64)`, oann's `Set(v, i, j)` order) was the other option: it needed no
+parser rule but would have evaluated the value before the indexes, against S4, and written the operator two ways
+(`SetAt(i, j, v)` for a fixed number). A variadic `SetAt` written value-first is E31e's error saying where the value goes.
+Implementation: `roleMethod` matches a role's method by its parameters (`takesOperands`: for At/SetAt/SetSlice a variadic
+one takes any number from the fixed ones up); `invoke` already gathered a variadic call's arguments from the written
+expressions, so a plain read or store needed only that; the typed paths that hold each index in a local and call the method
+with those (a compound store's read-modify-write, `x[i][j] = v` through a collection's own At, a parallel assignment's
+target) pack them into the array the variadic parameter takes (`packed`), and `writeBack` now emits the statements that
+held a variadic At's index array before it reads the element (the Seq `heldArray` makes). Mixing a variadic `At` with a fixed-arity `SetAt` is
+the operator for that many indexes only, so a compound store needs both in one form. `SetSlice` is checked as `Slice` is
+(`setSliceMethod`: every parameter but the last an `Axis`, or one `...Axis` then the value), taken by `assign` before the
+old E16a error, for `x[a, b:c] = v` and `x[lo:hi] = v`; a compound store into a slice stays E16a's error. The element type of
+the variadic At is not restricted to integers: the compiler gives the indexes and nothing else (a type indexed by several
+names is as valid). New diagnostics: `SetValueLast` and `SetSliceAxis` (E31e/E16f), `SliceNoPlace`'s help names SetSlice.
+tests/axes.olang's Voxels/Plane/Cells types and a top-level assert the compile-time evaluator decides (a false value there is
+a compile error, checked once); checks/cases e31esetvaluefirst, e31esetslicecount, e31esetslicenoaxis, e31esetatfixed.
+
 ## 2026-11-15: E11b - text joined with `+`; joining by adjacency removed
 
 The user, 2026-11-15: "remove adjacency and add +". Since E11b was first written, text was joined by writing its pieces

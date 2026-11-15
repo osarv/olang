@@ -1,0 +1,11 @@
+# check: fail error[E16f]: a slice is not stored into (E16a)
+# also: declare SetSlice (E31e)
+# E31e: a SetSlice whose parameters are not all Axis is no operator - the store into a slice is the error as before
+type Grid struct(n I64) { n }
+fn (g Grid&) Slice(r Axis, c Axis) I64 { return g.n }
+fn (g mut Grid&) SetSlice(r I64, c I64, v I64) { g.n = v }
+
+fn main() {
+    g := Grid(3)
+    g[0:2, :] = 4
+}

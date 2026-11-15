@@ -120,7 +120,7 @@ type Config struct() {
     Update Bool = false
     Tests Bool = false
     Checked Bool = false        # interpret's build (B3e): -quick, checked as test and -debug are (E16g), the trace kept (S18d)
-    Evaluated Bool = false      # -evaluate: interpret's program or test's tests run by the evaluator instead of built (B3e)
+    Evaluated Bool = false      # OLANG_EVALUATE: a file's program or test's tests run by the evaluator instead of built (B3e)
     TestWords Vec<String&>      # and their targets and descriptions, where the words named none (B7a's did-you-mean)
     Jobs I64 = 0
     Color Bool = false
@@ -260,11 +260,23 @@ fn (c Config&) ModeFlags() Vec<String&> {
     return out
 }
 
-# the flags an object with this IR is compiled with: the mode's, and under -debug LLVM 18's -O0 instruction selector
-# (FastISel) turned off where the IR holds a bfloat, which it keeps wrongly live across a branch (B2c) - everywhere
-# else FastISel is kept, since doing without it costs -O0 compiles 70% (DESIGN.md 3.4)
+# the flags an object with this IR is compiled with: the mode's; under full LTO without the vectorizers and the late
+# unroller (B2d, below); and under -debug LLVM 18's -O0 instruction selector (FastISel) turned off where the IR holds a
+# bfloat, which it keeps wrongly live across a branch (B2c) - everywhere else FastISel is kept, since doing without it
+# costs -O0 compiles 70% (DESIGN.md 3.4)
 fn (c Config&) CompileFlags(ir String&) Vec<String&> {
     out := c.ModeFlags()
+    if c.vectorizesAtLink() {
+        # B2d: under full LTO the link optimizes the whole program again, so an object's own compile leaves its loops for
+        # the link to vectorize after it has inlined across objects, as ThinLTO's compile does: vectorized there, a small
+        # function (a kernel's step) grew past the link's inlining threshold and stayed a call in the instance calling
+        # it, compiled in the root's object (oann's INT8 tiles, 2026-11-15: 12 GOPS against 86). Nor does it unroll a
+        # loop by a factor or with a remainder loop, which only the vectorizer is meant to precede: a loop so unrolled
+        # is no longer one the link vectorizes (linalg's store and epilogue loops, F32 products of 9 x 16 at half speed).
+        # Unrolling a loop whole stays, before either
+        for f in Array<String&>["-fno-vectorize", "-fno-slp-vectorize", "-mllvm", "-unroll-runtime=false", "-mllvm"
+                "-unroll-allow-partial=false"] { out.Push(f) }
+    }
     if c.Profile {
         # B20: a frame set up for the whole of each function, so that the sampler's walk finds every caller wherever a
         # sample lands (shrink-wrapping sets it up only on the paths that call, leaving a loop on its caller's) - here
@@ -283,6 +295,9 @@ fn (c Config&) CompileFlags(ir String&) Vec<String&> {
     }
     return out
 }
+
+# whether the objects are optimized again at the link with the vectorizers: an optimized build linked by full LTO
+fn (c Config&) vectorizesAtLink() Bool { return not c.Debug and not c.Race and not c.Quick and not c.Thin }
 
 # the flags a Locations object (B3l) is compiled with: the mode's without link-time optimization - it is data alone, which
 # no link optimizes and none imports, so a program linking by ThinLTO redoes no module's code when only it changed
@@ -917,9 +932,6 @@ fn LibName(file String&) String {
 # written) and ARGS as its command line - its status, a signal's included, the program's own (B3g)
 fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&) I32 {
     c.Quiet = true
-    # B3g: a file run is built as -quick builds (B2g) unless -debug or -race says how much to optimize - start-up is
-    # what running a file waits on, and -O3 with link-time optimization is build's
-    if not c.Debug and not c.Race: c.Quick = true
     status := BuildProgram(fe, c, file, d)
     spin.End()
     if status != 0 { return status }
@@ -1102,8 +1114,8 @@ fn InterpretTests<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag
     return 0 if status == 0 else 1
 }
 
-# interpret FILE ARGS (B3e): the program built as a file run builds it (-quick) but checked (E16g) and keeping the error
-# trace (S18d), into the cache - every object reused while current (B3i), the binary named by the file and where it is
+# interpret FILE ARGS (B3e): the program built as build builds it (-O3, link-time optimization; -quick and -checked, E16g,
+# where given), into the cache - every object reused while current (B3i), the binary named by the file and where it is
 # run from - what is only untidy said as a warning (D3b, M5a), then run in this process's place with ARGS (FILE as
 # written first, B3f) as its command line, its status the program's own. Under -evaluate the front end's evaluator
 # runs it instead (the prelude's C imports need clang either way, so there is no running without one to fall back on)
@@ -1112,8 +1124,6 @@ fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Stri
         return try fe.Interpret(file, args, c, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
     }
     c.Quiet = true
-    c.Quick = true
-    c.Checked = true
     c.Dir = CacheDir("run")
     real := try os.RealPath(file) catch default $file
     where Vec<String&>
@@ -1123,11 +1133,54 @@ fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Stri
     status := BuildProgram(fe, c, file, d)
     if status != 0 { return status }
     sayErr(d.Warnings())
+    prune(c.Dir, c.Built, RunCacheCap)
     try os.ExecInPlace(c.Built, ...args) catch os.Error {
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
         return finish(d)
     }
     unreachable
+}
+
+# a cache file's name, size and time written
+type Aged struct(Name String&, Size I64, Time I64) { Name, Size, Time }
+
+# the most the run cache keeps (bytes): interpret's builds grow it by a root's objects with every edit
+RunCacheCap := 1 << 30
+
+# keeps dir within cap bytes (B3e): what was written longest ago goes first - objects, stamps, the binaries of programs
+# no longer run - and never the binary just built (touched, so that a program run again is the newest). Only a cache:
+# what goes is built again where it is wanted
+fn prune(dir String&, keep String&, cap I64) {
+    os.Run("touch " + $os.Quote(keep) + " 2> /dev/null")
+    restamp(keep)
+    names := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
+    infos Vec<Aged>
+    total := 0
+    for n in names {
+        info := try os.FileInfo.Stat($dir + "/" + $n) catch os.Error { continue }
+        total += info.Size
+        infos.Push(Aged(n, info.Size, info.ModTime))
+    }
+    if total <= cap: return
+    infos.Sort(fn(a Aged, b Aged) Bool { return a.Time < b.Time })
+    for p in infos {
+        if total <= cap: return
+        path := $dir + "/" + $p.Name
+        if path == keep or path.StartsWith($keep + "."): continue
+        try os.RemoveAll(path) catch os.Error { continue }
+        total -= p.Size
+    }
+}
+
+# the link stamp of bin (linkCurrent's) said again with bin's time as touching left it, so touching a binary to mark it
+# used never makes its next run link it again
+fn restamp(bin String&) {
+    stamp := $bin + ".link"
+    text := try os.ReadFile(stamp) catch os.Error { return }
+    info := try os.FileInfo.Stat(bin) catch os.Error { return }
+    words := text.Trim().Split(" ")
+    if words.Len() != 3: return
+    try os.WriteFile(stamp, $words[0] + " " + $info.Size + " " + $info.ModTime + "\n") catch os.Error { }
 }
 
 # where olang keeps what it builds for itself from one run to the next - interpret's programs ("run"), the prompt's
@@ -1208,15 +1261,17 @@ fn listFiles(dir String&, ir Bool, out mut Listed&) {
     }
 }
 
-# B11d: the objects linked as Link links them, the plugin writing the code it generates (or, ir, the IR it generates
-# it from) into dir as code, code1 ... - a ThinLTO link's tasks each their own - and its remarks as link.yaml...; IR
-# written as bitcode is turned into text by clang, which reads bitcode and writes it back as text unchanged
+# B11d: the objects linked as Link links them, the plugin writing the code it generates into dir as code, code1 ... - a
+# ThinLTO link's tasks each their own - and its remarks as link.yaml...; or, ir, the IR it generates that code from: the
+# link's own temporaries kept (save-temps), each task's IR as optimized at the link (code.N.5.precodegen.bc) turned into
+# text by clang, which reads bitcode and writes it back as text unchanged, the rest removed - the plugin's emit-llvm
+# would write the IR before the link optimizes it, which under full LTO is not yet vectorized (B2d)
 fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir Bool, out mut Listed&, d mut diag.Diagnostics&) ? Failed {
     args Vec<String&>
     args.Push(c.Clang)
     for f in c.ModeFlags() { args.Push(f) }
     if c.Thin { args.Push($"-Wl,-plugin-opt,-import-instr-limit=" + $ImportLimit) }
-    args.Push("-Wl,-plugin-opt=emit-llvm" if ir else "-Wl,-plugin-opt=emit-asm")
+    args.Push("-Wl,-plugin-opt=save-temps" if ir else "-Wl,-plugin-opt=emit-asm")
     args.Push($"-Wl,-plugin-opt=opt-remarks-filename=" + $dir + "/link.yaml")
     args.Push($"-Wl,-plugin-opt=opt-remarks-passes=" + $RemarkPasses)
     args.Push("-o")
@@ -1248,13 +1303,17 @@ fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir B
     listFiles(dir, ir, out)
 }
 
-# B11d: each part of bitcode the link wrote into dir (code, code1 ...) written as text beside it (code.ll ...) by clang,
-# no pass run over it, side by side
+# B11d: the IR each task of the link handed its code generator (code.N.5.precodegen.bc) written as text beside it by
+# clang, no pass run over it, side by side; the link's other temporaries, and its program, removed
 fn (c Config&) bitcodeText(dir String&, d mut diag.Diagnostics&) ? Failed {
     cmds Vec<Array<String&>&>
     listed := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
     for n in listed {
-        if not n.StartsWith("code") { continue }
+        if not n.StartsWith("code") or n.EndsWith(".ll"): continue
+        if not n.EndsWith(".5.precodegen.bc") {
+            try os.Remove($dir + "/" + $n) catch os.Error { }
+            continue
+        }
         args mut Vec<String&>& = Vec<String&>()
         args.Push(c.Clang)
         if c.Target.Foreign { args.Push($"--target=" + $c.Target.Triple) }
@@ -1269,6 +1328,7 @@ fn (c Config&) bitcodeText(dir String&, d mut diag.Diagnostics&) ? Failed {
         d.Fatal(diag.Where.Nowhere, msgs.ClangFailed(cmds[i][cmds[i].Len() - 1]))
         error Failed.Reported
     }
+    for cmd in cmds: try os.Remove(cmd[cmd.Len() - 1]) catch os.Error { }
 }
 
 # B11d, -quick: each module's IR (its code - the places a Locations unit holds are data) and the runtime's compiled
@@ -1376,7 +1436,11 @@ test "an object's name is its identity made readable and a hash of its IR, its f
     assert f.Len() == 2 and f[0] == "-O3" and f[1] == "-flto"
     c.Thin = true
     assert c.ModeFlags()[1] == "-flto=thin"
+    assert c.CompileFlags("define void @f() { ret void }").Len() == 2
     c.Thin = false
+    # full LTO: an object's compile leaves vectorizing, and unrolling by a factor, to the link, which inlines first
+    v := c.CompileFlags("define void @f() { ret void }")
+    assert v.Len() == 8 and v[2] == "-fno-vectorize" and v[3] == "-fno-slp-vectorize" and v[5] == "-unroll-runtime=false"
     a := c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), f)
     assert a.StartsWith("build/m.") and a.EndsWith(".o") and a.Len() == "build/m.".Len() + 16 + 2
     assert c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), f) == a
@@ -1586,4 +1650,16 @@ test "listed test files run one after another in processes of their own, a signa
     assert text == ("test -debug a_ok.olang\ntest -debug b_ok.olang\ntest x_kill.olang\ntest y_bad.olang\ntest z_ok.olang\n" +
                     "test c_none.olang w\ntest d_ok.olang w\ntest e_none.olang w\ntest f_none.olang w\ntest g_none.olang w\ntest h_bad.olang w\n")
     assert SignalName(9) == "Killed" and SignalName(11) == "Segmentation fault" and SignalName(60) == "Unknown signal 60"
+}
+
+test "B3e: the run cache is kept within its cap, the oldest files going first and the program just built staying" {
+    dir := try os.MkTemp("", "olang-prune-")
+    defer try os.RemoveAll(dir) catch os.Error { }
+    for n in Array<String&>["old", "mid", "new", "app"]: try os.WriteFile($dir + "/" + $n, "0123456789")
+    os.Run("touch -d @1001 " + $os.Quote($dir + "/old") + " && touch -d @1002 " + $os.Quote($dir + "/app") + " && touch -d @1003 " + $os.Quote($dir + "/mid") + " && touch -d @1004 " + $os.Quote($dir + "/new"))
+    prune(dir, $dir + "/app", 25)
+    left := try os.ReadDir(dir)
+    assert left.Len() == 2 and "new" in left and "app" in left     # old and mid went, the 20 bytes left under the 25
+    prune(dir, $dir + "/app", 0)
+    assert try os.ReadDir(dir) == Array<String&>["app"]
 }

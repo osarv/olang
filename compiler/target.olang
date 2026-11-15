@@ -205,7 +205,7 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
         }
     }
     if hasCpu and cpu == "native" and t.Foreign { try refuse(d, msgs.TargetNativeForeign(spec)) }
-    if t.Foreign and interpreting { try refuse(d, msgs.TargetForeignMode("interpret", spec)) }
+    if t.Foreign and interpreting { try refuse(d, msgs.TargetForeignMode("running a file", spec)) }
     if t.Foreign and here != "" { try refuse(d, msgs.TargetForeignMode(here, spec)) }
     # interpret runs the program without clang and needs one only to know the target: this machine's own CPU, or an
     # x86-64 level, it knows without - the level this processor supports standing for its CPU

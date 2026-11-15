@@ -242,7 +242,7 @@ fn (w mut walker&) assign(t ast.Expr&, v ast.Expr&) {
     match t {
         case ast.Expr.Index(_, y, items) {
             # x[i] = v stores through the type's SetAt (E31b)
-            w.need(w.valOf(y), "SetAt")
+            w.need(w.valOf(y), "SetSlice" if ast.Slicing(items) else "SetAt")
             w.expr(y)
             for it in items { w.expr(it) }
         }

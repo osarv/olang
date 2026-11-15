@@ -111,6 +111,23 @@ local function make(prog, args)
   vim.cmd("cwindow")
 end
 
+-- the file an import names, for gf and friends (includeexpr): "std/x" in the standard library (OLANG_STD, else std
+-- beside the olang found on the PATH, as the compiler finds it), anything else beside the importing file; ".olang" added
+function M.include(name)
+  local file = name:match("%.olang$") and name or name .. ".olang"
+  local rest = file:match("^std/(.*)")
+  if rest then
+    local std = vim.env.OLANG_STD
+    if not std or std == "" then
+      local exe = vim.fn.exepath("olang")
+      std = exe ~= "" and vim.fn.fnamemodify(vim.fn.resolve(exe), ":h:h") .. "/std" or ""
+    end
+    return std .. "/" .. rest
+  end
+  if file:sub(1, 1) == "/" then return file end
+  return vim.fn.expand("%:p:h") .. "/" .. file
+end
+
 -- the buffer-local commands and keymaps (vim.g.olang_no_maps = 1 leaves the keymaps off)
 function M.commands(bufnr)
   local function cmd(name, fn, nargs)
@@ -138,6 +155,17 @@ function M.commands(bufnr)
   vim.api.nvim_buf_create_user_command(bufnr, "OlangFormatOnSave", function(o) M.format_on_save(o.args) end,
     { nargs = "?", complete = function() return { "on", "off" } end })
   if vim.g.olang_no_maps == 1 then return end
+  -- gd on a bracket jumps to its partner (as %), anywhere else to the definition (the language server's, else Vim's
+  -- own gd); set again when a server attaches, so a gd an LspAttach handler maps does not take brackets over
+  local function gd()
+    local col = vim.fn.col(".")
+    if vim.fn.getline("."):sub(col, col):match("[%(%)%[%]{}]") then return vim.cmd("normal! %") end
+    if #(vim.lsp.get_clients or vim.lsp.get_active_clients)({ bufnr = 0 }) > 0 then return vim.lsp.buf.definition() end
+    vim.cmd("normal! gd")
+  end
+  local function mapgd() vim.keymap.set("n", "gd", gd, { buffer = bufnr, desc = "olang: matching bracket, else definition" }) end
+  mapgd()
+  vim.api.nvim_create_autocmd("LspAttach", { buffer = bufnr, callback = function() vim.schedule(mapgd) end })
   local keys = { r = "OlangRun", b = "OlangBuild", t = "OlangTest", f = "OlangFormat", F = "OlangFormatOnSave", e = "OlangExplain", i = "OlangRepl" }
   for k, c in pairs(keys) do
     local lhs = "<localleader>" .. k
