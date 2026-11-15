@@ -1176,15 +1176,17 @@ fn listFiles(dir String&, ir Bool, out mut Listed&) {
     }
 }
 
-# B11d: the objects linked as Link links them, the plugin writing the code it generates (or, ir, the IR it generates
-# it from) into dir as code, code1 ... - a ThinLTO link's tasks each their own - and its remarks as link.yaml...; IR
-# written as bitcode is turned into text by clang, which reads bitcode and writes it back as text unchanged
+# B11d: the objects linked as Link links them, the plugin writing the code it generates into dir as code, code1 ... - a
+# ThinLTO link's tasks each their own - and its remarks as link.yaml...; or, ir, the IR it generates that code from: the
+# link's own temporaries kept (save-temps), each task's IR as optimized at the link (code.N.5.precodegen.bc) turned into
+# text by clang, which reads bitcode and writes it back as text unchanged, the rest removed - the plugin's emit-llvm
+# would write the IR before the link optimizes it, which under full LTO is not yet vectorized (B2d)
 fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir Bool, out mut Listed&, d mut diag.Diagnostics&) ? Failed {
     args Vec<String&>
     args.Push(c.Clang)
     for f in c.ModeFlags() { args.Push(f) }
     if c.Thin { args.Push($"-Wl,-plugin-opt,-import-instr-limit=" $ImportLimit) }
-    args.Push("-Wl,-plugin-opt=emit-llvm" if ir else "-Wl,-plugin-opt=emit-asm")
+    args.Push("-Wl,-plugin-opt=save-temps" if ir else "-Wl,-plugin-opt=emit-asm")
     args.Push($"-Wl,-plugin-opt=opt-remarks-filename=" $dir "/link.yaml")
     args.Push($"-Wl,-plugin-opt=opt-remarks-passes=" $RemarkPasses)
     args.Push("-o")
@@ -1216,13 +1218,17 @@ fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir B
     listFiles(dir, ir, out)
 }
 
-# B11d: each part of bitcode the link wrote into dir (code, code1 ...) written as text beside it (code.ll ...) by clang,
-# no pass run over it, side by side
+# B11d: the IR each task of the link handed its code generator (code.N.5.precodegen.bc) written as text beside it by
+# clang, no pass run over it, side by side; the link's other temporaries, and its program, removed
 fn (c Config&) bitcodeText(dir String&, d mut diag.Diagnostics&) ? Failed {
     cmds Vec<Array<String&>&>
     listed := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
     for n in listed {
-        if not n.StartsWith("code") { continue }
+        if not n.StartsWith("code") or n.EndsWith(".ll"): continue
+        if not n.EndsWith(".5.precodegen.bc") {
+            try os.Remove($dir "/" $n) catch os.Error { }
+            continue
+        }
         args mut Vec<String&>& = Vec<String&>()
         args.Push(c.Clang)
         if c.Target.Foreign { args.Push($"--target=" $c.Target.Triple) }
@@ -1237,6 +1243,7 @@ fn (c Config&) bitcodeText(dir String&, d mut diag.Diagnostics&) ? Failed {
         d.Fatal(diag.Where.Nowhere, msgs.ClangFailed(cmds[i][cmds[i].Len() - 1]))
         error Failed.Reported
     }
+    for cmd in cmds: try os.Remove(cmd[cmd.Len() - 1]) catch os.Error { }
 }
 
 # B11d, -quick: each module's IR (its code - the places a Locations unit holds are data) and the runtime's compiled

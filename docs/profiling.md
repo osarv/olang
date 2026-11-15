@@ -121,7 +121,8 @@ code a plain build makes (its IR is byte-identical with line tables taken out). 
 optimization remarks beside it (`clang -fsave-optimization-record`, `NAME.HASH.listing.yaml`). The code is final only
 once the program is linked - the link inlines across modules, vectorizes and generates the code - so the objects are
 then linked by the linker's LTO plugin told to write, in place of a program, the assembly it generates
-(`-plugin-opt=emit-asm`) or the IR it generates it from (`-plugin-opt=emit-llvm`, turned back into text by clang), with
+(`-plugin-opt=emit-asm`) or the IR it generates it from (`-plugin-opt=save-temps`, each task's `.5.precodegen.bc` - the IR
+as the link optimized it - turned back into text by clang, the other temporaries removed), with
 its own remarks (`-plugin-opt=opt-remarks-filename`), into `build/listing/NAME/`. Nothing more than the clang a build
 uses is needed - no `llvm-objdump`, no `llvm-dis` - and LLVM 18, 19 and 20 all do it. Under `-quick` each module is
 compiled again to assembly or IR with its remarks. Then the function's code is found by its symbol and written with each

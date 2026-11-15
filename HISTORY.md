@@ -37321,4 +37321,11 @@ Measured (load average 19-23 on 4 cores, interleaved runs): bench_int8 512^3 11.
 `vpdpwssd` 0 -> 80; the F32 GEMM beside it unchanged (~110-120 GFLOPS). olang's bench/ against C (nbody, spectral,
 mandelbrot, fannkuch, matmul, sha256, lanes) the same or slightly better, olang/C 0.93-1.13 before and after. Check: the
 `linkinline` scenario (checks/fixtures/linkinline: a step function in one module, a kernel in another calling it four times
-per iteration - fails with the old flags).
+per iteration - fails with the old flags). `explain -ir` (B11d) showed the IR the LTO plugin writes under
+`-plugin-opt=emit-llvm`, which is the merged module before the link optimizes it - vectorized only because each module's
+compile had been; its `listing` check failed on the change. The listing link now keeps the link's temporaries
+(`-plugin-opt=save-temps`) and shows each task's `.5.precodegen.bc`, the IR as the link optimized it and handed to the
+code generator, the other temporaries removed - truer than before, and with the link's remarks, which emit-llvm never
+ran. Proved by targeted runs (the coordinator's brief: no full verify): the bootstrap and `make fixedpoint`, checkir,
+build.olang's tests, the `listing`, `target`, `objnames`, `cinterop` and `linkinline` scenarios, tests/lanes, axes,
+bench, cimport, fnvalues and std/sha256, stats, regex.
