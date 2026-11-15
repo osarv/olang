@@ -1,0 +1,10 @@
+# check: fail error[E31]: Box declares At but not SetAt, which x[i] = v calls
+# E31e: a SetAt of a fixed number of indexes is the operator for that many only - x[i, j] = v needs a SetAt of two
+type Box struct(n I64) { n }
+fn (b Box&) At(i ...I64) I64 { return b.n }
+fn (b mut Box&) SetAt(i I64, v I64) { b.n = v }
+
+fn main() {
+    b := Box(1)
+    b[1, 2] = 3
+}

@@ -294,7 +294,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Slice` with one prelude `Axis` per item - `Index(i)`, `Range(lo, hi)` (an end off: 0, `I64.Max`), `Rest`; the
   type decides the meaning (`a.Bounds(n)` helps). Mine: one enum rather than a struct; a Slice of all-`Axis` parameters
   or one `...Axis`, which then takes `x[lo:hi]` as one Axis too; plain `x[i, j]` stays At; an array has one axis (an
-  error); a slice result is never stored into (`m[0:2, :] = v` an error - no SetSlice yet).
+  error); a slice result is never stored into (`m[0:2, :] = v` an error unless the type declares a `SetSlice`, E31e).
 - **Structures of arrays: `Columns<T>` and `ColumnVec<T>` (T7e, QCS 3 and QCU, the user's decisions 2026-11-06/07:
   "Do the columns solution", "two column types", no computed types).** `Columns<T>` is laid out as one `Array<F>` per
   field of the record `T` (`c.x` is a column, lane operators apply); `ColumnVec<T>` grows like a Vec. T must be a
@@ -408,7 +408,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   ... Inc Dec At SetAt Slice Call`, lowercase being module-private (M6b); `> <= >=` derive from `Less`. Any operator's
   method but `Len`/`Eq`/`Str` may declare errors (E31a). `x[i, j]` calls `At(i, j)`. **`commutes` (E31c, the user's
   decision 2026-10-25)** after an operator's result lets `2.0 * v` call `v.Mul(2.0)`. A store through `x[i]` uses
-  `SetAt` (E31b). No user-declared operator symbols; `==` and `$` overridable only by `Eq`/`Str`.
+  `SetAt` (E31b). **Any number of indexes (E31e, 2026-11-15, for oann's rank-N Tensor)**: `At(i ...I64)` and `SetAt(i ...I64,
+  v T)` are the operators for `x[i]`, `x[i, j]`, `x[i, j, k]` ... (the indexes the variadic array, nothing allocated); a
+  SetAt's value is its last parameter, after the variadic one (the one parameter D8g lets follow it). **`SetSlice`
+  (E31e)**: a store into a slice, `x[0:2, :] = v`, calls `SetSlice(axes ...Axis, v)` (or one `Axis` per axis, then the
+  value); none declared keeps E16a's error, which names it. No user-declared operator symbols; `==` and `$` overridable only by `Eq`/`Str`.
 - **Several results, no tuples (D8c/D8d, the user's call).** `return a, b`, `q, r := f()`, `f(g())`; `Pair<A, B>` in
   `std/pair`. **Results and error sets are written bare** (the user's call 2026-10-24): `fn divmod(a I64, b I64) I64,
   I64 ? A, B`. **Whole-item grouping (L18c, the user's call)**: a list item holding a top-level comma is parenthesized

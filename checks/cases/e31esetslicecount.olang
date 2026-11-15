@@ -1,0 +1,9 @@
+# check: fail error[E16f]: Grid's SetSlice takes 2 axes, 3 written
+# E16f, E31e: one Axis per item, as many as the SetSlice's axis parameters (a variadic '...Axis' takes any number)
+type Grid struct(n I64) { n }
+fn (g mut Grid&) SetSlice(r Axis, c Axis, v I64) { g.n = v }
+
+fn main() {
+    g := Grid(3)
+    g[0:2, :, 1] = 4
+}

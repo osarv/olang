@@ -2341,7 +2341,8 @@ of type `T`, none included - `fn sum(xs ...I64) I64` is called `sum()`, `sum(1)`
 `xs` is a read-only `Array<T>&` holding them in order (T25b), its length the count given. It is the last of its
 function's parameters but the defaulted ones (D8b), which then follow it and are given by name (E14b) -
 `fn Exec(args ...String&, dir String& = "")` is called `Exec("ls", "-l", dir = "/tmp")` - so a function has at most one,
-it has no default, and the parameters before it are required. Every argument by position from its place on, up to the
+it has no default, and the parameters before it are required. (The one parameter that may follow it without a default is
+the value of a `SetAt` or `SetSlice`, E31e: `fn (t mut T&) SetAt(i ...I64, v E)`, called `t.SetAt(1, 2, v)`.) Every argument by position from its place on, up to the
 first argument by name, is one of its arguments; each is checked against `T` as an argument is (E12, a literal adapting
 as it would there, T6). They are evaluated in the order written, after the arguments before them and before those by
 name (S4, E14b), and held as a **fixed array in the caller's frame** (T7c) - no storage made, lent to the call (E12) for
@@ -3631,7 +3632,7 @@ primary  ::= literal | try-expr | comptime-expr | call-expr | struct-literal
 
 `match-expr` is a `match` used as a value (§6.4 S12b); `unreachable-expr` is `unreachable` where a value is expected
 (§6.6 S16e); `comptime-expr ::= "comptime" expr` is a value computed while compiling (§13 K3). `index ::= "[" sub-item { sep sub-item } [ line-sep ] "]"`
-with `sub-item ::= expr | [ expr ] ":" [ expr ] | "..."` (several indices only for a type's `At`/`SetAt`, E31; one
+with `sub-item ::= expr | [ expr ] ":" [ expr ] | "..."` (several indices only for a type's `At`/`SetAt`, E31, E31e; one
 range alone is a slice, E16a; a range or `...` among several items a subscript by axes, E16f), `member ::= "." IDEN [ "(" list(arg) ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
 `call-on ::= "(" list(arg) ")"` calls the function value everything to its left gives (E13b). Every one of these lists
@@ -4303,7 +4304,8 @@ variadic `...Axis`** (D8g) taking any number; such a type slices by axes everywh
 compile-time error naming both counts; a type with no such `Slice` is an error naming the forms it may declare. A plain
 `x[i, j]` with no range and no `...` is `At` as before (E31). An **array has one axis**: a subscript by axes of an array
 is a compile-time error naming `a[lo:hi]`. What `Slice` gives is a value with no place of its own (E16a): it is read,
-indexed, called on and passed on, never assigned or stored into - `m[0:2, :] = v` is an error. It composes as any call
+indexed, called on and passed on, never assigned or stored into - `m[0:2, :] = v` is an error naming `SetSlice`, unless the
+type declares one, which a store into a slice calls (E31e). It composes as any call
 does: under `try` where `Slice` can fail (E31), through a type variable as a need (G18a), and in the compile-time
 evaluator (K1).
 
@@ -4606,8 +4608,9 @@ type declares one:
 | `a ** b` | `Pow` | one operand, a result (E5a) |
 | `-a` | `Neg` | none, a result |
 | `a < b` | `Less` | one operand, a `Bool` |
-| `x[i]`, `x[i, j, ...]` | `At` | one operand per index (at least one), a result |
-| `x[i] = v`, `x[i, j, ...] = v` | `SetAt` | the indices, then the value; no result |
+| `x[i]`, `x[i, j, ...]` | `At` | one operand per index (at least one), or one variadic parameter taking them (E31e), a result |
+| `x[i] = v`, `x[i, j, ...] = v` | `SetAt` | the indices, then the value (the indices one variadic parameter, E31e); no result |
+| `x[lo:hi, :] = v`, `x[lo:hi] = v` (E31e) | `SetSlice` | one `Axis` per item (or one `...Axis`), then the value; no result |
 | `x[lo:hi]` | `Slice` | two operands, a result |
 | `x[i, lo:hi, :, ...]` (E16f) | `Slice` | one `Axis` per item (or one `...Axis`), a result |
 | `a & b`, `a \| b`, `a ^ b`, `a << b`, `a >> b` | `BitAnd`, `BitOr`, `BitXor`, `ShiftLeft`, `ShiftRight` | one operand, a result |
@@ -4663,6 +4666,33 @@ slots past its count, a Map's empty slots, held as zeros (M19d) - holds no eleme
 declared Copy is never run on a value whose first never-null reference there is null. Where a type's copy runs a
 declared Copy, the copy is made wherever the program copies a value of it - none is left out (D9h, D9i); the
 compile-time evaluator makes the same calls (K1).
+
+**E31e (indexing by any number of indexes, and storing into a slice).** A type's `At` and `SetAt` may take their indexes
+as **one variadic parameter** (D8g) instead of one parameter each: `fn (t Tensor<T>&) At(i ...I64) T`, `fn (t mut
+Tensor<T>&) SetAt(i ...I64, v T)`. They are then the operators for any number of indexes, one or more: `t[i]`, `t[i, j]`,
+`t[i, j, k]` call `At` with the indexes, each of the parameter's element type (E12, a literal adapting as in an
+argument), held as D8g holds a variadic parameter's arguments - a fixed array in the caller's frame, nothing allocated -
+so a tensor whose rank is data, not type, is indexed as a fixed-arity type is. A parameter or two before the variadic
+one are indexes too (`At(i I64, rest ...I64)`). The element type is any type an index may be; the compiler gives the
+indexes and nothing else. The `SetAt` of a type takes the **value as its last parameter, after the variadic one** - the
+one parameter that may follow it (D8g); a `SetAt` with its variadic parameter anywhere else is an error naming that.
+Everything else is as for a fixed number of indexes: the indexes are evaluated left to right and then the value (S4); a
+compound store `t[i, j] += v` and an increment read through `At` and store through `SetAt` with the place held once
+(E31b), which needs both declared in the same form - a variadic `At` with a `SetAt` of a fixed number of indexes is the
+operator for that many only; either may declare errors (E31a); `t.At(i, j)` called by name gathers its arguments as
+any call does (D8g). The operators are named by their roles, so the private spellings `at` and `setAt` do likewise
+(M6b).
+
+A store into a slice - `x[lo:hi, :] = v`, `x[..., 0] = v`, and `x[lo:hi] = v` where the type declares a `SetSlice` taking `Axis` values - is the call
+of the type's **`SetSlice`**, the store counterpart of `Slice` (E16f): its parameters besides the receiver are **one
+`Axis` per axis written, then the value**, or **one variadic `...Axis`, then the value** (the value last, as `SetAt`'s
+is): `fn (t mut Tensor<T>&) SetSlice(axes ...Axis, v T)`, `fn (m mut Matrix&) SetSlice(r Axis, c Axis, v Matrix)`. The
+items are made `Axis` values as E16f says, evaluated left to right, then the value, which fits the last parameter as a
+`SetAt`'s does. The written items must be as many as a fixed list of `Axis` parameters, else a compile-time error naming
+both counts. A type declaring no such `SetSlice` keeps the error E16a gives for a store into a slice, which now names
+`SetSlice`. A compound store into a slice, `x[a:b, :] += v`, is that error as before: `SetSlice` is a store, and a slice
+is no place to read-modify-write. `SetSlice` may declare errors (E31a) and is covered by `try` as any operator method is
+(R21), through a type variable it is a need (G18a), and the compile-time evaluator runs it as a call (K1).
 
 **E31b (writing through `x[i]`).** `x[i]` on a type declaring `At` gives a copy of the element - but an element of a
 unique type (T13b), never copied, is the element where the collection holds it: `x[i]` is `x.RefMut(i)`'s referent where
