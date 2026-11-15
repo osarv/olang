@@ -1,0 +1,1440 @@
+modgraph:  tests/Base.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/Lib.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/any.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/arraypat.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/asserts.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/attrmod.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/attrs.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/axes.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/barelits.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/become.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/bench.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/builders.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/cimport.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/comptime.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/condnull.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  tests/copy.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/defaultbinds.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/definit.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/display.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  tests/drops.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/embed.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/errdata.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/errsetparams.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/errsets.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/errvalues.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/facts.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/fieldnarrow.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  tests/filtered.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/fnref.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/fnrel.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/fnvalues.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/follow.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/genenums.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/generators.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/globalstart.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/handover.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/handoverglobal.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/immut.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/inplace.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/intsweep.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/intwidths.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/kept.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/keptparams.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/lanes.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/literals.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/match.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/namedargs.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/nll.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/nulltest.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  tests/packed.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/place.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/power.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/promises.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/raised.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/raisedlex.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/reads.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/reclaim.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/reclaimarrays.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/reclaimtasks.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/reflect.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/reflmod.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/runner.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/shared.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/structpat.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/textplus.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  tests/textslot.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/topassert.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/unique.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/unreachable.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/valueparts.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/variadic.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/viewplace.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/weak.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/worker.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/geom/measure.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  tests/geom/rect.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/arith.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/base64.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/bench.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/bitset.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/cancel.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/chan.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/crc32.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/csv.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/deque.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/ffi.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/filepath.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/flags.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/frame.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  std/fuzz.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/heap.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/hex.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/http.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/io.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/json.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/list.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/net.olang: the golden (<) and the self-hosted loader (>) differ:
+> module <poll.h>
+>   cpoll <poll.h>
+> module std/prelude/display
+modgraph:  std/order.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/os.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/pair.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/plot.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  std/pool.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/prop.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/rand.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/regex.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/set.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/sha256.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/stats.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/sync.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/time.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/utf8.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  std/zmtp.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  compiler/api.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/ast.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/bindgen.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/build.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/cabi.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/cells.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  compiler/check.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/cond.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/definit.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/diag.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/diagmsg.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/doc.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/effects.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/emit.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/eval.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/explain.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/facts.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/fetch.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/fix.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/fmt.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/free.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/generic.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/interp.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/jupyter.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  compiler/lineedit.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  compiler/listing.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+>   spin compiler/spin
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/load.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/lower.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/lsp.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/mcp.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/measure.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  compiler/mir.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/msgs.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/names.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/needs.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/notebook.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  compiler/olang.olang: the golden (<) and the self-hosted loader (>) differ:
+> module <netdb.h>
+> module <sys/ioctl.h>
+> module <sys/socket.h>
+> module <termios.h>
+>   spin compiler/spin
+>   measure compiler/measure
+>   spin compiler/spin
+> module compiler/cells
+>   build compiler/build
+>   csignal <signal.h>
+>   diag compiler/diag
+>   io std/io
+>   msgs compiler/msgs
+>   os std/os
+>   session compiler/session
+>   spin compiler/spin
+>   syswait <sys/wait.h>
+>   unistd <unistd.h>
+>   spin compiler/spin
+> module compiler/jupyter
+modgraph:  compiler/paint.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  compiler/parse.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/profile.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/prompt.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  compiler/records.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/runtime.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/scan.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/scope.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/session.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/source.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/spin.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  compiler/target.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/token.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/typed.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/types.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/unparse.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/views.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/tools/astdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/checkdump.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/tools/consistency.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/diaggold.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/diaggold_capture.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/drvdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/dump.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/tools/emitdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/emitdump.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/tools/evaldiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/fmt.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/layoutdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/layoutgold.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/lowerdump.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/tools/memgate.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph:  compiler/tools/modgraph.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/namesdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/nesting.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/rungold.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/scopedump.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph:  compiler/tools/seed.olang: the golden (<) and the self-hosted loader (>) differ:
+> module <netdb.h>
+> module <sys/ioctl.h>
+> module <sys/socket.h>
+> module <termios.h>
+>   spin compiler/spin
+>   measure compiler/measure
+>   spin compiler/spin
+> module compiler/cells
+>   build compiler/build
+>   csignal <signal.h>
+>   diag compiler/diag
+>   io std/io
+>   msgs compiler/msgs
+>   os std/os
+>   session compiler/session
+>   spin compiler/spin
+>   syswait <sys/wait.h>
+>   unistd <unistd.h>
+>   spin compiler/spin
+> module compiler/jupyter
+modgraph:  compiler/tools/tokdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  compiler/tools/toolkit.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  checks/checks.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  fuzz/editgen.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  fuzz/fuzz.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  fuzz/gen.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  fuzz/scopegen.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/benchlib.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/binarytrees.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/dispatch.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/fannkuch.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/gen.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/ir.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/knucleotide.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/lanes.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/mandelbrot.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/matmul.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/nbody.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/parallel.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/regex.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/run.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/sha256.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/spectral.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/sum.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/text.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph:  bench/vec.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/Base.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/Lib.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/any.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/arraypat.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/asserts.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/attrmod.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/attrs.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/axes.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/barelits.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/become.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/bench.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/builders.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/cimport.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/comptime.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/condnull.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t tests/copy.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/defaultbinds.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/definit.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/display.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t tests/drops.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/embed.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/errdata.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/errsetparams.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/errsets.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/errvalues.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/facts.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/fieldnarrow.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t tests/filtered.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/fnref.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/fnrel.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/fnvalues.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/follow.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/genenums.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/generators.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/globalstart.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/handover.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/handoverglobal.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/immut.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/inplace.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/intsweep.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/intwidths.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/kept.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/keptparams.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/lanes.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/literals.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/match.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/namedargs.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/nll.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/nulltest.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t tests/packed.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/place.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/power.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/promises.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/raised.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/raisedlex.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/reads.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/reclaim.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/reclaimarrays.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/reclaimtasks.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/reflect.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/reflmod.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/runner.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/shared.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/structpat.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/textplus.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t tests/textslot.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/topassert.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/unique.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/unreachable.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/valueparts.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/variadic.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/viewplace.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/weak.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/worker.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/geom/measure.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t tests/geom/rect.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/arith.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/base64.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/bench.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/bitset.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/cancel.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/chan.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/crc32.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/csv.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/deque.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/ffi.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/filepath.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/flags.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/frame.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t std/fuzz.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/heap.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/hex.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/http.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/io.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/json.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/list.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/net.olang: the golden (<) and the self-hosted loader (>) differ:
+> module <poll.h>
+>   cpoll <poll.h>
+> module std/prelude/display
+modgraph: -t std/order.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/os.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/pair.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/plot.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t std/pool.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/prop.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/rand.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/regex.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/set.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/sha256.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/stats.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/sync.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/time.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/utf8.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t std/zmtp.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t compiler/api.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/ast.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/bindgen.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/build.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/cabi.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/cells.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t compiler/check.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/cond.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/definit.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/diag.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/diagmsg.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/doc.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/effects.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/emit.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/eval.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/explain.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/facts.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/fetch.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/fix.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/fmt.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/free.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/generic.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/interp.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/jupyter.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t compiler/lineedit.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t compiler/listing.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+>   spin compiler/spin
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/load.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/lower.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/lsp.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/mcp.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/measure.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t compiler/mir.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/msgs.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/names.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/needs.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/notebook.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t compiler/olang.olang: the golden (<) and the self-hosted loader (>) differ:
+> module <netdb.h>
+> module <sys/ioctl.h>
+> module <sys/socket.h>
+> module <termios.h>
+>   spin compiler/spin
+>   measure compiler/measure
+>   spin compiler/spin
+> module compiler/cells
+>   build compiler/build
+>   csignal <signal.h>
+>   diag compiler/diag
+>   io std/io
+>   msgs compiler/msgs
+>   os std/os
+>   session compiler/session
+>   spin compiler/spin
+>   syswait <sys/wait.h>
+>   unistd <unistd.h>
+>   spin compiler/spin
+> module compiler/jupyter
+modgraph: -t compiler/paint.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t compiler/parse.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/profile.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/prompt.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t compiler/records.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/runtime.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/scan.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/scope.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/session.olang: the golden (<) and the self-hosted loader (>) differ:
+>   measure compiler/measure
+>   spin compiler/spin
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/measure
+>   bench std/bench
+>   fcntl <fcntl.h>
+>   io std/io
+>   os std/os
+>   time std/time
+>   unistd <unistd.h>
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/bench
+>   io std/io
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/source.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/spin.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t compiler/target.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/token.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/typed.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/types.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/unparse.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/views.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/tools/astdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/checkdump.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/tools/consistency.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/diaggold.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/diaggold_capture.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/drvdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/dump.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/tools/emitdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/emitdump.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/tools/evaldiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/fmt.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/layoutdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/layoutgold.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/lowerdump.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+>   effects compiler/effects
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/tools/memgate.olang is not in compiler/goldens/modgraph.txt, skipped (make modgold)
+modgraph: -t compiler/tools/modgraph.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/namesdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/nesting.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/rungold.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/scopedump.olang: the golden (<) and the self-hosted loader (>) differ:
+>   spin compiler/spin
+> module compiler/spin
+>   io std/io
+>   os std/os
+>   time std/time
+> module std/prelude/display
+modgraph: -t compiler/tools/seed.olang: the golden (<) and the self-hosted loader (>) differ:
+> module <netdb.h>
+> module <sys/ioctl.h>
+> module <sys/socket.h>
+> module <termios.h>
+>   spin compiler/spin
+>   measure compiler/measure
+>   spin compiler/spin
+> module compiler/cells
+>   build compiler/build
+>   csignal <signal.h>
+>   diag compiler/diag
+>   io std/io
+>   msgs compiler/msgs
+>   os std/os
+>   session compiler/session
+>   spin compiler/spin
+>   syswait <sys/wait.h>
+>   unistd <unistd.h>
+>   spin compiler/spin
+> module compiler/jupyter
+modgraph: -t compiler/tools/tokdiff.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t compiler/tools/toolkit.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t checks/checks.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t fuzz/editgen.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t fuzz/fuzz.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t fuzz/gen.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t fuzz/scopegen.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/benchlib.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/binarytrees.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/dispatch.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/fannkuch.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/gen.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/ir.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/knucleotide.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/lanes.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/mandelbrot.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/matmul.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/nbody.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/parallel.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/regex.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/run.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/sha256.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/spectral.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/sum.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/text.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: -t bench/vec.olang: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display
+modgraph: the remote program: the golden (<) and the self-hosted loader (>) differ:
+> module std/prelude/display

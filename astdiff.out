@@ -1,0 +1,45 @@
+-- compiler/api.olang: its section is not the golden's (hash d13e6bff6f8903bf, golden d95e139e8b70291a); it begins
+ASSERT 495:5-495:54
+ASSERT 496:5-496:49
+ASSERT 497:5-497:90
+ASSIGN 252:5-252:24
+ASSIGN 302:13-302:19
+ASSIGN 305:13-305:19
+ASSIGN 342:9-342:38
+ASSIGN 345:9-345:16
+ASSIGN 356:9-356:37
+ASSIGN 358:5-358:78
+ASSIGN 406:19-406:42
+ASSIGN 472:13-472:25
+BREAK 307:13-307:18
+BREAK 327:13-327:18
+BREAK 333:13-333:18
+CASE 219:9-219:28
+CASE 220:9-220:29
+CASE 221:9-221:31
+CASE 222:9-222:24
+CATCH 102:38-102:74
+astdiff: checks/cases/s17afactcascade.olang changed since the golden was captured (make astgold)
+astdiff: checks/cases/traitunknowntype.olang changed since the golden was captured (make astgold)
+astdiff: checks/checks.olang changed since the golden was captured (make astgold)
+astdiff: checks/fixtures/cases/extend.olang changed since the golden was captured (make astgold)
+astdiff: checks/fixtures/cases/extuse.olang changed since the golden was captured (make astgold)
+astdiff: checks/fixtures/crash/crash.olang changed since the golden was captured (make astgold)
+astdiff: compiler/check.olang changed since the golden was captured (make astgold)
+astdiff: compiler/diag.olang changed since the golden was captured (make astgold)
+astdiff: compiler/generic.olang changed since the golden was captured (make astgold)
+astdiff: compiler/interp.olang changed since the golden was captured (make astgold)
+astdiff: compiler/names.olang changed since the golden was captured (make astgold)
+astdiff: compiler/parse.olang changed since the golden was captured (make astgold)
+astdiff: compiler/records.olang changed since the golden was captured (make astgold)
+astdiff: compiler/scope.olang changed since the golden was captured (make astgold)
+astdiff: compiler/target.olang changed since the golden was captured (make astgold)
+astdiff: compiler/tools/diaggold.olang changed since the golden was captured (make astgold)
+astdiff: docs/values-study/split/split.olang changed since the golden was captured (make astgold)
+astdiff: fuzz/fuzz.olang changed since the golden was captured (make astgold)
+astdiff: std/prelude/tests/columns.olang changed since the golden was captured (make astgold)
+astdiff: tests/any.olang changed since the golden was captured (make astgold)
+astdiff: tests/shared.olang changed since the golden was captured (make astgold)
+astdiff: tools/clone_migrate.olang changed since the golden was captured (make astgold)
+astdiff: tools/errors_migrate.olang changed since the golden was captured (make astgold)
+astdiff: the trees of 24 of 2591 files differ

@@ -6844,7 +6844,8 @@ where that value is ended - its holder's block left, a store over it, its collec
 destructor has run. What it held is reclaimed then - not when its scope closes - when the place was its **only
 holder**:
 1. it was **made for the place**: built there (a constructor call, an enum case, an array, a literal, text rendered or
-   joined, a call's built result, O13), `null`, or constant data (T25d); or moved there from a place that was its only
+   joined, a call's built result, O13), `null`, constant data (T25d), or nothing at all (a local declared with no
+   value, D13d, before its first assignment); or moved there from a place that was its only
    holder (a collection's `Pop`, `TakeAt` or `Take`, and the last use of a local given one); or handed on into it - by
    a by-value parameter of a unique type, moved (T13b), through any number of calls and constructors - from an
    argument made for it at the call that began the chain;
@@ -6873,15 +6874,20 @@ nothing else is built into it while the place holds it - so a value of it change
 reference to it handed to a call) makes the place keep, and so does a value holding it made with no store into the place
 (a copy of a struct, a `Map` or an array holding it; a value a call hands back as a view, copied where it is kept, D9h -
 but not a constructor's instance viewing only storage made for the call, or unique values moved into it, which it
-owns), and a local's value handed back. A local whose copy at its last mention is such a place's whole new value, by
+owns), and a local's value handed back. A constructor's instance viewing what it is given that a struct local is
+declared with, copied where it is kept (D9h), is that local's value made for its candidate parts, as at a store into a
+struct held in place: the copy is built for them (`d := Doc(""); d.text = d.text + $i` each turn holds one text). A local whose copy at its last mention is such a place's whole new value, by
 a statement of the very block declaring it (`v := Vec<I64>()`, pushes, `h.d = v`), is built for the place from its
 declaration - its value, and what the calls given it build where it lives, built where the place's next value is - and
 moved into it (D9i): that is the place's value made for it, and the local's reads are reads of the place's value, so a
 view of it kept or in use across a let-go makes the place keep, and so does a call changing it that cannot build where
 it is built. A value made for an owner held in a part of a struct - a `Map` entry's `Vec` value beside its text key -
 is that part alone: what the struct's other parts own is built where the struct would have been, never reclaimed
-with the part's old value. Where a text part is all the storage the entry owns (a text key beside a number or a
-reference, a text value beside a number key), that text is the value made for it: reclaimed where the entry is removed.
+with the part's old value. A text part of an entry of the prelude's - a `Map` entry's key, its value - is a value made
+for its own place and built alone, whatever else the entry owns: a key beside a `Vec` value is reclaimed where the entry
+is removed, a text value where a `Put` replaces it or the entry is removed. So is an array's text element (a `String` of
+an `Array<String>`, a `Vec<String>`'s buffer): each value built alone, reclaimed where the element is given another -
+`a[i] = v`, `SetAt` - or removed.
 A collection's **own storage** - a `Vec`'s buffer, a `Map`'s slot arrays, any array of a run-time length a struct holds
 by value - is a place too: what the collection's growth replaces is reclaimed as it grows, where the conditions hold -
 no view of the old storage in use across the growth (`View()`, `Ref()`, an element's reference, condition 6), every

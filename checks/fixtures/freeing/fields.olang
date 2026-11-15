@@ -1,0 +1,37 @@
+import "std/io"
+
+# O8f (docs/freeing.md gaps 6-7): a field replaced inside a struct a constructor's copied value made - a text field
+# given new text, in main and through 'mut Doc&', and a Vec field given a new Vec, the struct built from a call's value
+# and from a local - frees what it held: the copy D9h makes is built for the field (1.7 GB at 20,000 turns before)
+N I64 = 20000
+
+type Doc struct(text String) { text }
+
+type Model struct(w Vec<F64>) { w }
+
+fn fill(n I64) Vec<F64> {
+    out Vec<F64>
+    for _ in range n: out.Push(0.0)
+    return out
+}
+
+fn step(w Vec<F64>&) Vec<F64> {
+    out Vec<F64>
+    for x in w { out.Push(x + 1.0) }
+    return out
+}
+
+fn grow(d mut Doc&, i I64) { d.text = d.text + $i }
+
+fn main() {
+    d := Doc("")
+    for i in range N { d.text = d.text + $i }
+    e := Doc("")
+    for i in range N { grow(e, i) }
+    m := Model(fill(100))
+    for _ in range N { m.w = step(m.w) }
+    v := fill(100)
+    m2 := Model(v)
+    for _ in range N { m2.w = step(m2.w) }
+    io.PutLine($d.text.Len() + " " + $e.text.Len() + " " + $m.w[0] + " " + $m2.w[99])!
+}

@@ -1040,19 +1040,41 @@ fn (ln mut lowering&) splitCopy(site I64, v mir.Operand, ty types.TypeId, at mir
     if path.Len() == 0: return mir.Operand.None
     rest := try ln.regionPar.Get(site) catch { return mir.Operand.None }
     d := ln.local(ln.into(ty, mir.Rvalue.Use(v), sp), ty, sp)
-    ln.splitParts(pl(mir.Base.Local(d)), ty, path, 0, at, rest, sp)
+    # (O8f: the parts early freeing builds in slots of the region's parent - a Map entry's key text beside its value -
+    # each where its own place is decided sole, freed alone at the entry's removal)
+    fr := ln.L.Free!
+    for e in fr.SlotParts(I64(ln.B.Id), site) {
+        g := ln.guardOf(e & ((I64(1) << 32) - 1))
+        into := rest
+        if g != free.NotSole {
+            h := ln.temp(mir.I64T, sp)
+            ln.guarded(h, g, mir.Rvalue.Slots(rest), rest, sp)
+            into = mir.ScopeRef.Held(h)
+        }
+        ln.copyPart(ln.with(pl(mir.Base.Local(d)), mir.Proj.Field(e >> 32)), ln.partsOf(ty)[e >> 32], into, sp)
+    }
+    ln.splitParts(pl(mir.Base.Local(d)), ty, path, 0, at, rest, sp, fr.SlotParts(I64(ln.B.Id), site))
     return mir.Operand.Copy(mir.Lvalue.L(d))
 }
 
 fn (ln mut lowering&) splitParts(p pl, ty types.TypeId, path Array<I64>&, depth I64, at mir.ScopeRef, rest mir.ScopeRef
-                                 sp source.Span) {
+                                 sp source.Span, slotted Array<I64> = Array<I64>(0)) {
     fs := ln.partsOf(ty)
     for i in range fs.Len() {
         q := ln.with(p, mir.Proj.Field(i))
+        if depth == 0 and slottedField(slotted, i): continue
         if i != path[depth]: ln.copyPart(q, fs[i], rest, sp)
         else if depth + 1 == path.Len(): ln.copyPart(q, fs[i], at, sp)
         else: ln.splitParts(q, fs[i], path, depth + 1, at, rest, sp)
     }
+}
+
+# whether field i is one of a split copy's slot parts (free.SlotParts: field << 32 | place)
+fn slottedField(parts Array<I64>&, i I64) Bool {
+    for e in parts {
+        if e >> 32 == i: return true
+    }
+    return false
 }
 
 # h given rv where place k is decided sole (a link-time constant, wholeprog 2.1), else the handle of parent - every
@@ -1113,15 +1135,11 @@ type relPath struct(At I64, Path Array<I64>, Slot Bool = false) {
 fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<relPath> {
     out Vec<relPath>
     if not ln.freeing { return out }
-    # an element given a value lets go of nothing: the program's copies between elements are not known positions, and
-    # the prelude's chunks are filled with the very value pushed (docs/memory.md 2.6 item 7) - only a vacate does
-    if assign {
-        match p {
-            case typed.Lvalue.Elem(_, _, _) { return out }
-            case _ { }
-        }
-    }
     fr := ln.L.Free!
+    # an element given a value lets go of nothing: the program's copies between elements are not known positions, and
+    # the prelude's chunks are filled with the very value pushed (docs/memory.md 2.6 item 7) - only a vacate does; but
+    # text elements, each value its own slot (O8f)
+    if assign and p == typed.Lvalue.Elem and not fr.SlotPlace(fr.PlaceOf(p)): return out
     k := fr.PlaceOf(p)
     # (an owner local given another value: its place's old value, held whole)
     if p == typed.Lvalue.Local and assign { k = fr.LocalPlaceOf(I64(ln.B.Id), I64(p.id)) }
@@ -1438,7 +1456,11 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
                 # D13d: assigned on every path before any read - nothing is written for its declaration; its storage
                 # is marked set with no value (Use(None) writes nothing), so element stores may follow
                 if ln.F.Locals[I64(l)].Home != mir.ScopeRef.Frame { ln.emit(mir.Stmt.Live(sp, mir.LocalId(I32(l)))) }
-                ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(mir.LocalId(I32(l))), mir.Rvalue.Use(mir.Operand.None)))
+                # (O8d: a local place - one early freeing follows - holds zero bits until then, its first let-go
+                # releasing nothing, in every program alike)
+                none := mir.Operand.None
+                if ln.freeing and ln.L.Free!.LocalPlaceOf(I64(ln.B.Id), I64(l)) >= 0: none = mir.Operand.Const(ty, 0)
+                ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(mir.LocalId(I32(l))), mir.Rvalue.Use(none)))
                 return
             }
             # D18e: a for-in's own generator, made by a direct call - the call marked as the walk this block finishes

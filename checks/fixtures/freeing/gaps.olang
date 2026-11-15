@@ -1,8 +1,8 @@
 import "std/io"
 
-# B18a: -memory -check fails on a let-go early freeing does not follow - an element given new text (O8f's gap)
+# B18a: -memory -check fails on a let-go early freeing does not follow - an element given a new Vec (O8f's gap)
 fn main() {
-    names := Array<String>(10)
-    for i in range 1000 { names[i % 10] = "name " + $i }
-    io.PutLine($names[3])!
+    rows := Array<Vec<I64>>(10)
+    for i in range 1000 { rows[i % 10] = Vec<I64>(i) }
+    io.PutLine($rows[3].Len())!
 }

@@ -21,3 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
+1. Vec growth when a Vec is held whole by an owner or copied outside a region (gap 11, docs/freeing.md 2.1; asked 2026-11-15). Peak 98 MB against 66 MB where growth frees. Closing it may need a buffer region per copy, about 400 bytes at run time per such copy. Default: kept until the scope closes, reported by -memory -check. Recommendation: accept the cost only if the design round (running) finds no zero-cost design.
