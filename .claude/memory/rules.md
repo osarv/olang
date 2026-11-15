@@ -61,6 +61,7 @@ slimming of 2026-11-08").
   **stop code work at ~0.92 weekly** (nothing new starts near it; running agents finish and merge; no end-of-week burn
   unless the user says). A survey the user asked for runs to its end. Usage: `list_events` on the session id with
   `kinds: ["rate_limit_event"]`, `unifiedWindows.seven_day`. The five-hour window is gone. (why: archive/rules_log.md)
+- **The week ending 2026-11-21: no weekly stop (the user, 2026-11-15: "don't respect the weekly limit this week, because we're going to reset it either way")**; the 0.92 stop returns the week after.
 - **Keep the loaded context small, always** ("the token context is kind of the biggest cost"): what every session loads
   (CLAUDE.md, PRINCIPLES.md, memory files) stays small continuously - an answered ledger entry moves to
   archive/decisions_log.md in the commit that records the answer; a finished plan.md entry to archive/next_steps_log.md; a
