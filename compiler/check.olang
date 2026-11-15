@@ -8380,7 +8380,7 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
             c.err(c.opAfter(y.Span(), 2), msgs.IncdecInExpression("'" $op.Text() "'"))
             return c.unknown(sp)
         }
-        case ast.Expr.Is(sp, a, b, negated) { return c.identity(sp, a, b, negated) }
+        case ast.Expr.Is(sp, a, b, negated) { return c.nullTest(sp, a, b, negated) }
         case ast.Expr.As(sp, a, tr) { return c.asCase(sp, a, tr) }
         case ast.Expr.IsType(sp, a, tr, negated) {
             # E10c: "is" asks for null and nothing else; a type is no question for it
@@ -8971,15 +8971,11 @@ fn (c mut Checker&) opnd(op token.Tok, x ast.Expr&, want types.TypeId) typed.Exp
 fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&, want types.TypeId) typed.Expr& {
     if op == token.Tok.StarStar { return c.power(sp, a, b, want) }
     if op == token.Tok.EqEq or op == token.Tok.NotEq {
+        # E10c: a comparison with the null literal is the null test, never a call of Eq (E10a)
+        if isNullLit(a) or isNullLit(b): return c.nullTest(sp, a, b, op == token.Tok.NotEq)
         # R11b, T20: an error value compared with a word, an error type or a set
         ec := c.errCompare(sp, op, a, b)
         if ec is not null { return ec }
-        # E10c: null is tested with "is", never compared
-        if isNullLit(a) or isNullLit(b) {
-            o := a if isNullLit(b) else b
-            c.err(c.between(a.Span(), b.Span(), op.Text().Len()), msgs.NullCompared(c.src(o.Span()), "is null" if op == token.Tok.EqEq else "is not null"))
-            return c.lit(sp, types.BoolT, 0)
-        }
         # E32: a case written is a test of the case the other operand holds
         if c.caseWritten(b) and not c.caseWritten(a) { return c.caseCompare(sp, op, a, b) }
         if c.caseWritten(a) and not c.caseWritten(b) { return c.caseCompare(sp, op, b, a) }
@@ -9776,9 +9772,9 @@ fn (c mut Checker&) typeHasEq(t types.TypeId, depth I64) Bool {
     return c.partsHaveEq(d, depth + 1)
 }
 
-# "a is b": two references naming one instance (E10c)
-fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated Bool) typed.Expr& {
-    if isNullLit(a) and not isNullLit(b) { return c.identity(sp, b, a, negated) }
+# "x == null", "x != null" (negated): whether a reference, a function value or an error value holds none (E10c)
+fn (c mut Checker&) nullTest(sp source.Span, a ast.Expr&, b ast.Expr&, negated Bool) typed.Expr& {
+    if isNullLit(a) and not isNullLit(b) { return c.nullTest(sp, b, a, negated) }
     isp := c.between(a.Span(), b.Span(), 2)
     if not isNullLit(b) {
         # E10c: "is" asks for null and nothing else - a case and a value are compared with "==" (E32, E10)
@@ -18361,7 +18357,6 @@ fn (c mut Checker&) caughtCaseTest(m ast.Match&, cs ast.Case&) ast.Expr& {
 fn (c mut Checker&) altTest(m ast.Match&, p ast.Pattern&) ast.Expr?& {
     match p {
         case ast.Pattern.Path(psp, y), ast.Pattern.Value(psp, y) {
-            if isNullLit(y): return ast.Expr.Is(psp, m.Subject, y, false)
             return ast.Expr.Binary(psp, token.Tok.EqEq, m.Subject, y)
         }
         case ast.Pattern.Case(psp, y, _): return c.payloadTest(m, p, psp, y)
@@ -25867,7 +25862,13 @@ fn nullTests(x ast.Expr?&, positive Bool, out mut Vec<Array<source.NameId>&>&) {
             if (op == token.Tok.And and positive) or (op == token.Tok.Or and not positive) {
                 nullTests(a, positive, out)
                 nullTests(b, positive, out)
+                return
             }
+            # "p != null" where it holds, "p == null" where it fails, the null literal on either side (E10c)
+            if (op == token.Tok.NotEq) != positive or not (op == token.Tok.EqEq or op == token.Tok.NotEq): return
+            if isNullLit(a) == isNullLit(b): return
+            p := pathOf(b if isNullLit(a) else a)
+            if p.Len() > 0 { out.Push(p) }
         }
         case _ { }
     }
