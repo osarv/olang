@@ -135,9 +135,10 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	oannsparse	sonnet	high	done, oann master						oann A4 sparse+conv
 2026-11-15	oannscan	sonnet	high	done, oann master						oann A5 scan
 2026-11-15	oannio	sonnet	medium	done, oann master						oann A6 data+io
-2026-11-15	oannad	opus	high	running						oann B1 autodiff
+2026-11-15	oannad	opus	high	done, oann master (97.70%, arena 45 vs 90 MB, 0 kB growth; facts too coarse)						oann B1 autodiff
 2026-11-15	oanndyn	opus	high	done, oann master (sweeps 64/66/71 exact; 3 olang bugs; join leak)						oann B2a dyn core
 2026-11-15	merge2	opus	medium	running						merge fieldnarrow, racetests, dwarf, timeit onto + joins
 2026-11-15	earlyfree	opus	high	running						O8d: early freeing as a provable guarantee (design, then build)
 2026-11-15	oannlearn	opus	high	running						oann B2b learning rules
 2026-11-15	oannboard	sonnet	high	running						oann B4 board backend
+2026-11-15	oannnn	sonnet	high	running						oann B3 nn layers/optim/train
