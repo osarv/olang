@@ -520,9 +520,9 @@ test "what cannot be built for is said as stage 0 says it, before clang is asked
     assert mistake("aarch64-linux-gnu:", "", false, "linux", "x86_64").Contains("unknown target")
     assert mistake("a:b", "", false, "linux", "x86_64").Contains("unknown target 'a:b'")
     assert mistake("aarch64-linux-gnu", "", true, "linux", "x86_64") ==
-        "olang: error[B12a]: interpret runs on this machine, not on '-target aarch64-linux-gnu'\n" + $
+        "olang: error[B12a]: running a file runs on this machine, not on '-target aarch64-linux-gnu'\n" + $
         "olang: note: '-target aarch64-linux-gnu' is another architecture or system\n" + $
-        "olang: help: build, compile and test build for it\n"
+        "olang: help: build, compile, test and run build for it\n"
     assert mistake("native", "", false, "linux", "x86_64").Contains("clang not found on PATH")
     assert mistake("native", "", false, "linux", "riscv64").Contains("does not build for 'riscv64'")
     # without clang interpret knows this machine and the x86-64 levels, and the triple naming this machine

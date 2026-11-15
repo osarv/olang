@@ -37796,3 +37796,9 @@ Found by oann's work and by the suite; each fixed with a test or checks case tha
   so oann's Tensor and Matrix, which declare a deep-copying `Clone()`, had their calls turned into the supplied Copy,
   shared at references. A text tool cannot tell a call's receiver, so a file declaring a Clone of its own, or importing a
   module of the files given that does, is now left as it is and its `.Clone()` lines listed for a person (status 1).
+- **A stale test, not clang (B12a).** compiler/target.olang's test of `-target aarch64-linux-gnu` while interpreting
+  expected the message from before B3g merged interpret into running a file ("interpret runs on this machine ...");
+  the compiler says "running a file runs on this machine ..." with "build, compile, test and run build for it". The
+  assert, decided while compiling (S18c), failed the file's build on every clang; it now expects today's message.
+- **The `output` scenario's drift** was already gone: B3g updated its expected `-output` message to name `run`, and the
+  scenario passes as it stands.
