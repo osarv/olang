@@ -5997,9 +5997,11 @@ fn (f mut Free&) reported(k I64) Bool {
         if st.PlaceId == k and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove): owns = true
     }
     if not owns { return false }
+    # (text elements: where the program's own code gives one another value - its removals are the collection's, kept
+    # with what holds them where that is an owner)
+    if f.keyField[k] == -1 and f.arr[k] { return f.assignedHere(k) }
     if f.isContents(k) { return true }
     if f.isOwnLocal(k) { return true }
-    if f.keyField[k] == -1 and f.arr[k] { return true }
     if f.isGlobal(k) {
         m := f.glModule[k]
         return m >= 0 and m < f.P.L.Mods.Len() and not f.P.L.Mods[m].Identity.StartsWith("std/")
@@ -6010,6 +6012,14 @@ fn (f mut Free&) reported(k I64) Bool {
     if t.KindOf(r) != types.Kind.Named { return false }
     m := t.DeclModule(t.DeclOf(r))
     return m >= 0 and m < f.P.L.Mods.Len() and not f.P.L.Mods[m].Identity.StartsWith("std/")
+}
+
+# whether the program's own code gives place k another value (an assignment's let-go)
+fn (f Free&) assignedHere(k I64) Bool {
+    for g in f.goes {
+        if g.PlaceId == k and g.Kind == LAssign and f.programCode[g.Body]: return true
+    }
+    return false
 }
 
 fn (f mut Free&) rowBefore(a letGo, b letGo) Bool {

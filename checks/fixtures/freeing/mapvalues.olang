@@ -1,0 +1,23 @@
+import "std/io"
+
+# O8f (docs/freeing.md gaps 10, 15): a Map's text key beside a Vec value freed where its entry is removed, and a
+# Map<String, String>'s value freed where a Put replaces it - a Map entry's text parts built in slots, each freed alone
+# (52 MB at 400,000 turns before)
+N I64 = 100000
+
+fn mk(i I64) Vec<I64> {
+    v := Vec<I64>()
+    for j in range 10 { v.Push(i + j) }
+    return v
+}
+
+fn main() {
+    m := Map<String, Vec<I64>>()
+    s := Map<String, String>()
+    for i in range N {
+        m.Put("key number " + $i + " padded out to some length ......", mk(i))
+        if i > 0 { m.Remove("key number " + $(i - 1) + " padded out to some length ......") }
+        s.Put("k" + $(i % 10), "value " + $i + " padded out to some length .........................")
+    }
+    io.PutLine($m.Len() + " " + $s.Len() + " " + s.Get("k3")!)!
+}
