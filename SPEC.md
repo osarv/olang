@@ -2361,8 +2361,9 @@ variable arguments are C's `...`, X21) have none - a compile-time error naming a
 ### 3.4.1 Requirements
 
 **D17 (requirements).** What a function, a method or a constructor **requires** of its callers is read off its body:
-the asserts and **checks** its body begins with, up to the first statement that is neither, are its **requirements**.
-A check is an `if` with no `else` whose branch does nothing but raise the prelude's `ArgumentError` (§7.6), in either
+the asserts and **checks** its body begins with, up to the first statement that is neither, each whose condition
+reads a parameter or the receiver, are its **requirements** (one reading neither - a reflected member of a type
+variable, a constant - asks nothing of a call, and S18c decides it where it is written). A check is an `if` with no `else` whose branch does nothing but raise the prelude's `ArgumentError` (§7.6), in either
 form (S1b):
 
 ```
@@ -2398,7 +2399,9 @@ ArgumentError { }`, an item-less `catch` among them, a clause of an enclosing `t
 call fails at run time as written: a test of the failure path is such a call. An assert's false requirement is an
 error whatever catches the call, as nothing takes what an assert does. Where the evaluator runs a call itself - a global
 it bakes (K2), an assert it decides (S18c) - the body checks its requirements as at run time, failing the same way. A
-requirement the evaluator cannot decide, or one whose condition does not check on its own, is the run time's.
+requirement the evaluator cannot decide, or one whose condition does not check on its own, is the run time's. One
+cause is one error: an assert's false requirement at a call a global's initializer (K2) or a decided assert (S18c)
+evaluates whole is said there, as the assert's failure, and a function with an error of its own decides none.
 
 **D9a (arrays by value).** A parameter whose type is an array may take it **by value** (`a Array<F32>`, a declared
 array type such as `s String` among them) or by reference (`a Array<F32>&`, T24). A by-value array parameter is the

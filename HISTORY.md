@@ -37927,7 +37927,11 @@ today is a parse error (`expected '{', found '['`), no diagnostic of its own (PR
 **What stayed.** The requirement bodies (`BodyOf.Contract`, one per requirement, a `fn(params) Bool`) and the asks at
 calls (`contractAt`, `askBody`, interp's `decideContracts`) are made the same way, from `ast.Requirements(body)` rather
 than the block; they are made only at a call whose arguments are all closed, and one whose condition does not check as a
-body of its own (its diagnostics are the function's to say) is dropped, left to the run time. D17g, filed under
+body of its own (its diagnostics are the function's to say) is dropped, left to the run time. A leading assert reading
+no parameter (std/bitset's `assert T.Kind == TypeKind.Enum`, a constant) is no requirement - S18c decides it where it
+is written, and asking it at every call doubled the error. An assert's false requirement at a call that K2 or S18c
+evaluates whole is left to them (`evaluatedWhole`: k1assertaborts, k2abortsread, s18cinstancecall would each have said
+it twice), and a callee with an error of its own decides nothing (s17msgerror). D17g, filed under
 contracts but about conversions, is E26c of its own (`checks/cases/e26cconvfit`, `e26cconvglobal`).
 
 **Migration.** `tools/requires_migrate.olang`, last in fix's table: each item becomes `if not C: error

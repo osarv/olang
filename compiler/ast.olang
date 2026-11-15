@@ -738,20 +738,51 @@ type Req struct(Sp source.Span, Cond Expr&, Negated Bool) {
     Negated
 }
 
-# the requirements a body begins with: its leading asserts and checks, up to the first statement that is neither
-fn Requirements(body Array<Stmt&>&, names source.Names&) Array<Req&>& {
+# the requirements a body begins with: its leading asserts and checks, up to the first statement that is neither - each
+# one whose condition reads a parameter or the receiver (text the body's file); one reading none (a type's reflected
+# member, a constant) says nothing of a call, and S18c decides it where it is written
+fn Requirements(body Array<Stmt&>&, names source.Names&, text String&, params Array<Param&>&, recv Param?&) Array<Req&>& {
+    ps Vec<String&>
+    for p in params { ps.Push(names.Text(p.Name)) }
+    if recv != null { ps.Push(names.Text(recv.Name)) }
     out mut Vec<Req&>& = Vec<Req&>()
     for st in body {
-        match st {
-            case Stmt.Assert(sp, k, _): out.Push(Req(sp, k, false))
-            case Stmt.If(sp, i) {
-                if not isCheck(i, names): return out.ToArray()
-                out.Push(Req(sp, i.Cond!, true))
-            }
-            case _: return out.ToArray()
-        }
+        r := Req.leading(st, names)
+        if r == null: return out.ToArray()
+        if readsAny(exprText(r.Cond, text), ps): out.Push(r)
     }
     return out.ToArray()
+}
+
+# a statement as a requirement, null where it is neither an assert nor a check
+fn Req.leading(st Stmt&, names source.Names&) Req?& {
+    return match st {
+        case Stmt.Assert(sp, k, _): Req(sp, k, false)
+        case Stmt.If(sp, i): Req(sp, i.Cond!, true) if isCheck(i, names) else null
+        case _: null
+    }
+}
+
+# whether text holds one of the names as a whole word
+fn readsAny(text String&, ps Vec<String&>&) Bool {
+    for n in ps {
+        if n.Len() == 0 or n == "_": continue
+        i I64 = 0
+        for i + n.Len() <= text.Len() {
+            k := try text[i:].Find(n) catch default -1
+            if k < 0: break
+            j := i + k
+            if not wordAt(text, j - 1) and not wordAt(text, j + n.Len()): return true
+            i = j + 1
+        }
+    }
+    return false
+}
+
+fn wordAt(t String&, i I64) Bool {
+    if i < 0 or i >= t.Len(): return false
+    c := t[i]
+    return c.IsLetter() or c.IsDigit() or c == '_'
 }
 
 # whether an if is a check (D17): a condition, no else, and a branch raising ArgumentError and doing nothing else

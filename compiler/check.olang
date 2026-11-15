@@ -486,9 +486,9 @@ type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I
 # condition's value (BodyOf.Cond), where the call is (its file and span), where the condition is written (its file and
 # span; the argument's for a conversion), the function diagnostics name ("" for a conversion), the condition as written
 # (the argument for a conversion), the instance it was asked in (G16b), for a conversion the type, and whether the
-# requirement is an assert's - which no catch at the call takes
+# requirement is an assert's - which no catch at the call takes - the body the call is in and the one it calls
 type ContractAsk struct(Body I64, File I64, At source.Span, CondFile I64, CondSp source.Span, Name String&, Text String&
-    Ctx diag.Where, CtxText String&, Ty String& = "", Assert Bool = false) {
+    Ctx diag.Where, CtxText String&, Ty String& = "", Assert Bool = false, Caller I64 = -1, Callee I64 = -1) {
     Body
     File
     At
@@ -500,6 +500,8 @@ type ContractAsk struct(Body I64, File I64, At source.Span, CondFile I64, CondSp
     CtxText
     Ty
     Assert
+    Caller
+    Callee
 }
 
 # a value the evaluator decides while compiling (T29d, D13c): what it is, where it is needed (its file and span), its
@@ -5231,7 +5233,9 @@ fn (c mut Checker&) ctSourceOf(b I64) ctSource?& {
             fd := c.P.FnDecl(f)
             # a generator's are its first Next's (D18), which no call of it runs
             if not fd.Bodied or c.P.IsGenerator(f): return null
-            return ctSource(ast.Requirements(fd.Body, c.P.L.Names), fd.Recv, fd.S.Params, c.P.FnModule(f), $c.text(fd.Name))
+            mi := c.P.FnModule(f)
+            reqs := ast.Requirements(fd.Body, c.P.L.Names, c.P.L.Mods[mi].Src!.Text, fd.S.Params, fd.Recv)
+            return ctSource(reqs, fd.Recv, fd.S.Params, mi, $c.text(fd.Name))
         }
         case typed.BodyOf.Ctor(t, _) {
             d := c.P.T.DeclOf(t)
@@ -5239,11 +5243,12 @@ fn (c mut Checker&) ctSourceOf(b I64) ctSource?& {
             if td == null or td.Body == null { return null }
             mi := c.P.T.DeclModule(d)
             nm := $c.text(td.Name)
+            text := c.P.L.Mods[mi].Src!.Text
             match td.Body {
-                case ast.TypeBody.Struct(sb): return ctSource(ast.Requirements(sb.Body, c.P.L.Names), null, sb.Params, mi, nm)
+                case ast.TypeBody.Struct(sb): return ctSource(ast.Requirements(sb.Body, c.P.L.Names, text, sb.Params, null), null, sb.Params, mi, nm)
                 case ast.TypeBody.Over(_, ctor) {
                     if ctor == null: return null
-                    return ctSource(ast.Requirements(ctor.Body, c.P.L.Names), null, ctor.S.Params, mi, nm)
+                    return ctSource(ast.Requirements(ctor.Body, c.P.L.Names, text, ctor.S.Params, null), null, ctor.S.Params, mi, nm)
                 }
                 case _ { return null }
             }
@@ -5383,7 +5388,7 @@ fn (c mut Checker&) contractAt(sp source.Span, nsp source.Span, args Array<typed
     for i in range info.Reqs.Len() {
         ask := c.askBody(mi, sp, old, info.Reqs[i], args)
         c.ContractAsks.Push(ContractAsk(ask, file, nsp, info.File, info.ReqSps[i], info.Name, info.ReqTexts[i], cw, ct
-                                        Assert = info.Asserts[i]))
+                                        Assert = info.Asserts[i], Caller = old, Callee = cb))
         c.contractCallers.Push(old)
     }
 }

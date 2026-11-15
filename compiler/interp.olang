@@ -458,7 +458,8 @@ fn decideContracts(c mut typecheck.Checker&, x mut Exec&) I64 {
         key := pair.Pair(a.File, (I64(a.At.Start) << 32) | I64(a.CondSp.Start))
         # one false requirement is said at a call: the first, as the call checks them in order on entry
         call := pair.Pair(a.File, I64(a.At.Start) << 32)
-        if said.Has(key) or (a.Name != "" and said.Has(call)) { continue }
+        # (a callee with an error of its own is that cause: its requirements say nothing more)
+        if said.Has(key) or (a.Name != "" and said.Has(call)) or evaluatedWhole(c, a) or c.Faulty.Has(a.Callee) { continue }
         k := mir.FnKey.Body(typed.BodyId(I32(a.Body)))
         x.Need(k)
         s := x.M.Eval(k, Array<I64>(0))
@@ -481,6 +482,17 @@ fn decideContracts(c mut typecheck.Checker&, x mut Exec&) I64 {
         }
     }
     return n
+}
+
+# whether an assert's requirement asked at a call is said by what evaluates that call whole - a global's initializer
+# (K2) or an assert decided while compiling (S18c), which say the assert's failure where they are: one cause, one error
+fn evaluatedWhole(c typecheck.Checker&, a typecheck.ContractAsk&) Bool {
+    if not a.Assert or a.Caller < 0: return false
+    if c.Bodies[a.Caller].Of == typed.BodyOf.Global: return true
+    for q in c.AssertAsks {
+        if q.Body == a.Caller and q.Sp.Start <= a.At.Start and a.At.End <= q.Sp.End: return true
+    }
+    return false
 }
 
 # ---- values decided while compiling (T29d, D13c) ----

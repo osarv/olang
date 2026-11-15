@@ -337,12 +337,13 @@ fn receiverVars(c mut typecheck.Checker&, f I64) I64 {
 # "# requires: y > x"
 fn requires(b mut StringBuilder&, c mut typecheck.Checker&, f ast.Func&, mi I64, indent String&) {
     if f.S.Commutes { b.Push($indent + "# commutes: the operator applies with its operands the other way round too (E31c)\n") }
-    reqLines(b, c, f.Body, mi, indent)
+    reqLines(b, c, f.Body, f.S.Params, f.Recv, mi, indent)
 }
 
-fn reqLines(b mut StringBuilder&, c mut typecheck.Checker&, body Array<ast.Stmt&>&, mi I64, indent String&) {
+fn reqLines(b mut StringBuilder&, c mut typecheck.Checker&, body Array<ast.Stmt&>&, params Array<ast.Param&>&
+            recv ast.Param?&, mi I64, indent String&) {
     src := c.P.L.Mods[mi].Src!.Text
-    for r in ast.Requirements(body, c.P.L.Names) { b.Push($indent + "# requires: " + $ast.ReqText(r, src) + "\n") }
+    for r in ast.Requirements(body, c.P.L.Names, src, params, recv) { b.Push($indent + "# requires: " + $ast.ReqText(r, src) + "\n") }
 }
 
 # its scope obligations, inferred from the body (O10b, QCB: none is written) - what every call is held to - one a line:
@@ -518,8 +519,8 @@ fn overCtor(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId, self
 # typeItem's constructor's requirements (D17), from its body
 fn ctorRequires(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId) {
     match c.P.TypeDecl(d)!.Body {
-        case ast.TypeBody.Struct(sb): reqLines(b, c, sb.Body, c.P.DeclModule(d), "    ")
-        case ast.TypeBody.Over(_, ctor) if ctor != null: reqLines(b, c, ctor.Body, c.P.DeclModule(d), "    ")
+        case ast.TypeBody.Struct(sb): reqLines(b, c, sb.Body, sb.Params, null, c.P.DeclModule(d), "    ")
+        case ast.TypeBody.Over(_, ctor) if ctor != null: reqLines(b, c, ctor.Body, ctor.S.Params, null, c.P.DeclModule(d), "    ")
         case _ { }
     }
 }
