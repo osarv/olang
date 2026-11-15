@@ -39,7 +39,8 @@ fn Config(from build.Config&) build.Config {
     c.Consts = from.Consts
     c.Update = from.Update
     c.Jobs = from.Jobs
-    c.Quick = true
+    c.Quick = from.Quick
+    c.Checked = from.Checked
     c.Cell = true
     c.Quiet = true
     c.Dir = CacheDir()

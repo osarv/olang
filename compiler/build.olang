@@ -119,7 +119,7 @@ type Config struct() {
     Update Bool = false
     Tests Bool = false
     Checked Bool = false        # interpret's build (B3e): -quick, checked as test and -debug are (E16g), the trace kept (S18d)
-    Evaluated Bool = false      # -evaluate: interpret's program or test's tests run by the evaluator instead of built (B3e)
+    Evaluated Bool = false      # OLANG_EVALUATE: a file's program or test's tests run by the evaluator instead of built (B3e)
     TestWords Vec<String&>      # and their targets and descriptions, where the words named none (B7a's did-you-mean)
     Jobs I64 = 0
     Color Bool = false
@@ -911,9 +911,6 @@ fn LibName(file String&) String {
 # written) and ARGS as its command line - its status, a signal's included, the program's own (B3g)
 fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&) I32 {
     c.Quiet = true
-    # B3g: a file run is built as -quick builds (B2g) unless -debug or -race says how much to optimize - start-up is
-    # what running a file waits on, and -O3 with link-time optimization is build's
-    if not c.Debug and not c.Race: c.Quick = true
     status := BuildProgram(fe, c, file, d)
     if status != 0 { return status }
     run := try c.runner(d) catch Failed { return finish(d) }
@@ -1093,8 +1090,8 @@ fn InterpretTests<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag
     return 0 if status == 0 else 1
 }
 
-# interpret FILE ARGS (B3e): the program built as a file run builds it (-quick) but checked (E16g) and keeping the error
-# trace (S18d), into the cache - every object reused while current (B3i), the binary named by the file and where it is
+# interpret FILE ARGS (B3e): the program built as build builds it (-O3, link-time optimization; -quick and -checked, E16g,
+# where given), into the cache - every object reused while current (B3i), the binary named by the file and where it is
 # run from - what is only untidy said as a warning (D3b, M5a), then run in this process's place with ARGS (FILE as
 # written first, B3f) as its command line, its status the program's own. Under -evaluate the front end's evaluator
 # runs it instead (the prelude's C imports need clang either way, so there is no running without one to fall back on)
@@ -1103,8 +1100,6 @@ fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Stri
         return try fe.Interpret(file, args, c, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
     }
     c.Quiet = true
-    c.Quick = true
-    c.Checked = true
     c.Dir = CacheDir("run")
     real := try os.RealPath(file) catch default $file
     where Vec<String&>

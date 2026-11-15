@@ -9,7 +9,7 @@ Records for every change: `SPEC.md` (the rule), `docs/settled.md` (current-state
 `.claude/memory/decisions.md` (a question left open).
 
 Every change to what olang means keeps the interpreter comparison green (`interp@FILE` and `interp@casesK` in the
-suite): `test -evaluate` and `interpret -evaluate` run each test file and run case as the build does, held to `compiler/goldens/run.txt`. A test
+suite): `OLANG_EVALUATE=1 olang test` and `OLANG_EVALUATE=1 olang FILE` run each test file and run case as the build does, held to `compiler/goldens/run.txt`. A test
 added or a run case changing what it prints means `make rungold` (the built runs captured again, each difference
 explained first); a difference the interpreter must have is listed in `compiler/tools/evaldiff.olang`'s `Expected`
 (or, never ending interpreted, `Skipped`) with its reason - and fixed in `compiler/eval.olang`/`interp.olang` wherever it
@@ -107,7 +107,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | every `olang MODE -option` written in a README, SPEC.md or `editors/` **[checked]** | an unknown option or one the mode does not take is reported |
 | `compiler/doc.olang` (`Deprecation`, `DeprecatedNames`) / `api.olang` / `session.olang` (`DeprecatedUses`, `AddDep`) / `lsp.olang` | the `Deprecated:` doc-comment convention (L4b): doc's mark, hover, completion tag, use hints, api's `deprecated` row; SPEC L4b/B14/B15/B21, `checks` scenario `apicaps` |
 | `compiler/mcp.olang` / `lsp.olang` / `session.olang` | when the mode runs the analysis (`-target`, `-define`, `-update` pass through) |
-| `compiler/build.olang`, `target.olang` | the option's effect; the object-name hash if it changes code (`.quick`, `.debug`, B4) |
+| `compiler/build.olang`, `target.olang` | the option's effect; the object-name hash if it changes code (`.quick`, `.debug`, `.checked`, B4); `-quick` and `-checked` apply to build, compile, running a file, interpret, the prompt, jupyter, notebook (`compiler/cells.olang` `Config`, `jupyter.olang` `Install`) |
 | `tools/cli_words.olang` | rewrites old spellings; add to it only if an option is renamed |
 | `compiler/goldens/drv.txt` (`make drvgold`), `compiler/tools/drvdiff.olang` | the driver's command-line behaviour |
 | `compiler/prompt.olang` (`Session`, `pieces`, `HelpText`), `checks/fixtures/prompt/session.want`, `interp.want` | the prompt (B22): what a cell may hold, its commands, and the session the checks scenario `prompt` replays - a change to the build's diagnostics or `$` renderings changes `session.want` (and `interp.want`, its interpreted cells) |
@@ -115,7 +115,7 @@ call), `eval.olang`'s `enter` (the same, `frame.Tail`) and its `tail`.
 | `compiler/lineedit.olang`, `compiler/paint.olang`, the checks scenario `promptkeys` | the prompt's editing on a terminal (B22): a key, a setting or the history's file changed changes SPEC B22's list, `HelpText` (and `session.want`, which prints it), README "Try it"; paint colours by `token.Tok`, so a token kind added (a keyword) is coloured by its spelling with nothing to change |
 | `compiler/jupyter.olang`, `checks/fixtures/jupyter/` (`client.olang`, `session.want`), `tests/display.olang` | the notebook kernel (B23) drives the prompt's `Session.Cell`: a change to what a cell shows or says, or to the prelude's `Display`, changes `session.want`; `README.md` "Notebooks" quotes `jupyter -install` |
 | `compiler/notebook.olang`, `checks/fixtures/notebook/` (`in.ipynb`, `want.ipynb`, `want_continue.ipynb`) | `notebook run` (B24) reuses jupyter.olang's `Capture`, `Data`, `Q` and prompt.olang's `Session.Cell`: a change to what a cell shows or says changes the two `want` notebooks as well as `session.want`; `README.md` "Notebooks" quotes `notebook run` |
-| `compiler/olang.olang` `Passes.Interpret`, `build.olang` `Interpret`, `InterpretTests` | `interpret` (B3e) builds as a file run does, checked (`Config.Checked`: the Lowerer's checks, the emitter's trace, the record key and the `.checked` name), into `build.CacheDir("run")`; `-evaluate` runs the evaluator, and beside `test` an option saying how to build is refused (`buildWord`); the checks scenarios `interp` (the evaluator) and `interpbuilt` |
+| `compiler/olang.olang` `Passes.Interpret`, `build.olang` `Interpret`, `InterpretTests` | running a file (B3g) builds as `build` does into `build.CacheDir("run")` (`-checked`: `Config.Checked`, the Lowerer's checks, the emitter's trace, the record key and the `.checked` name); `run` (B3e) is `build` plus running; `OLANG_EVALUATE` (read in `CommandLine.Parse`) runs the evaluator; the checks scenarios `interp` (the evaluator) and `interpbuilt` |
 | `editors/nvim/` (`compiler/olang.vim` makeprg, `lua/olang/init.lua`), `editors/README.md` | commands the plugin runs |
 | `docs/profiling.md`, `docs/install.md`, `makefile` | commands they quote |
 
@@ -162,7 +162,7 @@ source of their own and the help after every note (B11: `diagmsg.Msg`'s `Note` a
 `Items`); `compiler/lsp.olang` (relatedInformation, help as `help: ...`), `compiler/mcp.olang` (`notes`, `"kind":"help"`),
 `editors/nvim/compiler/olang.vim` (`help:` rows) and `compiler/tools/diaggold.olang` (reads them back) change with the rows.
 
-A diagnostic said as a warning under `interpret` (B3e: D3b, M5a) is named in `compiler/diag.olang` `Untidy`; the row
+A diagnostic said as a warning under running a file (B3g: D3b, M5a) is named in `compiler/diag.olang` `Untidy`; the row
 `warning[RULE]` is B11's, and `editors/nvim/compiler/olang.vim`'s errorformat reads it.
 
 ## A built-in type or supplied method

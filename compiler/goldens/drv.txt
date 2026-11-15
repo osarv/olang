@@ -39,27 +39,23 @@
 | status 1
 === olang test -output o main.olang
 | stdout:
-| olang: error[B1]: -output applies to build, compile, bindgen, profile and notebook, not to test
+| olang: error[B1]: -output applies to build, compile, run, bindgen, profile and notebook, not to test
 | stderr:
 | status 1
 === olang format -debug a.olang
 | stdout:
-| olang: error[B1]: -debug applies to running a file, build, compile and test, not to format
+| olang: error[B1]: -debug applies to running a file, build, compile, test and run, not to format
 | stderr:
 | status 1
-=== olang interpret -race p.olang
+=== olang run -race p.olang
 | stdout:
-| olang: error[B1]: -race applies to running a file, build, compile and test, not to interpret
+| p.olang: error: cannot open this file
+| compilation failed with 1 error
 | stderr:
 | status 1
 === olang build -bench main.olang
 | stdout:
 | olang: error[B1]: -bench applies to test, not to build
-| stderr:
-| status 1
-=== olang test -bench -evaluate main.olang
-| stdout:
-| olang: error[B3e]: -evaluate builds nothing, and -bench says how to build - give one
 | stderr:
 | status 1
 === olang test -bench -fuzz x main.olang
@@ -71,7 +67,7 @@
 | status 1
 === olang help -debug
 | stdout:
-| olang: error[B1]: -debug applies to running a file, build, compile and test, not to help
+| olang: error[B1]: -debug applies to running a file, build, compile, test and run, not to help
 | stderr:
 | status 1
 === olang explain -check B1
@@ -147,11 +143,18 @@
 | olang: help: name the other architecture's CPU after ':', or none for its default
 | stderr:
 | status 1
-=== olang interpret -target aarch64-linux-gnu main.olang
+=== olang -target aarch64-linux-gnu main.olang
 | stdout:
-| olang: error[B12a]: interpret runs on this machine, not on '-target aarch64-linux-gnu'
+| olang: error[B12a]: running a file runs on this machine, not on '-target aarch64-linux-gnu'
 | olang: note: '-target aarch64-linux-gnu' is another architecture or system
-| olang: help: build, compile and test build for it
+| olang: help: build, compile, test and run build for it
+| stderr:
+| status 1
+=== olang run -target aarch64-linux-gnu:native main.olang
+| stdout:
+| olang: error[B12]: '-target aarch64-linux-gnu:native' names native with another architecture's CPU
+| olang: note: native is this machine's CPU
+| olang: help: name the other architecture's CPU after ':', or none for its default
 | stderr:
 | status 1
 === olang build -define X main.olang
@@ -230,9 +233,9 @@
 | olang: error[B1]: test needs a file
 | stderr:
 | status 1
-=== olang interpret
+=== olang run
 | stdout:
-| olang: error[B1]: interpret needs a file
+| olang: error[B1]: run needs a file
 | stderr:
 | status 1
 === olang format
@@ -243,13 +246,13 @@
 === olang bogus
 | stdout:
 | olang: error[B1]: 'bogus' is not a mode
-| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run
+| olang: note: the modes are build, compile, test, run, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang main.txt
 | stdout:
 | olang: error[B1]: 'main.txt' is not a mode
-| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run
+| olang: note: the modes are build, compile, test, run, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang -debug main.txt
@@ -267,11 +270,11 @@
 | usage: olang MODE [OPTION...] FILE...   or   olang [OPTION...] FILE.olang [ARGUMENT...]
 | 
 | modes:
-|   FILE.olang  builds the program FILE.olang is the root of, as build -quick does, and runs it with the arguments after the file
+|   FILE.olang  builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file (B3g)
 |   build       builds one program, FILE.olang its root module, into build/ (B3)
 |   compile     compiles one module to an object, linking nothing (B2)
 |   test        runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked (B3a, E16g)
-|   interpret   builds the program as -quick does, indexes, divisions and shifts checked, into the cache, and runs it with the arguments after the file (B3e)
+|   run         builds the program as build does, into build/ (B3), and runs it with the arguments after the file (B3e)
 |   format      rewrites each file in olang's one layout (B13)
 |   explain     prints a rule of the specification (B11a), a top-level item as the compiler sees it (B11b), or a function's code as build compiles it (B11d)
 |   help        lists the modes, or a mode's options
@@ -280,12 +283,12 @@
 |   mcp         serves the Model Context Protocol on the standard input and output, for agents (B16)
 |   fix         rewrites old code to the language of today: every migration tool of tools/, in the order the changes were made (B17)
 |   bindgen     writes a C header's declarations as olang declares them, read by clang (X16)
-|   profile     builds the program with a sampling profiler, runs it with the arguments after the file, and reports where its time went, with a flame graph (B20; interpret's runs are not profiled)
+|   profile     builds the program with a sampling profiler, runs it with the arguments after the file, and reports where its time went, with a flame graph (B20)
 |   api         lists what a module's exported interface gained, lost and changed between two versions - commits or directories - each change marked as breaking importers or not (B21)
 |   jupyter     serves a Jupyter kernel on the ports CONNECTION_FILE names, each notebook cell run as the prompt runs one (B23)
 |   notebook    runs the code cells of a Jupyter notebook in order, as the prompt runs cells, and writes the notebook back with their outputs as Jupyter stores them (B24)
 | 
-| 'olang help MODE' lists a mode's options; 'olang help run' those of running a file.
+| 'olang help MODE' lists a mode's options; 'olang help file' those of running a file.
 | 'olang' with nothing after it opens the prompt, which builds and runs what is typed as it is typed (B22).
 | 
 | environment:
@@ -312,12 +315,13 @@
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -library           builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
+|   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
 | stderr:
 | status 0
-=== olang help run
+=== olang help file
 | stdout:
 | usage: olang [OPTION...] FILE.olang [ARGUMENT...]
-| builds the program FILE.olang is the root of, as build -quick does, and runs it with the arguments after the file
+| builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file (B3g)
 | 
 | options:
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
@@ -328,6 +332,7 @@
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
+|   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
 | stderr:
 | status 0
 === olang help compile
@@ -344,6 +349,7 @@
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
+|   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
 | stderr:
 | status 0
 === olang help test
@@ -362,20 +368,26 @@
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
 |   -fuzz NAME         fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)
 |   -fuzztime SECONDS  with -fuzz: stops fuzzing after SECONDS (B19)
-|   -evaluate          runs the program, or the tests, by compile-time evaluation instead of building them - much slower, for checking the evaluator (B3e)
 |   -bench             measures the benchmarks the tests run (std/bench): time, allocations and bytes per call (B19b)
+|   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
 | stderr:
 | status 0
-=== olang help interpret
+=== olang help run
 | stdout:
-| usage: olang interpret [OPTION...] FILE.olang [ARGUMENT...]
-| builds the program as -quick does, indexes, divisions and shifts checked, into the cache, and runs it with the arguments after the file (B3e)
+| usage: olang run [OPTION...] FILE.olang [ARGUMENT...]
+| builds the program as build does, into build/ (B3), and runs it with the arguments after the file (B3e)
 | 
 | options:
+|   -output PATH       writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)
+|   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
+|   -race              builds with the data race detector (B2b)
+|   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
-|   -evaluate          runs the program, or the tests, by compile-time evaluation instead of building them - much slower, for checking the evaluator (B3e)
+|   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
+|   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
+|   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
 | stderr:
 | status 0
 === olang help format
@@ -445,7 +457,7 @@
 === olang help nope
 | stdout:
 | olang: error[B1]: 'nope' is not a mode
-| olang: note: the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run
+| olang: note: the modes are build, compile, test, run, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang help build test
@@ -473,16 +485,16 @@
 | 
 | ```
 | command   ::= "olang" [ mode-word ] { option } { argument }
-| mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
+| mode-word ::= "build" | "compile" | "test" | "run" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
 |             | "bindgen" | "profile" | "api" | "jupyter" | "notebook"
-| option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
+| option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sanitize" | "-target" NAME
 |             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-evaluate" | "-bench" | "-install" | "-continue"
+|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-install" | "-continue"
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
-| an error listing the modes. Nothing at all after `olang` opens the prompt (B22). After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
-| `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
+| an error listing the modes. Nothing at all after `olang` opens the prompt (B22). After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `run` (B3e), `format` (B13),
+| `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help file` running a file's), `doc`
 | (B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20), `api` (B21), `jupyter` (B23) and `notebook` (B24). An
 | **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 | the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
@@ -490,26 +502,26 @@
 | 
 | | option | applies to | rule |
 | |---|---|---|
-| | `-output PATH` | build, compile, bindgen, profile, notebook | B3h, §11 X16, B20, B24 |
-| | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
-| | `-quick` | running a file, build, compile, test, profile, explain | B2g, B20, B11d |
-| | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
-| | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
+| | `-output PATH` | build, compile, run, bindgen, profile, notebook | B3h, §11 X16, B20, B24 |
+| | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test, run | B2c, B2b, B2f |
+| | `-quick` | running a file, build, compile, test, profile, explain, run, the prompt, jupyter, notebook | B2g, B20, B11d |
+| | `-checked` | running a file, build, compile, test, run, the prompt, jupyter, notebook | E16g |
+| | `-target NAME` | running a file, build, compile, test, run, explain, doc, lsp, mcp | B12 |
+| | `-define Name=value`, `-update` | running a file, build, compile, test, run, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
 | | `-check` | format, fix | B13, B17 |
 | | `-html DIR` | doc | B14 |
 | | `-library` | build | §11 X14 |
-| | `-memory` | running a file, build, test | B18 |
+| | `-memory` | running a file, build, test, run | B18 |
 | | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
-| | `-evaluate` | test, interpret | B3e |
 | | `-bench` | test | B19b |
 | | `-caps` | explain | B11c |
 | | `-asm`, `-ir` | explain | B11d |
 | | `-install` | jupyter | B23 |
 | | `-continue` | notebook | B24 |
 | 
-| `build`, `compile`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
+| `build`, `compile`, `run`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
 | file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
-| `-html`) any number, `lsp` and `mcp` none; for running a file, for `interpret` and for `profile`
+| `-html`) any number, `lsp` and `mcp` none; for running a file, for `run` and for `profile`
 | every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
 | spellings: a flag of one character is an unknown option.
 | stderr:
@@ -569,7 +581,7 @@
 | status 1
 === olang mcp -debug
 | stdout:
-| olang: error[B1]: -debug applies to running a file, build, compile and test, not to mcp
+| olang: error[B1]: -debug applies to running a file, build, compile, test and run, not to mcp
 | stderr:
 | status 1
 === olang doc -check main.olang
@@ -617,7 +629,7 @@
 | compilation failed with 1 error
 | stderr:
 | status 1
-=== olang interpret W/none.olang a b
+=== olang run W/none.olang a b
 | stdout:
 | W/none.olang: error: cannot open this file
 | compilation failed with 1 error
@@ -678,14 +690,14 @@
 | 7
 | stderr:
 | status 0
-=== in a directory of programs: olang interpret args.olang x y
+=== in a directory of programs: olang run args.olang x y
 | stdout:
 | args.olang
 | x
 | y
 | stderr:
 | status 0
-=== in a directory of programs: olang interpret exit.olang
+=== in a directory of programs: olang run exit.olang
 | stdout:
 | stderr:
 | status 3

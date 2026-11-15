@@ -256,7 +256,7 @@ fn optionsOf(help String&) Vec<String&> {
 }
 
 # a mode as SPEC B1's table names it
-fn specMode(mode String&) String { return "running a file" if mode == "run" else $mode }
+fn specMode(mode String&) String { return "running a file" if mode == "file" else $mode }
 
 # what the compiler says about itself: the modes, the option words, and for each option the modes it applies to
 type CommandLine struct() {
@@ -270,7 +270,7 @@ fn CommandLine.commandLine(compiler String&) CommandLine {
     c.Modes = modesOf(toolkit.Run(Array<String&>[compiler, "help"]).Stdout)
     names := Vec<String&>()
     for m in c.Modes { names.Push(m) }
-    names.Push("run")
+    names.Push("file")
     for m in names {
         for o in optionsOf(toolkit.Run(Array<String&>[compiler, "help", m]).Stdout): addOption(c, o, specMode(m))
     }
@@ -380,12 +380,12 @@ fn checkCommand(c CommandLine&, where String&, command String&, p mut Problems&)
     first := f[0].TrimStart().Replace("[", "")
     mode := ""
     if has(c.Modes, first) { mode = $first }
-    else if first.StartsWith("-") or isPlaceholder(first) or first == "run" { mode = "run" }
+    else if first.StartsWith("-") or isPlaceholder(first) or first == "file" { mode = "file" }
     else {
         p.Add($where " writes `olang " $first "`, and " $first " is no mode")
         return
     }
-    own := mode == "run" or mode == "interpret" or mode == "profile"
+    own := mode == "file" or mode == "run" or mode == "profile"
     for i in range 1, f.Len() {
         w := f[i].Replace("[", "").Replace("]", "").Replace(",", "").Replace(".", "").Replace(")", "")
         if own and (w.Contains("olang") or w.StartsWith("ARG") or w.StartsWith("FILE")) { break }
