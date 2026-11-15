@@ -55,7 +55,7 @@
 | status 1
 === olang build -bench main.olang
 | stdout:
-| olang: error[B1]: -bench applies to test, not to build
+| olang: error[B1]: -bench applies to running a file, test and run, not to build
 | stderr:
 | status 1
 === olang test -bench -fuzz x main.olang
@@ -334,7 +334,9 @@
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
+|   -bench             measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; running a file, its build and run time, user and system time and peak memory (B19b)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
+|   -runs COUNT        with -bench: runs the program N times, the later runs' output discarded, and gives the run time as the median with its spread (B19b)
 | stderr:
 | status 0
 === olang help compile
@@ -370,7 +372,7 @@
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
 |   -fuzz NAME         fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)
 |   -fuzztime SECONDS  with -fuzz: stops fuzzing after SECONDS (B19)
-|   -bench             measures the benchmarks the tests run (std/bench): time, allocations and bytes per call (B19b)
+|   -bench             measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; running a file, its build and run time, user and system time and peak memory (B19b)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
 | stderr:
 | status 0
@@ -389,7 +391,9 @@
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
+|   -bench             measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; running a file, its build and run time, user and system time and peak memory (B19b)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
+|   -runs COUNT        with -bench: runs the program N times, the later runs' output discarded, and gives the run time as the median with its spread (B19b)
 | stderr:
 | status 0
 === olang help format
@@ -491,7 +495,7 @@
 |             | "bindgen" | "profile" | "api" | "jupyter" | "notebook"
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sanitize" | "-target" NAME
 |             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-install" | "-continue"
+|             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-runs" COUNT | "-install" | "-continue"
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -515,7 +519,8 @@
 | | `-library` | build | §11 X14 |
 | | `-memory` | running a file, build, test, run | B18 |
 | | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
-| | `-bench` | test | B19b |
+| | `-bench` | running a file, test, run | B19b |
+| | `-runs COUNT` | running a file, run | B19b |
 | | `-caps` | explain | B11c |
 | | `-asm`, `-ir` | explain | B11d |
 | | `-install` | jupyter | B23 |

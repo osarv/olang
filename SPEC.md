@@ -8112,7 +8112,7 @@ beginning with `-` that is no option is an error:
 | `-memory` | running a file, build, test, run | B18 |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
 | `-bench` | running a file, test, run | B19b |
-| `-runs COUNT` | running a file, run (with `-bench`) | B19b |
+| `-runs COUNT` | running a file, run | B19b |
 | `-caps` | explain | B11c |
 | `-asm`, `-ir` | explain | B11d |
 | `-install` | jupyter | B23 |
