@@ -100,3 +100,12 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-14	checked	opus	medium	merged, master 52c3ff94 (verify: stale interp case fixed, 2 OOM kills pass alone)						checked builds: index/div/shift checks in test/debug/interpret
 2026-11-14	cells	opus	high	merged, master 52c3ff94 (verify: stale interp case fixed, 2 OOM kills pass alone)						compiled notebook/prompt cells
 2026-11-14	testmem	opus	medium	merged, master 374c1e3c (verify passed on the tip)						test-build memory peaks before v1
+2026-11-15	oannport	opus	high	done, wt-oannport 81aaba7 (core 12 modules pass; merged all)						oann round 1: catch up to olang v1 (wt-oannport)
+2026-11-15	oanndata	sonnet	high	done, pushed wt-oanndata 8cbba30 (7 modules pass, bench ported; 2 olang bugs)						oann round 1b: sparse, store, tokenizer, datasets, script ports, repro re-check (wt-oanndata)
+2026-11-15	oanncirc	sonnet	high	done, pushed wt-oanncirc (circuit 23, board 14 pass)						oann round 1c: circuit, board (wt-oanncirc)
+2026-11-15	oannagent	sonnet	high	done, pushed wt-oannagent (consolidator 6, agent 15 pass)						oann round 1d: consolidator, agent (wt-oannagent)
+2026-11-15	fixbugs	sonnet	medium	merged, master 25659695 (tool tests pass)						olang: null_migrate crash, E11b join message (from oann)
+2026-11-15	eqnull	opus	high	running						olang: null test by == null, is removed (the user, reversing E10c)
+2026-11-15	oannex	sonnet	high	running						oann round 1e: examples (wt-oannex)
+2026-11-15	oannbench	sonnet	high	running						oann round 1f: bench programs (wt-oannbench)
+2026-11-15	spinner	sonnet	high	running						olang: braille spinner wherever we wait, the installer too
