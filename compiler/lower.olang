@@ -534,8 +534,8 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     entryRoots Map<I64, mir.Operand>   # O23a: the plan's roots read as the body is entered (Plan.AtEntry), by index
     retiring Bool = false            # a retire() being lowered past its O8d guard (retire)
     tryRel I64 = -1                 # a try statement with clauses releasing its value on its success path (O8d): -1 not,
-                                    # else 1 + the place's guard (free.Guard) << 1, and 0 the value or 1 the handle's
-                                    # state (free.IsHandle)
+                                    # else 1 + the place's guard (free.Guard) << 2, 2 where the place is a part place
+                                    # (free.PartPlace), and 0 the value or 1 the handle's state (free.IsHandle)
     walkSite typed.SiteId = typed.SiteId(-1)    # D18e: the generator call whose walk a for-in makes and finishes here
     # D9h: the call sites whose array value result is read where it stands - its consumer only reads it before
     # the statement ends - or handed back as it is by a return (a view of this body's arguments): a call of a function
@@ -1025,6 +1025,8 @@ fn (ln mut lowering&) regionOf(site I64) mir.ScopeRef {
     }
     h := ln.temp(mir.I64T, sp)
     rv := mir.Rvalue.Slots(parent) if kind == 3 else mir.Rvalue.Region(parent)
+    # (O8f: an array a value holds by value - a Vec's buffer - in a part region, which its let-go finds from its address)
+    if kind == 1 and ln.freeing and ln.L.Free!.PartSite(I64(ln.B.Id), site): rv = mir.Rvalue.Part(parent)
     ln.guarded(h, ln.plan.RegionGuard[site], rv, parent, sp)
     ln.regions.Put(site, h)
     ln.regionPar.Put(site, parent)
@@ -1124,10 +1126,11 @@ fn (ln mut lowering&) regionSite(x typed.Expr&) I64 {
 
 # what a let-go releases where a place is decided sole: by the fields that reach it from the holder, and a handle's
 # reference, field 0
-type relPath struct(At I64, Path Array<I64>, Slot Bool = false) {
+type relPath struct(At I64, Path Array<I64>, Slot Bool = false, Part Bool = false) {
     At
     Path
     Slot        # a text place's value built in a slot (free.SlotPlace): put back on its list, no region released
+    Part        # an array place's value built in a part region (free.PartPlace): found from its address, O8f
 }
 
 # the candidate places a place's let-go releases where each is decided sole: the place itself, or the leaves of a
@@ -1139,13 +1142,20 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<relPath
     # an element given a value lets go of nothing: the program's copies between elements are not known positions, and
     # the prelude's chunks are filled with the very value pushed (docs/memory.md 2.6 item 7) - only a vacate does; but
     # text elements, each value its own slot (O8f)
-    if assign and p == typed.Lvalue.Elem and not fr.SlotPlace(fr.PlaceOf(p)): return out
+    # (and an element owning storage only in part places - a Vec<I64> - its parts, O8f's gap 17)
+    if assign and p == typed.Lvalue.Elem and not fr.SlotPlace(fr.PlaceOf(p)) {
+        if not fr.PartsOnly(p.Type()): return out
+        for r in ln.leafPaths(p.Type()) {
+            if r.Part: out.Push(r)
+        }
+        return out
+    }
     k := fr.PlaceOf(p)
     # (an owner local given another value: its place's old value, held whole)
     if p == typed.Lvalue.Local and assign { k = fr.LocalPlaceOf(I64(ln.B.Id), I64(p.id)) }
     g := ln.guardOf(k)
     if k >= 0 and g != free.NotSole {
-        out.Push(relPath(g, Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0), fr.SlotPlace(k)))
+        out.Push(relPath(g, Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0), fr.SlotPlace(k), fr.PartPlace(k)))
         return out
     }
     return ln.leafPaths(p.Type())
@@ -1176,7 +1186,7 @@ fn (ln mut lowering&) leafPaths(ty types.TypeId) Vec<relPath> {
         g := ln.guardOf(lf.PlaceId)
         if g == free.NotSole: continue
         if not fr.IsHandle(lf.PlaceId) {
-            out.Push(relPath(g, lf.Path, fr.SlotPlace(lf.PlaceId)))
+            out.Push(relPath(g, lf.Path, fr.SlotPlace(lf.PlaceId), fr.PartPlace(lf.PlaceId)))
             continue
         }
         path := Array<I64>(lf.Path.Len() + 1)
@@ -1195,7 +1205,9 @@ fn (ln mut lowering&) releaseAt(l mir.LocalId, paths Vec<relPath>&, sp source.Sp
         after := ln.whenSole(r.At, true, sp) if r.At >= 0 else mir.NoBlock
         q := pl(mir.Base.Local(l))
         for i in r.Path { q = ln.with(q, mir.Proj.Field(i)) }
-        ln.emit(mir.Stmt.ReleaseSlot(sp, ln.mk(q)) if r.Slot else mir.Stmt.Release(sp, ln.mk(q)))
+        lv := ln.mk(q)
+        rel := mir.Stmt.ReleasePart(sp, lv) if r.Part else mir.Stmt.Release(sp, lv)
+        ln.emit(mir.Stmt.ReleaseSlot(sp, lv) if r.Slot else rel)
         if after != mir.NoBlock: ln.joinAt(after)
     }
 }
@@ -1845,7 +1857,7 @@ fn (ln mut lowering&) valueArrayStore(target typed.Lvalue&, dst mir.Lvalue, v mi
     ln.end(mir.Term.Branch(mir.Operand.Copy(mir.Lvalue.L(g)), yes, no))
     ln.start(yes)
     decided Vec<relPath>
-    for r in rel { decided.Push(relPath(-1, r.Path, r.Slot)) }
+    for r in rel { decided.Push(relPath(-1, r.Path, r.Slot, r.Part)) }
     ln.replaceStore(target, dst, v, value, decided, sp)
     ln.joinAt(after)
     ln.start(no)
@@ -2801,7 +2813,7 @@ fn (ln mut lowering&) mentions(lv mut liveness&, bi I64, i I64) {
 # where the vacate let go of them (a Map entry's key text released beside the node its value names)
 fn (ln mut lowering&) ownRelease(s mir.Stmt&) Bool {
     match s {
-        case mir.Stmt.Release(_, p), mir.Stmt.ReleaseSlot(_, p) {
+        case mir.Stmt.Release(_, p), mir.Stmt.ReleaseSlot(_, p), mir.Stmt.ReleasePart(_, p) {
             if baseLocal(p) < 0: return false
             for pr in ln.projsOf(p) {
                 if pr != mir.Proj.Field: return false
@@ -3517,7 +3529,7 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(slot), mir.Rvalue.Use(v)))
         if relK >= 0 {
             rel Vec<relPath>
-            rel.Push(relPath((relK >> 1) - 1, Array<I64>[0] if (relK & 1) == 1 else Array<I64>(0)))
+            rel.Push(relPath((relK >> 2) - 1, Array<I64>[0] if (relK & 1) == 1 else Array<I64>(0), false, (relK & 2) != 0))
             ln.releaseAt(slot, rel, sp)
         }
     }
@@ -3785,14 +3797,15 @@ fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
                 g := ln.L.Free!.Guard(I64(ln.B.Id), k)
                 if g == free.NotSole: k = -1
                 handle := k >= 0 and ln.L.Free!.IsHandle(k)
+                part := k >= 0 and ln.L.Free!.PartPlace(k)
                 # a try statement with clauses has its value only on its success path - where a clause takes the
                 # error there is nothing to release - so the try releases it there, before the paths join
                 if k >= 0 and clausedTry(x) {
-                    ln.tryRel = ((g + 1) << 1) | (1 if handle else 0)
+                    ln.tryRel = ((g + 1) << 2) | (2 if part else 0) | (1 if handle else 0)
                     ln.val(x)
                     return
                 }
-                if k >= 0 { rel.Push(relPath(g, Array<I64>[0] if handle else Array<I64>(0), ln.L.Free!.SlotPlace(k))) }
+                if k >= 0 { rel.Push(relPath(g, Array<I64>[0] if handle else Array<I64>(0), ln.L.Free!.SlotPlace(k), part)) }
             }
         }
     }
