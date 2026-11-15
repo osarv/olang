@@ -2147,6 +2147,30 @@ e31dcopyshape.olang:4:18: error[E31d]: this Copy has the wrong shape
 e31dcopyshape.olang:4:18: note: Copy takes nothing but its receiver, read through a read-only reference, gives a new tree and cannot fail
 e31dcopyshape.olang:4:18: help: write 'fn (x tree&) Copy() tree'
 compilation failed with 1 error
+=== e31esetatfixed.olang
+e31esetatfixed.olang:9:13: error[E31]: Box declares At but not SetAt, which x[i] = v calls
+    9 |     b[1, 2] = 3
+      |             ^
+compilation failed with 1 error
+=== e31esetslicecount.olang
+e31esetslicecount.olang:8:6: error[E16f]: Grid's SetSlice takes 2 axes, 3 written
+    8 |     g[0:2, :, 1] = 4
+      |      ^
+e31esetslicecount.olang:8:6: help: write one item per axis, or declare 'SetSlice(axes ...Axis, v E)'
+compilation failed with 1 error
+=== e31esetslicenoaxis.olang
+e31esetslicenoaxis.olang:10:5: error[E16f]: a slice is not stored into (E16a)
+   10 |     g[0:2, :] = 4
+      |     ^~~~~~~~~
+e31esetslicenoaxis.olang:10:5: help: store through its elements, or declare SetSlice (E31e), which a store into a slice calls with the axes, then the value
+compilation failed with 1 error
+=== e31esetvaluefirst.olang
+e31esetvaluefirst.olang:7:17: error[E31e]: SetAt's value is its last parameter, after a variadic one
+    7 | fn (b mut Box&) SetAt(v I64, i ...I64) { b.n = v }
+      |                 ^~~~~
+e31esetvaluefirst.olang:7:17: note: a store passes the indexes, then the value
+e31esetvaluefirst.olang:7:17: help: write 'fn (x mut T&) SetAt(i ...I64, v E)'
+compilation failed with 1 error
 === e31operatorfails.olang
 e31operatorfails.olang:14:19: error[E31]: this operator calls Minus, which can fail - write 'try' before the expression
    14 |     m := Money(3) - Money(1)
