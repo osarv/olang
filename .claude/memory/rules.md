@@ -98,7 +98,7 @@ slimming of 2026-11-08").
 
 # Verification
 
-- **No full verify for small changes, once the compiler passes the full gates (the user, 2026-11-14: "dont rerun the entire verify machine, we got the compiler to work now. any small change doesnt need the 2 hour check", "if we get it to pass that is")**: interface work, std additions, messages, tools, editors and docs are checked by their targeted tests, the scenarios they touch, `make quick` and the goldens they move; the full `make verify` and the gates only for changes to the compiler's semantics, scopes, memory or code generation, and before a release tag.
+- **No full verify for small changes, once the compiler passes the full gates (the user, 2026-11-14: "dont rerun the entire verify machine, we got the compiler to work now. any small change doesnt need the 2 hour check", "if we get it to pass that is")**: interface work, std additions, messages, tools, editors and docs are checked by their targeted tests, the scenarios they touch, `make quick` and the goldens they move; the full `make verify` and the gates only for changes to the compiler's semantics, scopes, memory or code generation, and before a release tag. **Bug fixes batch (the user, 2026-11-15: "we dont wanna do the full 2hour verify every time we fix one bug")**: a bug fix, even in the checker or code generation, is merged on its targeted tests; one full verify runs over a batch of merged fixes (riding a language change's verify where one is due, or before the tag), never one per fix.
 
 # Build memory
 
