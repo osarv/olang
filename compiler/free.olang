@@ -2937,9 +2937,16 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
     if not w.Final or w.quiet > 0 { return }
     owners Vec<I64>
     arrs Vec<I64>
+    leafIds Vec<I64>
     for lf in lvs {
+        leafIds.Push(lf.PlaceId)
         if f.IsOwner(lf.PlaceId): owners.Push(lf.PlaceId)
         if f.arr[lf.PlaceId] and not f.IsOwner(lf.PlaceId): arrs.Push(lf.PlaceId)
+    }
+    # (the places the copy's parts hold in turn - a Vec part's buffer, an array part's text elements - are given values
+    # with no store into them, as at any copy: untracked, which the call this copy is exempt from would have said)
+    for k in f.heldPlaces(x.Type()) {
+        if k not in leafIds: f.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by a call's value copied: '" + $w.text(x.Span()) + "'")
     }
     # an array leaf that is the only storage the copy owns (a Map entry's key text beside a reference) is made for as an
     # owner leaf is: built in its region, released where the entry is removed
