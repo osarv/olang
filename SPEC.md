@@ -785,7 +785,9 @@ a length paired with storage elsewhere, or fixed storage laid out in place with 
 elements into the storage it has when the length is the same - whatever the new value is: another array, a literal,
 a call's result - so a borrow taken earlier (a slice, a reference, E12c) sees them. When the length differs the
 target is given new storage, and an earlier borrow goes on naming the old storage, unchanged; it stays valid until
-its scope closes. A struct or enum value is assigned in place the same way, field by field, so a reference to one of
+its scope closes. A value of an immut type (T13a: `String`) is never written into: it is given the new value's storage
+- a copy of it where it is existing storage - whatever the lengths, and an earlier borrow goes on naming the old value,
+unchanged. A struct or enum value is assigned in place the same way, field by field, so a reference to one of
 its fields sees the new value.
 
 **T11a.** A reference to an `Array<T>` takes its length from the array it points to, every time it is assigned
