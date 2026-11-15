@@ -129,6 +129,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
                                        # beside it when it is done
     sawVariadic Bool = false
     spreadOk Bool = false     # D8g: the parameter list being read may hold a variadic parameter - a signature's
+    valueAfter Bool = false   # E31e: the parameter list being read is a SetAt's or SetSlice's - its value may follow a variadic one
 }
 
 # ---- reading tokens ----
@@ -1059,7 +1060,10 @@ fn (p mut Parser&) function() ast.Func& ? Fail {
     tps Array<ast.TypeParam&>& = Array<ast.TypeParam&>(0)
     if p.sees(token.Tok.Lt) { tps = try p.typeParams() }
     if recv != null and recv.Ty != null { p.receiverVars(recv.Ty!, false) }
+    nm := p.names.Text(name)
+    p.valueAfter = recv != null and (nm == "SetAt" or nm == "setAt" or nm == "SetSlice" or nm == "setSlice")
     s := try p.sig(false, false, true)
+    p.valueAfter = false
     braced := p.sees(token.Tok.LBrace)
     body := try p.block() catch {
         if braced {
@@ -1347,6 +1351,8 @@ fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>& ? Fail {
     defer { p.item = wasItem }
     ok := p.variadicOk
     p.variadicOk = false
+    va := p.valueAfter
+    p.valueAfter = false
     for not p.sees(token.Tok.RParen) {
         # X21: "..." last, in an extern's list - the rest of the arguments C's variable ones
         if ok and p.ellipsis() {
@@ -1361,7 +1367,7 @@ fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>& ? Fail {
     p.brackets--
     try p.want(token.Tok.RParen)
     ps := gather(p.prms, from)
-    p.spreadRules(ps, ok, p.spreadOk)
+    p.spreadRules(ps, ok, p.spreadOk, va)
     p.spreadOk = false
     return ps
 }
@@ -1369,10 +1375,12 @@ fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>& ? Fail {
 # D8g: a variadic parameter is a function's (a method's, a lambda's, a function type's), never an extern's - whose
 # variable arguments are C's "..." - a constructor's or a case's; one of them, with no default, only defaulted
 # parameters after it (given by name)
-fn (p mut Parser&) spreadRules(ps Array<ast.Param&>&, inExtern Bool, allowed Bool) {
+fn (p mut Parser&) spreadRules(ps Array<ast.Param&>&, inExtern Bool, allowed Bool, valueAfter Bool) {
     seen := -1
     for i in range ps.Len() {
         ty := ps[i].Ty
+        # E31e: a SetAt's or SetSlice's value, its last parameter, follows its variadic one
+        if seen >= 0 and ps[i].Dflt == null and valueAfter and i == ps.Len() - 1 and i == seen + 1: continue
         if seen >= 0 and ps[i].Dflt == null {
             p.report(ps[i].Sp.Start, ps[i].Sp.End, msgs.VariadicNotLast())
             return

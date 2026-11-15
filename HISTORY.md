@@ -37519,3 +37519,28 @@ make the buffer grow to n); `All` grows the buffer to the rest. Tests in std/io.
 numbers of several types, the count-then-numbers sample, ParseError and Exhausted, Bytes at the end, failing reads.
 
 D19: the floats (F16, BF16, F32, F64), the F8 types and Bool got `T.Parse(t)` builders in the prelude (2026-11-15, the user's go-ahead), beside the integers'. A float reads the text as `ParseFloat` does and rounds to the type, failing with Overflow where a finite number becomes infinite in it; Bool reads "true" or "false" exactly (Empty for no text, else Invalid). std/csv's `value<V>`, which special-cased Bool and floats (there is no `Reader.Next<T>` in std/io; csv held the match), now calls `Parse` for Bool and every number. Tests in std/prelude/tests/text.olang, with top-level asserts the evaluator decides.
+### 2026-11-15, any number of indexes: variadic At and SetAt, and SetSlice (E31e)
+
+Found building oann's Tensor<T> (rank up to 6, so a rank known only at run time): `At(i ...I64)` was the operator for
+`x[i]` only, and `x[i, j]` on it was "declares SetAt but not At", so the tensor read with `t.Get(i, j)` and wrote with
+`t.Set(v, i, j)`. Decided (mine, within the user's indexing direction): a type's `At` and `SetAt` may take their indexes as
+one variadic parameter, and are then the operators for one or more indexes; a store into a slice calls a new `SetSlice`.
+The value of a `SetAt` stays its last parameter (the existing order), which D8g's "the variadic parameter is last but the
+defaulted ones" does not allow, so D8g gained exactly one exception - a method named `SetAt`/`SetSlice` may have its value
+after the variadic parameter (the parser decides by the method's name; `gatherVariadic` leaves that tail argument out of
+the variadic ones). Value-first (`SetAt(v T, i ...I64)`, oann's `Set(v, i, j)` order) was the other option: it needed no
+parser rule but would have evaluated the value before the indexes, against S4, and written the operator two ways
+(`SetAt(i, j, v)` for a fixed number). A variadic `SetAt` written value-first is E31e's error saying where the value goes.
+Implementation: `roleMethod` matches a role's method by its parameters (`takesOperands`: for At/SetAt/SetSlice a variadic
+one takes any number from the fixed ones up); `invoke` already gathered a variadic call's arguments from the written
+expressions, so a plain read or store needed only that; the typed paths that hold each index in a local and call the method
+with those (a compound store's read-modify-write, `x[i][j] = v` through a collection's own At, a parallel assignment's
+target) pack them into the array the variadic parameter takes (`packed`), and `writeBack` now emits the statements that
+held a variadic At's index array before it reads the element (the Seq `heldArray` makes). Mixing a variadic `At` with a fixed-arity `SetAt` is
+the operator for that many indexes only, so a compound store needs both in one form. `SetSlice` is checked as `Slice` is
+(`setSliceMethod`: every parameter but the last an `Axis`, or one `...Axis` then the value), taken by `assign` before the
+old E16a error, for `x[a, b:c] = v` and `x[lo:hi] = v`; a compound store into a slice stays E16a's error. The element type of
+the variadic At is not restricted to integers: the compiler gives the indexes and nothing else (a type indexed by several
+names is as valid). New diagnostics: `SetValueLast` and `SetSliceAxis` (E31e/E16f), `SliceNoPlace`'s help names SetSlice.
+tests/axes.olang's Voxels/Plane/Cells types and a top-level assert the compile-time evaluator decides (a false value there is
+a compile error, checked once); checks/cases e31esetvaluefirst, e31esetslicecount, e31esetslicenoaxis, e31esetatfixed.

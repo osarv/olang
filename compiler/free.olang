@@ -1317,7 +1317,7 @@ fn (f mut Free&) anyMethod(b I64) Bool {
 
 # the methods the language calls where no call is written (E31, E11c, E10, S9, E28)
 fn protocolName(nm String&) Bool {
-    for p in Array<String&>["Str", "Eq", "Hash", "Copy", "Iter", "Next", "RunFrom", "At", "SetAt", "Len", "Has"
+    for p in Array<String&>["Str", "Eq", "Hash", "Copy", "Iter", "Next", "RunFrom", "At", "SetAt", "SetSlice", "Len", "Has"
         "Contains", "Slice", "Call", "Less", "Plus", "Minus", "Mul", "Div", "Rem", "MatMul", "Neg", "Pow", "BitAnd"
         "BitOr", "BitXor", "Shl", "Shr", "BitNot", "Inc", "Dec", "FromIter"] {
         # (lower case, an operator private to its module - M6b)

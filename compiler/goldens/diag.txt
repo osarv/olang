@@ -1612,7 +1612,7 @@ compilation failed with 1 error
 e16fslicestore.olang:8:5: error[E16f]: a slice is not stored into (E16a)
     8 |     g[0:2, :] = 4
       |     ^~~~~~~~~
-e16fslicestore.olang:8:5: help: store through its elements, or call a method the type declares for it
+e16fslicestore.olang:8:5: help: store through its elements, or declare SetSlice (E31e), which a store into a slice calls with the axes, then the value
 compilation failed with 1 error
 === e16getnotry.olang
 e16getnotry.olang:5:12: error[E15]: this call can fail - write 'try', and catch or pass on its errors
