@@ -1312,7 +1312,7 @@ fn (g mut SG&) secondScenario(k I64) String& {
         rz := "Rz" + $k
         return ("type " + $rz + " unique struct(r mut Tx&) { r } destruct { r[0] = 'Z' }\n" + "fn " + $f + "(i I64) Tx {\n" + $sbody +
                 "    d := " + $rz + "(s)\n    return s\n}\n" + "fn s" + $k + "() I64 {\n    x := " + $f + "(Run + " + $v + ")\n    churn()\n" +
-                "    if x[0] != 'a' { say(\"BAD dtor " + $k + ": \" $x) }\n    return x.Hash()\n}\n")
+                "    if x[0] != 'a' { say(\"BAD dtor " + $k + ": \" + $x) }\n    return x.Hash()\n}\n")
     }
     return ($head + "fn " + $b + "(i I64) String {\n" + $probe + "}\n" + "B" + $k + " String = " + $b + "(" + $v + ")\n" + "fn s" + $k + "() I64 {\n    w := " + $b +
             "(Run + " + $(v - 1) + ")\n    if w != B" + $k + " { say(\"BAD baked " + $k + ": \" + $w + \" / \" + $B" + $k + ") }\n    churn()\n" +
@@ -1417,7 +1417,7 @@ fn (g mut SG&) viewLeaf(k I64, ind String&) String& {
     if w == 1 { return $ind + $t + " := $\"" + $v + "-x\"\n" + $ind + "keep.Push(" + $t + "[0:1])\n" + $ind + "keep.Push(" + $t + "[1:])\n" }
     if w == 2 { return $ind + "keep.Push(vh" + $k + "(" + $v + "))\n" }
     if w == 3 { return $ind + $t + " mut Node& = Node(" + $v + ")\n" + $ind + "fs.Push(fn() I64 { return " + $t + ".v })\n" }
-    return $ind + $t + " := \"" + $v + "\" $" + $v + "\n" + $ind + "keep.Push(" + $t + "[0:" + $(Array<String&>["1", "2"][g.r(2)]) + "])\n"
+    return $ind + $t + " := \"" + $v + "\" + $" + $v + "\n" + $ind + "keep.Push(" + $t + "[0:" + $(Array<String&>["1", "2"][g.r(2)]) + "])\n"
 }
 
 # a relations scenario (T22a): functions and closures whose obligations are more than their type says - link, a lambda
@@ -1569,7 +1569,7 @@ fn Program(seed U64, n I64, keep Array<Bool>&) String& {
     }
     b.Push("fn main() ? {\n")
     for k in range n {
-        if keep.Len() == 0 or keep[k] { b.Push("    say(\"" + $k + ": \" $s" + $k + "())\n") }
+        if keep.Len() == 0 or keep[k] { b.Push("    say(\"" + $k + ": \" + $s" + $k + "())\n") }
     }
     if HasDtors(seed) { b.Push("    say(\"dtors \" + $(Made - Dropped))\n") }
     b.Push("}\n")
@@ -1942,7 +1942,7 @@ fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
         return ($ind + "{\n" + $ind + "    " + $x + " mut Node& = Node(i)\n" + $ind + "    " + $x + ".next = Node(" + $v + ")\n" + $ind + "    " + $h + ".n = " + $x +
                 "\n" + $ind + "}\n")
     }
-    if k == 20 { return $ind + $h + ".t = $" + $h + ".t.Len() \"x\"\n" }
+    if k == 20 { return $ind + $h + ".t = $" + $h + ".t.Len() + \"x\"\n" }
     # O15: resources built, kept in a Map, taken out - ended where their holders let go - and shapes the scope rules may refuse
     if k == 22 {
         r := g.name("r")
@@ -2011,7 +2011,7 @@ fn FreeProgram(seed U64, n I64, keep Array<Bool>&) String& {
     }
     b.Push("fn main() ? {\n")
     for k in range n {
-        if keep.Len() == 0 or keep[k] { b.Push("    say(\"" + $k + ": \" $s" + $k + "())\n") }
+        if keep.Len() == 0 or keep[k] { b.Push("    say(\"" + $k + ": \" + $s" + $k + "())\n") }
     }
     b.Push("}\n")
     # (std/list imported only where a scenario holds one: an import nothing is reached through is an error, M5a)
