@@ -2571,6 +2571,11 @@ calls is what it called where the lambda was made.
 
 A lambda's parameters and locals may not reuse the name of a variable it could capture.
 
+A lambda assigned to a variable it captures (`fib = fn(n I64) I64 { ... fib(n - 1) ... }`) is a compile-time error: the
+capture is made as the lambda is, so it would hold the variable's earlier value, never the lambda. A recursive function
+is a top-level `fn`, or reaches itself through a captured reference holding it (`h.f = fn(n I64) I64 { ... h.f(n - 1)
+... }`).
+
 **D16d (where a lambda lives).** A lambda's value is a reference to what it captured (T21). One capturing no
 reference is built where it lands, as any temporary is (E12c). One capturing references - or values holding them
 (D16c) - lives where they do:

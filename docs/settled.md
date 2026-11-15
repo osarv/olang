@@ -466,7 +466,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Lambdas (D16, the user's design).** `fn(x) { return ... }`, `return` always written; captures copied (plain values
   read-only, references still naming their instance, value arrays borrowed); types from the expected function type
   (D16a) or the body (D16b). A function value is `{code, environment}`. `(args)` after any postfix expression calls
-  (E13b). `spawn fn() { }` runs a lambda as a task (D16e).
+  (E13b). `spawn fn() { }` runs a lambda as a task (D16e). A lambda assigned to a variable it captures is an error (D16c,
+  2026-11-15, the AI study: it held the earlier value); recursion is a top-level `fn` or a captured holder.
 - **No shadowing (D3a, the user's call)**, types included: no local or parameter named like a global, function, build
   constant or type; a type and a function or global of one module may not share a name (D2).
 - **`:=` declares any settled expression's type (D15, the user's call).** `null` and a call giving nothing are errors.

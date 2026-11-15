@@ -3275,6 +3275,12 @@ l9typeunparsed.olang:15:5: error[L9]: 'destruct' is a keyword, not a name - choo
    15 |     destruct I64
       |     ^~~~~~~~
 compilation failed with 2 errors
+=== lambdaselfcapture.olang
+lambdaselfcapture.olang:6:5: error[D16c]: this lambda captures 'fib' and is assigned to it - the capture is a copy made as the lambda is, so it holds the earlier value of 'fib', never this lambda
+    6 |     fib = fn(n I64) I64 {
+      |     ^~~
+lambdaselfcapture.olang:6:5: help: for a recursive function write a top-level 'fn fib(...)' and pass it what it would capture, or capture a reference holding the function ('h mut Holder& = Holder(...)'; 'h.f = fn ... h.f(...) ...')
+compilation failed with 1 error
 === lanecompare.olang
 lanecompare.olang:6:10: error[E39]: '<' does not compare arrays - lane by lane it is 'a.LanesLess(b)', an Array<Bool>
     6 |     if a < b { }

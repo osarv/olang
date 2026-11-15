@@ -1,0 +1,11 @@
+# check: fail error[D16c]: this lambda captures 'fib' and is assigned to it - the capture is a copy made as the lambda is, so it holds the earlier value of 'fib', never this lambda
+# D16c (the AI study, docs/aistudy.md p10): a lambda assigned to a local it captures copies the local's earlier value, so
+# a "recursive" lambda written this way called the first function (fib(20) was 37): an error naming the ways to write it
+fn main() {
+    fib := fn(n I64) I64 { return n }
+    fib = fn(n I64) I64 {
+        if n < 2: return n
+        return fib(n - 1) + fib(n - 2)
+    }
+    Println($fib(20))
+}

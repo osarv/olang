@@ -1,0 +1,13 @@
+# check: run
+# D16c: a recursive lambda through a captured reference holding it - the way lambdaselfcapture's help names: the copy
+# is of the reference, which names the holder, so the call reads the function stored after the capture
+type H struct(f fn&(n I64) I64) { f }
+
+fn main() {
+    h mut H& = H(fn(n I64) I64 { return n })
+    h.f = fn(n I64) I64 {
+        if n < 2: return n
+        return h.f(n - 1) + h.f(n - 2)
+    }
+    Println($h.f(20))
+}
