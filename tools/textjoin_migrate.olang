@@ -8,10 +8,10 @@
 # R9a: `catch default "x" $k`), is parenthesized, so nothing is read apart. Comments and string literals are never edited. A Markdown file has its "```olang" blocks and its inline code
 # spans migrated, each read as a file or, where that does not parse, as the body of a function. Files are rewritten in
 # place and a count printed; --check writes nothing and the exit status says whether anything would change.
-# Idempotent: text joined with "+" has no pieces side by side. OLANG_STD names std (default "std", as from the
-# repository root), which says the parser which names are types.
+# Idempotent: text joined with "+" has no pieces side by side. --std (else OLANG_STD, else "std", as from the
+# repository root) names std, which tells the parser which names are types.
 #
-#     $OLANG build tools/textjoin_migrate.olang && build/tools_textjoin_migrate [--check] [-v] FILE|DIR...
+#     $OLANG build tools/textjoin_migrate.olang && build/tools_textjoin_migrate [--std DIR] [--check] [-v] FILE|DIR...
 
 import "std/os"
 import "srcmask"
@@ -195,19 +195,24 @@ fn migrateMarkdown(src String&, n mut Count&) String {
 fn main() ? {
     check := false
     verbose := false
+    std := try os.Env("OLANG_STD") catch default "std"
     paths Vec<String&>
     args := os.Args()
-    for i in range 1, args.Len() {
+    i := 1
+    for i < args.Len() {
         a := args[i]
+        i++
         if a == "--check": check = true
         else if a == "-v": verbose = true
-        else: paths.Push($a)
+        else if a == "--std" and i < args.Len() {
+            std = $args[i]
+            i++
+        } else: paths.Push($a)
     }
     if paths.Len() == 0 {
-        srcmask.SayErr("usage: tools_textjoin_migrate [--check] [-v] FILE|DIR...")
+        srcmask.SayErr("usage: tools_textjoin_migrate [--std DIR] [--check] [-v] FILE|DIR...")
         os.Exit(2)
     }
-    std := try os.Env("OLANG_STD") catch default "std"
     prelude := layout.PreludeTypes(std)
     files Vec<String&>
     for p in paths {
