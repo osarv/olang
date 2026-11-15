@@ -60,4 +60,38 @@ hi def link olangBlockComment Comment
 hi def link olangTodo Todo
 hi def link olangRule Underlined
 
+" olang's own palette, the same as the interpreter's (compiler/paint.olang; DEPENDENTS.md): colours readable on a dark
+" background, none dark blue or black. It replaces the colorscheme's for olang's groups; `let g:olang_palette = 0`
+" keeps the links above instead. Re-applied after every :colorscheme.
+let s:purple = 'guifg=#c792ea ctermfg=177'
+let s:yellow = 'guifg=#ffcb6b ctermfg=221'
+let s:teal = 'guifg=#7fdbca ctermfg=116'
+let s:orange = 'guifg=#f78c6c ctermfg=209'
+let s:green = 'guifg=#c3e88d ctermfg=150'
+let s:grey = 'guifg=#a6accd ctermfg=250 gui=italic cterm=italic'
+let s:cyan = 'guifg=#89ddff ctermfg=117'
+let s:palette = {
+  \ 'olangKeyword': s:purple, 'olangStatement': s:purple, 'olangConditional': s:purple, 'olangRepeat': s:purple,
+  \ 'olangException': s:purple, 'olangStorage': s:purple, 'olangBoolean': s:purple, 'olangConstant': s:purple,
+  \ 'olangOperator': s:cyan, 'olangRender': s:cyan, 'olangType': s:yellow, 'olangTypeName': s:yellow,
+  \ 'olangFunction': s:teal, 'olangNumber': s:orange, 'olangString': s:green, 'olangRawString': s:green,
+  \ 'olangChar': s:green, 'olangEscape': s:green, 'olangComment': s:grey, 'olangBlockComment': s:grey,
+  \ 'olangTodo': s:yellow . ' gui=bold cterm=bold guibg=NONE ctermbg=NONE',
+  \ 'olangRule': s:cyan . ' gui=underline cterm=underline'}
+
+function! s:OlangPalette() abort
+  if !get(g:, 'olang_palette', 1)
+    return
+  endif
+  for [group, spec] in items(s:palette)
+    exe 'hi! link ' . group . ' NONE'
+    exe 'hi ' . group . ' ' . spec
+  endfor
+endfunction
+call s:OlangPalette()
+augroup olangPalette
+  autocmd!
+  autocmd ColorScheme * call s:OlangPalette()
+augroup END
+
 let b:current_syntax = "olang"

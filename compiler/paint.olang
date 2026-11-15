@@ -1,22 +1,49 @@
 # paint - colour for the prompt (B22): olang text coloured by the compiler's own scanner (scan), never a second lexer, and
-# the words of diagnostics. Only the 16 standard ANSI colours, so any terminal theme reads them; nothing is coloured
+# the words of diagnostics, in olang's own palette (the Neovim plugin's too); nothing is coloured
 # where the output is not a terminal or NO_COLOR is set (Wanted).
 
 import "std/os"
 import "scan"
 import "token"
 
-# the colours, as SGR parameters
-keywordColour String& = "35"       # magenta: keywords, true, false, null
-typeNameColour String& = "36"      # cyan: a capitalized name
-numberColour String& = "33"        # yellow
-textColour String& = "32"          # green: text and character literals
-commentColour String& = "2;3"      # faint italic: the terminal's own text colour, dimmed (bright black is near black in some themes)
-operatorColour String& = "94"      # bright blue (plain blue is a deep blue in some themes, hard to read on black)
-errorWord String& = "1;31"
-warningWord String& = "1;33"
-noteWord String& = "1;36"
-helpWord String& = "1;32"
+# The palette, the same as editors/nvim/syntax/olang.vim's (DEPENDENTS.md): colours readable on a dark background, none
+# dark blue or black. Each is 24-bit RGB, its nearest of the 256 colours for a terminal without 24-bit colour, and how
+# it is drawn ("1" bold, "3" italic, "" plain)
+type Shade struct(Rgb String&, Cube String&, Style String& = "") {
+    Rgb
+    Cube
+    Style
+}
+
+plain Shade = Shade("", "")                                 # the terminal's own colour
+keywordColour Shade = Shade("199;146;234", "177")          # #c792ea purple: keywords, true, false, null
+typeNameColour Shade = Shade("255;203;107", "221")         # #ffcb6b yellow: a capitalized name
+functionColour Shade = Shade("127;219;202", "116")         # #7fdbca teal: a name called
+numberColour Shade = Shade("247;140;108", "209")           # #f78c6c orange
+textColour Shade = Shade("195;232;141", "150")             # #c3e88d green: text and character literals
+commentColour Shade = Shade("166;172;205", "250", "3")     # #a6accd grey, italic
+operatorColour Shade = Shade("137;221;255", "117")         # #89ddff light cyan
+errorWord Shade = Shade("255;83;112", "203", "1")          # #ff5370 red, bold
+warningWord Shade = Shade("255;203;107", "221", "1")       # yellow, bold
+noteWord Shade = Shade("137;221;255", "117", "1")          # light cyan, bold
+helpWord Shade = Shade("195;232;141", "150", "1")          # green, bold
+
+# whether the terminal draws 24-bit colour: COLORTERM says so, or it is Windows Terminal (WT_SESSION)
+fn Deep() Bool {
+    c := try os.Env("COLORTERM") catch os.Error { return has("WT_SESSION") }
+    return c == "truecolor" or c == "24bit" or has("WT_SESSION")
+}
+
+fn has(name String&) Bool {
+    v := try os.Env(name) catch os.Error { return false }
+    return v != ""
+}
+
+# a shade's SGR parameters, in 24-bit colour where deep, else from the 256
+fn sgr(c Shade&, deep Bool) String {
+    fg := $"38;2;" $c.Rgb if deep else $"38;5;" $c.Cube
+    return fg if c.Style == "" else $c.Style ";" $fg
+}
 
 # whether what is written to fd is coloured: it is a terminal and NO_COLOR is unset or empty (no-color.org)
 fn Wanted(fd I32) Bool {
@@ -33,64 +60,69 @@ fn coloured(code String&, t String&) String {
 
 # olang text coloured token by token, as the scanner reads it; what lies between tokens is coloured as a comment from
 # its first '#'. The text written is the text given, with only escape codes added
-fn Source(text String&) String {
+fn Source(text String&) String { return source(text, Deep()) }
+
+fn source(text String&, deep Bool) String {
     ts := scan.Tokens.Scan(text)
     b := StringBuilder()
     at I64 = 0
-    for t in ts.Toks {
+    for i, t in ts.Toks {
         s := I64(t.Start)
         e := I64(t.End)
         if e <= s or s < at: continue
-        b.Push(gap(text[at:s]))
-        b.Push(piece(text, t.Kind, s, e))
+        call := i + 1 < ts.Toks.Len() and ts.Toks[i + 1].Kind == token.Tok.LParen and I64(ts.Toks[i + 1].Start) == e
+        b.Push(gap(text[at:s], deep))
+        b.Push(piece(text[s:e], Shade.Of(t.Kind, text[s:e], call), deep))
         at = e
     }
-    b.Push(gap(text[at:]))
+    b.Push(gap(text[at:], deep))
     return b.ToString()
 }
 
 # what stands between two tokens: blanks, then a comment from its first '#'
-fn gap(t String&) String {
+fn gap(t String&, deep Bool) String {
     for i in range t.Len() {
-        if t[i] == '#': return $t[:i] $coloured(commentColour, t[i:])
+        if t[i] == '#': return $t[:i] $coloured(sgr(commentColour, deep), t[i:])
     }
     return $t
 }
 
-fn piece(text String&, k token.Tok, s I64, e I64) String {
-    t := text[s:e]
-    code := colourOf(k, t)
-    return $t if code == "" else coloured(code, t)
+fn piece(t String&, c Shade, deep Bool) String {
+    return $t if c.Rgb == "" else coloured(sgr(c, deep), t)
 }
 
-fn colourOf(k token.Tok, t String&) String& {
-    if k == token.Tok.Iden: return typeNameColour if t[0] >= 'A' and t[0] <= 'Z' else ""
+# a token's shade, plain where it stays the terminal's own colour; call says a '(' touches it
+fn Shade.Of(k token.Tok, t String&, call Bool) Shade {
+    if k == token.Tok.Iden and t[0] >= 'A' and t[0] <= 'Z': return typeNameColour
+    if k == token.Tok.Iden: return functionColour if call else plain
     if k == token.Tok.IntLit or k == token.Tok.FloatLit: return numberColour
     if k == token.Tok.StrLit or k == token.Tok.CharLit: return textColour
     c := t[0]
     if (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z'): return keywordColour
-    if k == token.Tok.Comma or k == token.Tok.Dot or k == token.Tok.Colon: return ""
-    if k == token.Tok.LParen or k == token.Tok.RParen or k == token.Tok.LBrack or k == token.Tok.RBrack: return ""
-    if k == token.Tok.LBrace or k == token.Tok.RBrace: return ""
+    if k == token.Tok.Comma or k == token.Tok.Dot or k == token.Tok.Colon: return plain
+    if k == token.Tok.LParen or k == token.Tok.RParen or k == token.Tok.LBrack or k == token.Tok.RBrack: return plain
+    if k == token.Tok.LBrace or k == token.Tok.RBrace: return plain
     return operatorColour
 }
 
 # diagnostics with their words coloured: "error", "warning", "note" and "help" where a row names its kind - after the
 # place ("cell3:1:1: error[D3b]: ...") or first on the row ("note: ...")
-fn Diagnostics(text String&) String {
+fn Diagnostics(text String&) String { return diagnostics(text, Deep()) }
+
+fn diagnostics(text String&, deep Bool) String {
     b := StringBuilder()
     first := true
     for line in text.Split("\n") {
         if not first: b.PushChar('\n')
         first = false
-        b.Push(row(line))
+        b.Push(row(line, deep))
     }
     return b.ToString()
 }
 
-fn row(line String&) String {
+fn row(line String&, deep Bool) String {
     words := Array<String&>["error", "warning", "note", "help"]
-    codes := Array<String&>[errorWord, warningWord, noteWord, helpWord]
+    codes := Array<String>[sgr(errorWord, deep), sgr(warningWord, deep), sgr(noteWord, deep), sgr(helpWord, deep)]
     for i in range words.Len() {
         at := kindAt(line, words[i])
         if at >= 0: return $line[:at] $coloured(codes[i], words[i]) $line[at + words[i].Len():]
@@ -118,19 +150,22 @@ fn startsAt(t String&, w String&, i I64) Bool {
 }
 
 test Source "colours each token by its kind, and only adds escape codes" {
-    out := Source("x := 1")
-    assert out == "x \x1b[94m:=\x1b[0m \x1b[33m1\x1b[0m"
-    assert Source("fn F() T # done") == "\x1b[35mfn\x1b[0m \x1b[36mF\x1b[0m() \x1b[36mT\x1b[0m \x1b[2;3m# done\x1b[0m"
-    assert Source("\"a\"") == "\x1b[32m\"a\"\x1b[0m"
-    assert Source("") == ""
+    assert source("x := 1", false) == "x \x1b[38;5;117m:=\x1b[0m \x1b[38;5;209m1\x1b[0m"
+    assert source("fn F() T # done", false) == "\x1b[38;5;177mfn\x1b[0m \x1b[38;5;221mF\x1b[0m() \x1b[38;5;221mT\x1b[0m " $
+        "\x1b[3;38;5;250m# done\x1b[0m"
+    assert source("\"a\"", true) == "\x1b[38;2;195;232;141m\"a\"\x1b[0m"
+    assert source("f(x) g (y)", false) == "\x1b[38;5;116mf\x1b[0m(x) g (y)"
+    assert source("", true) == ""
 }
 
 test Source "ends a colour at a line end and takes it up again" {
-    assert Source("\"\"\"\n    a\n    \"\"\"") == "\x1b[32m\"\"\"\x1b[0m\n\x1b[32m    a\x1b[0m\n\x1b[32m    \"\"\"\x1b[0m"
+    g := "\x1b[38;5;150m"
+    assert source("\"\"\"\n    a\n    \"\"\"", false) == $g "\"\"\"\x1b[0m\n" $g "    a\x1b[0m\n" $g "    \"\"\"\x1b[0m"
 }
 
 test Diagnostics "colours the kind of each row" {
-    d := Diagnostics("cell1:1:1: error[D3b]: no\n    1 | x\nnote: see\ncell2:1:1: warning: w")
-    assert d == "cell1:1:1: \x1b[1;31merror\x1b[0m[D3b]: no\n    1 | x\n\x1b[1;36mnote\x1b[0m: see\ncell2:1:1: \x1b[1;33mwarning\x1b[0m: w"
-    assert Diagnostics("an error: here") == "an error: here"
+    d := diagnostics("cell1:1:1: error[D3b]: no\n    1 | x\nnote: see\ncell2:1:1: warning: w", false)
+    assert d == "cell1:1:1: \x1b[1;38;5;203merror\x1b[0m[D3b]: no\n    1 | x\n\x1b[1;38;5;117mnote\x1b[0m: see\n" $
+        "cell2:1:1: \x1b[1;38;5;221mwarning\x1b[0m: w"
+    assert diagnostics("an error: here", true) == "an error: here"
 }

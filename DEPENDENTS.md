@@ -231,3 +231,7 @@ A change to the diagnostic row format, a mode name used there, or a keyword touc
 `editors/` as is (`makefile` `release`). `make install` (`install-editors`) copies `editors/nvim` whole as a Neovim
 package and its `syntax/olang.vim` and `compiler/olang.vim` for Vim, with a filetype rule of its own that follows
 `ftdetect/olang.lua`'s: a new Vimscript file, or a change to what ftdetect recognises, changes it.
+
+olang's palette is one: `compiler/paint.olang`'s shades (the prompt, 24-bit and 256-colour) and
+`editors/nvim/syntax/olang.vim`'s `s:palette` hold the same colours for the same kinds of token; a colour changed in one
+changes in the other.
