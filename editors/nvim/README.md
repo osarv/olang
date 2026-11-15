@@ -19,7 +19,7 @@ A plugin directory: put it on the runtime path and `.olang` files (and scripts b
   which then wins over the default and `setup()`.
   Keymaps under `<localleader>` - `r` run, `b` build, `t` test, `f` format, `F` format on save, `e` explain, `i` repl - are set where
 - `gf` on an import opens the module's file (`std/...` in the standard library, found through `OLANG_STD` or beside the `olang` on the PATH; anything else beside the importing file), and `[i`/`[I` follow imports too.
-- `gd` on a bracket jumps to its partner (as `%`), anywhere else to the definition; the sign column is always shown, so a diagnostic appearing never shifts or rewraps the text.
+- `gd` on a bracket jumps to its partner (as `%`), anywhere else to the definition; signs are drawn in the line-number column (an `E` replaces that line's number), so a diagnostic appearing never adds a column or shifts and rewraps the text.
   nothing is mapped already; `vim.g.olang_no_maps = 1` turns them off.
 
 Everything but the last works without the server; all of it needs `olang` on `PATH`.

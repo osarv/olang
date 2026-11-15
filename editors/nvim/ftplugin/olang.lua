@@ -10,8 +10,9 @@ vim.bo.tabstop = 4
 vim.bo.commentstring = "# %s"
 vim.bo.comments = ":#"
 vim.bo.keywordprg = "olang explain"
--- the sign column always there, so a diagnostic's sign appearing never shifts the text sideways (and rewraps it)
-vim.wo.signcolumn = "yes"
+-- signs drawn in the line-number column (the E replaces that line's number), so a diagnostic appearing never adds a column
+-- and never shifts or rewraps the text (with line numbers off it falls back to a sign column that appears as needed)
+vim.wo.signcolumn = "number"
 -- gf, [i and friends follow an import to its file
 vim.bo.include = [[^\s*import\s\+\(\w\+\s\+\)\=]]
 vim.bo.includeexpr = "v:lua.require'olang'.include(v:fname)"
