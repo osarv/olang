@@ -182,3 +182,6 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	lspimport	opus	low	killed
 2026-11-16	osfile	opus	medium	killed
 2026-11-16	readmes	sonnet	low	completed	123	16	2	yes		README history sweep, 3 repos
+2026-11-16	litcmp2	opus	medium	running
+2026-11-16	lspimport2	opus	low	running
+2026-11-16	osfile2	opus	medium	running
