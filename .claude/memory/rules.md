@@ -54,6 +54,7 @@ slimming of 2026-11-08").
   defaults above. Prefer fast iterations against the tests (build, run, fix, repeat) over long deliberation up front.
 - **Reviews**: routine soundness reviews opus high; full reviews in bulk, over several merged batches ("not one per
   change"); no more C-compiler (stage 0) reviews. (why: archive/rules_log.md)
+- **After an interrupt, check the agents (the user, 2026-11-16: "if you get interrupted by esc or send now, check in on the agents to make sure they are still running. make this a standing rule")**: an Esc or a forced "send now" can stop the background agents of the interrupted turn without a report (it did 2026-11-16: four agents stopped mid-work); after any interrupt, list what runs (ListAgents, the worktrees' last commits and uncommitted files, `pgrep` for builds) and restart each stopped one from its worktree's state with a continuation brief.
 - **Agent length**: one fresh agent per round of a big batch, from a hand-off note kept up to date; resume only for a
   short follow-up within about an hour; never resume a very long agent for a new round.
 - **Pacing by usage**: every week until the user changes it, use what the work needs, run in parallel only what does not
