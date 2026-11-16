@@ -975,7 +975,7 @@ test "olang lsp completes after '.' while the line is unfinished: an import, a v
 
 # B15: a file whose imports are being typed, and one using a std module it does not import (M10)
 PathSrc String& = "import \"std/\nimport \"./\nimport \"github.com/x/\nimport \"\n"
-FixSrc String& = "import \"std/io\"\n\nfn main() {\n    io.PutLine(json.Encode(1))!\n}\n"
+FixSrc String& = "import \"std/io\"\n\nfn main() {\n    io.PutLn(json.Encode(1))!\n}\n"
 
 test "olang lsp completes import paths and offers M10's missing import as a quick fix (B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
