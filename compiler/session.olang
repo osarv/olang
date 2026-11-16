@@ -1615,3 +1615,70 @@ test "the identifier at an offset" {
     assert WordAt(t, 4).Start == WordAt(t, 4).End
     assert WordAt(t, 11) == source.Span(6, 11)
 }
+
+# B15: the path sofar so far inside the quotes of an import line, where offset at stands in them; Nothing elsewhere
+fn ImportTyped(text String&, at I64) String ? Nothing {
+    start := at
+    for start > 0 and text[start - 1] != '\n': start--
+    line := text[start:at]
+    if not line.StartsWith("import "): error Nothing.Here
+    q := -1
+    for i in range line.Len() {
+        if line[i] == '"': q = i if q < 0 else -2
+    }
+    if q < 0: error Nothing.Here
+    return $line[q + 1:]
+}
+
+CompFile I64 = 17
+CompFolder I64 = 19
+
+# B15: the next segment of an import path sofar so far: std's modules after "std/", the files and folders relative to
+# the edited file's folder dir after "./" or "../", the roots at the opening quote; a remote path nothing
+fn ImportPaths(it mut Items&, sofar String&, dir String&) {
+    if sofar == "" {
+        for r in ["std/", "./", "../"] { it.Add(r, CompFolder, "") }
+        return
+    }
+    cut := sofar.Len()
+    for cut > 0 and sofar[cut - 1] != '/': cut--
+    if cut == 0: return
+    head := sofar[:cut]
+    from := ""
+    if head.StartsWith("std/") {
+        from = $load.StdDir() + "/" + $head[4:]
+    } else if head.StartsWith("./") or head.StartsWith("../") {
+        from = $dir + "/" + $head
+    } else {
+        return
+    }
+    entries := try os.ReadDir(from) catch os.Error { return }
+    for n in entries {
+        if n.StartsWith(".") or (head == "std/" and n == "prelude"): continue
+        if os.IsDir($from + "/" + $n) {
+            it.Add(n, CompFolder, "")
+        } else if n.EndsWith(".olang") {
+            it.Add(n[:n.Len() - 6], CompFile, "")
+        }
+    }
+}
+
+# B15: the quick fix for M10 "... std has it: 'import "std/x"'": the import line it names, and the offset to insert it
+# at - the start of the line after the last import, else the file's start; Nothing for another message
+fn ImportFix(text String&, message String&) String, I64 ? Nothing {
+    mark := "std has it: '"
+    i := try message.Find(mark) catch TextError { error Nothing.Here }
+    rest := message[i + mark.Len():]
+    end := try rest.Find("'") catch TextError { error Nothing.Here }
+    at I64 = 0
+    pos I64 = 0
+    for pos < text.Len() {
+        nl := pos
+        for nl < text.Len() and text[nl] != '\n': nl++
+        if text[pos:nl].StartsWith("import "): at = nl + 1 if nl < text.Len() else nl
+        pos = nl + 1
+    }
+    line := $rest[:end] + "\n"
+    if at == text.Len() and at > 0 and text[at - 1] != '\n': line = $"\n" + $rest[:end]
+    return line, at
+}

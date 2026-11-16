@@ -38640,3 +38640,16 @@ checker now notes the names a condition body could not find (`CondMissing`) and 
 `CondInBranch`: the name, a note where it is declared, help to declare it outside the conditional or decide on something
 that exists either way. Any other condition that does not check is `CondOwnError` ("has an error of its own"), followed
 by the condition's own errors replayed. Cases: checks/cases/unseen.olang (reworded), b9cown.olang (new).
+
+### B15: import path completion and M10's quick fix (2026-11-16, wt-lspimport)
+
+Asked for by the user. Inside the quotes of an `import` line the language server now completes the path one segment
+at a time: `"std/` lists the std in use (its .olang files without the extension and its folders, the prelude left out,
+since it is never imported), `"./` and `"../` list the .olang files and folders beside the edited file, the bare
+opening quote offers the three roots, and a remote path offers nothing (there is nothing local to list). `/` and `"`
+joined `.` as trigger characters so the menu opens as the path is typed. Second, `codeActionProvider`: for an M10
+diagnostic ("'json' is no import here - std has it: 'import "std/json"'") the server answers a quick fix inserting
+the named import after the last import line, or at the file's start. The import line is read back out of M10's own
+message, so the fix and the diagnostic cannot disagree. Helpers in compiler/session.olang (ImportTyped, ImportPaths,
+ImportFix); the scripted LSP test in compiler/lsp.olang covers both. Neovim maps `<localleader>a` to `:OlangFix`
+(`vim.lsp.buf.code_action()`).

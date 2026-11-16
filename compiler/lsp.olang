@@ -14,6 +14,7 @@
 import "std/os"
 import "std/json"
 import "std/time"
+import "std/filepath"
 import "diag"
 import "build"
 import "session"
@@ -152,7 +153,7 @@ fn (s mut Server&) handle(body String&) {
 
 # the requests a worker answers
 Requests := Array<String&>["textDocument/hover", "textDocument/definition", "textDocument/documentSymbol"
-                    "textDocument/completion", "textDocument/formatting"]
+                    "textDocument/completion", "textDocument/formatting", "textDocument/codeAction"]
 
 fn (s mut Server&) initialize(msg json.Json&, id String&) {
     encs := try msg["params"]["capabilities"]["general"]["positionEncodings"].AsArr() catch json.Error default Array<json.Json&>(0)
@@ -163,7 +164,8 @@ fn (s mut Server&) initialize(msg json.Json&, id String&) {
     }
     caps := $"{\"positionEncoding\":\"" + $("utf-8" if s.Utf8 else "utf-16") + "\",\"textDocumentSync\":{\"openClose\":true," + $
         "\"change\":1},\"hoverProvider\":true,\"definitionProvider\":true,\"documentSymbolProvider\":true," + $
-        "\"completionProvider\":{\"triggerCharacters\":[\".\"]},\"documentFormattingProvider\":true}"
+        "\"completionProvider\":{\"triggerCharacters\":[\".\",\"/\",\"\\\"\"]},\"documentFormattingProvider\":true," + $
+        "\"codeActionProvider\":true}"
     s.send(reply(id, $"{\"capabilities\":" + $caps + ",\"serverInfo\":{\"name\":\"olang\"}}"))
 }
 
@@ -653,6 +655,10 @@ fn (w mut worker&) answer(body String&) {
         w.send(reply(id, b.ToString()))
         return
     }
+    if method == "textDocument/codeAction" {
+        w.send(reply(id, codeActions(p, uri, text, pos)))
+        return
+    }
     if method == "textDocument/completion" {
         w.complete(id, doc, text, at, cfg, d)
         return
@@ -701,9 +707,15 @@ fn (w mut worker&) answer(body String&) {
 # completion at offset at of an open file: after "x." x's members - checked with the "." and the word the cursor is in
 # taken out, so the line is what it was before they were typed - else the names that may stand there
 fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut build.Config&, d mut diag.Diagnostics&) {
+    it := session.Items()
+    sofar := try session.ImportTyped(text, at) catch session.Nothing default "\n"
+    if sofar != "\n" {
+        session.ImportPaths(it, sofar, filepath.Dir(doc.Path))
+        w.send(reply(id, $"{\"isIncomplete\":false,\"items\":[" + $it.B.ToString() + "]}"))
+        return
+    }
     start := at
     for start > 0 and session.WordChar(text[start - 1]): start--
-    it := session.Items()
     for n in session.PromiseTargets(text, start) { it.Add(n, session.CompVariable, "a parameter a promise word names (T21c)") }
     if start > 0 and text[start - 1] == '.' {
         dot := start - 1
@@ -721,6 +733,29 @@ fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut 
         a.Names(it, doc.Real, at)
     }
     w.send(reply(id, $"{\"isIncomplete\":false,\"items\":[" + $it.B.ToString() + "]}"))
+}
+
+# the quick fixes for the diagnostics a codeAction request names: for M10, the import std has inserted (B15)
+fn codeActions(p json.Json&, uri String&, text String&, pos session.Positions&) String {
+    diags := try p["context"]["diagnostics"].AsArr() catch json.Error default Array<json.Json&>(0)
+    b := StringBuilder()
+    b.PushChar('[')
+    for dg in diags {
+        if str(dg, "code") != "M10": continue
+        line, at := try session.ImportFix(text, str(dg, "message")) catch session.Nothing { continue }
+        if b.Len() > 1: b.PushChar(',')
+        b.Push("{\"title\":")
+        session.JsonStr(b, $"Add " + $line.Trim())
+        b.Push($",\"kind\":\"quickfix\",\"diagnostics\":[" + $json.Encode(dg) + "],\"edit\":{\"changes\":{")
+        session.JsonStr(b, uri)
+        b.Push(":[{\"range\":")
+        pos.Range(b, at, at)
+        b.Push(",\"newText\":")
+        session.JsonStr(b, line)
+        b.Push("}]}}}")
+    }
+    b.PushChar(']')
+    return b.ToString()
 }
 
 # ---- messages ----
@@ -936,6 +971,62 @@ test "olang lsp completes after '.' while the line is unfinished: an import, a v
     assert offers(got, "7", "Push") and offers(got, "7", "Len") and offers(got, "7", "Iter") and not offers(got, "7", "data"), got.Get("7")!
     # p. in a call left open
     assert offers(got, "8", "X") and offers(got, "8", "Sum"), got.Get("8")!
+}
+
+# B15: a file whose imports are being typed, and one using a std module it does not import (M10)
+PathSrc String& = "import \"std/\nimport \"./\nimport \"github.com/x/\nimport \"\n"
+FixSrc String& = "import \"std/io\"\n\nfn main() {\n    io.PutLine(json.Encode(1))!\n}\n"
+
+test "olang lsp completes import paths and offers M10's missing import as a quick fix (B15)" {
+    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    defer try os.RemoveAll(dir) catch os.Error { }
+    try os.MkDirAll($dir + "/sub") catch os.Error { unreachable "no folder" }
+    path := $dir + "/c.olang"
+    fix := $dir + "/f.olang"
+    try os.WriteFile(path, PathSrc) catch os.Error { unreachable "no file" }
+    try os.WriteFile($dir + "/other.olang", "fn F() { }\n") catch os.Error { unreachable "no file" }
+    try os.WriteFile(fix, FixSrc) catch os.Error { unreachable "no file" }
+    uri := UriOf(path)
+    furi := UriOf(fix)
+    b := StringBuilder()
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}"))
+    for pair in [[uri, PathSrc], [furi, FixSrc]] {
+        u := pair[0]
+        t := StringBuilder()
+        session.JsonStr(t, pair[1])
+        b.Push(framed($"{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" + $u + $
+                      "\",\"languageId\":\"olang\",\"version\":1,\"text\":" + $t.ToString() + "}}}"))
+    }
+    at := [[0, 12], [1, 10], [2, 21], [3, 8]]
+    for i in range at.Len() {
+        b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":" + $(i + 2) + ",\"method\":\"textDocument/completion\",\"params\":{" + $
+                      "\"textDocument\":{\"uri\":\"" + $uri + "\"},\"position\":{\"line\":" + $at[i][0] + ",\"character\":" + $
+                      at[i][1] + "}}}"))
+    }
+    dg := "{\"range\":{\"start\":{\"line\":3,\"character\":15},\"end\":{\"line\":3,\"character\":19}},\"code\":\"M10\"," + $
+          "\"message\":\"'json' is no import here - std has it: 'import \\\"std/json\\\"'\"}"
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"textDocument/codeAction\",\"params\":{\"textDocument\":{\"uri\":\"" + $
+                  furi + "\"},\"range\":{\"start\":{\"line\":3,\"character\":15},\"end\":{\"line\":3,\"character\":15}}," + $
+                  "\"context\":{\"diagnostics\":[" + $dg + "]}}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"shutdown\"}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    assert out.Status == 0, "olang lsp ended with " + $out.Status + ": " + $out.Stderr
+    got := Map<String&, String&>()
+    for m in frames(out.Stdout) {
+        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
+        id := idOf(msg)
+        if id != "": got.Put(id, m)
+    }
+    caps := got.Get("1")!
+    assert caps.Contains("\"codeActionProvider\":true") and caps.Contains("\"/\""), caps
+    assert offers(got, "2", "json") and offers(got, "2", "io") and not offers(got, "2", "prelude"), got.Get("2")!
+    assert offers(got, "3", "other") and offers(got, "3", "sub") and offers(got, "3", "c"), got.Get("3")!
+    assert not offers(got, "4", "json"), got.Get("4")!
+    assert offers(got, "5", "std/") and offers(got, "5", "./"), got.Get("5")!
+    act := got.Get("9")!
+    fixed := act.Contains("\"kind\":\"quickfix\"") and act.Contains("\"newText\":\"import \\\"std/json\\\"\\n\"")
+    assert fixed and act.Contains("\"range\":{\"start\":{\"line\":1,\"character\":0}"), act
 }
 
 # B3i, docs/wholeprog.md 10.3 (T8): the language server's checks keep and take the records builds keep. A library is
