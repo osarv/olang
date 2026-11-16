@@ -1,4 +1,4 @@
-# mcp - "olang mcp" (B16): a Model Context Protocol server on the standard input and output, for agents. JSON-RPC 2.0, one
+# mcp - "olang serve mcp" (B16): a Model Context Protocol server on the standard input and output, for agents. JSON-RPC 2.0, one
 # message a line; the tools check (diagnostics as data), explain (B11b), doc (B14), format (B13) and test (B3a).
 #
 # Each tool call runs in a process of its own - a fork of the server for check, explain, doc and format, the compiler
@@ -91,7 +91,7 @@ fn handle(line String&, cfg mut build.Config&, exe String&) {
         send(reply(id, call(name, args, cfg, exe)))
         return
     }
-    send(errorReply(id, -32601, $"olang mcp has no " + $method))
+    send(errorReply(id, -32601, $"olang serve mcp has no " + $method))
 }
 
 # a tool call's result, CallToolResult as JSON
@@ -269,7 +269,7 @@ fn compilerUnderTest() String {
     return $(try os.Cwd() catch os.Error default ".") + "/build/olang"
 }
 
-test "olang mcp answers a scripted session: tools/list, check, explain, doc, format, test (B16)" {
+test "olang serve mcp answers a scripted session: tools/list, check, explain, doc, format, test (B16)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer try os.RemoveAll(dir) catch os.Error { }
     bad := $dir + "/bad.olang"
@@ -292,7 +292,7 @@ test "olang mcp answers a scripted session: tools/list, check, explain, doc, for
     lines.Push(callLine(7, "format", $"{\"file\":\"" + $good + "\"}"))
     lines.Push(callLine(8, "test", $"{\"file\":\"" + $good + "\"}"))
     lines.Push(callLine(9, "nothing", "{}"))
-    out := try os.Output.Exec(compilerUnderTest(), "mcp", input = lines.ToString()) catch os.Error { unreachable "olang mcp did not run" }
+    out := try os.Output.Exec(compilerUnderTest(), "serve", "mcp", input = lines.ToString()) catch os.Error { unreachable "olang serve mcp did not run" }
     assert out.Status == 0, out.Stderr
     got := Map<String&, String&>()
     for line in out.Stdout.Lines() {

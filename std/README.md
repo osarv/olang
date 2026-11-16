@@ -61,7 +61,7 @@ fn main() ? {
 }
 ```
 
-In a notebook (`olang jupyter`) a table ending a cell is shown as an HTML table.
+In a notebook (`olang serve jupyter`) a table ending a cell is shown as an HTML table.
 
 ## Calling C: a header import, an extern block, or `std/ffi`
 

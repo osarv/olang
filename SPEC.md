@@ -116,10 +116,10 @@ word or a global with no comment above it takes the line comment that ends its o
 `#` stands in the column of a line comment ending the line above it continues that comment, and is no doc comment of
 what follows. A module's documentation is the comment lines that begin its file - after a first line beginning `#!` -
 when they are no declaration's. The text is each line with its `#` and one space after it removed; a line holding `#`
-alone is a paragraph break. A block comment (L4a) is never documentation. `doc` prints it (B14) and `lsp` shows it
+alone is a paragraph break. A block comment (L4a) is never documentation. `doc` prints it (B14) and `serve lsp` shows it
 (B15). A paragraph of a doc comment beginning `Deprecated:` marks its declaration **deprecated**: a convention for tools
 alone - the checker, the diagnostics (all of them errors, B11), the builds and the evaluator give it no meaning. `doc`
-marks the item (B14), `lsp` hovers its note, tags its completion and hints at its uses (B15), `mcp`'s `doc` shows what
+marks the item (B14), `serve lsp` hovers its note, tags its completion and hints at its uses (B15), `serve mcp`'s `doc` shows what
 `doc` shows (B16), and `api` lists an item newly marked (B21). The usual way to deprecate is to remove between versions.
 
 **L5.** A newline (`'\n'`) is otherwise insignificant except for L18.
@@ -8207,29 +8207,32 @@ other entry point; or it names a file, which is built and run (B3g):
 
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
-mode-word ::= "build" | "compile" | "test" | "run" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
-            | "bindgen" | "profile" | "api" | "jupyter" | "notebook"
+mode-word ::= "build" | "compile" | "test" | "run" | "format" | "explain" | "help" | "doc" | "fix"
+            | "bindgen" | "profile" | "api" | "serve" server
+server    ::= "lsp" | "mcp" | "jupyter"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-runs" COUNT | "-install" | "-continue"
 ```
 
-A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
-an error listing the modes. Nothing at all after `olang` opens the prompt (B22). After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `run` (B3e), `format` (B13),
-`explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help file` scripting mode's), `doc`
-(B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20), `api` (B21), `jupyter` (B23) and `notebook` (B24). An
+A word ending in `.olang` in the mode's place is a file to run, and one ending in `.ipynb` a notebook to run (B24); any
+other word there is a mode, and one that names none is an error listing the modes. A server's mode is two words, `serve`
+and the protocol it serves; `serve` alone, or with a word naming no protocol, is an error. Nothing at all after `olang` opens the prompt (B22). After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `run` (B3e), `format` (B13),
+`explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options - `help serve lsp` a server's,
+`help serve` the servers -, `help file` scripting mode's), `doc` (B14), `fix` (B17), `bindgen` (§11 X16), `profile` (B20),
+`api` (B21), `serve lsp` (B15), `serve mcp` (B16) and `serve jupyter` (B23). An
 **option** is a word beginning with `-`, written after the mode (or, in scripting mode, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
 
 | option | applies to | rule |
 |---|---|---|
-| `-output PATH` | build, compile, run, bindgen, profile, notebook | B3h, §11 X16, B20, B24 |
+| `-output PATH` | build, compile, run, bindgen, profile | B3h, §11 X16, B20, B24 |
 | `-debug`, `-race`, `-sanitize` | scripting mode, build, compile, test, run | B2c, B2b, B2f |
-| `-quick` | scripting mode, build, compile, test, profile, explain, run, jupyter, notebook | B2g, B20, B11d |
-| `-checked` | scripting mode, build, compile, test, run, jupyter, notebook | E16g |
-| `-target NAME` | scripting mode, build, compile, test, run, explain, doc, lsp, mcp | B12 |
-| `-define Name=value`, `-update` | scripting mode, build, compile, test, run, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
+| `-quick` | scripting mode, build, compile, test, profile, explain, run, serve jupyter | B2g, B20, B11d |
+| `-checked` | scripting mode, build, compile, test, run, serve jupyter | E16g |
+| `-target NAME` | scripting mode, build, compile, test, run, explain, doc, serve lsp, serve mcp | B12 |
+| `-define Name=value`, `-update` | scripting mode, build, compile, test, run, explain, doc, serve lsp, serve mcp, profile, serve jupyter | B10, §4 M23c |
 | `-check` | format, fix, scripting mode, build, test, run | B13, B17, B18a |
 | `-html DIR` | doc | B14 |
 | `-library` | build | §11 X14 |
@@ -8239,12 +8242,12 @@ beginning with `-` that is no option is an error:
 | `-runs COUNT` | scripting mode, run | B19b |
 | `-caps` | explain | B11c |
 | `-asm`, `-ir` | explain | B11d |
-| `-install` | jupyter | B23 |
-| `-continue` | notebook | B24 |
+| `-install` | serve jupyter | B23 |
+| `-continue` | scripting mode, run | B24 |
 
 `build`, `compile`, `run`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
 file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
-`-html`) any number, `lsp` and `mcp` none; for scripting mode, for `run` and for `profile`
+`-html`) any number, `serve lsp` and `serve mcp` none; for scripting mode, for `run` and for `profile`
 every argument after the file belongs to the program (B3f, B4a), one beginning with `-` included - except one of olang's
 own options by name (`-define`, `-debug`, `-quick`, ...), which is an error: options go before the file. `--` right
 after the file gives the program everything after it unchecked (`olang s.olang -- -debug`). There are no other
@@ -8398,6 +8401,7 @@ the options it is given (`-quick`, B2g; `-checked`, E16g; `-debug`, `-race`, `-s
 line is B3f's, its standard input, output and error are the compiler's, and the status it ends with - 128 and the signal's
 number where a signal ends it, as a shell says - is the mode's. A compile-time error is reported as `build` reports it, with
 status 1, and nothing is run. Another architecture's program (B12a) runs in an emulator, given the program's path.
+`run FILE.ipynb` runs a notebook instead (B24).
 
 The **evaluator** - the compile-time evaluator (K1) run over a whole program - is not a mode of the command line. A program of
 the compiler's own testing sets the environment variable `OLANG_EVALUATE` (to any value), and then scripting mode (B3g)
@@ -8467,7 +8471,7 @@ passed on to it as written — one beginning with `-` included, which is never r
 program's command line (B4a) is `<file>`, as written, followed by those arguments.
 
 **B3g (scripting mode).** Running a file, `olang [<option> ...] <file> [<argument> ...]` - a file ending in `.olang` where the mode
-would stand - builds the program whose root module is `<file>` as `build` does by default (unchecked, `-O3`, link-time
+would stand (one ending in `.ipynb` is a notebook, run as B24 says) - builds the program whose root module is `<file>` as `build` does by default (unchecked, `-O3`, link-time
 optimization, B2d; `-quick`, B2g, and `-checked`, E16g, are its options, and `-debug`, `-race`, `-sanitize` and `-memory` apply as
 to `build`) but **into olang's own cache** - the directory `olang/run` of `$XDG_CACHE_HOME`, else of `~/.cache` - rather
 than into `build/`: every module's object is reused there while current (B3i), the binary is named by the file and where
@@ -8544,7 +8548,7 @@ the judgings of the same bodies before it in the build. A later build finding, a
 component with the same inputs that reads all the same takes that judging - where each value is built, and what the
 bodies require of their callers - and does not judge the component again; anything else is judged. What is built and
 reported is the same either way: a judging is kept only where nothing in it was wrong, so one taken says nothing, and a
-record that is not whole is never read. `olang lsp` and `olang mcp` check a program as `olang test` does in the
+record that is not whole is never read. `olang serve lsp` and `olang serve mcp` check a program as `olang test` does in the
 directory they run in, keeping and taking the same front and scope records, so a check after an edit judges again only
 what the edit reaches.
 
@@ -8922,7 +8926,7 @@ error set, then the effect words its body breaks none of (G42's facts, in the ca
 scope obligations say (`keeps b in a`, `borrows a`), so a place holding it can copy the type; a function held in locals
 and results only (T22a) says so after it. A function judged in twins (T22c) lists them, one line each - `# followed for:
 f = 'link', at FILE:LINE:COLUMN`, the function values followed and the call that first asked for the twin. `doc` (B14),
-the language server's hover (B15) and `mcp`'s `explain` and `doc` (B16) show the same lines; completion (B15) offers the
+the language server's hover (B15) and `serve mcp`'s `explain` and `doc` (B16) show the same lines; completion (B15) offers the
 promise words, and after `keeps`, `borrows` or `in` the parameters of the signature being written.
 
 **B11c (what imports reach).** `explain -caps FILE` prints, for the program `FILE` is the root of once it has checked,
@@ -9003,7 +9007,7 @@ item alone. The program `FILE` is the root of is checked first; one with errors 
 static HTML into the directory `DIR`, one page per module and an index, each example a section that opens to its body; a module that does not check is left out, its
 errors reported, and the status is then 1.
 
-**B15.** `lsp` serves the Language Server Protocol on the standard input and output (JSON-RPC 2.0 with
+**B15.** `serve lsp` serves the Language Server Protocol on the standard input and output (JSON-RPC 2.0 with
 `Content-Length` framing), for the files an editor has open, their text as the editor holds it: diagnostics as the
 compiler reports them (B11), a hover giving the item's signature and doc comment (B11b, L4b) and the first test naming it (B7a) with how many
 more there are, the definition of a name,
@@ -9024,14 +9028,14 @@ roots `std/`, `./` and `../`, and nothing for a remote path; `/` and `"` trigger
 diagnostic M10 a `textDocument/codeAction` request is answered with a quick fix inserting the import M10 names after
 the file's last `import` line, or at its start where there is none (`codeActionProvider`).
 
-**B15a (where the analyzing tools write).** The modes that only analyze - `lsp`, `mcp` (B16), `explain` (B11b), `doc`
+**B15a (where the analyzing tools write).** The modes that only analyze - `serve lsp`, `serve mcp` (B16), `explain` (B11b), `doc`
 (B14) and `api` - write nothing beside the program or in the working directory: the records and objects their checking
 keeps go to olang's cache of what it builds for itself (`analysis/` in `$XDG_CACHE_HOME/olang`, else `~/.cache/olang`),
 one directory per project - the directory of the file named, else the working directory, named by its hash - so two
 projects never share them; the projects' directories are kept within 1 GiB, the one used longest ago going first (B3i's
 caps). What they write that was asked for (`doc -html DIR`) goes where it was asked.
 
-**B16.** `mcp` serves the Model Context Protocol on the standard input and output (JSON-RPC 2.0, one message a line)
+**B16.** `serve mcp` serves the Model Context Protocol on the standard input and output (JSON-RPC 2.0, one message a line)
 with the tools `check` (a file's diagnostics, each its file, line, column, rule and message), `explain` (B11b),
 `doc` (B14, deprecated items marked as there), `format` (B13, the formatted text, the file unchanged) and `test` (B3a, each test's outcome).
 
@@ -9308,7 +9312,7 @@ diagnostics' rows and a shown value by its tokens - with the 16 standard ANSI co
 `NO_COLOR` is set and not empty. Input that is not a terminal is read as lines, as before; where it is read as lines from a terminal, no prompt is
 written for a line already read or waiting to be (one pasted).
 
-**B23 (the notebook kernel).** `olang jupyter CONNECTION_FILE` is a kernel of Jupyter's messaging protocol (version
+**B23 (the notebook kernel).** `olang serve jupyter CONNECTION_FILE` is a kernel of Jupyter's messaging protocol (version
 5.3): it reads the connection file (JSON: `ip`, `key`, and `shell_port`, `control_port`, `stdin_port`, `iopub_port`,
 `hb_port`), listens on those five ports, speaks ZeroMQ's wire protocol (ZMTP 3.0, the NULL mechanism) on them, signs
 every message it sends with HMAC-SHA256 under the key and drops every message it reads whose signature does not match.
@@ -9320,9 +9324,9 @@ that stops, publishes an `error` (`CompileError` or `RuntimeError`, one tracebac
 replies `error`. An `interrupt_request` on the control channel interrupts the running cell (B22),
 `is_complete_request` answers `incomplete` while an entry would go on at the prompt, `complete_request` offers the
 session's names and the keywords starting with the word before the cursor, and `shutdown_request` ends the kernel with
-status 0. Input is not read (`stdin` is connected, never asked). `olang jupyter -install` takes no file: it writes the
+status 0. Input is not read (`stdin` is connected, never asked). `olang serve jupyter -install` takes no file: it writes the
 kernel's spec, `kernels/olang/kernel.json` under `$JUPYTER_DATA_DIR` (else `~/.local/share/jupyter`), naming this
-`olang` and `jupyter {connection_file}` as its command line, so Jupyter offers olang as a kernel.
+`olang` and `serve jupyter {connection_file}` as its command line, so Jupyter offers olang as a kernel.
 
 **Rich display.** The prelude declares `type Display enum { Html(t String)  Markdown(t String)  Latex(t String)
 Svg(t String)  Png(bytes Array<U8>) }`, its `d.Mime()` (`text/html`, `text/markdown`, `text/latex`, `image/svg+xml`,
@@ -9330,9 +9334,9 @@ Svg(t String)  Png(bytes Array<U8>) }`, its `d.Mime()` (`text/html`, `text/markd
 by declaring `fn (x T&) Display() Display`, and so meets `Displayable`; only the kernel calls it, for the value a cell
 shows. The language gives the method no other meaning: `$x` and the prompt still write the text form.
 
-**B24 (running a notebook).** `olang notebook run FILE.ipynb` runs a Jupyter notebook (nbformat 4, JSON) without Jupyter:
+**B24 (running a notebook).** `olang run FILE.ipynb`, and in scripting mode `olang FILE.ipynb`, runs a Jupyter notebook (nbformat 4, JSON) without Jupyter:
 its code cells, in order, in one session as the kernel runs them (B23) - each named `In[N]` in diagnostics, N its
-`execution_count` - and writes the notebook back to FILE (or to `-output PATH`). Each code cell's `outputs` are replaced
+`execution_count` - and writes the notebook back to FILE (or, under `run`, to `-output PATH`). Each code cell's `outputs` are replaced
 by what Jupyter stores for it: a `stream` for what it wrote to its standard output (`stdout`) and to its standard error
 and diagnostics' warnings (`stderr`), text as the lines it ends; an `execute_result` for the value it shows, its `data`
 as B23's kernel gives it (`text/plain` and the value's `Display` under its MIME type, a PNG in base64) and the cell's
@@ -9341,7 +9345,8 @@ cell that does not check or that stops. A code cell with no source is not run an
 raw cell, every other member of the notebook and its metadata are written back as read, the metadata's `kernelspec`
 naming olang where it had none. A cell that fails ends the run with status 1, the code cells after it left with no
 output; with `-continue` they run too, the status still 1. A notebook that cannot be read, is no notebook or cannot be
-written is status 2; anything but the word `run` and one file after `notebook` is an error.
+written is status 2. A notebook runs alone: a word after it other than an option is an error, and `-continue` given
+with a `.olang` file is an error.
 
 ## 11. External Functions
 

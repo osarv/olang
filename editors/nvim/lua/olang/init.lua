@@ -1,7 +1,7 @@
--- olang for Neovim: format on save with "olang format", and "olang lsp" as the language server.
+-- olang for Neovim: format on save with "olang format", and "olang serve lsp" as the language server.
 --
 --   require("olang").setup({
---     cmd = { "olang", "lsp" },  -- the server (nil to leave the server off)
+--     cmd = { "olang", "serve", "lsp" },  -- the server (nil to leave the server off)
 --     format_on_save = true,     -- through the server when it runs, else "olang format" on a copy of the buffer
 --     completion = true,         -- Neovim's own completion from the server, shown on "." (0.11+; off where nvim-cmp
 --                                -- or blink.cmp is loaded, which take the server's completion themselves)
@@ -12,7 +12,7 @@
 -- without it.
 local M = {}
 
-M.config = { cmd = { "olang", "lsp" }, format_on_save = true, completion = true }
+M.config = { cmd = { "olang", "serve", "lsp" }, format_on_save = true, completion = true }
 
 function M.setup(opts)
   M.config = vim.tbl_extend("force", M.config, opts or {})

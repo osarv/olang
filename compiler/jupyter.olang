@@ -1,4 +1,4 @@
-# jupyter - "olang jupyter CONNECTION_FILE" (B23): a Jupyter kernel, the prompt's session (prompt.olang, B22) driven by
+# jupyter - "olang serve jupyter CONNECTION_FILE" (B23): a Jupyter kernel, the prompt's session (prompt.olang, B22) driven by
 # a notebook. It speaks Jupyter's messaging protocol 5.3 over ZeroMQ's wire protocol, std/zmtp - no libzmq - on the
 # five ports the connection file names: shell and control (requests, each answered on the connection it came by), stdin
 # (connected, never asked: input is not read), iopub (what the kernel publishes: status, the code run, its output,
@@ -9,7 +9,7 @@
 # A cell is run as the prompt runs an entry: its standard output and standard error captured while it runs (each into a
 # file in memory) and published as streams; the value of its last expression as an execute_result, its text "$v" and,
 # where its type renders itself (Display, B23), that rendering under its MIME type; its diagnostics and what stopped it
-# as an error, with a row of traceback per line. "olang jupyter -install" writes the kernel's spec for Jupyter to find.
+# as an error, with a row of traceback per line. "olang serve jupyter -install" writes the kernel's spec for Jupyter to find.
 
 import "std/os"
 import "std/io"
@@ -110,7 +110,7 @@ fn Serve(cfg mut build.Config&, file String&) I32 {
 }
 
 fn fail(why String&) I32 {
-    try io.PutErr($"olang jupyter: " + $why + "\n") catch io.Error { }
+    try io.PutErr($"olang serve jupyter: " + $why + "\n") catch io.Error { }
     return 1
 }
 
@@ -425,7 +425,7 @@ fn civil(days I64) I64, I64, I64 {
 
 # ---- the kernel's spec ----
 
-# "olang jupyter -install": the kernel's spec written where Jupyter looks for a user's kernels - $JUPYTER_DATA_DIR,
+# "olang serve jupyter -install": the kernel's spec written where Jupyter looks for a user's kernels - $JUPYTER_DATA_DIR,
 # else ~/.local/share/jupyter - as kernels/olang/kernel.json, running this olang
 fn Install(exe String&, c build.Config&) I32 {
     base := try os.Env("JUPYTER_DATA_DIR") catch default ""
@@ -433,10 +433,10 @@ fn Install(exe String&, c build.Config&) I32 {
     dir := $base + "/kernels/olang"
     try os.MkDirAll(dir) catch os.Error e { return fail($"cannot make " + $dir + ": " + $e) }
     opts := $(", \"-quick\"" if c.Quick else "") + $(", \"-checked\"" if c.Checked else "")     # (B23: the kernel's own options)
-    spec := $"{\n  \"argv\": [" + $Q(exe) + ", \"jupyter\"" + $opts + ", \"{connection_file}\"],\n  \"display_name\": \"olang\",\n" + $
+    spec := $"{\n  \"argv\": [" + $Q(exe) + ", \"serve\", \"jupyter\"" + $opts + ", \"{connection_file}\"],\n  \"display_name\": \"olang\",\n" + $
         "  \"language\": \"olang\",\n  \"interrupt_mode\": \"message\"\n}\n"
     try os.WriteFile($dir + "/kernel.json", spec) catch os.Error e { return fail($"cannot write " + $dir + "/kernel.json: " + $e) }
-    try io.Put($"olang jupyter: the kernel is installed at " + $dir + "/kernel.json - pick \"olang\" in a notebook\n") catch io.Error { }
+    try io.Put($"olang serve jupyter: the kernel is installed at " + $dir + "/kernel.json - pick \"olang\" in a notebook\n") catch io.Error { }
     return 0
 }
 

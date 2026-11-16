@@ -1,4 +1,4 @@
-# lsp - "olang lsp" (B15): a Language Server Protocol server on the standard input and output, for editors.
+# lsp - "olang serve lsp" (B15): a Language Server Protocol server on the standard input and output, for editors.
 #
 # Two processes. The server - this one - speaks the protocol and holds the open files, their text as the editor has
 # them; it never runs the compiler's passes itself. Each piece of analysis runs in a WORKER, a fork of the server made
@@ -148,7 +148,7 @@ fn (s mut Server&) handle(body String&) {
         s.ask(body, id)
         return
     }
-    s.send(errorReply(id, -32601, $"olang lsp has no " + $method))
+    s.send(errorReply(id, -32601, $"olang serve lsp has no " + $method))
 }
 
 # the requests a worker answers
@@ -867,7 +867,7 @@ SessionSrc String& = ("import \"std/io\"\n\n# a point on a plane\ntype Point str
                       "# the sum of a point's coordinates\nfn sum(p Point) I64 {\n    return p.X+p.Y\n}\n\n" + $
                       "fn main() {\n    q := Point(1, 2)\n    io.PutLn($sum(q))!\n    bad I32 = \"x\"\n}\n")
 
-test "olang lsp answers a scripted session: diagnostics, hover, definition, symbols, completion, formatting (B15)" {
+test "olang serve lsp answers a scripted session: diagnostics, hover, definition, symbols, completion, formatting (B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/p.olang"
@@ -896,8 +896,8 @@ test "olang lsp answers a scripted session: diagnostics, hover, definition, symb
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"textDocument/noSuchThing\",\"params\":{}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
-    assert out.Status == 0, "olang lsp ended with " + $out.Status + ": " + $out.Stderr
+    out := try os.Output.Exec(compilerUnderTest(), "serve", "lsp", input = b.ToString()) catch os.Error { unreachable "olang serve lsp did not run" }
+    assert out.Status == 0, "olang serve lsp ended with " + $out.Status + ": " + $out.Stderr
     got := Map<String&, String&>()
     diags := ""
     for m in frames(out.Stdout) {
@@ -927,7 +927,7 @@ EditSrc String& = ("import \"std/io\"\n\ntype Point struct(X I64, Y I64) {\n    
                    "type Line struct(A Point, B Point) {\n    A\n    B\n}\n\nfn main() {\n    p := Point(1, 2)\n    l := Line(p, p)\n" + $
                    "    n I64 = 3\n    v := Vec<I64>()\n    io.\n    p.\n    q := p.X\n    l.A.\n    n.\n    v.\n    io.PutLn(p.\n}\n")
 
-test "olang lsp completes after '.' while the line is unfinished: an import, a value, a word begun, a chain (B15)" {
+test "olang serve lsp completes after '.' while the line is unfinished: an import, a value, a word begun, a chain (B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/e.olang"
@@ -949,8 +949,8 @@ test "olang lsp completes after '.' while the line is unfinished: an import, a v
     }
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
-    assert out.Status == 0, "olang lsp ended with " + $out.Status + ": " + $out.Stderr
+    out := try os.Output.Exec(compilerUnderTest(), "serve", "lsp", input = b.ToString()) catch os.Error { unreachable "olang serve lsp did not run" }
+    assert out.Status == 0, "olang serve lsp ended with " + $out.Status + ": " + $out.Stderr
     got := Map<String&, String&>()
     for m in frames(out.Stdout) {
         msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
@@ -977,7 +977,7 @@ test "olang lsp completes after '.' while the line is unfinished: an import, a v
 PathSrc String& = "import \"std/\nimport \"./\nimport \"github.com/x/\nimport \"\n"
 FixSrc String& = "import \"std/io\"\n\nfn main() {\n    io.PutLine(json.Encode(1))!\n}\n"
 
-test "olang lsp completes import paths and offers M10's missing import as a quick fix (B15)" {
+test "olang serve lsp completes import paths and offers M10's missing import as a quick fix (B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer try os.RemoveAll(dir) catch os.Error { }
     try os.MkDirAll($dir + "/sub") catch os.Error { unreachable "no folder" }
@@ -1010,8 +1010,8 @@ test "olang lsp completes import paths and offers M10's missing import as a quic
                   "\"context\":{\"diagnostics\":[" + $dg + "]}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
-    assert out.Status == 0, "olang lsp ended with " + $out.Status + ": " + $out.Stderr
+    out := try os.Output.Exec(compilerUnderTest(), "serve", "lsp", input = b.ToString()) catch os.Error { unreachable "olang serve lsp did not run" }
+    assert out.Status == 0, "olang serve lsp ended with " + $out.Status + ": " + $out.Stderr
     got := Map<String&, String&>()
     for m in frames(out.Stdout) {
         msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
@@ -1044,7 +1044,7 @@ StepLibs := Array<String&>[
     "import \"std/list\"\n\nfn Keep(a mut Vec<String&>&, s String&) {\n    a.Push(s)\n    a.Push(s)\n}\n\nfn Count(a Vec<String&>&) I64 { return a.Len() }\n\nfn f(ok list.List<I64>&) I64 {\n    a := list.List.FromIter(ok.Iter())\n    return a.Len()\n}\n"
     "import \"std/list\"\n\nfn Keep(a mut Vec<String&>&, s String&) { a.Push(s) }\n\nfn Count(a Vec<String&>&) I64 { return a.Len() }\n\nfn f(ok list.List<I64>&) I64 {\n    a := list.List.FromIter(ok.Iter())\n    return a.Len()\n}\n"]
 
-test "olang lsp checks an edited program as a build does, taking the records the checks before it left (B3i, T8)" {
+test "olang serve lsp checks an edited program as a build does, taking the records the checks before it left (B3i, T8)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer try os.RemoveAll(dir) catch os.Error { }
     main := $dir + "/main.olang"
@@ -1070,8 +1070,8 @@ fn lspSaid(dir String&, main String&) String, String {
                   "\",\"languageId\":\"olang\",\"version\":1,\"text\":" + $t.ToString() + "}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    cmd := $"cd " + $os.Quote(dir) + " && OLANG_TOOL_LOG=1 " + $os.Quote(compilerUnderTest()) + " lsp"
-    out := try os.Output.Exec("sh", "-c", cmd, input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    cmd := $"cd " + $os.Quote(dir) + " && OLANG_TOOL_LOG=1 " + $os.Quote(compilerUnderTest()) + " serve lsp"
+    out := try os.Output.Exec("sh", "-c", cmd, input = b.ToString()) catch os.Error { unreachable "olang serve lsp did not run" }
     assert out.Status == 0, out.Stderr
     lines Vec<String&>
     for m in frames(out.Stdout) {
@@ -1125,7 +1125,7 @@ test "a file that does not parse gets its diagnostics, and requests on it answer
                   uri + "\"},\"position\":{\"line\":0,\"character\":4}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Output.Exec(compilerUnderTest(), "serve", "lsp", input = b.ToString()) catch os.Error { unreachable "olang serve lsp did not run" }
     assert out.Status == 0, out.Stderr
     assert out.Stdout.Contains("textDocument/publishDiagnostics") and out.Stdout.Contains("\"severity\":1")
     assert out.Stdout.Contains("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":null}"), out.Stdout
@@ -1155,7 +1155,7 @@ test "a hover on a function shows the first test naming it and how many more the
                   ",\"position\":{\"line\":3,\"character\":18}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Output.Exec(compilerUnderTest(), "serve", "lsp", input = b.ToString()) catch os.Error { unreachable "olang serve lsp did not run" }
     assert out.Status == 0, out.Stderr
     assert out.Stdout.Contains("Example: doubles") and out.Stdout.Contains("assert Twice(2) == 4"), out.Stdout
     assert out.Stdout.Contains("+1 more test") and not out.Stdout.Contains("doubles a negative"), out.Stdout
@@ -1190,7 +1190,7 @@ test "a deprecated item: hover shows the note, completion tags it, its uses get 
                   ",\"position\":{\"line\":5,\"character\":4}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Output.Exec(compilerUnderTest(), "serve", "lsp", input = b.ToString()) catch os.Error { unreachable "olang serve lsp did not run" }
     assert out.Status == 0, out.Stderr
     got := Map<String&, String&>()
     diags := ""
@@ -1224,7 +1224,7 @@ test "unused names are warnings, other rules errors (B15, D3b, M5a)" {
                   "\",\"languageId\":\"olang\",\"version\":1,\"text\":" + $t.ToString() + "}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Output.Exec(compilerUnderTest(), "serve", "lsp", input = b.ToString()) catch os.Error { unreachable "olang serve lsp did not run" }
     assert out.Stdout.Contains("\"code\":\"D3b\"") and out.Stdout.Contains("\"severity\":2"), out.Stdout
     assert not out.Stdout.Contains("\"severity\":1"), out.Stdout
 }
@@ -1256,7 +1256,7 @@ test "a hover on a function shows its # fits: line; a promise word is followed b
                   ",\"position\":{\"line\":4,\"character\":5}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Output.Exec(compilerUnderTest(), "serve", "lsp", input = b.ToString()) catch os.Error { unreachable "olang serve lsp did not run" }
     assert out.Status == 0, out.Stderr
     got := Map<String&, String&>()
     for m in frames(out.Stdout) {
@@ -1286,10 +1286,10 @@ test "lsp and explain write nothing in the directory they run in: their records 
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
     olang := compilerUnderTest()
-    out := try os.Output.Exec("env", "XDG_CACHE_HOME=" + $cache, olang, "lsp", input = b.ToString(), dir = dir) catch os.Error {
-        unreachable "olang lsp did not run"
+    out := try os.Output.Exec("env", "XDG_CACHE_HOME=" + $cache, olang, "serve", "lsp", input = b.ToString(), dir = dir) catch os.Error {
+        unreachable "olang serve lsp did not run"
     }
-    assert out.Status == 0, "olang lsp ended with " + $out.Status + ": " + $out.Stderr
+    assert out.Status == 0, "olang serve lsp ended with " + $out.Status + ": " + $out.Stderr
     ex := try os.Output.Exec("env", "XDG_CACHE_HOME=" + $cache, olang, "explain", "m.olang", "main", dir = dir) catch os.Error {
         unreachable "olang explain did not run"
     }

@@ -1,5 +1,5 @@
 # a Jupyter front end's side of the kernel's protocol (B23), for checks' "jupyter" scenario: "client OLANG" starts
-# "OLANG jupyter conn.json" on five free ports, connects to it as a notebook does (shell and control DEALERs, an iopub
+# "OLANG serve jupyter conn.json" on five free ports, connects to it as a notebook does (shell and control DEALERs, an iopub
 # SUB, a heartbeat REQ), and prints, per request, the messages its iopub carries and its reply - kinds and the parts of
 # their contents that do not change from run to run. Messages are signed under the connection file's key
 import "std/os"
@@ -29,7 +29,7 @@ fn main() ? {
         "\"shell_port\":" + $ports[0] + ",\"control_port\":" + $ports[1] + ",\"stdin_port\":" + $ports[2] + ",\"iopub_port\":" + $
         ports[3] + ",\"hb_port\":" + $ports[4] + "}"
     try os.WriteFile("conn.json", conn)
-    kernel := try os.Process.Start(olang, "jupyter", "conn.json", capture = false)
+    kernel := try os.Process.Start(olang, "serve", "jupyter", "conn.json", capture = false)
     c := client(dial(ports[0], "DEALER"), dial(ports[1], "DEALER"), dial(ports[3], "SUB"), dial(ports[4], "REQ"))
     try c.Beat.Send("ping")
     try io.PutLn($"heartbeat: " + $(try c.Beat.Recv())[0])

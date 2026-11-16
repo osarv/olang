@@ -88,8 +88,8 @@ Cases Array<String&> = Array<String&>[
     "help explain"
     "help help"
     "help doc"
-    "help lsp"
-    "help mcp"
+    "help serve lsp"
+    "help serve mcp"
     "help nope"
     "help build test"
     # explain

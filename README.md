@@ -92,19 +92,19 @@ set `OLANG_CLANG=/path/to/clang` for both `make` and the compiler.
 
 ### Notebooks
 
-`olang jupyter -install` writes olang's kernel spec into your Jupyter kernels (`$JUPYTER_DATA_DIR`, else
+`olang serve jupyter -install` writes olang's kernel spec into your Jupyter kernels (`$JUPYTER_DATA_DIR`, else
 `~/.local/share/jupyter`); then pick "olang" in JupyterLab, Notebook or VS Code (SPEC B23). Cells run as at the prompt;
 output is streamed, the last expression's value shown, and a type declaring `fn (x T&) Display() Display` (the
 prelude's, e.g. `Display.Html(...)`) is shown richly - a table, a plot, a formula. The stop button interrupts a cell.
 Compiled cells keep their objects in `~/.cache/olang/cells` (`$XDG_CACHE_HOME`); `OLANG_CELLS=interpret` interprets
 them instead.
 
-`olang notebook run FILE.ipynb` runs a notebook with no Jupyter and no Python: its code cells run in order as the kernel
-runs them, and the notebook is written back (in place, or to `-output PATH`) with each cell's output as Jupyter stores
+`olang run FILE.ipynb` (or just `olang FILE.ipynb`) runs a notebook with no Jupyter and no Python: its code cells run in order as the kernel
+runs them, and the notebook is written back (in place, or with `run` to `-output PATH`) with each cell's output as Jupyter stores
 it - printed text, the shown value, a plot's SVG, an error - and its execution count (SPEC B24). It stops at the first
 failing cell with status 1; `-continue` runs the rest.
 
-`editors/` has the Neovim plugin and the language server's setup (`olang lsp`).
+`editors/` has the Neovim plugin and the language server's setup (`olang serve lsp`).
 
 ## The repository
 

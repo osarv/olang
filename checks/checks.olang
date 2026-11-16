@@ -1419,9 +1419,9 @@ fn spinner(r mut report&) ? Failed {
     try r.expect(sh(dir, "! grep -aq \"$(printf '\\342\\240')\" out.txt && ! grep -aq \"$(printf '\\033')\" out.txt") == 0, "a standard error that is no terminal got the spinner", dir)
 }
 
-test "olang jupyter speaks Jupyter's protocol to a front end" { assert passed("jupyter") }
+test "olang serve jupyter speaks Jupyter's protocol to a front end" { assert passed("jupyter") }
 
-# B23: "olang jupyter CONNECTION_FILE" is a Jupyter kernel - a front end written in olang (fixtures/jupyter/client.olang)
+# B23: "olang serve jupyter CONNECTION_FILE" is a Jupyter kernel - a front end written in olang (fixtures/jupyter/client.olang)
 # drives it over ZeroMQ's wire protocol: heartbeat, kernel_info, cells run as the prompt runs them (a value shown, its
 # rich rendering by Display, output streamed, an error, an interrupted endless loop), is_complete, complete, shutdown
 fn jupyter(r mut report&) ? Failed {
@@ -1432,20 +1432,21 @@ fn jupyter(r mut report&) ? Failed {
     try r.expect(sh(dir, "cmp -s session.want out.txt") == 0, "the kernel's session printed other than session.want", dir)
 }
 
-test "olang notebook run runs a notebook's cells and stores their outputs" { assert passed("notebook") }
+test "olang run FILE.ipynb runs a notebook's cells and stores their outputs" { assert passed("notebook") }
 
-# B24: "olang notebook run" runs a notebook's code cells in order as the kernel runs them and writes it back with the
+# B24: "olang run FILE.ipynb" (and scripting mode's "olang FILE.ipynb") runs a notebook's code cells in order as the kernel runs them and writes it back with the
 # outputs Jupyter stores (a stream, a shown value with its MIME types, a plot's SVG, an error) and execution counts: it
 # stops at the first failing cell with status 1 - the cells after it cleared - or, with -continue, runs the rest
 fn notebook(r mut report&) ? Failed {
     dir := fresh("notebook")
     os.Run("cp checks/fixtures/notebook/* " + $os.Quote(dir))
-    try r.expect(sh(dir, "\"$OLANG\" notebook run in.ipynb -output out.ipynb > out.txt 2>&1") == 1, "a failing cell did not give status 1", dir)
+    try r.expect(sh(dir, "\"$OLANG\" run in.ipynb -output out.ipynb > out.txt 2>&1") == 1, "a failing cell did not give status 1", dir)
     try r.expect(sh(dir, "cmp -s want.ipynb out.ipynb") == 0, "the notebook run was other than want.ipynb", dir)
-    try r.expect(sh(dir, "\"$OLANG\" notebook run -continue in.ipynb -output out.ipynb > out.txt 2>&1") == 1, "-continue did not give status 1", dir)
+    try r.expect(sh(dir, "\"$OLANG\" run -continue in.ipynb -output out.ipynb > out.txt 2>&1") == 1, "-continue did not give status 1", dir)
     try r.expect(sh(dir, "cmp -s want_continue.ipynb out.ipynb") == 0, "the notebook run with -continue was other than want_continue.ipynb", dir)
-    try r.expect(sh(dir, "\"$OLANG\" notebook in.ipynb > out.txt 2>&1") == 1 and outOf(dir).Contains("error[B24]"), "a notebook named without run", dir)
-    try r.expect(sh(dir, "cp in.ipynb same.ipynb; \"$OLANG\" notebook run same.ipynb > out.txt 2>&1; cmp -s want.ipynb same.ipynb") == 0, "a notebook run in place", dir)
+    try r.expect(sh(dir, "\"$OLANG\" run in.ipynb extra > out.txt 2>&1") == 1 and outOf(dir).Contains("error[B24]"), "a notebook given an argument", dir)
+    try r.expect(sh(dir, "cp in.ipynb same.ipynb; \"$OLANG\" run same.ipynb > out.txt 2>&1; cmp -s want.ipynb same.ipynb") == 0, "a notebook run in place", dir)
+    try r.expect(sh(dir, "cp in.ipynb script.ipynb; \"$OLANG\" script.ipynb > out.txt 2>&1; cmp -s want.ipynb script.ipynb") == 0, "a notebook run in scripting mode", dir)
 }
 
 fn interp(r mut report&) ? Failed {

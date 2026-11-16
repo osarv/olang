@@ -492,7 +492,7 @@ For the announcement's "if you know ..." notes. The olang column is what to writ
 | `go vet` / `go fix` modernizers (1.26) | errors where checkable (1.2, 1.3 recommended); `olang fix` |
 | `gofmt` | `olang format` |
 | `go doc`, godoc | `olang doc`, `doc -html` |
-| `gopls` | `olang lsp` |
+| `gopls` | `olang serve lsp` |
 | exported = capitalized | the same (M6), members and error words too |
 | modules, `go.sum` | git imports pinned by `olang.lock`, `-update` |
 | `os.Root` (1.24) | not built; a confined directory would be a std item |
