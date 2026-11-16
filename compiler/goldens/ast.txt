@@ -1223,8 +1223,6 @@ b13dd1c2283b4390 8fd668afabccb613 checks/cases/r9bstmtdefault.olang
 878066393ff15646 77dbd3c486a5c6c9 checks/cases/r9buncaught.olang
 7657491c675c9c2a 67c2e2fb462821ee checks/cases/r9qualified.olang
 c0ae5c374ae200f9 25a6501574b6c287 checks/cases/rangefloat.olang
-5a2a7ad03d83d4ee adbba3da6514daf4 checks/cases/rangefourargs.olang
-c3730c6bf970a53f 990afd094454337e checks/cases/rangenoargs.olang
 23ee383056d1901c 08c2ee6455f5b8d5 checks/cases/rangezero.olang
 b6cf2e94d6636b54 a10588a32f57adc5 checks/cases/redefbuiltin.olang
 2036f5103e5f5030 34c7bc98ebbc71f5 checks/cases/redefd.olang
@@ -2230,7 +2228,7 @@ d81a069bb3b59724 9c7e3128f6e1808a checks/fixtures/print/print.olang
 69bc88433d300709 41114f0644ef2dfe checks/fixtures/protopriv/kk.olang
 2581f343a4d5f27f 83f4746729e421c3 checks/fixtures/protopriv/use.olang
 d07e11341e624359 3934139f15866363 checks/fixtures/racetests/clean.olang
-39dda910ff71bad9 302d20c61a597c9b checks/fixtures/racetests/race.olang
+a4bef28899fdbe1f 25965acead41327b checks/fixtures/racetests/race.olang
 5715d896eb44cb11 f985be0eaa0df2de checks/fixtures/regions/stub.olang
 bfe56a1d437a26d5 915eb8acaf9bdb5e checks/fixtures/remote/mathx/add.olang
 176e74b753db177e 4f600cece110c135 checks/fixtures/remote/mathy/inc.olang
@@ -2345,7 +2343,7 @@ be6d4829fde4952d 1bb3e9800f36f5e2 checks/fixtures/weak/unheld.olang
 02ce7168e65990f0 9680fa934ff5527a compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 6d0fd39394b50177 a1ce40f491622d99 compiler/cells.olang
-f77b76536ea8371e 6684dc1bb634b24c compiler/check.olang
+da3b7b778d2ee32d dd63bb101aad2d35 compiler/check.olang
 6133ecb87f52ad88 7c5ae7f00c3b2edb compiler/cond.olang
 2ab98962469bc960 f235e148eac3e4ba compiler/definit.olang
 78d9d5a291b0c250 de8c7d893cd9d28b compiler/diag.olang
@@ -2370,12 +2368,12 @@ b397e51ded4ef5a1 1ca26bef677bdc12 compiler/lower.olang
 2f63e0e3577845b1 79132e3f53908aac compiler/lsp.olang
 4808a3244f55bddf b8f4e5b32b1c8fb8 compiler/mcp.olang
 1d03d8a7a1b103a4 20589804ee6cb66c compiler/measure.olang
-0bfb7816823ce84f b78219bd6af3c538 compiler/mir.olang
-127757167bf08288 53eb2533c3a79dee compiler/msgs.olang
+378edb697eb766b4 dc7db6798853e657 compiler/mir.olang
+6f2982bddfd6d021 d9c0e3db69ac278d compiler/msgs.olang
 9a6f5aa11409f53c f859f3bfa840acd5 compiler/names.olang
 3f072b84e716c304 202ed56cc066d701 compiler/needs.olang
 8c0126f803fe9900 830b7fb352ee1367 compiler/notebook.olang
-cbff498da47fd465 3186d895842e2b8d compiler/olang.olang
+fa70468857dfa8e7 28f68ec61411a4e7 compiler/olang.olang
 b39996c18bbe72bf 450c7b08c181c7db compiler/paint.olang
 442346ea59bdc5b5 823ff387a1d59136 compiler/parse.olang
 4ba4b66a887cb42b 9ad060fee05b1107 compiler/profile.olang

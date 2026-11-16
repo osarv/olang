@@ -38517,3 +38517,25 @@ checks/cases/rangefourargs.olang, rangenoargs.olang.
 whether `!` should cover only the call it follows; kept as it is (the user: "we gain nothing from it right? all possible
 cases are writable and this simplifies the two failing args case"): `!` covers what a `try` in its place would (R8),
 so `f(a(), b())!` handles both arguments with one `!`, and `f(a()!, b())` still says exactly which may end the program.
+**The weekly verify of 693f3dfb: two stale tests and the race scenario under load (B11b, D17, P1e).** Two compiler
+test files had not been run since the changes they describe: compiler/olang.olang's explain test still expected
+`pct` to read `allocates` - its check's ArgumentError copies its text only on the way that fails, which G42's
+precision rule (2026-11-15) no longer counts, so explain now prints `noalloc` and `allocates only where it fails`,
+right by the rule; and compiler/mir.olang's verifier test still named `PrimOp.Holds`, gone with contracts (D17) - the
+case is removed with the verifier's branch for a check written as an operation, which no PrimOp is now. Every test
+file of compiler/ was run (`olang test compiler/X.olang`); no other stale expectation.
+The race scenario's `-race` run missed the race again under load: 1 in 40 there, 1 to 5 in 100 runs of the fixture's
+binary with eight busy processes beside it. Under gdb, ThreadSanitizer's DoReportRace was never entered in a missed
+run - the detector saw no conflict, it did not drop a report. The cause is in how it checks (tsan_rtl_access.cpp):
+an access identical to one already in a word's four shadow cells (same thread slot, same epoch, same size) is skipped
+without any check, so a task writing one counter over and over is checked on its first write only - its epoch moves
+only at a release - and the check-then-store on the shadow cells is not atomic, so two first writes made at the same
+instant can each read the cells before the other's store and both pass. The meeting of 337341c7 makes exactly that
+instant: both tasks leave their wait together. Measured, not assumed: unfolding -O3's single add into 100000 writes
+missed as often (only the first is checked); moving the counter off storage earlier tests used, the same; history_size=7,
+the same; putting the racing test first, 46 in 1000; an atomic store after each write to move the epoch, 80 in 1000
+(100000 releases a task exhaust a slot's 14-bit epochs several times over, so threads change slots mid-loop; not pursued). What holds: the tasks sweep an array of 4096 counters in opposite directions, one from the
+front and one from the back, so for the words at either end one task's write lands long after the other's is in the
+shadow - no instant at which both can be lost. 0 misses in 1000 runs of the binary and 0 in 40 of `olang test -race`
+under the same load. The detector's blind spot stays for real programs: two threads' first writes to a word at the same
+instant can go unreported; -race finds races, it never proves their absence.
