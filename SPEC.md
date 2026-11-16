@@ -8927,7 +8927,11 @@ errors reported, and the status is then 1.
 `Content-Length` framing), for the files an editor has open, their text as the editor holds it: diagnostics as the
 compiler reports them (B11), a hover giving the item's signature and doc comment (B11b, L4b) and the first test naming it (B7a) with how many
 more there are, the definition of a name,
-a document's symbols, completion of a module's members and of fields and methods after `.`, and formatting (B13). Each
+a document's symbols, completion of a module's members and of fields and methods after `.`, and formatting (B13).
+Completion after `x.` is answered while the line is unfinished and the body does not check: `x` is typed from what
+the file declares, through a chain of fields (`a.b.`); it offers the public fields (a private one in its own module),
+the methods declared for `x`'s type or a type it extends, its traits' defaults, and the methods the compiler supplies
+(E23, E26b, E31d, E33, E37, P9). Each
 open file is checked as the root of its program, again after every edit and in every open file importing it. A file
 that does not parse has its diagnostics and answers nothing else; no request ends the server but `shutdown` and
 `exit`. For a deprecated item (L4b) the hover shows the note with the rest of the doc comment, its completion item
