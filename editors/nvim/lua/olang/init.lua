@@ -25,9 +25,28 @@ local function root(bufnr)
   local found = vim.fs.root and vim.fs.root(name, { "olang.lock", ".git" })
   return found or vim.fs.dirname(name)
 end
+-- buffer is left as it is where the text does not parse, and the compiler's diagnostics shown
+-- the statuscolumn: the line number as nvim draws it, in the number column's own width; a line with a diagnostic gets its
+-- E/W and the number itself in the sign's colour; the E/W only where the number leaves the leftmost cell free
+local sev = { "Error", "Warn", "Info", "Hint" }
+local letter = { "E", "W", "I", "H" }
+function M.statuscol()
+  local w = math.max(vim.wo.numberwidth, #tostring(vim.api.nvim_buf_line_count(0)) + 1) - 1
+  if not (vim.wo.number or vim.wo.relativenumber) then w = 0 end
+  if vim.v.virtnum ~= 0 then return string.rep(" ", w + 1) end
+  local n = vim.wo.relativenumber and (vim.v.relnum == 0 and vim.wo.number and vim.v.lnum or vim.v.relnum) or vim.v.lnum
+  local text = tostring(n)
+  local d = vim.diagnostic.get(0, { lnum = vim.v.lnum - 1 })
+  local top = 5
+  for _, x in ipairs(d) do top = math.min(top, x.severity) end
+  if w == 0 or top > 4 then return "%#" .. (vim.v.relnum == 0 and vim.wo.cursorline and "CursorLineNr" or "LineNr") .. "#" .. string.rep(" ", w - #text) .. text .. " " end
+  local hl = "%#DiagnosticSign" .. sev[top] .. "#"
+  if #text < w then return hl .. letter[top] .. string.rep(" ", w - #text - 1) .. text .. "%#LineNr# " end
+  return hl .. text .. "%#LineNr# "
+end
+
 
 -- the buffer formatted by "olang format", on a copy beside the file (so its imports resolve as the file's do); the
--- buffer is left as it is where the text does not parse, and the compiler's diagnostics shown
 function M.format(bufnr)
   bufnr = bufnr or 0
   local name = vim.api.nvim_buf_get_name(bufnr)

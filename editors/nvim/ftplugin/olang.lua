@@ -10,9 +10,10 @@ vim.bo.tabstop = 4
 vim.bo.commentstring = "# %s"
 vim.bo.comments = ":#"
 vim.bo.keywordprg = "olang explain"
--- one sign column always reserved, so the E/W signs sit beside the line number and a diagnostic appearing or going away
--- never adds a column or shifts and rewraps the text
-vim.wo.signcolumn = "yes:1"
+-- diagnostic signs drawn inside the line-number column (olang.statuscol): the E/W takes the number's free leftmost cell, or
+-- replaces the number when it fills the column - never an added column, so the text never shifts
+vim.wo.signcolumn = "number"
+vim.wo.statuscolumn = "%{%v:lua.require'olang'.statuscol()%}"
 -- gf, [i and friends follow an import to its file
 vim.bo.include = [[^\s*import\s\+\(\w\+\s\+\)\=]]
 vim.bo.includeexpr = "v:lua.require'olang'.include(v:fname)"
@@ -34,4 +35,4 @@ if vim.g.olang_palette ~= 0 then
   end
   vim.wo.winhighlight = table.concat(map, ",")
 end
-vim.b.undo_ftplugin = "setlocal et< sw< sts< ts< cms< com< kp< makeprg< errorformat< signcolumn< inc< inex< sua< winhighlight<"
+vim.b.undo_ftplugin = "setlocal et< sw< sts< ts< cms< com< kp< makeprg< errorformat< signcolumn< statuscolumn< inc< inex< sua< winhighlight<"
