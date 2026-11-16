@@ -95,6 +95,7 @@ one rule that composes over special cases; fix rough edges found while building.
   case guards, "VEX" = Vec, "DQ" = Deque, "cloud" = declared, "F-O-R" = for); read each by its sound against the context.
   Never quote a garbled word back; where a reading is ambiguous and the choice matters, state the reading taken and
   record it in the ledger; otherwise act on the corrected reading without comment.
+- **Scripting mode** (the user, 2026-11-16: "that is what I am gonna call olang FILE now, scripting mode"): `olang FILE` (B3g) is scripting mode - in reports, docs and messages.
 - **Times** (2026-10-09): the user lives in Gothenburg; give times as Swedish local time, CET (UTC+1) from 2026-10-25,
   written like "15:10 CET". Tools speak UTC (send_later `at`, `resetsAt`, cron; `CRON_TZ=Europe/Stockholm` works);
   convert at the boundary. (why: archive/direction_log.md)
