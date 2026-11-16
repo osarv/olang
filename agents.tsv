@@ -174,3 +174,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	rangeargs	opus	low	completed	108	38	6	yes		S9b fourth arg refused
 2026-11-16	readln	sonnet	medium	running
 2026-11-16	lspcomp	opus	medium	running
+2026-11-16	nodump	opus	medium	running
