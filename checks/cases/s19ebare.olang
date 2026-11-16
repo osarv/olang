@@ -1,0 +1,6 @@
+# check: fail error[S19]: 'errdefer' takes a block or a one-line body
+# S19e: the bare 'errdefer stmt' is gone - one way to write each thing, 'errdefer: stmt'
+fn main() {
+    n := 0
+    errdefer n = 1
+}

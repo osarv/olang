@@ -1760,7 +1760,7 @@ fn (p mut Parser&) exprAsType(x ast.Expr&) ast.TypeRef& ? Fail {
 fn (p mut Parser&) block() Array<ast.Stmt&>& ? Fail {
     if not p.sees(token.Tok.LBrace): try p.fail(token.Tok.LBrace.Describe())
     try p.enter()
-    defer p.leave()
+    defer: p.leave()
     open := p.tk()
     p.advance()
     wasCtor := p.inCtor
@@ -1993,8 +1993,10 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
                 line := try p.lineBody()
                 return ast.Stmt.Defer(p.from(at), line[0], onError)
             }
-            s := try p.stmt()
-            return ast.Stmt.Defer(p.from(at), s, onError)
+            # the bare "defer stmt" is gone (S19): one way to write each thing, "defer: stmt"
+            t := p.tk()
+            p.report(p.here(), t.End, msgs.BareDefer("errdefer" if onError else "defer"))
+            error Fail.Syntax
         }
         case token.Tok.LBrace {
             body := try p.block()
@@ -3036,7 +3038,7 @@ fn (p mut Parser&) unary() ast.Expr& ? Fail {
         case token.Tok.Not {
             p.advance()
             try p.enter()
-            defer p.leave()
+            defer: p.leave()
             x := try p.binary(4)
             return ast.Expr.Unary(p.from(at), token.Tok.Not, x)
         }
@@ -3133,7 +3135,7 @@ fn (p mut Parser&) rendering() ast.Expr& ? Fail {
 # an operand and what follows it: one level (L21)
 fn (p mut Parser&) postfix() ast.Expr& ? Fail {
     try p.enter()
-    defer p.leave()
+    defer: p.leave()
     x := try p.primary()
     return try p.postfixFrom(x)
 }

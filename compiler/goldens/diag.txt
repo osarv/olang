@@ -5049,6 +5049,13 @@ s18cinstancecall.olang:12:12: note: instantiated here, with a.Len() = 4
    12 |     assert f(Array<I64>[1, 2, 3, 4]) == 1
       |            ^
 compilation failed with 1 error
+=== s19bare.olang
+s19bare.olang:5:11: error[S19]: 'defer' takes a block or a one-line body
+    5 |     defer n = 1
+      |           ^
+s19bare.olang:5:11: note: one way to write each thing: 'defer: stmt' is the one-statement form (S1b)
+s19bare.olang:5:11: help: write 'defer: stmt', or 'defer { ... }'
+compilation failed with 1 error
 === s19break.olang
 s19break.olang:10:23: error[S19b]: 'break' may not leave deferred code
    10 |             if t > 1: break
@@ -5060,14 +5067,21 @@ s19byieldindefer.olang:6:17: error[S19b, S20]: deferred code may not yield - it 
     6 |         defer { yield i }
       |                 ^~~~~
 compilation failed with 1 error
+=== s19ebare.olang
+s19ebare.olang:5:14: error[S19]: 'errdefer' takes a block or a one-line body
+    5 |     errdefer n = 1
+      |              ^
+s19ebare.olang:5:14: note: one way to write each thing: 'errdefer: stmt' is the one-statement form (S1b)
+s19ebare.olang:5:14: help: write 'errdefer: stmt', or 'errdefer { ... }'
+compilation failed with 1 error
 === s19eescape.olang
-s19eescape.olang:6:14: error[S19b]: an error may not leave deferred code - catch it here
-    6 |     errdefer try g()
-      |              ^~~
+s19eescape.olang:6:15: error[S19b]: an error may not leave deferred code - catch it here
+    6 |     errdefer: try g()
+      |               ^~~
 compilation failed with 1 error
 === s19eline.olang
 s19eline.olang:4:15: error[S1b]: a one-line body is one simple statement, not an errdefer - write a block, '{ ... }'
-    4 |     if x > 0: errdefer x = 2
+    4 |     if x > 0: errdefer: x = 2
       |               ^~~~~~~~
 compilation failed with 1 error
 === s19ereturn.olang
@@ -5081,9 +5095,9 @@ s19error.olang:8:19: error[S19b]: an error may not leave deferred code - catch i
       |                   ^~~~~
 compilation failed with 1 error
 === s19later.olang
-s19later.olang:4:16: error[M22]: unknown name 'later' - did you mean 'Iter'?
-    4 |     defer z := later
-      |                ^~~~~
+s19later.olang:4:18: error[M22]: unknown name 'later' - did you mean 'Iter'?
+    4 |     defer { z := later }
+      |                  ^~~~~
 compilation failed with 1 error
 === s19return.olang
 s19return.olang:5:19: error[S19b]: deferred code may not return - it runs while its block is left
@@ -5091,14 +5105,14 @@ s19return.olang:5:19: error[S19b]: deferred code may not return - it runs while 
       |                   ^~~~~~
 compilation failed with 1 error
 === s19spawn.olang
-s19spawn.olang:7:15: error[S19b, P1a]: a spawn in deferred code needs a join written in the deferred code
-    7 |         defer spawn h()
-      |               ^~~~~~~~~
+s19spawn.olang:7:16: error[S19b, P1a]: a spawn in deferred code needs a join written in the deferred code
+    7 |         defer: spawn h()
+      |                ^~~~~~~~~
 compilation failed with 1 error
 === s19try.olang
-s19try.olang:9:16: error[S19b]: an error may not leave deferred code - catch it here
-    9 |     defer x := try g()
-      |                ^~~
+s19try.olang:9:18: error[S19b]: an error may not leave deferred code - catch it here
+    9 |     defer { x := try g() }
+      |                  ^~~
 compilation failed with 1 error
 === s1bblock.olang
 s1bblock.olang:5:15: error[S1b]: a one-line body is one simple statement, not a block (a block takes no ':') - write a block, '{ ... }'
@@ -5326,11 +5340,11 @@ s8dassigned.olang:9:22: note: a test narrowed it, and an assignment since has en
 s8dassigned.olang:9:22: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8ddefercase.olang
-s8ddefercase.olang:10:43: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
-   10 |         defer io.PutLn("deferred r " + $e.r)!
-      |                                           ^
-s8ddefercase.olang:10:43: note: a test narrowed it, and an assignment since has ended that
-s8ddefercase.olang:10:43: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
+s8ddefercase.olang:10:44: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
+   10 |         defer: io.PutLn("deferred r " + $e.r)!
+      |                                            ^
+s8ddefercase.olang:10:44: note: a test narrowed it, and an assignment since has ended that
+s8ddefercase.olang:10:44: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8dnarrowlentfield.olang
 s8dnarrowlentfield.olang:11:24: error[S8d]: a narrowed payload field is read, never written or lent writably
@@ -5419,18 +5433,18 @@ s8dwideor.olang:4:53: error[S8d]: Shape is an enum, and its payload's 'r' is rea
 s8dwideor.olang:4:53: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8edefernull.olang
-s8edefernull.olang:10:45: error[T2c]: 'p' is a Node?&, which may be null
-   10 |         defer io.PutLn("deferred reads " + $p.V)!
-      |                                             ^
-s8edefernull.olang:10:45: note: a test narrowed it, and an assignment since has ended that
-s8edefernull.olang:10:45: help: read through it where a test says it is not ('if x != null'), or write 'p!'
+s8edefernull.olang:10:46: error[T2c]: 'p' is a Node?&, which may be null
+   10 |         defer: io.PutLn("deferred reads " + $p.V)!
+      |                                              ^
+s8edefernull.olang:10:46: note: a test narrowed it, and an assignment since has ended that
+s8edefernull.olang:10:46: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === s8eerrdefernull.olang
-s8eerrdefernull.olang:10:44: error[T2c]: 'p' is a Node?&, which may be null
-   10 |     errdefer io.PutLn("errdefer reads " + $p.V)!
-      |                                            ^
-s8eerrdefernull.olang:10:44: note: a test narrowed it, and an assignment since has ended that
-s8eerrdefernull.olang:10:44: help: read through it where a test says it is not ('if x != null'), or write 'p!'
+s8eerrdefernull.olang:10:45: error[T2c]: 'p' is a Node?&, which may be null
+   10 |     errdefer: io.PutLn("errdefer reads " + $p.V)!
+      |                                             ^
+s8eerrdefernull.olang:10:45: note: a test narrowed it, and an assignment since has ended that
+s8eerrdefernull.olang:10:45: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === satadd01outside.olang
 satadd01outside.olang:5:12: error[M19]: I16 has no method 'satAdd'
@@ -5682,20 +5696,20 @@ t13bhandondeferredafter.olang:10:12: error[T13b]: 'l' is handed on here, and Blo
 t13bhandondeferredafter.olang:10:12: note: a unique value given by value lands once more only at its last mention, and 'l' is mentioned after
 compilation failed with 1 error
 === t13bhandondeferredloop.olang
-t13bhandondeferredloop.olang:9:37: error[T13b]: 'l' is handed on here, and Blob is unique
-    9 |     for _ in range 2 { defer v.Push(l) }
-      |                                     ^
-t13bhandondeferredloop.olang:9:37: note: a unique value given by value lands once more only at its last mention, and 'l' is mentioned after
+t13bhandondeferredloop.olang:9:38: error[T13b]: 'l' is handed on here, and Blob is unique
+    9 |     for _ in range 2 { defer: v.Push(l) }
+      |                                      ^
+t13bhandondeferredloop.olang:9:38: note: a unique value given by value lands once more only at its last mention, and 'l' is mentioned after
 compilation failed with 1 error
 === t13bhandondeferredtwice.olang
-t13bhandondeferredtwice.olang:9:18: error[T13b]: 'l' is handed on here, and Blob is unique
-    9 |     defer v.Push(l)
-      |                  ^
-t13bhandondeferredtwice.olang:9:18: note: a unique value given by value lands once more only at its last mention, and 'l' is mentioned after
-t13bhandondeferredtwice.olang:10:18: error[T13b]: 'l' is handed on here, and Blob is unique
-   10 |     defer w.Push(l)
-      |                  ^
-t13bhandondeferredtwice.olang:10:18: note: a unique value given by value lands once more only at its last mention, and 'l' is mentioned after
+t13bhandondeferredtwice.olang:9:19: error[T13b]: 'l' is handed on here, and Blob is unique
+    9 |     defer: v.Push(l)
+      |                   ^
+t13bhandondeferredtwice.olang:9:19: note: a unique value given by value lands once more only at its last mention, and 'l' is mentioned after
+t13bhandondeferredtwice.olang:10:19: error[T13b]: 'l' is handed on here, and Blob is unique
+   10 |     defer: w.Push(l)
+      |                   ^
+t13bhandondeferredtwice.olang:10:19: note: a unique value given by value lands once more only at its last mention, and 'l' is mentioned after
 compilation failed with 2 errors
 === t13bimmutgenericunique.olang
 t13bimmutgenericunique.olang:9:1: error[T13b]: Token is unique, so it is no part of Box<Token>, which is immut
