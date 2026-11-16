@@ -5,26 +5,27 @@
 
 import unistd "unistd.h"
 
-# what a write to the standard output fails with, ended on in Print and Println (reported at the caller's place)
+# what a write to the standard output fails with, ended on by "!" in Print and Println - an error, status 1 (E35), not a
+# broken promise - carrying the caller's place
 type output error {
-    Refused
-    Stalled
+    Refused(at String)
+    Stalled(at String)
 }
 
 # x as "$x" renders it, then nothing - to the standard output
-fn Print<T>(x T, at Place = Place.Here) { try writeOut($x) catch e { assert false, $at + ": " + $e } }
+fn Print<T>(x T, at Place = Place.Here) { writeOut($x, at)! }
 
 # x as "$x" renders it and a line end - to the standard output; with nothing, a line end alone
-fn Println<T>(x T = "", at Place = Place.Here) { try writeOut($x + "\n") catch e { assert false, $at + ": " + $e } }
+fn Println<T>(x T = "", at Place = Place.Here) { writeOut($x + "\n", at)! }
 
 # every byte of t to the standard output, retrying a short write on the rest
-fn writeOut(t String&) ? output {
+fn writeOut(t String&, at Place) ? output {
     sent I64 = 0
     for sent < t.Len() {
         tail := t[sent:]
         n I64 = unistd.write(1, tail, U64(tail.Len()))
-        if n < 0: error output.Refused
-        if n == 0: error output.Stalled
+        if n < 0: error output.Refused($at)
+        if n == 0: error output.Stalled($at)
         sent += n
     }
 }

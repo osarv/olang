@@ -38853,3 +38853,32 @@ its link is unchanged. The cost is a relink after an edit for programs of 8-32 M
 again (25 s for tinystories) where ThinLTO's cache relinked only what changed - `-quick` is the edit loop's build.
 Cutting large objects into parts (B3d) stays at 8 MB, now its own constant (`SplitFrom`), so compiles of those
 programs stay parallel and the records' cut guess (`cutLikely`, calibrated at 8 MB) holds.
+
+## 2026-11-16: inherited trait-bounded methods on an extending number; a refused Print exits 1 (T29f, M19d, E35; wt-extfix)
+
+**`type Meters extends I64` had no `Abs`.** T29f says an extending type has its base's methods, but the prelude's
+numeric methods are written once over a closed trait - `fn (x T) Abs<T Number>() T` - and are keyed by that trait
+(`DefaultMethods`), reached by a type only when the trait lists it. T31a's closed traits list the very types, never
+one extending them (so a `match T` over the built-in floats stays exhaustive; checks/cases/numtraitextends.olang), so
+`m.Abs()`, `Min`, `Max`, `Clamp`, `Sqrt`, `PadStart` all failed M19. The fix (check.olang `inheritedDefault`,
+`baseDefaultCall`) keeps T31a as it is: when a method call on an extending number finds nothing of its own, the base
+chain is walked for a trait default of that name, and the call is the base's - the receiver converted to the base (the
+same bits, nothing run), the type variable bound to the base, so one instance serves the base and every type
+extending it - and where the method's result is the receiver's type variable, the result is converted back to the
+declared type, as T29e already did for an array's inherited method returning its own type. So `m.Abs()` is a
+`Meters`, `m.Max(3)` a `Meters`, `m.Hash()` stays the `I64` its non-generic method gives, and `m.IsNan()` a `Bool`.
+Binding `T` to the declared type instead was rejected: it would fail the bound T31a sets, and loosening T31a for it
+would break the exhaustive `match T`. A `Char` keeps CharNoPad: it pads as text, never through its `U8`'s
+`PadStart<T Integer>` (T29h); its `Max`/`Min` are inherited and give a `Char`. A type over a number without `extends`
+still gets MethodNotInherited (checks/cases/noextendsabs.olang). The evaluator runs the same typed call, so the
+corpus test's baked global agrees with the run (tests/shared.olang, "an extending number has its base's
+trait-bounded methods").
+
+**A refused `Println` exited 2.** The prelude's Print/Println caught the write's error and ended through
+`assert false` - the broken-promise class, status 2 (B6) - though M19d said "as `!` does" and an I/O failure is an
+error, status 1 (E35). They now end with `!` itself: `writeOut($x, at)!`, the error `output.Refused` (or `Stalled`)
+carrying the caller's place as text (a payload holds values, T19b, so not the `Place`). So the program's message is
+`print.olang:18: output.Refused("p.olang:2:5")` and status 1, a test fails as with any `!`, and the interpreter ends
+with 1 too, since it already ends a `!` so. Scanln and Scan's refused read did the same through `assert` and now end
+with `input.Refused` the same way. The `print` scenario checks status 1 on `./bare >&-`, built and under
+`OLANG_EVALUATE=1`.

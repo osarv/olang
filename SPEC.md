@@ -1789,7 +1789,10 @@ The same holds for a number extending its base (T29f).
 
 **T29f (`extends`).** `type Name extends Base`, for a `Base` that is a numeric type or an array type, declares a type
 that **inherits** its base: the base's methods (T29e; for a number, the prelude's methods on it - an `ExId extends
-I64` has `Hash`) and its built-in operators, each giving the declared type where it gives the base (`a + b` on two
+I64` has `Hash`, and the methods a numeric trait gives it, `fn (x T) Abs<T Number>() T`: the closed trait lists the
+base and not the declared type (T31a), so the call is the base's, on the value read as its base, and a result of the
+receiver's type variable is the declared type - `m.Abs()` on a `Meters extends I64` is a `Meters`; a `Char` (T29h) is
+padded as text, never as its `U8`) and its built-in operators, each giving the declared type where it gives the base (`a + b` on two
 `Meters extends I32` is a `Meters`). There is no dynamic dispatch and nothing is overridden. `extends` on a struct,
 enum, trait or function type is a compile-time error: none has a base.
 
@@ -3141,13 +3144,14 @@ their exported immutable globals - the **constants of the prelude** - are visibl
 with no import, and no module may declare a type, a global, a function, a local or a parameter of the same name
 (D2, D3a). So are its two **printing functions**, `Print(x)` and `Println(x = "")`, exported like any
 other prelude name (M6) and reserved the same way: each writes `$x` (E11a) - `Println` with a line end after it, a line end alone
-with nothing - to the standard output in one write, and a write the system refuses ends the program as `!` does (E35, reported at the
-caller's place, the trailing parameter `at Place = Place.Here`, E40; in a test, the test fails), so neither is fallible and no `try` is written. A program that handles a failed write uses
+with nothing - to the standard output in one write, and a write the system refuses ends the program as `!` does (E35: an error, status
+`1`, never a broken promise's `2` - the error `output.Refused` carrying the caller's place, the trailing parameter `at Place = Place.Here`, E40; in a
+test, the test fails), so neither is fallible and no `try` is written. A program that handles a failed write uses
 `std/io`'s `Put` and `PutLn` (M19f), which fail with `io.Error`. Their reading counterparts are `Scanln(prompt = "")`
 (the prompt, if any, written with no line end, then the next line of the standard input without its line end and without a
 carriage return before it) and `Scan<T>(prompt = "")` (the prompt likewise, then the next whitespace-separated word as a `T`,
 as `io.Reader`'s `Next<T>` parses it); both fail with `Exhausted` at the end of the input (`Scan` also with `ParseError`, the word
-taken all the same), and a read the system refuses ends the program as a failed write does. They and `io.Reader(io.Stdin)`
+taken all the same), and a read the system refuses ends the program as a failed write does (`input.Refused`, status `1`). They and `io.Reader(io.Stdin)`
 and `io.Lines(io.Stdin)` read through one buffer, so a program mixing them sees every byte once, in order. The evaluator
 refuses them while compiling, as it refuses any extern call (K1); under `interpret` they read for real. They are the only modules that may declare methods on a built-in type, which is how the built-in
 types get their methods; those methods are visible in every module. So with builders (D19): the prelude declares those
@@ -5118,7 +5122,8 @@ reaching it ends it as a failed `assert` does (S18) - while a test runs it fails
 writes `FILE:LINE: ` and the error - its type, named as the program writes it, an imported module's by the base name
 of its path (`io.Error.Failed`), and its word - to standard error and ends. Its trace follows (S18d). It ends with
 **status `1`**, as an error escaping `main` does (B5), not a failed assert's `2`: an error ending the program is often
-meant - bad input to a script - where a failed assert is a bug (B6). Its value is the expression's on
+meant - bad input to a script - where a failed assert is a bug (B6). The prelude's `Print` and `Println` end the
+same way, status `1`, on a write the system refuses (M19d). Its value is the expression's on
 success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; a check is a call
 that can fail, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
 `fn main() { io.PutLn("Hello World!")! }` is a program. On a value of a nullable reference type (T2c) - an array's
@@ -8657,7 +8662,8 @@ reads.
 
 **B6.** A failed runtime check (S18) - a failed `assert`, `unreachable` reached (S16d), a null reached by `x!` (E35),
 a guaranteed check (S18a) - outside a test ends the process with **status `2`**: a broken guarantee, apart from an
-error ending it, which is status `1` - one escaping `main` (B5) or one a `!` took (E35) - and from what `os.Exit`
+error ending it, which is status `1` - one escaping `main` (B5), one a `!` took (E35), or a refused write of the
+prelude's `Print`/`Println` (M19d) - and from what `os.Exit`
 reports (B5b), a decision. A task ending the program ends it with the status of what ended the task (P6). Neither
 raises `SIGABRT` or leaves a core dump unless `OLANG_CORE=1` was in the environment as the program started (S18); a
 real crash - a segmentation fault and the like - ends by its signal as before (`os.OnCrash`, std/os).
