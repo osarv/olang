@@ -204,6 +204,7 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	sumnarrow	opus	low	running
 2026-11-16	vfix2	opus	medium	done	225	147	98	no(fixes)		full verify passed 0c5530e8 incl wt-sumt
 2026-11-16	merge-vfix2	sonnet	low	done				yes		merged 872fa987
-2026-11-16	oannsum	sonnet	medium	running						INT8 kernels via Sum<I32>
+2026-11-16	oannsum	sonnet	medium	done						INT8 kernels via Sum<I32>
 2026-11-16	sumtotal	opus	medium	running						default type args + expected-type pick + T.Total
 2026-11-16	attrsurvey	sonnet	low	done						read-only: can attributes be dropped
+2026-11-16	oannprune2	opus	medium	running						XOR skip bug, cubic prune schedule, Tiles/LowRank prune, compaction, MNIST prune
