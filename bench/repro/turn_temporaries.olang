@@ -29,9 +29,9 @@ fn main() ? {
             s += p.Sum()
         }
     } else if args[1] == "built" {
-        for i in range n { s += P.mk(i).Sum() }
+        for i in range n: s += P.mk(i).Sum()
     } else if args[1] == "arg" {
-        for i in range n { s += norm(P(i, i + 1)) }
+        for i in range n: s += norm(P(i, i + 1))
     } else if args[1] == "arglocal" {
         for i in range n {
             t := P(i, i + 1)

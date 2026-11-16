@@ -7,7 +7,7 @@ import "std/regex"
 fn main() ? {
     args := os.Args()
     mb I64 = 4
-    if args.Len() > 1 { mb = try args[1].ParseInt() }
+    if args.Len() > 1: mb = try args[1].ParseInt()
     words := Array<String&>["sing", "sang", "running", "error", "code", "7", "42", "thing", "bring", "x"]
     b := StringBuilder()
     x U32 = 1

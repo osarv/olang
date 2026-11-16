@@ -49,9 +49,9 @@ fn afterPassedOn() ? Bad {
 
 # in a branch and a loop the program decides while it runs
 fn inBranch() I64 {
-    if os.Args().Len() > 1000 { assert false, "in a branch" }
+    if os.Args().Len() > 1000: assert false, "in a branch"
     for a in os.Args() {
-        if a.Len() > 100000 { assert twice(2) == 5, "in a loop" }
+        if a.Len() > 100000: assert twice(2) == 5, "in a loop"
     }
     return 7
 }
@@ -69,7 +69,7 @@ test "a false assert after what leaves a function is not reached" {
 }
 
 test "a true assert is decided wherever it is" {
-    if os.Args().Len() > 0 { assert twice(3) == 6, "decided true in a branch" }
+    if os.Args().Len() > 0: assert twice(3) == 6, "decided true in a branch"
     assert twice(4) == 8
 }
 

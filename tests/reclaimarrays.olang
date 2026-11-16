@@ -31,7 +31,7 @@ type KList struct() {
 
 fn (l mut KList&) PushBack(i I64) {
     xs := Vec<I64>()
-    for k in range i % 5 + 1 { xs.Push(i * 10 + k) }
+    for k in range i % 5 + 1: xs.Push(i * 10 + k)
     nd := KNode("key-" + $i, xs, Tag("tag" + $(i * 7), i))
     t := l.tail
     if t == null { l.head = nd } else {
@@ -75,7 +75,7 @@ fn (l KList&) Total() I64 {
 # what Total gives for nodes from..to-1 made by PushBack
 fn expected(from I64, to I64) I64 {
     l := KList()
-    for i in range from, to { l.PushBack(i) }
+    for i in range from, to: l.PushBack(i)
     return l.Total()
 }
 
@@ -121,10 +121,10 @@ fn churnFree(n I64) {
 # removed nodes' arrays reused by new nodes: the list read back has every key, Vec and tag of its own
 fn reused(extra I64) Bool {
     l := KList()
-    for i in range 1, 30 + extra { l.PushBack(i) }
-    for _ in range 20 { l.Drop() }
+    for i in range 1, 30 + extra: l.PushBack(i)
+    for _ in range 20: l.Drop()
     churnFree(60)
-    for i in range 30, 40 { l.PushBack(i) }
+    for i in range 30, 40: l.PushBack(i)
     churnFree(60)
     return l.Total() == expected(21, 40)
 }
@@ -133,7 +133,7 @@ fn reused(extra I64) Bool {
 # the view, keeping the key's slot, while the next nodes' arrays reuse the others
 fn viewAtSite(extra I64) Bool {
     l := KList()
-    for i in range 1, 4 + extra { l.PushBack(i) }
+    for i in range 1, 4 + extra: l.PushBack(i)
     k String& = l.head!.key
     for _ in range 30 {
         h := l.head!
@@ -147,7 +147,7 @@ fn viewAtSite(extra I64) Bool {
 # a removed node's key viewed across its removal, in the body: the text kept, never the next node's
 fn viewKept(extra I64) Bool {
     l := KList()
-    for i in range 1, 4 + extra { l.PushBack(i) }
+    for i in range 1, 4 + extra: l.PushBack(i)
     k String& = l.head!.key
     l.PopFront()
     churn(40)
@@ -163,7 +163,7 @@ fn (l mut KList&) popAndRead(k String&) Bool {
 
 fn viewInCallee(extra I64) Bool {
     l := KList()
-    for i in range 1, 4 + extra { l.PushBack(i) }
+    for i in range 1, 4 + extra: l.PushBack(i)
     return l.popAndRead(l.head!.key)
 }
 
@@ -171,11 +171,11 @@ fn viewInCallee(extra I64) Bool {
 # held before is kept too; the node read back before and after its neighbours are removed
 fn grown(extra I64) Bool {
     l := KList()
-    for i in range 1, 5 + extra { l.PushBack(i) }
+    for i in range 1, 5 + extra: l.PushBack(i)
     last := l.tail!
-    for k in range 20 { last.xs.Push(k) }
+    for k in range 20: last.xs.Push(k)
     s := last.Sum()
-    for _ in range 3 { l.PopFront() }
+    for _ in range 3: l.PopFront()
     churn(40)
     return l.n == 1 and l.head!.Sum() == s
 }
@@ -187,7 +187,7 @@ type Seen struct(n mut KNode?&) {
 
 fn weakNull(extra I64) Bool {
     l := KList()
-    for i in range 1, 4 + extra { l.PushBack(i) }
+    for i in range 1, 4 + extra: l.PushBack(i)
     s := Seen(l.head)
     l.PopFront()
     churn(20)

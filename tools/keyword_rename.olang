@@ -46,7 +46,7 @@ fn migrate(text String&) String {
             continue
         }
         j := i
-        for j < text.Len() and srcmask.IsWord(text[j]) { j++ }
+        for j < text.Len() and srcmask.IsWord(text[j]): j++
         if renamed(text, i, j) {
             b.Push(text[from:j])
             b.Push("_")
@@ -84,7 +84,7 @@ fn methodNamePlace(before String&) Bool {
 fn anyPlace(text String&, j I64) Bool {
     k := j
     if k >= text.Len() or text[k] != ' ': return false
-    for k < text.Len() and text[k] == ' ' { k++ }
+    for k < text.Len() and text[k] == ' ': k++
     if text[k:].StartsWith("mut "): k += 4
     depth I64 = 0
     for k < text.Len() and text[k] != '\n' {
@@ -108,7 +108,7 @@ fn declPlace(before String&) Bool {
     if not t.StartsWith("type "): return false
     rest := srcmask.StripStart(t[5:])
     k I64 = 0
-    for k < rest.Len() and srcmask.IsWord(rest[k]) { k++ }
+    for k < rest.Len() and srcmask.IsWord(rest[k]): k++
     rest = rest[k:]
     if rest.StartsWith("<") {
         close := try rest.Find(">") catch { return false }
@@ -126,7 +126,7 @@ fn onlyDeclWords(t String&) Bool {
             continue
         }
         e := k
-        for e < t.Len() and srcmask.IsWord(t[e]) { e++ }
+        for e < t.Len() and srcmask.IsWord(t[e]): e++
         if e == k or t[k:e] not in DeclWords: return false
         k = e
     }
@@ -135,9 +135,9 @@ fn onlyDeclWords(t String&) Bool {
 
 # `commutes` closing an operator method's signature: a method declaration whose line goes on with `?`, `{` or nothing
 fn commutesPlace(text String&, before String&, j I64) Bool {
-    if not srcmask.StripStart(before).StartsWith("fn (") { return false }
+    if not srcmask.StripStart(before).StartsWith("fn ("): return false
     k := j
-    for k < text.Len() and text[k] == ' ' { k++ }
+    for k < text.Len() and text[k] == ' ': k++
     return k >= text.Len() or text[k] == '?' or text[k] == '{' or text[k] == '\n' or text[k] == '#'
 }
 
@@ -153,7 +153,7 @@ fn fieldAt(text String&, w String&, before String&) Bool {
 
 fn lineStart(text String&, i I64) I64 {
     k := i
-    for k > 0 and text[k - 1] != '\n' { k-- }
+    for k > 0 and text[k - 1] != '\n': k--
     return k
 }
 

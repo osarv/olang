@@ -20,7 +20,7 @@ fn viaLocals(a Array<I64>&, n I64) I64 {
 }
 fn viaLoop(a Array<I64>&, n I64) I64 {
     s I64 = 0
-    for i in range 10, n - 10 { s += a[i] }
+    for i in range 10, n - 10: s += a[i]
     return s
 }
 

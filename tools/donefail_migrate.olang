@@ -46,7 +46,7 @@ fn codeOf(l String&) String {
                     k++
                 }
             }
-            if k < l.Len() { b.PushChar(c) }
+            if k < l.Len(): b.PushChar(c)
         } else { b.PushChar(c) }
         k++
     }
@@ -58,10 +58,10 @@ fn wordAt(code String&, w String&, from I64) I64 {
     k := from
     for k + w.Len() <= code.Len() {
         at := try code[k:].Find(w) catch default -1
-        if at < 0 { return -1 }
+        if at < 0: return -1
         p := k + at
         e := p + w.Len()
-        if (p == 0 or not isIdent(code[p - 1])) and (e == code.Len() or not isIdent(code[e])) { return p }
+        if (p == 0 or not isIdent(code[p - 1])) and (e == code.Len() or not isIdent(code[e])): return p
         k = p + 1
     }
     return -1
@@ -74,12 +74,12 @@ fn tryBefore(code String&, off I64) I64 {
     depth I64 = 0
     for k >= 0 {
         c := code[k]
-        if c == ')' or c == ']' { depth++ }
+        if c == ')' or c == ']': depth++
         if c == '(' or c == '[' {
-            if depth == 0 { return -1 }
+            if depth == 0: return -1
             depth--
         }
-        if depth == 0 and k + 4 <= off and code[k:k + 4] == "try " and (k == 0 or not isIdent(code[k - 1])) { return k }
+        if depth == 0 and k + 4 <= off and code[k:k + 4] == "try " and (k == 0 or not isIdent(code[k - 1])): return k
         k--
     }
     return -1
@@ -97,8 +97,8 @@ fn negated(c String&) String {
     ne := try code.Find(" != ") catch default -1
     plain := (wordAt(code, "and", 0) < 0 and wordAt(code, "or", 0) < 0 and wordAt(code, "xor", 0) < 0
               and wordAt(code, "if", 0) < 0 and wordAt(code, "not", 0) < 0 and code.CountOf("==") + code.CountOf("!=") == 1)
-    if plain and eq >= 0 { return $t[:eq] + " != " + $t[eq + 4:] }
-    if plain and ne >= 0 { return $t[:ne] + " == " + $t[ne + 4:] }
+    if plain and eq >= 0: return $t[:eq] + " != " + $t[eq + 4:]
+    if plain and ne >= 0: return $t[:ne] + " == " + $t[ne + 4:]
     loose := (wordAt(code, "and", 0) >= 0 or wordAt(code, "or", 0) >= 0 or wordAt(code, "xor", 0) >= 0
               or wordAt(code, "if", 0) >= 0)
     return ("not (" + $t + ")") if loose else ("not " + $t)
@@ -111,9 +111,9 @@ fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut Vec<
     for {
         code := codeOf(out)
         at := try code.Find("catch { fail }") catch default -1
-        if at < 0 { break }
+        if at < 0: break
         k := at - 1
-        for k >= 0 and code[k] == ' ' { k-- }
+        for k >= 0 and code[k] == ' ': k--
         t := tryBefore(code, k + 1)
         if inTest {
             # the clause dropped - with whatever spaces stood before it
@@ -181,24 +181,24 @@ fn migrate(file String&, left mut Vec<String&>&) I64 ? {
     n I64 = 1
     first Bool = true
     for l in text.Lines() {
-        if not first { b.PushChar('\n') }
+        if not first: b.PushChar('\n')
         first = false
         tl := l.Trim()
-        if testAt < 0 and tl.StartsWith("test \"") { testAt = depth }
-        if mainAt < 0 and tl.StartsWith("fn main()") { mainAt = depth }
+        if testAt < 0 and tl.StartsWith("test \""): testAt = depth
+        if mainAt < 0 and tl.StartsWith("fn main()"): mainAt = depth
         m := migrateLine(l, testAt >= 0, mainAt >= 0, $file + ":" + $n, left)
-        if m != l { changed++ }
+        if m != l: changed++
         b.Push(m)
         for c in codeOf(l) {
             if c == '{' { depth++ }
             if c == '}' { depth-- }
         }
-        if testAt >= 0 and depth <= testAt { testAt = -1 }
-        if mainAt >= 0 and depth <= mainAt { mainAt = -1 }
+        if testAt >= 0 and depth <= testAt: testAt = -1
+        if mainAt >= 0 and depth <= mainAt: mainAt = -1
         n++
     }
-    if text.EndsWith("\n") { b.PushChar('\n') }
-    if changed > 0 { try os.WriteFile(file, b.ToString()) }
+    if text.EndsWith("\n"): b.PushChar('\n')
+    if changed > 0: try os.WriteFile(file, b.ToString())
     return changed
 }
 
@@ -208,8 +208,8 @@ fn filesOf(paths Array<String&>&) Vec<String&> ? {
     for p in paths {
         if os.IsDir(p) {
             sub := Vec<String&>()
-            for n in try os.ReadDir(p) { sub.Push(filepath.Join(p, n)) }
-            for f in try filesOf(sub.ToArray()) { out.Push($f) }
+            for n in try os.ReadDir(p): sub.Push(filepath.Join(p, n))
+            for f in try filesOf(sub.ToArray()): out.Push($f)
         } else if p.EndsWith(".olang") { out.Push(p) }
     }
     return out
@@ -224,11 +224,11 @@ fn main() ? {
     left := Vec<String&>()
     total I64 = 0
     for f in try filesOf(args[1:]) {
-        if f.EndsWith("donefail_migrate.olang") { continue }
+        if f.EndsWith("donefail_migrate.olang"): continue
         total += try migrate(f, left)
     }
     try io.PutLine($total + " lines changed")
-    for l in left { try io.PutLine(l) }
+    for l in left: try io.PutLine(l)
 }
 
 test "a fail ending a catch becomes '!' outside a test and goes in one" {

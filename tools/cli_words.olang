@@ -31,7 +31,7 @@ fn main() ? io.Error {
         for i in range text.Len() + 1 {
             if i == text.Len() or text[i] == '\n' {
                 b.Push(migrateLine(text[start:i]))
-                if i < text.Len() { b.PushChar('\n') }
+                if i < text.Len(): b.PushChar('\n')
                 start = i + 1
             }
         }
@@ -48,17 +48,17 @@ fn isWord(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
 # the end of the invoker starting at i of line, or -1
 fn invoker(line String&, i I64) I64 {
     for p in Array<String&>["\\\"$OLANG\\\"", "\"$OLANG\"", "$(OLANG)", "${OLANG}"] {
-        if line[i:].StartsWith(p) { return i + p.Len() }
+        if line[i:].StartsWith(p): return i + p.Len()
     }
     if line[i:].StartsWith("$OLANG") {
         e := i + 6
-        if e == line.Len() or not isWord(line[e]) { return e }
+        if e == line.Len() or not isWord(line[e]): return e
     }
     for p in Array<String&>["build/out", "build/stage0", "build/olang", "olang"] {
-        if not line[i:].StartsWith(p) { continue }
+        if not line[i:].StartsWith(p): continue
         e := i + p.Len()
-        if i > 0 and (isWord(line[i - 1]) or line[i - 1] == '/' or line[i - 1] == '.' or line[i - 1] == '-') { continue }
-        if e < line.Len() and (isWord(line[e]) or line[e] == '.' or line[e] == '-' or line[e] == '/') { continue }
+        if i > 0 and (isWord(line[i - 1]) or line[i - 1] == '/' or line[i - 1] == '.' or line[i - 1] == '-'): continue
+        if e < line.Len() and (isWord(line[e]) or line[e] == '.' or line[e] == '-' or line[e] == '/'): continue
         return e
     }
     return -1
@@ -68,7 +68,7 @@ fn migrateLine(line String&) String {
     if line.StartsWith("# flags:") {
         rest := line[8:]
         at I64 = 0
-        for at < rest.Len() and rest[at] == ' ' { at++ }
+        for at < rest.Len() and rest[at] == ' ': at++
         conv := convert(" " + $rest[at:])
         if conv != "" { return "# flags:" + $conv }
         return $line
@@ -80,7 +80,7 @@ fn migrateLine(line String&) String {
         e := invoker(out, i)
         if e >= 0 {
             conv := convert(out[e:])
-            if conv != "" { out = $out[:e] + $conv }
+            if conv != "": out = $out[:e] + $conv
         }
         i--
     }
@@ -91,18 +91,18 @@ fn isFlagEnd(c Char) Bool { return c == ' ' or c == '\t' or c == '"' or c == '\\
 
 # the flag a word begins with, and how long it is: "-x" or "-x=..." up to a quote, a backslash or a backtick
 fn flagLen(w String&) I64 {
-    if w.Len() < 2 or w[0] != '-' or not w[1].IsLetter() { return 0 }
+    if w.Len() < 2 or w[0] != '-' or not w[1].IsLetter(): return 0
     i I64 = 1
-    for i < w.Len() and w[i].IsLetter() { i++ }
+    for i < w.Len() and w[i].IsLetter(): i++
     if i < w.Len() and w[i] == '=' {
-        for i < w.Len() and not isFlagEnd(w[i]) { i++ }
+        for i < w.Len() and not isFlagEnd(w[i]): i++
     }
     return i
 }
 
 fn valueLen(w String&) I64 {
     i I64 = 0
-    for i < w.Len() and not isFlagEnd(w[i]) { i++ }
+    for i < w.Len() and not isFlagEnd(w[i]): i++
     return i
 }
 
@@ -133,13 +133,13 @@ fn convert(rest String&) String {
     for {
         # the next word: spaces, then a run of non-spaces
         j := i
-        for j < rest.Len() and (rest[j] == ' ' or rest[j] == '\t') { j++ }
-        if j == i or j == rest.Len() { break }
+        for j < rest.Len() and (rest[j] == ' ' or rest[j] == '\t'): j++
+        if j == i or j == rest.Len(): break
         e := j
-        for e < rest.Len() and rest[e] != ' ' and rest[e] != '\t' { e++ }
+        for e < rest.Len() and rest[e] != ' ' and rest[e] != '\t': e++
         w := rest[j:e]
         n := flagLen(w)
-        if n == 0 { break }
+        if n == 0: break
         f := w[:n]
         tail := w[n:]
         isMode := f == "-b" or f == "-c" or f == "-t" or f == "-i" or f == "-e"
@@ -150,13 +150,13 @@ fn convert(rest String&) String {
         } else if (f == "-a" or f == "-D") and tail == "" {
             # a value follows, as the next word
             k := e
-            for k < rest.Len() and (rest[k] == ' ' or rest[k] == '\t') { k++ }
-            if k == e or k == rest.Len() { break }
+            for k < rest.Len() and (rest[k] == ' ' or rest[k] == '\t'): k++
+            if k == e or k == rest.Len(): break
             ve := k
-            for ve < rest.Len() and rest[ve] != ' ' and rest[ve] != '\t' { ve++ }
+            for ve < rest.Len() and rest[ve] != ' ' and rest[ve] != '\t': ve++
             v := rest[k:ve]
             vn := valueLen(v)
-            if vn == 0 { break }
+            if vn == 0: break
             opts.Push(" " + $word(f) + " " + $v[:vn])
             tail = v[vn:]
             e = ve
@@ -172,7 +172,7 @@ fn convert(rest String&) String {
             break
         }
     }
-    if not found { return "" }
+    if not found: return ""
     head := (" " + $mode) if mode != "" else ""
     return $head + $opts.ToString() + $trail + $rest[i:]
 }

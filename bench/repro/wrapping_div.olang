@@ -15,7 +15,7 @@ fn main() ? {
     n := try args[1].ParseInt()
     s F64 = 0.0
     for i in range n {
-        for j in range n { s += entry(i, j) }
+        for j in range n: s += entry(i, j)
     }
     try io.Put($s + "\n")
 }

@@ -30,7 +30,7 @@ NoteNullable String& = "the type is written here - write '?&' for '&' where it m
 
 # the expression a message is about: its text between the first quote and "' is a " - "" for none
 fn quoted(msg String&) String {
-    if msg.Len() == 0 or msg[0] != '\'' { return "" }
+    if msg.Len() == 0 or msg[0] != '\'': return ""
     end := try msg.Find("' is a ") catch { return "" }
     return $msg[1:end]
 }
@@ -83,7 +83,7 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
             # test for empty - each as the message writes it
             # a '!' on what can neither fail nor be null - an array's, one a narrowing made redundant - comes off
             if rule.Contains("E35") and msg.StartsWith("nothing here can fail") {
-                if diagedit.Allowed(full, allowed) { edits.Push(diagedit.Request($full, line, col, "dropbang", "", $row)) }
+                if diagedit.Allowed(full, allowed): edits.Push(diagedit.Request($full, line, col, "dropbang", "", $row))
                 answered = true
                 continue
             }
@@ -106,7 +106,7 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
             continue
         }
         if current.Len() > 0 and msg == NoteNullable {
-            if diagedit.Allowed(full, allowed) { edits.Push(diagedit.Request($full, line, col, "nullable", "", $current)) }
+            if diagedit.Allowed(full, allowed): edits.Push(diagedit.Request($full, line, col, "nullable", "", $current))
             answered = true
         }
     }
@@ -119,7 +119,7 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
 fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
     paths Vec<String&>
     for r in requests {
-        if r.Kind == kind and not (r.Path in paths) { paths.Push($r.Path) }
+        if r.Kind == kind and not (r.Path in paths): paths.Push($r.Path)
     }
     made I64 = 0
     for path in paths {
@@ -133,11 +133,11 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
         lines := src.Split("\n")
         mine Vec<diagedit.Request>
         for r in requests {
-            if r.Path == path and r.Kind == kind { mine.Push(r) }
+            if r.Path == path and r.Kind == kind: mine.Push(r)
         }
         # by line, and right to left within a line, so earlier columns stay put
         mine.Sort(fn(a, b) {
-            if a.Line != b.Line { return a.Line < b.Line }
+            if a.Line != b.Line: return a.Line < b.Line
             return a.Col > b.Col
         })
         seen Vec<String&>
@@ -146,24 +146,24 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
         shDelta Vec<I64>
         for r in mine {
             key := $r.Line + ":" + $r.Col
-            if diagedit.ContainsAny(r.Why, expect) or key in seen or r.Line - 1 >= lines.Len() { continue }
+            if diagedit.ContainsAny(r.Why, expect) or key in seen or r.Line - 1 >= lines.Len(): continue
             seen.Push($key)
             idx := r.Line - 1
             text := $lines[idx]
             mask := srcmask.Mask(text, true)
             at := r.Col - 1
-            if at < 0 or at >= text.Len() or mask[at] != 'c' { continue }
+            if at < 0 or at >= text.Len() or mask[at] != 'c': continue
             replaced := ""
             if kind == "empty" or kind == "isempty" or kind == "dropbang" {
                 delta := I64(0)
                 if kind == "dropbang" {
-                    if text[at] != '!' { continue }
+                    if text[at] != '!': continue
                     replaced = $text[:at] + $text[at + 1:]
                     delta = -1
                 } else if kind == "empty" {
-                    if not text[at:].StartsWith("null") { continue }
+                    if not text[at:].StartsWith("null"): continue
                     # in a generic's instance the advice names the instance's type, which this line does not write
-                    if r.Arg.EndsWith("(0)") and not text.Contains(r.Arg[:r.Arg.Len() - 3]) { continue }
+                    if r.Arg.EndsWith("(0)") and not text.Contains(r.Arg[:r.Arg.Len() - 3]): continue
                     replaced = $text[:at] + $r.Arg + $text[at + 4:]
                     delta = r.Arg.Len() - 4
                 } else {
@@ -172,11 +172,11 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
                     x := r.Arg[:r.Arg.Len() - (10 if neg else 11)]
                     old := $x + $(" is not null" if neg else " is null")
                     from := at - x.Len() - 1
-                    if from < 0 or not text[from:].StartsWith(old) { continue }
+                    if from < 0 or not text[from:].StartsWith(old): continue
                     # "x is null or x.Len() == 0", written for an array that was nullable, is the length test once
                     rest := text[from + old.Len():]
                     dup := $(" and " if neg else " or ") + $r.Arg
-                    if rest.StartsWith(dup) { rest = rest[dup.Len():] }
+                    if rest.StartsWith(dup): rest = rest[dup.Len():]
                     replaced = $text[:from] + $r.Arg + $rest
                     delta = replaced.Len() - text.Len()
                 }
@@ -190,7 +190,7 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
             }
             if kind == "nullable" {
                 # the "&" the note points at, not made nullable already
-                if text[at] != '&' or (at > 0 and text[at - 1] == '?') { continue }
+                if text[at] != '&' or (at > 0 and text[at - 1] == '?'): continue
                 replaced = $text[:at] + "?" + $text[at:]
             } else {
                 # the expression quoted, written at the column, followed by no "!" already; one that is no postfix
@@ -272,7 +272,7 @@ fn main() ? {
     files Vec<String&>
     diagedit.OlangFiles(paths, files)
     allowed Vec<String&>
-    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+    for p in paths: allowed.Push(diagedit.RealPathOf(p))
 
     tmp := try os.MkTemp("", "null_migrate") catch {
         srcmask.SayErr("null_migrate: cannot make a temporary directory")
@@ -296,15 +296,15 @@ fn main() ? {
         outputs := diagedit.CompileAll(olang, fileArray, work, true)
         requests Vec<diagedit.Request>
         unanswered = Vec<diagedit.Request>()
-        for o in outputs { diagsFrom(o, allowed, requests, unanswered) }
+        for o in outputs: diagsFrom(o, allowed, requests, unanswered)
         arrays := apply(requests, "empty") + apply(requests, "isempty") + apply(requests, "dropbang")
         nullable := apply(requests, "nullable") if arrays == 0 else 0
         bangs I64 = 0
-        if nullable == 0 and arrays == 0 { bangs = apply(requests, "bang") }
+        if nullable == 0 and arrays == 0: bangs = apply(requests, "bang")
         srcmask.Say("round " + $round + ": " + $arrays + " arrays never null, " + $nullable + " types made nullable, " + $bangs + " '!' written")
         totalNullable += nullable
         totalBang += bangs
-        if arrays == 0 and nullable == 0 and bangs == 0 { break }
+        if arrays == 0 and nullable == 0 and bangs == 0: break
     }
     srcmask.Say("total: " + $totalNullable + " types made nullable, " + $totalBang + " '!' written")
     seen Vec<String&>

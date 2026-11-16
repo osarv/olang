@@ -40,34 +40,34 @@ type SimV struct(n I64) {
     vel Vec<I64> = Vec<I64>()
 }
 fn (s mut SimV&) step() {
-    for i in range s.pos.Len() { s.pos[i] += s.vel[i] }
+    for i in range s.pos.Len(): s.pos[i] += s.vel[i]
 }
 type SimA struct(n I64) {
     pos mut Array<I64>& = Array<I64>(n)
     vel mut Array<I64>& = Array<I64>(n)
 }
 fn (s mut SimA&) step() {
-    for i in range s.pos.Len() { s.pos[i] += s.vel[i] }
+    for i in range s.pos.Len(): s.pos[i] += s.vel[i]
 }
 
 fn walkVec(v Vec<I64>&, passes I64) I64 {
     t I64 = 0
     for p in range passes {
-        for x in v { t += x ^ p }
+        for x in v: t += x ^ p
     }
     return t
 }
 fn walkArray(a Array<I64>&, passes I64) I64 {
     t I64 = 0
     for p in range passes {
-        for x in a { t += x ^ p }
+        for x in a: t += x ^ p
     }
     return t
 }
 fn walkList(l list.List<I64>&, passes I64) I64 {
     t I64 = 0
     for p in range passes {
-        for x in l { t += x ^ p }
+        for x in l: t += x ^ p
     }
     return t
 }
@@ -84,42 +84,42 @@ fn positions(m I64, n I64) Array<I64> {
 }
 fn gatherVec(v Vec<I64>&, idx Array<I64>&) I64 {
     t I64 = 0
-    for i in range idx.Len() { t += v[idx[i]] }
+    for i in range idx.Len(): t += v[idx[i]]
     return t
 }
 fn gatherArray(a Array<I64>&, idx Array<I64>&) I64 {
     t I64 = 0
-    for i in range idx.Len() { t += a[idx[i]] }
+    for i in range idx.Len(): t += a[idx[i]]
     return t
 }
 fn gatherList(l list.List<I64>&, idx Array<I64>&) I64 {
     t I64 = 0
-    for i in range idx.Len() { t += l[idx[i]] }
+    for i in range idx.Len(): t += l[idx[i]]
     return t
 }
 
 fn storeVec(v mut Vec<I64>&, passes I64) I64 {
     for p in range passes {
-        for i in range v.Len() { v[i] = v[i] * 2 + p }
+        for i in range v.Len(): v[i] = v[i] * 2 + p
     }
     t I64 = 0
-    for x in v { t += x }
+    for x in v: t += x
     return t
 }
 fn storeArray(a mut Array<I64>&, passes I64) I64 {
     for p in range passes {
-        for i in range a.Len() { a[i] = a[i] * 2 + p }
+        for i in range a.Len(): a[i] = a[i] * 2 + p
     }
     t I64 = 0
-    for x in a { t += x }
+    for x in a: t += x
     return t
 }
 fn storeList(l mut list.List<I64>&, passes I64) I64 {
     for p in range passes {
-        for i in range l.Len() { l[i] = l[i] * 2 + p }
+        for i in range l.Len(): l[i] = l[i] * 2 + p
     }
     t I64 = 0
-    for x in l { t += x }
+    for x in l: t += x
     return t
 }
 
@@ -127,7 +127,7 @@ fn opaqueVec(v Vec<I64>&, passes I64) I64 {
     f := Opaque
     t I64 = 0
     for _ in range passes {
-        for i in range v.Len() { t += f(v[i]) }
+        for i in range v.Len(): t += f(v[i])
     }
     return t
 }
@@ -135,7 +135,7 @@ fn opaqueArray(a Array<I64>&, passes I64) I64 {
     f := Opaque
     t I64 = 0
     for _ in range passes {
-        for i in range a.Len() { t += f(a[i]) }
+        for i in range a.Len(): t += f(a[i])
     }
     return t
 }
@@ -183,7 +183,7 @@ fn runsWritten(a mut Array<I64>&, scratch mut Array<I64>&, from I64, to I64, fir
 
 fn forwardWritten(a mut Array<I64>&, scratch mut Array<I64>&, lo I64, m I64, hi I64) {
     nl := m - lo
-    for k in range nl { scratch[k] = a[lo + k] }
+    for k in range nl: scratch[k] = a[lo + k]
     i, j, k := I64(0), m, lo
     for i < nl and j < hi {
         if a[j] < scratch[i] {
@@ -204,7 +204,7 @@ fn forwardWritten(a mut Array<I64>&, scratch mut Array<I64>&, lo I64, m I64, hi 
 
 fn backwardWritten(a mut Array<I64>&, scratch mut Array<I64>&, lo I64, m I64, hi I64) {
     nr := hi - m
-    for k in range nr { scratch[k] = a[m + k] }
+    for k in range nr: scratch[k] = a[m + k]
     i, j, k := m - 1, nr - 1, hi - 1
     for i >= lo and j >= 0 {
         if scratch[j] < a[i] {
@@ -225,7 +225,7 @@ fn backwardWritten(a mut Array<I64>&, scratch mut Array<I64>&, lo I64, m I64, hi
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 5 { error Usage.Args }
+    if args.Len() < 5: error Usage.Args
     mode := args[1]
     kind := args[2]
     n := try args[3].ParseInt()
@@ -235,8 +235,8 @@ fn main() ? {
     v := Vec<I64>()
     l := list.List<I64>()
     if mode != "push" and mode != "fields" {
-        if kind == "vec" { v.PushAll(a) }
-        if kind == "list" { l.PushAll(a) }
+        if kind == "vec": v.PushAll(a)
+        if kind == "list": l.PushAll(a)
     }
     total I64 = 0
     if mode == "walk" {
@@ -250,24 +250,24 @@ fn main() ? {
         if kind == "vec" {
             sv := SimV(n)
             sv.pos.PushAll(a)
-            for i in range n { sv.vel.Push(i) }
-            for _ in range passes { sv.step() }
-            for x in sv.pos { total += x }
+            for i in range n: sv.vel.Push(i)
+            for _ in range passes: sv.step()
+            for x in sv.pos: total += x
         } else {
             sa := SimA(n)
             for i in range n {
                 sa.pos[i] = a[i]
                 sa.vel[i] = i
             }
-            for _ in range passes { sa.step() }
-            for x in sa.pos { total += x }
+            for _ in range passes: sa.step()
+            for x in sa.pos: total += x
         }
     } else if mode == "push" {
         if kind == "vec" {
-            for i in range n { v.Push(a[i]) }
+            for i in range n: v.Push(a[i])
             total = v.Len() + v[n - 1]
         } else {
-            for i in range n { l.Push(a[i]) }
+            for i in range n: l.Push(a[i])
             total = l.Len() + l[n - 1]
         }
     } else if mode == "opaque" {
@@ -275,16 +275,16 @@ fn main() ? {
     } else if mode == "sort" {
         if kind == "vec" {
             v.Sort(fn(x I64, y I64) Bool { return x < y })
-            for i in range n { total += v[i] * (i % 7) }
+            for i in range n: total += v[i] * (i % 7)
         } else if kind == "value" {
             a.Sort(Less)
-            for i in range n { total += a[i] * (i % 7) }
+            for i in range n: total += a[i] * (i % 7)
         } else if kind == "written" {
             sortWritten(a)
-            for i in range n { total += a[i] * (i % 7) }
+            for i in range n: total += a[i] * (i % 7)
         } else {
             a.Sort(fn(x I64, y I64) Bool { return x < y })
-            for i in range n { total += a[i] * (i % 7) }
+            for i in range n: total += a[i] * (i % 7)
         }
     } else {
         error Usage.Mode

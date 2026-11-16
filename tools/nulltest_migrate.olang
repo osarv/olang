@@ -43,7 +43,7 @@ type Count struct() { n I64 = 0 }
 # whether token i is the word "is" (an identifier once the keyword is gone, the keyword before), not a member's name
 fn isWord(src String&, v Vec<VT>&, i I64) Bool {
     t := v[i]
-    if src[t.start:t.end] != "is" { return false }
+    if src[t.start:t.end] != "is": return false
     return i == 0 or v[i - 1].k != token.Tok.Dot
 }
 
@@ -86,7 +86,7 @@ fn looser(v Vec<VT>&, i I64) Bool {
 
 # whether what follows the null at i binds at "is"'s level and would now take the null as its left operand
 fn tighterAfter(src String&, v Vec<VT>&, i I64) Bool {
-    if i + 1 >= v.Len() { return false }
+    if i + 1 >= v.Len(): return false
     k := v[i + 1].k
     if k == token.Tok.Lt or k == token.Tok.Le or k == token.Tok.Gt or k == token.Tok.Ge or k == token.Tok.In: return true
     if k == token.Tok.Not: return i + 2 < v.Len() and v[i + 2].k == token.Tok.In
@@ -97,11 +97,11 @@ fn migrate(src String&, n mut Count&) String {
     v := vtokens(src)
     edits Vec<Edit>
     for i in range v.Len() {
-        if not isWord(src, v, i) { continue }
+        if not isWord(src, v, i): continue
         at := i + 1
         negated := at < v.Len() and v[at].k == token.Tok.Not
         if negated: at++
-        if at >= v.Len() or v[at].k != token.Tok.NullLit { continue }
+        if at >= v.Len() or v[at].k != token.Tok.NullLit: continue
         op := "!= null" if negated else "== null"
         first := operandStop(v, i) + 1
         n.n++
@@ -112,7 +112,7 @@ fn migrate(src String&, n mut Count&) String {
         }
         edits.Push(Edit(v[i].start, v[at].end, op))
     }
-    if edits.Len() == 0 { return $src }
+    if edits.Len() == 0: return $src
     out := StringBuilder()
     from I64 = 0
     for ed in edits {
@@ -130,9 +130,9 @@ fn migrateSpans(line String&, n mut Count&) String {
     from I64 = 0
     for {
         a := try line[from:].Find("`") catch default -1
-        if a < 0 { break }
+        if a < 0: break
         b := try line[from + a + 1:].Find("`") catch default -1
-        if b < 0 { break }
+        if b < 0: break
         lo, hi := from + a + 1, from + a + 1 + b
         out.Push(line[from:lo])
         out.Push(migrate(line[lo:hi], n))
@@ -198,17 +198,17 @@ fn main() ? {
     total := Count()
     changed I64 = 0
     for path in files {
-        if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")): continue
         src := try srcmask.ReadText(path) catch {
             srcmask.SayErr("nulltest_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
         out := migrateMarkdown(src, total) if path.EndsWith(".md") else migrate(src, total)
-        if out == src { continue }
+        if out == src: continue
         changed++
         if verbose: srcmask.Say(path)
-        if check { continue }
+        if check: continue
         try os.WriteFile(path, out) catch {
             srcmask.SayErr("nulltest_migrate: cannot write " + $path)
             os.Exit(1)

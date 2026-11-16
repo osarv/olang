@@ -14,7 +14,7 @@ fn churn(n I64) I64 {
     t := 0
     for i in range n {
         v := Vec<N>()
-        for j in range 16 { v.Push(N(i * j)) }
+        for j in range 16: v.Push(N(i * j))
         t += v[15].v
     }
     return t
@@ -51,7 +51,7 @@ test "a function followed through a chain three deep" {
 
 # a recursive callee handing its parameter on unchanged
 fn chainN(f fn&(a mut N&, b N&), a mut N&, n I64) {
-    if n == 0 { return }
+    if n == 0: return
     f(a, N(n))
     chainN(f, a, n - 1)
 }
@@ -100,7 +100,7 @@ type Keeper struct() {
 }
 fn (k mut Keeper&) Call(n N&) { k.kept.Push(n) }
 fn feed(s fn&(n N&), ns Array<N&>&) {
-    for n in ns { s(n) }
+    for n in ns: s(n)
 }
 
 test "an adapter keeping what it is handed, followed" {

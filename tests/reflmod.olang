@@ -8,7 +8,7 @@ type Secret struct(Open I64, hidden I64) {
 # the names of T's fields as this module sees them
 fn FieldNames<T>() String {
     s := ""
-    for f in T.Fields { s = $s + $f.Name + " " }
+    for f in T.Fields: s = $s + $f.Name + " "
     return s
 }
 

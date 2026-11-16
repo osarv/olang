@@ -11,7 +11,7 @@ import "../benchlib"
 
 fn main() {
     args := os.Args()
-    if args.Len() < 2 { benchlib.Fail("usage: opt NAME", 1) }
+    if args.Len() < 2: benchlib.Fail("usage: opt NAME", 1)
     name := $args[1]
     dir := "bench/repro"
     olang := benchlib.Compiler()
@@ -20,8 +20,8 @@ fn main() {
     try os.MkDirAll($dir + "/build/lto") catch os.Error { benchlib.Fail("cannot make " + $dir + "/build/lto", 1) }
     link := Vec<String&>()
     for a in Array<String&>["clang", "-O3", "-flto", "-o", "build/lto/" + $name, "build/" + $name + ".main.ll"] { link.Push($a) }
-    for o in others { link.Push($o) }
-    for a in Array<String&>["-lm", "-lpthread", "-Wl,-plugin-opt=save-temps"] { link.Push($a) }
+    for o in others: link.Push($o)
+    for a in Array<String&>["-lm", "-lpthread", "-Wl,-plugin-opt=save-temps"]: link.Push($a)
     benchlib.Must(link.ToArray(), dir)
     benchlib.Must(Array<String&>["llvm-dis", "build/lto/" + $name + ".0.5.precodegen.bc", "-o", "build/" + $name + ".opt.ll"], dir)
     try os.RemoveAll($dir + "/build/lto") catch os.Error { }

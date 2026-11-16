@@ -49,11 +49,11 @@ fn lineSpan(text String&, line I64) I64, I64 {
     l I64 = 1
     i I64 = 0
     for l < line and i < text.Len() {
-        if text[i] == '\n' { l++ }
+        if text[i] == '\n': l++
         i++
     }
     e := i
-    for e < text.Len() and text[e] != '\n' { e++ }
+    for e < text.Len() and text[e] != '\n': e++
     return i, e
 }
 
@@ -64,7 +64,7 @@ fn renameTryForms(text String&) String {
     for i < text.Len() {
         if isIdent(text[i]) {
             j := i
-            for j < text.Len() and isIdent(text[j]) { j++ }
+            for j < text.Len() and isIdent(text[j]): j++
             w := text[i:j]
             kept Bool = true
             if w.Len() > 3 and (w[0] == 'T' or w[0] == 't') and w[1] == 'r' and w[2] == 'y' {
@@ -75,7 +75,7 @@ fn renameTryForms(text String&) String {
                     kept = false
                 }
             }
-            if kept { b.Push(w) }
+            if kept: b.Push(w)
             i = j
         } else {
             b.PushChar(text[i])
@@ -91,11 +91,11 @@ fn codeOf(l String&) String {
     k I64 = 0
     for k < l.Len() {
         c := l[k]
-        if c == '#' { break }
+        if c == '#': break
         if c == '"' or c == '\'' {
             k++
             for k < l.Len() and l[k] != c {
-                if l[k] == '\\' { k++ }
+                if l[k] == '\\': k++
                 k++
             }
             b.PushChar(c)
@@ -112,13 +112,13 @@ fn inTest(text String&, line I64) Bool {
     testAt I64 = -1
     n I64 = 1
     for l in text.Lines() {
-        if testAt < 0 and l.Trim().StartsWith("test \"") { testAt = depth }
-        if n == line { return testAt >= 0 }
+        if testAt < 0 and l.Trim().StartsWith("test \""): testAt = depth
+        if n == line: return testAt >= 0
         for c in codeOf(l) {
             if c == '{' { depth++ }
             if c == '}' { depth-- }
         }
-        if testAt >= 0 and depth <= testAt { testAt = -1 }
+        if testAt >= 0 and depth <= testAt: testAt = -1
         n++
     }
     return false
@@ -128,27 +128,27 @@ fn inTest(text String&, line I64) Bool {
 # chain included - "a.b(x)[i].f(y)" for f's column starts at a
 fn callExtent(l String&, col I64) I64, I64 ? {
     j := col - 1
-    for j < l.Len() and isIdent(l[j]) { j++ }
-    if j >= l.Len() or l[j] != '(' { error Unparsed.Call }
+    for j < l.Len() and isIdent(l[j]): j++
+    if j >= l.Len() or l[j] != '(': error Unparsed.Call
     depth I64 = 0
     k := j
     for k < l.Len() {
         c := l[k]
-        if c == '(' or c == '[' { depth++ }
+        if c == '(' or c == '[': depth++
         if c == ')' or c == ']' {
             depth--
-            if depth == 0 { break }
+            if depth == 0: break
         }
         if c == '"' {
             k++
             for k < l.Len() and l[k] != '"' {
-                if l[k] == '\\' { k++ }
+                if l[k] == '\\': k++
                 k++
             }
         }
         k++
     }
-    if k >= l.Len() { error Unparsed.Call }
+    if k >= l.Len(): error Unparsed.Call
     start := col - 1
     for start > 0 and l[start - 1] == '.' {
         s := start - 1
@@ -158,17 +158,17 @@ fn callExtent(l String&, col I64) I64, I64 ? {
             d I64 = 0
             m := s - 1
             for m >= 0 {
-                if l[m] == close { d++ }
+                if l[m] == close: d++
                 if l[m] == open {
                     d--
-                    if d == 0 { break }
+                    if d == 0: break
                 }
                 m--
             }
-            if m < 0 { error Unparsed.Call }
+            if m < 0: error Unparsed.Call
             s = m
         }
-        for s > 0 and isIdent(l[s - 1]) { s-- }
+        for s > 0 and isIdent(l[s - 1]): s--
         start = s
     }
     return start, k + 1
@@ -184,7 +184,7 @@ fn tryCall(text String&, line I64, col I64) String ? {
     ls, le := lineSpan(text, line)
     l := text[ls:le]
     a, b := try callExtent(l, col)
-    if b < a { error Unparsed.Call }
+    if b < a: error Unparsed.Call
     return splice(text, ls + a, 0, "try ")
 }
 
@@ -236,7 +236,7 @@ fn diagnostics(olang String&, path String&) Vec<diagnostic> ? {
         # "FILE:LINE:COL: error[RULE]: MESSAGE"
         e := try row.Find(": error[") catch { continue }
         loc := row[:e].Split(":")
-        if loc.Len() != 3 { continue }
+        if loc.Len() != 3: continue
         close := try row.Find("]: ") catch { continue }
         line := try loc[1].ParseInt() catch { continue }
         col := try loc[2].ParseInt() catch { continue }
@@ -273,7 +273,7 @@ fn apply(file String&, ds mut Vec<diagnostic>&, left mut Vec<String&>&) I64 ? {
             lastLine = d.Line
         } else { left.Push($d.File + ":" + $d.Line + ":" + $d.Col + ": [" + $d.Rule + "] " + $d.Msg) }
     }
-    if edits > 0 { try os.WriteFile(file, text) }
+    if edits > 0: try os.WriteFile(file, text)
     return edits
 }
 
@@ -283,8 +283,8 @@ fn filesOf(paths Array<String&>&) Vec<String&> ? {
     for p in paths {
         if os.IsDir(p) {
             sub := Vec<String&>()
-            for n in try os.ReadDir(p) { sub.Push(filepath.Join(p, n)) }
-            for f in try filesOf(sub.ToArray()) { out.Push($f) }
+            for n in try os.ReadDir(p): sub.Push(filepath.Join(p, n))
+            for f in try filesOf(sub.ToArray()): out.Push($f)
         } else if p.EndsWith(".olang") { out.Push(p) }
     }
     return out
@@ -301,7 +301,7 @@ fn main() ? {
     for f in files {
         text := try os.ReadFile(f)
         renamed := renameTryForms(text)
-        if renamed != text { try os.WriteFile(f, renamed) }
+        if renamed != text: try os.WriteFile(f, renamed)
     }
     left := Vec<String&>()
     for round in range 1, 21 {
@@ -311,21 +311,21 @@ fn main() ? {
         for f in files {
             for d in try diagnostics(olang, f) {
                 all.Push(diagnostic($d.File, d.Line, d.Col, $d.Rule, $d.Msg))
-                if d.File not in names { names.Push($d.File) }
+                if d.File not in names: names.Push($d.File)
             }
         }
         edits I64 = 0
         for name in names {
             ds := Vec<diagnostic>()
             for d in all {
-                if d.File == name { ds.Push(diagnostic($d.File, d.Line, d.Col, $d.Rule, $d.Msg)) }
+                if d.File == name: ds.Push(diagnostic($d.File, d.Line, d.Col, $d.Rule, $d.Msg))
             }
             edits += try apply(name, ds, left)
         }
         try io.PutErrLine("round " + $round + ": " + $edits + " edits")
-        if edits == 0 { break }
+        if edits == 0: break
     }
-    for l in left { try io.PutLine(l) }
+    for l in left: try io.PutLine(l)
 }
 
 test "the checked forms are renamed as whole words" {

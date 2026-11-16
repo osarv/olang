@@ -12,7 +12,7 @@ fn a(i I64, j I64) F64 { return 1.0 / F64((i + j) * (i + j + 1) / 2 + i + 1) }
 fn timesA(v Array<F64>&, out mut Array<F64>&) {
     for i in range out.Len() {
         s F64 = 0.0
-        for j, x in v { s += a(i, j) * x }
+        for j, x in v: s += a(i, j) * x
         out[i] = s
     }
 }
@@ -21,7 +21,7 @@ fn timesA(v Array<F64>&, out mut Array<F64>&) {
 fn timesAt(v Array<F64>&, out mut Array<F64>&) {
     for i in range out.Len() {
         s F64 = 0.0
-        for j, x in v { s += a(j, i) * x }
+        for j, x in v: s += a(j, i) * x
         out[i] = s
     }
 }
@@ -35,7 +35,7 @@ fn timesAtA(v Array<F64>&, out mut Array<F64>&, tmp mut Array<F64>&) {
 fn main() ? {
     args := os.Args()
     n I64 = 100
-    if args.Len() > 1 { n = try args[1].ParseInt() }
+    if args.Len() > 1: n = try args[1].ParseInt()
     u := Array<F64>(n, 1.0)
     v := Array<F64>(n)
     tmp := Array<F64>(n)

@@ -33,19 +33,19 @@ fn main() ? {
         } else if mode == "countloop" {
             for x in a { if x % 3 == 0 { s++ } }
         } else if mode == "zip" {
-            for z in a.Iter().Zip(b.Iter()) { s += z.First * z.Second }
+            for z in a.Iter().Zip(b.Iter()): s += z.First * z.Second
         } else if mode == "ziploop" {
-            for i in range a.Len() { s += a[i] * b[i] }
+            for i in range a.Len(): s += a[i] * b[i]
         } else if mode == "enum" {
-            for e in a.Iter().Enumerate() { s += e.Index * e.Value }
+            for e in a.Iter().Enumerate(): s += e.Index * e.Value
         } else if mode == "enumloop" {
-            for i, x in a { s += i * x }
+            for i, x in a: s += i * x
         } else if mode == "takesum" {
             s += a.Iter().Skip(10).Take(n - 20).Sum()
         } else if mode == "takeloop" {
-            for i in range 10, n - 10 { s += a[i] }
+            for i in range 10, n - 10: s += a[i]
         } else if mode == "genfor" {
-            for x in gen(n) { s += x }
+            for x in gen(n): s += x
         }
         s = s ^ p
     }

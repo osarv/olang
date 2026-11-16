@@ -138,9 +138,9 @@ fn flowCase(n I64) String {
 # hashing agrees with == at every width, a Map keyed by the wide types holding what was put
 fn hashCase(n I64) Bool {
     m := Map<U128, I64>()
-    for i in range n { m.Put(U128(i) << 100, i) }
+    for i in range n: m.Put(U128(i) << 100, i)
     k := Map<I24, I64>()
-    for i in range n { k.Put(I24(-i), i * 2) }
+    for i in range n: k.Put(I24(-i), i * 2)
     return (try m.Get(U128(3) << 100) catch default -1) == 3 and (try k.Get(I24(-4)) catch default -1) == 8 and
         U128(5).Hash() == U128(5).Hash() and I24(-1).Hash() == I24(-1).Hash() and m.Len() == n
 }
@@ -266,7 +266,7 @@ fn churn() I64 {
 
 fn wides(n I64) Array<U100> {
     a := Array<U100>(n)
-    for i in range n { a[i] = U100(i) << 90 }
+    for i in range n: a[i] = U100(i) << 90
     return a
 }
 

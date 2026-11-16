@@ -7,14 +7,14 @@ Live mut I64 = 0
 
 fn sum(xs ...I64) I64 {
     t := 0
-    for x in xs { t += x }
+    for x in xs: t += x
     return t
 }
 
 fn joined(sep String&, parts ...String&, upper Bool = false) String {
     b := StringBuilder()
     for i, p in parts {
-        if i > 0 { b.Push(sep) }
+        if i > 0: b.Push(sep)
         b.Push(p.ToUpper() if upper else p)
     }
     return b.ToString()
@@ -115,7 +115,7 @@ type Base struct(base I64) { base }
 
 fn (b Base) Add(xs ...I64) I64 {
     t := b.base
-    for x in xs { t += x }
+    for x in xs: t += x
     return t
 }
 

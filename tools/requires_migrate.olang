@@ -37,7 +37,7 @@ fn declAt(src String&, a I64, b I64) String, I64 {
     if t.StartsWith("type ") {
         j := i + 5
         n := j
-        for n < b and srcmask.IsWord(src[n]) { n++ }
+        for n < b and srcmask.IsWord(src[n]): n++
         k := try src[i:b].Find(" struct(") catch default -1
         if k < 0: return "", -1
         return $src[j:n], i + k + 7
@@ -48,7 +48,7 @@ fn declAt(src String&, a I64, b I64) String, I64 {
             k := closeParen(src, j, b)
             if k < 0: return "", -1
             j = k
-            for j < b and src[j] == ' ' { j++ }
+            for j < b and src[j] == ' ': j++
         }
         out := StringBuilder()
         for j < b and src[j] != '(' {
@@ -66,10 +66,10 @@ fn declAt(src String&, a I64, b I64) String, I64 {
     }
     # a trait's method: "mut Name(" or "Name(" at the line's start
     j := i
-    if t.StartsWith("mut ") { j += 4 }
-    if j >= b or not src[j].IsUpper() { return "", -1 }
+    if t.StartsWith("mut "): j += 4
+    if j >= b or not src[j].IsUpper(): return "", -1
     n := j
-    for j < b and srcmask.IsWord(src[j]) { j++ }
+    for j < b and srcmask.IsWord(src[j]): j++
     if j >= b or src[j] != '(': return "", -1
     return $src[n:j], j
 }
@@ -78,10 +78,10 @@ fn declAt(src String&, a I64, b I64) String, I64 {
 fn closeParen(src String&, i I64, b I64) I64 {
     depth I64 = 0
     for k in range i, b {
-        if src[k] == '(' { depth++ }
+        if src[k] == '(': depth++
         if src[k] == ')' {
             depth--
-            if depth == 0 { return k + 1 }
+            if depth == 0: return k + 1
         }
     }
     return -1
@@ -91,10 +91,10 @@ fn closeParen(src String&, i I64, b I64) I64 {
 fn closeAngle(src String&, i I64, b I64) I64 {
     depth I64 = 0
     for k in range i, b {
-        if src[k] == '<' { depth++ }
+        if src[k] == '<': depth++
         if src[k] == '>' {
             depth--
-            if depth == 0 { return k + 1 }
+            if depth == 0: return k + 1
         }
     }
     return -1
@@ -106,7 +106,7 @@ fn splitTop(src String&, mask String&, a I64, b I64) Vec<String&> {
     depth I64 = 0
     at := a
     for k in range a, b {
-        if mask[k] != 'c' { continue }
+        if mask[k] != 'c': continue
         x := src[k]
         if x == '(' or x == '[' or x == '{' {
             depth++
@@ -118,16 +118,16 @@ fn splitTop(src String&, mask String&, a I64, b I64) Vec<String&> {
         }
     }
     last := srcmask.Strip(src[at:b])
-    if last.Len() > 0 { out.Push(last) }
+    if last.Len() > 0: out.Push(last)
     return out
 }
 
 # whether an item is to be parenthesized after "not": one holding a word that binds looser than "not" does, or
 # beginning with a word that takes what follows it
 fn needsParens(it String&) Bool {
-    if it.StartsWith("try ") or it.StartsWith("not ") or it.StartsWith("comptime ") { return true }
+    if it.StartsWith("try ") or it.StartsWith("not ") or it.StartsWith("comptime "): return true
     for w in Array<String&>[" and ", " or ", " xor ", " if "] {
-        if it.Contains(w) { return true }
+        if it.Contains(w): return true
     }
     return false
 }
@@ -136,7 +136,7 @@ fn needsParens(it String&) Bool {
 fn quoted(t String&) String {
     out := StringBuilder()
     for ch in t {
-        if ch == '"' or ch == '\\' { out.PushChar('\\') }
+        if ch == '"' or ch == '\\': out.PushChar('\\')
         out.PushChar(ch)
     }
     return out.ToString()
@@ -160,7 +160,7 @@ fn braceAt(src String&, mask String&, a I64, b I64) I64 {
         if x == '{' { return q }
         if x == '(' or x == '[' {
             e := srcmask.CloseOf(src, mask, q)
-            if e < 0 or e > b { return -1 }
+            if e < 0 or e > b: return -1
             q = e
             continue
         }
@@ -172,12 +172,12 @@ fn braceAt(src String&, mask String&, a I64, b I64) I64 {
 # one declaration's line from a to b rewritten, and where the text it replaced ends - "" where it has no contract
 fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c mut Result&) String, I64 {
     name, p := declAt(src, a, b)
-    if p < 0 { return "", b }
+    if p < 0: return "", b
     pe := srcmask.CloseOf(src, mask, p)
-    if pe < 0 or pe > b { return "", b }
+    if pe < 0 or pe > b: return "", b
     k := pe
-    for k < b and src[k] == ' ' { k++ }
-    if k >= b or src[k] != '[' or mask[k] != 'c' { return "", b }
+    for k < b and src[k] == ' ': k++
+    if k >= b or src[k] != '[' or mask[k] != 'c': return "", b
     ke := srcmask.CloseOf(src, mask, k)
     where := $path + ":" + $line + ": "
     if ke < 0 or ke > b {
@@ -196,10 +196,10 @@ fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c m
     indent := $src[a:b - t.Len()]
     inner := $indent + "    "
     checks := StringBuilder()
-    for it in items { checks.Push($inner + $check(name, it) + "\n") }
+    for it in items: checks.Push($inner + $check(name, it) + "\n")
     hb := br - a - (ke - pe)    # the body's "{" in head
     rest := srcmask.Strip(src[br + 1:b])
-    if rest.Len() == 0 or rest.StartsWith("#") { return $head + "\n" + $checks.ToString().TrimEnd(), b }
+    if rest.Len() == 0 or rest.StartsWith("#"): return $head + "\n" + $checks.ToString().TrimEnd(), b
     be := srcmask.CloseOf(src, mask, br)
     if be < 0 or be > b {
         c.left.Push($where + "a body opening on its declaration's line and going on after it")
@@ -211,7 +211,7 @@ fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c m
     out.PushChar('\n')
     out.Push(checks.ToString())
     body := srcmask.Strip(src[br + 1:be - 1])
-    if body.Len() > 0 { out.Push($inner + $body + "\n") }
+    if body.Len() > 0: out.Push($inner + $body + "\n")
     out.Push($indent + "}" + $src[be:b])
     return out.ToString(), b
 }
@@ -225,7 +225,7 @@ fn migrate(path String&, src String&, c mut Result&) String {
         b := lineEnd(src, a)
         r, _ := moveLine(path, src, mask, a, b, line, c)
         out.Push(r if r.Len() > 0 else src[a:b])
-        if b < src.Len() { out.PushChar('\n') }
+        if b < src.Len(): out.PushChar('\n')
         a = b + 1
         line++
     }
@@ -260,9 +260,9 @@ fn main() ? {
             unreachable
         }
         out := migrate(path, src, total)
-        if out == src { continue }
+        if out == src: continue
         changed++
-        if verbose { srcmask.Say(path) }
+        if verbose: srcmask.Say(path)
         if not checkOnly {
             try os.WriteFile(path, out) catch {
                 srcmask.SayErr("requires_migrate: cannot write " + $path)
@@ -272,8 +272,8 @@ fn main() ? {
     }
     verb := "would change " if checkOnly else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.changes + " contracts")
-    for l in total.left { srcmask.Say("by hand: " + $l) }
-    if checkOnly and changed > 0 { os.Exit(1) }
+    for l in total.left: srcmask.Say("by hand: " + $l)
+    if checkOnly and changed > 0: os.Exit(1)
 }
 
 test "a contract becomes checks at the top of the body" {

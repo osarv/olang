@@ -34,7 +34,7 @@ fn keys<T>() String {
     for f in T.Fields {
         k := try f.Attr<Key>() catch default Key(f.Name)
         b.Push(k.Name)
-        if f.HasAttr<Skip>() { b.Push("(skip)") }
+        if f.HasAttr<Skip>(): b.Push("(skip)")
         b.Push(" ")
     }
     return b.ToString()
@@ -57,7 +57,7 @@ fn caseKeys<T>() String {
 
 # a type's own attribute of type A, and whether a type has none
 fn typeKey<T>() String {
-    if T.HasAttr<Key>() { return $(T.Attr<Key>()!).Name }
+    if T.HasAttr<Key>(): return $(T.Attr<Key>()!).Name
     return "-"
 }
 
@@ -107,7 +107,7 @@ fn methods(r attrmod.Rec) String {
 # a generic taking a function's descriptor, failing as the function does
 
 fn half(x I64) I64 ? Odd {
-    if x % 2 != 0 { error Odd }
+    if x % 2 != 0: error Odd
     return x / 2
 }
 
@@ -131,7 +131,7 @@ test Key "attributes are read on types, fields, puns, cases and their fields" {
     assert User.HasAttr<Key>() and not User.HasAttr<Skip>()
     # a parameter's attribute, which the field punning it has
     for p in User.Params {
-        if p.Name == "Id" { assert (p.Attr<Key>()!).Name == "id" }
+        if p.Name == "Id": assert (p.Attr<Key>()!).Name == "id"
     }
     missing := false
     try User.Attr<Skip>() catch AttrError.Missing { missing = true }
@@ -147,7 +147,7 @@ test "functions reflected: a router and a command table collected while compilin
     assert methods(attrmod.Rec(1)) == "Sum=3 Twice=9 "
     assert apply(attrmod.Functions[3], 4) == 8
     for f in attrmod.Functions {
-        if f.Name == "Plain" { assert apply(f, 21) == 42 }
+        if f.Name == "Plain": assert apply(f, 21) == 42
     }
 }
 
@@ -155,7 +155,7 @@ test "functions reflected: a router and a command table collected while compilin
 fn halves() I64 ? Odd {
     total I64 = 0
     for f in me2.Functions {
-        if f.Name == "half" { total += try apply(f, 8) }
+        if f.Name == "half": total += try apply(f, 8)
     }
     return total
 }

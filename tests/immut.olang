@@ -42,7 +42,7 @@ test "an immut value is read, held and replaced whole, never changed" {
 # E12, T29h (found with T13a): an Array<Char> of a run-time length lent as a writable Array<U8>& is the caller's
 # storage - it had been copied and the copy lent, so what the callee wrote was lost
 fn fill(b mut Array<U8>&) I64 {
-    for i in range b.Len() { b[i] = 65 + U8(i) }
+    for i in range b.Len(): b[i] = 65 + U8(i)
     return b.Len()
 }
 
@@ -98,6 +98,6 @@ fn grown(n I64) String {
 test "text built by reassignment holds what it was given, its old values freed" {
     s := grown(500)
     assert s.Len() == 500 and s[0:10] == "0123456789" and s[490:500] == "0123456789"
-    for i in range 300 { Built = Built + $(i % 10) }
+    for i in range 300: Built = Built + $(i % 10)
     assert Built.Len() == 300 and Built[290:300] == "0123456789"
 }

@@ -29,7 +29,7 @@ fn sequence(n I64) String {
     for i in range n {
         r := rng.Next(1.0)
         k I64 = 0
-        for k < 3 and r >= cumulative[k] { k++ }
+        for k < 3 and r >= cumulative[k]: k++
         s[i] = letters[k]
     }
     return String(s)
@@ -65,9 +65,9 @@ fn occurrences(seq String&, run String&) ? {
 fn main() ? {
     args := os.Args()
     n I64 = 1000
-    if args.Len() > 1 { n = try args[1].ParseInt() }
+    if args.Len() > 1: n = try args[1].ParseInt()
     seq := sequence(n)
     try frequencies(seq, 1)
     try frequencies(seq, 2)
-    for run in Array<String&>["ggt", "ggta", "ggtatt", "ggtattttaatt", "ggtattttaatttatagt"] { try occurrences(seq, run) }
+    for run in Array<String&>["ggt", "ggta", "ggtatt", "ggtattttaatt", "ggtattttaatttatagt"]: try occurrences(seq, run)
 }

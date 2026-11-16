@@ -32,7 +32,7 @@ fn mixed(path String&, text String&, std String&, prelude String&) Vec<source.Sp
     p := parse.Parser(src, ts, names, o, d, file)
     p.OldBitwise = true
     p.File()
-    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 { error Unparsable.Syntax }
+    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0: error Unparsable.Syntax
     return p.Mixed
 }
 
@@ -48,9 +48,9 @@ fn reading(path String&, text String&, std String&, prelude String&, old Bool) S
     p.OldBitwise = old
     p.RecordOperators = true
     p.File()
-    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 { error Unparsable.Syntax }
+    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0: error Unparsable.Syntax
     b := StringBuilder()
-    for sp in p.Operators { b.Push($sp.Start + ":" + $sp.End + " ") }
+    for sp in p.Operators: b.Push($sp.Start + ":" + $sp.End + " ")
     return b.ToString()
 }
 
@@ -104,7 +104,7 @@ fn run() I32 {
     changed I64 = 0
     status I32 = 0
     for path in files {
-        if not path.EndsWith(".olang") { continue }
+        if not path.EndsWith(".olang"): continue
         src := try srcmask.ReadText(path) catch {
             srcmask.SayErr("precedence_migrate: cannot read " + $path)
             return 1
@@ -125,10 +125,10 @@ fn run() I32 {
             status = 1
             continue
         }
-        if spans.Len() == 0 { continue }
+        if spans.Len() == 0: continue
         wrapped += spans.Len()
         changed++
-        if verbose { srcmask.Say($path + ": " + $spans.Len()) }
+        if verbose: srcmask.Say($path + ": " + $spans.Len())
         if not check {
             try os.WriteFile(path, wrap(src, spans)) catch {
                 srcmask.SayErr("precedence_migrate: cannot write " + $path)
@@ -141,7 +141,7 @@ fn run() I32 {
         return status
     }
     srcmask.Say($"precedence_migrate: " + $wrapped + " comparisons wrapped in " + $changed + " files" + $(" (nothing written)" if check else ""))
-    if check and changed > 0 { return 1 }
+    if check and changed > 0: return 1
     return status
 }
 

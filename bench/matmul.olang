@@ -20,7 +20,7 @@ fn multiply(a Array<F32>&, b Array<F32>&, c mut Array<F32>&, n I64) {
         for k in range n {
             aik := a[i * n + k]
             bk := b[k * n:(k + 1) * n]
-            for j in range n { row[j] += aik * bk[j] }
+            for j in range n: row[j] += aik * bk[j]
         }
     }
 }
@@ -28,12 +28,12 @@ fn multiply(a Array<F32>&, b Array<F32>&, c mut Array<F32>&, n I64) {
 fn main() ? {
     args := os.Args()
     n I64 = 64
-    if args.Len() > 1 { n = try args[1].ParseInt() }
+    if args.Len() > 1: n = try args[1].ParseInt()
     a := matrix(n, 1)
     b := matrix(n, 2)
     c := Array<F32>(n * n)
     multiply(a, b, c, n)
     sum F64 = 0.0
-    for x in c { sum += x }
+    for x in c: sum += x
     try io.Put($sum + " " + $c[0] + " " + $c[n * n - 1] + "\n")
 }

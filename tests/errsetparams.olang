@@ -13,12 +13,12 @@ type Other error { Odd }
 type Both error Bad, Other
 
 fn parsePos(x I64) I64 ? Bad {
-    if x < 0 { error Bad.Neg }
+    if x < 0: error Bad.Neg
     return x
 }
 
 fn even(x I64) I64 ? Other {
-    if x % 2 != 0 { error Other.Odd }
+    if x % 2 != 0: error Other.Odd
     return x
 }
 
@@ -77,23 +77,23 @@ type Reader struct(of Array<I64>&) {
 }
 
 fn (r mut Reader&) Next() I64 ? Bad, Exhausted {
-    if r.at == r.xs.Len() { error Exhausted.End }
+    if r.at == r.xs.Len(): error Exhausted.End
     r.at++
-    if r.xs[r.at - 1] < 0 { error Bad.Neg }
+    if r.xs[r.at - 1] < 0: error Bad.Neg
     return r.xs[r.at - 1]
 }
 
 fn readAll(xs Array<I64>&) I64 ? Bad {
     r := Reader(xs)
     s I64 = 0
-    for x in try r { s += x }
+    for x in try r: s += x
     return s
 }
 
 # a function over any iterator failing with Bad, its set written in the constraint
 fn total<I Iterator<I64 ? Bad>>(it mut I&) I64 ? Bad {
     s I64 = 0
-    for x in try it { s += x }
+    for x in try it: s += x
     return s
 }
 
@@ -135,7 +135,7 @@ counter mut I64 = 0
 
 fn flaky() I64 ? Bad {
     counter++
-    if counter < 3 { error Bad.Big }
+    if counter < 3: error Bad.Big
     return counter
 }
 
@@ -152,7 +152,7 @@ test "G1a: a type's error-set parameter, and catch E in its methods" {
 
 fn either<I Iterator<I64 ? Both>>(it mut I&) I64 ? Both {
     s I64 = 0
-    for x in try it { s += x }
+    for x in try it: s += x
     return s
 }
 
@@ -186,15 +186,15 @@ test "G12: an instance named with its error set, and one whose set is left to in
 type Countdown struct(n I64) { n }
 
 fn (r mut Countdown&) Next() I64 ? Exhausted, Bad {
-    if r.n == 0 { error Exhausted.End }
+    if r.n == 0: error Exhausted.End
     r.n--
-    if r.n == 5 { error Bad.Neg }
+    if r.n == 5: error Bad.Neg
     return r.n
 }
 
 fn sumAny(it mut any Iterator<I64 ? Bad>&) I64 ? Bad {
     s I64 = 0
-    for x in try it { s += x }
+    for x in try it: s += x
     return s
 }
 

@@ -28,7 +28,7 @@ fn startsWord(line String&, word String&) Bool {
 # whether some line of src starts with the word
 fn anyLineStartsWord(src String&, word String&) Bool {
     for line in src.Split("\n") {
-        if startsWord(line, word) { return true }
+        if startsWord(line, word): return true
     }
     return false
 }
@@ -65,20 +65,20 @@ type notDiag error {
 fn parseDiag(row String&) String, I64, I64, String, String ? {
     n := row.Len()
     for k in range 1, n {
-        if srcmask.IsPySpace(row[k - 1]) { break }
-        if row[k] != ':' { continue }
+        if srcmask.IsPySpace(row[k - 1]): break
+        if row[k] != ':': continue
         a := k + 1
         b := a
-        for b < n and row[b].IsDigit() { b++ }
-        if b == a or b >= n or row[b] != ':' { continue }
+        for b < n and row[b].IsDigit(): b++
+        if b == a or b >= n or row[b] != ':': continue
         c := b + 1
         d := c
-        for d < n and row[d].IsDigit() { d++ }
-        if d == c or not row[d:].StartsWith(": error[") { continue }
+        for d < n and row[d].IsDigit(): d++
+        if d == c or not row[d:].StartsWith(": error["): continue
         e := d + 8
         f := e
-        for f < n and srcmask.IsWord(row[f]) { f++ }
-        if f == e or not row[f:].StartsWith("]: ") { continue }
+        for f < n and srcmask.IsWord(row[f]): f++
+        if f == e or not row[f:].StartsWith("]: "): continue
         return $row[:k], (try row[a:b].ParseInt()), (try row[c:d].ParseInt()), $row[e:f], $row[f + 3:]
     }
     error notDiag.Row
@@ -97,7 +97,7 @@ fn container(lines Array<String&>&, ln I64) I64 {
 # whether the line has "fn(" with something other than a word character before it
 fn hasFnParen(line String&) Bool {
     for i in range line.Len() {
-        if line[i:].StartsWith("fn(") and (i == 0 or not srcmask.IsWord(line[i - 1])) { return true }
+        if line[i:].StartsWith("fn(") and (i == 0 or not srcmask.IsWord(line[i - 1])): return true
     }
     return false
 }
@@ -105,7 +105,7 @@ fn hasFnParen(line String&) Bool {
 # the last index of c in t, or -1
 fn lastIndex(t String&, c Char) I64 {
     i := t.Len() - 1
-    for i >= 0 and t[i] != c { i-- }
+    for i >= 0 and t[i] != c: i--
     return i
 }
 
@@ -114,16 +114,16 @@ fn lastIndex(t String&, c Char) I64 {
 fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<String&>&) I32 {
     for row in errs {
         p, line, col, code, msg := try parseDiag(row) catch { continue }
-        if srcmask.AbsPath(p) != srcmask.AbsPath(path) { continue }
+        if srcmask.AbsPath(p) != srcmask.AbsPath(path): continue
         ln := line - 1
         at := col - 1
-        if ln < 0 or ln >= lines.Len() or at < 0 or at > lines[ln].Len() { continue }
+        if ln < 0 or ln >= lines.Len() or at < 0 or at > lines[ln].Len(): continue
         if code == "E15" {
             lines[ln] = $lines[ln][:at] + "try " + $lines[ln][at:]
             TryFixes++
             return 1
         }
-        if code != "R9" and code != "R13" { continue }
+        if code != "R9" and code != "R13": continue
         k := container(lines, ln)
         if k < 0 {
             srcmask.Say("MANUAL " + $path + " " + $(ln + 1) + " " + $srcmask.Prefix(msg, 60))
@@ -132,13 +132,13 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
         head := lines[k]
         inner := head.StartsWith("test") or head.StartsWith("type") or code == "R13"
         for j in range k + 1, ln + 1 {
-            if hasFnParen(lines[j]) { inner = true }
+            if hasFnParen(lines[j]): inner = true
         }
         if not inner and head.StartsWith("fn ") {
             # the signature: before the opening brace of the body
             j := k
             for j < lines.Len() and not ("{" in lines[j]) { j++ }
-            if j >= lines.Len() { continue }
+            if j >= lines.Len(): continue
             b := lastIndex(lines[j], '{')
             pre := $srcmask.StripEnd(lines[j][:b])
             paren := lastIndex(pre, ')')
@@ -169,7 +169,7 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
         depth I64 = 0
         end I64 = -1
         i := at
-        for i < text.Len() and text[i] != '(' { i++ }
+        for i < text.Len() and text[i] != '(': i++
         for i < text.Len() {
             if mask[i] == 'c' {
                 if text[i] == '(' {
@@ -209,7 +209,7 @@ fn fixFile(olang String&, path String&, alias String&) {
             if outcome == 0 {
                 for row in errs {
                     p, line, _, code, msg := try parseDiag(row) catch { continue }
-                    if srcmask.AbsPath(p) != srcmask.AbsPath(path) { continue }
+                    if srcmask.AbsPath(p) != srcmask.AbsPath(path): continue
                     if code != "R9" and code != "R13" and code != "E15" {
                         srcmask.Say("OTHER " + $path + " " + $line + " " + $code + " " + $srcmask.Prefix(msg, 70))
                     }

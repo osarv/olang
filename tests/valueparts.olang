@@ -222,7 +222,7 @@ fn vecWalks(k I64) I64 {
     cs := Vec<vwCell>()
     for i in range 3 {
         c := vwCell()
-        for j in range i + k { c.xs.Push(j) }
+        for j in range i + k: c.xs.Push(j)
         c.n = i
         cs.Push(c)
     }

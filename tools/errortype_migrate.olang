@@ -21,11 +21,11 @@ fn migrate(src String&, c mut Count&) String {
     at I64 = 0
     for i in range ts.Len() - 2 {
         t := ts[i]
-        if t.Kind != token.Tok.Error or ts[i + 1].Kind != token.Tok.Iden or ts[i + 2].Kind != token.Tok.LBrace { continue }
+        if t.Kind != token.Tok.Error or ts[i + 1].Kind != token.Tok.Iden or ts[i + 2].Kind != token.Tok.LBrace: continue
         # first in its statement: first on its line, or after the end of one or a brace
         if i > 0 and not t.Has(token.LineBreak) {
             k := ts[i - 1].Kind
-            if k != token.Tok.StmtEnd and k != token.Tok.LBrace and k != token.Tok.RBrace { continue }
+            if k != token.Tok.StmtEnd and k != token.Tok.LBrace and k != token.Tok.RBrace: continue
         }
         name := ts[i + 1]
         out.Push(src[at:I64(t.Start)])
@@ -35,7 +35,7 @@ fn migrate(src String&, c mut Count&) String {
         at = I64(name.End)
         c.n++
     }
-    if at == 0 { return src }
+    if at == 0: return src
     out.Push(src[at:])
     return out.ToString()
 }
@@ -61,9 +61,9 @@ fn migrateMarkdown(src String&, n mut Count&) String {
             inBlock = true
         }
         out.Push(line)
-        if not last { out.PushChar('\n') }
+        if not last: out.PushChar('\n')
     }
-    if inBlock { out.Push(block.ToString()) }
+    if inBlock: out.Push(block.ToString())
     return out.ToString()
 }
 
@@ -89,16 +89,16 @@ fn main() ? {
     total := Count()
     changed I64 = 0
     for path in files {
-        if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")): continue
         src := try srcmask.ReadText(path) catch {
             srcmask.SayErr("errortype_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
         out := migrateMarkdown(src, total) if path.EndsWith(".md") else migrate(src, total)
-        if out == src { continue }
+        if out == src: continue
         changed++
-        if verbose { srcmask.Say(path) }
+        if verbose: srcmask.Say(path)
         if not check {
             try os.WriteFile(path, out) catch {
                 srcmask.SayErr("errortype_migrate: cannot write " + $path)
@@ -108,7 +108,7 @@ fn main() ? {
     }
     verb := "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.n + " declarations")
-    if check and changed > 0 { os.Exit(1) }
+    if check and changed > 0: os.Exit(1)
 }
 
 test "an error type declared with its keyword first becomes a type; statements and new declarations are left" {
