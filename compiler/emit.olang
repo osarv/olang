@@ -5098,7 +5098,7 @@ fn (fe mut fnEm&) objectPtr(v String&, ty types.TypeId) String {
 # storage for an array of el elements, bytes long, in the scope whose header is sc: the size class an array takes, and
 # at least an element's own alignment where that is more than 8 (I65 to I128, T4a - LLVM holds an i128 16-aligned);
 # zero-filled where zeroed. O8f round 8: in a scope a local holds (held), which may be a slot scope, through
-# __olang_held_alloc, whose slot allocation is inline - only such sites test for one
+# __olang_held_alloc, which reaches a slot scope's allocation in one call - only such sites test for one
 fn (fe mut fnEm&) arrayStorage(sc String&, bytes String&, el types.TypeId, zeroed Bool, held Bool = false) String {
     a := fe.align(el)
     pre := "__olang_held_alloc" if held and not zeroed else "__olang_scope_alloc"

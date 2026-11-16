@@ -989,11 +989,13 @@ done:
   ret ptr %p
 }
 
-; O8f round 8: __olang_gen_buf's own work inline, for what a module builds through a slot scope - a copy's text above
-; all, a string a slot each: the class of a size up to 256 bytes (header and padding room included) is arithmetic, the
-; slot a pop from its scope part's free list or a bump (__olang_gen_alloc, inline too), its header and its record
-; written here; anything larger is __olang_gen_buf's call. The same allocation as gen_buf makes, to the byte
-define noalias ptr @__olang_slot_alloc(ptr %ss, i64 %rawsize) alwaysinline {
+; O8f round 8: a slot scope's allocation reached in one call (__olang_held_alloc_a), not through a failed bump,
+; __olang_scope_alloc_slow and __olang_gen_buf: the class of a size up to 256 bytes (header and padding room included)
+; is arithmetic, the slot a pop from its scope part's free list or a bump (__olang_gen_alloc, inlined here), its header
+; and its record written here; anything larger is __olang_gen_buf's. The same allocation as gen_buf makes, to the byte.
+; Not inlined into modules: measured (docs/freeing.md 2.3), inlining it saved nothing over this one call and grew every
+; held scope's allocation site
+define noalias ptr @__olang_slot_alloc(ptr %ss, i64 %rawsize) noinline {
 entry:
   %up = add i64 %rawsize, 7
   %s8 = and i64 %up, -8
@@ -1046,7 +1048,7 @@ done:
 }
 
 ; __olang_scope_alloc_a for a scope a function holds in a local (mir.ScopeRef.Held: a region, a part, a slot scope, a
-; scope handed over): a slot scope's allocation inline (__olang_slot_alloc), any other the bump. Only such scopes test
+; scope handed over): a slot scope's allocation one call (__olang_slot_alloc), any other the bump. Only such scopes test
 ; their head here, so no other allocation grows
 define noalias ptr @__olang_held_alloc_a(ptr %scope, i64 %rawsize, i64 %aln) alwaysinline {
 entry:
