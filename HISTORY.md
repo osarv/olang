@@ -38973,3 +38973,29 @@ compiler/lsp.olang kept `PutLine`; they are renamed, and the tool now reads thos
 declaration (prelude `Scan` and oann's ad/ops `Scan`; prelude `InputError` and tests/worker's). Asked whether a module's
 declaration should take precedence, the user: "don't allow shadowing". A clash stays an error; the clashing name is
 renamed, by hand or by an `olang fix` tool shipped with the prelude addition.
+
+### The weekly verify of fee25a61 put right (2026-11-16, wt-vfix2)
+
+The full `make verify` on fee25a61 failed in checks/checks.olang (7 scenarios) and compiler/build.olang. None was a
+compiler regression in what olang means; each was a scenario or generator not moved with a decided rule, plus one
+test that silently ended its own process.
+- **Scenarios left behind.** `listing` looked for `build/*.listing.o` and `.yaml`, which B15a moved to olang's cache
+  (`analysis/`); the B11d "no function" line in its log was an earlier step's output, as expected. It now runs explain
+  with its own `XDG_CACHE_HOME`, finds them there, and checks nothing is written beside the program. `checkedbuild`
+  expected column 22 of an index that PutLn's shorter name moved to 20 (as g16boutermost, 61ca5e43). `runfile` passed
+  `-debug` after the file, which B4a refuses - now `a --x` after the file, `-debug` after `--`, and the refusal checked.
+  `output` and `words` expected `-output` to name the notebook mode, which serve/run (B24) removed: SPEC's B1 table says
+  build, compile, run, bindgen and profile, as the compiler does. Each rule's refusal is the decided one; no compiler
+  change.
+- **The differential fuzzer** emitted the bare `defer stmt` (S19 refuses it since wt-seed) and a comparison of two
+  Bool literals (`true == false`, S8a refuses it since wt-litcmp). fuzz/gen.olang writes `defer: stmt`, and k == 4 of
+  exBool makes one side of an `==`/`!=` between two literals a non-literal, as the numeric comparisons already did.
+  Seeds 1-30 run clean.
+- **compiler/build.olang's file failed with "6 passed, 0 failed".** Two tests never reported: "a build compiles and
+  links only what changed" ended with `Interpret(...)`, which since B3g runs the program in the process's place
+  (ExecInPlace), so the test binary became the stub program and exited 42 before the rest ran. The test now checks the
+  evaluated path (the one that returns a status). And the runner said nothing about it: runTests now says "FILE: the
+  tests ended with status N before every test had run" for any status the harness never gives (it ends 0, 1 or 3), as
+  it already did for a signal. The "x_kill.olang: the compiler ended (Killed)" line is that test's own fake compiler
+  killing itself on purpose, not a memory kill; the "libclang_rt.tsan-.a not installed" note came from the same test's
+  bare Config (no clang, no architecture) - TestFiles no longer says it where no clang is known.
