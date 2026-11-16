@@ -7,5 +7,5 @@ fn main() ? io.Error {
     n := os.Args().Len()
     xs := Array<I64>[10, 20, 30, 40]
     s U8 = U8(n)
-    try io.PutLine($(xs[n] / n) + " " + $(xs[0] % n) + " " + $(s << n) + " " + $(xs[1] >> n))
+    try io.PutLn($(xs[n] / n) + " " + $(xs[0] % n) + " " + $(s << n) + " " + $(xs[1] >> n))
 }

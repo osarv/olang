@@ -156,7 +156,7 @@ fn main() {
     olang := benchlib.Compiler()
     try os.MkDirAll($benchlib.Dir + "/build") catch os.Error { benchlib.Fail("cannot make bench/build", 1) }
     build(olang, rows, o.base)
-    benchlib.TakeLock()
+    lock := benchlib.TakeLock()          # held to the end of main
     check(rows, o.base)
     if o.quick: return
     results := timing(rows, o.base, o.reps)

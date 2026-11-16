@@ -126,7 +126,7 @@ fn worse(a Func, b Func) Bool { return a.depth > b.depth or (a.depth == b.depth 
 fn defaultFiles() Vec<String&> {
     out := Vec<String&>()
     names := try os.ReadDir("compiler") catch {
-        io.PutErrLine("nesting: no compiler/ here - run from the repository root")!
+        io.PutErrLn("nesting: no compiler/ here - run from the repository root")!
         os.Exit(2)
     }
     for f in names {
@@ -163,9 +163,9 @@ fn main() ? {
     }
     for k, f in funcs {
         if limit >= 0 and k >= limit: break
-        try io.PutLine($f.depth + "\t" + $f.lines + "\t" + $f.file + ":" + $f.line + "\t" + $f.name)
+        try io.PutLn($f.depth + "\t" + $f.lines + "\t" + $f.file + ":" + $f.line + "\t" + $f.name)
     }
-    try io.PutLine(("nesting: " + $funcs.Len() + " functions; " + $over4 + " over depth 4, " + $over5 + " over depth 5, " + $over6 + " over depth 6, " + $long +
+    try io.PutLn(("nesting: " + $funcs.Len() + " functions; " + $over4 + " over depth 4, " + $over5 + " over depth 5, " + $over6 + " over depth 6, " + $long +
         " over 200 lines"))
 }
 

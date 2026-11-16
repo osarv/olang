@@ -48,7 +48,7 @@ fn main() {
         from = 3
     }
     if args.Len() <= from {
-        try io.PutErrLine("usage: memgate [-key KEY] COMMAND ARGS... | memgate -table") catch io.Error { }
+        try io.PutErrLn("usage: memgate [-key KEY] COMMAND ARGS... | memgate -table") catch io.Error { }
         os.Exit(2)
     }
     cmd := args[from:]
@@ -95,7 +95,7 @@ fn table(dir String&) {
     keys Vec<String&>
     for k in last.Keys(): keys.Push(k)
     keys.Sort(fn(a String&, b String&) Bool { return a < b })
-    for k in keys { try io.PutLine($k + " " + $(try last.Get(k) catch default 0)) catch io.Error { } }
+    for k in keys { try io.PutLn($k + " " + $(try last.Get(k) catch default 0)) catch io.Error { } }
 }
 
 fn record(dir String&, key String&, peak I64) {
@@ -185,7 +185,7 @@ fn unlock(dir String&) { try os.Remove($dir + "/lock") catch os.Error { } }
 # and its peak in MB
 fn run(dir String&, me I64, mb I64, cmd Array<String&>&) I32, I64 {
     p mut os.Process& = try os.Process.Start(...cmd, capture = false) catch os.Error e {
-        try io.PutErrLine($"memgate: cannot run " + $cmd[0] + ": " + $e) catch io.Error { }
+        try io.PutErrLn($"memgate: cannot run " + $cmd[0] + ": " + $e) catch io.Error { }
         return 127, 0
     }
     status I32 = 0

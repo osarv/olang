@@ -9,5 +9,5 @@ fn main() ? {
     h := H()
     h.n = 3
     c := h
-    try io.PutLine($c.n)
+    try io.PutLn($c.n)
 }

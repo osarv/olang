@@ -13,5 +13,5 @@ fn main() {
         m.Put($i, Rec("payload " + $i + " - about sixty bytes of value text ....."))
         if i >= 100: m.Remove($(i - 100))
     }
-    io.PutLine($m.Len())!
+    io.PutLn($m.Len())!
 }

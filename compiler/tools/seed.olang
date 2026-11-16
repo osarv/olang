@@ -27,7 +27,7 @@ fn main() ? {
 }
 
 fn die(why String&) noreturn {
-    try io.PutErrLine($"seed: " + $why) catch io.Error { }
+    try io.PutErrLn($"seed: " + $why) catch io.Error { }
     os.Exit(1)
 }
 

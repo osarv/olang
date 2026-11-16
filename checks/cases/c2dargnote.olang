@@ -19,5 +19,5 @@ fn (r mut R&) load(path String&) {
 fn main() ? {
     r := R()
     r.load("abc")
-    try io.PutLine($r.mods.Len())
+    try io.PutLn($r.mods.Len())
 }

@@ -8,6 +8,6 @@ fn main() {
         rows[i % 10] = Map<String, Vec<String>>[$i: Vec<String>[$i]]
         c := rows[(i + 3) % 10]
         c.Put("x", Vec<String>["y"])
-        io.PutLine($c.Len())!
+        io.PutLn($c.Len())!
     }
 }

@@ -3,11 +3,11 @@ import "std/io"
 fn main() ? io.Error {
     n := 42
     try io.Put("n is ")
-    try io.PutLine($n)
-    try io.PutLine("joined " + $n + " and " + $(n + 1))
-    try io.PutLine()
+    try io.PutLn($n)
+    try io.PutLn("joined " + $n + " and " + $(n + 1))
+    try io.PutLn()
     try io.PutErr("to the ")
-    try io.PutErrLine("standard error")
-    say := io.PutLine<String>        # a function value, as any function is - a generic one named by its instance (G12)
+    try io.PutErrLn("standard error")
+    say := io.PutLn<String>        # a function value, as any function is - a generic one named by its instance (G12)
     try say("through a value")
 }

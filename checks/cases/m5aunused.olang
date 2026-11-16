@@ -3,5 +3,5 @@
 import "std/os"
 import "std/io"
 fn main() ? {
-    try io.PutLine("hi")
+    try io.PutLn("hi")
 }

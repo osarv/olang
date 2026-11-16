@@ -30,9 +30,9 @@ fn churn(d I64) I64 {
 }
 fn main() ? {
     b := Bag(Node(1))
-    try io.PutLine($b)
+    try io.PutLn($b)
     t := churn(200)
     l := Vec<Node&>()
     for i in range 50: l.Push(Node(i))
-    try io.PutLine($b.head.next!.v + " " + $t)
+    try io.PutLn($b.head.next!.v + " " + $t)
 }

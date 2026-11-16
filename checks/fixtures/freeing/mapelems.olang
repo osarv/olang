@@ -39,5 +39,5 @@ fn main() {
         vv.RefMut(i % 10).Remove($(i + 2) + "-2 padded")
         t += rows[i % 10].Len() + v[i % 10].Len() + rv[i % 10].Len() + vv[i % 10].Len() + vv.Ref(i % 10).Ref($(i + 2) + "-4 padded")![19]
     }
-    io.PutLine($t + " " + $(rows[3].Get($(N - 7) + "-5 padded out a little")!) + " " + $v.Ref(4).Len())!
+    io.PutLn($t + " " + $(rows[3].Get($(N - 7) + "-5 padded out a little")!) + " " + $v.Ref(4).Len())!
 }

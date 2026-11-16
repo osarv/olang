@@ -20,5 +20,5 @@ fn main() {
         v = mk(k)
         t += v[99]
     }
-    io.PutLine($olang_total(t))!
+    io.PutLn($olang_total(t))!
 }

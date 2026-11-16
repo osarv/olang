@@ -863,7 +863,7 @@ test Profile.Read "a samples file's header, records and map; a record cut short 
 }
 
 test Readable "a symbol olang wrote read back as the profile names it; any other name as it is" {
-    assert Readable(types.Symbol("std/io.PutLine")) == "io.PutLine"
+    assert Readable(types.Symbol("std/io.PutLn")) == "io.PutLn"
     assert Readable(types.Symbol("compiler/check.compiler/check:Checker.joinStmt")) == "check.Checker.joinStmt"
     assert Readable(types.Symbol("std/prelude/vec.std/prelude/vec:Vec<I64>.Push")) == "Vec<I64>.Push"
     assert Readable(types.Symbol("hot.main")) == "hot.main"

@@ -31,7 +31,7 @@ import rt "../runtime"
 fn main() ? {
     args := os.Args()
     if args.Len() < 2 {
-        try io.PutErrLine("usage: emitdump [-D NAME=VALUE]... [-t] [-standin] [-o OUT.ll] FILE") catch io.Error { }
+        try io.PutErrLn("usage: emitdump [-D NAME=VALUE]... [-t] [-standin] [-o OUT.ll] FILE") catch io.Error { }
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { run(args) })
@@ -113,16 +113,15 @@ fn run(args Array<String&>&) {
         if base.EndsWith(".olang"): base = base[:base.Len() - 6]
         outPath = "build/" + $base + ".ll"
     }
-    fd := try os.Create(outPath) catch os.Error {
-        try io.PutErrLine("emitdump: cannot write " + $outPath) catch io.Error { }
+    fd := try os.File.Create(outPath) catch os.Error {
+        try io.PutErrLn("emitdump: cannot write " + $outPath) catch io.Error { }
         os.Exit(1)
     }
     w := io.Writer(fd)
     e.Program(w)
     try w.Flush() catch io.Error { os.Exit(1) }
-    try os.Close(fd) catch os.Error { }
-    for g in e.Gaps { try io.PutErrLine("gap " + $g) catch io.Error { } }
-    for g in lw.Gaps { try io.PutErrLine("lower gap " + $d.Locate(g.File, I64(g.Sp.Start)) + " " + $g.What) catch io.Error { } }
+    for g in e.Gaps { try io.PutErrLn("gap " + $g) catch io.Error { } }
+    for g in lw.Gaps { try io.PutErrLn("lower gap " + $d.Locate(g.File, I64(g.Sp.Start)) + " " + $g.What) catch io.Error { } }
 }
 
 # the runtime's files filled in for this machine (B12), written into dir: compiler/runtime.olang's, as the driver builds
@@ -141,7 +140,7 @@ fn runtimeFiles(dir String&) {
 
 fn write(path String&, text String&) {
     try os.WriteFile(path, text) catch os.Error {
-        try io.PutErrLine("emitdump: cannot write " + $path) catch io.Error { }
+        try io.PutErrLn("emitdump: cannot write " + $path) catch io.Error { }
         os.Exit(1)
     }
 }

@@ -22,5 +22,5 @@ fn main() {
     s := shout(p)
     u := p.Upper()
     assert s == "Xmy" and u == "Amy" and p.name == "amy"
-    io.PutLine($p.name + " " + $s + " " + $u)!
+    io.PutLn($p.name + " " + $s + " " + $u)!
 }

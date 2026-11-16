@@ -27974,7 +27974,7 @@ fn (c mut Checker&) handleLine(b typed.Body&, l typed.Local&, mi I64, kind Strin
     ty := c.ty(l.Ty)
     c.spellQualified = was
     c.spellMod = -1
-    try io.PutErrLine("handles: " + $c.P.L.Diags.Locate(b.File, I64(l.Sp.Start)) + ": " + $kind + " " + $c.text(l.Name) + "|" + $ty + "|" + $root) catch io.Error { }
+    try io.PutErrLn("handles: " + $c.P.L.Diags.Locate(b.File, I64(l.Sp.Start)) + ": " + $kind + " " + $c.text(l.Name) + "|" + $ty + "|" + $root) catch io.Error { }
 }
 
 # the local a place's storage belongs to - through fields, payloads, the elements of an array held by value and a

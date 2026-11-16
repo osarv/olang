@@ -11,5 +11,5 @@ fn main() {
     v Vec<String>
     for _ in range 10: v.Push("")
     for i in range N: v[i % 10] = "value " + $i
-    io.PutLine(names[3] + " " + v[3])!
+    io.PutLn(names[3] + " " + v[3])!
 }

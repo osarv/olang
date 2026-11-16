@@ -145,7 +145,7 @@ fn Run<? E>(body fn&() ? E, label String& = "", budget time.Duration = DefaultBu
     }
     s := try Series.Of(body, budget, runs)
     name := $running() + $("/" if label != "" else "") + $label
-    try io.PutLine($"bench " + $name + "  " + $s) catch io.Error { }
+    try io.PutLn($"bench " + $name + "  " + $s) catch io.Error { }
 }
 
 # the runs a measurement is made of unless said
@@ -241,7 +241,7 @@ fn Human(ns F64, spread F64) String {
 # time of a call in nanoseconds (Series.Of gives all the runs, where they are wanted)
 fn Time<? E>(body fn&() ? E, budget time.Duration = DefaultBudget, runs I64 = DefaultRuns) F64 ? E {
     s := try Series.Of(body, budget, runs)
-    try io.PutLine(s.Line()) catch io.Error { }
+    try io.PutLn(s.Line()) catch io.Error { }
     return s.Median()
 }
 
@@ -269,9 +269,9 @@ fn Compare<? E>(a fn&() ? E, b fn&() ? E, labels Array<String&> = Array<String&>
     budget time.Duration = DefaultBudget, runs I64 = DefaultRuns) F64 ? E {
     c := try Comparison.Of(a, b, budget, runs)
     la, lb := labels[0], labels[1]
-    try io.PutLine($la + ": " + $c.A.Line()) catch io.Error { }
-    try io.PutLine($lb + ": " + $c.B.Line()) catch io.Error { }
-    try io.PutLine($lb + "/" + $la + " " + $c.Ratio().Fixed(2) + " ± " + $c.RatioSpread().Fixed(2) + " (median of " + $c.Ratios.Len() + " paired runs)") catch io.Error { }
+    try io.PutLn($la + ": " + $c.A.Line()) catch io.Error { }
+    try io.PutLn($lb + ": " + $c.B.Line()) catch io.Error { }
+    try io.PutLn($lb + "/" + $la + " " + $c.Ratio().Fixed(2) + " ± " + $c.RatioSpread().Fixed(2) + " (median of " + $c.Ratios.Len() + " paired runs)") catch io.Error { }
     return c.Ratio()
 }
 

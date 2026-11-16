@@ -19,5 +19,5 @@ fn main() {
         for j in range 50: u.Push(j)
         t += u[149] + u.Len() + m.Get(i % 7)!.Len()
     }
-    io.PutLine($t + " " + $m.Len())!
+    io.PutLn($t + " " + $m.Len())!
 }

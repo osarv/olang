@@ -9,7 +9,7 @@ heartbeat: ping
   iopub execute_result: {"text/plain":"42"}
   execute_reply: status="ok"
 > execute_request
-  iopub execute_input: "import \"std/io\"\nio.PutLine(\"hello\")!"
+  iopub execute_input: "import \"std/io\"\nio.PutLn(\"hello\")!"
   iopub stream: stdout "hello\n"
   execute_reply: status="ok"
 > execute_request

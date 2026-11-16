@@ -20,5 +20,5 @@ fn main() {
     d Doc
     d = Doc("")
     for _ in range N: d = Doc(d.text + "x")
-    io.PutLine($v[0] + " " + $d.text.Len())!
+    io.PutLn($v[0] + " " + $d.text.Len())!
 }

@@ -36,5 +36,5 @@ fn main() ? {
             if w == Value.Num: s += w.n
         }
     }
-    try io.PutLine($outer.Len() + " " + $s)
+    try io.PutLn($outer.Len() + " " + $s)
 }

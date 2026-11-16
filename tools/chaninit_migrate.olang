@@ -15,13 +15,13 @@ fn main() ? io.Error {
     for k in range 1, args.Len() {
         path := args[k]
         text := try os.ReadFile(path) catch os.Error {
-            try io.PutErrLine("chaninit_migrate: " + $path + ": cannot be read")
+            try io.PutErrLn("chaninit_migrate: " + $path + ": cannot be read")
             continue
         }
         out := migrate(text, path.EndsWith("std/chan.olang"))
         if out == text: continue
-        try os.WriteFile(path, out) catch os.Error { try io.PutErrLine("chaninit_migrate: " + $path + ": cannot be written") }
-        try io.PutLine(path)
+        try os.WriteFile(path, out) catch os.Error { try io.PutErrLn("chaninit_migrate: " + $path + ": cannot be written") }
+        try io.PutLn(path)
     }
 }
 

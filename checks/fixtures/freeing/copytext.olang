@@ -28,5 +28,5 @@ fn main() {
         c.Push("x")
         t += longest(rows[i % 10]) + c.Len()
     }
-    io.PutLine($t + " " + $rows[3][0])!
+    io.PutLn($t + " " + $rows[3][0])!
 }

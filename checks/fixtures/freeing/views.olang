@@ -22,5 +22,5 @@ fn main() {
     m.Put("a", v[1])
     t := 0
     for i in range N: t += v[i % 10][2][0] + v[(i + 1) % 10][4][29] + m.Ref("a")![3][i % 30] + v[i % 10][1].Len()
-    io.PutLine($t + " " + $v[9][4].Len())!
+    io.PutLn($t + " " + $v[9][4].Len())!
 }

@@ -10,5 +10,5 @@ fn add(i I64) { Log = Log + $i }
 
 fn main() {
     for i in range N: add(i)
-    io.PutLine($Log.Len())!
+    io.PutLn($Log.Len())!
 }

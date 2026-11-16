@@ -32,5 +32,5 @@ fn main() ? {
         churn()
     }
     churn()
-    try io.PutLine($GF!())
+    try io.PutLn($GF!())
 }

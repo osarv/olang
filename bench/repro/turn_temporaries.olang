@@ -51,5 +51,5 @@ fn main() ? {
             s += try m.Get(i)
         }
     }
-    try io.PutLine($s)
+    try io.PutLn($s)
 }

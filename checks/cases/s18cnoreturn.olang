@@ -11,5 +11,5 @@ fn check(x I64) {
 
 fn main() {
     check(1)
-    io.PutLine("not reached")!
+    io.PutLn("not reached")!
 }

@@ -17,5 +17,5 @@ fn (b Bag&) Str() String {
 }
 fn main() ? {
     b := Bag(Cell())
-    try io.PutLine($b)
+    try io.PutLn($b)
 }

@@ -20,5 +20,5 @@ fn main() {
         v[i % 10] = mk(i + 1)
         t += rows[i % 10][99] + v[i % 10][0]
     }
-    io.PutLine($t + " " + $rows[3].Len() + " " + $v[3].Len())!
+    io.PutLn($t + " " + $rows[3].Len() + " " + $v[3].Len())!
 }

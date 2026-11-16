@@ -18,5 +18,5 @@ fn main() ? {
         keep = try get(m)
     }
     keep.Push(1)
-    io.PutLine($keep.Len())!
+    io.PutLn($keep.Len())!
 }

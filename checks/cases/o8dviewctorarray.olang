@@ -36,5 +36,5 @@ fn main() {
         if i % 500 == 0: churn()
     }
     churn()
-    io.PutLine($t + " " + $h.p.name + " " + $h.p.tags[31])!
+    io.PutLn($t + " " + $h.p.name + " " + $h.p.tags[31])!
 }

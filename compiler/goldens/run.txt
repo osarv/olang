@@ -1532,9 +1532,9 @@
 | status 0
 | ok - Write reports a failure from the underlying syscall
 | ok - Write succeeds on a real descriptor
-| ok - Put and PutLine write text, PutLine with its line end
-| ok - PutLine: writes any value as $ renders it
-| ok - Writer.PutLine: writes any value as $ renders it, with a line end
+| ok - Put and PutLn write text, PutLn with its line end
+| ok - PutLn: writes any value as $ renders it
+| ok - Writer.PutLn: writes any value as $ renders it, with a line end
 | ok - Show: gives its value back after writing it, with the place of the call, to the standard error
 | ok - Read returns a slice of the caller's own buffer
 | ok - FormatInt renders decimals, including zero and negatives

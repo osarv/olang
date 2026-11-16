@@ -80,5 +80,5 @@ fn main() ? {
         }
         t += p
     }
-    try io.PutLine($t)
+    try io.PutLn($t)
 }

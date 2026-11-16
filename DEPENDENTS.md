@@ -197,7 +197,7 @@ The busy indicator's frames are `Frames` in `compiler/spin.olang`; `makefile`'s 
 | `SPEC.md` | only if the language rule changes (a std API is not specified there, except B14-B16 outputs) |
 | `compiler/doc.olang` | `olang doc -html` writes all of std; nothing to add per module |
 | `tools/stutter_rename.olang` | the naming rule (no module name repeated in a type: `io.Error`, never `io.IoError`) |
-| `tools/io_rename.olang` | a std/io function renamed: no `io` function shares a name with a prelude one (D3a), `Put`, `PutLine`, `PutErr`, `PutErrLine` |
+| `tools/io_rename.olang` | a std/io function renamed: no `io` function shares a name with a prelude one (D3a), `Put`, `PutLn`, `PutErr`, `PutErrLn` |
 | `std/runtime/*.ll` and `compiler/runtime.olang` | a new runtime function or C-library fact; `emit.olang` declares runtime functions from the runtime's text |
 | `compiler/eval.olang` `runtimeFn` (and `callExtern`'s compile-time list) | a runtime function std calls (`__olang_*`): what the evaluator answers for it, under `-evaluate` and while compiling (B19b's `__olang_bench_*`) |
 | `compiler/*.olang` that import it | `grep -l 'std/NAME'` - the compiler uses `std/os`, `std/io`, `std/json`, `std/filepath` and others |

@@ -25,5 +25,5 @@ fn main() ? {
         c.onEvict!(t)
     }
     churn()
-    try io.PutLine(gone.Join(","))
+    try io.PutLn(gone.Join(","))
 }

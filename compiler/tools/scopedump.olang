@@ -27,14 +27,14 @@ import "../scope"
 fn main() ? {
     args := os.Args()
     if args.Len() < 2 {
-        try io.PutErrLine("usage: scopedump [-D NAME=VALUE]... [-t] [-plan PATTERN] FILE...") catch io.Error { }
+        try io.PutErrLn("usage: scopedump [-D NAME=VALUE]... [-t] [-plan PATTERN] FILE...") catch io.Error { }
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { run(args) })
 }
 
 fn run(args Array<String&>&) {
-    out := io.Writer(1)
+    out := io.Writer(io.Stdout)
     std := try os.Env("OLANG_STD") catch default "std"
     defines Vec<String&>
     testBuild := false

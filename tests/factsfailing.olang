@@ -19,7 +19,7 @@ fn Checked(x I64) I64 ? Mismatch {
 
 fn Settled8(x I64) I64 {
     if x > 100 {
-        io.PutErrLine("too far: " + $x)!
+        io.PutErrLn("too far: " + $x)!
         unreachable "lost " + $x
     }
     return x * 2

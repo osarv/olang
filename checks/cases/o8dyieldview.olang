@@ -37,6 +37,6 @@ fn main() {
     for x in walk(h) {
         h.set(x + 7)
         churn()
-        io.PutLine($x)!
+        io.PutLn($x)!
     }
 }

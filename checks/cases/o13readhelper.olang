@@ -53,5 +53,5 @@ fn main() {
     assert q != null
     assert q == Spot.Local(7)
     assert root(Spot.Deref(Term.Other)) == null
-    io.PutLine($q)!
+    io.PutLn($q)!
 }

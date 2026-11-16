@@ -450,7 +450,7 @@ WorkerSource String& = """
     fn main() {
         fcntl.fcntl(3, 2, 1)
         fcntl.fcntl(4, 2, 1)
-        cmds := io.Lines(3)
+        cmds := io.Lines(I32(3))
         for {
             line := try cmds.Next() catch { break }
             if line.StartsWith("cell "): run(line[5:])

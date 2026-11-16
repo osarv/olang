@@ -24,7 +24,7 @@ fn count(s String?&) I64 {
 }
 
 fn main() ? io.Error {
-    try io.PutLine("fixed " + $id(7))
+    try io.PutLn("fixed " + $id(7))
     r := try half(8) catch Bad default 0
-    try io.PutLine($r + " " + $name(r + count(null)))
+    try io.PutLn($r + " " + $name(r + count(null)))
 }

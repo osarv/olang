@@ -10,5 +10,5 @@ fn work(n I64) I64 {
 }
 
 fn main() {
-    io.PutLine("fast " + $work(f.FAST_N) + " " + $f.fast_total())!
+    io.PutLn("fast " + $work(f.FAST_N) + " " + $f.fast_total())!
 }

@@ -25,5 +25,5 @@ fn main() ? {
     kp := Keeper()
     fill(n, kp)
     t := churn(300)
-    try io.PutLine($kp.kept!() + " " + $t)
+    try io.PutLn($kp.kept!() + " " + $t)
 }

@@ -22,5 +22,5 @@ fn work2() I64 {
 }
 fn main() ? {
     t := work()
-    try io.PutLine($t)
+    try io.PutLn($t)
 }

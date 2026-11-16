@@ -23,5 +23,5 @@ fn main() ? {
         ms.Push(try mat.Mat.View(d, 0, 2, 2))
     }
     churn()
-    io.PutLine($ms[0].Get(1, 1) + " " + $ms[2].Get(1, 1))!
+    io.PutLn($ms[0].Get(1, 1) + " " + $ms[2].Get(1, 1))!
 }

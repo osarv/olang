@@ -49,7 +49,7 @@ fn bumpF(f mut Array<I64>&) I64 {
 }
 Baked String& = joins()
 fn main() ? {
-    try io.PutLine(joins())
-    try io.PutLine(Baked)
+    try io.PutLn(joins())
+    try io.PutLn(Baked)
     assert Baked == joins()
 }

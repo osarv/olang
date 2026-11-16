@@ -15,5 +15,5 @@ fn main() ? {
     join {
         for i, n in ns: spawn out[i] = see(n)
     }
-    try io.PutLine($out[0] + " " + $out[1])
+    try io.PutLn($out[0] + " " + $out[1])
 }

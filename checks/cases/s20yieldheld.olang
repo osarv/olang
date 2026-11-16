@@ -38,5 +38,5 @@ fn main() ? {
         churn()
     }
     assert Closed == 3
-    try io.PutLine("closed " + $Closed)
+    try io.PutLn("closed " + $Closed)
 }
