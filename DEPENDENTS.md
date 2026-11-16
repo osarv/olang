@@ -123,8 +123,11 @@ a `Vec`'s buffer, a `Map`'s slots, a text field; `free.olang` PartPlace, PartSit
 region is left to it - in the runtime (`__olang_slot_release`, the chunk's owner read first) and the evaluator
 (`releaseHeld`'s `slotRegion`) alike. An element's let-go of a Vec it walks (O8f gap 17: `free.olang` VecWalks, PartsLet,
 VecFields - the prelude Vec's `data` and `n` by name, so renaming them changes these and `emit.olang`'s and `views.olang`'s
-`data`) is lowered by `lower.olang`'s partReleases and textWalk; a copy made in a part region is split by its partCopy
-(free.PartSplit), so a part region holds one array - a change to how a Copy helper builds parts changes it. The stores
+`data`; a Map's walk, of its live entries, MapFields - its `ents`, `n` and `next` by name, the live test `next[i] >= -1`
+the prelude's `live` - with EntryOnly, so renaming them or changing how a removal empties a slot changes these) is lowered
+by `lower.olang`'s partReleases and textWalk; a copy made in a part region is split by its partCopy (free.PartSplit;
+a Map's other parts and its live entries by partOf and entryCopy, as a Put builds an entry), so a part region holds one
+array - a change to how a Copy helper builds parts, or to how `Map.add` builds an entry, changes it. The stores
 `occupy` makes are listed in `typed.Body.Rooms` (check.suppliedOccupy) and are no let-go in free.olang or lower.olang.
 
 A function's hidden scope arguments (`types.ScopeVarsOf`) are read off its type alone; a role that adds one (`RoleTail`,
