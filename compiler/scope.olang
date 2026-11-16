@@ -251,6 +251,7 @@ type compRun struct() {
     WantDecl Vec<I64>
     WantField Vec<pair.Pair<I64, I64>>
     WantHits I64 = 0
+    Landed Vec<I64>        # the declarations a call's result landed in a field's derived scope of (landedOn)
     Marks Vec<markRead>
     Read Vec<sumRead>
     Twinned Bool = false   # T22c: a call of it reached a twin, judged again in every round (judgeTwin)
@@ -621,6 +622,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     wantDecl Map<I64, Bool>
     wantField Map<pair.Pair<I64, I64>, Bool>
     landedOn Map<I64, Bool>                # the declarations whose field's derived scope a call's result landed in (O18c)
+    landLog Vec<I64>                       # ... those the judging being made landed in (compRun.Landed)
     promotedF Map<pair.Pair<I64, I64>, I64>   # ... the constructor parameter it binds to
     demotedF Map<pair.Pair<I64, I64>, Bool>
     Unplaced Vec<String&>                     # fields a refusal needed promoted that have no parameter to bind to (open point 4)
@@ -878,6 +880,7 @@ fn (s mut Scoper&) judgeComp(comp Array<I64>&, report Bool) mut compRun& {
     s.vrLog.Clear()
     s.readLog.Clear()
     s.absentLog.Clear()
+    s.landLog.Clear()
     s.logReads = s.diskRec
     run mut compRun& = compRun()
     if s.diskRec {
@@ -905,6 +908,9 @@ fn (s mut Scoper&) judgeComp(comp Array<I64>&, report Bool) mut compRun& {
     for d in s.wantsDecl { run.WantDecl.Push(d) }
     for w in s.wantsField { run.WantField.Push(w) }
     run.WantHits = s.wantHits - hits
+    for d in s.landLog {
+        if not run.Landed.Has(d): run.Landed.Push(d)
+    }
     # what it read: the marks of the constructor fields (its own constructors' every field), and the summaries of
     # its callees outside it and of the constructors whose bindings it read, as they are now
     mine Map<I64, Bool>
@@ -1061,6 +1067,7 @@ fn (s mut Scoper&) retake(run mut compRun&, comp Array<I64>&) {
     for d in run.WantDecl { s.wantDecl.Put(d, true) }
     for w in run.WantField { s.wantField.Put(w, true) }
     s.wantHits += run.WantHits
+    for d in run.Landed { s.landedOn.Put(d, true) }
 }
 
 # whether two summaries say the same for a caller's judging - where a body's first build is (BuildFile, BuildAt) only
@@ -14348,11 +14355,45 @@ fn (s mut Scoper&) giveBackDerived(t Term) {
 # for it, is not one of them)
 fn (s mut Scoper&) giveBackCallee(callee I64, t Term) {
     if callee < 0 or t != Term.Derived or t.p < 0 or t.p >= s.Bodies[callee].Params.Len(): return
-    cb := s.Bodies[callee]
-    d := s.declOf(cb.Locals[I64(cb.Params[t.p])].Ty)
+    if s.logReads: s.logLanded(callee, t.p, t.w)
+    d, dd := s.landedDecls(callee, t.p, t.w)
     if d >= 0 and s.landedOn.Has(d): s.giveBack(d)
-    dd := try s.derivedDecl.Get(pair.Pair<I64, I64>(callee * 65536 + t.p, t.w)) catch default -1
     if dd >= 0 and s.landedOn.Has(dd): s.giveBack(dd)
+}
+
+# ... the declarations it looks at: the parameter's, and the one the callee's derived scope was read through (-1 for none)
+fn (s mut Scoper&) landedDecls(callee I64, p I64, w I64) I64, I64 {
+    cb := s.Bodies[callee]
+    d := s.declOf(cb.Locals[I64(cb.Params[p])].Ty)
+    dd := try s.derivedDecl.Get(pair.Pair<I64, I64>(callee * 65536 + p, w)) catch default -1
+    return d, dd
+}
+
+# ... what it finds, as words: neither the landings nor the callee's state is a body's summary, so a judging's record
+# names them as a read of its own ("-land\tCALLEE\tP\tW\tFOUND"), taken only where it finds the same (absentNow)
+fn (s mut Scoper&) landedText(callee I64, p I64, w I64) String {
+    d, dd := s.landedDecls(callee, p, w)
+    return $s.declWord(d) + "," + $(1 if d >= 0 and s.landedOn.Has(d) else 0) + "," + $s.declWord(dd) + "," + $(1 if dd >= 0 and s.landedOn.Has(dd) else 0)
+}
+
+fn (s mut Scoper&) logLanded(callee I64, p I64, w I64) {
+    name := s.NameOf(callee)
+    if name == "" {
+        s.globalDep = true
+        return
+    }
+    s.absentLog.Push($"-land\t" + $name + "\t" + $p + "\t" + $w + "\t" + $s.landedText(callee, p, w))
+}
+
+# whether read line (logLanded's) finds what it found
+fn (s mut Scoper&) landedNow(line String&) Bool {
+    f := line.Split("\t").ToVec()
+    if f.Len() != 5: return false
+    callee := try s.nameAt.Get(f[1]) catch { return false }
+    p := try f[2].ParseInt() catch { return false }
+    w := try f[3].ParseInt() catch { return false }
+    if p < 0 or p >= s.Bodies[callee].Params.Len(): return false
+    return s.landedText(callee, p, w) == f[4]
 }
 
 # a call's result landed in derived scope Derived(p, w) of the body being judged (landByObligations): the declarations
@@ -14363,6 +14404,8 @@ fn (s mut Scoper&) noteLanded(p I64, w I64) {
     if d >= 0: s.landedOn.Put(d, true)
     dd := try s.derivedDecl.Get(pair.Pair<I64, I64>(s.Id * 65536 + p, w)) catch default -1
     if dd >= 0: s.landedOn.Put(dd, true)
+    if d >= 0: s.landLog.Push(d)
+    if dd >= 0: s.landLog.Push(dd)
 }
 
 # ... asked by an exact relation on a call's result, in any judging of the field inference
@@ -15006,7 +15049,7 @@ type diskRun struct(Sig String&) {
     Marks Vec<String&>     # "CTOR\tFIELD,FIELD..." - the constructors' fields whose marks it read
     MarksHash String = ""  # ... and a hash of the marks they had (marksOf)
     Reads Vec<String&>     # "NAME\tHASH" (readLine)
-    Wants Vec<String&>     # "decl NAME", "field NAME K"
+    Wants Vec<String&>     # "decl NAME", "field NAME K", "land NAME" (compRun.Landed)
     Hits I64 = 0
     Vrs Vec<String&>       # "I SITE NAME,ADAPTER..." - its bodies' calls through a value (valueRecs)
     Judged Vec<Bool>
@@ -15304,8 +15347,10 @@ fn (s mut Scoper&) logLookup(id I64, t types.TypeId, kind String&) {
     s.absentLog.Push($kind + $c)
 }
 
-# whether no constructor (kind "-ctor\t") or destructor ("-dtor\t") of the type of canonical text c is in the program
+# whether no constructor (kind "-ctor\t") or destructor ("-dtor\t") of the type of canonical text c is in the program -
+# or a landing a callee's derived scope was read with is as it was ("-land\t", logLanded)
 fn (s mut Scoper&) absentNow(line String&) Bool {
+    if line.StartsWith("-land\t"): return s.landedNow(line)
     if s.ctorCanons.Len() == 0 and s.dtorCanons.Len() == 0 {
         for e in s.ctorOf { s.ctorCanons.Put(s.P.T.CanonNamed(e.Key), true) }
         for e in s.dtorOf { s.dtorCanons.Put(s.P.T.CanonNamed(e.Key), true) }
@@ -15694,6 +15739,7 @@ fn (s mut Scoper&) RunRecord(run mut compRun&, comp Array<I64>&) String {
     }
     for d in run.WantDecl { b.Push($"want decl " + $s.declWord(d) + "\n") }
     for f in run.WantField { b.Push($"want field " + $s.declWord(f.First) + " " + $f.Second + "\n") }
+    for d in run.Landed { b.Push($"want land " + $s.declWord(d) + "\n") }
     b.Push($"hits " + $run.WantHits + "\n")
     for v in run.Vrs {
         i := indexIn(comp, v.Body)
@@ -16234,6 +16280,8 @@ fn (s mut Scoper&) takeDisk(d diskRun&, comp Array<I64>&) mut compRun?& {
         dl := try s.declOfWord(f[1]) catch typed.Unwritable { return null }
         if f[0] == "decl" {
             run.WantDecl.Push(dl)
+        } else if f[0] == "land" {
+            run.Landed.Push(dl)
         } else {
             if f.Len() != 3: return null
             run.WantField.Push(pair.Pair<I64, I64>(dl, try f[2].ParseInt() catch { return null }))

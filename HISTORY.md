@@ -38348,3 +38348,35 @@ places: two rows). SPEC is unchanged: O8f already says such a let-go frees; it n
 point; the scenarios freeing, earlyfree, memoryplaced, regions, landing, chunkpool, scopefind, fieldset and twins;
 tests/*.olang under `-debug -sanitize`; scopefuzz seed 7, 150 programs, 0 findings; evaldiff (846 files, none differing
 unlisted); tokdiff, astdiff, namesdiff, layoutdiff, consistency.
+
+## 2026-11-16: a warm rebuild judged a caller from a landing its taken callees never made (wt-warmrec)
+
+**The bug.** A second build of the compiler in a directory holding the first build's scope records (`build/rec`, B3i)
+failed with O10c at compiler/lsp.olang:276 (`work.Run()`), where a cold build of the same source passed - so `make
+quick` and the fixed point depended on whether `build/rec` was there. A trace of every judging of lsp's components showed
+the warm build taking exactly the cold build's judgings, state for state (every "in" and "out" name the same), until
+`startWorker` was judged afresh from the same state, with the same reads and marks - and said O10c where the cold
+judging had not.
+
+**The cause.** The field inference keeps one whole-pass set the records did not carry: `landedOn`, the declarations
+whose field's derived scope a call's result landed in (O18c, `noteLanded`). A caller's judging reads it in
+`giveBackCallee`: where a refused obligation runs through a callee's derived scope that a result landed in, the field
+goes back to its container's scope (2.6, step 4) instead of the caller being refused. The judgings of `check` and `Run`
+landed results in `worker`'s field's derived scope; taken from a record, they added nothing to `landedOn`, so
+`startWorker` saw no landing, gave nothing back, and the refusal stood. The read was invisible to the record's check as
+well: neither `landedOn` nor the callee's `derivedDecl` (the declaration its derived scope was read through) is a
+body's summary, so a judging taken from a record was never held to them.
+
+**The fix (scope.olang).** Both halves of what the records left out: a judging's landings are kept with it
+(`compRun.Landed`, written as `want land DECL` beside the field inference's other asks) and given back to `landedOn`
+when it is taken (`retake`), so a warm build's pass is in the state a cold one's is; and what `giveBackCallee` found is a
+read of the judging's own (`-land\tCALLEE\tP\tW\tFOUND`, kept with the `-ctor`/`-dtor` lookups), a record taken only
+where the callee's derived declaration and the landings read the same now. No rule changed. A warm self-build is now
+byte for byte the cold one's, and `OLANG_CHECKINCR` finds every taken judging the same (15339 of them).
+
+**The check.** `make fixedpoint` builds the compiler once more after its fixed point, warm, taking every record the first
+build left, into build/olang.4, which must equal it too - the bug's own shape, about 5 s more.
+
+Verified: the self-build fixed point cold (three stages, cmp) and warm (twice, cmp); `OLANG_CHECKINCR` on the warm
+build; the scenarios records, incremental, reuse, reusefact, stale and reuseall; tests/shared.olang; tokdiff, astdiff,
+layoutdiff (Scoper gained a field; recaptured), consistency.
