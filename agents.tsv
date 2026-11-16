@@ -201,3 +201,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	oannprune	opus	medium	completed	291	103	50	yes		run-time pruning, 20% kept holds accuracy
 2026-11-16	sumt	opus	medium	completed	206	90	17	yes		Sum<A>, LaneDot 256-lane vpdpbusd, 2.5-3.9x
 2026-11-16	vfix2	opus	medium	running
+2026-11-16	sumnarrow	opus	low	running
