@@ -342,6 +342,9 @@
 | FN 6:1-6:14
 | -- diagnostics
 | error  4:20
+=== checks/cases/rangenoargs.olang
+| -- diagnostics
+| error  3:20
 === checks/cases/s12bstays.olang
 | FN 12:1-12:16
 | -- diagnostics

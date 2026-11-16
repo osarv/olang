@@ -1223,6 +1223,8 @@ b13dd1c2283b4390 8fd668afabccb613 checks/cases/r9bstmtdefault.olang
 878066393ff15646 77dbd3c486a5c6c9 checks/cases/r9buncaught.olang
 7657491c675c9c2a 67c2e2fb462821ee checks/cases/r9qualified.olang
 c0ae5c374ae200f9 25a6501574b6c287 checks/cases/rangefloat.olang
+5a2a7ad03d83d4ee adbba3da6514daf4 checks/cases/rangefourargs.olang
+c3730c6bf970a53f 990afd094454337e checks/cases/rangenoargs.olang
 23ee383056d1901c 08c2ee6455f5b8d5 checks/cases/rangezero.olang
 b6cf2e94d6636b54 a10588a32f57adc5 checks/cases/redefbuiltin.olang
 2036f5103e5f5030 34c7bc98ebbc71f5 checks/cases/redefd.olang
