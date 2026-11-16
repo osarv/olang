@@ -38501,3 +38501,6 @@ the first's thread, after it, ordered by the cache's handover, and the detector 
 assumption in the fixture, not the runtime: the two tasks now meet first (each raises an atomic flag and waits for the
 other's), so they run at once on two threads; the atomics order nothing between the counters' writes, so the race is
 always there to report. 0 misses in 40 fixture runs, 10 of 10 scenario runs.
+
+**2026-11-16, ranges stay upward only (S9b).** Asked whether ranges only count upward, the user confirmed: "keep it
+upward only". Counting down stays `a.Reversed()` for an array and `n - 1 - i` over `range n`; no `down to` form.

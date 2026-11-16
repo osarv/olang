@@ -94,7 +94,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **One loop keyword, `for` (S9, S9a, the user's direction).** `for { }`, `for cond { }`, three clauses, `for x in e`,
   `for i, x in e`, `do { } for cond`. `for ... in` walks an array, a type with `RunFrom`, a type's own `Iter()`/`Next()`,
   else `At`+`Len` (S9d), in that order; elements are copies. `range end` / `range s, e` / `range s, e, step` counts
-  upward only (S9b). `for x in try c { } catch ...` covers the loop's own calls (S9e). A for-in's names are new (D3a).
+  upward only (S9b; the user's call, confirmed 2026-11-16: "keep it upward only"). `for x in try c { } catch ...` covers the loop's own calls (S9e). A for-in's names are new (D3a).
   No labeled `break`/`continue` (the user's call, 2026-10-08).
 - **An expression statement must do something (S3):** a call or an increment. `++`/`--` are statements only (S3a, the
   user's call). A bare `{ }` is a scope (S1a). **A call statement giving a value that does nothing else is an error
