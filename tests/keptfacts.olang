@@ -1,0 +1,118 @@
+# G42's count of a value local kept past its block (typed.RefsKept.Kept) - only where something may keep it: a callee
+# writing through what it is lent, a fixed array given as an array reference, a part sliced for a lane operator, a
+# parameter or an outer local given a task its join waits for, a value built of a reference to it and only read - none
+# keeps it, and the facts say so; where a callee or the value built keeps it, they do (oann's kernels and settle)
+
+type lanes struct() {
+    v := Array<F32>(16)
+}
+
+fn step(acc mut lanes&, n I64) {
+    for j in range n: acc.v[j] = acc.v[j] + 1.0
+}
+
+fn lent(n I64) F32 {
+    acc := lanes()
+    step(acc, n)
+    return acc.v[0]
+}
+
+# a fixed array given as an array of run-time length, read through slices a lane operator adds
+fn total8(v Array<F32>&) F32 {
+    h := v[0:4] + v[4:8]
+    return h[0] + h[1] + h[2] + h[3]
+}
+
+fn fill8(a mut Array<F32>&) {
+    for j in range 8: a[j] = F32(j)
+}
+
+fn converted() F32 {
+    acc := Array<F32>(8)
+    fill8(acc)
+    return total8(acc)
+}
+
+# a parameter and an outer local given tasks the join waits for
+type opd struct(d Array<F32>&, ld I64) {
+    d
+    ld
+}
+
+fn rows(sa opd, lo I64, bk lanes&, ap mut Array<F32>&) {
+    ap[lo] = sa.d[lo] + F32(sa.ld) + bk.v[0]
+}
+
+fn inTasks(sa opd, tasks I64, ap mut Array<F32>&) {
+    bk := lanes()
+    join {
+        for t in range tasks: spawn rows(sa, t, bk, ap)
+    }
+}
+
+# a value made of a reference to a local, only read: the view a constructor builds and a reader takes
+type mt struct(Data mut Array<F32>&, Off I64) {
+    Data
+    Off
+}
+
+fn read(m mt&) F32 { return m.Data[m.Off] }
+
+fn fwd(s mut Array<F32>&) F32 {
+    from := mt(s, 1)
+    return read(from)
+}
+
+fn viewed(x F32) F32 {
+    acc := Array<F32>(8)
+    acc[1] = x
+    return fwd(acc)
+}
+
+assert not lent.Allocates, "a local lent to a body writing through it allocates"
+assert not converted.Allocates, "a fixed array given as an array reference allocates"
+assert not inTasks.Allocates, "a parameter or an outer local given a joined task allocates"
+assert not viewed.Allocates, "a local a value only read is built of allocates"
+
+# kept: a value built of a local stored where it outlives the call, or of a part of what a callee is lent
+type holder struct(d mut Array<F32>&) {
+    d
+}
+
+fn keepPart(h mut holder&, m mt&) { h.d = m.Data }
+
+fn keptDeep(h mut holder&) {
+    acc := Array<F32>(8)
+    from := mt(acc, 0)
+    keepPart(h, from)
+}
+
+fn copyOut(h mut holder&, m mt) { h.d = m.Data }
+
+fn keptCopy(h mut holder&) {
+    acc := Array<F32>(8)
+    from := mt(acc, 0)
+    copyOut(h, from)
+}
+
+fn mt.Over(x F32) mt {
+    acc := Array<F32>(8)
+    acc[0] = x
+    return mt(acc, 0)
+}
+
+assert keptDeep.Allocates and keptCopy.Allocates and mt.Over.Allocates, "a local a kept value is built of is given storage"
+
+test lent "a local kept by nothing is the frame's, and reads back what was written" {
+    assert lent(3) == 1.0 and converted() == 28.0 and viewed(2.5) == 2.5
+    d := Array<F32>(4)
+    for i in range 4: d[i] = F32(i)
+    out := Array<F32>(4)
+    inTasks(opd(d, 1), 4, out)
+    assert out[0] == 1.0 and out[3] == 4.0
+    base := Array<F32>(2)
+    h := holder(base)
+    keptDeep(h)
+    keptCopy(h)
+    assert h.d.Len() == 8 and mt.Over(1.5).Data[0] == 1.5
+}

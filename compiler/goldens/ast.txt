@@ -2424,7 +2424,7 @@ c33a998ee0a9a8ab 2cf348db8e5f3abb compiler/tools/scopedump.olang
 e4503bc11d688442 85f32f692b83f2a5 compiler/tools/seed.olang
 de8f44f2efb8185b b69d0d593b266d61 compiler/tools/tokdiff.olang
 1b2522e00e51396d 8213937deb1f8446 compiler/tools/toolkit.olang
-a5ffbe509027c836 6c9e93d907736caa compiler/typed.olang
+8c14b5c7a46cbf73 8d691a9d87115f61 compiler/typed.olang
 dd09d2f6b8939ebb 50dabaecbae26997 compiler/types.olang
 90f9cb09ca64ef52 62b48f1cc51a09b2 compiler/unparse.olang
 0588cc1c800e97e3 4526494401c553fb compiler/views.olang

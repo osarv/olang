@@ -821,6 +821,40 @@ type LocalUses struct(T types.Table&, B Body&) {
     spawning I64 = 0
     at BlockId = BlockId(0) # the block being walked
     partRef Bool = false    # whether the use walked is of a reference read out of a part (EscSelf)
+    # RefsKept's own record (Kept, NoneKept), which no other reader of the uses sees. EscOwn is EscSelf but for a view
+    # of the local handed back in a value result (RetView, which the caller follows) and for what GiveAt holds; EscPart
+    # a reference read out of a part of it escaping; EscRefs the references a value read out of it holds escaping, and
+    # RetRefs those handed back in a value result
+    EscOwn Vec<Bool>
+    EscPart Vec<Bool>
+    EscRefs Vec<Bool>
+    RetView Vec<Bool>
+    RetRefs Vec<Bool>
+    RetWhole Vec<Bool>      # Ret but a reference read out of a part of it
+    # the calls given a local's storage - or, GiveRefs, only the references a value read out of it holds - beyond RefAt
+    # and LendAt: a fixed array converted or a part sliced, a local outlasting its task's join given a spawned call, a
+    # value holding references given by value, and the calls closed into it from the locals carrying it (Link)
+    GiveAt Vec<I64>
+    GiveBody Vec<I64>
+    GiveParam Vec<I64>
+    GiveRefs Vec<Bool>
+    # a value holding references made of a local's storage (or, LinkRefs, of the references a value read out of it
+    # holds): by the call LinkBody (-1 a copy) given it as parameter LinkParam - what the callee's result carries of it
+    # (RefsKept.carries) - and where that value went: LinkFrom the value local the Let declares, Handed (handed back)
+    # or Elsewhere (anywhere it may be kept)
+    LinkFrom Vec<I64>
+    LinkTo Vec<I64>
+    LinkRefs Vec<Bool>
+    LinkBody Vec<I64>
+    LinkParam Vec<I64>
+    depth I64 = 0           # how deep the block walked is
+    declDepth Vec<I64>      # by local: the depth of the block declaring it, 0 for a parameter (outlasts)
+    joinAt I64 = -1         # the depth of the block holding the innermost join walked in
+    letInto I64 = -1        # the value local the Let walked declares, until the call or read making its value takes it
+    readInto I64 = -1       # ... as the read walked took it
+    readTy types.TypeId = types.UnknownT   # the type of the value the read walked reads
+    quiet Bool = false      # whether the argument walked is in GiveAt already (no EscOwn, EscPart, EscRefs of it)
+    byValue Bool = true     # whether the body's result is no reference
 }
 
 # the uses of b's locals
@@ -836,7 +870,15 @@ fn LocalUses.Uses(t types.Table&, b Body&) LocalUses {
         u.Ret.Push(false)
         u.AliasOf.Push(-1)
         u.Init.Push(null)
+        u.EscOwn.Push(false)
+        u.EscPart.Push(false)
+        u.EscRefs.Push(false)
+        u.RetView.Push(false)
+        u.RetRefs.Push(false)
+        u.RetWhole.Push(false)
     }
+    for l in b.Locals { u.declDepth.Push(0 if l.Kind == LocalKind.Param else I64.Max) }
+    u.byValue = t.KindOf(b.Ty) != types.Kind.Func or not t.IsRef(t.Result(b.Ty))
     if b.Root != null: u.block(b.Root!)
     # (a constructor's fields are what it hands back: its instance is made of them)
     for f in b.Fields { u.Ret[I64(f)] = true }
@@ -851,6 +893,10 @@ fn LocalUses.Uses(t types.Table&, b Body&) LocalUses {
 # answers are kept by body * 64 + k; one asked again while it is being found is no
 type RefsKept struct() {
     known Map<I64, Bool>
+    kept Map<I64, Bool>      # NoneKept's answers, kept the same way
+    asking Map<I64, I64>     # ... the questions being answered, by the depth each was asked at
+    assumed I64 = I64.Max    # ... the least depth of those an answer being found took to keep nothing
+    carried Map<I64, I64>    # carries' answers
 }
 
 fn (r mut RefsKept&) None(t types.Table&, bodies Vec<mut Body&>&, body I64, k I64) Bool {
@@ -872,6 +918,119 @@ fn (r mut RefsKept&) noneIn(t types.Table&, bodies Vec<mut Body&>&, b Body&, k I
     if u.EscSelf[p] or u.WrOther[p] or u.Whole[p]: return false
     if u.Ret[p] and t.IsRef(t.Result(b.Ty)): return false
     return r.namedOnly(t, bodies, u, p)
+}
+
+# whether a body keeps nothing of what its parameter k names past the call, nor of what the references a part of it
+# holds name - Kept's question of a value local's storage given it, read-only, writably or carried in a value: escaping
+# nowhere and handed back in no reference result (EscOwn, EscPart, EscRefs), and given only to bodies keeping none.
+# Unlike None, a body writing through it (which changes what that storage holds, never who names it), a local aliasing
+# it (whose escapes are closed into it, closeAliases) and a value result holding a view of it (which the caller follows
+# where it goes, LocalUses.carried) are no keeping. The answers are kept by body * 64 + k. One asked again while it is
+# being found (recursion) is taken to keep nothing - a cycle of calls stores nothing of its own, a store on it is found
+# where it is - and a yes found on that assumption is kept only once the call the assumption was about is answered
+fn (r mut RefsKept&) NoneKept(t types.Table&, bodies Vec<mut Body&>&, body I64, k I64) Bool {
+    if body < 0 or body >= bodies.Len() or k >= 64: return false
+    key := body * 64 + k
+    if r.kept.Has(key): return try r.kept.Get(key) catch default false
+    at := try r.asking.Get(key) catch default -1
+    if at >= 0 {
+        if at < r.assumed: r.assumed = at
+        return true
+    }
+    depth := r.asking.Len()
+    r.asking.Put(key, depth)
+    outer := r.assumed
+    r.assumed = I64.Max
+    ok := r.noneKeptIn(t, bodies, bodies[body], k)
+    r.asking.Remove(key)
+    if not ok or r.assumed >= depth: r.kept.Put(key, ok)
+    if r.assumed >= depth: r.assumed = I64.Max
+    if outer < r.assumed: r.assumed = outer
+    return ok
+}
+
+fn (r mut RefsKept&) noneKeptIn(t types.Table&, bodies Vec<mut Body&>&, b Body&, k I64) Bool {
+    if b.Root == null or k >= b.Params.Len(): return false
+    u := LocalUses.Uses(t, b)
+    p := I64(b.Params[k])
+    if u.EscOwn[p] or u.EscPart[p] or u.EscRefs[p]: return false
+    for j in range u.RefAt.Len() {
+        if u.RefAt[j] == p and not r.NoneKept(t, bodies, u.RefBody[j], u.RefParam[j]): return false
+    }
+    for j in range u.LendAt.Len() {
+        if u.LendAt[j] == p and not r.NoneKept(t, bodies, u.LendBody[j], u.LendParam[j]): return false
+    }
+    for j in range u.GiveAt.Len() {
+        if u.GiveAt[j] == p and not r.NoneKept(t, bodies, u.GiveBody[j], u.GiveParam[j]): return false
+    }
+    for j in range u.LinkTo.Len() {
+        if u.LinkTo[j] != p or r.linkLevel(t, bodies, u, j) == 0: continue
+        if r.escapes(t, bodies, u, u.LinkFrom[j], true, 0): return false
+    }
+    return true
+}
+
+# how much of what a call's parameter k names its value result may hold (LocalUses' Link): 0 nothing, 1 the references
+# a part of it holds, 2 its storage - handed back, or in a value handed back. Kept by body * 64 + k
+fn (r mut RefsKept&) carries(t types.Table&, bodies Vec<mut Body&>&, body I64, k I64) I64 {
+    if body < 0 or body >= bodies.Len() or k >= 64: return 2
+    key := body * 64 + k
+    known := try r.carried.Get(key) catch {
+        r.carried.Put(key, 2)
+        b := bodies[body]
+        if b.Root == null or k >= b.Params.Len(): return 2
+        u := LocalUses.Uses(t, b)
+        lv := r.reach(t, bodies, u, I64(b.Params[k]), 0)
+        r.carried.Put(key, lv)
+        return lv
+    }
+    return known
+}
+
+# how much of local l the body's value result holds (carries)
+fn (r mut RefsKept&) reach(t types.Table&, bodies Vec<mut Body&>&, u LocalUses&, l I64, depth I64) I64 {
+    if l == Handed or depth > 16: return 2
+    if l < 0: return 0
+    lv := 2 if u.RetView[l] or l < u.Ret.Len() and u.Ret[l] else 1 if u.RetRefs[l] else 0
+    for j in range u.LinkTo.Len() {
+        if lv == 2: return lv
+        if u.LinkTo[j] != l: continue
+        lk := r.linkLevel(t, bodies, u, j)
+        if lk > lv and r.reach(t, bodies, u, u.LinkFrom[j], depth + 1) > 0: lv = lk
+    }
+    return lv
+}
+
+# how much of the local link j names the value it makes holds: as much as its callee's result carries of the
+# parameter, at most the references where only those are given
+fn (r mut RefsKept&) linkLevel(t types.Table&, bodies Vec<mut Body&>&, u LocalUses&, j I64) I64 {
+    given := 1 if u.LinkRefs[j] else 2
+    if u.LinkBody[j] < 0: return given
+    c := r.carries(t, bodies, u.LinkBody[j], u.LinkParam[j])
+    return c if c < given else given
+}
+
+# whether what value local f holds may be kept past the body: it escapes, it is given a body's call that may keep it,
+# a value made of it does - or, but deep (a parameter's referent, its caller's), it is handed back
+fn (r mut RefsKept&) escapes(t types.Table&, bodies Vec<mut Body&>&, u LocalUses&, f I64, deep Bool, depth I64) Bool {
+    if f == Handed: return not deep
+    if f < 0 or depth > 16: return true
+    if u.EscOwn[f] or u.EscPart[f] or u.EscRefs[f]: return true
+    if not deep and (u.RetView[f] or u.RetRefs[f] or f < u.Ret.Len() and u.Ret[f]): return true
+    for j in range u.RefAt.Len() {
+        if u.RefAt[j] == f and not r.NoneKept(t, bodies, u.RefBody[j], u.RefParam[j]): return true
+    }
+    for j in range u.LendAt.Len() {
+        if u.LendAt[j] == f and not r.NoneKept(t, bodies, u.LendBody[j], u.LendParam[j]): return true
+    }
+    for j in range u.GiveAt.Len() {
+        if u.GiveAt[j] == f and not r.NoneKept(t, bodies, u.GiveBody[j], u.GiveParam[j]): return true
+    }
+    for j in range u.LinkTo.Len() {
+        if u.LinkTo[j] != f or r.linkLevel(t, bodies, u, j) == 0: continue
+        if r.escapes(t, bodies, u, u.LinkFrom[j], deep, depth + 1): return true
+    }
+    return false
 }
 
 # whether nothing but local l names its storage: no other local but one holding a reference read out of a part of it,
@@ -906,17 +1065,25 @@ fn (r mut RefsKept&) OwnSlot(t types.Table&, bodies Vec<mut Body&>&, b Body&, u 
 # it where it is kept (O26a, O28; R3: a by-value parameter's copy) and lowering gives it storage in an arena - G42's
 # count of it (effects): a reference to its storage itself escapes (stored, captured, yielded, or so used through a
 # local aliasing it), it is handed back by a reference result, or a reference to it is given a body's call - read-only
-# or writably - that may keep it (None). A reference read out of a part of it names what that part refers to, never
-# its storage
+# or writably, or carried in a value made of a reference to it - that may keep it (NoneKept). A reference read out of a
+# part of it names what that part refers to, never its storage
 fn (r mut RefsKept&) Kept(t types.Table&, bodies Vec<mut Body&>&, b Body&, u LocalUses&, l I64) Bool {
     if l < 0 or l >= b.Locals.Len() or t.IsRef(b.Locals[l].Ty): return false
-    if u.EscSelf[l]: return true
-    if u.Ret[l] and t.KindOf(b.Ty) == types.Kind.Func and t.IsRef(t.Result(b.Ty)): return true
+    if u.EscOwn[l] or u.RetView[l]: return true
+    if u.RetWhole[l] and not u.byValue: return true
     for j in range u.RefAt.Len() {
-        if u.RefAt[j] == l and not u.RefPart[j] and not r.None(t, bodies, u.RefBody[j], u.RefParam[j]): return true
+        if u.RefAt[j] == l and not u.RefPart[j] and not r.NoneKept(t, bodies, u.RefBody[j], u.RefParam[j]): return true
     }
     for j in range u.LendAt.Len() {
-        if u.LendAt[j] == l and not r.None(t, bodies, u.LendBody[j], u.LendParam[j]): return true
+        if u.LendAt[j] == l and not r.NoneKept(t, bodies, u.LendBody[j], u.LendParam[j]): return true
+    }
+    for j in range u.GiveAt.Len() {
+        if u.GiveAt[j] != l or u.GiveRefs[j]: continue
+        if not r.NoneKept(t, bodies, u.GiveBody[j], u.GiveParam[j]): return true
+    }
+    for j in range u.LinkTo.Len() {
+        if u.LinkTo[j] != l or r.linkLevel(t, bodies, u, j) < 2: continue
+        if r.escapes(t, bodies, u, u.LinkFrom[j], false, 0): return true
     }
     return false
 }
@@ -946,6 +1113,58 @@ fn RefField(t types.Table&, p Lvalue&) Bool {
 
 # a struct whose fields are numbers, Bools and references to arrays alone, with no destructor (OwnSlot) - no reference
 # in it to a struct, which may be a generational instance's (genrefs: an owning place counted)
+# RefsKept's record of alias i closed into a, the local whose storage it names (part: what a part of it refers to)
+fn (u mut LocalUses&) viewInto(i I64, a I64, part Bool) {
+    own := u.EscOwn[i]
+    view := u.RetView[i] or u.Ret[i]
+    if part {
+        if own or u.EscPart[i] or u.EscRefs[i]: u.EscPart[a] = true
+        if view or u.RetRefs[i]: u.RetRefs[a] = true
+    } else {
+        if own: u.EscOwn[a] = true
+        if u.EscPart[i]: u.EscPart[a] = true
+        if u.EscRefs[i]: u.EscRefs[a] = true
+        if view: u.RetView[a] = true
+        if u.RetRefs[i]: u.RetRefs[a] = true
+    }
+    n := u.GiveAt.Len()
+    for k in range n {
+        if u.GiveAt[k] == i: u.give(a, u.GiveBody[k], u.GiveParam[k], u.GiveRefs[k] or part)
+    }
+}
+
+fn (u mut LocalUses&) give(l I64, body I64, k I64, refs Bool) {
+    u.GiveAt.Push(l)
+    u.GiveBody.Push(body)
+    u.GiveParam.Push(k)
+    u.GiveRefs.Push(refs)
+}
+
+# whether a value of type ty may hold a reference (types.HoldsRefs, read-only and erring toward yes): a number or a Bool
+# never, a struct, an enum or a fixed array only through a part that may
+fn mayHold(t types.Table&, ty types.TypeId, depth I64) Bool {
+    if scalarType(t, ty): return false
+    r := t.Repr(ty)
+    k := t.KindOf(r)
+    if k == types.Kind.Void or k == types.Kind.Noreturn: return false
+    if depth > 8 or k == types.Kind.Ref or t.OwnedPart(r) and depth > 0: return true
+    if k == types.Kind.Array: return mayHold(t, t.Elem(r), depth + 1)
+    if k == types.Kind.Tuple or k == types.Kind.Record {
+        for x in t.Items(t.Parts(r)) {
+            if mayHold(t, x, depth + 1): return true
+        }
+        return false
+    }
+    if k != types.Kind.Named or not t.HasBody(r): return true
+    dk := t.DeclKindOf(t.DeclOf(r))
+    if dk != types.DeclKind.Struct and dk != types.DeclKind.Enum: return true
+    for f in t.Items(t.Cases(r) if dk == types.DeclKind.Enum else t.Fields(r)) {
+        if f == types.TypeId(0) and dk == types.DeclKind.Struct: return true
+        if f != types.TypeId(0) and mayHold(t, f, depth + 1): return true
+    }
+    return false
+}
+
 fn plainStruct(t types.Table&, o types.TypeId) Bool {
     r := t.Repr(o)
     if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.NeedsDrop(r): return false
@@ -977,6 +1196,7 @@ fn (u mut LocalUses&) aliasInto(i I64, a I64) {
     # the source's storage)
     part := RefReadOut(u.T, u.Init[i])
     if (u.EscSelf[i] or u.Ret[i]) and not part: u.EscSelf[a] = true
+    u.viewInto(i, a, part)
     for k in range u.RefAt.Len() {
         if u.RefAt[k] != i: continue
         u.RefAt.Push(a)
@@ -1001,7 +1221,9 @@ fn (u mut LocalUses&) block(bl Block?&) {
     if bl == null: return
     was := u.at
     u.at = bl.Id
+    u.depth++
     for st in bl.Stmts { u.stmt(st) }
+    u.depth--
     u.at = was
 }
 
@@ -1039,7 +1261,10 @@ fn (u mut LocalUses&) stmt(st Stmt&) {
         }
         case Stmt.Block(_, bl), Stmt.Defer(_, bl) { u.block(bl) }
         case Stmt.Join(_, j) {
+            was := u.joinAt
+            u.joinAt = u.depth
             u.block(j.Code)
+            u.joinAt = was
             u.clauses(j.Clauses, Ctx.Esc)
         }
         case Stmt.Spawn(_, sw) {
@@ -1064,9 +1289,12 @@ fn (u mut LocalUses&) targets(ps Array<Lvalue?&>&) {
 # local), else stored into the local's own (copied there where it is existing storage)
 fn (u mut LocalUses&) let(l LocalId, x Expr&) {
     u.Init[I64(l)] = x
+    u.declDepth[I64(l)] = u.depth
     k := u.B.Local(l).Kind
     alias := u.T.IsRef(u.B.Local(l).Ty) or k == LocalKind.Held or k == LocalKind.Binding
+    if madeBy(x): u.letInto = I64(l)
     u.expr(x, Ctx.Alias(l) if alias else Ctx.Store)
+    u.letInto = -1
 }
 
 # a store: its place written - a part store recorded with its value where no reference is crossed, a scalar field's
@@ -1208,14 +1436,29 @@ fn (u mut LocalUses&) use(p Lvalue&, ctx Ctx, ref Bool) {
         }
         return
     }
+    # (RefsKept: a value read is copied into its task as it starts, the references it holds with it - GiveAt where the
+    # call is followed)
+    held := not ref and mayHold(u.T, u.readTy, 0)
     if u.spawning > 0 {
+        own, part := u.EscOwn[root], u.EscPart[root]
         u.escape(root)
+        if not ref: u.EscOwn[root] = own
+        if not ref: u.EscPart[root] = part
+        if held and not u.quiet: u.EscRefs[root] = true
         return
     }
     match ctx {
-        case Ctx.Op, Ctx.Arg { }
-        case Ctx.Store { if ref: u.escape(root) }
-        case Ctx.Ret { u.Ret[root] = true }
+        case Ctx.Op { }
+        case Ctx.Arg { if held and not u.quiet: u.EscRefs[root] = true }
+        case Ctx.Store {
+            if ref: u.escape(root)
+            if held: u.copied(root)
+        }
+        case Ctx.Ret {
+            u.Ret[root] = true
+            if not u.partRef: u.RetWhole[root] = true
+            if held: u.RetRefs[root] = true
+        }
         case Ctx.Alias(of) {
             if u.AliasOf[I64(of)] >= 0 and u.AliasOf[I64(of)] != root: u.escape(root)
             u.AliasOf[I64(of)] = root
@@ -1228,6 +1471,41 @@ fn (u mut LocalUses&) escape(root I64) {
     u.Esc[root] = true
     u.EscHard[root] = true
     if not u.partRef: u.EscSelf[root] = true
+    if u.quiet: return
+    if u.partRef: u.EscPart[root] = true
+    if not u.partRef: u.EscOwn[root] = true
+}
+
+# a value holding references read out of local root's storage stored: into the local its Let declares, a copy linked
+# to it (LinkRefs); anywhere else, its references escape
+fn (u mut LocalUses&) copied(root I64) {
+    if u.readInto < 0 {
+        u.EscRefs[root] = true
+        return
+    }
+    u.link(u.readInto, root, true, -1, 0)
+}
+
+fn (u mut LocalUses&) link(from I64, root I64, refs Bool, body I64, k I64) {
+    u.LinkFrom.Push(from)
+    u.LinkTo.Push(root)
+    u.LinkRefs.Push(refs)
+    u.LinkBody.Push(body)
+    u.LinkParam.Push(k)
+}
+
+Handed I64 = -2    # LinkFrom: the value is handed back in the body's (value) result
+Elsewhere I64 = -3 # LinkFrom: the value goes where it may be kept
+
+# whether a Let's value is a call's or a read's, which takes the local declared (letInto): through a try and a default
+# written elsewhere
+fn madeBy(x Expr&) Bool {
+    return match x {
+        case Expr.Call(_, _, _), Expr.Read(_, _, _, _): true
+        case Expr.Try(_, _, tr): tr.X != null and madeBy(tr.X!)
+        case Expr.Away(_, _, y): madeBy(y)
+        case _: false
+    }
 }
 
 fn (u mut LocalUses&) expr(x Expr?&, ctx Ctx) {
@@ -1236,15 +1514,20 @@ fn (u mut LocalUses&) expr(x Expr?&, ctx Ctx) {
         case Expr.Lit(_, _, _), Expr.Data(_, _, _, _) { }
         case Expr.Read(_, ty, p, _) {
             if scalarType(u.T, ty): return
-            was := u.partRef
+            was, wasTy, wasInto := u.partRef, u.readTy, u.readInto
+            u.readInto = u.letInto
+            u.letInto = -1
+            u.readTy = ty
             u.partRef = u.T.IsRef(ty) and p != Lvalue.Local
             u.use(p, ctx, u.T.IsRef(ty))
             u.partRef = was
+            u.readTy = wasTy
+            u.readInto = wasInto
         }
         case Expr.Borrow(_, ty, p) { u.borrow(p, ty, ctx) }
         case Expr.Take(_, _, p) { u.write(p, false) }
         case Expr.Promote(_, _, pr) { u.expr(pr.X, ctx) }
-        case Expr.Call(_, _, c) { u.call(c) }
+        case Expr.Call(_, ty, c) { u.call(c, ty, ctx) }
         case Expr.Make(_, _, m) {
             for it in m.Items { u.expr(it, ctx if m.Kind == MakeKind.Tuple else Ctx.Store) }
             u.expr(m.Length, Ctx.Op)
@@ -1324,36 +1607,165 @@ fn (u mut LocalUses&) clauses(cs Array<Clause&>&, ctx Ctx) {
 
 # a call's arguments: each one where an argument stands - a reference escapes, as the callee may keep it - a writable lend of a local whole to a body a Lend (whose
 # callee may keep its parts as they are), any other writable lend a write
-fn (u mut LocalUses&) call(c Call&) {
+fn (u mut LocalUses&) call(c Call&, ty types.TypeId, ctx Ctx) {
+    into := u.letInto
+    u.letInto = -1
     body := -1
     helper := false
+    sig := types.UnknownT
+    table := false
+    ext := false
     match c.Target {
         case Callee.Body(id) { body = I64(id) }
-        case Callee.Value(x) { u.expr(x, Ctx.Op) }
+        case Callee.Value(x) {
+            u.expr(x, Ctx.Op)
+            sig = x.Type()
+        }
+        case Callee.Dispatch(_, _, sg) {
+            sig = sg
+            table = true
+        }
         case Callee.Helper(_, _) { helper = true }
-        case _ { }
+        case Callee.Extern(_) { ext = true }
     }
+    # (RefsKept: a value made holding references may hold the arguments', where it goes - LocalUses.carried)
+    carry := mayHold(u.T, ty, 0)
     for i in range c.Args.Len() {
-        a := c.Args[i]
-        lent := u.lendOf(a)
-        if lent >= 0 and body >= 0 and u.spawning == 0 {
-            u.LendAt.Push(lent)
-            u.LendBody.Push(body)
-            u.LendParam.Push(i)
-            continue
-        }
-        if lent >= 0: u.WrOther[lent] = true
-        tv := u.tempLent(a)
-        if tv != null and body >= 0 and u.spawning == 0 {
-            u.TempX.Push(tv)
-            u.TempBody.Push(body)
-            u.TempParam.Push(i)
-            u.TempIn.Push(u.at)
-        }
-        kept := u.T.IsRef(a.Type()) and not helper
-        if kept and body >= 0 and u.spawning == 0 and u.refArg(a, body, i): continue
-        u.expr(a, Ctx.Esc if kept else Ctx.Arg)
+        if carry: u.carried(c.Args[i], into, ctx, body, i)
+        u.made(c.Args[i], into, ctx if carry else Ctx.Op, body, i, u.unkept(c.Args[i], sig, i, table, ext))
+        was := u.quiet
+        u.quiet = u.given(c.Args[i], body, i, helper) or u.unkept(c.Args[i], sig, i, table, ext)
+        u.arg(c.Args[i], body, i, helper)
+        u.quiet = was
     }
+}
+
+# an argument that is a call's value holding references: a value of its own (RefsKept's temporary, past the locals),
+# given the call - which may keep it, or carry it into its value where that goes - and taking what the inner call's
+# value is made of (its Links, through letInto)
+fn (u mut LocalUses&) made(a Expr&, into I64, ctx Ctx, body I64, k I64, unkept Bool) {
+    x := converted(a)
+    if x != Expr.Call or not mayHold(u.T, x.Type(), 0): return
+    tmp := u.EscOwn.Len()
+    u.EscOwn.Push(false)
+    u.EscPart.Push(false)
+    u.EscRefs.Push(body < 0 and not unkept)
+    u.RetView.Push(false)
+    u.RetRefs.Push(false)
+    u.RetWhole.Push(false)
+    u.declDepth.Push(u.depth)
+    if body >= 0: u.give(tmp, body, k, true)
+    if ctx != Ctx.Op: u.link(into if into >= 0 else Handed if ctx == Ctx.Ret else Elsewhere, tmp, false, body, k)
+    u.letInto = tmp
+}
+
+# what a value made by a call holding references may hold of argument a (a reference to a local's storage, or a value
+# holding references read out of one): linked to the local the Let declares; else, where the value goes, handed back or
+# kept (but read and dropped)
+fn (u mut LocalUses&) carried(a Expr&, into I64, ctx Ctx, body I64, k I64) {
+    ar := u.argRoot(a)
+    if ar.Root < 0 or ctx == Ctx.Op: return
+    to := into if into >= 0 else Handed if ctx == Ctx.Ret else Elsewhere
+    u.link(to, ar.Root, ar.Refs, body, k)
+}
+
+# the local an argument gives a call the storage of, or (Refs) references read out of: a reference to a place of it (a
+# part's reference read whole: Refs), a fixed array converted, a value holding references read out of it - Root -1 for
+# any other
+type argRoot struct(Root I64, Refs Bool) {
+    Root
+    Refs
+}
+
+fn (u mut LocalUses&) argRoot(a Expr&) argRoot {
+    x := converted(a)
+    if not u.T.IsRef(a.Type()) {
+        if x != Expr.Read or not mayHold(u.T, x.Type(), 0): return argRoot(-1, false)
+        return argRoot(u.rootOf(x.p), true)
+    }
+    return match x {
+        case Expr.Borrow(_, _, q): argRoot(u.rootOf(q), false)
+        case Expr.Slice(_, _, sl): argRoot(u.rootOf(sl.Base), u.T.IsRef(sl.Base.Type()))
+        case Expr.Read(_, _, q, _): argRoot(u.rootOf(q), q != Lvalue.Local)
+        case _: argRoot(-1, false)
+    }
+}
+
+# RefsKept's record of an argument the shared walk takes for an escape (GiveAt): a fixed array converted or a part
+# sliced, given a body's call; given a spawned call, a reference to a local outlasting the task's join (P1a: the task is
+# waited for there, so it keeps the storage only where the callee does); a value holding references, given by value
+fn (u mut LocalUses&) given(a Expr&, body I64, k I64, helper Bool) Bool {
+    if body < 0 or helper: return false
+    ar := u.argRoot(a)
+    root, refs := ar.Root, ar.Refs
+    if root < 0: return false
+    if u.spawning > 0 and not u.outlasts(root): return false
+    if u.spawning == 0 and u.T.IsRef(a.Type()) and (u.lendOf(a) >= 0 or u.refArgs(a)): return false
+    u.give(root, body, k, refs)
+    return true
+}
+
+# whether argument k of a call names a local's storage the call keeps nothing of: an extern's (O17: an extern keeps
+# nothing); through a function value or an any's table (sig its type), one its type writes no "keeps" of (O17, T21c - a
+# body held as that type is judged against it, T22b, T30c), and through a table one where it writes none at all. What
+# the result holds of it is its Link's
+fn (u mut LocalUses&) unkept(a Expr&, sig types.TypeId, k I64, table Bool, ext Bool) Bool {
+    if ext: return u.spawning == 0 and u.argRoot(a).Root >= 0
+    if sig == types.UnknownT or u.spawning > 0 or u.T.KindOf(sig) != types.Kind.Func: return false
+    if u.argRoot(a).Root < 0: return false
+    ks := u.T.KeepsOf(sig)
+    if table and ks.Len() > 0: return false
+    for i in range ks.Len() / 3 {
+        if ks[3 * i] == k: return false
+    }
+    return true
+}
+
+# whether refArg records argument a (RefAt): a read-only reference to a place of a local
+fn (u mut LocalUses&) refArgs(a Expr&) Bool {
+    p := match a {
+        case Expr.Borrow(_, ty, q): q if (u.T.PermOf(ty) & types.Writable) == 0 else null
+        case Expr.Read(_, ty, q, _): q if not scalarType(u.T, ty) and (u.T.PermOf(ty) & types.Writable) == 0 else null
+        case _: null
+    }
+    return p != null and u.rootOf(p) >= 0
+}
+
+# whether local l outlasts the join of the spawn walked: a parameter, or declared in a block holding that join
+fn (u LocalUses&) outlasts(l I64) Bool { return l >= 0 and u.declDepth[l] <= u.joinAt }
+
+# what a conversion converts - a fixed array given as a reference to an array of run-time length (T7c) names its
+# storage as much as the array given whole does - else the expression itself
+fn converted(a Expr&) Expr& {
+    return match a {
+        case Expr.Prim(_, _, op, _, args): args[0] if op == PrimOp.Convert and args.Len() == 1 else a
+        case Expr.Away(_, _, y): converted(y)
+        case _: a
+    }
+}
+
+# an argument where a call's arguments stand: each one where an argument stands - a reference escapes, as the callee
+# may keep it - a writable lend of a local whole to a body a Lend (whose callee may keep its parts as they are), any
+# other writable lend a write
+fn (u mut LocalUses&) arg(a Expr&, body I64, i I64, helper Bool) {
+    lent := u.lendOf(a)
+    if lent >= 0 and body >= 0 and u.spawning == 0 {
+        u.LendAt.Push(lent)
+        u.LendBody.Push(body)
+        u.LendParam.Push(i)
+        return
+    }
+    if lent >= 0: u.WrOther[lent] = true
+    tv := u.tempLent(a)
+    if tv != null and body >= 0 and u.spawning == 0 {
+        u.TempX.Push(tv)
+        u.TempBody.Push(body)
+        u.TempParam.Push(i)
+        u.TempIn.Push(u.at)
+    }
+    kept := u.T.IsRef(a.Type()) and not helper
+    if kept and body >= 0 and u.spawning == 0 and u.refArg(a, body, i): return
+    u.expr(a, Ctx.Esc if kept else Ctx.Arg)
 }
 
 # a read-only reference to a place of a local given parameter k of a body's call: Esc (the callee may keep it), recorded
