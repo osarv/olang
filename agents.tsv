@@ -158,6 +158,7 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	oannkern	opus	medium	running
 2026-11-15	freeing5	opus	medium	running
 2026-11-15	aistudy2	opus	medium	running
-2026-11-15	freeing6	opus	high	running
-2026-11-16	freeing7	opus	medium	running
-2026-11-16	freeing8	opus	medium	running
+2026-11-15	freeing6	opus	high	completed
+2026-11-16	freeing7	opus	medium	completed
+2026-11-16	freeing8	opus	medium	completed	382	224	85	yes		slot fast path within 4%; shipped; found warm-rebuild O10c bug
+2026-11-16	warmrec	opus	medium	running
