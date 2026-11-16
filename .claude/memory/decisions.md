@@ -21,4 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-1. VNNI byte dot products (asked 2026-11-16). No olang form produces vpdpbusd (u8 x s8, 64 products an instruction); INT8 at 64+ rows needs it (oann repro/vnnidot.olang). Default: none, INT8 stays 0.53-0.75x F32 at 64+ rows. Recommendation: a named lane operation for a widening byte dot product accumulated into I32 lanes (like the other lane operators; lowered to vpdpbusd where the target has it, plain code elsewhere), a visible named cost as principle 2 asks.
+(none)
