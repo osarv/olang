@@ -2222,6 +2222,50 @@ one module.
 through a reference marker at some point in the chain (T16, T17d). An error type references nothing but, as a named
 set, error types, their words and other sets (T19a).
 
+**D4a (type members).** A **type member** is a type declared in another type's namespace, written after its owner
+and a `.` as a builder is (D19):
+
+```
+member-decl ::= "type" owner "." IDEN [ type-params ] "=" type-expr [ STMNT_END ]     (an alias)
+              | "type" IDEN "." IDEN [ decl-word ] [ "packed" ] type-expr              (declared in place)
+owner       ::= IDEN [ type-args ]
+```
+
+```
+type T.Accumulator<T Number> = T     # the prelude: a default for every Number
+type U8.Accumulator = U64            # the prelude: U8's own, overriding it
+type Percent.Accumulator = U64       # a program's type, in Percent's module
+type Box<T>.Item = T                 # every Box's, each instance reading it with its own T
+type Account.Json enum {             # a type declared in place, named Account.Json
+    UserID = "id"
+    Name
+}
+```
+
+The **owner** is what a builder's is (D19): a struct, an enum, a type declared over another or an extern type its own
+module declares; in the prelude (M19d) also a built-in type or one of the prelude's; or a type variable constrained by
+a trait the module declares (the prelude: any of its traits), which makes the member a **default** of that trait
+(M19e): every type satisfying it has the member, `type T.Accumulator<T Number> = T` every number's. A generic owner is
+written over its variables, one name per parameter (`type Box<T>.Item = T`); the member is every instance's, each
+reading its type with its own arguments. A declaration anywhere else - another module's type, a built-in type outside
+the prelude, an owner with types for arguments - is a compile-time error naming the rule.
+
+The **alias** form names a type; it declares none. `Owner.Name` is that type wherever it is written, read with the
+owner's variables (or the trait's) bound to the type it is read through: `U8.Accumulator` is `U64`, `F8E4M3.Accumulator`
+`F8E4M3`. The form **declared in place** declares a new nominal type named `Owner.Name`, of one owner that is no generic
+and no type variable, with a struct or an enum body: it has everything a type declared by D4 has - its rendering by `$`,
+its symbol name, reflection (its fields and cases read by G32-G35), its methods (`fn (j Account.Json) ...`), and its
+place in documentation and an editor's symbols.
+
+A member lives in its owner's namespace beside the builders (D19), an enum's cases and what the language reads through a
+type's name, and in no set of D2's: a member named like a case, a builder or one of those names is a compile-time
+error, and so are two members of one name of one owner. **A type's own member overrides a trait's default** of that
+name, as its own method overrides M19e's default (`U8.Accumulator` is the prelude's `U64`, not the default's `U8`);
+two defaults reaching one type with one name are an error where it is read. A member is never inherited through
+`extends` (T29f): `Percent extends U8` has `T.Accumulator`'s default (`Percent`) unless it declares its own. Its first
+letter makes it public or private (M6). `Owner.Name` for a member the type has none of is an error naming the members it
+has (G38).
+
 ### 3.4 Function declarations
 
 **D7.** `func-decl ::= "fn" [ receiver ] IDEN [ fn-type-params ] func-sig body` (`body`, S1b: a block, or `:` and one statement on its line), with
@@ -10245,11 +10289,12 @@ variable, or a type G38 names - these members are read with a `.`, alongside a n
   or a named set as a value's type) `Error`. Coarse on purpose: the exact type is `match T`'s (G13). A trait and an
   extern type have none, an error.
 - `T.Base` - the type a declared type is over (T29, `Meters.Base` is `F64`), else `T` itself.
-- `T.Accumulator` - the type a total of `T`'s values is worked in (E39's `Sum`, the prelude's `Product` and `Cumsum`): `T`
-  itself by default, while each built-in number narrower than 64 bits names a wider one - `I8`, `I16` and `I32` total as
-  `I64`, `U8`, `U16` and `U32` as `U64`, `F16` and `BF16` as `F32`. `I64`, `U64`, `F32` and `F64` total as themselves,
-  and so does every declared type (`Meters`, an `extends` type such as `Percent extends U8`) and a type of the
-  program's own.
+- `T.Accumulator` - the type a total of `T`'s values is worked in (E39's `Sum`, the prelude's `Product` and `Cumsum`): a
+  type member (D4a) the prelude declares, `type T.Accumulator<T Number> = T` for every number, with overrides for each
+  built-in number narrower than 64 bits - `I8`, `I16` and `I32` total as `I64`, `U8`, `U16` and `U32` as `U64` (every
+  `In` and `Un` below 64 alike), `F16` and `BF16` as `F32`. `I64`, `U64`, `F32`, `F64`, `F8E4M3` and `F8E5M2` total as
+  themselves, and so does a declared number type (`Meters`, an `extends` type such as `Percent extends U8`) unless its
+  module declares its own, `type Percent.Accumulator = U64`. A type that is no number has none unless it declares one.
 - `T.Element` - an array's element type, a `Columns`' or `ColumnVec`'s rows' type (T7e) (an error for another type); `T.Target` - a reference's referent (`Node&`'s
   `Node`).
 - `T.Length` - an array's length where it is known while compiling (T7c), an `I64`; for another type an error.
@@ -10366,12 +10411,14 @@ fn arg<P>(p P, k I64) P.Type {
 fn build<T>(k I64) T { return T(arg(p, k) for p in T.Params) }
 ```
 
-**G38 (reflected types are types).** A type G32 or G34 names - `T.Base`, `T.Element`, `T.Target`, `T.Accumulator`, `f.Type`, `p.Type`,
-`r.Type`, and chains of them, `T.Element.Base` - is usable wherever a type is written (a declaration, a parameter, a
+**G38 (reflected types are types).** A type G32 or G34 names - `T.Base`, `T.Element`, `T.Target`, `f.Type`, `p.Type`,
+`r.Type`, a type member (D4a: `T.Accumulator`, `Account.Json`, `lib.Percent.Accumulator`), and chains of them,
+`T.Element.Base`, `T.Element.Accumulator` - is usable wherever a type is written (a declaration, a parameter, a
 result, a type argument, a `match`'s subject) and is a type of the instance it is read in (a result written `P.Type` is
 each instance's own). It is no value: written where a value goes it is an error naming the declaration form - and so
 is any type's own name written there (`I64 > 3`, `a := Point`; an enum's name is where its cases are read, E32). One that
-does not exist (`I64.Element`) is an error where it is written, saying why.
+does not exist (`I64.Element`, `String.Accumulator`) is an error where it is written, saying why and naming the type
+members the type has.
 
 **G39 (attributes).** An **attribute** is a value of a declared type written on a declaration, data a library reads by
 reflection (G40) - the compiler gives none a meaning, and nothing compiles otherwise because of one:
