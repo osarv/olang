@@ -25,7 +25,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `else: count++`: `:` and one simple statement (assignment, call, increment, `return`, `break`, `continue`, `error`,
   `unreachable`, `assert`, `spawn`) on the colon's line; a declaration, `if`, loop, `match`, `join`, `defer` or block
   there is an error naming the block form. `else`/`catch` may begin the next line. Not for the forever `for` or a `do`
-  loop. **A lambda's body too (D16, the user's decision 2026-10-24):** `xs.Count(fn(x): return x > 3)`.
+  loop. **A lambda's body too (D16, the user's decision 2026-10-24):** `xs.Count(fn(x): return x > 3)`. **A catch
+  clause's too (R11, 2026-11-16):** `try f() catch NotBuilt e: why = $e.why`, no default after it; its line's end ends
+  the statement the try is in.
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build compile
   test run format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target
   -define -update -check -quick -checked -html -library -memory -fuzz -fuzztime -caps -asm -ir -bench`, each checked against
