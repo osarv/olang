@@ -371,6 +371,9 @@
 | ok - rows: moves a whole local into what outlives its turn
 | ok - texts: builds text where the result keeps it
 | ok - caseLocals: gives locals an enum case holding a parameter's reference
+=== test tests/keptfacts.olang
+| status 0
+| ok - lent: a local kept by nothing is the frame's, and reads back what was written
 === test tests/keptparams.olang
 | status 0
 | ok - borrowed: hands back the parameter's own copy, made in the result scope
@@ -1064,6 +1067,7 @@
 | ok - L18a: lists, literals, comprehensions and joins run over several lines inside brackets
 | ok - S1a: a bare block closes its scope at its end, and leaves as its statements do (D10a)
 | ok - S1b: one-line bodies run as the blocks they stand for, at run time and while compiling
+| ok - S1b, R11: a catch clause's one-line body runs as its block, at run time and while compiling
 | ok - D10a: a loop with no condition and no break of its own never falls through
 | ok - E8b: a shift of a literal by a value takes its target's type, or the other operand's
 | ok - E28: ':=' from a conditional of text, and of numbers of one type
@@ -1245,6 +1249,7 @@
 | ok - S6: text lent writably as an Array<Char> where it may be written
 | ok - E31b: a mutating call through x[i] is made on the element in place, as the evaluator makes it
 | ok - S4c, E31: a parallel assignment of elements stores through SetAt
+| ok - S1b: a one-line body for every block of statements
 | ok - two tasks run concurrently and are joined before the block ends
 | ok - several tasks may be handed the same instance
 | ok - the same instance may be shared read-only by several tasks
@@ -1302,6 +1307,7 @@
 | ok - E31a: try on a fallible Call
 | ok - P4a/D16d: a task's default holding a lambda, while compiling and at run time
 | ok - P4a/D16d: a task's default may hold a lambda capturing only values
+| ok - S1b: one-line bodies of functions, types and loops at run time
 === test tests/slotfacts.olang
 | status 0
 | ok - viaTemp: a call's value lent to a read-only reference is read where it stands
@@ -1452,6 +1458,7 @@
 | ok - Ready.Select: times out on time.After, on the virtual clock in no time
 | ok - Ready.Select: fails with CLOSED once a channel it receives from is closed and drained
 | ok - a bounded channel carries values between two tasks
+| ok - Chan: a channel needs nothing but its constructor, on storage used before
 | ok - Cancel wakes a task blocked in a wait
 | ok - P4: a task cancelled in RecvUntil fails into its join, or takes its own default
 | ok - a channel carries any element type
@@ -1989,6 +1996,9 @@
 | status 0
 === run b9cmethod.olang
 | status 0
+=== run b9linebody.olang
+| status 0
+| 31
 === run b9scanbranch.olang
 | status 0
 === run becomearenaarray.olang
@@ -3180,6 +3190,15 @@
 | status 0
 === run s1bline.olang
 | status 0
+=== run s1blinebodies.olang
+| status 0
+| hello
+| 3
+| worked
+| first
+| deferred
+| 2.5 42
+| gone 7
 === run s1bparallel.olang
 | status 0
 === run s20renderframe.olang
@@ -3285,6 +3304,9 @@
 | status 0
 === run s6strref.olang
 | status 0
+=== run s8alitlegal.olang
+| status 0
+| release
 === run s8bchaintaken.olang
 | status 0
 === run s8bchosen.olang

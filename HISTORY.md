@@ -38588,7 +38588,7 @@ in a function that body is a scope; a top-level branch is none - its declaration
 "{" ... "}" | ":" top-decl`: one declaration on the colon's line (parse.olang topLine; a declaration running past the
 line is refused naming the braces). The loader's pre-scan (load.olang condEnd, branchClose, afterBranch) ends a
 condition at a depth-0 `:` and the branch at its line's end or an `else` on it, so imports and nested conditions in a
-one-line branch are found as in braces. unparse still renders braces (one canonical form). And a `:` where a construct
+one-line branch are found as in braces. unparse writes the branch as written (astdiff reads its tokens back). And a `:` where a construct
 takes no one-line body now says "this takes a block here, not a one-line body: write { }" (S1b) rather than "expected
 '{', found ':'".
 
@@ -38619,3 +38619,6 @@ statement's clause list. Inside a function a declaration as a one-line body is s
 needed nothing. The AST is the same as for the braced form, so the checker and the evaluator needed nothing either -
 `tests/shared.olang` "S1b: a one-line body for every block of statements" bakes a global through each (the evaluator)
 beside the run-time test. The compiler's own sources keep the braced forms (the seed reads them).
+The evaldiff row the coordinator reported on "S1b, R11: a catch clause's one-line body ..." (since wt-predverify) was no
+disagreement of the evaluator's: the interpreted run passes it; the test was missing from compiler/goldens/run.txt
+("not in the built run"), as were this round's. `make rungold` captured them again.
