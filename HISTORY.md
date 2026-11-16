@@ -38501,3 +38501,12 @@ the first's thread, after it, ordered by the cache's handover, and the detector 
 assumption in the fixture, not the runtime: the two tasks now meet first (each raises an atomic flag and waits for the
 other's), so they run at once on two threads; the atomics order nothing between the counters' writes, so the race is
 always there to report. 0 misses in 40 fixture runs, 10 of 10 scenario runs.
+
+### S9b: a range with a fourth argument refused (2026-11-16)
+
+The user found `for _ in range 10, 2, 3, 2 { }` compiling and running no times: the parser takes any expression list
+after `range` and the checker read only the first three, so the fourth was silently dropped. SPEC S9b allows one to
+three. The checker now refuses a fourth argument at its span (RangeArgs: "a range takes at most three arguments", help
+"write 'range END', 'range START, END' or 'range START, END, STEP'"); the evaluator and interpret run the checked tree,
+so they need nothing. `range` with no argument was already refused by the parser ("expected an expression"). Cases:
+checks/cases/rangefourargs.olang, rangenoargs.olang.

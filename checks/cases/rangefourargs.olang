@@ -1,0 +1,7 @@
+# check: fail error[S9b]: a range takes at most three arguments
+fn main() {
+    x := 5
+    for _ in range 10, 2, 3, 2 {
+        Print(x)
+    }
+}
