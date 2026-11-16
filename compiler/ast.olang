@@ -819,3 +819,34 @@ fn unparen(x Expr&) Expr& {
 }
 
 fn exprText(x Expr&, text String&) String& { return text[I64(x.Span().Start):I64(x.Span().End)] }
+
+# S8a: a comparison ("==", "!=", "<", "<=", ">", ">=") of two literals written - Bool, number, character or text, a
+# negated number among them - which gives one answer on every build
+fn LitComparison(x Expr&) Bool {
+    match x {
+        case Expr.Paren(_, y): return LitComparison(y)
+        case Expr.Binary(_, op, a, b) {
+            cmp := op == token.Tok.EqEq or op == token.Tok.NotEq or op == token.Tok.Lt or op == token.Tok.Le or
+                   op == token.Tok.Gt or op == token.Tok.Ge
+            return cmp and plainLit(a) and plainLit(b)
+        }
+        case _: return false
+    }
+}
+
+fn plainLit(x Expr&) Bool {
+    return match x {
+        case Expr.Lit(_, kind): kind != token.Tok.NullLit
+        case Expr.Paren(_, y): plainLit(y)
+        case Expr.Unary(_, op, y): op == token.Tok.Minus and numLit(y)
+        case _: false
+    }
+}
+
+fn numLit(x Expr&) Bool {
+    return match x {
+        case Expr.Lit(_, kind): kind == token.Tok.IntLit or kind == token.Tok.FloatLit
+        case Expr.Paren(_, y): numLit(y)
+        case _: false
+    }
+}

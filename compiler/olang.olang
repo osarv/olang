@@ -72,7 +72,7 @@ fn roomFor(bytes I64) Bool {
 
 # ---- the command line ----
 
-# the modes, by number: running a file (no word - a file ending in .olang written first, B3g), then each mode's word
+# the modes, by number: scripting mode (no word - a file ending in .olang written first, B3g), then each mode's word
 ModeWords Array<String&> = Array<String&>["", "build", "compile", "test", "run", "format", "explain", "help", "doc", "lsp"
     "mcp"
     "fix"
@@ -168,14 +168,14 @@ OptWhat Array<String&> = Array<String&>[
     "prints what each module the program loads may reach - files, network, processes, environment, threads, C (B11c)"
     "prints a function's machine code as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
     "prints a function's optimized LLVM IR as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
-    "measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; running a file, its build and run time, user and system time and peak memory (B19b)"
+    "measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; in scripting mode, its build and run time, user and system time and peak memory (B19b)"
     "writes the kernel's spec into the user's Jupyter kernels, so a notebook offers olang (B23)"
     "with notebook run: goes on past a cell that failed, running the cells after it (B24)"
     "builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)"
     "with -bench: runs the program N times, the later runs' output discarded, and gives the run time as the median with its spread (B19b)"
 ]
 
-fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
+fn modeName(m I64) String { return "scripting mode" if m == Run else $ModeWords[m] }
 
 # the modes an option applies to, as a diagnostic names them: "build and compile"
 fn modesOf(modes I64) String {
@@ -475,7 +475,7 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
         b.Push("usage: olang MODE [OPTION...] FILE...   or   olang [OPTION...] FILE.olang [ARGUMENT...]\n\nmodes:\n")
         b.Push($"  " + $"FILE.olang".PadEnd(11) + " " + $ModeWhat[Run] + "\n")
         for m in range 1, ModeWords.Len(): b.Push($"  " + $ModeWords[m].PadEnd(11) + " " + $ModeWhat[m] + "\n")
-        b.Push("\n'olang help MODE' lists a mode's options; 'olang help file' those of running a file.\n")
+        b.Push("\n'olang help MODE' lists a mode's options; 'olang help file' those of scripting mode.\n")
         b.Push("'olang' with nothing after it opens the prompt, which builds and runs what is typed as it is typed (B22).\n")
         b.Push("\nenvironment:\n")
         b.Push("  OLANG_JOBS=N       runs N of clang's compiles at once; unset, one per core the memory available holds (B3m)\n")
@@ -1508,10 +1508,10 @@ fn mistake(words Array<String&>&) String {
 }
 
 test "a command line's mistakes are said as stage 0 says them" {
-    # B22: nothing after "olang" opens the prompt (the mode it is said as: running a file's)
-    assert mistake(Array<String&>[]) == "no mistake: running a file"
+    # B22: nothing after "olang" opens the prompt (the mode it is said as: scripting mode's)
+    assert mistake(Array<String&>[]) == "no mistake: scripting mode"
     assert mistake(Array<String&>["-x"]) ==
-        "olang: error[B1]: unknown option '-x' - 'olang help' lists the options of running a file\n"
+        "olang: error[B1]: unknown option '-x' - 'olang help' lists the options of scripting mode\n"
     assert mistake(Array<String&>["build", "-b", "m.olang"]) ==
         "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
     assert mistake(Array<String&>["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode\n" + $
@@ -1523,11 +1523,11 @@ test "a command line's mistakes are said as stage 0 says them" {
         "olang: error[B1]: -output applies to build, compile, run, bindgen, profile and notebook, not to test\n"
     # B20: profile takes -quick, not the builds of other programs, nor another machine's
     assert mistake(Array<String&>["profile", "-race", "m.olang"]) ==
-        "olang: error[B1]: -race applies to running a file, build, compile, test and run, not to profile\n"
+        "olang: error[B1]: -race applies to scripting mode, build, compile, test and run, not to profile\n"
     assert mistake(Array<String&>["profile", "-target", "aarch64", "m.olang"]) ==
-        "olang: error[B1]: -target applies to running a file, build, compile, test, run, explain, doc, lsp and mcp, not to profile\n"
+        "olang: error[B1]: -target applies to scripting mode, build, compile, test, run, explain, doc, lsp and mcp, not to profile\n"
     assert mistake(Array<String&>["format", "-debug", "m.olang"]) ==
-        "olang: error[B1]: -debug applies to running a file, build, compile, test and run, not to format\n"
+        "olang: error[B1]: -debug applies to scripting mode, build, compile, test and run, not to format\n"
     assert mistake(Array<String&>["build", "-define", "X"]) == "olang: error[B10]: -define takes Name=value, found 'X'\n"
     assert mistake(Array<String&>["build", "-define", "X=1", "-define", "X=2"]) ==
         "olang: error[B10]: -define X=2: defined twice\n"
@@ -1540,29 +1540,29 @@ test "a command line's mistakes are said as stage 0 says them" {
     # the first mistake is the one said, and what follows a run's or interpret's file is the program's
     assert mistake(Array<String&>["-x", "-y"]) == mistake(Array<String&>["-x"])
     assert mistake(Array<String&>["run", "p.olang", "-x", "-define"]) == "no mistake: run"
-    assert mistake(Array<String&>["-debug", "p.olang", "-race", "x"]) == "no mistake: running a file"
+    assert mistake(Array<String&>["-debug", "p.olang", "-race", "x"]) == "no mistake: scripting mode"
     # B2g: -quick is an optimization level of its own
     assert mistake(Array<String&>["build", "-quick", "-debug", "m.olang"]) ==
         "olang: error[B2g]: -quick and -debug each say how much to optimize - give one\n"
     assert mistake(Array<String&>["test", "-race", "-quick", "m.olang"]) ==
         "olang: error[B2g]: -quick and -race each say how much to optimize - give one\n"
     assert mistake(Array<String&>["run", "-quick", "m.olang"]) == "no mistake: run"
-    assert mistake(Array<String&>["-quick", "-checked", "m.olang"]) == "no mistake: running a file"
+    assert mistake(Array<String&>["-quick", "-checked", "m.olang"]) == "no mistake: scripting mode"
     assert mistake(Array<String&>["build", "-checked", "-debug", "m.olang"]) == "no mistake: build"
     assert mistake(Array<String&>["build", "-checked", "m.olang"]) == "no mistake: build"
     assert mistake(Array<String&>["lsp", "-checked"]) ==
-        "olang: error[B1]: -checked applies to running a file, build, compile, test, run, jupyter and notebook, not to lsp\n"
+        "olang: error[B1]: -checked applies to scripting mode, build, compile, test, run, jupyter and notebook, not to lsp\n"
     assert mistake(Array<String&>["build", "-quick", "m.olang"]) == "no mistake: build"
     # B19b: -bench measures a run, a file's or a test's; -runs says how many times, with it
-    assert mistake(Array<String&>["-bench", "m.olang"]) == "no mistake: running a file"
+    assert mistake(Array<String&>["-bench", "m.olang"]) == "no mistake: scripting mode"
     assert mistake(Array<String&>["run", "-bench", "-runs", "3", "m.olang"]) == "no mistake: run"
     assert mistake(Array<String&>["test", "-bench", "m.olang"]) == "no mistake: test"
     assert mistake(Array<String&>["-runs", "x", "m.olang"]).Contains("whole number")
-    assert mistake(Array<String&>["-runs", "3", "-bench", "m.olang"]) == "no mistake: running a file"
+    assert mistake(Array<String&>["-runs", "3", "-bench", "m.olang"]) == "no mistake: scripting mode"
     assert mistake(Array<String&>["-bench", "-runs", "0", "m.olang"]) ==
         "olang: error[B19b]: -runs takes a whole number of runs, at least 1, and '0' is none\n"
     assert mistake(Array<String&>["build", "-bench", "m.olang"]) ==
-        "olang: error[B1]: -bench applies to running a file, test and run, not to build\n"
+        "olang: error[B1]: -bench applies to scripting mode, test and run, not to build\n"
 }
 
 test "-bench and -runs are recorded (B19b)" {
@@ -1627,7 +1627,7 @@ test "the modes: each said wrong as stage 0 says it" {
     # B12a: another architecture is built and tested for where this clang can, interpreted never
     arm := prepared(Array<String&>["build", "-target", "aarch64-linux-gnu", "m.olang"])
     assert arm == "no mistake: build" or arm.Contains("error[B12a]: this clang cannot build")
-    assert prepared(Array<String&>["-target", "aarch64-linux-gnu", "m.olang"]).Contains("error[B12a]: running a file runs")
+    assert prepared(Array<String&>["-target", "aarch64-linux-gnu", "m.olang"]).Contains("error[B12a]: scripting mode runs")
     assert prepared(Array<String&>["run", "p.olang", "x", "-y"]) == "no mistake: run"
     assert prepared(Array<String&>["explain", "zz9"]) == "no mistake: explain"
     assert prepared(Array<String&>["explain", "m.olang"]) ==
@@ -1696,7 +1696,7 @@ test "doc, lsp and mcp: their files, names and options (B14-B16)" {
         "olang: error[B14]: doc a.olang takes at most the name of one of its items, as 'olang doc a.olang main'\n"
     assert prepared(Array<String&>["lsp", "a.olang"]) == "olang: error[B1]: lsp takes no files - its client names them as it goes\n"
     assert mistake(Array<String&>["mcp", "-quick"]) ==
-        "olang: error[B1]: -quick applies to running a file, build, compile, test, run, explain, profile, jupyter and notebook, not to mcp\n"
+        "olang: error[B1]: -quick applies to scripting mode, build, compile, test, run, explain, profile, jupyter and notebook, not to mcp\n"
     assert mistake(Array<String&>["build", "-html", "d", "a.olang"]) == "olang: error[B1]: -html applies to doc, not to build\n"
     if target.FindClang() == "": return
     assert prepared(Array<String&>["doc", "-html", "out"]) == "no mistake: doc"

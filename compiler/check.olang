@@ -8242,6 +8242,7 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
         case ast.Expr.Unary(sp, op, y) { return c.unary(sp, op, y, want)! }
         case ast.Expr.Binary(sp, op, a, b) {
             if op == token.Tok.In: return c.membership(sp, a, b)
+            if ast.LitComparison(x): return c.litCompare(sp, op, x, a, b, want)
             return c.binary(sp, op, a, b, want)
         }
         case ast.Expr.Cond(sp, a, k, b) { return c.cond(sp, a, k, b, want) }
@@ -9835,6 +9836,56 @@ fn nullValue(m ast.Match&) Bool {
         if cs.Value != null and isNullLit(cs.Value!): return true
     }
     return false
+}
+
+# S8a: a comparison of two literals gives one answer on every build, wherever it is written - write the answer
+fn (c mut Checker&) litCompare(sp source.Span, op token.Tok, x ast.Expr&, a ast.Expr&, b ast.Expr&, want types.TypeId) typed.Expr& {
+    r := c.binary(sp, op, a, b, want)
+    order := c.litOrder(a, b)
+    if order == litUnordered {
+        k := c.P.FoldKnown(c.fr().Ctx, x, types.BoolT)
+        if c.P.T.KindOf(k) != types.Kind.Const: return r
+        c.err(sp, msgs.LitCompare(c.src(sp), "true" if c.P.T.ConstValue(k) != 0 else "false"))
+        return r
+    }
+    holds := match op {
+        case token.Tok.EqEq: order == 0
+        case token.Tok.NotEq: order != 0
+        case token.Tok.Lt: order < 0
+        case token.Tok.Le: order <= 0
+        case token.Tok.Gt: order > 0
+        case _: order >= 0
+    }
+    v := "true" if holds else "false"
+    c.err(sp, msgs.LitCompare(c.src(sp), v))
+    return r
+}
+
+litUnordered I64 = 2
+
+# how two literals written order (S8a): -1, 0 or 1 - text and characters by their decoded bytes, numbers by value; 2
+# where this cannot tell (Bools, integers past 64 bits), left to the fold
+fn (c mut Checker&) litOrder(a ast.Expr&, b ast.Expr&) I64 {
+    ka, kb := litKind(a), litKind(b)
+    if (ka == token.Tok.StrLit or ka == token.Tok.CharLit) and ka == kb {
+        x, y := scan.LiteralText(c.src(a.Span())), scan.LiteralText(c.src(b.Span()))
+        return 0 if x == y else (-1 if x < y else 1)
+    }
+    if ka != token.Tok.FloatLit and kb != token.Tok.FloatLit: return litUnordered
+    u, w := c.fold(a), c.fold(b)
+    if not u.Ok or not w.Ok or u.Big or w.Big: return litUnordered
+    f := u.F if u.IsFloat else F64(u.I)
+    g := w.F if w.IsFloat else F64(w.I)
+    return 0 if f == g else (-1 if f < g else 1)
+}
+
+# the kind of literal x is, through parentheses and a sign
+fn litKind(x ast.Expr&) token.Tok {
+    return match x {
+        case ast.Expr.Lit(_, kind): kind
+        case ast.Expr.Paren(_, y), ast.Expr.Unary(_, _, y): litKind(y)
+        case _: token.Tok.Eof
+    }
 }
 
 fn isNullLit(x ast.Expr&) Bool {
@@ -20627,7 +20678,7 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt& {
     # (S8c), or is wrong, included. One asked for stays held until evaluation decides it
     if not asked: c.Running(i)
     k := c.cond1(i.Cond!)
-    if dead and typeOf(k) == types.BoolT: c.err(c.operatorOf(i.Cond!), msgs.ConditionConstant())
+    if dead and typeOf(k) == types.BoolT and not ast.LitComparison(i.Cond!): c.err(c.operatorOf(i.Cond!), msgs.ConditionConstant())
     # S8d: what the condition says holds in its block, what it says where it fails in the else
     live := c.livePaths()
     then := c.narrowedBranch(i.Then!, i.Cond!, true)

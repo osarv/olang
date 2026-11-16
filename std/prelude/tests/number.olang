@@ -104,7 +104,8 @@ test "sign and size" {
     assert (-0.0).Abs().Bits() == 0 and negOne.Abs() == 1.0 and (-Inf).Abs() == Inf
     assert 3.0.CopySign(-0.0) == -3.0 and (-3.0).CopySign(1.0) == 3.0 and F16(2.0).CopySign(F16(-1.0)) == -2.0
     assert (-0.0).SignBit() and not 0.0.SignBit() and F16(-0.0).SignBit() and BF16(-2.0).SignBit() and (-NaN).SignBit()
-    assert not NaN.SignBit() and not (-0.0 < 0.0)
+    nz := -0.0
+    assert not NaN.SignBit() and not (nz < 0.0)
 }
 
 test "NaN, the infinities and -0" {

@@ -28,6 +28,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   loop. **A lambda's body too (D16, the user's decision 2026-10-24):** `xs.Count(fn(x): return x > 3)`. **A catch
   clause's too (R11, 2026-11-16):** `try f() catch NotBuilt e: why = $e.why`, no default after it; its line's end ends
   the statement the try is in.
+  **A top-level branch too (B9, the user's call 2026-11-16):** `if Debug: import "std/os"`, `else: Limit I64 = 2` - one
+  declaration on the colon's line, the module's (a top-level branch is no scope); more is an error naming the braces.
+  A `:` where a construct takes no one-line body says it takes a block ("write { }").
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build compile
   test run format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target
   -define -update -check -quick -checked -html -library -memory -fuzz -fuzztime -caps -asm -ir -bench`, each checked against
@@ -290,12 +293,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   base's scope and permission; `try a.Get(i)`, `try a.Set(i, v)`, `try a.SliceOf(lo, hi)` fail with
   `ArrayError.OutOfRange`. An out-of-range index, a wrong `extern` prototype and a data race are the three unchecked
   holes, stated.
-- **Checked builds (E16g, the user's decision 2026-11-14; built 2026-11-14).** `test`, `-debug`, the evaluator (`OLANG_EVALUATE`) and any build or run given `-checked` (`build`, `compile`, `test`, `run`, running a file, the
+- **Checked builds (E16g, the user's decision 2026-11-14; built 2026-11-14).** `test`, `-debug`, the evaluator (`OLANG_EVALUATE`) and any build or run given `-checked` (`build`, `compile`, `test`, `run`, scripting mode, the
   prompt, the kernel; the user, 2026-11-15: "checked and quick as options but not as default") stop, as a failed assert does, on an index, an integer `/` or `%`
   (a zero divisor, the least value by -1) and a shift (amount outside the width) the program wrote, printing
   `FILE:LINE:COLUMN: index out of range` (`division by zero`, `division overflows: the least value by -1`, `shift
   amount outside the width`). Indexes the language makes (for-in walks, comprehensions, lanes, patterns) and lane
-  operations' divisions and shifts are never checked. Release builds (`build`, `run`, running a file, the prompt and the kernel by default, `-quick`, `-library`)
+  operations' divisions and shifts are never checked. Release builds (`build`, `run`, scripting mode, the prompt and the kernel by default, `-quick`, `-library`)
   are byte-identical to before: no check, no cost. Mine: the column (several per line), a check kind `typed.Check.Debug`
   lowered to a guaranteed check only when the Lowerer is `Checked`, so the evaluator stops with the built text.
   **Release stays unchecked (the user, 2026-11-14: "Keep it unchecked")**, after measuring every index checked in every
@@ -998,7 +1001,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma`. No fast-math or contraction (the user's call).
 - **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-define Name=value` build constants;
   an immutable top-level global is a default `-define` replaces (B10c); a local `if` the build decides is conditional
-  compilation too (S8b); a constant condition not depending on the build is a dead-branch error (S8a).
+  compilation too (S8b); a constant condition not depending on the build is a dead-branch error (S8a). **A comparison
+  of two literals (`true == false`, `1 < 2`, `"a" == "a"`) is S8a's error wherever it is written** - top-level
+  conditions, `assert`, any expression - naming the answer to write (the user's call 2026-11-16: "true is never false");
+  a lone `true`/`false` at the top level and a comparison reading any named or build constant stay legal. **In scripting
+  mode, the prompt and the notebook S8a is a warning** and the program runs (the user, 2026-11-16: "this is an error,
+  but it should just be a warning in scripting mode"); build, run, test and the LSP keep it an error. A lone `if false`
+  inside a function is still S8a's error.
 - **Diagnostics are one row each (B11/B11a, the user's design).** `path:line:col: error[RULE]: headline`, the source
   line and a caret, `note:` rows; one error per cause; `olang explain RULE` prints the spec rule. **Did you mean
   (2026-10-26, the user's request):** every name that names nothing ends with the nearest allowed name. **Typed holes
@@ -1033,10 +1042,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   endings, undefined behaviour, destructor-bearing values outside a global's own frame (K2c), anything past the step
   and 256MB budgets; tasks run in sequence at the join. Every disagreement with the run time is a bug fixed in the
   evaluator. Tests the evaluator runs sit beside run-time tests for every language change (the checklist above).
-- **Running a file builds and runs; the evaluator is internal (B3e, B3g, the user 2026-11-15: "make olang interpret fast
-  as well, we might run some data science work in it"; built 2026-11-15; `interpret` merged into running a file the same day).** `olang FILE` builds as `build` does
+- **Scripting mode (running a file) builds and runs; the evaluator is internal (B3e, B3g, named scripting mode by the user 2026-11-16; the user 2026-11-15: "make olang interpret fast
+  as well, we might run some data science work in it"; built 2026-11-15; `interpret` merged into scripting mode the same day).** `olang FILE` builds as `build` does
   (unchecked, -O3 and LTO; `-quick` and `-checked` are its options, as of the prompt's and the kernel's - 2026-11-15) with the error trace (S18d) under `-checked`, into `$XDG_CACHE_HOME/olang/run` (objects reused, B3i;
-  nothing beside the program; the cache is kept within 1 GiB, the oldest files going first), D3b/M5a warnings, then execs it: a 1e8-iteration loop 56 s -> 0.5 s, a 200x200 matmul
+  nothing beside the program; the cache is kept within 1 GiB, the oldest files going first), D3b/M5a/S8a warnings, then execs it: a 1e8-iteration loop 56 s -> 0.5 s, a 200x200 matmul
   11.4 s -> 0.09 s; hello world 0.05 s -> 0.08 s cached, ~1.2 s on a cold cache. Mine: no fallback without clang (the
   prelude's C imports need it either way); **`OLANG_EVALUATE=1`** (environment only, the testing tools': evaldiff, the fuzzers, the checks scenarios; no option, not in help) runs a file's program or `test`'s tests
   through the evaluator as before (M8;

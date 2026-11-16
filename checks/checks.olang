@@ -1463,6 +1463,12 @@ fn interp(r mut report&) ? Failed {
                  "-i untidy.olang's warnings", dir)
     try r.expect(sh(dir, "\"$OLANG\" build untidy.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("error[M5a]")
                  "untidy.olang built", dir)
+    # B3g: S8a too is a warning in scripting mode, and the program runs; a build refuses it
+    try r.expect(sh(dir, "\"$OLANG\" dead.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "ran\n", "dead.olang did not run", dir)
+    dead := try os.ReadFile($dir + "/err.txt") catch default ""
+    try r.expect(dead.Contains("dead.olang:3:8: warning[S8a]: "), "dead.olang's warning", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build dead.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("error[S8a]")
+                 "dead.olang built", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" refused.olang > out.txt 2>&1") == 1, "-i refused.olang ran", dir)
     try r.expect(outOf(dir).Contains("error[R11, O25]") and not outOf(dir).Contains("assertion"), "-i refused.olang output", dir)
     # ... and a construct the checker does not check yet stops it, as it stops a build (F11)

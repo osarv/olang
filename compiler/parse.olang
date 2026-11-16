@@ -798,6 +798,8 @@ fn (p mut Parser&) topIfRest() ast.TopIf& ? Fail {
 }
 
 fn (p mut Parser&) topBranch() ast.TopBranch& ? Fail {
+    if p.sees(token.Tok.Colon): return try p.topLine()
+    if not p.sees(token.Tok.LBrace): try p.fail(token.Tok.LBrace.Describe())
     at := try p.want(token.Tok.LBrace)
     g := p.diags.Hold()
     from := p.decls.Len()
@@ -811,6 +813,35 @@ fn (p mut Parser&) topBranch() ast.TopBranch& ? Fail {
     sp := p.from(at)
     decls := gather(p.decls, from)
     return ast.TopBranch(sp, decls, g)
+}
+
+# B9, S1b: a top-level branch's one-line body - one declaration on the line of its ':', the module's as a braced
+# branch's are (a top-level branch is no scope)
+fn (p mut Parser&) topLine() ast.TopBranch& ? Fail {
+    colon := p.tk()
+    at := p.here()
+    p.advance()
+    t := p.tk()
+    line := p.src.Line(colon.Start)
+    if p.sees(token.Tok.StmtEnd) or p.sees(token.Tok.Eof) or p.src.Line(t.Start) != line {
+        p.report(colon.Start, colon.End, msgs.LineBodyOnLine())
+        error Fail.Syntax
+    }
+    g := p.diags.Hold()
+    from := p.decls.Len()
+    first := p.pos
+    wasLine := p.inLine
+    p.inLine = true
+    p.item()
+    p.inLine = wasLine
+    p.diags.EndHold()
+    for k in range first, p.pos {
+        u := p.ts.Toks[k]
+        if u.Kind == token.Tok.StmtEnd or p.src.Line(u.Start) == line: continue
+        p.report(t.Start, t.End, msgs.TopLineOne())
+        error Fail.Syntax
+    }
+    return ast.TopBranch(p.from(at), gather(p.decls, from), g)
 }
 
 fn (p mut Parser&) typeDecl() ast.Decl& ? Fail {
@@ -3629,6 +3660,11 @@ fn (p mut Parser&) hint(want String&) Bool {
     # L9a: "x := range + 1" in a constructor declaring a field "range" - a keyword names a field only after "."
     if keywordNamesField(fk) and want == "an expression" and pk != token.Tok.Colon {
         p.reportAt(f, msgs.KeywordFieldRead(p.named(f)))
+        return true
+    }
+    # S1b: a ':' where a construct that takes no one-line body wants its block
+    if fk == token.Tok.Colon and want == token.Tok.LBrace.Describe() {
+        p.reportAt(f, msgs.NoLineBody())
         return true
     }
     if p.caseValueComma(f) {

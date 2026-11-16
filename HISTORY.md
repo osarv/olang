@@ -38561,3 +38561,38 @@ completes after '.' while the line is unfinished".
 
 Found on the way, not changed: a declared type extending an integer (`type Meters extends I64`) does not get the
 prelude's trait-bounded generic methods (`m.Abs()` is M19's error), though it gets the ones declared on I64 itself.
+
+## 2026-11-16: literal comparisons, top-level one-line branches, scripting mode (wt-litcmp)
+
+### S8a: a comparison of two literals (the user's call: "true is never false")
+`true == false`, `1 < 2`, `"a" == "a"` give one answer on every build. S8a already refused them as a function's `if`
+condition ("this condition is the same on every build"), but not in an `assert`, as a value, or as a top-level
+condition (`if true == false { }` built). The coordinator's first brief proposed a new rule (E10d); it was folded into
+S8a instead, one rule and one message family: `'1 < 2' compares two literals, so it is true on every build`, help
+`write 'true'`. The checker reports it at the comparison (check.olang litCompare, before E10c's null test needs nothing:
+`null == null` stays E10c's); the answer comes from the decoded literals (text and characters by their bytes, numbers
+by value) or from the fold for Bools and integers. A function `if` whose condition is such a comparison reports it once,
+the generic S8a row skipped. The loader reports a top-level one after B9a decides it (load.olang evalCond). Stays legal:
+a lone `true`/`false` at the top level (a branch switch) and anything reading a named or build constant (`Debug ==
+false`), even where it folds - another build may set it differently. Found: a lone `if false` inside a function is S8a's
+error today; not changed (asked of the user via the coordinator). The evaluator never sees a refused program.
+
+### B3g: S8a a warning in scripting mode (the user: "this is an error, but it should just be a warning in scripting mode")
+diag.Scripting(rule) = Untidy (D3b, M5a) or S8a decides what a lenient Diagnostics (scripting mode, the prompt, the
+notebook) turns into a warning; the LSP's severity still reads Untidy alone, so S8a stays an error there, as in build,
+run and test. checks.olang's interp fixture dead.olang warns and runs, and fails to build.
+
+### B9, S1b: a top-level branch takes a one-line body (the user's call)
+`if true: import "std/io"` failed with "expected '{', found ':'". S1b excludes declarations from a one-line body because
+in a function that body is a scope; a top-level branch is none - its declarations are the module's. So `top-branch ::=
+"{" ... "}" | ":" top-decl`: one declaration on the colon's line (parse.olang topLine; a declaration running past the
+line is refused naming the braces). The loader's pre-scan (load.olang condEnd, branchClose, afterBranch) ends a
+condition at a depth-0 `:` and the branch at its line's end or an `else` on it, so imports and nested conditions in a
+one-line branch are found as in braces. unparse still renders braces (one canonical form). And a `:` where a construct
+takes no one-line body now says "this takes a block here, not a one-line body: write { }" (S1b) rather than "expected
+'{', found ':'".
+
+### Scripting mode
+The user named `olang FILE` **scripting mode** on 2026-11-16: B3g's heading, the spec's option table and prose, settled,
+the command line's mode name (its messages: "-race applies to scripting mode, build, ...", "scripting mode needs a
+file") and the B12a refusal.

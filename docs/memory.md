@@ -77,7 +77,7 @@ destructor is still to run is kept until the instance's scope closes, and the de
 **M19d's Vec paragraph** is rewritten for the handle (section 4.1). **M19g (a Vec's views)** is new (section 4.4).
 
 **B14 (new: the memory report).** *(Not yet implemented: stage 0 has no `-memory`.)* `-memory` is an option of `build`,
-`test` and running a file (B1). After the build's diagnostics it prints one row for each place that keeps what it lets
+`test` and scripting mode (B1). After the build's diagnostics it prints one row for each place that keeps what it lets
 go of until its scope closes, with notes naming why (the store, the view, the task, the destructor), and then a count of
 the places that reclaim at once. Rows have B11's form, `path:line:col: memory: ...`. It changes nothing about the build.
 
@@ -472,7 +472,7 @@ That is the real trade: share nodes, or free the old tree. The language does not
 
 ### 2.8 The report
 
-`olang build -memory f.olang` (also `test -memory` and running a file with it) prints, after the diagnostics:
+`olang build -memory f.olang` (also `test -memory` and scripting mode with it) prints, after the diagnostics:
 
 - one row for each place that keeps what it lets go of, at the place's let-go site in the program's code (a let-go
   inside the prelude is reported at the program's call, as B11 reports a library's error at its use);
@@ -1030,7 +1030,7 @@ These are details within the user's direction. They are recorded so the user can
 9. M19g case 2 reads the callee's body per parameter, rather than refusing every call given `v` writably. It refuses
    less correct code and is still exact: never by element type (4.4).
 10. T36's field/element split extends to references (4.2).
-11. The report is `-memory`, an option of `build`, `test` and running a file; it lists only places that keep (2.8).
+11. The report is `-memory`, an option of `build`, `test` and scripting mode; it lists only places that keep (2.8).
 12. `Map.Take(k)` is added as an ordinary method (round 4).
 13. `docs/own.md` stays as a record; O30-O42 are retired, not reused.
 

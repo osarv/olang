@@ -1,6 +1,6 @@
 === anynocopy.olang
 anynocopy.olang:16:17: error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none
-   16 |     for x in it.Take(2) { n += x }
+   16 |     for x in it.Take(2): n += x
       |                 ^~~~
 anynocopy.olang:16:17: help: call it on the instance's own type
 compilation failed with 1 error
@@ -49,10 +49,10 @@ assertfalsepieces.olang:7:21: error[S18c]: this assertion is false, evaluated wh
       |                     ^~
 compilation failed with 1 error
 === assertfalsewritten.olang
-assertfalsewritten.olang:6:14: error[S18c]: this assertion is false, evaluated while compiling
-    6 |     assert 1 > 2, "n is " + $n
+assertfalsewritten.olang:7:14: error[S18c]: this assertion is false, evaluated while compiling
+    7 |     assert 1 > Two, "n is " + $n
       |              ^
-assertfalsewritten.olang:6:14: note: its message reads what only the running program knows, so it is shown as written: "n is " + $n
+assertfalsewritten.olang:7:14: note: its message reads what only the running program knows, so it is shown as written: "n is " + $n
 compilation failed with 1 error
 === assertmsgnottext.olang
 assertmsgnottext.olang:5:23: error[S18a]: an assert's message is text, found I64 - write it as text: "x is " + $x
@@ -246,9 +246,9 @@ b10undefined.olang:12:8: error[M22]: unknown name 'Mode' - did you mean 'Mod'?
       |        ^~~~
 compilation failed with 3 errors
 === b11near.olang
-b11near.olang:16:26: error[T19]: MyErr has no word 'FIRTS' - did you mean 'First'?
-   16 |     if count < 0 { error MyErr.FIRTS }
-      |                          ^~~~~~~~~~~
+b11near.olang:16:25: error[T19]: MyErr has no word 'FIRTS' - did you mean 'First'?
+   16 |     if count < 0: error MyErr.FIRTS
+      |                         ^~~~~~~~~~~
 b11near.olang:17:12: error[M22]: unknown name 'cout' - did you mean 'count'?
    17 |     return cout
       |            ^~~~
@@ -326,6 +326,11 @@ compilation failed with 1 error
 b9anomeet.olang:5:6: error[T6b]: '>': these numbers' types do not meet - convert one, as I64(n)
     5 | if X > 0.5 {
       |      ^
+compilation failed with 1 error
+=== b9linebodytwo.olang
+b9linebodytwo.olang:4:11: error[S1b]: a top-level branch's one-line body is one declaration on the line of its ':' - write a block, '{ ... }'
+    4 | if Debug: fn f() I64 {
+      |           ^~
 compilation failed with 1 error
 === badcond.olang
 badcond.olang:5:4: error[B9c]: this top-level condition cannot be decided while compiling
@@ -615,7 +620,7 @@ cascadee14.olang:27:14: error[E14]: expected 1 argument, found 2
 compilation failed with 1 error
 === cascademember.olang
 cascademember.olang:12:10: error: S has no member 'flag' - it is a parameter of the constructor, not a field (C2a): name it alone on a line of the constructor's body
-   12 |     if s.flag { try io.PutLine("yes") }
+   12 |     if s.flag: try io.PutLine("yes")
       |          ^~~~
 compilation failed with 1 error
 === charnopad.olang
@@ -992,9 +997,9 @@ $ROOT/std/prelude/iterator.olang:35:34: note: 'Next' is declared here
       |                                  ^~~~
 compilation failed with 1 error
 === d18cviewwrite.olang
-d18cviewwrite.olang:13:27: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
-   13 |     for x in nodes(3) { x.v = 4 }
-      |                           ^
+d18cviewwrite.olang:13:26: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
+   13 |     for x in nodes(3): x.v = 4
+      |                          ^
 compilation failed with 1 error
 === d18errors.olang
 d18errors.olang:5:4: error[D18]: a generator fails as its Next does - write its errors in its result: 'Iterator<I64 ? E>'
@@ -1112,7 +1117,7 @@ d3adflag.olang:5:5: error[D3a]: 'Level' is a build constant - choose another nam
     5 |     Level := 1
       |     ^~~~~
 d3adflag.olang:6:14: error[S8a]: this condition is the same on every build, so one branch is dead
-    6 |     if Level > 3 { return }
+    6 |     if Level > 3: return
       |              ^
 d3adflag.olang:6:14: help: depend on a build constant, or remove it
 compilation failed with 2 errors
@@ -1145,7 +1150,7 @@ d3bunread.olang:11:5: error[D3b]: 'x' is declared and never read - read it, or l
    11 |     x := 3
       |     ^
 d3bunread.olang:13:9: error[D3b]: 'i' is never read - write '_' in its place
-   13 |     for i in range 3 { total++ }
+   13 |     for i in range 3: total++
       |         ^
 d3bunread.olang:16:28: error[D3b]: 'h' is never read - write '_' in its place
    16 |         case Shape.Rect(w, h) { total += w }
@@ -1214,9 +1219,9 @@ d8eoperator.olang:6:10: error[D8e]: an operator's method cannot be 'noreturn'
       |          ^~~~
 compilation failed with 1 error
 === d8ereturn.olang
-d8ereturn.olang:4:16: error[D8e]: a 'noreturn' function never returns - end this path with a noreturn call or 'unreachable'
-    4 |     if n > 0 { return }
-      |                ^~~~~~
+d8ereturn.olang:4:15: error[D8e]: a 'noreturn' function never returns - end this path with a noreturn call or 'unreachable'
+    4 |     if n > 0: return
+      |               ^~~~~~
 compilation failed with 1 error
 === d8gctor.olang
 d8gctor.olang:2:20: error[D8g]: a variadic parameter is a function's, not a constructor's or a case's - take an array, 'xs Array<T>&'
@@ -1370,8 +1375,8 @@ definitfield.olang:7:5: error[D13d]: the field 'n' is not assigned on every path
       |     ^
 definitfield.olang:7:5: note: N& has no zero value
 definitfield.olang:8:5: note: when this condition is false nothing assigns it - this 'if' has no 'else'
-    8 |     if c { n = N(1) }
-      |     ^~~~~~~~~~~~~~~~~
+    8 |     if c: n = N(1)
+      |     ^~~~~~~~~~~~~~
 definitfield.olang:7:5: help: assign it on each path, or give it a value, or write 'N?&'
 compilation failed with 1 error
 === definithiddenbreak.olang
@@ -1446,8 +1451,8 @@ definitloop.olang:8:12: error[D13d]: 'x' is read here before it is assigned on e
       |            ^
 definitloop.olang:8:12: note: N& has no zero value
 definitloop.olang:7:5: note: this loop may run no times - assigning in its body does not count
-    7 |     for i in range 3 { x = N(i) }
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    7 |     for i in range 3: x = N(i)
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~
 definitloop.olang:8:12: help: assign it on each path before this read, or give it a value, or write 'N?&'
 compilation failed with 1 error
 === e10aprivateeq.olang
@@ -2012,9 +2017,9 @@ e31bviewcycle.olang:13:11: error[E31b]: this call writes a copy of x[i]
    13 |     down(s[0], 3)
       |           ^
 e31bviewcycle.olang:13:11: note: x[i] gives a copy, and the call can reach the collection another way
-e31bviewcycle.olang:16:16: note: the callee is no view of the element because of this statement
-   16 |     if k > 0 { up(v, k - 1) }
-      |                ^~~~~~~~~~~~
+e31bviewcycle.olang:16:15: note: the callee is no view of the element because of this statement
+   16 |     if k > 0: up(v, k - 1)
+      |               ^~~~~~~~~~~~
 e31bviewcycle.olang:13:11: help: call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference
 compilation failed with 1 error
 === e31bviewfield.olang
@@ -2570,7 +2575,7 @@ forinneedstry.olang:16:5: error[S9e]: this loop's own calls can fail - write 'fo
 compilation failed with 1 error
 === forinshadowparam.olang
 forinshadowparam.olang:6:9: error[D3a, E29]: 's' is already declared, and a for-in declares new names
-    6 |     for s in options { n += s }
+    6 |     for s in options: n += s
       |         ^
 forinshadowparam.olang:6:9: help: choose another, or to loop while it is in c write 'for { if s not in c { break } }'
 compilation failed with 1 error
@@ -3108,9 +3113,9 @@ k1globalaborts.olang:10:1: error[K2]: this global's initializer aborts the progr
    10 | G I32 = pick(5)
       | ^
 k1globalaborts.olang:10:1: note: it reaches unreachable code, which aborts the program
-k1globalaborts.olang:7:16: note: here
-    7 |     if x > 3 { unreachable }
-      |                ^~~~~~~~~~~
+k1globalaborts.olang:7:15: note: here
+    7 |     if x > 3: unreachable
+      |               ^~~~~~~~~~~
 compilation failed with 1 error
 === k1matchnull.olang
 k1matchnull.olang:16:1: error[K2]: this global's initializer aborts the program, evaluated while compiling
@@ -3229,7 +3234,7 @@ l15unicode.olang:4:12: error[L15]: '\u' needs one to six hexadecimal digits in b
 compilation failed with 1 error
 === l16unknown.olang
 l16unknown.olang:6:8: error[L16]: unexpected character '`'
-    6 |     if `(x == 1) {
+    6 |     if `(x == 1): return 2
       |        ^
 compilation failed with 1 error
 === l18atrailing.olang
@@ -3239,7 +3244,7 @@ l18atrailing.olang:4:26: error[L18a]: a comma before ']' separates nothing - rem
 compilation failed with 1 error
 === l18bifline.olang
 l18bifline.olang:8:10: error: expected '{', found 'else'
-    8 |     if c else fn() I64 { return 2 }
+    8 |     if c else fn() I64: return 2
       |          ^~~~
 compilation failed with 1 error
 === l18cneedless.olang
@@ -3433,17 +3438,17 @@ compilation failed with 1 error
 m19g01push.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    11 |     try io.PutLine($d[0])
       |                     ^
-m19g01push.olang:10:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
-   10 |     for i in range 100 { v.Push(i) }
-      |                            ^~~~
+m19g01push.olang:10:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   10 |     for i in range 100: v.Push(i)
+      |                           ^~~~
 compilation failed with 1 error
 === m19g02secondname.olang
 m19g02secondname.olang:12:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    12 |     try io.PutLine($d[0])
       |                     ^
-m19g02secondname.olang:11:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
-   11 |     for i in range 100 { w.Push(i) }
-      |                            ^~~~
+m19g02secondname.olang:11:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   11 |     for i in range 100: w.Push(i)
+      |                           ^~~~
 compilation failed with 1 error
 === m19g03callgrows.olang
 m19g03callgrows.olang:12:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
@@ -3501,17 +3506,17 @@ compilation failed with 1 error
 m19g08givenboth.olang:12:31: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
    12 |     try io.PutLine($grow(v, v.View()))
       |                               ^~~~
-m19g08givenboth.olang:6:28: note: 'grow' may grow it here
-    6 |     for i in range 100 { w.Push(i) }
-      |                            ^~~~
+m19g08givenboth.olang:6:27: note: 'grow' may grow it here
+    6 |     for i in range 100: w.Push(i)
+      |                           ^~~~
 compilation failed with 1 error
 === m19g09element.olang
 m19g09element.olang:12:37: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
    12 |     try io.PutLine($grow(v, v.View()[0]))
       |                                     ^
-m19g09element.olang:6:28: note: 'grow' may grow it here
-    6 |     for i in range 100 { v.Push(Pt(i)) }
-      |                            ^~~~
+m19g09element.olang:6:27: note: 'grow' may grow it here
+    6 |     for i in range 100: v.Push(Pt(i))
+      |                           ^~~~
 compilation failed with 1 error
 === m19g10through.olang
 m19g10through.olang:14:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
@@ -3528,9 +3533,9 @@ m19g11column.olang:16:5: error[M19g]: 'xs' holds a view of 'v' taken before 'v' 
 m19g11column.olang:15:5: note: 'v' may grow here, in 'grow' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    15 |     grow(v)
       |     ^~~~
-m19g11column.olang:8:27: note: 'grow' may grow it here
-    8 |     for i in range 20 { v.Push(P(i, i)) }
-      |                           ^~~~
+m19g11column.olang:8:26: note: 'grow' may grow it here
+    8 |     for i in range 20: v.Push(P(i, i))
+      |                          ^~~~
 m19g11column.olang:19:12: error[M19g]: 'ys' holds a view of 'v' taken before 'v' may have grown
    19 |     assert ys[0] == 2
       |            ^~
@@ -3542,14 +3547,14 @@ compilation failed with 2 errors
 m19g11lambda.olang:10:21: error[M19g]: 'f' holds a view of 'v' taken before 'v' may have grown
    10 |     try io.PutLine($f())
       |                     ^
-m19g11lambda.olang:9:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
-    9 |     for i in range 100 { v.Push(i) }
-      |                            ^~~~
+m19g11lambda.olang:9:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+    9 |     for i in range 100: v.Push(i)
+      |                           ^~~~
 compilation failed with 1 error
 === m19g12task.olang
-m19g12task.olang:11:32: error[M19g]: 'v' may grow here while a task holds a view of it - give the task a copy: 'v.ToArray()'
-   11 |         for i in range 100 { v.Push(i) }
-      |                                ^~~~
+m19g12task.olang:11:31: error[M19g]: 'v' may grow here while a task holds a view of it - give the task a copy: 'v.ToArray()'
+   11 |         for i in range 100: v.Push(i)
+      |                               ^~~~
 m19g12task.olang:10:9: note: the task holding a view of 'v' is started here
    10 |         spawn look(d)
       |         ^~~~~~~~~~~~~
@@ -3558,9 +3563,9 @@ compilation failed with 1 error
 m19g13kept.olang:10:21: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
    10 |     try io.PutLine($l[0])
       |                     ^
-m19g13kept.olang:9:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
-    9 |     for _ in range 100 { v.Push('b') }
-      |                            ^~~~
+m19g13kept.olang:9:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+    9 |     for _ in range 100: v.Push('b')
+      |                           ^~~~
 compilation failed with 1 error
 === m19g14byvalue.olang
 m19g14byvalue.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
@@ -3583,19 +3588,19 @@ m19g15loop.olang:11:11: note: 'v' may grow here, in 'Push' - take the view or th
 compilation failed with 1 error
 === m19g16forin.olang
 m19g16forin.olang:7:5: error[M19g]: this reads a view of 'v' taken before 'v' may have grown
-    7 |     for x in v.View() { v.Push(x) }
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-m19g16forin.olang:7:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
-    7 |     for x in v.View() { v.Push(x) }
-      |                           ^~~~
+    7 |     for x in v.View(): v.Push(x)
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+m19g16forin.olang:7:26: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+    7 |     for x in v.View(): v.Push(x)
+      |                          ^~~~
 compilation failed with 1 error
 === m19gelemroute.olang
 m19gelemroute.olang:13:5: error[M19g]: 'r' holds a view of 'vs[...]' taken before 'vs[...]' may have grown
    13 |     r.n = 77
       |     ^
-m19gelemroute.olang:12:27: note: 'vs[...]' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('vs[...].ToArray()')
-   12 |     for i in range 1000 { vs[0].Push(blk(i, i)) }
-      |                           ^~
+m19gelemroute.olang:12:26: note: 'vs[...]' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('vs[...].ToArray()')
+   12 |     for i in range 1000: vs[0].Push(blk(i, i))
+      |                          ^~
 compilation failed with 1 error
 === m19gelemroutemap.olang
 m19gelemroutemap.olang:17:5: error[M19g]: 'r' holds a view of 'ss[...].m' taken before 'ss[...].m' may have grown
@@ -3620,41 +3625,41 @@ compilation failed with 1 error
 m19gmapnote.olang:12:24: error[M19g]: 'r' holds a view of 'm' taken before 'm' may have grown
    12 |     io.PutLine("r " + $r.n)!
       |                        ^
-m19gmapnote.olang:11:32: note: 'm' may grow here, in 'Put' - take the view or the reference after it, or copy the value first ('m.Get(k)')
-   11 |     for k in range 2, 3000 { m.Put(k, blk(k)) }
-      |                                ^~~
+m19gmapnote.olang:11:31: note: 'm' may grow here, in 'Put' - take the view or the reference after it, or copy the value first ('m.Get(k)')
+   11 |     for k in range 2, 3000: m.Put(k, blk(k))
+      |                               ^~~
 compilation failed with 1 error
 === m19gmapref.olang
 m19gmapref.olang:13:5: error[M19g]: 'r' holds a view of 'm' taken before 'm' may have grown
    13 |     r.n = 77
       |     ^
-m19gmapref.olang:12:32: note: 'm' may grow here, in 'Put' - take the view or the reference after it, or copy the value first ('m.Get(k)')
-   12 |     for i in range 1, 1000 { m.Put(i, rec(i)) }
-      |                                ^~~
+m19gmapref.olang:12:31: note: 'm' may grow here, in 'Put' - take the view or the reference after it, or copy the value first ('m.Get(k)')
+   12 |     for i in range 1, 1000: m.Put(i, rec(i))
+      |                               ^~~
 compilation failed with 1 error
 === m19gonce.olang
 m19gonce.olang:19:14: error[M19g]: 'g' holds a view of 'v' taken before 'v' may have grown
    19 |     for x in g: s += x
       |              ^
-m19gonce.olang:17:29: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
-   17 |     for i in range 1000 { v.Push(blk(i)) }
-      |                             ^~~~
+m19gonce.olang:17:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   17 |     for i in range 1000: v.Push(blk(i))
+      |                            ^~~~
 compilation failed with 1 error
 === m19grefgrow.olang
 m19grefgrow.olang:13:5: error[M19g]: 'r' holds a view of 'v' taken before 'v' may have grown
    13 |     r.n = 77
       |     ^
-m19grefgrow.olang:12:31: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
-   12 |     for i in range 100000 { v.Push(blk(i)) }
-      |                               ^~~~
+m19grefgrow.olang:12:30: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   12 |     for i in range 100000: v.Push(blk(i))
+      |                              ^~~~
 compilation failed with 1 error
 === m19grefloop.olang
 m19grefloop.olang:15:12: error[M19g]: 'r' holds a view of 'v' taken before 'v' may have grown
    15 |     return r.n + r.s.Len() + junk.Len() - 5000
       |            ^
-m19grefloop.olang:12:29: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
-   12 |     for i in range 5000 { v.Push(blk(i, $i)) }
-      |                             ^~~~
+m19grefloop.olang:12:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   12 |     for i in range 5000: v.Push(blk(i, $i))
+      |                            ^~~~
 compilation failed with 1 error
 === m21twiceexact.olang
 m21twiceexact.olang:8:18: error[M21]: 'Describe' is declared twice for Box<I64> - declare one per instance
@@ -3968,10 +3973,10 @@ overridesig.olang:11:12: error[M19e]: Twice does not have the signature of the d
 overridesig.olang:11:12: help: match it, or choose another name
 compilation failed with 1 error
 === p1gresultref.olang
-p1gresultref.olang:13:39: error[P1g]: a spawn target has exactly the call's type Array<I64>, found Array<I64>&
-   13 |         for t in range 2 { spawn parts[t] = part(t * 4, t * 4 + 4) }
-      |                                       ^
-p1gresultref.olang:13:39: help: declare 'part' to give Array<I64>&, built where its result lands
+p1gresultref.olang:13:38: error[P1g]: a spawn target has exactly the call's type Array<I64>, found Array<I64>&
+   13 |         for t in range 2: spawn parts[t] = part(t * 4, t * 4 + 4)
+      |                                      ^
+p1gresultref.olang:13:38: help: declare 'part' to give Array<I64>&, built where its result lands
 compilation failed with 1 error
 === p1gtargetsfields.olang
 p1gtargetsfields.olang:20:13: error[P1g]: these targets live in different scopes, and the results are built in one
@@ -3979,9 +3984,9 @@ p1gtargetsfields.olang:20:13: error[P1g]: these targets live in different scopes
       |             ^~~~~
 compilation failed with 1 error
 === p2forincopy.olang
-p2forincopy.olang:17:32: error[P2]: this argument's storage closes before the join does - declare it at the join's level or wider
-   17 |             spawn out[i] = see(n)
-      |                                ^
+p2forincopy.olang:16:44: error[P2]: this argument's storage closes before the join does - declare it at the join's level or wider
+   16 |         for i, n in ns: spawn out[i] = see(n)
+      |                                            ^
 compilation failed with 1 error
 === p4aclausebreak.olang
 p4aclausebreak.olang:12:50: error[P4a]: 'break' may not leave a task's clause
@@ -4292,9 +4297,9 @@ r1cwordescapes.olang:11:37: error[R9]: LE.Gone can escape here, and this functio
       |                                     ^~~
 compilation failed with 1 error
 === r1cwordraised.olang
-r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.Empty, not this word - add it after '?'
-    8 |     if n == 0 { error LE.Gone }
-      |                          ^~~~
+r1cwordraised.olang:8:25: error[R3]: this function's '?' names LE.Empty, not this word - add it after '?'
+    8 |     if n == 0: error LE.Gone
+      |                         ^~~~
 compilation failed with 1 error
 === r1dcontract.olang
 r1dcontract.olang:4:25: error[R1d]: this function raises ArgumentError but writes no '?'
@@ -4304,11 +4309,11 @@ r1dcontract.olang:4:25: note: a function that can fail says so
 r1dcontract.olang:4:25: help: write '?' after its result (its errors inferred), or '? ArgumentError'
 compilation failed with 1 error
 === r1draise.olang
-r1draise.olang:4:27: error[R1d]: this function raises Odd but writes no '?'
-    4 |     if n % 2 == 1 { error Odd }
-      |                           ^~~
-r1draise.olang:4:27: note: a function that can fail says so
-r1draise.olang:4:27: help: write '?' after its result (its errors inferred), or '? Odd'
+r1draise.olang:4:26: error[R1d]: this function raises Odd but writes no '?'
+    4 |     if n % 2 == 1: error Odd
+      |                          ^~~
+r1draise.olang:4:26: note: a function that can fail says so
+r1draise.olang:4:26: help: write '?' after its result (its errors inferred), or '? Odd'
 compilation failed with 1 error
 === r1dtry.olang
 r1dtry.olang:5:5: error[R1d]: io.Error can escape here, and this function writes no '?'
@@ -4374,9 +4379,9 @@ r3areraiseword.olang:6:23: error[R3a]: the error raised again can be P.B, not in
 r3areraiseword.olang:6:23: help: add it after '?', or test the error first
 compilation failed with 1 error
 === r3bareerror.olang
-r3bareerror.olang:4:22: error: expected a name, found '}'
-    4 |     if n < 0 { error }
-      |                      ^
+r3bareerror.olang:4:20: error: expected a name, found end of line
+    4 |     if n < 0: error
+      |                    ^
 compilation failed with 1 error
 === r3bfirstraiseorder.olang
 r3bfirstraiseorder.olang:10:17: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
@@ -4384,16 +4389,16 @@ r3bfirstraiseorder.olang:10:17: error[T6b]: I64 does not flow into I32 - convert
       |                 ^
 compilation failed with 1 error
 === r3bnear.olang
-r3bnear.olang:12:22: error[R3b]: no error of this module is named 'NotFond' - did you mean 'NotFound'?
-   12 |     if k < 0 { error NotFond }
-      |                      ^~~~~~~
-r3bnear.olang:12:22: help: to raise a new error of that name, name it after this function's '?'
+r3bnear.olang:12:21: error[R3b]: no error of this module is named 'NotFond' - did you mean 'NotFound'?
+   12 |     if k < 0: error NotFond
+      |                     ^~~~~~~
+r3bnear.olang:12:21: help: to raise a new error of that name, name it after this function's '?'
 compilation failed with 1 error
 === r3bnearcase.olang
-r3bnearcase.olang:9:22: error[R3b]: no error of this module is named 'notFound' - did you mean 'NotFound'?
-    9 |     if k < 0 { error notFound }
-      |                      ^~~~~~~~
-r3bnearcase.olang:9:22: help: to raise a new error of that name, name it after this function's '?'
+r3bnearcase.olang:9:21: error[R3b]: no error of this module is named 'notFound' - did you mean 'NotFound'?
+    9 |     if k < 0: error notFound
+      |                     ^~~~~~~~
+r3bnearcase.olang:9:21: help: to raise a new error of that name, name it after this function's '?'
 compilation failed with 1 error
 === r3bownword.olang
 r3bownword.olang:3:1: error[R3b]: an error of one word named as its type needs no declaration
@@ -4509,6 +4514,17 @@ rangefloat.olang:4:20: error[S9b]: a range's bounds and step are integers, found
     4 |     for _ in range 2.5 { }
       |                    ^~~
 compilation failed with 1 error
+=== rangefourargs.olang
+rangefourargs.olang:4:30: error[S9b]: a range takes at most three arguments
+    4 |     for _ in range 10, 2, 3, 2 {
+      |                              ^
+rangefourargs.olang:4:30: help: write 'range END', 'range START, END' or 'range START, END, STEP'
+compilation failed with 1 error
+=== rangenoargs.olang
+rangenoargs.olang:3:20: error: expected an expression, found '{'
+    3 |     for x in range {
+      |                    ^
+compilation failed with 1 error
 === rangezero.olang
 rangezero.olang:4:27: error[S9b]: a range only counts upward, so its step is positive
     4 |     for _ in range 10, 0, 0 { }
@@ -4559,9 +4575,9 @@ reflfilterundecided.olang:9:84: error[G33]: this comprehension's filter is known
 reflfilterundecided.olang:9:84: note: a comprehension over a list known while compiling keeps an element by a filter decided while compiling
 compilation failed with 1 error
 === reflfncall.olang
-reflfncall.olang:6:35: error[G41]: 'Get' is called with 1 arguments (a method's receiver first), found 0
-    6 |     for m in Box.Methods { assert m() == 1 }
-      |                                   ^~~
+reflfncall.olang:6:34: error[G41]: 'Get' is called with 1 arguments (a method's receiver first), found 0
+    6 |     for m in Box.Methods: assert m() == 1
+      |                                  ^~~
 compilation failed with 1 error
 === reflindexnotconst.olang
 reflindexnotconst.olang:9:42: error[G33]: a list known while compiling is indexed by a constant - this index is known only at run time
@@ -4691,8 +4707,8 @@ rv3roat.olang:5:7: error[E31b]: this call writes a copy of x[i]
       |       ^
 rv3roat.olang:5:7: note: x[i] gives a copy, and the call can reach the collection another way
 $ROOT/std/prelude/vec.olang:67:5: note: the callee is no view of the element because of this statement
-   67 |     if v.n == v.data.Len() { v.room(v.n + 1) }
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   67 |     if v.n == v.data.Len(): v.room(v.n + 1)
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 rv3roat.olang:5:7: help: call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference
 compilation failed with 1 error
 === rv3roclone.olang
@@ -4700,9 +4716,9 @@ rv3roclone.olang:8:20: error[O10c]: the callee needs one argument's scope to out
     8 |     c := list.List.FromIter(ro.Iter())
       |                    ^~~~~~~~
 rv3roclone.olang:8:20: note: nothing here shows it
-$ROOT/std/list.olang:365:18: note: in the standard library's code, here
-  365 |     for x in try it { out.Push(x) }
-      |                  ^~
+$ROOT/std/list.olang:365:26: note: in the standard library's code, here
+  365 |     for x in try it: out.Push(x)
+      |                          ^~~~
 rv3roclone.olang:8:20: note: instantiated here, with T = List<I64>, I = Iter<List<I64>>, E = nothing
     8 |     c := list.List.FromIter(ro.Iter())
       |                    ^~~~~~~~
@@ -4979,14 +4995,14 @@ s15returnvalue.olang:4:5: error[S15]: a test has no result - a bare 'return' end
       |     ^~~~~~~~
 compilation failed with 1 error
 === s16dmsgerror.olang
-s16dmsgerror.olang:11:32: error[S17]: an error may not leave an unreachable's message - catch it here
-   11 |     if k > 100 { unreachable $(try h(k)) }
-      |                                ^~~
+s16dmsgerror.olang:11:31: error[S17]: an error may not leave an unreachable's message - catch it here
+   11 |     if k > 100: unreachable $(try h(k))
+      |                               ^~~
 compilation failed with 1 error
 === s16dmsgnottext.olang
-s16dmsgnottext.olang:5:31: error[S18a]: an unreachable's message is text, found I64 - write it as text: "x is " + $x
-    5 |     if Seed > 0 { unreachable Seed }
-      |                               ^~~~
+s16dmsgnottext.olang:5:30: error[S18a]: an unreachable's message is text, found I64 - write it as text: "x is " + $x
+    5 |     if Seed > 0: unreachable Seed
+      |                              ^~~~
 compilation failed with 1 error
 === s17afactcascade.olang
 s17afactcascade.olang:6:8: error[M5a]: nothing here is reached through 'os' - remove 'import "std/os"'
@@ -5026,10 +5042,10 @@ s18cinstancecall.olang:12:12: note: instantiated here, with a.Len() = 4
       |            ^
 compilation failed with 1 error
 === s19break.olang
-s19break.olang:10:24: error[S19b]: 'break' may not leave deferred code
-   10 |             if t > 1 { break }
-      |                        ^~~~~
-s19break.olang:10:24: note: it runs while its block is left
+s19break.olang:10:23: error[S19b]: 'break' may not leave deferred code
+   10 |             if t > 1: break
+      |                       ^~~~~
+s19break.olang:10:23: note: it runs while its block is left
 compilation failed with 1 error
 === s19byieldindefer.olang
 s19byieldindefer.olang:6:17: error[S19b, S20]: deferred code may not yield - it runs while its block is left
@@ -5047,14 +5063,14 @@ s19eline.olang:4:15: error[S1b]: a one-line body is one simple statement, not an
       |               ^~~~~~~~
 compilation failed with 1 error
 === s19ereturn.olang
-s19ereturn.olang:6:20: error[S19b]: deferred code may not return - it runs while its block is left
-    6 |         if n > 1 { return 3 }
-      |                    ^~~~~~
+s19ereturn.olang:6:19: error[S19b]: deferred code may not return - it runs while its block is left
+    6 |         if n > 1: return 3
+      |                   ^~~~~~
 compilation failed with 1 error
 === s19error.olang
-s19error.olang:8:20: error[S19b]: an error may not leave deferred code - catch it here
-    8 |         if n > 1 { error E.Bad }
-      |                    ^~~~~
+s19error.olang:8:19: error[S19b]: an error may not leave deferred code - catch it here
+    8 |         if n > 1: error E.Bad
+      |                   ^~~~~
 compilation failed with 1 error
 === s19later.olang
 s19later.olang:4:16: error[M22]: unknown name 'later' - did you mean 'Iter'?
@@ -5062,9 +5078,9 @@ s19later.olang:4:16: error[M22]: unknown name 'later' - did you mean 'Iter'?
       |                ^~~~~
 compilation failed with 1 error
 === s19return.olang
-s19return.olang:5:20: error[S19b]: deferred code may not return - it runs while its block is left
-    5 |         if n > 1 { return 3 }
-      |                    ^~~~~~
+s19return.olang:5:19: error[S19b]: deferred code may not return - it runs while its block is left
+    5 |         if n > 1: return 3
+      |                   ^~~~~~
 compilation failed with 1 error
 === s19spawn.olang
 s19spawn.olang:7:15: error[S19b, P1a]: a spawn in deferred code needs a join written in the deferred code
@@ -5085,6 +5101,11 @@ s1bblock.olang:5:10: error[S8a]: this condition is the same on every build, so o
       |          ^
 s1bblock.olang:5:10: help: depend on a build constant, or remove it
 compilation failed with 2 errors
+=== s1bcatchdecl.olang
+s1bcatchdecl.olang:6:22: error[S1b]: a one-line body is one simple statement, not a declaration - write a block, '{ ... }'
+    6 |     try f() catch E: y := 1
+      |                      ^~~~~~
+compilation failed with 1 error
 === s1bdecl.olang
 s1bdecl.olang:4:23: error[S1b]: a one-line body is one simple statement, not a declaration - write a block, '{ ... }'
     4 |     for i in range 3: y := i
@@ -5112,13 +5133,18 @@ s1bmultidecl.olang:5:23: error[S1b]: a one-line body is one simple statement, no
 compilation failed with 1 error
 === s1bnested.olang
 s1bnested.olang:5:15: error[S1b]: a one-line body is one simple statement, not an if - write a block, '{ ... }'
-    5 |     if x > 0: if x > 1 { x = 2 }
+    5 |     if x > 0: if x > 1: x = 2
       |               ^~
 s1bnested.olang:5:10: error[S8a]: this condition is the same on every build, so one branch is dead
-    5 |     if x > 0: if x > 1 { x = 2 }
+    5 |     if x > 0: if x > 1: x = 2
       |          ^
 s1bnested.olang:5:10: help: depend on a build constant, or remove it
 compilation failed with 2 errors
+=== s1bnolinebody.olang
+s1bnolinebody.olang:3:11: error[S1b]: this takes a block here, not a one-line body: write { }
+    3 | fn f() I64: return 1
+      |           ^
+compilation failed with 1 error
 === s1bsameline.olang
 s1bsameline.olang:5:13: error[S1b]: a one-line body stands on the line of its ':' - write a block, '{ ... }'
     5 |     if x > 0:
@@ -5191,11 +5217,11 @@ s5handlerepointfn.olang:13:17: note: x[i] gives a copy, and the call can reach t
 s5handlerepointfn.olang:13:17: help: call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference
 compilation failed with 1 error
 === s5spawnhandlekept.olang
-s5spawnhandlekept.olang:14:49: error[E31b]: this call writes a copy of x[i]
-   14 |         for i in range 4 { spawn put(keep, users[i]) }
-      |                                                 ^
-s5spawnhandlekept.olang:14:49: note: x[i] gives a copy, and the call can reach the collection another way
-s5spawnhandlekept.olang:14:49: help: call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference
+s5spawnhandlekept.olang:14:48: error[E31b]: this call writes a copy of x[i]
+   14 |         for i in range 4: spawn put(keep, users[i])
+      |                                                ^
+s5spawnhandlekept.olang:14:48: note: x[i] gives a copy, and the call can reach the collection another way
+s5spawnhandlekept.olang:14:48: help: call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference
 compilation failed with 1 error
 === s6immutableglobalfield.olang
 s6immutableglobalfield.olang:6:7: error[S6]: G cannot be written - only a local, a parameter or a 'mut' global can
@@ -5204,38 +5230,62 @@ s6immutableglobalfield.olang:6:7: error[S6]: G cannot be written - only a local,
 compilation failed with 1 error
 === s8acall.olang
 s8acall.olang:9:18: error[S8a]: this condition is the same on every build, so one branch is dead
-    9 |     if helper3() > 2 { return }
+    9 |     if helper3() > 2: return
       |                  ^
 s8acall.olang:9:18: help: depend on a build constant, or remove it
 compilation failed with 1 error
 === s8afalse.olang
 s8afalse.olang:9:8: error[S8a]: this condition is the same on every build, so one branch is dead
-    9 |     if false { return }
+    9 |     if false: return
       |        ^~~~~
 s8afalse.olang:9:8: help: depend on a build constant, or remove it
 compilation failed with 1 error
 === s8afixedlocal.olang
 s8afixedlocal.olang:10:10: error[S8a]: this condition is the same on every build, so one branch is dead
-   10 |     if x > Level { return }
+   10 |     if x > Level: return
       |          ^
 s8afixedlocal.olang:10:10: help: depend on a build constant, or remove it
 compilation failed with 1 error
 === s8alevel.olang
 s8alevel.olang:10:18: error[S8a]: this condition is the same on every build, so one branch is dead
-   10 |     if Level * 2 == 6 { x = 1 }
+   10 |     if Level * 2 == 6: x = 1
       |                  ^~
 s8alevel.olang:10:18: help: depend on a build constant, or remove it
 compilation failed with 1 error
+=== s8alitassert.olang
+s8alitassert.olang:4:12: error[S8a]: '"a" == "a"' compares two literals, so it is true on every build
+    4 |     assert "a" == "a"
+      |            ^~~~~~~~~~
+s8alitassert.olang:4:12: help: write 'true'
+compilation failed with 1 error
+=== s8alitexpr.olang
+s8alitexpr.olang:4:10: error[S8a]: '-1.5 >= 2.0' compares two literals, so it is false on every build
+    4 |     b := -1.5 >= 2.0
+      |          ^~~~~~~~~~~
+s8alitexpr.olang:4:10: help: write 'false'
+compilation failed with 1 error
+=== s8alitif.olang
+s8alitif.olang:4:8: error[S8a]: '1 < 2' compares two literals, so it is true on every build
+    4 |     if 1 < 2: Println("x")
+      |        ^~~~~
+s8alitif.olang:4:8: help: write 'true'
+compilation failed with 1 error
+=== s8alittop.olang
+s8alittop.olang:3:4: error[S8a]: 'true == false' compares two literals, so it is false on every build
+    3 | if true == false {
+      |    ^~~~~~~~~~~~~
+s8alittop.olang:3:4: help: write 'false'
+compilation failed with 1 error
 === s8averbose.olang
 s8averbose.olang:10:16: error[S8a]: this condition is the same on every build, so one branch is dead
-   10 |     if Verbose == 1 { return }
+   10 |     if Verbose == 1: return
       |                ^~
 s8averbose.olang:10:16: help: depend on a build constant, or remove it
 compilation failed with 1 error
 === s8bother.olang
-s8bother.olang:9:13: error[M22]: unknown function or type 'onlyOnSmallBuilds'
-    9 |         x = onlyOnSmallBuilds()
-      |             ^~~~~~~~~~~~~~~~~
+s8bother.olang:7:15: error[M22]: unknown function or type 'onlyOnSmallBuilds'
+    7 |     else: x = onlyOnSmallBuilds()
+      |               ^~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === s8dassignclause.olang
 s8dassignclause.olang:15:18: error[S8d]: Shape is an enum, and its payload's 'p' is read through a case
@@ -5264,11 +5314,11 @@ s8ddefercase.olang:10:45: note: a test narrowed it, and an assignment since has 
 s8ddefercase.olang:10:45: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8dnarrowlentfield.olang
-s8dnarrowlentfield.olang:12:9: error[S8d]: a narrowed payload field is read, never written or lent writably
-   12 |         e.c.Grow()
-      |         ^~~
-s8dnarrowlentfield.olang:12:9: note: 'e' is narrowed to Shape.Box, and what it reads there is a copy of the payload
-s8dnarrowlentfield.olang:12:9: help: assign the whole case, 'e = Shape.Box(...)', or change a copy a match binds and assign the case back
+s8dnarrowlentfield.olang:11:24: error[S8d]: a narrowed payload field is read, never written or lent writably
+   11 |     if e == Shape.Box: e.c.Grow()
+      |                        ^~~
+s8dnarrowlentfield.olang:11:24: note: 'e' is narrowed to Shape.Box, and what it reads there is a copy of the payload
+s8dnarrowlentfield.olang:11:24: help: assign the whole case, 'e = Shape.Box(...)', or change a copy a match binds and assign the case back
 compilation failed with 1 error
 === s8dnarrowlentmethod.olang
 s8dnarrowlentmethod.olang:14:9: error[S8d]: a narrowed payload field is read, never written or lent writably
@@ -5278,18 +5328,18 @@ s8dnarrowlentmethod.olang:14:9: note: 'e' is narrowed to Shape.Round, and what i
 s8dnarrowlentmethod.olang:14:9: help: assign the whole case, 'e = Shape.Round(...)', or change a copy a match binds and assign the case back
 compilation failed with 1 error
 === s8dnarrowlentparam.olang
-s8dnarrowlentparam.olang:12:14: error[S8d]: a narrowed payload field is read, never written or lent writably
-   12 |         grow(e)
-      |              ^
-s8dnarrowlentparam.olang:12:14: note: 'e' is narrowed to Shape.Round, and what it reads there is a copy of the payload
-s8dnarrowlentparam.olang:12:14: help: assign the whole case, 'e = Shape.Round(...)', or change a copy a match binds and assign the case back
+s8dnarrowlentparam.olang:11:31: error[S8d]: a narrowed payload field is read, never written or lent writably
+   11 |     if e == Shape.Round: grow(e)
+      |                               ^
+s8dnarrowlentparam.olang:11:31: note: 'e' is narrowed to Shape.Round, and what it reads there is a copy of the payload
+s8dnarrowlentparam.olang:11:31: help: assign the whole case, 'e = Shape.Round(...)', or change a copy a match binds and assign the case back
 compilation failed with 1 error
 === s8dnarrowwrite.olang
-s8dnarrowwrite.olang:9:30: error[S8d]: a narrowed payload field is read, never written or lent writably
-    9 |     if s == Shape.Ring { s.c.r = 5 }
-      |                              ^
-s8dnarrowwrite.olang:9:30: note: 's' is narrowed to Shape.Ring, and what it reads there is a copy of the payload
-s8dnarrowwrite.olang:9:30: help: assign the whole case, 's = Shape.Ring(...)', or change a copy a match binds and assign the case back
+s8dnarrowwrite.olang:9:29: error[S8d]: a narrowed payload field is read, never written or lent writably
+    9 |     if s == Shape.Ring: s.c.r = 5
+      |                             ^
+s8dnarrowwrite.olang:9:29: note: 's' is narrowed to Shape.Ring, and what it reads there is a copy of the payload
+s8dnarrowwrite.olang:9:29: help: assign the whole case, 's = Shape.Ring(...)', or change a copy a match binds and assign the case back
 compilation failed with 1 error
 === s8dpathassigned.olang
 s8dpathassigned.olang:7:12: error[T2c]: 'h.next.next' is a N?&, which may be null
@@ -5306,10 +5356,10 @@ s8dpathcase.olang:9:16: note: a test narrowed it, and a call since may have chan
 s8dpathcase.olang:9:16: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8dpathcondcall.olang
-s8dpathcondcall.olang:6:45: error[T2c]: 'h.next' is a N?&, which may be null
-    6 |     if h.next != null and ready(h) { return h.next.v }
-      |                                             ^~~~~~
-s8dpathcondcall.olang:6:45: help: read through it where a test says it is not ('if x != null'), or write 'h.next!'
+s8dpathcondcall.olang:6:44: error[T2c]: 'h.next' is a N?&, which may be null
+    6 |     if h.next != null and ready(h): return h.next.v
+      |                                            ^~~~~~
+s8dpathcondcall.olang:6:44: help: read through it where a test says it is not ('if x != null'), or write 'h.next!'
 compilation failed with 1 error
 === s8dpathglobal.olang
 s8dpathglobal.olang:7:12: error[T2c]: 'g.next' is a N?&, which may be null
@@ -5512,10 +5562,10 @@ t13atextmutref.olang:3:12: error[T13a, T29c]: 'mut' on a String, which never cha
       |            ^~~
 t13atextmutref.olang:3:12: note: 'mut' makes a reference writable
 t13atextmutref.olang:3:12: help: write text through 'mut Array<Char>&', read it through 'String&'
-t13atextmutref.olang:4:31: error[T13a, T29c]: a String never changes once it is made
-    4 |     for i in range t.Len() { t[i] = t[i].ToUpper() }
-      |                               ^
-t13atextmutref.olang:4:31: help: write 'c Array<Char> = t', change 'c', then 'String(c)'; or 'b := StringBuilder()', 'b.Push(t)', 'b.ToString()'
+t13atextmutref.olang:4:30: error[T13a, T29c]: a String never changes once it is made
+    4 |     for i in range t.Len(): t[i] = t[i].ToUpper()
+      |                              ^
+t13atextmutref.olang:4:30: help: write 'c Array<Char> = t', change 'c', then 'String(c)'; or 'b := StringBuilder()', 'b.Push(t)', 'b.ToString()'
 compilation failed with 2 errors
 === t13atextslice.olang
 t13atextslice.olang:6:9: error[T13a, T29c]: a String never changes once it is made
@@ -5542,10 +5592,10 @@ t13bafterdefer.olang:7:12: error[T13b]: 'f' is handed on here, and File is uniqu
 t13bafterdefer.olang:7:12: note: a unique value given by value lands once more only at its last mention, and 'f' is mentioned after
 compilation failed with 1 error
 === t13bafterloop.olang
-t13bafterloop.olang:5:31: error[T13b]: 'f' is handed on here, and File is unique
-    5 |     for _ in range 2 { v.Push(f) }
-      |                               ^
-t13bafterloop.olang:5:31: note: a unique value given by value lands once more only at its last mention, and 'f' is mentioned after
+t13bafterloop.olang:5:30: error[T13b]: 'f' is handed on here, and File is unique
+    5 |     for _ in range 2: v.Push(f)
+      |                              ^
+t13bafterloop.olang:5:30: note: a unique value given by value lands once more only at its last mention, and 'f' is mentioned after
 compilation failed with 1 error
 === t13baliasafter.olang
 t13baliasafter.olang:16:23: error[T13b]: 't' is handed on here, and 'alias', which reaches it, is used after
@@ -5749,7 +5799,7 @@ t13cfieldtext.olang:3:43: help: a field is an integer, Bool, Char, float, payloa
 compilation failed with 1 error
 === t13cforin.olang
 t13cforin.olang:10:14: error[T13c]: 'h.lanes' is a field of a packed struct, so no reference names it
-   10 |     for x in h.lanes { n += I64(x) }
+   10 |     for x in h.lanes: n += I64(x)
       |              ^~~~~~~
 t13cforin.olang:10:14: note: it is at a bit offset
 t13cforin.olang:10:14: help: copy it into a local first ('v := h.lanes') and lend that
@@ -6242,11 +6292,11 @@ t22apushed.olang:12:8: note: instantiated here, with T = fn&(mut N&, N&)
 t22apushed.olang:12:8: help: write 'keeps b in a' after its signature
 compilation failed with 1 error
 === t22areturncycle.olang
-t22areturncycle.olang:10:24: error[T22b]: 'link' keeps 'b' in 'a'
-   10 |     if n == 0 { return link }
-      |                        ^~~~
-t22areturncycle.olang:10:24: note: the function type of this return (from a function calling itself, or among several results) says nothing of that
-t22areturncycle.olang:10:24: help: write 'keeps b in a' after its signature
+t22areturncycle.olang:10:23: error[T22b]: 'link' keeps 'b' in 'a'
+   10 |     if n == 0: return link
+      |                       ^~~~
+t22areturncycle.olang:10:23: note: the function type of this return (from a function calling itself, or among several results) says nothing of that
+t22areturncycle.olang:10:23: help: write 'keeps b in a' after its signature
 compilation failed with 1 error
 === t22bglobalkeep.olang
 t22bglobalkeep.olang:11:15: error[T22a]: 'keepIt' ties where what it is given lives to what it keeps or gives back
@@ -6509,13 +6559,13 @@ t25ccopyfill.olang:9:24: error[T25c]: a copy of a read-only Box cannot be stored
 t25ccopyfill.olang:9:24: help: store one of its own, made from its parts
 compilation failed with 1 error
 === t25ccopyforin.olang
-t25ccopyforin.olang:11:22: error[T25c]: this writes through a reference a read-only copy holds
-   11 |     for b in GA { b.P[0] = 1 }
-      |                      ^
-t25ccopyforin.olang:11:22: note: a copy of a place reached read-only writes nothing it shares
+t25ccopyforin.olang:11:21: error[T25c]: this writes through a reference a read-only copy holds
+   11 |     for b in GA: b.P[0] = 1
+      |                     ^
+t25ccopyforin.olang:11:21: note: a copy of a place reached read-only writes nothing it shares
 t25ccopyforin.olang:11:5: note: 'b' copies a place reached read-only, so it is read-only
-   11 |     for b in GA { b.P[0] = 1 }
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~
+   11 |     for b in GA: b.P[0] = 1
+      |     ^~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === t25ccopyfuncvalue.olang
 t25ccopyfuncvalue.olang:9:10: error[T25c]: this lambda cannot be a function value
@@ -6589,8 +6639,8 @@ t25ccopystore.olang:10:10: help: store one of its own, made from its parts
 compilation failed with 1 error
 === t25cforinwrites.olang
 t25cforinwrites.olang:19:5: error[T25c]: a read-only reference cannot become writable
-   19 |     for x in hs[0].ring { t += x }
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   19 |     for x in hs[0].ring: t += x
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~
 t25cforinwrites.olang:19:5: note: what is reached read-only stays so - a read-only parameter, and a local copied from one (x := r copies the reference, not what it names)
 t25cforinwrites.olang:19:5: help: pass a writable reference, change a copy of your own ('r.Copy()'), or, where a 'mut' parameter asks for it, make that parameter read-only
 compilation failed with 1 error
@@ -6680,9 +6730,9 @@ t29dradixbad.olang:4:16: error[T29d]: this literal enters Radix through its cons
 t29dradixbad.olang:4:16: note: it fails with an error no clause handles
 compilation failed with 1 error
 === t29dreturn.olang
-t29dreturn.olang:4:18: error[C2b]: a constructor gives no value - its fields are the instance; fail with 'error'
-    4 |     if v > 100 { return 100 }
-      |                  ^~~~~~~~~~
+t29dreturn.olang:4:17: error[C2b]: a constructor gives no value - its fields are the instance; fail with 'error'
+    4 |     if v > 100: return 100
+      |                 ^~~~~~~~~~
 compilation failed with 1 error
 === t29dvalue.olang
 t29dvalue.olang:8:17: error[T6b]: I32 does not flow into Percent - convert it, as Percent(x)
@@ -6790,7 +6840,7 @@ t2cnarrowkill.olang:8:12: help: read through it where a test says it is not ('if
 compilation failed with 1 error
 === t2cnevernull.olang
 t2cnevernull.olang:5:10: error[T2c]: 'n' is a N&, never null, so this is always false
-    5 |     if n == null { return 0 }
+    5 |     if n == null: return 0
       |          ^~
 t2cnevernull.olang:4:11: note: the type is written here - write '?&' for '&' where it may be null
     4 | fn get(n N&) I64 {
@@ -7211,11 +7261,11 @@ t6alocalnote.olang:8:5: error[S3]: 'give(n * 2 + 1)' gives a value and does noth
 t6alocalnote.olang:8:5: help: use the value (assign it, pass it on), or leave the call out
 compilation failed with 2 errors
 === t6arangenote.olang
-t6arangenote.olang:7:35: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
-    7 |     for i in range 1, 10 { l.Push(i) }
-      |                                   ^
+t6arangenote.olang:7:34: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
+    7 |     for i in range 1, 10: l.Push(i)
+      |                                  ^
 t6arangenote.olang:7:23: note: the range's literals make 'i' I64 - write 'I32(10)' here for I32 values
-    7 |     for i in range 1, 10 { l.Push(i) }
+    7 |     for i in range 1, 10: l.Push(i)
       |                       ^~
 compilation failed with 1 error
 === t6aspawnnote.olang
@@ -7485,25 +7535,25 @@ compilation failed with 1 error
 vec01view.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
    11 |     try io.PutLine($d[0])
       |                     ^
-vec01view.olang:10:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
-   10 |     for i in range 100 { v.Push(i) }
-      |                            ^~~~
+vec01view.olang:10:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   10 |     for i in range 100: v.Push(i)
+      |                           ^~~~
 compilation failed with 1 error
 === vec04lend.olang
 vec04lend.olang:12:31: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
    12 |     try io.PutLine($grow(v, v.View()))
       |                               ^~~~
-vec04lend.olang:6:28: note: 'grow' may grow it here
-    6 |     for i in range 100 { v.Push(i) }
-      |                            ^~~~
+vec04lend.olang:6:27: note: 'grow' may grow it here
+    6 |     for i in range 100: v.Push(i)
+      |                           ^~~~
 compilation failed with 1 error
 === vec05elem.olang
 vec05elem.olang:13:37: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
    13 |     try io.PutLine($grow(v, v.View()[0]))
       |                                     ^
-vec05elem.olang:7:28: note: 'grow' may grow it here
-    7 |     for i in range 100 { v.Push(Pt(i)) }
-      |                            ^~~~
+vec05elem.olang:7:27: note: 'grow' may grow it here
+    7 |     for i in range 100: v.Push(Pt(i))
+      |                           ^~~~
 compilation failed with 1 error
 === vec06through.olang
 vec06through.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
@@ -7541,9 +7591,9 @@ compilation failed with 1 error
 vec14nominalconv.olang:18:21: error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown
    18 |     try io.PutLine($d[0] + " " + $d[1])
       |                     ^
-vec14nominalconv.olang:16:29: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()')
-   16 |     for i in range 1000 { w.Push(i + 100) }
-      |                             ^~~~
+vec14nominalconv.olang:16:28: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()')
+   16 |     for i in range 1000: w.Push(i + 100)
+      |                            ^~~~
 compilation failed with 1 error
 === vec160genericselfhold.olang
 vec160genericselfhold.olang:5:5: error[T16]: N<I64> cannot hold itself by value - hold it through a reference ('&')
@@ -7557,9 +7607,9 @@ compilation failed with 1 error
 vec19listconv.olang:13:21: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
    13 |     try io.PutLine($l[0])
       |                     ^
-vec19listconv.olang:12:28: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
-   12 |     for _ in range 100 { v.Push('b') }
-      |                            ^~~~
+vec19listconv.olang:12:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   12 |     for _ in range 100: v.Push('b')
+      |                           ^~~~
 compilation failed with 1 error
 === vec54assertmsgreturn.olang
 vec54assertmsgreturn.olang:26:51: error[S17]: an assert's message may not return - it is evaluated only where it is used, and gives text
@@ -7712,10 +7762,10 @@ x19macro.olang:5:24: error[X19]: the C import has no olang form of 'stdout': a v
       |                        ^~~~~~
 compilation failed with 1 error
 === x21bool.olang
-x21bool.olang:5:38: error[X21]: Bool cannot be a C variable argument
-    5 | fn main() { s.printf("%d\n".ToC(), 1 > 0) }
-      |                                      ^
-x21bool.olang:5:38: help: pass a number, a reference or an array; a Bool as 'I32(b)', a struct by reference
+x21bool.olang:7:28: error[X21]: Bool cannot be a C variable argument
+    7 |     s.printf("%d\n".ToC(), b)
+      |                            ^
+x21bool.olang:7:28: help: pass a number, a reference or an array; a Bool as 'I32(b)', a struct by reference
 compilation failed with 1 error
 === x21struct.olang
 x21struct.olang:11:28: error[X21]: P cannot be a C variable argument

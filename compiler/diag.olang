@@ -191,7 +191,7 @@ fn (d mut Diagnostics&) ErrorOncePerLine(at Where, m diagmsg.Msg) I64 { return d
 
 fn (d mut Diagnostics&) report(at Where, m diagmsg.Msg, oncePerLine Bool) I64 {
     if d.Quiet: return -1
-    if d.Lenient and Untidy(m.Rule) {
+    if d.Lenient and Scripting(m.Rule) {
         for w in d.warns {
             if w.text == m.Text and w.at == at: return -1
         }
@@ -733,6 +733,10 @@ fn (d Diagnostics&) HasFatal() Bool { return d.fatal }
 
 # B3e: what interpret reports as a warning and runs the program beside - an unread local (D3b), an unused import (M5a)
 fn Untidy(rule String&) Bool { return rule == "D3b" or rule == "M5a" }
+
+# B3g: what scripting mode (and interpret, the prompt, the notebook) reports as a warning and runs the program beside -
+# the untidy, and a condition the same on every build (S8a); build, run, test and the LSP keep S8a an error
+fn Scripting(rule String&) Bool { return Untidy(rule) or rule == "S8a" }
 
 # the warnings (Lenient), each a row "path:line:col: warning[RULE]: text" with its source, in report order
 fn (d mut Diagnostics&) Warnings() String {

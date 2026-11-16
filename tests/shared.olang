@@ -4357,13 +4357,14 @@ test "D10a: every path produces a result" {
 # A leading zero stays decimal: there is no octal syntax, C's bare-0 form being widely held to be a
 # mistake, and reading "0755" as octal would have silently changed what existing programs meant.
 test "L10a: hexadecimal literals" {
-    assert 0xF56E == 62830
-    assert 0xff == 0xFF
-    assert 0X10 == 16
-    assert -0x10 == -16
-    assert 07 == 7        # a leading zero is decimal, not octal
-    assert 0xFFFFFFFF == 4294967295        # wider than I32, so I64 by T6a
-    assert 0xFFFFFFFFFFFFFFFF == -1        # the full width, as a bit pattern
+    # each literal read through a local: a comparison of two literals is S8a's error
+    h1, h2, h3, h4, h5 I64 = 0xF56E, 0xff, 0X10, -0x10, 07
+    assert h1 == 62830 and h2 == 0xFF and h3 == 16 and h4 == -16
+    assert h5 == 7        # a leading zero is decimal, not octal
+    h6 := 0xFFFFFFFF
+    assert h6 == 4294967295        # wider than I32, so I64 by T6a
+    h7 I64 = 0xFFFFFFFFFFFFFFFF
+    assert h7 == -1        # the full width, as a bit pattern
     assert (0xF0 | 0x0F) == 0xFF
     b U8 = 0xFF
     assert b == 255
@@ -4374,32 +4375,25 @@ test "L10a: hexadecimal literals" {
 # and "1_e5" errors. Nothing needs saying about the other end: a leading "_" is a letter, so "_1" is an
 # identifier and never reaches the number path.
 test "L10c: binary literals" {
-    assert 0b1010 == 10
-    assert 0B1111 == 15
-    assert 0b0 == 0
-    assert -0b101 == -5
+    b1, b2, b3, b4 I64 = 0b1010, 0B1111, 0b0, -0b101
+    assert b1 == 10 and b2 == 15 and b3 == 0 and b4 == -5
     flags U8 = 0b11111111
     assert flags == 255
 }
 
 test "L10b: digit separators" {
-    assert 1_000_000 == 1000000
-    assert 0xFF_FF == 65535
-    assert 0b1010_1010 == 170
-    assert 1_000.5 == 1000.5
-    assert 1.000_5 > 1.0
-    assert 1e1_0 > 1000000000.0
+    i1, i2, i3 I64 = 1_000_000, 0xFF_FF, 0b1010_1010
+    assert i1 == 1000000 and i2 == 65535 and i3 == 170
+    f1, f2, f3 F64 = 1_000.5, 1.000_5, 1e1_0
+    assert f1 == 1000.5 and f2 > 1.0 and f3 > 1000000000.0
 }
 
 # an exponent makes a literal a float whether or not a "." appeared, and is recognised only when the
 # whole of it is there - so "1e" is still an int literal followed by an identifier and nothing that
 # parsed before changed meaning.
 test "L12a: exponent literals" {
-    assert 1.0e3 == 1000.0
-    assert 1e3 == 1000.0
-    assert 2.5E2 == 250.0
-    assert 1.0e+3 == 1000.0
-    assert 1.0e-3 < 0.01
+    e1, e2, e3, e4, e5 := 1.0e3, 1e3, 2.5E2, 1.0e+3, 1.0e-3
+    assert e1 == 1000.0 and e2 == 1000.0 and e3 == 250.0 and e4 == 1000.0 and e5 < 0.01
     big F64 = 1.0e30
     assert big > 1.0e29
 }
@@ -10536,11 +10530,14 @@ TxRaw := """
     done
     """
 fn textsAll(one I64) Bool {
-    hex Bool = "\x41\x62\x63" == "Abc" and "\xff".Len() == 1 and U8("\xFF"[0]) == 255 and '\x41' == 'A' and '\x00' == '\0'
-    uni Bool = "\u{41}" == "A" and "\u{E9}".Len() == 2 and U8("\u{E9}"[0]) == 0xC3 and U8("\u{E9}"[1]) == 0xA9
+    # each escape read through a local: a comparison of two literals is S8a's error
+    t1, t2, c1, c2, c3, c4 := "\x41\x62\x63", "\u{41}", '\x41', '\x00', '\u{7A}', '\u{0}'
+    t3 := """"""
+    hex Bool = t1 == "Abc" and "\xff".Len() == 1 and U8("\xFF"[0]) == 255 and c1 == 'A' and c2 == '\0'
+    uni Bool = t2 == "A" and "\u{E9}".Len() == 2 and U8("\u{E9}"[0]) == 0xC3 and U8("\u{E9}"[1]) == 0xA9
     uni2 Bool = "\u{20AC}".Len() == 3 and "\u{1F600}".Len() == 4 and U8("\u{1F600}"[0]) == 0xF0 and U8("\u{10FFFF}"[3]) == 0xBF
-    ch Bool = '\u{7A}' == 'z' and '\u{0}' == '\0'
-    raw Bool = """C:\dir\n""".Len() == 8 and """a"b""" == "a" + $Char(34) + "b" and """""" == ""
+    ch Bool = c3 == 'z' and c4 == '\0'
+    raw Bool = """C:\dir\n""".Len() == 8 and """a"b""" == "a" + $Char(34) + "b" and t3 == ""
     lines Bool = TxRaw == "olang build FILE\n    builds FILE\n\ndone" and TxRaw.Len() == 38
     e := """
         """

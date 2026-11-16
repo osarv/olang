@@ -1,0 +1,6 @@
+# check: fail error[S8a]: 'true == false' compares two literals, so it is false on every build
+# S8a: a comparison of two literals at the top level (B9) gives one answer on every build
+if true == false {
+    X I64 = 1
+}
+fn main() { }

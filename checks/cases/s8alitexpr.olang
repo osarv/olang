@@ -1,0 +1,6 @@
+# check: fail error[S8a]: '-1.5 >= 2.0' compares two literals, so it is false on every build
+# S8a: a comparison of two literals as a value
+fn main() {
+    b := -1.5 >= 2.0
+    Println($b)
+}

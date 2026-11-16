@@ -1,0 +1,10 @@
+# check: run
+# B9, S1b: a top-level branch takes a one-line body - one declaration, the module's
+Debug Bool = true
+if Debug: import "std/pair"
+if Debug: X I64 = 1
+else: X I64 = 2
+fn main() {
+    p := pair.Pair(X, 3)
+    Println($p.Second + $X)
+}

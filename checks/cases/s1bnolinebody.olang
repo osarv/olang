@@ -1,0 +1,4 @@
+# check: fail error[S1b]: this takes a block here, not a one-line body: write { }
+# S1b: a function's body is a block, never a one-line body
+fn f() I64: return 1
+fn main() { }

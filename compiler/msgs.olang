@@ -627,6 +627,9 @@ type Diag enum {
     NullToNonNull
     NoteNullableDecl
     NeverNull
+    LitCompare
+    TopLineOne
+    NoLineBody
     NoZeroNonNull
     ReadMaybeNull
     NullToArray
@@ -1105,6 +1108,8 @@ fn TargetNoClang(text String&) r.Msg { return r.Msg(Diag.TargetNoClang, "B12", "
 fn TargetNoEmulator(text String&) r.Msg { return r.Msg(Diag.TargetNoEmulator, "B12a", "nothing here runs " + $text + " programs", "", "install qemu-user (qemu-" + $text + "), or name an emulator with OLANG_EMULATOR") }
 fn ExplainNeedsRule() r.Msg { return r.Msg(Diag.ExplainNeedsRule, "B11a", "explain takes one rule, as 'olang explain B1'") }
 fn ExplainNeedsName(file String&) r.Msg { return r.Msg(Diag.ExplainNeedsName, "B11b", $"explain " + $file + " takes the name of one of its items, as 'olang explain " + $file + " main'") }
+fn TopLineOne() r.Msg { return r.Msg(Diag.TopLineOne, "S1b", "a top-level branch's one-line body is one declaration on the line of its ':' - write a block, '{ ... }'") }
+fn NoLineBody() r.Msg { return r.Msg(Diag.NoLineBody, "S1b", "this takes a block here, not a one-line body: write { }") }
 fn LineBodyOnLine() r.Msg { return r.Msg(Diag.LineBodyOnLine, "S1b", "a one-line body stands on the line of its ':' - write a block, '{ ... }'") }
 fn LineBodyNotSimple(what String&) r.Msg { return r.Msg(Diag.LineBodyNotSimple, "S1b", $"a one-line body is one simple statement, not " + $what + " - write a block, '{ ... }'") }
 fn NotebookUsage() r.Msg { return r.Msg(Diag.NotebookUsage, "B24", "notebook takes the word run and one notebook", "write 'olang notebook run FILE.ipynb'") }
@@ -1639,6 +1644,7 @@ fn NullTestOfValue(ty String&) r.Msg { return r.Msg(Diag.NullTestOfValue, "E10c"
 fn MayBeNull(text String&, ty1 String&, ty2 String&, bang String&) r.Msg { return r.Msg(Diag.MayBeNull, "T2c", "'" + $text + "' is a " + $ty1 + ", which may be null, and " + $ty2 + " never is", "", "test it first ('if x != null'), or write '" + $bang + "!'") }
 fn NullToNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NullToNonNull, "T2c", $ty1 + " is never null - a reference that may be is written " + $ty2) }
 fn NoteNullableDecl() r.Msg { return r.Msg(Diag.NoteNullableDecl, "", "the type is written here - write '?&' for '&' where it may be null") }
+fn LitCompare(text String&, val String&) r.Msg { return r.Msg(Diag.LitCompare, "S8a", "'" + $text + "' compares two literals, so it is " + $val + " on every build", "", "write '" + $val + "'") }
 fn NeverNull(text String&, ty String&, val String&) r.Msg { return r.Msg(Diag.NeverNull, "T2c", "'" + $text + "' is a " + $ty + ", never null, so this is always " + $val) }
 fn NoZeroNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NoZeroNonNull, "T2c", $ty1 + " is never null, so it has no zero value - give it a value, or write " + $ty2) }
 fn ReadMaybeNull(text String&, ty String&, bang String&, why String& = "") r.Msg { return r.Msg(Diag.ReadMaybeNull, "T2c", "'" + $text + "' is a " + $ty + ", which may be null", why, "read through it where a test says it is not ('if x != null'), or write '" + $bang + "!'") }
