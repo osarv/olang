@@ -155,7 +155,7 @@ in the prelude's `SetAt` - each released through its address: a part region is r
 per element is made. An element owning more (a `Vec<String>`: the text its buffer holds) still keeps that and is
 reported (checks' gaps.olang).
 
-### 2.3 Round 7 (wt-freeing7): a Map in an element, gap 20, and a copied Vec of text
+### 2.3 Rounds 7 and 8 (wt-freeing7, wt-freeing8): a Map in an element, gap 20, and a copied Vec of text
 
 **An element holding a Map** (gap 17's last kind). `free.MapFields` reads the prelude Map's `ents`, `n` and `next`; a Map
 whose entries own storage only in text slots and in their value's own place (`free.EntryOnly`: a `String` key or value,
@@ -177,24 +177,50 @@ storage given a call's value read in place is as stable as that value (`stablePl
 statement could change the view, the copy is made in the innermost block open (`m.Ref(k)![3][j]`), never where the
 callee's result would live. 151 MB to 13 MB at 80,000 reads; checks' freeing views.
 
-**A copied Vec of text - measured, not built (item 3).** A by-value argument a callee changes (`longest(rows[i])`) and
-`c := rows[i]` copy a Vec of text; a copy's strings are built in no slot, so the text place keeps (RCopied) and an
-element's let-go puts nothing back. Round 7 built every copy's text of a place built in slots in slots of where the copy
-goes (the Copy helper's array and struct parts, `lower.copySlots`, guarded by the place's decision; `free.untracked`
-then keeping no slot place for a copy lowering makes) and measured it:
+**A copied Vec of text (item 3): measured in round 7, built in round 8 (wt-freeing8).** A by-value argument a callee
+changes (`longest(rows[i])`) and `c := rows[i]` copy a Vec of text. Round 7 built every copy's text in slots of where
+the copy goes (the Copy helper's array and struct parts, `lower.copySlots`, guarded by the place's decision;
+`free.untracked` keeping no slot place for a copy lowering makes) and took it out at +70% a copy: 142-152 ms against
+238-296 ms for 1,000,000 copies of a `Vec<String>` of 20 strings. The cost was not the slot list. Each string paid for a
+slot scope cleared whole (128 bytes, its eight records included), a bump tried in `@__olang_slot_chunk` and failed, a
+call to `__olang_scope_alloc_slow`, a tail call to `__olang_gen_buf`, and two calls for its class. Round 8:
 
-| 1,000,000 copies of a `Vec<String>` of 20 strings (a by-value argument the callee pushes to) | time |
-|---|---|
-| arena (master, the text place kept) | 142-152 ms |
-| slots (the place sole, each string a slot) | 238-296 ms |
+- an allocation in a scope a local holds (`mir.ScopeRef.Held`: a slot scope, a region, a part) goes through
+  `__olang_held_alloc` (emit.olang `arrayStorage`, `textStorage`), which tests the head and makes a slot scope's
+  allocation one call, `__olang_slot_alloc`: the class of up to 256 bytes worked out with no table, the slot taken from
+  the scope part's free list or bumped (`__olang_gen_alloc`, inlined into it), the header and the record written as
+  `gen_buf` writes them. Anything larger is still `gen_buf`'s. No other allocation site grows;
+- a slot scope clears its scope header and its count, not its records (only those below the count are read);
+- a copied array of text makes one slot scope before its loop, not one a string (`lower.slotsOf`).
 
-About 100 ns more a copy, 5 ns a string (+70%): `__olang_gen_buf`, the slot allocation, is a call per string (its class
-looked up, a free list read, a header written) where the arena bumps inline. That is a real per-copy cost, so it is not
-in: the copies keep the text place, and checks' gaps.olang is that case (a Vec of text copied, the element's text kept).
-copytext at 80,000 turns: 130 MB on master, 52 MB now (the buffers freed, below), 13 MB with slots. Making it cost
-nothing needs a slot allocation as cheap as a bump - an inline fast path in `gen_buf` (the class of a size a table
-lookup, the free list's head in the slot scope) - a runtime change of its own; or a copy's text built in its own part
-region per copy (~160 bytes a copy). The user's to choose.
+Inlining `__olang_slot_alloc` into modules as well was measured and left out: it saved nothing over the one call, and
+it made the self-build's clang work 3-7 s longer. Alternated in one run (ms, 41 runs each, min / median):
+
+| 1,000,000 copies of a `Vec<String>` of 20 strings (a by-value argument the callee pushes to) | min | median |
+|---|---|---|
+| arena (master: the text place kept) | 144 | 159 |
+| slots, round 7 (`gen_buf` through the slow path) | 231 | 249 |
+| slots, round 8 with `__olang_slot_alloc` inlined | 149 | 161 |
+| slots, round 8 as built (`__olang_slot_alloc` one call) | 153 | 164 |
+
+That is within 4% of the arena, inside this machine's noise (another run gave 150 against 169, one before it 152 against
+156), so round 8 builds it. checks' freeing copytext (80,000 turns of a by-value argument and a local copy) goes from 50
+MB to 12 MB and from 86 ms to 70 ms (the slots are reused). The compiler building itself, cold, master's compiler
+against round 8's on the same source: the front end 11.6 s against 11.4 s, clang 73-74 s against 74-75 s - equal within
+the noise of two runs each.
+
+Two bugs found once copies stopped keeping the text place:
+
+- a slot scope made over a slot scope (a `Map` entry's text copied in a Copy helper `Map.add` hands a slot scope to)
+  read a scope as its tail chunk: checks' freeing mapvalues ended in a segmentation fault. A slot scope made over one
+  now builds into its tail (emit.olang `slotScope`, `flatScope`);
+- a fixed array a comprehension writes element by element (T7c: `Array<String>[$w + "!" for w in ws]` over three
+  words) is declared unset (D13d) and was never cleared, so each element's store let go of whatever the frame held once
+  its text place was decided sole - tests/valueparts.olang and tests/bench.olang stopped under `-sanitize`. An unset
+  array whose elements are a place now holds zero bits (`lower.elemsPlaced`), as an unset local place does.
+
+checks' gaps.olang, the fixture of a gap -memory -check names, is now an `Array<Map<String, Vec<String>>>` copied: the
+copy of a Map whose values are Vecs of text is made with no store into its places (two rows).
 
 What round 7 did build for it: the buffer. A by-value argument the callee changes is a copy lowering surely makes
 (`lower.argView` leaves out only one the callee keeps as it is), so what the argument reads is read for the copy alone
@@ -324,6 +350,10 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   from a Map `SetAt` copied in no longer puts back text that is no slot; a by-value argument's copy reads nothing in
   use (its buffer freed). Measured and left for the user: a copy's text in slots, +5 ns a string. Fixtures: checks'
   freeing mapelems, views; gaps.olang a Vec of text copied.
+- 2026-11-16, wt-freeing8 (2.3): a copy's text built in slots (round 7's item 3), with a slot scope's allocation one
+  call (`__olang_held_alloc`, `__olang_slot_alloc`) - within 4% of the arena; a slot scope over a slot scope and an
+  unset comprehension array's let-go of garbage fixed. Fixtures: checks' freeing copytext; gaps.olang a Map of Vecs of
+  text copied.
 - 2026-11-15, wt-sect8: gap 19 closed (`Plan.RetFrame`, lowering's retFrames: a returned value local's slot in the
   frame, its parts where the result goes - 90 MB to 1.6 MB at 4,000,000 calls; checks' freeing returned). Gap 17's text
   part analysed (2.2) and left: a release walk over the old buffer's live elements and a fill exemption are the next

@@ -38300,3 +38300,51 @@ reads), so what the argument reads is read for the copy alone and over before th
 Fixtures: checks' freeing mapelems (four Map kinds, through an array store and `SetAt`, a removal from a Map copied
 in) and views (gap 20, a copy in the reading block too), each under 8 MB of address space and interpreted;
 gaps.olang a Vec of text copied.
+
+## 2026-11-16: a copy's text built in slots, with a slot allocation one call (wt-freeing8)
+
+**Why it came back.** Round 7 built a copy's text in slots of where the copy goes - so that a program copying a Vec of
+text (a by-value argument its callee changes, `c := rows[i]`) frees that text where the element is given another - and
+took it out: 1,000,000 copies of a `Vec<String>` of 20 strings ran 238-296 ms against 142-152 ms in the arena. The brief
+for round 8 was to make the slot allocation cheap, and to keep it only within about 10% of the arena. Reading the IR
+showed where the time went: not the free list, but what came before it. Each string made a slot scope (128 bytes
+cleared, its eight records included), tried a bump in `@__olang_slot_chunk` (no room, by design), called
+`__olang_scope_alloc_slow`, which tail-called `__olang_gen_buf`, which called `__olang_gen_class_of` and
+`__olang_gen_class_size`.
+
+**What was built.** An allocation in a scope a function holds in a local (`mir.ScopeRef.Held`: a slot scope, a region, a
+part) goes through `__olang_held_alloc`, which tests the scope's head and makes a slot scope's allocation one call,
+`__olang_slot_alloc` (the class of up to 256 bytes by arithmetic, the free list's pop or a bump inlined from
+`__olang_gen_alloc`, the header and record as `gen_buf` writes them; larger sizes still `gen_buf`). Only held sites
+test, so no other allocation grows. A slot scope clears its header and count, not its records. A copied array of text
+makes one slot scope before its loop (`lower.slotsOf`), not one per string. Then round 7's item 3 again: the Copy
+helper's `copyAt` builds the text of a place built in slots in slots of where it goes (`lower.copySlots`), and
+`free.untracked` keeps no slot place for a copy lowering makes.
+
+**Measured** (alternated, 41 runs each, min/median ms): arena 144/159, round 7's slots 231/249, round 8 with
+`__olang_slot_alloc` inlined into modules 149/161, round 8 as built (one call) 153/164 - within 4%, inside this
+machine's noise. Inlining it too was left out: it saved nothing measurable and made the self-build's clang 3-7 s longer,
+while the one-call form leaves it as master's (73-74 s against 74-75 s, two cold runs each; the front end 11.6 s against
+11.4 s). checks' freeing copytext: 50 MB to 12 MB, 86 ms to 70 ms. Shipped, as the brief allowed; nothing goes to the
+user.
+
+**Two bugs it surfaced, both fixed.** (1) Checks' freeing mapvalues ended in a segmentation fault: `Map.add` hands its
+entry's Copy helper a slot scope, and the helper's text copy made a slot scope over it, whose allocation read the slot
+scope as a scope's tail chunk (a table at address 1). A slot scope made over a slot scope now builds into that one's
+tail (emit.olang `slotScope`, `flatScope`). (2) tests/valueparts.olang and tests/bench.olang stopped under `-sanitize`
+("use after scope closed"): a comprehension of a count known while compiling (T7c) writes a fixed array declared unset
+(D13d) element by element, and with the copies no longer keeping it the array's text place was decided sole - so each
+store let go of whatever bytes the frame held there, a pointer into a closed scope's quarantined chunk. Master was safe
+only because every such comprehension's result was copied and the copy kept the place. An unset array whose elements are
+a place now holds zero bits (`lower.elemsPlaced`), as an unset local place already did (gap 16).
+
+**Found on the way, not fixed:** a second build of the compiler in a directory holding the first build's scope records
+(`build/rec`, B3i) fails with O10c at compiler/lsp.olang's `work.Run()` where a cold build of the same source passes -
+on master's source with master's compiler too. Every build of round 8 was made cold (`rm -rf build/rec`).
+
+Fixtures: checks' freeing copytext (under 8 MB, interpreted alike); gaps.olang, the gap fixture -memory -check fails on,
+is now an `Array<Map<String, Vec<String>>>` copied (a Map whose values are Vecs of text is copied with no store into its
+places: two rows). SPEC is unchanged: O8f already says such a let-go frees; it now does. Verified: the self-build fixed
+point; the scenarios freeing, earlyfree, memoryplaced, regions, landing, chunkpool, scopefind, fieldset and twins;
+tests/*.olang under `-debug -sanitize`; scopefuzz seed 7, 150 programs, 0 findings; evaldiff (846 files, none differing
+unlisted); tokdiff, astdiff, namesdiff, layoutdiff, consistency.
