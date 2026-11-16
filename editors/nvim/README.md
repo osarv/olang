@@ -27,7 +27,7 @@ A plugin directory: put it on the runtime path and `.olang` files (and scripts b
 - `gd` on a bracket jumps to its partner (as `%`), anywhere else to the definition; signs are drawn in the line-number column (an `E` replaces that line's number), so a diagnostic appearing never adds a column or shifts and rewraps the text.
   nothing is mapped already; `vim.g.olang_no_maps = 1` turns them off.
 
-Markdown files read comfortably: a long line wraps at word boundaries with list items' indentation kept, `**` and `` ` `` around text are hidden, and ```` ```olang ```` blocks are highlighted as olang (`ftplugin/markdown.lua`, `ftdetect/olang.lua`); `vim.g.olang_markdown = 0` leaves Markdown alone. For rendered headings and tables, add [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim).
+Code blocks fenced as ```` ```olang ```` in Markdown are highlighted as olang (`ftdetect/olang.lua`, through Neovim's classic markdown syntax); `vim.g.olang_markdown = 0` leaves them alone.
 
 Everything but the last works without the server; all of it needs `olang` on `PATH`.
 
