@@ -21,4 +21,5 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-(none)
+1. A module's own declaration and a prelude name (asked 2026-11-16). With no shadowing, every name added to the prelude can break code already using it (prelude Scan broke oann's ad/ops Scan, renamed GatedScan; prelude InputError broke tests/worker, renamed WorkInputError). Default: a clash is an error, renamed by hand or an olang fix tool. Recommendation: a module's own top-level declaration takes precedence over a prelude name (the prelude the outermost scope), so prelude additions never break code - shadowing at exactly that one boundary.
+2. VNNI byte dot products (asked 2026-11-16). No olang form produces vpdpbusd (u8 x s8, 64 products an instruction); INT8 at 64+ rows needs it (oann repro/vnnidot.olang). Default: none, INT8 stays 0.53-0.75x F32 at 64+ rows. Recommendation: a named lane operation for a widening byte dot product accumulated into I32 lanes (like the other lane operators; lowered to vpdpbusd where the target has it, plain code elsewhere), a visible named cost as principle 2 asks.
