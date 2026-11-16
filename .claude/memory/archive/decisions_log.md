@@ -3839,3 +3839,7 @@ stood:
 - The AI-code study's proposal 3 (asked 2026-11-15): an editor warning (W) for a spawned function writing a mutable global. Default: none. Recommendation: yes, editor only. (1 and 2 answered the same day.) ANSWERED 2026-11-15: "no, it's legal code, so don't warn on it".
 
 - The prompt's shadowing exception (asked 2026-11-14). The prompt keeps a cell's top-level locals as session globals, and lets a later declaration's parameters or locals share their names - a D3a exception for the prompt only (one line in names.olang). Default in effect: the exception. Options: (a) keep it (otherwise `x := 1` in one cell forbids `fn f(x I64)` in every later cell); (b) no exception: such a declaration is refused, naming the session global. Recommendation: (a) - the session's names are not the program's, and the exception exists only at the prompt. ANSWERED 2026-11-15: (a) keep - "we want to be able to create a local function or a function that takes X as a parameter without ... a previous X being declared ... in a previous cell ... clashing".
+
+## 2026-11-16, gap 11 withdrawn (closed at no run-time cost by part regions, wt-freeing3)
+
+1. Vec growth when a Vec is held whole by an owner or copied outside a region (gap 11, docs/freeing.md 2.1; asked 2026-11-15). Peak 98 MB against 66 MB where growth frees. Closing it may need a buffer region per copy, about 400 bytes at run time per such copy. Default: kept until the scope closes, reported by -memory -check. Recommendation: accept the cost only if the design round (running) finds no zero-cost design.
