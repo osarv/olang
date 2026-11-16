@@ -161,8 +161,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   result lands and passed down unchanged (the result scope, or a `RoleTail` one) - memory as `return`'s, constant stack,
   `-memory` names each site; a by-value parameter holding a destructor value must be handed on.
 - **`defer` is block-scoped (S19, the user's decision).** Last registered first, on every way out but the
-  process-ending ones; deferred code runs before a join's wait and before the scope closes; it may not leave.
-- **`errdefer` (S19e, the user's decision 2026-10-18).** `errdefer STATEMENT` / `errdefer { }`: deferred code run only
+  process-ending ones; deferred code runs before a join's wait and before the scope closes; it may not leave. One
+  spelling (2026-11-16): `defer { }` or the one-line body `defer: stmt`; the bare `defer stmt` is refused (BareDefer).
+- **`errdefer` (S19e, the user's decision 2026-10-18).** `errdefer: stmt` / `errdefer { }` (the bare form refused, as S19's): deferred code run only
   when an error leaves the block outward; one list with `defer`. None pending around a `yield` (S20).
 - **`match` (S12-S13f).** Several values per case, guards (`case P if c`), nested patterns, literals in payload
   positions, `case _` (alone, last); exhaustiveness (S13a). `match T` dispatches on a type variable (G15). **`case _`

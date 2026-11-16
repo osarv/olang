@@ -981,6 +981,7 @@
 | ok - E11c: $ renders through a declared Str, wherever the value sits
 | ok - T6b: numbers widen within their family, and meet at the wider
 | ok - T29f: extends inherits the base's methods and operators; without it a type reads as its base
+| ok - T29f: an extending number has its base's trait-bounded methods, giving the declared type
 | ok - E28/S12b: a conditional of literals takes its target's type; a value made in an arm is built where it lands
 | ok - T7/E12c: a reference field or element adopts a fresh array, each its own storage
 | ok - T7b: a returned local array is the caller's own, built where it lands or copied there

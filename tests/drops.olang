@@ -813,7 +813,7 @@ fn holders() String {
     }
     {
         g Grip = Grip(5)
-        defer t.seen.Push(9)
+        defer: t.seen.Push(9)
         l Lamp = Lamp(6, t)
         g.held = l
     }
@@ -907,12 +907,12 @@ test registeredHeld "ends a registered holder before a value registered before i
 
 # deferred code runs after everything, so a by-value parameter handed on there is handed on at its last mention: once,
 # on every way out - an errdefer's only where an error leaves, the parameter ended at the callee's end otherwise
-fn deferPush(v mut Vec<Res>&, r Res) { defer v.Push(r) }
+fn deferPush(v mut Vec<Res>&, r Res) { defer: v.Push(r) }
 
 type Late error { No }
 
 fn errdeferPush(v mut Vec<Res>&, r Res, fail Bool) ? {
-    errdefer v.Push(r)
+    errdefer: v.Push(r)
     if fail: error Late.No
 }
 

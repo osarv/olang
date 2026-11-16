@@ -99,7 +99,7 @@ fn main() {
         os.Exit(1)
         unreachable
     }
-    defer try os.RemoveAll(tmp) catch { }
+    defer: try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs.Max(1))
     for k in range work.Len() {
         work[k] = $tmp + "/w" + $k

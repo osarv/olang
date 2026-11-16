@@ -271,7 +271,7 @@ fn compilerUnderTest() String {
 
 test "olang serve mcp answers a scripted session: tools/list, check, explain, doc, format, test (B16)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     bad := $dir + "/bad.olang"
     good := $dir + "/good.olang"
     try os.WriteFile(bad, "fn main() {\n    x I32 = \"no\"\n}\n") catch os.Error { unreachable "no file" }

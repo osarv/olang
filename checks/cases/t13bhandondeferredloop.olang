@@ -6,7 +6,7 @@ type Blob unique struct(id I64) {
 }
 
 fn d(v mut Vec<Blob>&, w mut Vec<Blob>&, l Blob) {
-    for _ in range 2 { defer v.Push(l) }
+    for _ in range 2 { defer: v.Push(l) }
 }
 
 fn main() {

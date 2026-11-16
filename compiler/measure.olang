@@ -82,7 +82,7 @@ fn Line(built I64, runs Array<Sample>&) String {
 # run that did not succeed (the others are not made, and the line is of the runs made), else 0, or 1 where it cannot be started
 fn Measure(argv Array<String&>&, built I64, wanted I64 = 1, program String& = "") I32 {
     nowhere := fcntl.open("/dev/null\0", 1)
-    defer unistd.close(nowhere)
+    defer: unistd.close(nowhere)
     runs Vec<Sample>
     status I64 = 0
     for i in range wanted.Max(1) {

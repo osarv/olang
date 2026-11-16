@@ -38909,3 +38909,62 @@ What was decided, beyond the user's words:
   must be written again with `olang serve jupyter -install` (the user's oinit install.sh changed with it).
 - The consistency tool reads two-word modes from `help` and from SPEC B1's grammar (`"serve" server`, `server ::=
   "lsp" | "mcp" | "jupyter"`), and checks `olang serve lsp -option` written in the docs against the server's options.
+
+## 2026-11-16: `olang fix`'s tools touched valid code (B17; wt-fixtools)
+
+Running fix over oann (olang 07a0a9dd, from oann f038bfb) broke valid code five ways, each a tool changing a form its
+rule never named; the oann agent reverted them by hand. Each tool now changes only its own construct, with the case in
+its own test, and the six files fix to oann's hand-corrected result:
+- keyword_rename gave a promise word closing a trait method's signature a `_` (`mut Relax(...) F64 noalloc_`): only a
+  `fn` declaration's or a function type's promises were known. A promise after a `)` with only a result type between,
+  no assignment on the line and nothing but words, `?`, `{` or a comment after it stays (promisePlace).
+- builder_migrate took an error type's case `Open(path String)` for a bare call of the builder `Log.Open`: an error
+  set's cases are now skipped as an enum's are.
+- bare_typevars read `g(1, betaOf<A>(x))` as the old parameter form `(a<T>, b<T>)` and wrote `betaOf A(x)`: a
+  parameter's `<T>` is never followed by `(`, so a call with a type argument is left.
+- textbuild_migrate rewrote every `x := String(Array<Char>(...))` as the array, also one made filled and only read
+  (`String(Array<Char>(100000, 'a'))`); it now rewrites only a local its function writes element by element (`x[i] =`).
+- clone_migrate skipped a file only when a module among the files given declared `Clone()`; quantgraph reached
+  Tensor's own Clone through `ad/graph`. It now follows the file's imports from disk, transitively (std's excluded).
+
+Found on the way: the PutLine -> PutLn rename (putln_rename) read only .olang, .md, .txt and .want files, so the C-interop
+`.part` fixtures, the prompt's `.in` sessions, the notebook fixtures, the makefile's inline programs and a test string in
+compiler/lsp.olang kept `PutLine`; they are renamed, and the tool now reads those kinds of file too.
+
+### Fix leaves kept text alone; three more tools kept to their rules; defer_migrate (2026-11-16, wt-fixtools, the coordinator's calls)
+
+- **What fix walks.** A directory walk leaves out a migration tool's own source (one of fix's table, or one its
+  directory's README lists as run by `build/tools_NAME`) - its comments and tests hold the old spellings on purpose -
+  a case that must fail (`# check: fail` first: its refused text is what it checks), and every file under a directory
+  holding `.olangfix` (checks/fixtures: each fixture's text is what its scenario reads, line numbers included). Keyed on
+  what a file is, not on the olang repository's paths.
+- **helper_rename** renamed compiler/ast's enum case `TypeRef.Any` and types.olang's `Table.Any(tr TypeId)`, and
+  std/io's `Reader.All()`: an enum case after a type's name (`TypeRef.Any(sp, _)`, through an imported alias), a call
+  taking nothing, a declaration whose `)` ends the line before, and every file reaching (through its imports) a method
+  Any/All of its own that takes no function are left. **results_migrate** read `(fn&(x) I64, I64)` - one result, a
+  function reference - as an old result list: `fn&(`/`fn?&(` are function types as `fn(` is. **unique_migrate** kept
+  applying T13b where C11 later made two exceptions: a library collection's conditional destructor (a generic type in
+  std; Vec, Map, Deque) and a generational type (one with `weak` back links, T13d). Both are left now - the tool stays
+  in fix's table, a no-op where the later rule holds.
+- **defer_migrate** (one way to write each thing): the bare `defer stmt` / `errdefer stmt` gains S1b's `:`. Run over
+  tests, tools, checks, bench and fuzz; `fix -check` over them changes 0 files. **Held:** the parser's refusal of the
+  bare form (S19's grammar `"defer" body`, a BareDefer message, checks/cases/s19bare) - the seed reads neither
+  `defer: stmt` nor `catch E: stmt`, so std/ and compiler/ (what the seed builds) keep the bare form, and refusing it
+  would break the self-build until the seed is written again. Left for that commit: std/cancel.olang,
+  std/prelude/array.olang, compiler/fix.olang, compiler/generic.olang, compiler/parse.olang (their bare defers).
+
+### The seed written again; the bare `defer stmt` refused (2026-11-16, wt-seed)
+
+- **Why now.** The seed of 51e49bf read neither S1b's one-line bodies in every place, `defer: stmt` nor `catch E:
+  stmt`, so std/ and compiler/ (what it builds) were held in the older forms and the bare-defer refusal waited.
+  Master cc83bf0d still bootstrapped from it (`make boot` from a clean clone passed), because nothing there used the
+  new forms yet.
+- **What was done.** The seed was written again from wt-fixtools' tip (278969b6) and proved (`make clean; make boot;
+  make fixedpoint`); then the parser's refusal landed (S19/S19e's grammar `"defer" body`, msgs.BareDefer naming S19
+  and saying to write `defer: stmt`, checks/cases s19bare and s19ebare); defer_migrate and oneline_migrate ran over
+  std/ and compiler/, compiler/fix.olang's two `catch NotBuilt e { ... }` became one-line bodies, `olang fix` put
+  fuzz/'s one-line blocks right; the seed was written again from those sources and proved the same way. `olang fix
+  -check` over std, tests, tools, compiler, checks, bench and fuzz changes 0 files.
+- **A bug found.** defer_migrate gave a deferred declaration the `:` (`defer: z := later`), which S1b refuses - a one-line
+  body is one simple statement; checks/cases s19later and s19try had been migrated so and failed with S1b instead of
+  their own diagnostic. A deferred declaration now goes in a block, `defer { z := later }`, as a deferred defer does.

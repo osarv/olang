@@ -34,8 +34,8 @@ ToolNames Array<String&> = Array<String&>["bare_typevars", "perm_mut", "int_lite
     "unused_migrate", "errorcase_rename", "variadic_migrate", "scopes_migrate", "fnref_migrate", "clone_migrate"
     "textbuild_migrate", "unique_migrate", "builder_migrate", "literal_migrate", "keyword_rename", "destroy_migrate", "io_rename", "oneline_migrate"
     "nulltest_migrate", "textjoin_migrate", "requires_migrate", "chaninit_migrate", "file_migrate"
-    "putln_rename"]
-ToolKinds Array<I64> = Array<I64>[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]
+    "putln_rename", "defer_migrate"]
+ToolKinds Array<I64> = Array<I64>[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]
 
 fn driven(kind I64) Bool { return kind >= DrivenOpt }
 
@@ -44,7 +44,7 @@ fn Order() Array<I64> {
     out Vec<I64>
     for want in Array<String&>["text", "driven"] {
         for t in range ToolNames.Len() {
-            if driven(ToolKinds[t]) == (want == "driven") { out.Push(t) }
+            if driven(ToolKinds[t]) == (want == "driven"): out.Push(t)
         }
     }
     return out.ToArray()
@@ -63,19 +63,38 @@ fn arguments(program String&, kind I64, exe String&, std String&, files Array<St
     } else if kind == DrivenArg {
         out.Push(exe)
     }
-    for f in files { out.Push(f) }
+    for f in files: out.Push(f)
     return out.ToArray()
 }
 
-# the .olang files under a directory, sorted; build/ and names beginning with "." are left out
+# the .olang files under a directory, sorted; build/ and names beginning with "." are left out, and so is a migration
+# tool's own source (B17): one of Tools, or a tool its directory's README lists in its table ("| `NAME.olang` |", run as
+# "build/tools_NAME ...") - its
+# comments and tests hold the old spellings on purpose. Text kept as written on purpose is left too: a directory holding
+# a file ".olangfix" (fixtures whose text is what a test reads), and a case that must fail ("# check: fail" first)
 fn walk(dir String&, out mut Vec<String&>&) {
+    if os.Exists(filepath.Join(dir, ".olangfix")): return
     names := try os.ReadDir(dir) catch default Array<String&>(0)
+    readme := try os.ReadFile(filepath.Join(dir, "README.md")) catch default ""
     for n in names {
-        if n.StartsWith(".") or n == "build" { continue }
+        if n.StartsWith(".") or n == "build": continue
         p := filepath.Join(dir, n)
         if os.IsDir(p): walk(p, out)
-        else if n.EndsWith(".olang"): out.Push(p)
+        else if n.EndsWith(".olang") and not migrationTool(n, readme) and not mustFail(p): out.Push(p)
     }
+}
+
+# whether the file at p is a case that must fail to compile: its refused text is what it checks
+fn mustFail(p String&) Bool {
+    text := try os.ReadFile(p) catch default ""
+    return text.StartsWith("# check: fail")
+}
+
+# whether the file named n is a migration tool's source: a tool of fix's table, or one its directory's README lists
+fn migrationTool(n String&, readme String&) Bool {
+    if n[:n.Len() - 6] in ToolNames: return true
+    prog := "tools_" + $n[:n.Len() - 6]
+    return readme.Contains("| `" + $n + "` |") and (readme.Contains(prog + " ") or readme.Contains(prog + "`"))
 }
 
 # the files the command line names: a directory is every .olang file under it
@@ -105,7 +124,7 @@ fn ToolsDir(exe String&, std String&) String {
 ToolTriggers Array<String&> = Array<String&>["", "mut", "", "", "olang|flags", "done|fail|abort", "", "math", "Array<", ""
     "is", "Any|All", "", "Builtin", "Error", "checked|Check", "[", "try", "as", "error", "List", "link", "nomatch|=>", ""
     "", "", "Exec|Start|http.|Record", "&", "fn", "Clone", "String", "destruct", "", "[", ToolKeywords, "Destroy", "Print"
-    "{", "is", "\"|$", "[", "Init(", "Open(|Create(|Close(|Reader(|Writer(|Lines(", "Line"]
+    "{", "is", "\"|$", "[", "Init(", "Open(|Create(|Close(|Reader(|Writer(|Lines(", "Line", "defer"]
 
 # keyword_rename's words (L9, one tier)
 ToolKeywords String& = "any|unique|immut|packed|commutes|weak|returns|noalloc|noblock|nospawn|norecurse|noextern|pure|keeps|borrows|noborrow"
@@ -201,7 +220,7 @@ fn buildTool(exe String&, tools String&, bin String&, name String&, program Stri
     tmp := try os.MkTemp(dir = bin, prefix = "tools_" + $name + ".") catch os.Error e {
         error NotBuilt(why = "cannot build tools/" + $name + ".olang: " + $e)
     }
-    defer try os.RemoveAll(tmp) catch os.Error { }
+    defer: try os.RemoveAll(tmp) catch os.Error { }
     made := filepath.Join(tmp, "tools_" + $name)
     out := try os.Output.Exec(exe, "build", "-output", made, filepath.Join(tools, $name + ".olang"), dir = tmp) catch os.Error e {
         error NotBuilt(why = "cannot run " + $exe + ": " + $e)
@@ -239,7 +258,7 @@ fn builder(exe String&, tools String&, bin String&, todo Vec<I64>&, programs Arr
         k := next[0].AtomicAdd(1)
         if k >= todo.Len(): return
         t := todo[k]
-        try buildTool(exe, tools, bin, ToolNames[t], programs[t]) catch NotBuilt e { said[t] = $e.why }
+        try buildTool(exe, tools, bin, ToolNames[t], programs[t]) catch NotBuilt e: said[t] = $e.why
     }
 }
 
@@ -273,7 +292,7 @@ fn checker(exe String&, files Array<String&>&, next mut Array<I64>&, bad mut Arr
 # whether the compiler builds a file's module (its tests included) with no error, -quick, into a directory of its own
 fn compiles(exe String&, file String&) Bool {
     tmp := try os.MkTemp(prefix = "olang-fix.") catch os.Error { return false }
-    defer try os.RemoveAll(tmp) catch os.Error { }
+    defer: try os.RemoveAll(tmp) catch os.Error { }
     real := try os.RealPath(file) catch default $file
     out := try os.Output.Exec(exe, "compile", "-quick", "-output", filepath.Join(tmp, "m.o"), real, dir = tmp) catch os.Error { return false }
     return out.Status == 0
@@ -351,7 +370,7 @@ fn run(files Array<String&>&, before Vec<String&>&, exe String&, std String&, sa
         if given.Len() == 0 or not triggered(ToolTriggers[t], textsOf(given)): continue
         name := ToolNames[t]
         if failed[t] != "" or not os.Exists(programs[t]) {
-            if failed[t] == "": try buildTool(exe, tools, bin, name, programs[t]) catch NotBuilt e { failed[t] = $e.why }
+            if failed[t] == "": try buildTool(exe, tools, bin, name, programs[t]) catch NotBuilt e: failed[t] = $e.why
             if failed[t] != "" {
                 said.Write("olang: fix: " + $failed[t] + "\n")
                 return 2
@@ -427,7 +446,7 @@ test "the text tools run before the driven ones, each group in the order the cha
     last I64 = -1
     for t in o {
         if driven(ToolKinds[t]) {
-            if not seenDriven { last = -1 }
+            if not seenDriven: last = -1
             seenDriven = true
         } else {
             assert not seenDriven
@@ -439,6 +458,9 @@ test "the text tools run before the driven ones, each group in the order the cha
 }
 
 test "a tool's command line has its compiler or std before the files" {
+    assert migrationTool("clone_migrate.olang", "") and migrationTool("io_try.olang", "| `io_try.olang` | old | `build/tools_io_try FILE` |")
+    assert not migrationTool("fix.olang", "| `fix.olang` | olang fix |")
+    assert not migrationTool("srcmask.olang", "| `clone_migrate.olang` |")
     f := Array<String&>["a.olang", "b.olang"]
     assert arguments("p", TextTool, "olang", "std", f).Len() == 3
     s := arguments("p", StdTool, "olang", "std", f)
@@ -465,7 +487,7 @@ test "a tool runs only where one of its texts stands, one with none always" {
 
 test "a tool's program is keyed by the texts it is built from: a change to its source, the compiler or std names another" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     try os.WriteFile(dir + "/shared.olang", "fn S() I64 { return 1 }\n") catch os.Error { unreachable "no file" }
     try os.WriteFile(dir + "/t.olang", "import \"shared\"\nimport \"std/os\"\nfn main() { }\n") catch os.Error { unreachable "no file" }
     a := ProgramOf("/bin", "t", dir, "olang 1 2", "std")

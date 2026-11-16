@@ -65,10 +65,10 @@ Frees mut I64 = 0           # ... the places their builds' -memory reports say f
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 3 { try usage() }
+    if args.Len() < 3: try usage()
     Root = try os.Cwd() catch default "."
     Olang = try os.Env("OLANG") catch default "build/olang"
-    if not Olang.StartsWith("/") { Olang = $Root + "/" + $Olang }
+    if not Olang.StartsWith("/"): Olang = $Root + "/" + $Olang
     if args[1] == "show" {
         seed := try args[2].ParseInt() catch default 1
         if args.Len() > 3 { Cases = try args[3].ParseInt() catch default 30 }
@@ -80,7 +80,7 @@ fn main() ? {
     if args[1] == "scopeshow" {
         seed := try args[2].ParseInt() catch default 1
         if args.Len() > 3 { Scenarios = try args[3].ParseInt() catch default 12 }
-        if args.Len() > 5 and args[5] == "avoid" { scopegen.AvoidKnown = true }
+        if args.Len() > 5 and args[5] == "avoid": scopegen.AvoidKnown = true
         keep := Array<Bool>(0)
         only := (try args[4].ParseInt() catch default -1) if args.Len() > 4 else -1    # (-1: every scenario)
         if only >= 0 and only < Scenarios {
@@ -109,7 +109,7 @@ fn main() ? {
         try io.Put(scopegen.FreeProgram(U64(seed), Scenarios, Array<Bool>(0)))
         return
     }
-    if args[1] != "run" or args.Len() < 4 { try usage() }
+    if args[1] != "run" or args.Len() < 4: try usage()
     start := try args[2].ParseInt() catch default 1
     count := try args[3].ParseInt() catch default 1
     jobs I64 = 2
@@ -118,14 +118,14 @@ fn main() ? {
     try newRun()
     os.Run("mkdir -p " + $os.Quote($Run + "/found"))
     queue mut chan.Chan<I64>& = chan.Chan<I64>(count)
-    for i in range count { chan.Send(queue, start + i)! }
+    for i in range count: chan.Send(queue, start + i)!
     chan.Close(queue)
     join {
-        for w in range jobs { spawn worker(queue, w) }
+        for w in range jobs: spawn worker(queue, w)
     }
     summary String& = "fuzz: " + $Ran + " programs, " + $Total + " cases (" + $Baked + " globals baked while compiling)"
     try io.Put($summary + ", " + $Found + " findings" + $endRun() + "\n")
-    if Found > 0 { os.Exit(1) }
+    if Found > 0: os.Exit(1)
 }
 
 # this run's own directory under build/fz, so nothing another run writes - a leftover one included - is read here
@@ -176,7 +176,7 @@ fn read(dir String&, name String&) String& {
 fn runSeed(seed I64, dir String&) ? io.Error {
     expect Array<String&> = Array<String&>(Cases, "")
     has Array<Bool> = Array<Bool>(Cases)
-    if not try write(dir, seed, expect, has) { return }
+    if not try write(dir, seed, expect, has): return
     if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build -debug p.olang > c1.txt 2>&1") != 0 {
         try finding(dir, seed, -1, "does not compile at -d (step 1)", read(dir, "c1.txt"))
         return
@@ -190,19 +190,19 @@ fn runSeed(seed I64, dir String&) ? io.Error {
     for line in lines {
         at := try line.Find(": ") catch { continue }
         bar := try line.Find(" | ") catch { continue }
-        if bar < at { continue }
+        if bar < at: continue
         ci := try line[:at].ParseInt() catch default -1
-        if ci < 0 or ci >= Cases { continue }
+        if ci < 0 or ci >= Cases: continue
         k := line[at + 2:bar]
         r := line[bar + 3:]
         expect[ci] = r
         has[ci] = true
-        if k != r { try finding(dir, seed, ci, "global baked while compiling is not the -d run time's value", line) }
+        if k != r: try finding(dir, seed, ci, "global baked while compiling is not the -d run time's value", line)
     }
     # step 2: the asserts, built -O3; one decided false is a finding, and is left out to see the rest
     for _ in range 3 {
-        if not try write(dir, seed, expect, has) { return }
-        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build p.olang > c2.txt 2>&1") == 0 { break }
+        if not try write(dir, seed, expect, has): return
+        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build p.olang > c2.txt 2>&1") == 0: break
         c2 := read(dir, "c2.txt")
         bad := falseAsserts(c2)
         if bad.Len() == 0 {
@@ -221,10 +221,10 @@ fn runSeed(seed I64, dir String&) ? io.Error {
     Total.AtomicAdd(Cases)
     st := sh(dir, "timeout 120 ./build/p > b.txt 2> berr.txt")
     try compare(dir, seed, out, read(dir, "b.txt"), "-b")
-    if st != 0 { try finding(dir, seed, -1, "-b run failed", read(dir, "berr.txt")) }
+    if st != 0: try finding(dir, seed, -1, "-b run failed", read(dir, "berr.txt"))
     st = sh(dir, "timeout 600 nice -n 19 env OLANG_EVALUATE=1 \"$OLANG\" p.olang > i.txt 2> ierr.txt")
     try compare(dir, seed, out, read(dir, "i.txt"), "-i")
-    if st != 0 { try finding(dir, seed, -1, "-i run failed", read(dir, "ierr.txt")) }
+    if st != 0: try finding(dir, seed, -1, "-i run failed", read(dir, "ierr.txt"))
 }
 
 # writes seed's program into dir, asserting expect[i] where has[i]
@@ -248,7 +248,7 @@ fn falseAsserts(diag String&) Vec<I64>& {
         rest = rest[c + 9:]
         end := try rest.FindByte('(') catch { break }
         ci := try rest[:end].ParseInt() catch default -1
-        if ci >= 0 { bad.Push(ci) }
+        if ci >= 0: bad.Push(ci)
     }
     return bad
 }
@@ -258,10 +258,10 @@ fn compare(dir String&, seed I64, want String&, got String&, mode String&) ? io.
     w := want.Split("\n")
     g := got.Split("\n")
     for i, line in w {
-        if line.Len() == 0 { continue }
-        if i < g.Len() and g[i] == line { continue }
+        if line.Len() == 0: continue
+        if i < g.Len() and g[i] == line: continue
         detail String& = $line + "\n<missing>"
-        if i < g.Len() { detail = $line + "\n" + $g[i] }
+        if i < g.Len(): detail = $line + "\n" + $g[i]
         at := try line.Find(": ") catch default 0
         ci := try line[:at].ParseInt() catch default -1
         try finding(dir, seed, ci, $mode + " disagrees with the -d run", detail)
@@ -302,7 +302,7 @@ fn editMain(args Array<String&>&) ? io.Error {
         try io.Put($"fuzz edit: seed " + $seed + ": " + $found + "\n")
     }
     try io.Put($"fuzz edit: " + $Ran + " programs edited " + $steps + " times each, " + $Found + " findings" + $endRun() + "\n")
-    if Found > 0 { os.Exit(1) }
+    if Found > 0: os.Exit(1)
 }
 
 # ---- the scope fuzzer ----
@@ -313,19 +313,19 @@ fn scopeMain(args Array<String&>&) ? io.Error {
     jobs I64 = 2
     if args.Len() > 4 { jobs = try args[4].ParseInt() catch default 2 }
     if args.Len() > 5 { Scenarios = try args[5].ParseInt() catch default 12 }
-    if args.Len() > 6 and args[6] == "avoid" { scopegen.AvoidKnown = true }
+    if args.Len() > 6 and args[6] == "avoid": scopegen.AvoidKnown = true
     try newRun()
     os.Run("mkdir -p " + $os.Quote($Run + "/scope"))
     queue mut chan.Chan<I64>& = chan.Chan<I64>(count)
-    for i in range count { chan.Send(queue, start + i)! }
+    for i in range count: chan.Send(queue, start + i)!
     chan.Close(queue)
     join {
-        for w in range jobs { spawn scopeWorker(queue, w) }
+        for w in range jobs: spawn scopeWorker(queue, w)
     }
     summary String& = "fuzz scope: " + $Ran + " programs, " + $Total + " scenarios run, " + $Refused + " refused by the compiler"
     if FreeMode { summary = $"fuzz free: " + $Ran + " programs, " + $Total + " scenarios run, " + $Refused + " refused, " + $Frees + " places freeing at once" }
     try io.Put($summary + ", " + $Found + " findings" + $endRun() + "\n")
-    if Found > 0 { os.Exit(1) }
+    if Found > 0: os.Exit(1)
 }
 
 fn scopeWorker(queue mut chan.Chan<I64>&, w I64) {
@@ -366,15 +366,15 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
     }
     n I64 = 0
     for k in keep { if k { n++ } }
-    if n == 0 { return }
+    if n == 0: return
     Total.AtomicAdd(n)
-    if FreeMode { Frees.AtomicAdd(freesIn(read(dir, "c.txt"))) }
+    if FreeMode: Frees.AtomicAdd(freesIn(read(dir, "c.txt")))
     st := sh(dir, "timeout 120 ./build/p.debug.san > s.txt 2> serr.txt")
     sOut := read(dir, "s.txt")
     # a scenario that checks itself - a baked global against the same computation at run time, a value a destructor must
     # not reach - says "BAD k: ..." when the check fails (scopegen's second-name scenarios)
     for line in sOut.Split("\n") {
-        if not line.StartsWith("BAD ") { continue }
+        if not line.StartsWith("BAD "): continue
         rest := line[(try line[4:].FindByte(' ') catch default 0) + 5:]
         at := try rest.Find(":") catch default 0
         k := try rest[:at].ParseInt() catch default -1
@@ -390,7 +390,7 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
         }
         bst := sh(dir, "timeout 120 ./build/p > i.txt 2> ierr.txt")
         bOut := read(dir, "i.txt")
-        if st == 0 and bst == 0 and sOut == bOut and sOut.Contains("\ndtors 0\n") { return }
+        if st == 0 and bst == 0 and sOut == bOut and sOut.Contains("\ndtors 0\n"): return
         if st == 0 and bst == 0 and sOut == bOut {
             try scopeFinding(dir, seed, -1, "a destructor did not run (made and destructed differ)", sOut)
             return
@@ -408,7 +408,7 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
             return
         }
         if st == 0 and sOut == read(dir, "i.txt") {
-            if FreeMode { try splitSeed(seed, dir, sOut) }
+            if FreeMode: try splitSeed(seed, dir, sOut)
             return
         }
     }
@@ -417,12 +417,12 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
     want := iOut.Split("\n")
     got := sOut.Split("\n")
     for i, line in want {
-        if line.Len() == 0 { continue }
-        if i < got.Len() and got[i] == line { continue }
+        if line.Len() == 0: continue
+        if i < got.Len() and got[i] == line: continue
         at := try line.Find(": ") catch default 0
         k := try line[:at].ParseInt() catch default -1
         detail String& = $line + "\n<missing>"
-        if i < got.Len() { detail = $line + "\n" + $got[i] }
+        if i < got.Len(): detail = $line + "\n" + $got[i]
         detail = $detail + "\n" + $read(dir, "serr.txt")
         try scopeFinding(dir, seed, k, "-d -s disagrees with -i (or -b) (a use after a scope closed)", detail)
         return
@@ -477,17 +477,17 @@ fn dropRefused(src String&, diag String&, keep mut Array<Bool>&) I64 {
     cur I64 = -1
     for i, line in lines {
         if line.StartsWith("# scenario ") { cur = try line[11:].ParseInt() catch default -1 }
-        if line.StartsWith("fn main()") { cur = -1 }
+        if line.StartsWith("fn main()"): cur = -1
         owner[i + 1] = cur
     }
     dropped I64 = 0
     for d in diag.Split("\n") {
-        if not d.StartsWith("p.olang:") { continue }
-        if not d.Contains(": error") { continue }
+        if not d.StartsWith("p.olang:"): continue
+        if not d.Contains(": error"): continue
         rest := d[8:]
         end := try rest.FindByte(':') catch { continue }
         ln := try rest[:end].ParseInt() catch { continue }
-        if ln < 1 or ln >= owner.Len() { continue }
+        if ln < 1 or ln >= owner.Len(): continue
         k := owner[ln]
         if k >= 0 and k < keep.Len() and keep[k] {
             keep[k] = false

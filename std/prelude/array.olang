@@ -367,7 +367,7 @@ fn sortInsertion<T ? E>(a mut Array<T>&, lo I64, hi I64, less fn&(x T, y T) Bool
 fn sortInsert<T ? E>(a mut Array<T>&, lo I64, i I64, less fn&(x T, y T) Bool ? E) ? E {
     x := a[i].vacate()
     j I64 = i
-    errdefer a[j].occupy(x)
+    errdefer: a[j].occupy(x)
     for j > lo and try less(x, a[j - 1]) {
         a[j].occupy(a[j - 1].vacate())
         j--

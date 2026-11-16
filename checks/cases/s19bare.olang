@@ -1,0 +1,6 @@
+# check: fail error[S19]: 'defer' takes a block or a one-line body
+# S19: the bare 'defer stmt' is gone - one way to write each thing, 'defer: stmt'
+fn main() {
+    n := 0
+    defer n = 1
+}

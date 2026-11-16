@@ -46,7 +46,7 @@
 | VAR 5:1-5:16
 | VAR 8:5-8:27
 | -- diagnostics
-| error L9 15:36
+| error  16:21
 === checks/cases/b4droppedbranch.olang
 | ASSERT 9:15-9:33
 | TEST 9:1-9:35
@@ -370,6 +370,12 @@
 | TYPE 4:1-4:32
 | -- diagnostics
 | error  8:22
+=== checks/cases/s19bare.olang
+| -- diagnostics
+| error S19 5:11
+=== checks/cases/s19ebare.olang
+| -- diagnostics
+| error S19 5:14
 === checks/cases/s19eline.olang
 | EXPR 6:13-6:17
 | FN 6:1-6:19

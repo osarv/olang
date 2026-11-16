@@ -47,7 +47,7 @@ fn main() {
     old := toolkit.Text(toolkit.Sorted(kept))
     if old != new {
         work := toolkit.Scratch("namesdiff")
-        defer toolkit.Clean(work)
+        defer: toolkit.Clean(work)
         toolkit.Say("namesdiff: stage 0 (<) and the self-hosted load and names (>) differ:\n")
         toolkit.Say(toolkit.Head(toolkit.Changes(toolkit.Diff(work, old, new)), 40))
         os.Exit(1)

@@ -132,7 +132,7 @@ fn deferred(n I64) I64 {
     out := Vec<I64>()
     {
         t := mk(n)
-        defer out.Push(t.Len())
+        defer: out.Push(t.Len())
         p := Holder(t)
         p.toks.Push(1)
         out.Push(p.toks.Len())

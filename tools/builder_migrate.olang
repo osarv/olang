@@ -205,6 +205,8 @@ fn collectDecls(m mut Mod&, decls Array<ast.Decl&>&, names source.Names&, types 
                 skipMembers(m, td, names)
             }
             case ast.Decl.Global(_, v) { for n in v.Names { m.tops.Put($names.Text(n), true) } }
+            # an error type's cases are names of their own (`Open(path String)`), never a call of a builder
+            case ast.Decl.Errors(_, _, _, _, cases) { for c in cases { m.skips.Put(I64(c.Sp.Start), true) } }
             case ast.Decl.If(_, ti) { collectIf(m, ti, names, types) }
             case _ { }
         }
@@ -932,4 +934,15 @@ test "the prelude's methods become builders" {
     methodEdits(text, scan.Tokens.Scan(text).Toks, edits)
     out := applied(text, edits)
     assert out == "fn f(u U64, p CStr&, t String&) { a := F64.FromBits(u)\n b := F32.FromBits(u | 1)\n c := String.FromC(p, 9)\n d := U8.Parse(t[1:], 16)! }"
+}
+
+test "an error type's case is no call of a builder named the same" {
+    dir := os.MkTemp(dir = "/tmp", prefix = "builder_migrate.")!
+    path := dir + "/runlog.olang"
+    text := "type E error {\n    Open(path String)\n}\ntype Log struct() { }\nfn Log.Open(path String&) Log ? E { return Log() }\nfn f() { l := Log.Open(\"x\")! }\n"
+    os.WriteFile(path, text)!
+    t := Tool("std", layout.PreludeTypes("std"))
+    k := t.load(path)
+    assert k >= 0 and t.rewrite(k) == text
+    os.RemoveAll(dir)!
 }

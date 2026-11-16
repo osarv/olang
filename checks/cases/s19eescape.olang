@@ -3,7 +3,7 @@
 type E error { Bad }
 fn g() ? E { error E.Bad }
 fn f() ? E {
-    errdefer try g()
+    errdefer: try g()
     error E.Bad
 }
 fn main() ? { try f() catch { } }

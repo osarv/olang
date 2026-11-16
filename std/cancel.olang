@@ -165,7 +165,7 @@ fn spinRecord(t Token&, n mut stopCount&) {
 fn cancelOnExit(fails Bool, n mut stopCount&) ? stepFailed {
     t := Token.After(5000)
     join {
-        defer t.Cancel()
+        defer: t.Cancel()
         spawn spinRecord(t, n)
         if fails: error stepFailed.Bad
     }

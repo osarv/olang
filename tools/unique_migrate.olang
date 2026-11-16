@@ -21,20 +21,23 @@ fn main() ? io.Error {
             try io.PutErrLn("unique_migrate: " + $path + ": cannot be read")
             continue
         }
-        out := migrate(text)
+        out := migrate(text, path.StartsWith("std/") or path.Contains("/std/"))
         if out == text: continue
         try os.WriteFile(path, out) catch os.Error { try io.PutErrLn("unique_migrate: " + $path + ": cannot be written") }
         try io.PutLn(path)
     }
 }
 
-# the text with every destructor-declaring type declared unique
-fn migrate(text String&) String {
+# the text with every destructor-declaring type declared unique; in the library (std and its prelude) a generic one is
+# left - C11's exception, a collection whose destructor exists only in its instances holding values with destructors
+fn migrate(text String&, library Bool = false) String {
     mask := srcmask.Mask(text, false)
     at Vec<I64> # where "unique " goes, in order
     for i in range text.Len() {
         if not destructAt(text, mask, i): continue
-        s := structOf(text, mask, i)
+        s := structOf(text, mask, i, library)
+        # a type with weak back links is generational (T13d), C11's other way: its values are never copied
+        if s >= 0 and text[s:i].Contains(" weak "): continue
         if s >= 0 and (at.Len() == 0 or at[at.Len() - 1] != s): at.Push(s)
     }
     if at.Len() == 0: return $text
@@ -60,8 +63,8 @@ fn destructAt(text String&, mask String&, i I64) Bool {
 }
 
 # where "struct" stands in the declaration the destructor at i closes - the nearest line at or above it beginning with
-# "type" - when that declaration says neither "unique" nor "immut"; -1 for none
-fn structOf(text String&, mask String&, i I64) I64 {
+# "type" - when that declaration says neither "unique" nor "immut" and is no library collection; -1 for none
+fn structOf(text String&, mask String&, i I64, library Bool) I64 {
     ls := lineStart(text, i)
     for {
         t := ls
@@ -70,6 +73,8 @@ fn structOf(text String&, mask String&, i I64) I64 {
             st := try text[t:].Find(" struct") catch { return -1 }
             head := text[t:t + st + 1]
             if wordIn(head, "unique") or wordIn(head, "immut"): return -1
+            # a library collection's destructor is conditional (C11's exception, M19d): Vec<T>, Map<K, V>, Deque<T>
+            if library and head.Contains("<"): return -1
             return t + st + 1
         }
         if ls == 0: return -1
@@ -100,6 +105,10 @@ test migrate "a destructor's type gains unique, once; one saying it, comments an
     assert migrate("type C struct(n I32) { n } destruct { x++ }\n") == "type C unique struct(n I32) { n } destruct { x++ }\n"
     assert migrate("type B<T> struct(v T) { v } destruct { x++ }\n") == "type B<T> unique struct(v T) { v } destruct { x++ }\n"
     assert migrate("    type s struct() {\n    } destruct { d += 1 }\n") == "    type s unique struct() {\n    } destruct { d += 1 }\n"
+    gen := "type Res struct(v I64) {\n    v\n    back weak Res?& = null\n} destruct {\n    n++\n}\n"
+    assert migrate(gen) == gen
+    vec := "type Vec<T> struct() {\n    n I64 = 0\n} destruct {\n    n = 0\n}\n"
+    assert migrate(vec, true) == vec
     done := "type C unique struct(n I32) { n } destruct { x++ }\n"
     assert migrate(done) == done
     assert migrate("# type C struct(n I32) { n } destruct { }\nx := \"destruct {\"\n") == "# type C struct(n I32) { n } destruct { }\nx := \"destruct {\"\n"

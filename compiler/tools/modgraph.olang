@@ -25,7 +25,7 @@ fn main() {
     roots := defaultRoots() if capture else toolkit.FilesOr(args, defaultRoots())
     g := toolkit.Golden() if capture else toolkit.Golden.Read(Golden, "modgold")
     work := toolkit.Scratch("modgraph")
-    defer toolkit.Clean(work)
+    defer: toolkit.Clean(work)
     out := StringBuilder()
     n I64 = 0
     bad := false

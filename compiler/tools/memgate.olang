@@ -100,7 +100,7 @@ fn table(dir String&) {
 
 fn record(dir String&, key String&, peak I64) {
     locked(dir)
-    defer unlock(dir)
+    defer: unlock(dir)
     old := try os.ReadFile($dir + "/peaks.txt") catch os.Error default ""
     try os.WriteFile($dir + "/peaks.txt", $old + $key + " " + $peak + "\n") catch os.Error { }
 }

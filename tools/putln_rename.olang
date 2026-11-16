@@ -73,8 +73,18 @@ fn walk(dir String&, out mut Vec<String&>&) {
     }
 }
 
+# the files the rename reads: olang source, and the texts that hold olang - documents, expected output, the fixtures
+# fed to the compiler (a C-interop ".part", a prompt session's ".in", a notebook) and the makefile's inline programs
 fn wanted(path String&) Bool {
-    return path.EndsWith(".olang") or path.EndsWith(".md") or path.EndsWith(".txt") or path.EndsWith(".want")
+    for e in Array<String&>[".olang", ".md", ".txt", ".want", ".part", ".in", ".ipynb", "makefile"] {
+        if path.EndsWith(e): return true
+    }
+    return false
+}
+
+test wanted "the fixtures fed to the compiler are read too" {
+    assert wanted("checks/fixtures/cinterop/zdemo.part") and wanted("checks/fixtures/prompt/session.in") and wanted("makefile")
+    assert not wanted("build/olang")
 }
 
 fn main() ? {

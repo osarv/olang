@@ -7,7 +7,7 @@ Tidied mut I64 = 0
 fn tidy() { Tidied++ }
 
 fn f() Iterator<I64> {
-    defer tidy()
+    defer: tidy()
     yield 2
     yield 3
 }

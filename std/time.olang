@@ -144,7 +144,7 @@ fn Sleep(d Duration) {
 fn Virtual<? E>(f fn&() ? E) ? E {
     assert TestBuild, "time.Virtual runs only in a test build ('olang test') - a program's clock is the real one"
     if virtualDepth.AtomicAdd(1) == 0: virtualNs.AtomicStore(VirtualStart)
-    defer virtualDepth.AtomicAdd(-1)
+    defer: virtualDepth.AtomicAdd(-1)
     try f()
 }
 

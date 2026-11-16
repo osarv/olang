@@ -157,7 +157,7 @@ fn main() {
     g := toolkit.Golden() if capture else toolkit.Golden.Read(gpath, "drvgold")
     here := try os.Cwd() catch os.Error { toolkit.Die("drvdiff: no working directory") }
     work := toolkit.Scratch("drvdiff")
-    defer toolkit.Clean(work)
+    defer: toolkit.Clean(work)
     try os.MkDir($work + "/adir") catch os.Error { toolkit.Die("drvdiff: cannot make " + $work + "/adir") }
     keys := Vec<String&>()
     got := Vec<String&>()

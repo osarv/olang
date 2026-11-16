@@ -426,25 +426,25 @@ fn (g mut SG&) addHelper(text String&) { g.helpers = $g.helpers + $text }
 fn (g mut SG&) newNode() String& {
     v := g.val()
     k := g.r(9)
-    if k == 0 { return "Node.mkNode(" + $v + ")" }
-    if k == 1 { return "Node.mkChain(" + $v + ")" }
-    if k == 2 { return "Node.via(" + $v + ")" }
-    if k == 3 { return "Node.mkLambda(" + $v + ")" }
-    if k == 4 { return "Node.nodeOf(E.N(Node(" + $v + ")))" }
+    if k == 0: return "Node.mkNode(" + $v + ")"
+    if k == 1: return "Node.mkChain(" + $v + ")"
+    if k == 2: return "Node.via(" + $v + ")"
+    if k == 3: return "Node.mkLambda(" + $v + ")"
+    if k == 4: return "Node.nodeOf(E.N(Node(" + $v + ")))"
     return "Node(" + $v + ")"
 }
 
 # a statement storing a new node through the node a (a writable reference)
 fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
-    if g.chance(8) { return g.scopeArgNode(a, ind) }
+    if g.chance(8): return g.scopeArgNode(a, ind)
     k := g.r(14)
-    if g.chance(35) { return g.condOp(a, ind) }
-    if g.chance(15) { return g.failOp(a, ind) }
-    if g.dtors and g.chance(30) { return g.dtorOp(a, ind) }
+    if g.chance(35): return g.condOp(a, ind)
+    if g.chance(15): return g.failOp(a, ind)
+    if g.dtors and g.chance(30): return g.dtorOp(a, ind)
     v := g.val()
-    if k == 1 { return $ind + "grow(" + $a + ", " + $v + ")\n" }
-    if k == 2 { return $ind + "growDeep(" + $a + ", " + $v + ")\n" }
-    if k == 3 { return $ind + "link(" + $a + ", " + $g.newNode() + ")\n" }
+    if k == 1: return $ind + "grow(" + $a + ", " + $v + ")\n"
+    if k == 2: return $ind + "growDeep(" + $a + ", " + $v + ")\n"
+    if k == 3: return $ind + "link(" + $a + ", " + $g.newNode() + ")\n"
     if k == 4 {    # made in a block of its own and stored outward: refused unless it lives where a does
         q := g.name("q")
         return $ind + "{\n" + $ind + "    " + $q + " := " + $g.newNode() + "\n" + $ind + "    " + $a + ".next = " + $q + "\n" + $ind + "}\n"
@@ -469,7 +469,7 @@ fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
         h := g.name("h")
         return $ind + $h + " := pickNode(" + $a + ")\n" + $ind + $h + ".next = " + $g.newNode() + "\n"
     }
-    if k == 10 { return $ind + $a + ".next = " + $g.newNode() + "\n" + $ind + $a + ".next!.next = " + $g.newNode() + "\n" }
+    if k == 10: return $ind + $a + ".next = " + $g.newNode() + "\n" + $ind + $a + ".next!.next = " + $g.newNode() + "\n"
     if k == 11 {    # a box made here, holding the node
         b := g.name("b")
         return $ind + $b + " := Box()\n" + $ind + $b + ".head = " + $a + "\n" + $ind + $b + ".head.next = " + $g.newNode() + "\n"
@@ -580,8 +580,8 @@ fn (g mut SG&) dtorOp(a String&, ind String&) String& {
 fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
     k := g.r(14)
     if AvoidKnown {
-        if g.boxKind == 2 or k == 3 or k == 7 { k = 0 }
-        if g.boxKind == 1 and (k == 4 or k == 5 or k == 6 or k == 8 or k == 11) { k = 0 }
+        if g.boxKind == 2 or k == 3 or k == 7: k = 0
+        if g.boxKind == 1 and (k == 4 or k == 5 or k == 6 or k == 8 or k == 11): k = 0
     }
     if k == 1 {    # a copy of the box: its references are the box's
         c := g.name("c")
@@ -595,7 +595,7 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
         c := g.name("c")
         return $ind + $c + " Box = pickBox(" + $b + ")\n" + $ind + $c + ".head.next = " + $g.newNode() + "\n"
     }
-    if k == 4 { return $ind + "build(" + $b + ")\n" }
+    if k == 4: return $ind + "build(" + $b + ")\n"
     if k == 5 {    # a copy kept by a constructor
         h := g.name("h")
         return $ind + $h + " := H(" + $b + ")\n" + $ind + $h + ".b.head.next = " + $g.newNode() + "\n"
@@ -606,12 +606,12 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
         return ($ind + $e + " := E.A(" + $b + ")\n" + $ind + "match " + $e + " {\n" + $ind + "    case E.A(" + $y + ") { " + $y + ".head.next = " +
                 $g.newNode() + " }\n" + $ind + "    case _ { }\n" + $ind + "}\n")
     }
-    if k == 7 { return $ind + "byAs(E.A(" + $b + "))\n" }
+    if k == 7: return $ind + "byAs(E.A(" + $b + "))\n"
     if k == 8 {    # a payload taken out by "as"
         x := g.name("x")
         return $ind + $x + " := (E.A(" + $b + ") as E.A)!\n" + $ind + $x + ".head.next = " + $g.newNode() + "\n"
     }
-    if k == 9 { return g.nodeOp($b + ".head", ind, d) }
+    if k == 9: return g.nodeOp($b + ".head", ind, d)
     if k == 12 {    # a copy with no storage of its own - a call's result, a conditional of the box - lent to a reference
         v := g.val() # parameter that builds through its shallow "mut" field, in a loop (O17: refused), or only reads it
         i := g.name("i")
@@ -651,7 +651,7 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
 
 # a statement storing a new node into the List l
 fn (g mut SG&) listOp(l String&, ind String&) String& {
-    if g.chance(30) { return g.listElemOp(l, ind) }
+    if g.chance(30): return g.listElemOp(l, ind)
     if g.chance(8) {    # E25: a node a scope argument places in an inner block, pushed outward (refused)
         t := g.name("t")
         v := g.val()
@@ -667,7 +667,7 @@ fn (g mut SG&) listOp(l String&, ind String&) String& {
         i := g.name("i")
         return $ind + "for " + $i + " in range 3 { " + $l + ".Push(Node(" + $v + " + " + $i + ")) }\n"
     }
-    if k == 3 { return $ind + "pushNode(" + $l + ", " + $v + ")\n" }
+    if k == 3: return $ind + "pushNode(" + $l + ", " + $v + ")\n"
     if k == 4 {
         f := g.name("f")
         return $ind + $f + " := fn(v I64) mut Node& { return Node(v) }\n" + $ind + $l + ".Push(" + $f + "(" + $v + "))\n"
@@ -730,7 +730,7 @@ fn (g mut SG&) mapOp(m String&, ind String&) String& {
         i := g.name("i")
         return $ind + "for " + $i + " in range 3 { " + $m + ".Put(" + $key + " + " + $i + ", Node(" + $v + ")) }\n"
     }
-    if k == 3 { return $ind + "putNode(" + $m + ", " + $key + ", " + $v + ")\n" }
+    if k == 3: return $ind + "putNode(" + $m + ", " + $key + ", " + $v + ")\n"
     if k == 4 {    # building through the entries a walk hands out
         e := g.name("e")
         return $ind + "for " + $e + " in " + $m + " { " + $e + ".Value.next = " + $g.newNode() + " }\n"
@@ -756,7 +756,7 @@ fn (g mut SG&) arrOp(a String&, ind String&, d I64) String& {
         i := g.name("i")
         return $ind + "for " + $i + " in range 4 { " + $a + "[" + $i + "] = Node(" + $v + " + " + $i + ") }\n"
     }
-    if k == 3 { return $ind + "setNode(" + $a + ", " + $at + ", " + $v + ")\n" }
+    if k == 3: return $ind + "setNode(" + $a + ", " + $at + ", " + $v + ")\n"
     if k == 4 {    # a slice of the array, stored through
         s := g.name("s")
         return $ind + $s + " := " + $a + "[0:2]\n" + $ind + $s + "[1] = " + $g.newNode() + "\n"
@@ -765,7 +765,7 @@ fn (g mut SG&) arrOp(a String&, ind String&, d I64) String& {
         n := g.name("n")
         return $ind + "for " + $n + " in " + $a + " { " + $n + ".next = " + $g.newNode() + " }\n"
     }
-    if k == 6 { return g.nodeOp($a + "[0]", ind, d) }
+    if k == 6: return g.nodeOp($a + "[0]", ind, d)
     return $ind + $a + "[" + $at + "] = " + $g.newNode() + "\n"
 }
 
@@ -784,14 +784,14 @@ fn (g mut SG&) twoOp(t String&, ind String&, d I64) String& {
         c := g.name("c")
         return $ind + $c + " := " + $t + "\n" + $ind + $c + ".items[1].next = " + $g.newNode() + "\n"
     }
-    if k == 4 { return g.nodeOp($t + ".items[1]", ind, d) }
+    if k == 4: return g.nodeOp($t + ".items[1]", ind, d)
     return g.nodeOp($t + ".items[0]", ind, d)
 }
 
 # a statement storing into the enum e (holding a box)
 fn (g mut SG&) enumOp(e String&, ind String&, d I64) String& {
     k := g.r(3)
-    if k == 1 and not AvoidKnown { return $ind + "byAs(" + $e + ")\n" }
+    if k == 1 and not AvoidKnown: return $ind + "byAs(" + $e + ")\n"
     y := g.name("y")
     was := g.boxKind
     g.boxKind = 2
@@ -807,16 +807,16 @@ fn (g mut SG&) cellOp(b String&, ind String&) String& {
     k := g.r(9)
     v := g.val()
     q := g.name("q")
-    if k == 0 { return $ind + $b + ".cells[0].S.Push(" + $g.newNode() + ")\n" }
-    if k == 1 { return $ind + "pushNode(" + $b + ".cells[0].S, " + $v + ")\n" }
-    if k == 2 { return $ind + $b + ".grid[0][0].S.Push(" + $g.newNode() + ")\n" }
+    if k == 0: return $ind + $b + ".cells[0].S.Push(" + $g.newNode() + ")\n"
+    if k == 1: return $ind + "pushNode(" + $b + ".cells[0].S, " + $v + ")\n"
+    if k == 2: return $ind + $b + ".grid[0][0].S.Push(" + $g.newNode() + ")\n"
     if k == 3 { return $ind + "{\n" + $ind + "    " + $q + " := " + $b + ".grid[0][0].S\n" + $ind + "    " + $q + ".Push(" + $g.newNode() + ")\n" + $ind + "}\n" }
     if k == 4 { return $ind + "{\n" + $ind + "    " + $q + " := " + $b + ".grid[0][0]\n" + $ind + "    " + $q + ".S.Push(" + $g.newNode() + ")\n" + $ind + "}\n" }
     if k == 5 {
         i := g.name("i")
         return $ind + "for " + $i + " in range 3 { " + $b + ".cells[0].S.Push(Node(" + $v + " + " + $i + ")) }\n"
     }
-    if k == 6 { return $ind + "gridPush(" + $b + ", " + $v + ")\n" }
+    if k == 6: return $ind + "gridPush(" + $b + ", " + $v + ")\n"
     if k == 7 {    # made in a block of its own, pushed outward - refused
         return $ind + "{\n" + $ind + "    " + $q + " := " + $g.newNode() + "\n" + $ind + "    " + $b + ".grid[0][0].S.Push(" + $q + ")\n" + $ind + "}\n"
     }
@@ -830,7 +830,7 @@ fn (g mut SG&) anyOp(b String&, ind String&) String& {
     v := g.val()
     q := g.name("q")
     k := g.r(23)
-    if k == 0 { return $ind + $b + ".anys.Push(" + $g.newNode() + ")\n" }
+    if k == 0: return $ind + $b + ".anys.Push(" + $g.newNode() + ")\n"
     if k >= 20 {    # E25: text a scope argument puts in an inner block, boxed outward - copied into the box (T32a)
         t := g.name("t")
         if k == 22 {
@@ -869,11 +869,11 @@ fn (g mut SG&) anyOp(b String&, ind String&) String& {
     if k == 15 {    # an inner block's text copied into an any
         return $ind + "{\n" + $ind + "    " + $q + " := \"u\" + $" + $v + "\n" + $ind + "    churn()\n" + $ind + "    " + $b + ".szs.Push(" + $q + ")\n" + $ind + "}\n"
     }
-    if k == 1 { return $ind + $b + ".anys.Push(Cnt(" + $v + "))\n" }
-    if k == 2 { return $ind + $b + ".anys.Push(Box())\n" }
-    if k == 3 { return $ind + $b + ".anys.Push(E.A(Box()))\n" }
+    if k == 1: return $ind + $b + ".anys.Push(Cnt(" + $v + "))\n"
+    if k == 2: return $ind + $b + ".anys.Push(Box())\n"
+    if k == 3: return $ind + $b + ".anys.Push(E.A(Box()))\n"
     if k == 4 { return $ind + $b + ".anys.Push(" + $g.newNode() + " if Run > 0 else Cnt(" + $v + "))\n" }
-    if k == 5 { return $ind + $b + ".anys.Push(anyOf(" + $v + "))\n" }
+    if k == 5: return $ind + $b + ".anys.Push(anyOf(" + $v + "))\n"
     if k == 6 {    # made in an inner block, kept outward: a borrow of it refused, a copy (a number) fine
         return $ind + "{\n" + $ind + "    " + $q + " := Node(" + $v + ")\n" + $ind + "    " + $b + ".anys.Push(" + $q + ")\n" + $ind + "}\n"
     }
@@ -881,7 +881,7 @@ fn (g mut SG&) anyOp(b String&, ind String&) String& {
     if k == 8 {    # an element's box, written through a mut any: a copy of the element, its references the element's
         return $ind + "if " + $b + ".boxes.Len() > 0 {\n" + $ind + "    " + $q + " mut any Gr& = " + $b + ".boxes[0]\n" + $ind + "    growAny(" + $q + ", " + $v + ")\n" + $ind + "}\n"
     }
-    if k == 9 { return $ind + $b + ".cls.Push(" + $g.newNode() + ")\n" + $ind + $b + ".cls.Push(Cnt(" + $v + "))\n" }
+    if k == 9: return $ind + $b + ".cls.Push(" + $g.newNode() + ")\n" + $ind + $b + ".cls.Push(Cnt(" + $v + "))\n"
     if k == 10 {    # a closed trait's type case, building through the binding
         x := g.name("x")
         return ($ind + "for " + $x + " in " + $b + ".cls {\n" + $ind + "    match " + $x + " {\n" + $ind + "        case Node n { n.next = Node(" + $v + ") }\n" +
@@ -893,27 +893,27 @@ fn (g mut SG&) anyOp(b String&, ind String&) String& {
 
 # a statement storing into what t declares: 0 a node x, 1 a box (the scenario's w.b), anything else the target's own
 fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
-    if t == 0 and g.chance(6) { return g.ctorScopeOp(a, ind, g.r(14)) }
-    if t == 0 { return g.nodeOp(a, ind, d) }
+    if t == 0 and g.chance(6): return g.ctorScopeOp(a, ind, g.r(14))
+    if t == 0: return g.nodeOp(a, ind, d)
     if t == 1 {
-        if g.chance(60) { return g.boxOp(a, ind, d) }
+        if g.chance(60): return g.boxOp(a, ind, d)
         return g.nodeOp($a + ".head", ind, d)
     }
-    if t == 2 { return g.listOp(a, ind) }
-    if t == 3 { return g.mapOp(a, ind) }
-    if t == 4 { return g.arrOp(a, ind, d) }
+    if t == 2: return g.listOp(a, ind)
+    if t == 3: return g.mapOp(a, ind)
+    if t == 4: return g.arrOp(a, ind, d)
     if t == 5 {
-        if g.chance(50) { return g.anyOp(a, ind) }
-        if g.chance(40) { return g.cellOp(a, ind) }
+        if g.chance(50): return g.anyOp(a, ind)
+        if g.chance(40): return g.cellOp(a, ind)
         k := g.r(4)
-        if k == 0 { return $ind + $a + ".boxes.Push(Box())\n" }
+        if k == 0: return $ind + $a + ".boxes.Push(Box())\n"
         if k == 1 {    # a copy of an element of a List of boxes: its references are the element's
             c := g.name("c")
             return $ind + $c + " := " + $a + ".boxes[0]\n" + $ind + $c + ".head.next = " + $g.newNode() + "\n"
         }
         return g.listOp($a + ".nodes", ind)
     }
-    if t == 6 { return g.enumOp(a, ind, d) }
+    if t == 6: return g.enumOp(a, ind, d)
     return g.twoOp(a, ind, d)
 }
 
@@ -927,7 +927,7 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
 # with the instance (8, accepted): either way the closure lives where what it captured does, never in the
 # constructor's frame
 fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
-    if k >= 10 { return g.ctorChoiceArgOp(a, ind, k) }
+    if k >= 10: return g.ctorChoiceArgOp(a, ind, k)
     v := g.val()
     ty := g.name("cs")
     mkt := g.name("cst")
@@ -936,7 +936,7 @@ fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
     tt := g.name("tt")
     field := "    y String& = $n + \"-new-text-in-p\"\n"
     if k == 2 { field = "    y := " + $mkt + "(n)\n" }
-    if k == 4 { field = "    y String& = $n + \"-new-text-in-the-instance\"\n" }
+    if k == 4: field = "    y String& = $n + \"-new-text-in-the-instance\"\n"
     if k == 5 { field = "    y String& = (p if n >= 0 else $n + \"-new-text-in-the-instance\")\n" }
     if k == 6 {
         field = "    y String& = match n >= 0 {\n        case true: p\n        case false: $n + \"-new-text-in-the-instance\"\n    }\n"
@@ -974,7 +974,7 @@ fn (g mut SG&) ctorChoiceArgOp(a String&, ind String&, k I64) String& {
     if k == 11 { choice = "match n == -77777 {\n        case true: \"\"\n        case false: " + $mk + "(t, n)\n    }" }
     if k == 13 { choice = "\"\" if n == -77777 else " + $mk + "(t, n)" }
     body := "    e := " + $ty + "(" + $choice + ", n)\n    return e\n"
-    if k == 11 { body = "    return " + $ty + "(" + $choice + ", n)\n" }
+    if k == 11: body = "    return " + $ty + "(" + $choice + ", n)\n"
     rt := ty
     if k == 12 {
         rt = wt
@@ -998,7 +998,7 @@ fn (g mut SG&) strOp(ind String&) String& {
     q := g.name("q")
     if g.chance(60) {
         k := g.r(17)
-        if k == 0 { return $ind + "acc += chain(r.n)\n" }
+        if k == 0: return $ind + "acc += chain(r.n)\n"
         if k == 1 { return $ind + "r.n.v = r.n.v + 1\n" }                       # an effect: once per rendering
         if k == 2 {    # a lambda in this frame, reading what the receiver reaches
             return $ind + $q + " := fn() I64 { return r.n.v + " + $v + " }\n" + $ind + "acc += " + $q + "()\n"
@@ -1008,8 +1008,8 @@ fn (g mut SG&) strOp(ind String&) String& {
             return ($ind + $f + " := fn() I64 {\n" + $ind + "    " + $q + " := Node(r.n.v)\n" + $ind + "    " + $q + ".next = Node(" + $v + ")\n" + $ind +
                     "    return chain(" + $q + ")\n" + $ind + "}\n" + $ind + "acc += " + $f + "()\n")
         }
-        if k == 4 { return $ind + "acc += idT(r.n).v + idT(r.n.v)\n" }
-        if k == 5 { return $ind + "acc += cycA(r.n, 3)\n" }
+        if k == 4: return $ind + "acc += idT(r.n).v + idT(r.n.v)\n"
+        if k == 5: return $ind + "acc += cycA(r.n, 3)\n"
         if k == 6 { return $ind + "if r.l.Len() > 0 { acc += r.l[0].v }\n" }
         if k == 7 {    # what Str builds in its own blocks
             tl := g.name("tl")
@@ -1017,7 +1017,7 @@ fn (g mut SG&) strOp(ind String&) String& {
                     $q + "))\n" + $ind + "acc += " + $tl + "[0]\n")
         }
         if k == 8 { return $ind + $q + " := $r.n.v + \"x\" + $chain(r.n)\n" + $ind + "acc += " + $q + ".Len()\n" }
-        if k == 9 { return $ind + "acc += sumList(r.l) + sumMap(r.m) + sumArr(r.a)\n" }
+        if k == 9: return $ind + "acc += sumList(r.l) + sumMap(r.m) + sumArr(r.a)\n"
         if k == 10 {    # a conditional of references, read
             return $ind + $q + " := r.n if Run > 0 else r.l[0]\n" + $ind + "acc += " + $q + ".v\n"
         }
@@ -1051,13 +1051,13 @@ fn (g mut SG&) strOp(ind String&) String& {
         h := g.name("h")
         return $ind + $h + " := r.n\n" + $ind + "join { spawn fn() { " + $h + ".next = Node(" + $v + ") } }\n"
     }
-    if k == 10 { return $ind + "idT(r.n).next = Node(" + $v + ")\n" }
-    if k == 11 { return $ind + "cycGrow(r.n, 2)\n" }
+    if k == 10: return $ind + "idT(r.n).next = Node(" + $v + ")\n"
+    if k == 11: return $ind + "cycGrow(r.n, 2)\n"
     if k == 12 { return $ind + "if r.l.Len() > 0 { r.l[0].next = Node(" + $v + ") }\n" }
-    if k == 13 { return $ind + "acc += moveH(r.n).v\n" }
-    if k == 14 { return $ind + "r.n.next = pickDef(r.n, " + $v + ")\n" }
-    if k == 15 { return $ind + "r.l.Push(Node(" + $v + "))\n" }
-    if k == 16 { return $ind + "r.m.Put(" + $v + ", Node(" + $v + "))\n" }
+    if k == 13: return $ind + "acc += moveH(r.n).v\n"
+    if k == 14: return $ind + "r.n.next = pickDef(r.n, " + $v + ")\n"
+    if k == 15: return $ind + "r.l.Push(Node(" + $v + "))\n"
+    if k == 16: return $ind + "r.m.Put(" + $v + ", Node(" + $v + "))\n"
     return $ind + $q + " := Node(" + $v + ")\n" + $ind + "r.n.next = " + $q + "\n"
 }
 
@@ -1104,7 +1104,7 @@ fn (g mut SG&) textScenario(k I64) String& {
     g.outer = ""
     g.after = ""
     body String& = ""
-    for _ in range 2 + g.r(4) { body = $body + $g.textOp("        ") }
+    for _ in range 2 + g.r(4): body = $body + $g.textOp("        ")
     return ("fn s" + $k + "() I64 {\n    bag := Bag()\n    acc I64 = 0\n" + $g.outer + "    for i in range 3 {\n        t := \"in\" + $i\n" + $body +
             "        churn()\n    }\n    churn()\n" + $g.after + "    return acc * 7 + sumAg(bag.anys) * 3 + sumSz(bag.szs)\n}\n")
 }
@@ -1130,15 +1130,15 @@ fn (g mut SG&) textOp(ind String&) String& {
     }
     if k == 0 {    # numbers a scope argument puts in the loop body, returned on or made here
         nums String& = $"mkNums(" + $v + ")"
-        if g.chance(50) { nums = $"retNumsAt(t, " + $v + ")" }
+        if g.chance(50): nums = $"retNumsAt(t, " + $v + ")"
         return $ind + $q + " := " + $nums + "\n" + $ind + "churn()\n" + $ind + "acc = acc * 31 + hashNums(" + $q + ")\n"
     }
     if k == 1 {    # one of several results
         n := g.name("n")
         return $ind + $q + ", " + $n + " := retTup(" + $v + ")\n" + $ind + "churn()\n" + $ind + "acc = acc * 31 + " + $q + ".Hash() + " + $n + "\n"
     }
-    if k == 2 { return $ind + "bag.szs.Push(Lab(" + $call + "))\n" }
-    if k == 3 { return $ind + "bag.anys.Push(Lab(" + $call + "))\n" }
+    if k == 2: return $ind + "bag.szs.Push(Lab(" + $call + "))\n"
+    if k == 3: return $ind + "bag.anys.Push(Lab(" + $call + "))\n"
     if k == 4 {    # captured by a lambda called after a churn
         f := g.name("f")
         return ($ind + $q + " := " + $call + "\n" + $ind + $f + " := fn() I64 { return " + $q + ".Len() * 7 + I64(U8(" + $q + "[0])) }\n" + $ind +
@@ -1210,7 +1210,7 @@ fn (g mut SG&) genScenario(k I64) String& {
             body = ($body + $ind + $q + " := " + $gn + "(" + $v + ", " + $n + ", t)\n" + $ind + $a + " := try " + $q + ".Next() catch default \"\"\n" + $ind +
                     "churn()\n" + $ind + "acc = acc * 31 + " + $a + ".Hash()\n")
         }
-        if w == 7 { body = $body + $ind + "acc = acc * 31 + rt" + $k + "(" + $n + ", " + $(g.r(5)) + ")\n" }
+        if w == 7: body = $body + $ind + "acc = acc * 31 + rt" + $k + "(" + $n + ", " + $(g.r(5)) + ")\n"
         if w == 8 { body = $body + $ind + "acc = acc * 31 + (try er" + $k + "(" + $n + ") catch SgErr default -1)\n" }
         # D18c: an input's views kept beside it, or where the scenario's list is (refused where t is the turn's)
         if w == 9 {
@@ -1275,9 +1275,9 @@ fn (g mut SG&) secondScenario(k I64) String& {
         refs String& = ""
         loop String& = ""
         if kind == 3 {
-            for j in range n { refs = $refs + "    r" + $(j + 1) + " Tx& = Tx(Array<Char>(0))\n" }
+            for j in range n: refs = $refs + "    r" + $(j + 1) + " Tx& = Tx(Array<Char>(0))\n"
             loop = "        k.s = r" + $n + "\n"
-            for j in range n - 1 { loop = $loop + "        r" + $(n - j) + " = r" + $(n - j - 1) + "\n" }
+            for j in range n - 1: loop = $loop + "        r" + $(n - j) + " = r" + $(n - j - 1) + "\n"
             loop = "    for j in range " + $(n + 2) + " {\n" + $loop + "        r1 = s\n    }\n"
         } else {
             loop = "    k.s = s\n"
@@ -1353,25 +1353,25 @@ fn (g mut SG&) cursorStmts(d I64, ind String&) String& {
 fn (g mut SG&) cursorLeaf(ind String&) String& {
     v := g.val()
     w := g.r(11)
-    if w == 0 { return $ind + "cur = root\n" }
-    if w == 1 { return $ind + "cur = outer\n" }
-    if w == 2 { return $ind + "cur = Node(" + $v + ")\n" }
+    if w == 0: return $ind + "cur = root\n"
+    if w == 1: return $ind + "cur = outer\n"
+    if w == 2: return $ind + "cur = Node(" + $v + ")\n"
     if w == 3 {
         q := g.name("q")
         return $ind + $q + " mut Node& = Node(" + $v + ")\n" + $ind + "cur = " + $q + "\n"
     }
-    if w == 4 { return $ind + "cur.next = Node(" + $v + ")\n" }
+    if w == 4: return $ind + "cur.next = Node(" + $v + ")\n"
     if w == 5 {    # a walk along the chain, five steps at most (a chain may loop)
         nx := g.name("nx")
         return ($ind + "for _ in range 5 {\n" + $ind + "    " + $nx + " := cur.next\n" + $ind + "    if " + $nx + " == null: break\n" + $ind + "    cur = " +
                 $nx + "\n" + $ind + "}\n")
     }
-    if w == 6 { return $ind + "acc += cur.v\n" }
+    if w == 6: return $ind + "acc += cur.v\n"
     if w == 7 {
         f := g.name("f")
         return $ind + $f + " := fn() I64 { return cur.v }\n" + $ind + "acc += " + $f + "()\n"
     }
-    if w == 8 { return $ind + "root.next = cur\n" }
+    if w == 8: return $ind + "root.next = cur\n"
     if w == 9 { return $ind + "cur = cur if Run > 0 else outer\n" }
     q := g.name("q")
     return $ind + $q + " mut Node& = Node(" + $v + ")\n" + $ind + $q + ".next = cur\n" + $ind + "cur = " + $q + "\n"
@@ -1382,7 +1382,7 @@ fn (g mut SG&) cursorLeaf(ind String&) String& {
 # them: each storage must be built where its view is kept (or the view refused), so the words and what the closures
 # read, after a churn, are the checksum
 fn (g mut SG&) viewScenario(k I64) String& {
-    for _ in range 8 { g.next() }
+    for _ in range 8: g.next()
     body := $g.viewStmts(k, 2, "    ") + $g.viewStmts(k, 2, "    ")
     return ("fn vw" + $k + "(t String&) Iterator<String&> {\n    s := 0\n    for i in range t.Len() {\n        if t[i] == ' ' {\n" +
             "            yield t[s:i]\n            s = i + 1\n        }\n    }\n    yield t[s:]\n}\n" +
@@ -1415,7 +1415,7 @@ fn (g mut SG&) viewLeaf(k I64, ind String&) String& {
     t := g.name("t")
     if w == 0 { return $ind + $t + " := $\"" + $v + " a b\"\n" + $ind + "for w in vw" + $k + "(" + $t + ") { keep.Push(w) }\n" }
     if w == 1 { return $ind + $t + " := $\"" + $v + "-x\"\n" + $ind + "keep.Push(" + $t + "[0:1])\n" + $ind + "keep.Push(" + $t + "[1:])\n" }
-    if w == 2 { return $ind + "keep.Push(vh" + $k + "(" + $v + "))\n" }
+    if w == 2: return $ind + "keep.Push(vh" + $k + "(" + $v + "))\n"
     if w == 3 { return $ind + $t + " mut Node& = Node(" + $v + ")\n" + $ind + "fs.Push(fn() I64 { return " + $t + ".v })\n" }
     return $ind + $t + " := \"" + $v + "\" + $" + $v + "\n" + $ind + "keep.Push(" + $t + "[0:" + $(Array<String&>["1", "2"][g.r(2)]) + "])\n"
 }
@@ -1427,7 +1427,7 @@ fn (g mut SG&) viewLeaf(k I64, ind String&) String& {
 # so the chain and the kept nodes, after a churn, are the checksum. Now and then a value carrying one reaches a place a
 # written function type is all that holds - a list's element, a capture - which must be refused
 fn (g mut SG&) relScenario(k I64) String& {
-    for _ in range 8 { g.next() }
+    for _ in range 8: g.next()
     body := $g.relStmts(k, 2, "    ") + $g.relStmts(k, 2, "    ")
     return ("fn rk" + $k + "(l mut Vec<Node&>&) fn&(n Node&) {\n    return fn(n Node&) { l.Push(n) }\n}\n" +
             "fn rs" + $k + "(a mut Node&, b mut Node?&) { a.v += 1 }\n" +
@@ -1465,18 +1465,18 @@ fn (g mut SG&) relLeaf(k I64, ind String&) String& {
     if g.r(400) == 0 { return $ind + $q + " := Vec<fn&(a mut Node&, b mut Node?&)>()\n" + $ind + $q + ".Push(op)\n" }
     if g.r(400) == 0 { return $ind + $q + " := fn() { add(Node(" + $v + ")) }\n" + $ind + $q + "()\n" }
     w := g.r(15)
-    if w == 10 { return $ind + "rh" + $k + "(link, root, " + $v + ")\n" }
-    if w == 11 { return $ind + "rd" + $k + "(op, root, " + $v + ")\n" }
+    if w == 10: return $ind + "rh" + $k + "(link, root, " + $v + ")\n"
+    if w == 11: return $ind + "rd" + $k + "(op, root, " + $v + ")\n"
     if w == 12 { return $ind + $q + " := Node(" + $v + ")\n" + $ind + "rc" + $k + "(add, " + $q + ")\n" }
     if w == 13 { return $ind + $q + " := Node(" + $v + ")\n" + $ind + "rc" + $k + "(give, " + $q + ")\n" }
     if w == 14 { return $ind + $q + " := link\n" + $ind + $q + "f := fn() { " + $q + "(root, Node(" + $v + ")) }\n" + $ind + $q + "f()\n" }
-    if w == 0 { return $ind + "op(root, Node(" + $v + "))\n" }
-    if w == 1 { return $ind + $q + " mut Node& = Node(" + $v + ")\n" + $ind + "op(root, " + $q + ")\n" }
-    if w == 2 { return $ind + "add(Node(" + $v + "))\n" }
+    if w == 0: return $ind + "op(root, Node(" + $v + "))\n"
+    if w == 1: return $ind + $q + " mut Node& = Node(" + $v + ")\n" + $ind + "op(root, " + $q + ")\n"
+    if w == 2: return $ind + "add(Node(" + $v + "))\n"
     if w == 3 { return $ind + $q + " := Node(" + $v + ")\n" + $ind + "add(" + $q + ")\n" }
-    if w == 4 { return $ind + "give(Node(" + $v + "))\n" }
-    if w == 5 { return $ind + "op = rs" + $k + "\n" }
-    if w == 6 { return $ind + "op = link\n" }
+    if w == 4: return $ind + "give(Node(" + $v + "))\n"
+    if w == 5: return $ind + "op = rs" + $k + "\n"
+    if w == 6: return $ind + "op = link\n"
     if w == 7 { return $ind + $q + " := link if Run > 0 else rs" + $k + "\n" + $ind + $q + "(root, Node(" + $v + "))\n" }
     if w == 8 { return $ind + $q + " := rk" + $k + "(kept)\n" + $ind + $q + "(Node(" + $v + "))\n" }
     return $ind + $q + " := Node(" + $v + ")\n" + $ind + "give(" + $q + ")\n"
@@ -1531,14 +1531,14 @@ fn Scenario(seed U64, k I64) String& {
     head String& = ""
     kind I64 = t
     a String& = "x"
-    if t == 1 { a = "w.b" }
-    if t == 2 or t == 7 { a = "l" }
-    if t == 3 { a = "m" }
-    if t == 4 { a = "a" }
-    if t == 5 { a = "bag" }
-    if t == 6 { a = "e" }
-    if t == 7 { kind = 2 }
-    if t == 8 { a = "t" }
+    if t == 1: a = "w.b"
+    if t == 2 or t == 7: a = "l"
+    if t == 3: a = "m"
+    if t == 4: a = "a"
+    if t == 5: a = "bag"
+    if t == 6: a = "e"
+    if t == 7: kind = 2
+    if t == 8: a = "t"
     if t == 9 {    # a global node, written through by a function
         kind = 0
         a = "G" + $k
@@ -1563,15 +1563,15 @@ fn Program(seed U64, n I64, keep Array<Bool>&) String& {
     b := StringBuilder()
     b.Push("# scope fuzz seed " + $seed + "\n")
     b.Push(Prelude)
-    if HasDtors(seed) { b.Push(DtorPrelude) }
+    if HasDtors(seed): b.Push(DtorPrelude)
     for k in range n {
-        if keep.Len() == 0 or keep[k] { b.Push(Scenario(seed, k)) }
+        if keep.Len() == 0 or keep[k]: b.Push(Scenario(seed, k))
     }
     b.Push("fn main() ? {\n")
     for k in range n {
-        if keep.Len() == 0 or keep[k] { b.Push("    say(\"" + $k + ": \" + $s" + $k + "())\n") }
+        if keep.Len() == 0 or keep[k]: b.Push("    say(\"" + $k + ": \" + $s" + $k + "())\n")
     }
-    if HasDtors(seed) { b.Push("    say(\"dtors \" + $(Made - Dropped))\n") }
+    if HasDtors(seed): b.Push("    say(\"dtors \" + $(Made - Dropped))\n")
     b.Push("}\n")
     return b.ToString()
 }
@@ -1654,8 +1654,8 @@ fn (g mut SG&) weakOp(k I64, ind String&) String& {
     x := g.name("x")
     n := "WN" + $k
     w := g.r(14)
-    if w <= 1 { return $ind + "l.push(i * " + $v + ")\n" }
-    if w == 2 { return $ind + "l.pop()\n" }
+    if w <= 1: return $ind + "l.push(i * " + $v + ")\n"
+    if w == 2: return $ind + "l.pop()\n"
     if w == 3 {    # a reference across the call removing its node
         return $ind + $x + " := l.head\n" + $ind + "l.pop()\n" + $ind + "churn()\n" + $ind + "if " + $x + " != null { acc = acc * 31 % 1000000007 + " + $x + ".v + " + $x + ".key.Len() }\n"
     }
@@ -1670,9 +1670,9 @@ fn (g mut SG&) weakOp(k I64, ind String&) String& {
                 "    acc = acc * 31 % 1000000007 + " + $x + ".Hash() % 1000\n" + $ind + "}\n")
     }
     if w == 6 { return $ind + "if l.head != null { acc += l.popRead(l.head!.key) }\n" }
-    if w == 7 { return $ind + "s = WS" + $k + "(l.head)\n" }
+    if w == 7: return $ind + "s = WS" + $k + "(l.head)\n"
     if w == 8 { return $ind + "if l.head != null { l.m.Put(i % 3, l.head!) }\n" }
-    if w == 9 { return $ind + "l.m.Remove((i + 1) % 3)\n" }
+    if w == 9: return $ind + "l.m.Remove((i + 1) % 3)\n"
     if w == 10 {    # moved out of the Map
         return $ind + $x + " := try l.m.Take(i % 3) catch default " + $n + "(-1, \"none\")\n" + $ind + "acc = acc * 31 % 1000000007 + " + $x + ".v + " + $x + ".key.Len()\n"
     }
@@ -1684,7 +1684,7 @@ fn (g mut SG&) weakOp(k I64, ind String&) String& {
 }
 
 fn (g mut SG&) weakScenario(k I64) String& {
-    for _ in range 8 { g.next() }
+    for _ in range 8: g.next()
     body String& = ""
     for _ in range 4 + g.r(6) {
         op := g.weakOp(k, "        ")
@@ -1851,14 +1851,14 @@ fn (g mut SG&) handOp(ind String&, clean Bool) String& {
     kk := g.k
     bf := "Buf" + $kk
     k := g.r(14)
-    for clean and k in HandKeeps { k = g.r(14) }
-    if k == 0 { return $ind + "put" + $kk + "(p, i, " + $bf + "(i + " + $v + "))\n" }
-    if k == 1 { return $ind + "pass" + $kk + "(p, i, " + $bf + "(i * " + $v + "))\n" }
-    if k == 2 { return $ind + "p.bm.Put(i % 4, " + $bf + "(i - " + $v + "))\n" }
+    for clean and k in HandKeeps: k = g.r(14)
+    if k == 0: return $ind + "put" + $kk + "(p, i, " + $bf + "(i + " + $v + "))\n"
+    if k == 1: return $ind + "pass" + $kk + "(p, i, " + $bf + "(i * " + $v + "))\n"
+    if k == 2: return $ind + "p.bm.Put(i % 4, " + $bf + "(i - " + $v + "))\n"
     if k == 3 { return $ind + "push" + $kk + "(p, " + $bf + "(i + " + $v + "))\n" + $ind + "if p.bv.Len() > 3 { p.bv.Truncate(1) }\n" }
-    if k == 4 { return $ind + "p.bm.Remove((i + 1) % 4)\n" }
-    if k == 5 { return $ind + "wrapPut" + $kk + "(p, i, " + $bf + "(i + " + $v + "))\n" }
-    if k == 6 { return $ind + "acc += peek" + $kk + "(p, i, " + $bf + "(i + " + $v + "))\n" }
+    if k == 4: return $ind + "p.bm.Remove((i + 1) % 4)\n"
+    if k == 5: return $ind + "wrapPut" + $kk + "(p, i, " + $bf + "(i + " + $v + "))\n"
+    if k == 6: return $ind + "acc += peek" + $kk + "(p, i, " + $bf + "(i + " + $v + "))\n"
     if k == 7 {    # taken out to a holder, ended at its block's end
         return ($ind + "if p.bm.Has(i % 4) {\n" + $ind + "    " + $x + " " + $bf + " = try p.bm.Take(i % 4) catch { unreachable }\n" + $ind +
                 "    acc += " + $x + ".data[0]\n" + $ind + "}\n")
@@ -1872,7 +1872,7 @@ fn (g mut SG&) handOp(ind String&, clean Bool) String& {
                 "    put" + $kk + "(p, i, " + $bf + "(" + $v + "))\n" + $ind + "    acc += " + $x + "[0]\n" + $ind + "}\n")
     }
     if k == 10 { return $ind + "if p.bv.Len() > 0 { acc += (try p.bv.Pop() catch { unreachable }).n }\n" }
-    if k == 11 { return $ind + "p.wm.Remove(i % 3)\n" }
+    if k == 11: return $ind + "p.wm.Remove(i % 3)\n"
     if k == 12 {    # a view of the Vec's element kept across a Truncate: the place keeps
         return ($ind + "if p.bv.Len() > 0 {\n" + $ind + "    " + $x + " := p.bv.Ref(0).data[0:1]\n" + $ind + "    p.bv.Truncate(0)\n" + $ind +
                 "    acc += " + $x + "[0]\n" + $ind + "}\n")
@@ -1886,7 +1886,7 @@ HandKeeps Array<I64> = Array<I64>[8, 9, 12]
 fn (g mut SG&) handScenario(k I64) String& {
     clean := g.chance(50)
     body String& = ""
-    for _ in range 3 + g.r(5) { body = $body + $g.handOp("        ", clean) }
+    for _ in range 3 + g.r(5): body = $body + $g.handOp("        ", clean)
     turns := 20 + g.r(40)
     return ("# scenario " + $k + "\n" + $handHolder(k) + "fn s" + $k + "() I64 {\n    p Pool" + $k + " = Pool" + $k + "()\n    acc I64 = 0\n" +
             "    for i in range " + $turns + " {\n" + $body + "        if i % 7 == 0 { acc += churn() }\n    }\n    churn()\n" +
@@ -1902,19 +1902,19 @@ fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
     x := g.name("x")
     kk := g.k
     k := g.r(31)
-    for clean and k in FreeKeeps { k = g.r(31) }
-    if k == 0 { return $ind + $h + ".t = \"t\" + $i + \"-" + $v + "\"\n" }
-    if k == 1 { return $ind + $h + ".n = Node(i + " + $v + ")\n" }
-    if k == 2 { return $ind + $h + ".n = Node.mkChain(i, " + $(1 + g.r(3)) + ")\n" }
-    if k == 3 { return $ind + $h + ".l.Push(Node(i * " + $v + "))\n" }
+    for clean and k in FreeKeeps: k = g.r(31)
+    if k == 0: return $ind + $h + ".t = \"t\" + $i + \"-" + $v + "\"\n"
+    if k == 1: return $ind + $h + ".n = Node(i + " + $v + ")\n"
+    if k == 2: return $ind + $h + ".n = Node.mkChain(i, " + $(1 + g.r(3)) + ")\n"
+    if k == 3: return $ind + $h + ".l.Push(Node(i * " + $v + "))\n"
     if k == 4 { return $ind + "if " + $h + ".l.Len() > 2 { try " + $h + ".l.Pop() catch { } }\n" }
     if k == 5 { return $ind + "if " + $h + ".l.Len() > 3 { try " + $h + ".l.RemoveAt(0) catch { } }\n" }
-    if k == 6 { return $ind + $h + ".m.Put($(i % 4), Node(i + " + $v + "))\n" }
-    if k == 7 { return $ind + $h + ".m.Remove($((i + 1) % 4))\n" }
+    if k == 6: return $ind + $h + ".m.Put($(i % 4), Node(i + " + $v + "))\n"
+    if k == 7: return $ind + $h + ".m.Remove($((i + 1) % 4))\n"
     if k == 8 {    # taken out of the Map: this function's, used, then let go of
         return $ind + $x + " := try " + $h + ".m.Take($(i % 4)) catch default Node(-1)\n" + $ind + "acc = acc * 31 + chain(" + $x + ")\n"
     }
-    if k == 9 { return $ind + $h + ".v.Push(i * " + $v + ")\n" }
+    if k == 9: return $ind + $h + ".v.Push(i * " + $v + ")\n"
     if k == 10 {    # a view of the node, used after its place lets go: the place keeps
         return $ind + $x + " := " + $h + ".n\n" + $ind + $h + ".n = Node(" + $v + ")\n" + $ind + "acc = acc * 31 + chain(" + $x + ")\n"
     }
@@ -1936,13 +1936,13 @@ fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
         return ($ind + $x + " := try " + $h + ".m.Get($(i % 4)) catch default Node(-3)\n" + $ind + $h + ".m.Remove($(i % 4))\n" + $ind +
                 "acc = acc * 31 + chain(" + $x + ")\n")
     }
-    if k == 17 { return $ind + "grow" + $kk + "(" + $h + ", i)\n" }
-    if k == 18 { return $ind + "reset" + $kk + "(" + $h + ", i)\n" }
+    if k == 17: return $ind + "grow" + $kk + "(" + $h + ", i)\n"
+    if k == 18: return $ind + "reset" + $kk + "(" + $h + ", i)\n"
     if k == 19 {    # a node made where the holder lives, its chain grown, then given to the place
         return ($ind + "{\n" + $ind + "    " + $x + " mut Node& = Node(i)\n" + $ind + "    " + $x + ".next = Node(" + $v + ")\n" + $ind + "    " + $h + ".n = " + $x +
                 "\n" + $ind + "}\n")
     }
-    if k == 20 { return $ind + $h + ".t = $" + $h + ".t.Len() + \"x\"\n" }
+    if k == 20: return $ind + $h + ".t = $" + $h + ".t.Len() + \"x\"\n"
     # O15: resources built, kept in a Map, taken out - ended where their holders let go - and shapes the scope rules may refuse
     if k == 22 {
         r := g.name("r")
@@ -1969,8 +1969,8 @@ fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
         return ($ind + "{\n" + $ind + "    " + $r + " := Res(i)\n" + $ind + "    " + $f + " := fn() I64 { return " + $r + ".n }\n" + $ind + "    acc += " + $f + "()\n" + $ind + "}\n")
     }
     # O8d: the scenario's globals given new values, by a call and here, and views of them kept across a let-go (keep)
-    if k == 27 { return $ind + "setv" + $kk + "(i + " + $v + ")\n" }
-    if k == 28 { return $ind + "GN" + $kk + " = Node.mkChain(i, " + $(1 + g.r(3)) + ")\n" }
+    if k == 27: return $ind + "setv" + $kk + "(i + " + $v + ")\n"
+    if k == 28: return $ind + "GN" + $kk + " = Node.mkChain(i, " + $(1 + g.r(3)) + ")\n"
     if k == 29 {
         return ($ind + $x + " := GV" + $kk + ".View()\n" + $ind + "setv" + $kk + "(i)\n" + $ind + "churn()\n" + $ind + "acc = acc * 31 + " +
                 $x + "[" + $x + ".Len() - 1]\n")
@@ -1991,7 +1991,7 @@ fn (g mut SG&) freeScenario(k I64) String& {
     }
     clean := g.chance(50)
     body String& = ""
-    for _ in range 3 + g.r(5) { body = $body + $g.freeOp(h, "        ", clean) }
+    for _ in range 3 + g.r(5): body = $body + $g.freeOp(h, "        ", clean)
     turns := 20 + g.r(40)
     return ("# scenario " + $k + "\n" + $head + "fn s" + $k + "() I64 {\n" + $decl + "    acc I64 = 0\n    for i in range " + $turns + " {\n" + $body +
             "        if i % 7 == 0 { acc += churn() }\n    }\n    churn()\n    return acc * 7 + sum" + $k + "(" + $h + ")\n}\n")
@@ -2011,7 +2011,7 @@ fn FreeProgram(seed U64, n I64, keep Array<Bool>&) String& {
     }
     b.Push("fn main() ? {\n")
     for k in range n {
-        if keep.Len() == 0 or keep[k] { b.Push("    say(\"" + $k + ": \" + $s" + $k + "())\n") }
+        if keep.Len() == 0 or keep[k]: b.Push("    say(\"" + $k + ": \" + $s" + $k + "())\n")
     }
     b.Push("}\n")
     # (std/list imported only where a scenario holds one: an import nothing is reached through is an error, M5a)

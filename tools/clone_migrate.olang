@@ -28,19 +28,14 @@ fn main() ? io.Error {
             continue
         })
     }
-    # the modules among the files given that declare a Clone() of their own, by their names as an import names them
-    owners Vec<String>
-    for k in range 1, args.Len() {
-        if declaresClone(texts[k - 1]): owners.Push(moduleName(args[k]))
-    }
     listed := 0
     for k in range 1, args.Len() {
         path := args[k]
         text := texts[k - 1]
         if text.Len() == 0: continue
-        if owners.Len() > 0 and (declaresClone(text) or importsAny(text, owners)) {
+        if reachesClone(path, text) {
             for n in cloneLines(text) {
-                if listed == 0: try io.PutErrLn("for a person: these call a Clone(), and a module here declares one of its own - Copy() is the supplied one, shared at references:")
+                if listed == 0: try io.PutErrLn("for a person: these call a Clone(), and a module here or one it imports declares one of its own - Copy() is the supplied one, shared at references:")
                 try io.PutErrLn("  " + $path + ":" + $n)
                 listed++
             }
@@ -88,25 +83,32 @@ fn declaresClone(text String&) Bool {
     return false
 }
 
-# the name an import gives a file: its base name without ".olang"
-fn moduleName(path String&) String {
-    b := path[(try path.FindLast("/") catch default -1) + 1:]
-    return $(b[:b.Len() - 6] if b.EndsWith(".olang") else b)
+# whether text (the file at path), or a module it imports - directly or through others, read from beside it; std's
+# never declare one - declares a Clone() of its own: a ".Clone()" there may be that one, not the supplied one
+fn reachesClone(path String&, text String&) Bool {
+    seen Map<String, String>
+    reached(path, text, seen)
+    for e in seen.Iter() {
+        if declaresClone(e.Value): return true
+    }
+    return false
 }
 
-# whether text imports a module named one of names (the last part of its path)
-fn importsAny(text String&, names Vec<String>&) Bool {
+# the file at path and every module it imports but std's, by path, with their texts
+fn reached(path String&, text String&, seen mut Map<String, String>&) {
+    if path in seen: return
+    seen.Put($path, $text)
+    dir := path[:(try path.FindLast("/") catch default -1) + 1]
     for l in text.Lines() {
         if not l.StartsWith("import "): continue
         q := try l.Find("\"") catch { continue }
         e := try l[q + 1:].Find("\"") catch { continue }
         spec := l[q + 1:q + 1 + e]
-        last := spec[(try spec.FindLast("/") catch default -1) + 1:]
-        for n in names {
-            if n == last: return true
-        }
+        if spec.StartsWith("std/"): continue
+        p := $dir + $spec + ".olang"
+        t := try os.ReadFile(p) catch os.Error { continue }
+        reached(p, t, seen)
     }
-    return false
 }
 
 # the line numbers (from 1) holding ".Clone()" in code
@@ -145,9 +147,11 @@ test declaresClone "a type's own Clone is found; a call is no declaration" {
     assert not declaresClone("# fn (m M&) Clone() M\n")
 }
 
-test importsAny "an import is matched by its last part" {
-    names := Vec<String>["tensor"]
-    assert importsAny("import \"../tensor\"\nfn main() { }\n", names)
-    assert importsAny("import t \"oann/tensor\"\n", names)
-    assert not importsAny("import \"std/io\"\n", names) and moduleName("a/b/tensor.olang") == "tensor"
+test reachesClone "a Clone() declared in the file or in a module it imports, through others too" {
+    dir := os.MkTemp(dir = "/tmp", prefix = "clone_migrate.")!
+    os.WriteFile(dir + "/tensor.olang", "fn (t T&) Clone() T { return t }\n")!
+    os.WriteFile(dir + "/graph.olang", "import \"tensor\"\n")!
+    assert reachesClone(dir + "/quantgraph.olang", "import \"graph\"\nb := g.Value(y).Clone()\n")
+    assert not reachesClone(dir + "/x.olang", "import \"std/io\"\nb := a.Clone()\n")
+    os.RemoveAll(dir)!
 }

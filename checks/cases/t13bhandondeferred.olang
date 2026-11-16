@@ -27,12 +27,12 @@ fn idx(k I64) I64 ? {
 }
 
 fn deferPush(v mut Vec<Lamp>&, l Lamp) {
-    defer v.Push(l)
+    defer: v.Push(l)
     assert l.data.Len() >= 3
 }
 
 fn withErrdefer(v mut Vec<Lamp>&, l Lamp, k I64) ? {
-    errdefer v.Push(l)
+    errdefer: v.Push(l)
     try idx(k)
 }
 

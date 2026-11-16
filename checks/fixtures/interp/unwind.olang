@@ -9,18 +9,18 @@ fn f(n I64) I64 ? E { error E.Bad(n) }
 fn inner(n I64) I64 ? E { return try f(n) }
 fn helper(n I64) {
     r := R(n)
-    defer io.PutLn("helper defer " + $r.id)!
+    defer: io.PutLn("helper defer " + $r.id)!
     assert n == 0, "boom"
 }
 test helper "fails in a helper" {
     r := R(1)
-    defer io.PutLn("deferred " + $r.id)!
+    defer: io.PutLn("deferred " + $r.id)!
     helper(Live + 2)
 }
 test inner "lets a payload out" {
     r := R(3)
-    defer io.PutLn("deferred " + $r.id)!
-    errdefer io.PutLn("errdeferred " + $r.id)!
+    defer: io.PutLn("deferred " + $r.id)!
+    errdefer: io.PutLn("errdeferred " + $r.id)!
     x := try inner(Live + 4)
     assert x == 0
 }

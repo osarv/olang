@@ -306,7 +306,7 @@ fn main() ? {
         os.Exit(1)
         unreachable
     }
-    defer try os.RemoveAll(tmp) catch { }
+    defer: try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs)
     for k in range jobs {
         work[k] = $tmp + "/w" + $k

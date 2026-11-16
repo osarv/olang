@@ -250,7 +250,7 @@ fn Process.Start(args ...String&, input Array<U8>& = "", capture Bool = true, di
         at++
     }
     feed := try memFile()
-    defer unistd.close(feed)
+    defer: unistd.close(feed)
     try io.Write(feed, input) catch io.Error { error Error.Failed(args[0]) }
     unistd.lseek(feed, 0, 0)
     out I32 = -1                                        # -1: this program's own, which the child inherits

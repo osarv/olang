@@ -6330,13 +6330,14 @@ follows to tell a synchronised program from a racy one.
 
 ### 6.9 `defer`
 
-**S19.** `defer-stmnt ::= "defer" ( body | statement )` (`body`, S1b: `defer: f.Close()`). A `defer` does nothing where it stands: it registers its
-block - in the second form a block holding just that one statement, so `defer x = y` is `defer { x = y }` - as
+**S19.** `defer-stmnt ::= "defer" body` (`body`, S1b: a block or `defer: f.Close()`). A `defer` does nothing where it stands: it registers its
+block - a one-line body being a block holding just that one statement, so `defer: x = y` is `defer { x = y }` - as
 **deferred code** of the block it is written in. Deferred code runs when that block is left, by **every** way out of
 it: falling off its end; a `return`, once the value returned has been computed; a `break` or `continue` (S11a); and an
 error leaving the function - an `error` statement, or a `try` whose error no clause takes (§7). Only deferred code
 whose `defer` was reached runs, once each time it was reached: a `defer` in a loop body registers anew in every
-iteration, and its code runs at that iteration's end.
+iteration, and its code runs at that iteration's end. A statement written straight after the word, `defer f.Close()`,
+is an error naming S19 that says to write `defer: f.Close()` - one way to write each thing (2026-11-16).
 
 ```
 saved := ctx.inLoop
@@ -6370,7 +6371,7 @@ deferred code.
 
 **S19d.** A `defer` is not a statement that leaves (D10a), whatever its deferred code holds.
 
-**S19e.** `errdefer-stmnt ::= "errdefer" ( body | statement )`. An `errdefer` registers deferred code as `defer` does
+**S19e.** `errdefer-stmnt ::= "errdefer" body`. An `errdefer` registers deferred code as `defer` does
 (S19), checked as S19a and S19b check it, but its code runs only when its block is left by an **error moving
 outward**: an error leaving the function (an `error` statement, a `try` whose error no clause inside the block takes),
 an error going to a clause of a `try` outside the block - a `for x in try c` ended by its own error (S9e) included -
