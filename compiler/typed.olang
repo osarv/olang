@@ -623,6 +623,12 @@ fn FreshViews(plan Plan&, c Call&, views I64, viewsOf fn&(id BodyId) I64, varsOf
         # (a unique value moved out of a parameter, T13b: nothing else holds it, and section 8 holds the parameter's
         # storage to outlive the instance - the constructor's obligation on it)
         if MovedArg(c.Args[k]): continue
+        # (text rendered for the call, where the instance lives - a Map literal's "$i: i", O8f)
+        ts := freshText(c.Args[k], 0)
+        if ts >= 0 {
+            if ts >= plan.Built.Len() or plan.Built[ts] != home: return false
+            continue
+        }
         a := Call.fresh(c.Args[k], 0)
         if a == null or a.Site < SiteId(0): return false
         id := CalleeBody(a)
@@ -661,6 +667,17 @@ fn Scope.result(plan Plan&, site SiteId, vs Array<I64>&) Scope {
         if vs[j] == types.ResultVar: return plan.Passed(site, j)
     }
     return Scope.Unset
+}
+
+# the site of the text an argument renders, past the wrappers that give it storage, -1 for any other argument
+fn freshText(x Expr&, depth I64) I64 {
+    if depth > 8: return -1
+    return match x {
+        case Expr.Text(_, _, tx): I64(tx.Site)
+        case Expr.Promote(_, _, pr): freshText(pr.X, depth + 1)
+        case Expr.Away(_, _, y): freshText(y, depth + 1)
+        case _: -1
+    }
 }
 
 # the call an argument is, past the wrappers that give it storage, null for any other argument

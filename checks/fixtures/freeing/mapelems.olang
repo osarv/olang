@@ -1,0 +1,43 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 17's Map part): an element holding a Map, given another - in an array, through a Vec's
+# SetAt, a Map of text or of Vecs - frees what the old one held: each live entry's key and value (a slot put back, a
+# region released), then its entries, links and buckets; a removal from a Map SetAt copied in frees its entry (the copy
+# split as a Put builds an entry: before, it built the text in no slot and the removal put back what was none)
+N I64 = 20000
+
+fn mk(i I64) Map<String, I64> {
+    m Map<String, I64>
+    for j in range 20 { m.Put($i + "-" + $j + " padded out a little", j) }
+    m.Remove($i + "-3 padded out a little")
+    return m
+}
+
+fn mkv(i I64) Map<String, Vec<I64>> {
+    m Map<String, Vec<I64>>
+    for j in range 5 {
+        w Vec<I64>
+        for k in range 20 { w.Push(i + k) }
+        m.Put($i + "-" + $j + " padded", w)
+    }
+    return m
+}
+
+fn main() {
+    rows := Array<Map<String, I64>>(10)
+    v Vec<Map<String, I64>>
+    for _ in range 10: v.Push(Map<String, I64>())
+    rv := Array<Map<String, Vec<I64>>>(10)
+    vv Vec<Map<String, Vec<I64>>>
+    for _ in range 10: vv.Push(Map<String, Vec<I64>>())
+    t := 0
+    for i in range N {
+        rows[i % 10] = mk(i)
+        v[i % 10] = mk(i + 1)
+        rv[i % 10] = mkv(i)
+        vv[i % 10] = mkv(i + 2)
+        vv.RefMut(i % 10).Remove($(i + 2) + "-2 padded")
+        t += rows[i % 10].Len() + v[i % 10].Len() + rv[i % 10].Len() + vv[i % 10].Len() + vv.Ref(i % 10).Ref($(i + 2) + "-4 padded")![19]
+    }
+    io.PutLine($t + " " + $(rows[3].Get($(N - 7) + "-5 padded out a little")!) + " " + $v.Ref(4).Len())!
+}

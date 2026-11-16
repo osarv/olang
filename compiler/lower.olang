@@ -1091,15 +1091,29 @@ fn (ln mut lowering&) partCopy(site I64, v mir.Operand, ty types.TypeId, at mir.
 fn (ln mut lowering&) partSplit(p pl, ty types.TypeId, path Array<I64>&, depth I64, at mir.ScopeRef, rest mir.ScopeRef
                                 sp source.Span) {
     if depth == path.Len() {
-        ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(ln.splitArray(p, ty, at, rest, mir.Operand.None, sp))))
+        ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(ln.splitArray(p, ty, at, rest, mir.Operand.None, sp, p, false))))
         return
     }
     fs := ln.partsOf(ty)
-    d, c := ln.L.Free!.VecFields(ty)
+    fr := ln.L.Free!
+    d, c := fr.VecFields(ty)
+    md, mn, mx := fr.MapFields(ty)
+    parts := fr.PartsOnly(ty)
     for i in range fs.Len() {
         q := ln.with(p, mir.Proj.Field(i))
+        # (a PartsOnly value's other parts each in a part region of their own, as an element's copy builds them - a
+        # Map's links and buckets beside its entries - so that its let-go's walk finds each where it was made for it)
+        if i != path[depth] and parts {
+            ln.partOf(p, ty, i, rest, sp)
+            continue
+        }
         if i != path[depth] {
             ln.copyPart(q, fs[i], rest, sp)
+            continue
+        }
+        if depth + 1 == path.Len() and i == md and mn >= 0 {
+            n := mir.Operand.Copy(ln.mk(ln.with(p, mir.Proj.Field(mn))))
+            ln.emit(mir.Stmt.Assign(sp, ln.mk(q), mir.Rvalue.Use(ln.splitArray(q, fs[i], at, rest, n, sp, ln.with(p, mir.Proj.Field(mx)), true))))
             continue
         }
         if depth + 1 < path.Len() or i != d or c < 0 {
@@ -1107,14 +1121,15 @@ fn (ln mut lowering&) partSplit(p pl, ty types.TypeId, path Array<I64>&, depth I
             continue
         }
         n := mir.Operand.Copy(ln.mk(ln.with(p, mir.Proj.Field(c))))
-        ln.emit(mir.Stmt.Assign(sp, ln.mk(q), mir.Rvalue.Use(ln.splitArray(q, fs[i], at, rest, n, sp))))
+        ln.emit(mir.Stmt.Assign(sp, ln.mk(q), mir.Rvalue.Use(ln.splitArray(q, fs[i], at, rest, n, sp, q, false))))
     }
 }
 
 # a new array at at of what array a holds, each element's own storage copied into rest - a text element's into a slot of
 # rest where the text place is decided sole (free.SlotPlace), an empty one left empty. Where live is given, the elements
 # from it on are left empty (zero bits) rather than copied
-fn (ln mut lowering&) splitArray(a pl, ty types.TypeId, at mir.ScopeRef, rest mir.ScopeRef, live mir.Operand, sp source.Span) mir.Operand {
+fn (ln mut lowering&) splitArray(a pl, ty types.TypeId, at mir.ScopeRef, rest mir.ScopeRef, live mir.Operand, sp source.Span
+                                 links pl, linked Bool) mir.Operand {
     el := ln.T.Elem(ln.T.Repr(ty))
     into := rest
     fr := ln.L.Free!
@@ -1134,7 +1149,7 @@ fn (ln mut lowering&) splitArray(a pl, ty types.TypeId, at mir.ScopeRef, rest mi
     ln.eachIndex(n, sp, fn(i mir.LocalId) {
         src := ln.with(a, mir.Proj.Index(i))
         dst := ln.mk(ln.with(pl(mir.Base.Local(buf)), mir.Proj.Index(i)))
-        if live == mir.Operand.None and not text {
+        if live == mir.Operand.None and not text and not linked {
             ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(ln.elemCopy(src, el, into, rest, sp))))
             return
         }
@@ -1143,6 +1158,13 @@ fn (ln mut lowering&) splitArray(a pl, ty types.TypeId, at mir.ScopeRef, rest mi
             more := ln.F.NewBlock()
             ln.end(mir.Term.Branch(ln.prim(typed.PrimOp.Lt, types.BoolT, Array<mir.Operand>[mir.Operand.Copy(mir.Lvalue.L(i)), live], sp), more, empty))
             ln.start(more)
+        }
+        # (a Map's slot a removal emptied holds what its removal let go of: left empty, as room is)
+        if linked {
+            used := ln.F.NewBlock()
+            link := mir.Operand.Copy(ln.mk(ln.with(links, mir.Proj.Index(i))))
+            ln.end(mir.Term.Branch(ln.prim(typed.PrimOp.Ge, types.BoolT, Array<mir.Operand>[link, ln.constI64(-1)], sp), used, empty))
+            ln.start(used)
         }
         if text {
             some := ln.F.NewBlock()
@@ -1166,43 +1188,118 @@ fn (ln mut lowering&) splitArray(a pl, ty types.TypeId, at mir.ScopeRef, rest mi
 # it is (gap 17's walk)
 fn (ln mut lowering&) elemCopy(src pl, el types.TypeId, into mir.ScopeRef, rest mir.ScopeRef, sp source.Span) mir.Operand {
     fr := ln.L.Free!
-    if ln.T.OwnedPart(el) or not fr.PartsOnly(el): return ln.copyAt(src, el, into, sp)
+    if ln.T.OwnedPart(el): return ln.copyAt(src, el, into, sp)
+    if not fr.PartsOnly(el) and fr.EntryOnly(el): return ln.entryCopy(src, el, rest, sp)
+    if not fr.PartsOnly(el): return ln.copyAt(src, el, into, sp)
     d := ln.local(ln.into(el, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(src))), sp), el, sp)
     ln.partsCopied(pl(mir.Base.Local(d)), el, rest, sp)
     return mir.Operand.Copy(mir.Lvalue.L(d))
 }
 
-# the parts of a PartsOnly value's bytes at p, of type ty, copied over the parts it shares (elemCopy)
-fn (ln mut lowering&) partsCopied(p pl, ty types.TypeId, rest mir.ScopeRef, sp source.Span) {
+# O8f (gap 17): a Map entry at src, of type el (free.EntryOnly), copied as a Put builds one - each text part in a slot of
+# rest, the value in a region of its own (a kid of rest, settled at once where it holds nothing), each where its place is
+# decided sole, a PartsOnly part split - so that the walk of an element's let-go, and a removal's vacate, release each
+# where it was made for its place
+fn (ln mut lowering&) entryCopy(src pl, el types.TypeId, rest mir.ScopeRef, sp source.Span) mir.Operand {
     fr := ln.L.Free!
-    fs := ln.partsOf(ty)
-    dataF, countF := fr.VecFields(ty)
-    for i in range fs.Len() {
-        ft := fs[i]
+    d := ln.local(ln.into(el, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(src))), sp), el, sp)
+    fs := ln.partsOf(el)
+    for j in range fs.Len() {
+        ft := fs[j]
         if ln.T.IsRef(ft) or not ln.ownsStorage(ft): continue
-        q := ln.with(p, mir.Proj.Field(i))
-        if not ln.T.OwnedPart(ft) {
-            ln.partsCopied(q, ft, rest, sp)
+        q := ln.with(pl(mir.Base.Local(d)), mir.Proj.Field(j))
+        k := fr.FieldPlace(el, j)
+        if fr.SlotPlace(k) {
+            ln.textSlotCopy(q, ft, k, rest, sp)
             continue
         }
-        at := rest
-        g := ln.guardOf(fr.FieldPlace(ty, i))
-        h := mir.NoLocal
-        if g != free.NotSole {
-            h = ln.temp(mir.I64T, sp)
-            ln.guarded(h, g, mir.Rvalue.Part(rest), rest, sp)
-            at = mir.ScopeRef.Held(h)
+        if k >= 0 and not fr.PartPlace(k) {
+            ln.regionCopy(q, ft, k, rest, sp)
+            continue
         }
-        el := ln.T.Elem(ln.T.Repr(ft))
-        live := mir.Operand.Copy(ln.mk(ln.with(p, mir.Proj.Field(countF)))) if i == dataF and countF >= 0 else mir.Operand.None
-        arr := ln.splitArray(q, ft, at, rest, live, sp) if ln.ownsStorage(el) else ln.copyAt(q, ft, at, sp)
-        ln.emit(mir.Stmt.Assign(sp, ln.mk(q), mir.Rvalue.Use(arr)))
-        if h == mir.NoLocal: continue
-        # (a part region holding nothing - an empty array - released at once, as settled's)
-        after := ln.whenSole(g, true, sp) if g >= 0 else mir.NoBlock
-        ln.emit(mir.Stmt.Settle(sp, h, ln.mk(q)))
-        if after != mir.NoBlock: ln.joinAt(after)
+        if fr.PartPlace(k): ln.partOf(pl(mir.Base.Local(d)), el, j, rest, sp)
+        else if fr.PartsOnly(ft): ln.partsCopied(q, ft, rest, sp)
+        else: ln.copyPart(q, ft, rest, sp)
     }
+    return mir.Operand.Copy(mir.Lvalue.L(d))
+}
+
+# the text at q, of type ty, copied into a slot of rest where text place k is decided sole, else into rest - empty text
+# made zero bits (a slot for it would be put back by no walk, and the source's storage is never the copy's)
+fn (ln mut lowering&) textSlotCopy(q pl, ty types.TypeId, k I64, rest mir.ScopeRef, sp source.Span) {
+    some, empty, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(q))], sp)
+    ln.end(mir.Term.Branch(ln.prim(typed.PrimOp.Gt, types.BoolT, Array<mir.Operand>[n, ln.constI64(0)], sp), some, empty))
+    ln.start(empty)
+    ln.emit(mir.Stmt.Assign(sp, ln.mk(q), mir.Rvalue.Use(mir.Operand.Const(ty, 0))))
+    ln.goto(after)
+    ln.start(some)
+    into := rest
+    g := ln.guardOf(k)
+    if g != free.NotSole {
+        h := ln.temp(mir.I64T, sp)
+        ln.guarded(h, g, mir.Rvalue.Slots(rest), rest, sp)
+        into = mir.ScopeRef.Held(h)
+    }
+    ln.copyPart(q, ty, into, sp)
+    ln.joinAt(after)
+}
+
+# the value at q, of type ty, copied into a region of its own, a kid of rest, where place k is decided sole (released at
+# once where it holds nothing), else into rest
+fn (ln mut lowering&) regionCopy(q pl, ty types.TypeId, k I64, rest mir.ScopeRef, sp source.Span) {
+    g := ln.guardOf(k)
+    if g == free.NotSole {
+        ln.copyPart(q, ty, rest, sp)
+        return
+    }
+    h := ln.temp(mir.I64T, sp)
+    ln.guarded(h, g, mir.Rvalue.Region(rest), rest, sp)
+    ln.copyPart(q, ty, mir.ScopeRef.Held(h), sp)
+    after := ln.whenSole(g, true, sp) if g >= 0 else mir.NoBlock
+    ln.emit(mir.Stmt.Settle(sp, h, ln.mk(q)))
+    if after != mir.NoBlock: ln.joinAt(after)
+}
+
+# the parts of a PartsOnly value's bytes at p, of type ty, copied over the parts it shares (elemCopy)
+fn (ln mut lowering&) partsCopied(p pl, ty types.TypeId, rest mir.ScopeRef, sp source.Span) {
+    for i in range ln.partsOf(ty).Len() { ln.partOf(p, ty, i, rest, sp) }
+}
+
+# partsCopied's field i of the value at p: a part place's array in a part region of its own where the place is decided
+# sole - a Vec's live elements, a Map's entries in use, split again - a struct's parts in turn
+fn (ln mut lowering&) partOf(p pl, ty types.TypeId, i I64, rest mir.ScopeRef, sp source.Span) {
+    fr := ln.L.Free!
+    ft := ln.partsOf(ty)[i]
+    if ln.T.IsRef(ft) or not ln.ownsStorage(ft): return
+    q := ln.with(p, mir.Proj.Field(i))
+    if not ln.T.OwnedPart(ft) {
+        ln.partsCopied(q, ft, rest, sp)
+        return
+    }
+    dataF, countF := fr.VecFields(ty)
+    entF, usedF, linkF := fr.MapFields(ty)
+    at := rest
+    g := ln.guardOf(fr.FieldPlace(ty, i))
+    h := mir.NoLocal
+    if g != free.NotSole {
+        h = ln.temp(mir.I64T, sp)
+        ln.guarded(h, g, mir.Rvalue.Part(rest), rest, sp)
+        at = mir.ScopeRef.Held(h)
+    }
+    el := ln.T.Elem(ln.T.Repr(ft))
+    live := mir.Operand.None
+    if i == dataF and countF >= 0: live = mir.Operand.Copy(ln.mk(ln.with(p, mir.Proj.Field(countF))))
+    linked := i == entF and usedF >= 0 and linkF >= 0
+    if linked: live = mir.Operand.Copy(ln.mk(ln.with(p, mir.Proj.Field(usedF))))
+    links := ln.with(p, mir.Proj.Field(linkF if linked else i))
+    arr := ln.splitArray(q, ft, at, rest, live, sp, links, linked) if ln.ownsStorage(el) else ln.copyAt(q, ft, at, sp)
+    ln.emit(mir.Stmt.Assign(sp, ln.mk(q), mir.Rvalue.Use(arr)))
+    if h == mir.NoLocal: return
+    # (a part region holding nothing - an empty array - released at once, as settled's)
+    after := ln.whenSole(g, true, sp) if g >= 0 else mir.NoBlock
+    ln.emit(mir.Stmt.Settle(sp, h, ln.mk(q)))
+    if after != mir.NoBlock: ln.joinAt(after)
 }
 
 fn (ln mut lowering&) splitParts(p pl, ty types.TypeId, path Array<I64>&, depth I64, at mir.ScopeRef, rest mir.ScopeRef
@@ -1273,7 +1370,7 @@ fn (ln mut lowering&) regionSite(x typed.Expr&) I64 {
 # what a let-go releases where a place is decided sole: by the fields that reach it from the holder, and a handle's
 # reference, field 0
 type relPath struct(At I64, Path Array<I64>, Slot Bool = false, Part Bool = false, Data I64 = -1, Count I64 = -1
-                    Elem types.TypeId = types.UnknownT) {
+                    Elem types.TypeId = types.UnknownT, Next I64 = -1) {
     At
     Path
     Slot        # a text place's value built in a slot (free.SlotPlace): put back on its list, no region released
@@ -1281,6 +1378,7 @@ type relPath struct(At I64, Path Array<I64>, Slot Bool = false, Part Bool = fals
     Data        # a Vec at Path (free.VecWalks): its buffer's field, whose live elements - below the count in field Count -
     Count       # each let go of before the buffer goes (O8f, gap 17): a slot put back (Slot), or an Elem's parts; -1 for none
     Elem
+    Next        # a Map's entries at Path: the field of each slot's link, the slot live where it is -1 or more; -1 for a Vec
 }
 
 # the candidate places a place's let-go releases where each is decided sole: the place itself, or the leaves of a
@@ -1311,7 +1409,7 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
 
 # O8f (gap 17): what a let-go of a PartsOnly value of type ty releases - each Vec's live elements first (a Vec of text's
 # slots where the text place is decided sole, a Vec of Vecs' elements' parts in turn), then every part leaf
-fn (ln mut lowering&) partReleases(ty types.TypeId, depth I64 = 0) Vec<relPath> {
+fn (ln mut lowering&) partReleases(ty types.TypeId, depth I64 = 0, entry Bool = false) Vec<relPath> {
     out Vec<relPath>
     fr := ln.L.Free!
     for vw in fr.VecWalks(ty) {
@@ -1320,10 +1418,14 @@ fn (ln mut lowering&) partReleases(ty types.TypeId, depth I64 = 0) Vec<relPath> 
             if g != free.NotSole: out.Push(relPath(g, vw.Path, true, false, vw.Data, vw.Count))
             continue
         }
-        if depth < 8 and ln.partReleases(vw.Elem, depth + 1).Len() > 0: out.Push(relPath(-1, vw.Path, false, false, vw.Data, vw.Count, vw.Elem))
+        if depth < 8 and ln.partReleases(vw.Elem, depth + 1, vw.Next >= 0).Len() > 0 {
+            out.Push(relPath(-1, vw.Path, false, false, vw.Data, vw.Count, vw.Elem, vw.Next))
+        }
     }
+    # (a Map entry's every leaf, as its removal's vacate releases them: its text's slots, its value's region -
+    # free.EntryOnly)
     for r in ln.leafPaths(ty) {
-        if r.Part: out.Push(r)
+        if entry or r.Part: out.Push(r)
     }
     return out
 }
@@ -1393,11 +1495,24 @@ fn (ln mut lowering&) releaseOn(base pl, paths Vec<relPath>&, sp source.Span) {
 fn (ln mut lowering&) textWalk(q pl, r relPath, sp source.Span) {
     data := ln.with(q, mir.Proj.Field(r.Data))
     n := mir.Operand.Copy(ln.mk(ln.with(q, mir.Proj.Field(r.Count))))
-    inner := Vec<relPath>() if r.Slot else ln.partReleases(r.Elem)
+    inner := Vec<relPath>() if r.Slot else ln.partReleases(r.Elem, 0, r.Next >= 0)
     ln.eachIndex(n, sp, fn(i mir.LocalId) {
         e := ln.with(data, mir.Proj.Index(i))
-        if r.Slot: ln.emit(mir.Stmt.ReleaseSlot(sp, ln.mk(e)))
-        else: ln.releaseOn(e, inner, sp)
+        if r.Slot {
+            ln.emit(mir.Stmt.ReleaseSlot(sp, ln.mk(e)))
+            return
+        }
+        if r.Next < 0 {
+            ln.releaseOn(e, inner, sp)
+            return
+        }
+        # (a Map's slot a removal emptied holds no entry: its link is below -1)
+        link := mir.Operand.Copy(ln.mk(ln.with(ln.with(q, mir.Proj.Field(r.Next)), mir.Proj.Index(i))))
+        live, after := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(ln.prim(typed.PrimOp.Ge, types.BoolT, Array<mir.Operand>[link, ln.constI64(-1)], sp), live, after))
+        ln.start(live)
+        ln.releaseOn(e, inner, sp)
+        ln.joinAt(after)
     })
 }
 
@@ -4500,12 +4615,24 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
         } else {
             ln.L.ViewCopies++
             at := ln.viewCopyAt(c.Site, ln.resultOf(fty, scopes))
+            # (O8f, gap 20: a value only read where it stands, copied - something in its statement may change what it
+            # views - is dead by the statement's end: its copy in the innermost scope open, never where the callee's
+            # result would live, the collection's)
+            if ln.readWin.Has(I64(c.Site)) and ln.levels.Len() > 0 and not heldRef(at): at = mir.ScopeRef.Scope(ln.top().S)
             sv := ln.splitCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
             if sv != mir.Operand.None: return sv
             return ln.arrayCopy(mir.Operand.Copy(mir.Lvalue.L(dest)), ty, sp, at, true)
         }
     }
     return mir.Operand.Copy(mir.Lvalue.L(dest))
+}
+
+# whether a scope is a region early freeing made (O8d), held in a local
+fn heldRef(at mir.ScopeRef) Bool {
+    return match at {
+        case mir.ScopeRef.Held(_): true
+        case _: false
+    }
 }
 
 # where a view call's copy is made (D9h): where the scope pass put the value (its Built - a local's block, so a copy made
