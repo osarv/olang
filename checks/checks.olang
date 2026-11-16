@@ -1709,8 +1709,11 @@ fn printing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build bare.olang > out.txt 2>&1 && ./build/bare > out.txt") == 0 and outOf(dir) == bare
                  "Print and Println", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" bare.olang > out.txt") == 0 and outOf(dir) == bare, "Print and Println -i", dir)
-    try r.expect(sh(dir, "./build/bare >&- 2> out.txt") == 2 and outOf(dir).Contains("output.Refused")
+    # E35: an error ending the program - status 1, as "!" gives - not a broken promise (2); the interpreter alike
+    try r.expect(sh(dir, "./build/bare >&- 2> out.txt") == 1 and outOf(dir).Contains("output.Refused")
                  "println to a closed output ends the program", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" bare.olang >&- 2> out.txt") == 1 and outOf(dir).Contains("output.Refused")
+                 "println to a closed output ends the program -i", dir)
 }
 
 # B19, B19a: a test fuzzed by libFuzzer finds the planted bug within seconds and saves its input beside the file, which

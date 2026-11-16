@@ -1,0 +1,7 @@
+# check: fail error[T29f]: Dist declares no 'Abs', and does not extend its base, which has one
+# T29f: without "extends", a declared number does not inherit its base's trait-bounded methods either
+type Dist I64
+fn main() ? {
+    d := Dist(-3)
+    a := d.Abs()
+}

@@ -14279,6 +14279,10 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         }
         if ds.Len() == 1: m = ds[0]
     }
+    if m < 0 {
+        bx := c.inheritedDefault(c.deref(rt), n)
+        if bx != types.UnknownT: return c.baseDefaultCall(sp, nsp, c.P.DefaultMethod(bx, n), rx, bx, args)
+    }
     # T2c: what the compiler supplies, and a function value in a field, are reached through the receiver - not through
     # one that may be null (a method fits its receiver as an argument, which says so there)
     if m < 0 and c.isRef(rt) and c.P.T.IsNullable(rt) and not vacates {
@@ -14330,6 +14334,32 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
     # M6: a method is public by its first letter - another module's private one is said, and called still
     if not name[0].IsUpper() and c.P.FnModule(m) != c.fr().Mi: c.err(nsp, msgs.MethodIsPrivate(c.tok(n)))
     return c.inPlaceCall(sp, c.invoke(sp, nsp, m, rx, args, Array<typed.Expr&>(0)))
+}
+
+# T29f: the base, reached through what a number extends, whose numeric trait gives a method of this name (Abs, Min,
+# Clamp, PadStart ...) - the closed trait lists the base and not the declared type (T31a), so the type inherits it
+# from there; Unknown for none. A Char pads as the character it is, never as its U8 (T29h)
+fn (c mut Checker&) inheritedDefault(t types.TypeId, n source.NameId) types.TypeId {
+    if t == c.charType() and (c.text(n) == "PadStart" or c.text(n) == "PadEnd"): return types.UnknownT
+    x := t
+    for _ in range 16 {
+        if not c.isNumber(x) or not c.P.Extends(x): return types.UnknownT
+        x = c.P.T.Base(x)
+        if c.P.DefaultMethods(x, n).Len() == 1: return x
+    }
+    return types.UnknownT
+}
+
+# T29f: inherited method f called on the receiver read as the base bx it is written for, its type variable bound to
+# bx; where its result is that variable (`fn (x T) Abs<T Number>() T`), the result is the receiver's declared type
+fn (c mut Checker&) baseDefaultCall(sp source.Span, nsp source.Span, f I64, rx typed.Expr&, bx types.TypeId
+                                    args Array<ast.Expr&>&) typed.Expr& {
+    dt := c.deref(typeOf(rx))
+    x := c.invoke(sp, nsp, f, c.convert(rx.Span(), rx, bx), args, Array<typed.Expr&>(0))
+    sig := c.P.Sig(f)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    if ps.Len() == 0 or not c.P.T.Same(c.P.T.Result(sig), ps[0]) or not c.P.T.Same(typeOf(x), bx): return x
+    return c.convert(sp, x, dt)
 }
 
 # E31b: a call writing through x[i] - its receiver a writable borrow of the element At gives - made on the element in

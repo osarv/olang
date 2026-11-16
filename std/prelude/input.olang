@@ -170,11 +170,19 @@ fn (s InputBuffer&) Text(first I64, last I64) String& {
     return String(t)
 }
 
+# what a read of standard input the system refuses ends Scanln and Scan with, as "!" does - an error, status 1 (E35) -
+# naming the caller's place
+type input error {
+    Refused(at String)
+}
+
+fn readRefused(at Place) ? input { error input.Refused($at) }
+
 # the prompt, if any, then the next line of standard input without its line end. Fails with Exhausted at the end of the input
 fn Scanln(prompt String& = "", at Place = Place.Here) String& ? Exhausted {
     if prompt.Len() > 0: Print(prompt, at)
     return try StdinLine() catch InputError {
-        assert false, $at + ": the read of standard input failed"
+        readRefused(at)!
         unreachable
     }
 }
@@ -184,7 +192,7 @@ fn Scanln(prompt String& = "", at Place = Place.Here) String& ? Exhausted {
 fn Scan<T>(prompt String& = "", at Place = Place.Here) T ? Exhausted, ParseError {
     if prompt.Len() > 0: Print(prompt, at)
     w := try StdinWord() catch InputError {
-        assert false, $at + ": the read of standard input failed"
+        readRefused(at)!
         unreachable
     }
     return try T.Parse(w)

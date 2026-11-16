@@ -10070,6 +10070,30 @@ test "T29f: extends inherits the base's methods and operators; without it a type
     assert ExBaked
 }
 
+# T29f/T31a: an extending number has the prelude's methods its base meets a numeric trait for (Abs, Min, Max, Clamp,
+# Sqrt, PadStart), though the closed trait lists only the base: the call is the base's, and a result of the receiver's
+# own type is the declared type. A Char (T29h) has U8's Max; an extending String has String's methods
+type ExMeters extends I64
+type ExRatio extends F64
+type ExName extends String
+fn exMeters(m ExMeters) ExMeters { return m }
+fn exNumbers(n I64) Bool {
+    m := ExMeters(-n)
+    ints Bool = exMeters(m.Abs()) == ExMeters(n) and exMeters(m.Max(0)) == ExMeters(0) and m.Min(m.Abs()) == m
+    clamp Bool = exMeters(m.Clamp(ExMeters(-2), ExMeters(2))) == ExMeters(-2) and m.PadStart(4) == "  -" + $n
+    r := ExRatio(F64(n * n))
+    q ExRatio = r.Sqrt()
+    text ExName = "ab"
+    rest Bool = q == ExRatio(F64(n)) and 'a'.Max('c') == 'c' and text.ToUpper() == "AB" and text.Len() == 2
+    return ints and clamp and rest
+}
+ExNumBaked := exNumbers(5)
+
+test "T29f: an extending number has its base's trait-bounded methods, giving the declared type" {
+    assert exNumbers(I64(WdMutable / 2000000000) + 6)
+    assert ExNumBaked
+}
+
 # D13c: a declaration with no value is its type's zero value, and a type with a constructor makes its own - the
 # constructor run on zeros, taking parameters' defaults. Pure, so how often it runs cannot show: zero bits stay a
 # memset, any other plain value is that value, one holding references gets a constructor call per declaration.
