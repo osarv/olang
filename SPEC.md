@@ -1984,8 +1984,9 @@ from `init` (`f(init, x0)`, then `f` of that and `x1` ...; `init` itself not giv
 each key to a new `Vec` of the values that have it, in order, the keys in the order first met (`key` called once per
 value); `ChunkBy(same)`, the runs of consecutive values `same(previous, next)` holds for, each a new `Vec` built where
 its `Next`'s result lands; `Dedup()`, the values with each run of equal ones (`==`, E10) given once; `Unzip()`, a walk
-of `Zipped<A, B>` taken apart into two new `Vec`s as two results; `Product()`, every value multiplied from `1` (a `Number`
-type, wrapping as `*` does; a product of none is `1`); `Last()`, the last value; and `Nth(n)`, the value at position
+of `Zipped<A, B>` taken apart into two new `Vec`s as two results; `Sum()` and `Product()`, every value added from `0`
+and multiplied from `1` in `A` - `<A Number = T.Total>` (G4a, G4b), so the type the call is wanted as, else `T.Total`
+(G32), or the one written, `it.Sum<U8>()` - wrapping in `A` as `+` and `*` do; a sum of none is `0`, a product `1`; `Last()`, the last value; and `Nth(n)`, the value at position
 `n` counted from `0` - the last two failing with `Exhausted` where there is none (and `Nth` for a negative `n`). A type
 with `At` and `Len` has, beside `Iter()`, the default `Reversed()`, a `ReversedIndexIter<T, C>` over positions
 `Len() - 1` down to `0`, read at each step (so `for x in v.Reversed()` walks a `Vec` backward); `Cycle()`, a
@@ -5076,8 +5077,12 @@ otherwise they are compared once per operation - never per lane - and a differen
 equal, as a slice's bounds are.
 
 Arrays have these **lane methods**, the compiler's as `Len()` is, on any array type a lane operator takes:
-- `a.Sum()` - the elements added in order (`+`, E31) to `T`'s zero value; an empty array's is that zero. `Sum` adds in
-  order, so a float sum is the sequential one and vectorizes only where the order does not matter (integers).
+- `a.Sum()` - `a.Sum<A Number = T.Total>()` (G4a) with `T` the lanes' type: the elements added in order (`+`, E31) to
+  `A`'s zero value; an empty array's is that zero. `A` is the type the call is wanted as where one is (G4b: `t U32 =
+  b.Sum()`), else `T.Total` (G32) - so an `Array<U8>`'s sum is a `U64` and an `Array<I32>`'s an `I64`, while an
+  `Array<F64>`'s, an `Array<Meters>`'s or an `Array<C64>`'s is worked in its own type. Where `A` is `T` the elements are
+  added as they are; else it is `Sum<A>` below. `Sum` adds in order, so a float sum is the sequential one and vectorizes
+  only where the order does not matter (integers). Wrapping in the elements' own type is written: `b.Sum<U8>()`.
 - `a.Sum<A>()` - `Sum` with every lane computed in `A`: each operand's elements are widened to `A` (T6b) before the
   lane's operation, and the lanes are added in `A`, from its zero - `(x * w).Sum<I32>()` with `x` an `Array<U8>` and
   `w` an `Array<I8>` multiplies in `I32` and cannot wrap where `x * w`'s own lanes would; `c.Sum<I32>()` totals `I8`s
@@ -9790,7 +9795,7 @@ its declaration (G8b):
 
 ```
 fn-type-params ::= "<" ( list(type-param) [ errset-param ] | errset-param ) ">"
-type-param     ::= IDEN [ type-expr ]
+type-param     ::= IDEN [ type-expr ] [ "=" type-expr ]
 errset-param   ::= "?" IDEN
 ```
 
@@ -9860,6 +9865,30 @@ fn sortBy<T>(v mut Array<T>&, less fn&(a T, b T) Bool) { ... }
 `T` here is `sortBy`'s, inferred from the call as usual (G9, which unifies through a function type's own
 parameters), and `less` is called inside the body as an ordinary function value.
 
+**G4a (default type arguments).** A type parameter of a function's, a method's, a builder's or a generic type's list
+may declare a **default** after `=`: `fn (a Array<T>&) Cumsum<A = T.Total>() Array<A>`, `type Grid<T Number = F32>
+struct(n I64) { ... }`. The default is a type written as anywhere else; it may name the list's earlier parameters, the
+receiver's and the owner's variables (G3b, D19), and the types G38 reflects of them (`T.Total`, `T.Element`), and it is
+read per instance with those bound. Defaults are **trailing**, as D8b's are for values: a parameter without one after a
+parameter with one is a compile-time error at it, naming the rule; an error-set parameter (G1a) closing the list takes
+none and is no exception to it. A constructor's own list (G10d) takes none - its variables are inferred from its
+arguments - and a default written there is an error. A function's variable is bound, in this order, by: the type
+arguments written (G12), the arguments (G9, G9a-G9e), the type the call is wanted as (G4b), and last its default. Type
+arguments written may stop before the variables that have defaults (`total<U8>(b)` with `fn total<T Number, A Number =
+T.Total>(xs Array<T>&) A`), the rest bound by the steps after; a generic type written with fewer arguments than its
+parameters takes the defaults of those left off where it is written (`Grid` is `Grid<F32>`, `Box<U8>` is
+`Box<U8, U64>` with `type Box<T Number, A = T.Total>`). A default its variable's constraint (G19) does not take, at a
+call that left the variable to it, is a compile-time error at the call naming the variable and its default and saying
+to write the type arguments or where the value goes.
+
+**G4b (the expected type picks a result's variable).** A variable that a call's arguments leave unbound and that is
+the call's whole result (`A`, or `A` with an error set: `Sum<...A Number...>() A ? E`) takes the type the call's value
+is wanted as, as a literal takes its type from where it goes (T6, O25i): an initializer's written type (`t U64 =
+x.Sum()` is `Sum<U64>`), a parameter's (`f(x.Sum())` takes `f`'s parameter type), a returned result's, an assignment's
+target. A wanted type the variable's constraint does not take is passed over; where nothing wants a type, the default
+(G4a) binds it. What the call then does with that type is the instance's: a total wanted in a type its values do not
+widen to is that call's own error (E39's narrowing, a body's).
+
 **G4.** A type variable of a generic function that appears in no *parameter's* type - only in the result, say
 (`fn (x T) Narrow<T Number, U Number>() U`) - is given by the type arguments written at each call (G12):
 `x.Narrow<I32>()`. A call that writes none, so that nothing determines the variable, is a compile-time error at the
@@ -9872,7 +9901,7 @@ lets it differ between instantiations, as an inferred set (R1a) does too.
 
 **G6.** `type-decl` (D4) is extended to
 `"type" IDEN [ type-params ] type-expr [ STMNT_END ]`, where
-`type-params ::= "<" list(type-param) ">"` and `type-param ::= IDEN [ type-expr ]` (G1). Each `IDEN`
+`type-params ::= "<" list(type-param) ">"` and `type-param ::= IDEN [ type-expr ] [ "=" type-expr ]` (G1, G4a). Each `IDEN`
 declares a parameter, unique within the list, in scope throughout the whole declaration - the list's own constraints,
 the constructor's `param-list` and error list (C1), every field, and the `destruct` block (C7) - written there as its
 bare `IDEN` (G8b). Every parameter is a **type parameter**: an `IDEN` alone, or followed by a trait, its constraint
@@ -10080,7 +10109,9 @@ length an array taken by value gives (G29) - is a value in no instance; called, 
 arguments as always. A **method** takes type arguments the same way, written directly after its name at a call (E3) - `x.Narrow<I32>()`,
 `xs.Map<U>(f)` - one for each variable its list introduces that its receiver's type does not name, in the list's
 order: `fn (l List<T>&) Map<U>(f fn&(x T) U) List<U>` takes `U`, the receiver's `T` being the receiver's; `fn (x T)
-Narrow<T Number, U Number>() U ? NumberError` takes `U`. Those not written are inferred from the arguments, the
+Narrow<T Number, U Number>() U ? NumberError` takes `U`. A variable the constraint of one the receiver names names is
+the receiver's too (G9c gives it): `fn (it mut I&) Sum<I Iterator<T ? E>, T Number, A Number = T.Total ? E>() A ? E`
+takes `A` alone, `it.Sum<I32>()`. Those not written are inferred from the arguments, the
 receiver included. A method so given its arguments is only called, never a value (M19). Only a function's own
 variables are written: a non-generic function, and a method whose list introduces nothing its receiver does not name,
 takes none (G7).
@@ -10214,6 +10245,11 @@ variable, or a type G38 names - these members are read with a `.`, alongside a n
   or a named set as a value's type) `Error`. Coarse on purpose: the exact type is `match T`'s (G13). A trait and an
   extern type have none, an error.
 - `T.Base` - the type a declared type is over (T29, `Meters.Base` is `F64`), else `T` itself.
+- `T.Total` - the type a total of `T`'s values is worked in (E39's `Sum`, the prelude's `Product` and `Cumsum`): `T`
+  itself by default, while each built-in number narrower than 64 bits names a wider one - `I8`, `I16` and `I32` total as
+  `I64`, `U8`, `U16` and `U32` as `U64`, `F16` and `BF16` as `F32`. `I64`, `U64`, `F32` and `F64` total as themselves,
+  and so does every declared type (`Meters`, an `extends` type such as `Percent extends U8`) and a type of the
+  program's own.
 - `T.Element` - an array's element type, a `Columns`' or `ColumnVec`'s rows' type (T7e) (an error for another type); `T.Target` - a reference's referent (`Node&`'s
   `Node`).
 - `T.Length` - an array's length where it is known while compiling (T7c), an `I64`; for another type an error.
@@ -10330,7 +10366,7 @@ fn arg<P>(p P, k I64) P.Type {
 fn build<T>(k I64) T { return T(arg(p, k) for p in T.Params) }
 ```
 
-**G38 (reflected types are types).** A type G32 or G34 names - `T.Base`, `T.Element`, `T.Target`, `f.Type`, `p.Type`,
+**G38 (reflected types are types).** A type G32 or G34 names - `T.Base`, `T.Element`, `T.Target`, `T.Total`, `f.Type`, `p.Type`,
 `r.Type`, and chains of them, `T.Element.Base` - is usable wherever a type is written (a declaration, a parameter, a
 result, a type argument, a `match`'s subject) and is a type of the instance it is read in (a result written `P.Type` is
 each instance's own). It is no value: written where a value goes it is an error naming the declaration form - and so
