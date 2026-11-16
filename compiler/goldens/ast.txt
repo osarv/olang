@@ -693,7 +693,7 @@ d77a509cf832a716 4f85e93c7b66427c checks/cases/g12methodnotgeneric.olang
 a1f7a15f9ae8d886 eb03f78652bbed11 checks/cases/g12value.olang
 fc17d94bc414ed7e 09e6a4ca88ee4477 checks/cases/g16arrayname.olang
 6476aef16c4eb4a0 b8bee8dfe6be0fd8 checks/cases/g16bgenericonce.olang
-163b0ffb3d923ea0 c0a4553e9034167d checks/cases/g16boutermost.olang
+0f6addf9bb8de5ed c0a4553e9034167d checks/cases/g16boutermost.olang
 6cac01b407bca6b7 cd5d61f4df967a19 checks/cases/g16note.olang
 320a820b6125d773 6eb0a4be7746ca72 checks/cases/g17func.olang
 2a8b58c3403da50f 1b1cba5ffef71299 checks/cases/g17type.olang
@@ -2038,7 +2038,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-eb93a9c41d3b7d45 696f81d1d7195ba6 checks/checks.olang
+177a0bd93f24c8eb f222e67ec524ad30 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2362,7 +2362,7 @@ be6d4829fde4952d 1bb3e9800f36f5e2 checks/fixtures/weak/unheld.olang
 80e4e502642e2266 8b20d8008d6cc972 compiler/api.olang
 6c0fe42dea3fa460 c63777d337510b54 compiler/ast.olang
 e20178f94e07dfed ff5ec0fbe401eade compiler/bindgen.olang
-7a8ad2102d095fcf 6a48688404acc886 compiler/build.olang
+90881337ba685229 3e0cfd8336125a80 compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 a63bb2cbd4c666c1 32f8e5565363d2f2 compiler/cells.olang
 357a781b1eab4df8 338d80f41f6fc084 compiler/check.olang
@@ -2486,7 +2486,7 @@ ec8e66d75dd0842f 8a2e9ce00fa6d009 docs/values-study/compiler/vals.olang
 4a5d1ad3da54e20b 5061e43c07ba90de docs/values-study/split/split.olang
 a9b0273745b3a3f5 22744dcd31e278d9 fuzz/editgen.olang
 a4e6bb69cb2c58fb 6adffddba0357766 fuzz/fuzz.olang
-0c2e7329df88db47 8dfe69e450512af2 fuzz/gen.olang
+9dacce3c7b912605 ca245e5983751fc4 fuzz/gen.olang
 c9c2ca4429812242 fb33e3eb346f544d fuzz/repro/bf16bitcastfold.olang
 9e5aaa5e8d37b874 b52387e8681f45b0 fuzz/repro/bf16fastisel.olang
 61625101f227098c c3b787eb38f2c37b fuzz/repro/bf16shrink.olang
