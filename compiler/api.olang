@@ -52,10 +52,10 @@ fn Mode(old String&, now String&, path String&, cfg mut build.Config&) I32 {
         olds := try entries(a, f, filepath.Join(work, "old.sigs"), cfg) catch Unread { return 2 }
         news := try entries(b, f, filepath.Join(work, "new.sigs"), cfg) catch Unread { return 2 }
         cs := compare(olds, news)
-        if cs.Len() == 0 { continue }
+        if cs.Len() == 0: continue
         out.Push($f + "\n")
         for c in cs {
-            if c.Breaks { broken++ }
+            if c.Breaks: broken++
             out.Push(rowOf(c))
         }
     }
@@ -73,8 +73,8 @@ fn said(d mut diag.Diagnostics&) I32 {
 
 fn rowOf(c change&) String {
     mark := "breaking" if c.Breaks else "deprecated" if c.Deprecated else "ok      "
-    if c.Old == "" { return $"  " + $mark + "  " + $c.What + ": " + $c.New + "\n" }
-    if c.New == "" { return $"  " + $mark + "  " + $c.What + ": " + $c.Old + "\n" }
+    if c.Old == "": return $"  " + $mark + "  " + $c.What + ": " + $c.New + "\n"
+    if c.New == "": return $"  " + $mark + "  " + $c.What + ": " + $c.Old + "\n"
     return $"  " + $mark + "  " + $c.What + ": " + $c.Old + "\n              now: " + $c.New + "\n"
 }
 
@@ -82,7 +82,7 @@ fn rowOf(c change&) String {
 
 # the directory a side's tree is at: the directory named, or a commit's tree written into at
 fn side(name String&, at String&, d mut diag.Diagnostics&) String ? Unread {
-    if os.IsDir(name) { return $name }
+    if os.IsDir(name): return $name
     commit := try git("git", "rev-parse", "--verify", "--quiet", $name + "^{commit}")
     if commit == "" {
         d.Error(diag.Where.Nowhere, msgs.ApiNoSide(name))
@@ -100,7 +100,7 @@ fn side(name String&, at String&, d mut diag.Diagnostics&) String ? Unread {
 # what a command writes, its last line break taken off; "" where it fails
 fn git(args ...String&) String ? Unread {
     o := try os.Output.Exec(...args) catch os.Error { error Unread.Side }
-    if o.Status != 0 { return "" }
+    if o.Status != 0: return ""
     return $o.Stdout.TrimEnd()
 }
 
@@ -109,22 +109,22 @@ fn git(args ...String&) String ? Unread {
 fn sources(at String&, rel String&) Vec<String&> {
     out Vec<String&>
     if not os.IsDir(at) {
-        if os.Exists(at) and at.EndsWith(".olang") { out.Push(rel) }
+        if os.Exists(at) and at.EndsWith(".olang"): out.Push(rel)
         return out
     }
     names := try os.ReadDir(at) catch os.Error default Array<String&>(0)
     for n in names {
-        if n.StartsWith(".") or n == "testdata" { continue }
-        for f in sources(filepath.Join(at, n), filepath.Join(rel, n)) { out.Push(f) }
+        if n.StartsWith(".") or n == "testdata": continue
+        for f in sources(filepath.Join(at, n), filepath.Join(rel, n)): out.Push(f)
     }
     return out
 }
 
 fn union(a Vec<String&>&, b Vec<String&>&) Vec<String&> {
     out Vec<String&>
-    for f in a { out.Push(f) }
+    for f in a: out.Push(f)
     for f in b {
-        if not out.Has(f) { out.Push(f) }
+        if not out.Has(f): out.Push(f)
     }
     out.Sort(fn(x String&, y String&) Bool { return x.Compare(y) < 0 })
     return out
@@ -135,7 +135,7 @@ fn union(a Vec<String&>&, b Vec<String&>&) Vec<String&> {
 fn entries(root String&, rel String&, scratch String&, cfg mut build.Config&) Vec<sig> ? Unread {
     out Vec<sig>
     file := filepath.Join(root, rel)
-    if not os.Exists(file) { return out }
+    if not os.Exists(file): return out
     if session.InChild(fn() I32 { return writeSigs(file, scratch, cfg) }) != 0 {
         say($"olang: " + $file + " does not check - api compares modules that do\n")
         error Unread.Side
@@ -143,7 +143,7 @@ fn entries(root String&, rel String&, scratch String&, cfg mut build.Config&) Ve
     text := try os.ReadFile(scratch) catch os.Error { error Unread.Side }
     for line in text.Lines() {
         parts := line.Split("\t")
-        if parts.Len() == 4 { out.Push(sig($parts[0], $parts[1], $parts[2], parts[3] == "deprecated")) }
+        if parts.Len() == 4: out.Push(sig($parts[0], $parts[1], $parts[2], parts[3] == "deprecated"))
     }
     return out
 }
@@ -158,7 +158,7 @@ fn writeSigs(file String&, scratch String&, cfg mut build.Config&) I32 {
     }
     md := doc.Module.Of(a.C!, a.Sc!, a.X!, a.L.Root, false)
     b := StringBuilder()
-    for it in md.Items { itemSigs(b, it) }
+    for it in md.Items: itemSigs(b, it)
     try os.WriteFile(scratch, b.ToString()) catch os.Error { return 1 }
     return 0
 }
@@ -224,17 +224,17 @@ fn sigLine(line String&) String {
 }
 
 fn itemKind(line String&) String {
-    if line.StartsWith("fn ") or line.StartsWith("extern fn ") { return "fn" }
+    if line.StartsWith("fn ") or line.StartsWith("extern fn "): return "fn"
     if line.StartsWith("error ") { return "error" }     # R3b: an error raised by name, its payload after its name
-    if not line.StartsWith("type ") { return "global" }
+    if not line.StartsWith("type "): return "global"
     for k in Array<String&>["enum", "error", "trait", "struct", "extends"] {
-        if line.Contains($" " + $k) { return k }
+        if line.Contains($" " + $k): return k
     }
     return "type"
 }
 
 fn memberKind(parent String&, line String&, builder Bool) String {
-    if builder or line.StartsWith("fn ") { return "fn" }
+    if builder or line.StartsWith("fn "): return "fn"
     return match parent {
         case "enum": "case"
         case "error": "word"
@@ -249,18 +249,18 @@ fn memberKind(parent String&, line String&, builder Bool) String {
 fn compare(olds Vec<sig>&, news Vec<sig>&) Vec<change> {
     out Vec<change>
     was Map<String&, sig>
-    for s in olds { was.Put(s.Key, s) }
+    for s in olds: was.Put(s.Key, s)
     for n in news {
         o := try was.Get(n.Key) catch MapError {
             if n.Kind == "requires": out.Push(change(true, "requirements gained (a call meeting none may now fail)", "", n.Line))
             else if n.Kind != "fits": out.Push(change(addBreaks(n.Kind), $"added " + $n.Kind, "", n.Line))
             continue
         }
-        if o.Line != n.Line { pushChange(out, o, n) }
-        if n.Dep and not o.Dep { out.Push(change.deprecation(n)) }
+        if o.Line != n.Line: pushChange(out, o, n)
+        if n.Dep and not o.Dep: out.Push(change.deprecation(n))
     }
     now Map<String&, Bool>
-    for n in news { now.Put(n.Key, true) }
+    for n in news: now.Put(n.Key, true)
     for o in olds {
         if now.Has(o.Key) or o.Kind == "fits": continue
         if o.Kind == "requires": out.Push(change(false, "requirements dropped", o.Line, ""))
@@ -308,7 +308,7 @@ fn change.fits(o sig, n sig) change {
     for w in nw { if not ow.Has(w) and not relation(w): gained.Push(w) }
     for w in ow { if not nw.Has(w) and relation(w): gained.Push(w) }
     if lost.Len() > 0 { return change(true, "promise words lost by fn (a function type may rely on them)", o.Line, n.Line) }
-    if gained.Len() > 0 { return change(false, "promise words gained by fn", o.Line, n.Line) }
+    if gained.Len() > 0: return change(false, "promise words gained by fn", o.Line, n.Line)
     return change(false, "", "", "")
 }
 
@@ -440,7 +440,7 @@ fn tailEnd(s String&, from I64) I64 {
 fn untilWords(tail String&, ws Array<String&>&) String {
     toks := tail.Split(" ")
     n I64 = 0
-    for w in ws { n += w.Split(" ").Len() }
+    for w in ws: n += w.Split(" ").Len()
     return toks[:toks.Len() - n].Join(" ") if n > 0 else tail
 }
 
@@ -454,11 +454,11 @@ fn wordsOnly(o String&, n String&) Bool {
     for k in range ofs.Len() {
         for w in nfs[k].Words {
             if ofs[k].Words.Has(w): continue
-            if ofs[k].Given != relation(w) { return false }
+            if ofs[k].Given != relation(w): return false
         }
         for w in ofs[k].Words {
             if nfs[k].Words.Has(w): continue
-            if ofs[k].Given == relation(w) { return false }
+            if ofs[k].Given == relation(w): return false
         }
     }
     return true
@@ -470,7 +470,7 @@ fn change.changed(o sig, n sig) change {
     oh, oe := splitErrors(o.Line)
     nh, ne := splitErrors(n.Line)
     if oh == nh and oe != ne {
-        if subset(ne, oe) { return change(false, $"narrower error set of " + $n.Kind, o.Line, n.Line) }
+        if subset(ne, oe): return change(false, $"narrower error set of " + $n.Kind, o.Line, n.Line)
         return change(true, $"wider error set of " + $n.Kind, o.Line, n.Line)
     }
     if n.Kind == "fn" and wordsOnly(o.Line, n.Line) {
@@ -488,8 +488,8 @@ fn splitErrors(line String&) String, Array<String&> {
     depth I64 = 0
     for i in range line.Len() {
         ch := line[i]
-        if ch == '(' or ch == '<' or ch == '[' { depth++ }
-        if (ch == ')' or ch == '>' or ch == ']') and depth > 0 { depth-- }
+        if ch == '(' or ch == '<' or ch == '[': depth++
+        if (ch == ')' or ch == '>' or ch == ']') and depth > 0: depth--
         if depth == 0 and ch == '?' and i > 0 and line[i - 1] == ' ': return $line[:i - 1], items(line[i + 1:].Trim())
     }
     return line, Array<String&>(0)
@@ -502,20 +502,20 @@ fn items(t String&) Array<String&> {
     from I64 = 0
     for i in range t.Len() {
         ch := t[i]
-        if ch == '(' or ch == '<' or ch == '[' { depth++ }
-        if (ch == ')' or ch == '>' or ch == ']') and depth > 0 { depth-- }
+        if ch == '(' or ch == '<' or ch == '[': depth++
+        if (ch == ')' or ch == '>' or ch == ']') and depth > 0: depth--
         if depth == 0 and ch == ',' {
             out.Push($t[from:i].Trim())
             from = i + 1
         }
     }
-    if t.Len() > from { out.Push($t[from:].Trim()) }
+    if t.Len() > from: out.Push($t[from:].Trim())
     return out.ToArray()
 }
 
 fn subset(a Array<String&>&, b Array<String&>&) Bool {
     for x in a {
-        if not b.Has(x) { return false }
+        if not b.Has(x): return false
     }
     return true
 }

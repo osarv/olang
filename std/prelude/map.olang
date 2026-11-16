@@ -56,7 +56,7 @@ fn (m Map<K, V>&) Len() I64 { return m.count }
 # literal calls (E19): "Map<String&, I64>["a": 1, "b": 2]". Fails with what the iterator fails with
 fn Map<K, V>.FromIter<K Hashable<K>, I Iterator<MapEntry<K, V> ? E> ? E>(it mut I&) Map<K, V> ? E {
     out Map<K, V>
-    for e in try it { out.Put(e.Key, e.Value) }
+    for e in try it: out.Put(e.Key, e.Value)
     return out
 }
 
@@ -70,9 +70,9 @@ fn (m Map<K, V>&) live(i I64) Bool { return m.next[i] >= -1 }
 
 # the slot holding key - failing with Missing when no slot does
 fn (m Map<K, V>&) slotOf(key K) I64 ? MapError {
-    if m.count == 0 { error MapError.Missing }
+    if m.count == 0: error MapError.Missing
     for i := m.buckets[m.bucketOf(key)], i >= 0, i = m.next[i] {
-        if m.ents[i].Key == key { return i }
+        if m.ents[i].Key == key: return i
     }
     error MapError.Missing
 }
@@ -83,7 +83,7 @@ fn (m mut Map<K, V>&) add(b I64, key K, value V) {
     if i >= 0 {
         m.free = freeLink(m.next[i])
     } else {
-        if m.n == m.ents.Len() { m.room() }
+        if m.n == m.ents.Len(): m.room()
         i = m.n
         m.n++
     }
@@ -91,7 +91,7 @@ fn (m mut Map<K, V>&) add(b I64, key K, value V) {
     m.next[i] = m.buckets[b]
     m.buckets[b] = i
     m.count++
-    if m.count * 4 > m.buckets.Len() * 3 { m.rehash() }
+    if m.count * 4 > m.buckets.Len() * 3: m.rehash()
 }
 
 # slot arrays twice the size (8 at first), the slots moved into them, grown from the old as a Vec's buffer is (M19d) -
@@ -119,7 +119,7 @@ fn (m mut Map<K, V>&) rehash() {
 
 # sets the value for key, replacing the one it had
 fn (m mut Map<K, V>&) Put(key K, value V) {
-    if m.buckets.Len() == 0 { m.buckets = Array<I64>(8, -1) }
+    if m.buckets.Len() == 0: m.buckets = Array<I64>(8, -1)
     b := m.bucketOf(key)
     for i := m.buckets[b], i >= 0, i = m.next[i] {
         if m.ents[i].Key == key {
@@ -133,7 +133,7 @@ fn (m mut Map<K, V>&) Put(key K, value V) {
 # the value for key made f(its value) - or, where key has none, f(init) put for it: counting is
 # "m.Update(word, 0, fn(n) { return n + 1 })". One hash and one walk of key's chain, where Get then Put take two
 fn (m mut Map<K, V>&) Update(key K, init V, f fn&(v V) V) {
-    if m.buckets.Len() == 0 { m.buckets = Array<I64>(8, -1) }
+    if m.buckets.Len() == 0: m.buckets = Array<I64>(8, -1)
     b := m.bucketOf(key)
     for i := m.buckets[b], i >= 0, i = m.next[i] {
         if m.ents[i].Key == key {
@@ -164,7 +164,7 @@ fn (m Map<K, V>&) Has(key K) Bool {
 # key's slot taken out of its chain and emptied, kept for the next key put - failing with Missing when there is none.
 # take: the value moved out and given (Take), else let go (Remove)
 fn (m mut Map<K, V>&) unlink(key K) I64 ? MapError {
-    if m.count == 0 { error MapError.Missing }
+    if m.count == 0: error MapError.Missing
     b := m.bucketOf(key)
     prev I64 = -1
     for i := m.buckets[b], i >= 0, i = m.next[i] {
@@ -201,7 +201,7 @@ fn (m mut Map<K, V>&) Clear() {
     for i := m.n - 1, i >= 0, i-- {
         if m.live(i): m.ents[i].vacate()       # (an emptied slot holds nothing to end)
     }
-    for b in range m.buckets.Len() { m.buckets[b] = -1 }
+    for b in range m.buckets.Len(): m.buckets[b] = -1
     m.n = 0
     m.count = 0
     m.free = -1
@@ -209,10 +209,10 @@ fn (m mut Map<K, V>&) Clear() {
 
 # whether two Maps hold the same keys, each with an equal value - "==" (E10a), whatever order they were put in
 fn (m Map<K, V>&) Eq(o Map<K, V>&) Bool {
-    if m.Len() != o.Len() { return false }
+    if m.Len() != o.Len(): return false
     for e in m {
         v := try o.Get(e.Key) catch MapError { return false }
-        if v != e.Value { return false }
+        if v != e.Value: return false
     }
     return true
 }
@@ -220,7 +220,7 @@ fn (m Map<K, V>&) Eq(o Map<K, V>&) Bool {
 # the entries' hashes summed, so equal Maps hash alike whatever order they were put in (E10b)
 fn (m Map<K, V>&) Hash() I64 {
     h I64 = 0
-    for e in m { h += e.Key.Hash() * 1099511628211 + e.Value.Hash() }
+    for e in m: h += e.Key.Hash() * 1099511628211 + e.Value.Hash()
     return h
 }
 
@@ -235,7 +235,7 @@ fn (m Map<K, V>&) Str() String {
     # receiver, would be a read-only copy, QC)
     for i in range m.n {
         if not m.live(i): continue
-        if n > 0 { b.Push(", ") }
+        if n > 0: b.Push(", ")
         n++
         k := $alone(m.ents[i].Key)                             # "(" the key ", 0)"
         b.Push(k[1:k.Len() - 4])

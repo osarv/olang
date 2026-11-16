@@ -78,10 +78,10 @@ fn tightAfter(k token.Tok) Bool {
 # whether the join over sp must be parenthesized: what stands just before or after it would now take a piece alone
 fn needsGroup(toks Array<token.Token>&, sp source.Span) Bool {
     for i in range toks.Len() {
-        if toks[i].Start != sp.Start { continue }
-        if i > 0 and tightBefore(toks[i - 1].Kind) { return true }
+        if toks[i].Start != sp.Start: continue
+        if i > 0 and tightBefore(toks[i - 1].Kind): return true
         for j in range i, toks.Len() {
-            if toks[j].Start < sp.End { continue }
+            if toks[j].Start < sp.End: continue
             return tightAfter(toks[j].Kind)
         }
         return false
@@ -98,7 +98,7 @@ fn inserts(text String&, r Reading&, shift I64, n mut Count&, out mut Vec<Insert
     }
     for sp in r.joins {
         n.joins++
-        if not needsGroup(ts.Toks, sp) and I32(sp.Start) not in r.tight { continue }
+        if not needsGroup(ts.Toks, sp) and I32(sp.Start) not in r.tight: continue
         n.wrapped++
         out.Push(Insert(I64(sp.Start) - shift, 2, "("))
         out.Push(Insert(I64(sp.End) - shift, 0, ")"))
@@ -106,12 +106,12 @@ fn inserts(text String&, r Reading&, shift I64, n mut Count&, out mut Vec<Insert
 }
 
 fn apply(src String&, ins mut Vec<Insert>&) String {
-    if ins.Len() == 0 { return $src }
+    if ins.Len() == 0: return $src
     ins.Sort(fn(a, b): return a.pos < b.pos or (a.pos == b.pos and a.rank < b.rank))
     out := StringBuilder()
     from I64 = 0
     for e in ins {
-        if e.pos < from or e.pos > src.Len() { continue }
+        if e.pos < from or e.pos > src.Len(): continue
         out.Push(src[from:e.pos])
         out.Push(e.text)
         from = e.pos
@@ -147,9 +147,9 @@ fn migrateSpans(line String&, n mut Count&) String {
     from I64 = 0
     for {
         a := try line[from:].Find("`") catch default -1
-        if a < 0 { break }
+        if a < 0: break
         b := try line[from + a + 1:].Find("`") catch default -1
-        if b < 0 { break }
+        if b < 0: break
         lo, hi := from + a + 1, from + a + 1 + b
         out.Push(line[from:lo])
         out.Push(migrateFragment(line[lo:hi], n))
@@ -222,17 +222,17 @@ fn main() ? {
     total := Count()
     changed I64 = 0
     for path in files {
-        if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")): continue
         src := try srcmask.ReadText(path) catch {
             srcmask.SayErr("textjoin_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
         out := migrateMarkdown(src, total) if path.EndsWith(".md") else migrate(path, src, std, prelude, total)
-        if out == src { continue }
+        if out == src: continue
         changed++
         if verbose: srcmask.Say(path)
-        if check { continue }
+        if check: continue
         try os.WriteFile(path, out) catch {
             srcmask.SayErr("textjoin_migrate: cannot write " + $path)
             os.Exit(1)

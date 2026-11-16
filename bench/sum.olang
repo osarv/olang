@@ -12,7 +12,7 @@ type Usage error {
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 4 { error Usage.Args }
+    if args.Len() < 4: error Usage.Args
     mode := args[1]
     n := try args[2].ParseInt()
     passes := try args[3].ParseInt()
@@ -27,7 +27,7 @@ fn main() ? {
         total = l.Len() + l[n - 1]
     } else if mode == "list" {
         for p in range passes {
-            for x in l { total += x ^ p }
+            for x in l: total += x ^ p
         }
     } else if mode == "listfold" {
         for p in range passes {
@@ -36,7 +36,7 @@ fn main() ? {
     } else if mode == "array" {
         a := l.ToArray()
         for p in range passes {
-            for x in a { total += x ^ p }
+            for x in a: total += x ^ p
         }
     } else if mode == "arrayfold" {
         a := l.ToArray()

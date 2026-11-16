@@ -201,7 +201,7 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
             }
             break
         }
-        if arg == "-h" or arg == "--help" { error Error.Help }
+        if arg == "-h" or arg == "--help": error Error.Help
         if arg.Len() < 2 or arg[0] != '-' {
             s.args.Push(arg)
             continue
@@ -262,7 +262,7 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
 # where it has none. Fails as Parse does, and with what T's constructor fails with
 fn (p mut Flags&) Read<T>(args Array<String&>&) T ? {
     assert T.Kind == TypeKind.Struct, "flags reads a struct's constructor parameters"
-    for q in T.Params { p.declare(q) }
+    for q in T.Params: p.declare(q)
     try p.Parse(args)
     return try T(try p.s.valueOf(q) for q in T.Params)
 }
@@ -275,7 +275,7 @@ fn (p mut Flags&) declare<Q>(q Q) {
     match Q.Type {
         case Bool {
             f := p.add(name, short, Kind.Bool, help)
-            if q.HasDefault { f.b = q.Default }
+            if q.HasDefault: f.b = q.Default
         }
         case String, String& {
             f := p.add(name, short, Kind.Text, help)
@@ -343,7 +343,7 @@ fn dashed(name String&) String {
         if i > 0 and ch.IsUpper() {
             prev := name[i - 1]
             next := name[i + 1] if i + 1 < name.Len() else ' '
-            if prev.IsLower() or prev.IsDigit() or (prev.IsUpper() and next.IsLower()) { b.PushChar('-') }
+            if prev.IsLower() or prev.IsDigit() or (prev.IsUpper() and next.IsLower()): b.PushChar('-')
         }
         b.PushChar(ch.ToLower())
     }

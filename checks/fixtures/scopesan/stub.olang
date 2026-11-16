@@ -4,10 +4,10 @@ import "std/os"
 fn Touch(n I64) I64 {
     a := Array<I64>(n, 1)
     l := Vec<I64>()
-    for x in a { l.Push(x) }
+    for x in a: l.Push(x)
     return l.Len()
 }
 
 fn main() ? {
-    if Touch(os.Args().Len()) < 0 { os.Exit(1) }
+    if Touch(os.Args().Len()) < 0: os.Exit(1)
 }

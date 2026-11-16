@@ -7,7 +7,7 @@ type Stop error {
     Here
 }
 fn g(i I64) I64 ? {
-    if i % 2 == 0 { error Stop.Here }
+    if i % 2 == 0: error Stop.Here
     return i
 }
 type Big struct(a Array<I64>&) {

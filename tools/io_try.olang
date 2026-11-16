@@ -19,8 +19,8 @@ Names Array<String&>& = Array<String&>["Println", "PrintErrln", "PrintErr", "Pri
 fn followsTry(text String&, i I64) Bool {
     window := text[(i - 12 if i > 12 else 0):i]
     e := window.Len()
-    for e > 0 and srcmask.IsPySpace(window[e - 1]) { e-- }
-    if e == window.Len() or e < 3 or window[e - 3:e] != "try" { return false }
+    for e > 0 and srcmask.IsPySpace(window[e - 1]): e--
+    if e == window.Len() or e < 3 or window[e - 3:e] != "try": return false
     return e == 3 or not srcmask.IsWord(window[e - 4])
 }
 
@@ -36,13 +36,13 @@ fn migrate(text String&, alias String&) String, I64 {
     last I64 = 0
     count I64 = 0
     for i in range text.Len() {
-        if i > 0 and (srcmask.IsWord(text[i - 1]) or text[i - 1] == '.' or text[i - 1] == '$') { continue }
-        if not hasAt(text, i, alias) or not hasAt(text, i + alias.Len(), ".") { continue }
+        if i > 0 and (srcmask.IsWord(text[i - 1]) or text[i - 1] == '.' or text[i - 1] == '$'): continue
+        if not hasAt(text, i, alias) or not hasAt(text, i + alias.Len(), "."): continue
         p := i + alias.Len() + 1
         q := p
-        for q < text.Len() and srcmask.IsWord(text[q]) { q++ }
-        if not (text[p:q] in Names) or not hasAt(text, q, "(") { continue }
-        if mask[i] != 'c' or followsTry(text, i) { continue }
+        for q < text.Len() and srcmask.IsWord(text[q]): q++
+        if not (text[p:q] in Names) or not hasAt(text, q, "("): continue
+        if mask[i] != 'c' or followsTry(text, i): continue
         out.Push(text[last:i])
         out.Push("try ")
         last = i
@@ -55,7 +55,7 @@ fn migrate(text String&, alias String&) String, I64 {
 # whether a path has build or .git as one of its parts
 fn inBuildOrGit(path String&) Bool {
     for part in path.Split("/") {
-        if part == "build" or part == ".git" { return true }
+        if part == "build" or part == ".git": return true
     }
     return false
 }
@@ -76,7 +76,7 @@ fn main() ? {
             os.Exit(1)
             unreachable
         }
-        if not srcmask.ValidUtf8(raw) { continue }
+        if not srcmask.ValidUtf8(raw): continue
         text := srcmask.Translate(raw)
         alias := try srcmask.IoAlias(text, p) catch { continue }
         changed, n := migrate(text, alias)

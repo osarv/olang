@@ -6,7 +6,7 @@ N I64 = 20000
 
 fn mk(i I64) Vec<I64> {
     w Vec<I64>
-    for j in range 100 { w.Push(i + j) }
+    for j in range 100: w.Push(i + j)
     return w
 }
 

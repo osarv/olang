@@ -14,7 +14,7 @@ fn Summary.scan(n I64) Summary {
     for i in range n {
         l := line(i)
         v := measure(l)
-        if v > s.best { s.best = v }
+        if v > s.best: s.best = v
     }
     return s
 }

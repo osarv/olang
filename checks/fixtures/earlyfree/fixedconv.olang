@@ -9,7 +9,7 @@ fn sum3(a I64) I64 {
     v Array<I64> = Array<I64>(0, 0)
     v = x
     t I64 = 0
-    for e in v { t += e }
+    for e in v: t += e
     return t
 }
 
@@ -23,7 +23,7 @@ fn sumLit(i I64) I64 {
     v Array<I64> = Array<I64>[0]
     v = x
     t I64 = 0
-    for e in v { t += e }
+    for e in v: t += e
     return t
 }
 

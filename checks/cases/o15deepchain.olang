@@ -9,7 +9,7 @@ type Deep unique struct(v I64) {
     v
     next mut Deep?& = null
 } destruct {
-    if v != RelNext { RelBad++ }
+    if v != RelNext: RelBad++
     RelNext--
 }
 # (the count is set before the loop: nothing reads 'head' after it, so the chain lives in the loop's block and its

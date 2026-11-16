@@ -32,7 +32,7 @@ fn keep(n I64) I64 {
     }
     churn()
     s := 0
-    for v in views { s += v[0] }
+    for v in views: s += v[0]
     return s
 }
 
@@ -45,7 +45,7 @@ fn viaLocal(n I64) I64 {
     }
     churn()
     s := 0
-    for v in views { s += v[1] }
+    for v in views: s += v[1]
     return s
 }
 

@@ -36,9 +36,9 @@ type Result struct() {
 
 # the end of a name starting at i, i itself where none starts there
 fn nameEnd(src String&, i I64) I64 {
-    if i >= src.Len() or not srcmask.IsIdStart(src[i]) { return i }
+    if i >= src.Len() or not srcmask.IsIdStart(src[i]): return i
     j := i + 1
-    for j < src.Len() and srcmask.IsWord(src[j]) { j++ }
+    for j < src.Len() and srcmask.IsWord(src[j]): j++
     return j
 }
 
@@ -66,14 +66,14 @@ fn postfixEnd(src String&, mask String&, i I64) I64 {
     if j == i {
         if i < src.Len() and (src[i] == '(' or src[i] == '[') and mask[i] == 'c' {
             k := srcmask.CloseOf(src, mask, i)
-            if k < 0 { return i }
+            if k < 0: return i
             j = k
         } else if i < src.Len() and src[i] == '"' {
             j = i + 1
-            for j < src.Len() and mask[j] != 'c' { j++ }
+            for j < src.Len() and mask[j] != 'c': j++
         } else {
             for j < src.Len() and (src[j].IsDigit() or src[j] == '_' or (src[j] == '.' and j + 1 < src.Len() and src[j + 1].IsDigit())) { j++ }
-            if j == i { return i }
+            if j == i: return i
         }
     }
     for j < src.Len() {
@@ -82,11 +82,11 @@ fn postfixEnd(src String&, mask String&, i I64) I64 {
             j = nameEnd(src, j + 1)
         } else if (c == '(' or c == '[') and mask[j] == 'c' {
             k := srcmask.CloseOf(src, mask, j)
-            if k < 0 { break }
+            if k < 0: break
             j = k
         } else if c == '<' {
             k := typeArgsEnd(src, j)
-            if k < 0 { break }
+            if k < 0: break
             j = k
         } else if c == '!' and not (j + 1 < src.Len() and src[j + 1] == '=') {
             j++
@@ -100,14 +100,14 @@ fn postfixEnd(src String&, mask String&, i I64) I64 {
 fn lineOf(src String&, i I64) I64 {
     n I64 = 1
     for k in range i {
-        if src[k] == '\n' { n++ }
+        if src[k] == '\n': n++
     }
     return n
 }
 
 fn lineText(src String&, i I64) String& {
     a := i
-    for a > 0 and src[a - 1] != '\n' { a-- }
+    for a > 0 and src[a - 1] != '\n': a--
     b := try src[i:].FindByte('\n') catch default (src.Len() - i)
     return src[a:i + b]
 }
@@ -122,10 +122,10 @@ fn typeEnd(text String&, a I64) I64 {
         } else if ch == '<' {
             depth I64 = 0
             for j < text.Len() {
-                if text[j] == '<' { depth++ }
+                if text[j] == '<': depth++
                 if text[j] == '>' {
                     depth--
-                    if depth == 0 { break }
+                    if depth == 0: break
                 }
                 j++
             }
@@ -151,7 +151,7 @@ fn trailing(src String&, mask String&, br String&, e I64) Vec<I64> ? Unreadable 
     for {
         j = srcmask.SkipGap(src, mask, br, j)
         op := srcmask.OpAt(src[j:])
-        if op.Len() == 0 { return precs }
+        if op.Len() == 0: return precs
         if op == "if" {
             precs.Push(0)
             return precs
@@ -163,7 +163,7 @@ fn trailing(src String&, mask String&, br String&, e I64) Vec<I64> ? Unreadable 
         }
         if op == "not" {
             j = srcmask.SkipGap(src, mask, br, j)
-            if not wordAt(src, mask, j, "in") { error Unreadable }
+            if not wordAt(src, mask, j, "in"): error Unreadable
             j += 2
             op = "in"
         }
@@ -175,7 +175,7 @@ fn trailing(src String&, mask String&, br String&, e I64) Vec<I64> ? Unreadable 
             else: break
         }
         k := postfixEnd(src, mask, j)
-        if k == j { error Unreadable }
+        if k == j: error Unreadable
         j = k
     }
 }
@@ -185,26 +185,26 @@ fn chainStart(text String&, mask String&, b I64) I64 {
     i := b
     for i > 0 {
         ch := text[i - 1]
-        if mask[i - 1] != 'c' { break }
+        if mask[i - 1] != 'c': break
         if ch == ')' or ch == ']' {
             k := i - 1
             depth I64 = 0
             open := '(' if ch == ')' else '['
             for k >= 0 {
-                if mask[k] == 'c' and text[k] == ch { depth++ }
+                if mask[k] == 'c' and text[k] == ch: depth++
                 if mask[k] == 'c' and text[k] == open {
                     depth--
-                    if depth == 0 { break }
+                    if depth == 0: break
                 }
                 k--
             }
-            if k < 0 { return b }
+            if k < 0: return b
             i = k
             continue
         }
         if srcmask.IsWord(ch) {
-            for i > 0 and srcmask.IsWord(text[i - 1]) { i-- }
-            if i == 0 or text[i - 1] != '.' { break }
+            for i > 0 and srcmask.IsWord(text[i - 1]): i--
+            if i == 0 or text[i - 1] != '.': break
             i--
             continue
         }
@@ -222,7 +222,7 @@ fn asUnderTry(path String&, src String&, mask String&, o I64, e I64, edits mut V
             continue
         }
         b := p
-        for b > 0 and src[b - 1] == ' ' { b-- }
+        for b > 0 and src[b - 1] == ' ': b--
         seen.Push(p)
         a := chainStart(src, mask, b)
         t := typeEnd(src, p + 3)
@@ -263,12 +263,12 @@ fn migrateAs(path String&, src String&, c mut Result&) String {
             continue
         }
         o := i + 4
-        for o < src.Len() and src[o] == ' ' { o++ }
+        for o < src.Len() and src[o] == ' ': o++
         e := postfixEnd(src, mask, o)
-        if e > o { asUnderTry(path, src, mask, o, e, edits, texts, seen, c) }
+        if e > o: asUnderTry(path, src, mask, o, e, edits, texts, seen, c)
         i = o
     }
-    if edits.Len() == 0 { return $src }
+    if edits.Len() == 0: return $src
     # the insertions in the order of where they go, those at one place as they were asked for
     order := Array<I64>(edits.Len())
     for k in range edits.Len() {
@@ -293,7 +293,7 @@ fn migrateAs(path String&, src String&, c mut Result&) String {
 # src migrated as the header says
 fn migrate(path String&, text String&, old Bool, c mut Result&) String {
     src := migrateAs(path, text, c)
-    if src != text { c.changes++ }
+    if src != text: c.changes++
     mask := srcmask.Mask(src, true)
     br := srcmask.Brackets(src, mask)
     out := StringBuilder()
@@ -305,7 +305,7 @@ fn migrate(path String&, text String&, old Bool, c mut Result&) String {
             continue
         }
         o := i + 4
-        for o < src.Len() and src[o] == ' ' { o++ }
+        for o < src.Len() and src[o] == ' ': o++
         e := postfixEnd(src, mask, o)
         if src[o:].StartsWith("join") or e == o {
             i = o
@@ -339,7 +339,7 @@ fn migrate(path String&, text String&, old Bool, c mut Result&) String {
         same := lp >= 0
         precs := try trailing(src, mask, br, e) catch Unreadable { same = false } default Vec<I64>()
         for q in precs {
-            if q <= lp { same = false }
+            if q <= lp: same = false
         }
         if same {
             i = o
@@ -392,9 +392,9 @@ fn main() ? {
             unreachable
         }
         out := migrate(path, src, old, total)
-        if out == src { continue }
+        if out == src: continue
         changed++
-        if verbose { srcmask.Say(path) }
+        if verbose: srcmask.Say(path)
         if not check {
             try os.WriteFile(path, out) catch {
                 srcmask.SayErr("try_migrate: cannot write " + $path)
@@ -404,8 +404,8 @@ fn main() ? {
     }
     verb := "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.changes + " rewrites")
-    for l in total.left { srcmask.Say("by hand: " + $l) }
-    if check and changed > 0 { os.Exit(1) }
+    for l in total.left: srcmask.Say("by hand: " + $l)
+    if check and changed > 0: os.Exit(1)
 }
 
 test "parentheses around a try's operand taken off, a try read on wrapped with --old" {

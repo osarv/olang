@@ -69,7 +69,7 @@ firstChunk I64 = 8
 
 fn (l mut List<T>&) Push(x T) {
     s := l.s
-    if s.used == s.room { s.grow(x) }
+    if s.used == s.room: s.grow(x)
     s.tail[s.used] = x
     s.used++
     s.count++
@@ -80,17 +80,17 @@ fn (l mut List<T>&) Push(x T) {
 fn (l mut List<T>&) PushAll(a Array<T>&) {
     s := l.s
     if a.Len() <= s.room - s.used { # it fits in the tail: the common case, kept short
-        for j in range a.Len() { s.tail[s.used + j] = a[j] }
+        for j in range a.Len(): s.tail[s.used + j] = a[j]
         s.used += a.Len()
         s.count += a.Len()
         return
     }
     from I64 = 0
     for from < a.Len() {
-        if s.used == s.room { s.grow(a[from]) }
+        if s.used == s.room: s.grow(a[from])
         n I64 = a.Len() - from
-        if s.room - s.used < n { n = s.room - s.used }
-        for j in range n { s.tail[s.used + j] = a[from + j] }
+        if s.room - s.used < n: n = s.room - s.used
+        for j in range n: s.tail[s.used + j] = a[from + j]
         s.used += n
         from += n
     }
@@ -113,7 +113,7 @@ fn (s mut listState<T>&) grow(fill T) {
             s.chunks = Array<mut Array<T>&>(4, s.first) # every slot past made written before it is read
         } else if s.made == s.chunks.Len() {
             more mut Array<mut Array<T>&>& = Array<mut Array<T>&>(s.made * 2, s.first)
-            for k in range s.made { more[k] = s.chunks[k] }
+            for k in range s.made: more[k] = s.chunks[k]
             s.chunks = more
         }
         s.chunks[s.made] = Array<T>(firstChunk << s.made, fill)
@@ -127,7 +127,7 @@ fn (s mut listState<T>&) grow(fill T) {
 
 # chunk k of those made - the first is held on its own, so a list that never outgrows it has no array of chunks
 fn (s listState<T>&) chunk(k I64) mut Array<T>& {
-    if k == 0 { return s.first }
+    if k == 0: return s.first
     return s.chunks[k]
 }
 
@@ -156,13 +156,13 @@ fn highBit(x I64) I64 {
         x = x >> 2
         k += 2
     }
-    if x >= 2 { k += 1 }
+    if x >= 2: k += 1
     return k
 }
 
 # the element at position i - "l[i]" (E31). Unchecked, as an array index is (E16): "try l.Get(i)" checks it
 fn (l List<T>&) At(i I64) T {
-    if i < firstChunk { return l.s.first[i] }
+    if i < firstChunk: return l.s.first[i]
     p I64 = i + firstChunk
     k I64 = highBit(p) - firstChunkLog
     return l.s.chunks[k][p - (firstChunk << k)]
@@ -171,7 +171,7 @@ fn (l List<T>&) At(i I64) T {
 # the element at position i, failing with OUT_OF_RANGE where i is no position - "l[i]" checked, as an array's Get is
 # (E16d)
 fn (l List<T>&) Get(i I64) T ? Error.OutOfRange {
-    if i < 0 or i >= l.s.count { error Error.OutOfRange }
+    if i < 0 or i >= l.s.count: error Error.OutOfRange
     return l.At(i)
 }
 
@@ -189,14 +189,14 @@ fn (l mut List<T>&) SetAt(i I64, x T) {
 # the first element - failing with Empty when there is none, as Map.Get fails on a missing key:
 # "try l.First() catch default 0" gives a fallback
 fn (l List<T>&) First() T ? Error.Empty {
-    if l.s.count == 0 { error Error.Empty }
+    if l.s.count == 0: error Error.Empty
     return l.s.first[0]
 }
 
 # the last element - failing with Empty when there is none
 fn (l List<T>&) Last() T ? Error.Empty {
     s := l.s
-    if s.count == 0 { error Error.Empty }
+    if s.count == 0: error Error.Empty
     if s.used == 0 {
         c := s.chunk(s.nChunks - 2)
         return c[c.Len() - 1]
@@ -208,7 +208,7 @@ fn (l List<T>&) Last() T ? Error.Empty {
 # list is emptied by "for { x := try l.Pop() catch { break } ... }". Moves nothing
 fn (l mut List<T>&) Pop() T ? Error.Empty {
     s := l.s
-    if s.count == 0 { error Error.Empty }
+    if s.count == 0: error Error.Empty
     s.dropLast()
     return s.tail[s.used]
 }
@@ -245,7 +245,7 @@ fn (l mut List<T>&) Clear() {
 # "c := From(l.Iter())" and "c.Truncate(k)"; of an array, the slice "a[:k]".)
 fn (l mut List<T>&) Truncate(n I64) {
     s := l.s
-    if n >= s.count { return }
+    if n >= s.count: return
     if n <= 0 {
         l.Clear()
         return
@@ -268,7 +268,7 @@ fn (l mut List<T>&) RemoveAt(i I64) ? Error.OutOfRange { try l.TakeAt(i) }
 # checked once per call
 fn (l mut List<T>&) TakeAt(i I64) T ? Error.OutOfRange {
     s := l.s
-    if i < 0 or i >= s.count { error Error.OutOfRange }
+    if i < 0 or i >= s.count: error Error.OutOfRange
     p I64 = i + firstChunk
     k I64 = highBit(p) - firstChunkLog
     o I64 = p - (firstChunk << k)
@@ -295,7 +295,7 @@ fn (l mut List<T>&) TakeAt(i I64) T ? Error.OutOfRange {
 # per call
 fn (l mut List<T>&) Insert(i I64, x T) ? Error.OutOfRange {
     s := l.s
-    if i < 0 or i > s.count { error Error.OutOfRange }
+    if i < 0 or i > s.count: error Error.OutOfRange
     if i == s.count {
         l.Push(x)
         return
@@ -343,8 +343,8 @@ fn (l mut List<T>&) Sort<? E>(less fn&(x T, y T) Bool ? E) ? E {
     for k in range s.nChunks {
         c := s.chunk(k)
         n I64 = c.Len()
-        if k == s.nChunks - 1 { n = s.used }
-        for j in range n { c[j] = a[at + j] }
+        if k == s.nChunks - 1: n = s.used
+        for j in range n: c[j] = a[at + j]
         at += n
     }
 }
@@ -362,7 +362,7 @@ fn List<T>.Of(a Array<T>&) List<T> {
 # "list.List<I64>[1, 2]", "list.List.FromIter(m.Keys())". Fails with what the iterator fails with
 fn List<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) List<T> ? E {
     out := List<T>()
-    for x in try it { out.Push(x) }
+    for x in try it: out.Push(x)
     return out
 }
 
@@ -380,7 +380,7 @@ type Iter<T> struct(of List<T>&) {
 }
 
 fn (it mut Iter<T>&) Next() T ? Exhausted {
-    if it.at >= it.list.count { error Exhausted.End }
+    if it.at >= it.list.count: error Exhausted.End
     if it.i == it.room { # this chunk is used up: on to the next one
         it.chunk = it.list.first if it.k == 0 else it.list.chunks[it.k]
         it.room = it.chunk.Len()
@@ -395,7 +395,7 @@ fn (it mut Iter<T>&) Next() T ? Exhausted {
 # moves on to the next chunk when this one is used up, failing with Exhausted at the end - so the elements still to come
 # that sit next to each other are chunk[i:runEnd()]. A caller walking them moves i and at on by what it took
 fn (it mut Iter<T>&) enter() ? Exhausted {
-    if it.at >= it.list.count { error Exhausted.End }
+    if it.at >= it.list.count: error Exhausted.End
     if it.i == it.room {
         it.chunk = it.list.first if it.k == 0 else it.list.chunks[it.k]
         it.room = it.chunk.Len()
@@ -406,7 +406,7 @@ fn (it mut Iter<T>&) enter() ? Exhausted {
 
 # where the run from i ends: the chunk's end, or the list's
 fn (it Iter<T>&) runEnd() I64 {
-    if it.list.count - it.at < it.room - it.i { return it.i + it.list.count - it.at }
+    if it.list.count - it.at < it.room - it.i: return it.i + it.list.count - it.at
     return it.room
 }
 
@@ -460,7 +460,7 @@ fn (it mut Iter<T>&) Count<? E>(keep fn&(x T) Bool ? E) I64 ? E {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
         for x in run {
-            if try keep(x) { c++ }
+            if try keep(x): c++
         }
         it.i += run.Len()
         it.at += run.Len()
@@ -501,7 +501,7 @@ fn (it mut Iter<T>&) Filter<? E>(keep fn&(x T) Bool ? E) mut Vec<T>& ? E {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
         for x in run {
-            if try keep(x) { out.Push(x) }
+            if try keep(x): out.Push(x)
         }
         it.i += run.Len()
         it.at += run.Len()
@@ -516,7 +516,7 @@ fn (it mut Iter<T>&) Filter<? E>(keep fn&(x T) Bool ? E) mut Vec<T>& ? E {
 # the iterator would give it.
 fn (l List<T>&) RunFrom(at I64) Array<T>& ? Exhausted {
     s := l.s
-    if at >= s.count or at < 0 { error Exhausted.End }
+    if at >= s.count or at < 0: error Exhausted.End
     if s.nChunks == 1 { return s.first[at:s.used] } # a list in one chunk - most are - is one run
     return s.runIn(highBit(at + firstChunk) - firstChunkLog, at)
 }
@@ -542,8 +542,8 @@ fn (l List<T>&) ToArray() mut Array<T>& {
     for k in range s.nChunks {
         c := s.chunk(k)
         n I64 = c.Len()
-        if k == s.nChunks - 1 { n = s.used }
-        for i in range n { out[at + i] = c[i] }
+        if k == s.nChunks - 1: n = s.used
+        for i in range n: out[at + i] = c[i]
         at += n
     }
     return out
@@ -552,8 +552,8 @@ fn (l List<T>&) ToArray() mut Array<T>& {
 # the texts one after another with sep between each two, as an array of texts joins (Array<String&>.Join)
 fn (l List<String&>&) Join(sep String&) String {
     n I64 = 0
-    for p in l { n += p.Len() }
-    if l.Len() > 1 { n += sep.Len() * (l.Len() - 1) }
+    for p in l: n += p.Len()
+    if l.Len() > 1: n += sep.Len() * (l.Len() - 1)
     out := Array<Char>(n)
     w I64 = 0
     for i, p in l {
@@ -574,7 +574,7 @@ fn (l List<String&>&) Join(sep String&) String {
 # whether x is one of the elements, compared with "==" - what "x in l" asks (E29)
 fn (l List<T>&) Has(x T) Bool {
     for y in l {
-        if y == x { return true }
+        if y == x: return true
     }
     return false
 }
@@ -583,7 +583,7 @@ fn (l List<T>&) Has(x T) Bool {
 # Find does: "try l.IndexOf(x) catch default -1" gives a fallback
 fn (l List<T>&) IndexOf(x T) I64 ? Error.NotFound {
     for i, y in l {
-        if y == x { return i }
+        if y == x: return i
     }
     error Error.NotFound
 }
@@ -604,7 +604,7 @@ fn (l mut List<T>&) SwapRemove(i I64) ? Error.OutOfRange { try l.SwapTake(i) }
 # one that is not fails with OutOfRange, checked once per call, as TakeAt checks it
 fn (l mut List<T>&) SwapTake(i I64) T ? Error.OutOfRange {
     s := l.s
-    if i < 0 or i >= s.count { error Error.OutOfRange }
+    if i < 0 or i >= s.count: error Error.OutOfRange
     x := l.At(i)
     s.dropLast()
     if i < s.count { l.SetAt(i, s.tail[s.used]) } # the last element, just dropped, moved into the gap
@@ -613,9 +613,9 @@ fn (l mut List<T>&) SwapTake(i I64) T ? Error.OutOfRange {
 
 # whether two Lists hold equal elements in the same order - "==" (E10a), each pair by its own "==", as two arrays compare
 fn (l List<T>&) Eq(o List<T>&) Bool {
-    if l.Len() != o.Len() { return false }
+    if l.Len() != o.Len(): return false
     for i in range l.Len() {
-        if l[i] != o[i] { return false }
+        if l[i] != o[i]: return false
     }
     return true
 }
@@ -623,7 +623,7 @@ fn (l List<T>&) Eq(o List<T>&) Bool {
 # the elements' hashes combined in order, as an array's (HashElements) - so equal Lists hash alike (E10b)
 fn (l List<T>&) Hash() I64 {
     h I64 = 0
-    for y in l { h = h * 1099511628211 + y.Hash() }
+    for y in l: h = h * 1099511628211 + y.Hash()
     return h
 }
 
@@ -637,7 +637,7 @@ fn (l List<T>&) Str() String {
         case Char { # an array of Char renders as text, so these are written here
             b.Push($typeWritten(Array<List<Char>>(0)) + "[")
             for i, c in l {
-                if i > 0 { b.Push(", ") }
+                if i > 0: b.Push(", ")
                 b.Push(charLiteral(c))
             }
         }
@@ -648,7 +648,7 @@ fn (l List<T>&) Str() String {
                 run := try l.RunFrom(at) catch Exhausted { break }
                 r := $run # "T[...]": the element type as written, then the items
                 o := try r.FindByte('[') catch { unreachable }
-                if at > 0 { b.Push(", ") }
+                if at > 0: b.Push(", ")
                 b.Push($r[o + 1:r.Len() - 1])
                 at += run.Len()
             }
@@ -666,12 +666,12 @@ fn typeWritten<T>(a Array<T>&) String {
 
 # c as a character literal writes it - how "$" renders a Char inside another value (E11a)
 fn charLiteral(c Char) String {
-    if c == '\n' { return "'\\n'" }
-    if c == '\t' { return "'\\t'" }
-    if c == '\r' { return "'\\r'" }
-    if c == '\0' { return "'\\0'" }
-    if c == '\\' { return "'\\\\'" }
-    if c == '\'' { return "'\\''" }
+    if c == '\n': return "'\\n'"
+    if c == '\t': return "'\\t'"
+    if c == '\r': return "'\\r'"
+    if c == '\0': return "'\\0'"
+    if c == '\\': return "'\\\\'"
+    if c == '\'': return "'\\''"
     return "'" + $c + "'"
 }
 
@@ -740,7 +740,7 @@ if TestBuild {
         l mut List<I64>& = List<I64>()
         for i in range 20 { l.Push(i) } # crosses two chunks (8, then 16)
         sum I64 = 0
-        for x in l { sum += x }
+        for x in l: sum += x
         assert sum == 190
         again I64 = 0
         for x in l { again += x } # a second loop starts from the beginning
@@ -758,7 +758,7 @@ if TestBuild {
         start I64 = 0
         for i in range t.Len() + 1 {
             if i == t.Len() or t[i] == ' ' {
-                if i > start { out.Push(t[start:i]) }
+                if i > start: out.Push(t[start:i])
                 start = i + 1
             }
         }
@@ -770,7 +770,7 @@ if TestBuild {
         ws := List<String&>.wordsOf(line)
         assert ws.Len() == 4
         n := 0
-        for _ in ws { n++ }
+        for _ in ws: n++
         assert n == 4
         arr := ws.ToArray()
         assert arr[0].Eq("to") and arr[3].Eq("not")
@@ -789,16 +789,16 @@ if TestBuild {
 
     test "pushing from inside a loop builds where the list lives" {
         l := List<I64>()
-        for i in range 100 { l.Push(i) }
+        for i in range 100: l.Push(i)
         assert listChurn() > 0
         sum I64 = 0
-        for x in l { sum = sum + x }
+        for x in l: sum = sum + x
         assert sum == 4950
     }
 
     test "a list's elements, walked through a lambda" {
         l mut List<I32>& = List<I32>()
-        for i in range 20 { l.Push(I32(i)) }
+        for i in range 20: l.Push(I32(i))
         limit I32 = 15
         assert l.Iter().Some(fn(x) { return x > limit }) and not l.Iter().Every(fn(x) { return x > limit })
         assert l.Iter().Count(fn(x) { return x % 5 == 0 }) == 4
@@ -813,7 +813,7 @@ if TestBuild {
     # 100 and doubles, so 250 elements grow it twice
     test "a comprehension walks a List" {
         l mut List<I32>& = List<I32>()
-        for i in range I32(250) { l.Push(i) }
+        for i in range I32(250): l.Push(i)
         evens := Array<I32>[x for x in l if x % 2 == 0]
         assert evens.Len() == 125
         assert evens[124] == 248
@@ -833,8 +833,8 @@ if TestBuild {
     # both sides of every chunk boundary
     test "indexing a List" {
         l mut List<I64>& = List<I64>()
-        for i in range 1000 { l.Push(I64(i) * 3) }
-        for i in range 1000 { assert l[i] == I64(i) * 3 }
+        for i in range 1000: l.Push(I64(i) * 3)
+        for i in range 1000: assert l[i] == I64(i) * 3
         assert l[0] == 0 and l[7] == 21 and l[8] == 24 and l[23] == 69 and l[24] == 72 and l[999] == 2997
         l[8] = -1 # the first element of the second chunk
         l[7] = -2 # the last of the first
@@ -853,7 +853,7 @@ if TestBuild {
     # E16d: "try l.Get(i)" checks i against the length and fails with OUT_OF_RANGE, as an array's Get does
     test "a checked index into a List" {
         l mut List<I32>& = List<I32>()
-        for i in range 20 { l.Push(I32(i)) }
+        for i in range 20: l.Push(I32(i))
         assert (try l.Get(19) catch default -1) == 19
         assert (try l.Get(20) catch default -1) == -1
         assert (try l.Get(-1) catch Error.OutOfRange default -1) == -1
@@ -864,7 +864,7 @@ if TestBuild {
     # a List of structs and of references indexes like any other
     test "indexing a List of structs and of references" {
         kv mut List<listKV>& = List<listKV>()
-        for i in range 30 { kv.Push(listKV(I32(i), I32(i) * 2)) }
+        for i in range 30: kv.Push(listKV(I32(i), I32(i) * 2))
         assert kv[17].v == 34
         kv[17] = listKV(0, 99) # an element is replaced whole: "l[i]" is a copy, as "for x in l" gives
         assert kv[17].v == 99 and kv[17].k == 0
@@ -872,7 +872,7 @@ if TestBuild {
         ws := List<String&>.wordsOf(line)
         assert ws[1] == "be" and ws[3] == "not"
         mine mut List<String&>& = List<String&>()
-        for w in ws { mine.Push(w) }
+        for w in ws: mine.Push(w)
         mine[1] = line[6:8]
         assert mine[1] == "or" and ws[1] == "be"
     }
@@ -883,11 +883,11 @@ if TestBuild {
         l.Push(-1)
         l.PushAll(Array<I32>[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) # fills the first chunk and spills into the second
         big := Array<I32>(100)
-        for i in range 100 { big[i] = I32(i) + 10 }
+        for i in range 100: big[i] = I32(i) + 10
         l.PushAll(big)
         l.PushAll(Array<I32>(0)) # nothing to add
         assert l.Len() == 111
-        for i in range 111 { assert l[i] == I32(i) - 1 }
+        for i in range 111: assert l[i] == I32(i) - 1
         a := l.ToArray()
         assert a.Len() == 111 and a[0] == -1 and a[110] == 109
         t mut List<Char>& = List<Char>()
@@ -900,9 +900,9 @@ if TestBuild {
     # load per element whatever the length; two walks, nested, still keep separate positions
     test "walking a long List" {
         l mut List<I64>& = List<I64>()
-        for i in range 100000 { l.Push(i) }
+        for i in range 100000: l.Push(i)
         sum I64 = 0
-        for x in l { sum += x }
+        for x in l: sum += x
         assert sum == 4999950000
         n I64 = 0
         for i, x in l {
@@ -913,7 +913,7 @@ if TestBuild {
         it := l.Iter()
         assert (try it.Next() catch default -1) == 0 and (try it.Next() catch default -1) == 1
         l2 mut List<I32>& = List<I32>()
-        for i in range 9 { l2.Push(I32(i)) }
+        for i in range 9: l2.Push(I32(i))
         pairs I32 = 0
         for a in l2 { for b in l2 { if a == b { pairs++ } } }
         assert pairs == 9
@@ -924,15 +924,15 @@ if TestBuild {
     # generated (checks.olang, "a List is walked by its iterator") - and Indexable's default Iter changes nothing for it
     fn indexedTotal<C Indexable<T>, T>(c C&) I64 {
         s I64 = 0
-        for x in c { s += x }
+        for x in c: s += x
         return s
     }
 
     test "a List with At is still walked by its own iterator" {
         l mut List<I32>& = List<I32>()
-        for i in range 50 { l.Push(I32(i)) }
+        for i in range 50: l.Push(I32(i))
         sum I32 = 0
-        for x in l { sum += x }
+        for x in l: sum += x
         assert sum == 1225
         assert indexedTotal(l) == 1225
         assert Array<I32>[x for x in l if x >= 40].Len() == 10
@@ -945,13 +945,13 @@ if TestBuild {
     # run time does
     fn listIndexed() I64 {
         l := List<I64>()
-        for i in range 40 { l.Push(i) }
+        for i in range 40: l.Push(i)
         l.PushAll(Array<I64>[100, 200])
         l[8] = 1000
         l[41] += 1
         s I64 = 0
-        for i in range l.Len() { s += l[i] }
-        for x in l { s += x }
+        for i in range l.Len(): s += l[i]
+        for x in l: s += x
         return s + (try l.Get(42) catch default 7)
     }
 
@@ -968,7 +968,7 @@ if TestBuild {
     # leaves from inside, and an element pushed while the loop runs is walked too
     fn listRuns(n I64) I64 {
         l := List<I64>()
-        for i in range n { l.Push(i) }
+        for i in range n: l.Push(i)
         firstBig I64 = -1
         for i, x in l {
             assert i == x
@@ -979,7 +979,7 @@ if TestBuild {
         }
         odd I64 = 0
         for x in l {
-            if x % 2 == 0 { continue }
+            if x % 2 == 0: continue
             odd += x
         }
         grown I64 = 0
@@ -992,7 +992,7 @@ if TestBuild {
 
     fn firstOver(l List<I64>&, limit I64) I64 ? {
         for x in l {
-            if x > limit { return x }
+            if x > limit: return x
         }
         error Error.NotFound
     }
@@ -1003,7 +1003,7 @@ if TestBuild {
         assert listRuns(40) == listRunsBaked
         assert listRunsBaked == 21 * 1000000 + 400 * 100
         l := List<I64>()
-        for i in range 100 { l.Push(i * 2) }
+        for i in range 100: l.Push(i * 2)
         assert (try firstOver(l, 150) catch default -1) == 152
         assert (try firstOver(l, 500) catch default -1) == -1
         pairs I64 = 0
@@ -1011,14 +1011,14 @@ if TestBuild {
         assert pairs == 100
         sq := Array<I64>[x * x for x in l if x < 10] # a comprehension walks it too
         assert sq.Len() == 5 and sq[4] == 64
-        for _ in List<I32>() { unreachable }
+        for _ in List<I32>(): unreachable
     }
 
     # the iterator helpers walk a List's iterator chunk by chunk, and leave it where Next would: just past the element Some or
     # Every stopped at - so Next goes on from there - or at the end
     test "S9f: Iter's helpers walk run by run and leave the iterator where Next would" {
         l := List<I64>()
-        for i in range 50 { l.Push(i) }
+        for i in range 50: l.Push(i)
         it := l.Iter()
         assert (try it.Next() catch default -1) == 0
         assert it.Some(fn(x) { return x == 30 })
@@ -1043,7 +1043,7 @@ if TestBuild {
         b := StringBuilder()
         b.PushChar('[')
         for i, x in l {
-            if i > 0 { b.PushChar(' ') }
+            if i > 0: b.PushChar(' ')
             b.Push($x)
         }
         b.PushChar(']')
@@ -1053,7 +1053,7 @@ if TestBuild {
     # 0, 1, ... n - 1
     fn List<I64>.listUpTo(n I64) mut List<I64>& {
         l mut List<I64>& = List<I64>()
-        for i in range n { l.Push(i) }
+        for i in range n: l.Push(i)
         return l
     }
 
@@ -1100,14 +1100,14 @@ if TestBuild {
         l := List<I64>.listUpTo(100)
         l.Clear()
         assert l.Len() == 0 and listShow(l) == "[]" and l.ToArray().Len() == 0
-        for _ in l { unreachable }
+        for _ in l: unreachable
         assert (try l.Last() catch default -1) == -1
-        for i in range 40 { l.Push(i + 1000) }
+        for i in range 40: l.Push(i + 1000)
         assert l.Len() == 40 and l[0] == 1000 and l[8] == 1008 and l[24] == 1024 and l[39] == 1039
         a := l.ToArray()
         assert a.Len() == 40 and a[39] == 1039
         sum I64 = 0
-        for x in l { sum += x }
+        for x in l: sum += x
         assert sum == 40 * 1000 + 780
         e := List<I32>()
         e.Clear() # an empty list, never grown, clears too
@@ -1175,12 +1175,12 @@ if TestBuild {
             l := List<I64>.listUpTo(n)
             l.Reverse()
             assert l.Len() == n
-            for i in range n { assert l[i] == n - 1 - i }
+            for i in range n: assert l[i] == n - 1 - i
             l.Sort(fn(a, b) { return a < b })
-            for i in range n { assert l[i] == i }
+            for i in range n: assert l[i] == i
         }
         keys := List<I32>()
-        for i in range 300 { keys.Push(I32(i)) }
+        for i in range 300: keys.Push(I32(i))
         keys.Sort(fn(x, y) { return x % 3 < y % 3 }) # stable: equal keys keep their order
         assert keys[0] == 0 and keys[1] == 3 and keys[99] == 297 and keys[100] == 1 and keys[299] == 299
         words := List.Of("pear fig apple kiwi banana".Split(" "))
@@ -1208,7 +1208,7 @@ if TestBuild {
         assert l.Join(", ") == ""
         l.Push("one")
         assert l.Join(", ") == "one"
-        for w in more.Split(" ") { l.Push(w) }
+        for w in more.Split(" "): l.Push(w)
         assert l.Join(", ") == "one, two, three, four, five, six, seven, eight, nine, ten"
         assert l.Join("") == "onetwothreefourfivesixseveneightnineten"
     }
@@ -1223,7 +1223,7 @@ if TestBuild {
         l.Reverse()
         l.Sort(fn(a, b) { return a % 10 < b % 10 })
         h I64 = r
-        for i, y in l { h = h * 31 + y * (i + 1) }
+        for i, y in l: h = h * 31 + y * (i + 1)
         l.Clear()
         l.Push(5)
         return h * 7 + (try l.Last() catch default -1)
@@ -1251,7 +1251,7 @@ if TestBuild {
 
     test "a List of mutable references, reordered and emptied" {
         l := List<mut listNode&>()
-        for i in range 30 { l.Push(listNode(30 - i)) }
+        for i in range 30: l.Push(listNode(30 - i))
         l.Sort(fn(a, b) { return a.v < b.v })
         l.Reverse()
         x := (try l.TakeAt(3))
@@ -1284,7 +1284,7 @@ if TestBuild {
         a[0] = 10
         assert a.Len() == 3 and c.Len() == 4 and c[0] == 1 and c[3] == 4 and a[0] == 10
         h := listHolder()
-        for i in range 20 { h.items.Push(i) }
+        for i in range 20: h.items.Push(i)
         g := h # a struct holding a List copies the handle with it
         g.items.Push(99)
         assert h.items.Len() == 21 and h.items[20] == 99
@@ -1292,8 +1292,8 @@ if TestBuild {
         shared[0].Push(5)
         assert shared[2].Len() == 1 and shared[2][0] == 5
         s I64 = 0
-        for x in a { s += x }
-        for x in c { s += x }
+        for x in a: s += x
+        for x in c: s += x
         return s * 1000 + h.items.Len() + shared[1].Len()
     }
     listCopiesBaked := listCopies()
@@ -1326,7 +1326,7 @@ if TestBuild {
         assert kept.Len() == 100 and kept[0] == 0 and kept[99] == 99
         words := List<String&>()
         line String& = "a bb ccc"
-        for w in line.Split(" ") { words.Push(w) }
+        for w in line.Split(" "): words.Push(w)
         copy := List.FromIter(words.Iter()) # a List of references copies to the same references
         assert copy.Len() == 3 and copy[2] == words[2]
     }
@@ -1341,7 +1341,7 @@ if TestBuild {
             c.Push(1000)
             l.Push(2000)
             assert c.Len() == n + 1 and l.Len() == n + 1 and c[n] == 1000 and l[n] == 2000, "From of " + $n
-            for i, x in c { s += x * (i + 1) }
+            for i, x in c: s += x * (i + 1)
         }
         return s
     }
@@ -1358,7 +1358,7 @@ if TestBuild {
             assert l.Len() == n, "Truncate(" + $n + ")"
             ok := true
             for i, x in l {
-                if x != i { ok = false }
+                if x != i: ok = false
             }
             assert ok
             l.Push(-1) # the next Push goes right after them, into the chunk they ended in
@@ -1439,7 +1439,7 @@ if TestBuild {
         t.Push("")
         b.Push($t + " ")
         c := List<Char>()
-        for x in "x\n'" { c.Push(x) }
+        for x in "x\n'": c.Push(x)
         b.Push($c + " ")
         n := List<List<I64>>()
         n.Push(List<I64>.listUpTo(2))
@@ -1461,7 +1461,7 @@ if TestBuild {
         expect := StringBuilder()
         expect.Push("List<I64>[")
         for i in range 1000 {
-            if i > 0 { expect.Push(", ") }
+            if i > 0: expect.Push(", ")
             expect.Push($i)
         }
         expect.Push("]")
@@ -1480,13 +1480,13 @@ if TestBuild {
     }
     fn listFind(l List<pair.Pair<String&, listItem&>>&, key String&) listItem& ? {
         for f in l {
-            if f.First == key { return f.Second }
+            if f.First == key: return f.Second
         }
         error Error.NotFound
     }
     fn listFindIter(l List<pair.Pair<String&, listItem&>>&, key String&) listItem& ? {
         for f in l.Iter() {
-            if f.First == key { return f.Second }
+            if f.First == key: return f.Second
         }
         error Error.NotFound
     }
@@ -1495,8 +1495,8 @@ if TestBuild {
         bags.Push(listBag())
         bags.Push(listBag())
         s I64 = 0
-        for b in bags { s += b.items.Len() + 1 }
-        for b in bags.Iter() { s += b.items.Len() + 1 }
+        for b in bags: s += b.items.Len() + 1
+        for b in bags.Iter(): s += b.items.Len() + 1
         assert s == 4
         #(a helper's callback handed an element something can be stored through is refused - the element's scope is
         #derived from the iterator's, O23a, which a build through it would underestimate: C2d - so it counts these)
@@ -1516,14 +1516,14 @@ if TestBuild {
     # Truncate emptied is filled again by Push - the same while compiling as at run time
     fn listVacated() I64 {
         l := List<String&>()
-        for i in range 40 { l.Push($i) }
+        for i in range 40: l.Push($i)
         a := try l.SwapTake(39) catch default "" # the last: nothing moves into the gap
         b := try l.SwapTake(0) catch default ""  # the last moved into position 0
         try l.Insert(7, "in") catch { unreachable }
         c := try l.TakeAt(20) catch default "" # the elements after 20 move down, across chunks
         assert l[0] == "38" and l[7] == "in" and l[8] == "7" and l[20] == "20" and l[37] == "37" and l.Len() == 38
         l.Truncate(30)
-        for i in range 5 { l.Push("t" + $i) }
+        for i in range 5: l.Push("t" + $i)
         assert l[29] == "29" and l[30] == "t0" and l[34] == "t4"
         n := l.Len()
         l.Clear()

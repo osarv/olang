@@ -55,7 +55,7 @@ fn destructAt(text String&, mask String&, i I64) Bool {
     if i > 0 and srcmask.IsWord(text[i - 1]): return false
     j := i + 8
     if j < text.Len() and srcmask.IsWord(text[j]): return false
-    for j < text.Len() and text[j] == ' ' { j++ }
+    for j < text.Len() and text[j] == ' ': j++
     return j < text.Len() and text[j] == '{'
 }
 
@@ -65,7 +65,7 @@ fn structOf(text String&, mask String&, i I64) I64 {
     ls := lineStart(text, i)
     for {
         t := ls
-        for t < text.Len() and (text[t] == ' ' or text[t] == '\t') { t++ }
+        for t < text.Len() and (text[t] == ' ' or text[t] == '\t'): t++
         if mask[t] == 'c' and text[t:].StartsWith("type ") {
             st := try text[t:].Find(" struct") catch { return -1 }
             head := text[t:t + st + 1]
@@ -80,7 +80,7 @@ fn structOf(text String&, mask String&, i I64) I64 {
 
 fn lineStart(text String&, i I64) I64 {
     k := i
-    for k > 0 and text[k - 1] != '\n' { k-- }
+    for k > 0 and text[k - 1] != '\n': k--
     return k
 }
 

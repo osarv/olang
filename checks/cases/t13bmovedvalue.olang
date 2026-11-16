@@ -32,7 +32,7 @@ fn fill(n I64) I64 {
         churn()
     }
     s := 0
-    for b in v { s += b.data[b.data.Len() - 1] + b.n }
+    for b in v: s += b.data[b.data.Len() - 1] + b.n
     return s
 }
 
@@ -44,7 +44,7 @@ fn chosen(n I64) I64 {
         churn()
     }
     s := 0
-    for b in v { s += b.data[b.data.Len() - 1] }
+    for b in v: s += b.data[b.data.Len() - 1]
     return s
 }
 
@@ -57,7 +57,7 @@ fn reassigned(n I64) I64 {
         f = keepIt
     }
     s := 0
-    for b in v { s += b.data[0] }
+    for b in v: s += b.data[0]
     return s
 }
 

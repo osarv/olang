@@ -457,7 +457,7 @@ fn (a T) Min<T Number>(b T) T {
 fn (a T) Max<T Number>(b T) T {
     match T {
         case F64, F32, F16, BF16 {
-            if a != a or b != b { return a + b }
+            if a != a or b != b: return a + b
             if a == b { return b if a.SignBit() else a }
         }
         case _ { }
@@ -496,7 +496,7 @@ fn (x T) Pow<T Integer>(n U32) T {
             started = true
         }
         e = e >> 1
-        if e > 0 { b = b * b }
+        if e > 0: b = b * b
     }
     return r
 }
@@ -530,11 +530,11 @@ fn (x T) DivCeil<T Integer>(n T) T {
 # it within one). The root of any U64 is below 2^32, so r is held there and the comparisons square without overflowing
 # (r + 1 is squared only while r < 2^32 - 1) - no division
 fn sqrtU64(n U64) U64 {
-    if n < 2 { return n }
+    if n < 2: return n
     r U64 = U64(cmath.sqrt(F64(n)))
-    if r > 0xFFFFFFFF { r = 0xFFFFFFFF }
-    for r * r > n { r-- }
-    for r < 0xFFFFFFFF and (r + 1) * (r + 1) <= n { r++ }
+    if r > 0xFFFFFFFF: r = 0xFFFFFFFF
+    for r * r > n: r--
+    for r < 0xFFFFFFFF and (r + 1) * (r + 1) <= n: r++
     return r
 }
 
@@ -545,19 +545,19 @@ fn (x U16) Sqrt() U16 { return U16(sqrtU64(U64(x))) }
 fn (x U32) Sqrt() U32 { return U32(sqrtU64(U64(x))) }
 fn (x U64) Sqrt() U64 { return sqrtU64(x) }
 fn (x I8) Sqrt() I8 ? NumberError {
-    if x < 0 { error NumberError.Negative }
+    if x < 0: error NumberError.Negative
     return I8(sqrtU64(U64(x)))
 }
 fn (x I16) Sqrt() I16 ? NumberError {
-    if x < 0 { error NumberError.Negative }
+    if x < 0: error NumberError.Negative
     return I16(sqrtU64(U64(x)))
 }
 fn (x I32) Sqrt() I32 ? NumberError {
-    if x < 0 { error NumberError.Negative }
+    if x < 0: error NumberError.Negative
     return I32(sqrtU64(U64(x)))
 }
 fn (x I64) Sqrt() I64 ? NumberError {
-    if x < 0 { error NumberError.Negative }
+    if x < 0: error NumberError.Negative
     return I64(sqrtU64(U64(x)))
 }
 
@@ -565,23 +565,23 @@ fn (x I64) Sqrt() I64 ? NumberError {
 # NumberError.Negative for a negative x - its error set inferred, so per width (R1a)
 fn (x T) Sqrt<T Integer>() T ? {
     if T.Min < 0 {
-        if x < 0 { error NumberError.Negative }
+        if x < 0: error NumberError.Negative
     }
-    if T.Size <= 8 { return T(sqrtU64(U64(x))) }
+    if T.Size <= 8: return T(sqrtU64(U64(x)))
     return T(sqrtU128(U128(x)))
 }
 
 # sqrtU64's floor of the square root, for the widths past 64 bits: from just above the F64's root - within 2^12 of the
 # true one at 128 bits - Newton's steps down to the floor, each step's sum below 2^66
 fn sqrtU128(n U128) U128 {
-    if n < (U128(1) << 64) { return U128(sqrtU64(U64(n))) }
+    if n < (U128(1) << 64): return U128(sqrtU64(U64(n)))
     r := U128(cmath.sqrt(F64(n))) + 4096
     for {
         s := (r + n / r) / 2
-        if s >= r { break }
+        if s >= r: break
         r = s
     }
-    for r > n / r { r-- }
-    for r + 1 <= n / (r + 1) { r++ }
+    for r > n / r: r--
+    for r + 1 <= n / (r + 1): r++
     return r
 }

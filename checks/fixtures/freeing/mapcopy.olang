@@ -6,7 +6,7 @@ N I64 = 20000
 
 fn mk(i I64) Vec<I64> {
     w Vec<I64>
-    for j in range 100 { w.Push(i + j) }
+    for j in range 100: w.Push(i + j)
     return w
 }
 
@@ -16,7 +16,7 @@ fn main() {
     for i in range N {
         m.Put(i % 7, mk(i))
         u := m.Get(i % 7)!
-        for j in range 50 { u.Push(j) }
+        for j in range 50: u.Push(j)
         t += u[149] + u.Len() + m.Get(i % 7)!.Len()
     }
     io.PutLine($t + " " + $m.Len())!

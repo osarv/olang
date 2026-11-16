@@ -27,26 +27,26 @@ fn chainStart(text String&, mask String&, b I64) I64 {
     i := b
     for i > 0 {
         c := text[i - 1]
-        if mask[i - 1] != 'c' { break }
+        if mask[i - 1] != 'c': break
         if c == ')' or c == ']' {
             open := '(' if c == ')' else '['
             depth I64 = 0
             k := i - 1
             for k >= 0 {
-                if mask[k] == 'c' and text[k] == c { depth++ }
+                if mask[k] == 'c' and text[k] == c: depth++
                 if mask[k] == 'c' and text[k] == open {
                     depth--
-                    if depth == 0 { break }
+                    if depth == 0: break
                 }
                 k--
             }
-            if k < 0 { return b }
+            if k < 0: return b
             i = k
             continue
         }
         if srcmask.IsWord(c) {
-            for i > 0 and srcmask.IsWord(text[i - 1]) { i-- }
-            if i == 0 or text[i - 1] != '.' { break }
+            for i > 0 and srcmask.IsWord(text[i - 1]): i--
+            if i == 0 or text[i - 1] != '.': break
             i--
             continue
         }
@@ -65,10 +65,10 @@ fn typeEnd(text String&, a I64) I64 {
         } else if c == '<' {
             depth I64 = 0
             for j < text.Len() {
-                if text[j] == '<' { depth++ }
+                if text[j] == '<': depth++
                 if text[j] == '>' {
                     depth--
-                    if depth == 0 { break }
+                    if depth == 0: break
                 }
                 j++
             }
@@ -83,16 +83,16 @@ fn typeEnd(text String&, a I64) I64 {
 # the line with the "as" at column index at rewritten to end the program where it fails; "" where it cannot be
 fn rewriteAt(text String&, at I64) String {
     mask := srcmask.Mask(text, true)
-    if not text[at:].StartsWith("as ") { return "" }
+    if not text[at:].StartsWith("as "): return ""
     b := at
-    for b > 0 and text[b - 1] == ' ' { b-- }
+    for b > 0 and text[b - 1] == ' ': b--
     a := chainStart(text, mask, b)
-    if a == b { return "" }
+    if a == b: return ""
     e := typeEnd(text, at + 3)
-    if e == at + 3 { return "" }
+    if e == at + 3: return ""
     # already in parentheses of its own - not a call's - the "!" goes after them
     if a > 0 and text[a - 1] == '(' and e < text.Len() and text[e] == ')' and (a < 2 or not (srcmask.IsWord(text[a - 2]) or text[a - 2] == ']' or text[a - 2] == ')')) {
-        if e + 1 < text.Len() and text[e + 1] == '!' { return "" }
+        if e + 1 < text.Len() and text[e + 1] == '!': return ""
         return $text[:e + 1] + "!" + $text[e + 1:]
     }
     return $text[:a] + "(" + $text[a:e] + ")!" + $text[e:]
@@ -121,12 +121,12 @@ fn main() ? {
         srcmask.SayErr("usage: build/tools_as_migrate [--olang PATH] [-j N] FILE|DIR...")
         os.Exit(2)
     }
-    if jobs < 1 { jobs = 1 }
+    if jobs < 1: jobs = 1
     olang = $diagedit.RealPathOf(olang)
     files Vec<String&>
     diagedit.OlangFiles(paths, files)
     allowed Vec<String&>
-    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+    for p in paths: allowed.Push(diagedit.RealPathOf(p))
     tmp := try os.MkTemp("", "as_migrate") catch {
         srcmask.SayErr("as_migrate: cannot make a temporary directory")
         os.Exit(1)
@@ -160,17 +160,17 @@ fn main() ? {
         made := apply(requests, left)
         srcmask.Say("round " + $round + ": " + $made + " uses of 'as' given '!'")
         total += made
-        if made == 0 { break }
+        if made == 0: break
     }
     srcmask.Say("total: " + $total + " uses of 'as' given '!'")
-    for l in left { srcmask.Say("by hand: " + $l) }
+    for l in left: srcmask.Say("by hand: " + $l)
 }
 
 # the edits applied to their files; how many were made, what could not be in left
 fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
     paths Vec<String&>
     for r in requests {
-        if not (r.Path in paths) { paths.Push($r.Path) }
+        if not (r.Path in paths): paths.Push($r.Path)
     }
     made I64 = 0
     for path in paths {
@@ -180,10 +180,10 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
         lines := src.Split("\n")
         mine Vec<diagedit.Request>
         for r in requests {
-            if r.Path == path { mine.Push(r) }
+            if r.Path == path: mine.Push(r)
         }
         mine.Sort(fn(a, b) {
-            if a.Line != b.Line { return a.Line < b.Line }
+            if a.Line != b.Line: return a.Line < b.Line
             return a.Col > b.Col
         })
         shLine Vec<I64>
@@ -194,13 +194,13 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
         for r in mine {
             # a module imported by several files compiled is reported once by each
             key := $r.Line + ":" + $r.Col
-            if key in seen or diagedit.ContainsAny(r.Why, expect) or r.Line - 1 >= lines.Len() { continue }
+            if key in seen or diagedit.ContainsAny(r.Why, expect) or r.Line - 1 >= lines.Len(): continue
             seen.Push($key)
             idx := r.Line - 1
             text := $lines[idx]
             out := rewriteAt(text, r.Col - 1)
             if out.Len() == 0 {
-                if not (r.Why in left) { left.Push($r.Why) }
+                if not (r.Why in left): left.Push($r.Why)
                 continue
             }
             lines[idx] = $out
@@ -212,11 +212,11 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
             made++
             changed = true
         }
-        if not changed { continue }
+        if not changed: continue
         diagedit.ShiftExpected(lines, shLine, shAt, shDelta)
         b := StringBuilder()
         for k in range lines.Len() {
-            if k > 0 { b.PushChar('\n') }
+            if k > 0: b.PushChar('\n')
             b.Push(lines[k])
         }
         try os.WriteFile(path, b.ToString()) catch { srcmask.SayErr("as_migrate: cannot write " + $path) }

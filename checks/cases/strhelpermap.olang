@@ -5,12 +5,12 @@
 import "std/io"
 fn total(m Map<String&, I64>&) I64 {
     t I64 = 0
-    for e in m { t += e.Value }
+    for e in m: t += e.Value
     return t
 }
 fn keys(m Map<String&, I64>&) String {
     sb := StringBuilder()
-    for k in m.Keys() { sb.Push(k) }
+    for k in m.Keys(): sb.Push(k)
     return sb.ToString()
 }
 type Reg struct() {

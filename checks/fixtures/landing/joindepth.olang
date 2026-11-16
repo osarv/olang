@@ -5,7 +5,7 @@
 import "std/io"
 Depth mut I64 = 60000
 fn r(n I64, name String&) I64 {
-    if n == 0 { return 0 }
+    if n == 0: return 0
     s := $name + $r(n - 1, name)
     return s.Len() - name.Len()
 }

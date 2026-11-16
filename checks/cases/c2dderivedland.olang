@@ -33,9 +33,7 @@ type ShapeError error { Mismatch(what String) }
 
 fn (l Learner<T>&) shaped<Y>(i I64, x Array<Y>&) ? ShapeError {
     size := l.S.Pop(i).Size
-    if x.Len() != size {
-        error ShapeError.Mismatch("population " + $i + " takes " + $size)
-    }
+    if x.Len() != size: error ShapeError.Mismatch("population " + $i + " takes " + $size)
 }
 
 fn (l Learner<T>&) units() I64 {

@@ -103,7 +103,7 @@ test Header "a packed value held in a struct and an array, its fields written th
 # G34: where each field starts and how many bits it takes
 fn layout<T>() String {
     out := ""
-    for f in T.Fields { out = $out + $f.Name + ":" + $f.BitOffset + "+" + $f.Bits + "@" + $f.Offset + " " }
+    for f in T.Fields: out = $out + $f.Name + ":" + $f.BitOffset + "+" + $f.Bits + "@" + $f.Offset + " "
     return out
 }
 

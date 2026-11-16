@@ -41,7 +41,7 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
     c.Profile = true
     status := build.BuildProgram(fe, c, file, d)
     spin.End()
-    if status != 0 { return status }
+    if status != 0: return status
     dir := $c.Dir + "/profile"
     try os.MkDirAll(dir) catch os.Error {
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun($"its profile's directory " + $dir + " cannot be made"))
@@ -52,7 +52,7 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
     dot := try name.Find(".") catch default name.Len()
     name = name[:dot]
     samples := $dir + "/" + $name + ".samples"
-    if html == "" { html = $dir + "/" + $name + ".html" }
+    if html == "": html = $dir + "/" + $name + ".html"
     try os.Remove(samples) catch os.Error { }
     status = runProfiled(c.Built, file, args, samples)
     if status < 0 {
@@ -88,7 +88,7 @@ fn say(text String&) { spin.Say(io.Stdout, text) }
 fn runProfiled(bin String&, file String&, args Array<String&>&, samples String&) I32 {
     av Vec<String&>
     av.Push(file)
-    for a in args { av.Push(a) }
+    for a in args: av.Push(a)
     stdlib.setenv("OLANG_PROFILE\0", $samples + "\0", 1)
     pid := unistd.fork()
     if pid == 0 {
@@ -96,18 +96,18 @@ fn runProfiled(bin String&, file String&, args Array<String&>&, samples String&)
         unistd._exit(127)
     }
     stdlib.unsetenv("OLANG_PROFILE\0")
-    if pid < 0 { return -1 }
+    if pid < 0: return -1
     oldInt := signal(2, 1)                  # SIGINT, SIGQUIT: SIG_IGN
     oldQuit := signal(3, 1)
     waited := Array<I32>(1)
     for syswait.waitpid(pid, waited, 0) < 0 {
         # EINTR alone; any other failure leaves no child to wait for
-        if not os.Exists($"/proc/" + $pid) { break }
+        if not os.Exists($"/proc/" + $pid): break
     }
     signal(2, oldInt)
     signal(3, oldQuit)
     w := waited[0]
-    if (w & 0x7F) != 0 { return 128 + (w & 0x7F) }
+    if (w & 0x7F) != 0: return 128 + (w & 0x7F)
     return (w >> 8) & 0xFF
 }
 
@@ -139,14 +139,14 @@ type Profile struct() {
 # the profile's whole weight: the periods every sample stands for
 fn (p Profile&) Total() I64 {
     n I64 = 0
-    for s in p.Samples { n += s.Weight }
+    for s in p.Samples: n += s.Weight
     return n
 }
 
 # the little-endian word at word index i of b
 fn word(b Array<U8>&, i I64) I64 {
     v I64 = 0
-    for k in range 8 { v = v | (I64(b[i * 8 + k]) << (k * 8)) }
+    for k in range 8: v = v | (I64(b[i * 8 + k]) << (k * 8))
     return v
 }
 
@@ -156,23 +156,23 @@ fn word(b Array<U8>&, i I64) I64 {
 # one whose header is still zero ends the records, since nothing says where the next begins
 fn Profile.Read(b Array<U8>&) Profile ? Bad {
     p := Profile()
-    if b.Len() < 40 or String(b[:8]) != "OLPROF01" { error Bad.Malformed }
+    if b.Len() < 40 or String(b[:8]) != "OLPROF01": error Bad.Malformed
     p.PeriodNs = word(b, 1)
     words := word(b, 2)
     p.Dropped = word(b, 3)
     p.Threads = word(b, 4)
-    if words < 0 or 40 + words * 8 > b.Len() { error Bad.Malformed }
+    if words < 0 or 40 + words * 8 > b.Len(): error Bad.Malformed
     i I64 = 0
     for i < words {
         h := word(b, 5 + i)
         n := h & 0xFF
-        if h == 0 or n == 0 or i + 1 + n > words { break }
+        if h == 0 or n == 0 or i + 1 + n > words: break
         if h < 0 {
             i += n + 1
             continue
         }
         p.Samples.Push(Sample(h >> 8, p.Addrs.Len(), n))
-        for k in range n { p.Addrs.Push(word(b, 5 + i + 1 + k)) }
+        for k in range n: p.Addrs.Push(word(b, 5 + i + 1 + k))
         i += n + 1
     }
     p.Maps = String(b[40 + words * 8:])
@@ -201,7 +201,7 @@ type Places struct() {
 
 fn (pl mut Places&) name(text String&) I64 {
     n := try pl.named.Get(text) catch default -1
-    if n >= 0 { return n }
+    if n >= 0: return n
     pl.Names.Push(text)
     pl.named.Put(text, pl.Names.Len() - 1)
     return pl.Names.Len() - 1
@@ -223,14 +223,14 @@ fn mappings(maps String&) Vec<mapping> {
     for line in maps.Lines() {
         parts Vec<String&>
         for f in line.Split(" ") {
-            if f != "" { parts.Push(f) }
+            if f != "": parts.Push(f)
         }
-        if parts.Len() < 6 { continue }
+        if parts.Len() < 6: continue
         dash := try parts[0].Find("-") catch default -1
-        if dash < 0 { continue }
+        if dash < 0: continue
         path := StringBuilder()
         for k in range 5, parts.Len() {
-            if k > 5 { path.PushChar(' ') }
+            if k > 5: path.PushChar(' ')
             path.Push(parts[k])
         }
         out.Push(mapping(hex(parts[0][:dash]), hex(parts[0][dash + 1:]), hex(parts[2]), path.ToString()))
@@ -243,13 +243,13 @@ fn mappings(maps String&) Vec<mapping> {
 fn segments(path String&) Vec<I64> {
     out Vec<I64>
     b := try os.ReadFile(path) catch os.Error { return out }
-    if b.Len() < 64 or b[0] != U8(0x7F) or b[1] != U8('E') or b[4] != U8(2) { return out }
+    if b.Len() < 64 or b[0] != U8(0x7F) or b[1] != U8('E') or b[4] != U8(2): return out
     phoff := word(b, 4)
     size := I64(b[54]) | (I64(b[55]) << 8)
     count := I64(b[56]) | (I64(b[57]) << 8)
     for k in range count {
         at := phoff + k * size
-        if at + 56 > b.Len() or at % 8 != 0 { break }
+        if at + 56 > b.Len() or at % 8 != 0: break
         w := at / 8
         if (word(b, w) & 0xFFFFFFFF) != 1 { continue }       # PT_LOAD
         out.Push(word(b, w + 1))                            # p_offset
@@ -262,7 +262,7 @@ fn segments(path String&) Vec<I64> {
 # the n-byte little-endian number at byte offset at of b
 fn le(b Array<U8>&, at I64, n I64) I64 {
     v I64 = 0
-    for k in range n { v = v | (I64(b[at + k]) << (k * 8)) }
+    for k in range n: v = v | (I64(b[at + k]) << (k * 8))
     return v
 }
 
@@ -279,13 +279,13 @@ type elfFn struct(Addr I64, Size I64, Name String&) {
 fn functionSymbols(path String&) Vec<elfFn> {
     out Vec<elfFn>
     b := try os.ReadFile(path) catch os.Error { return out }
-    if b.Len() < 64 or b[0] != U8(0x7F) or b[1] != U8('E') or b[4] != U8(2) { return out }
+    if b.Len() < 64 or b[0] != U8(0x7F) or b[1] != U8('E') or b[4] != U8(2): return out
     shoff := le(b, 0x28, 8)
     shsize := le(b, 0x3A, 2)
     shnum := le(b, 0x3C, 2)
     for k in range shnum {
         at := shoff + k * shsize
-        if at + 64 > b.Len() { break }
+        if at + 64 > b.Len(): break
         kind := le(b, at + 4, 4)
         if kind != 2 and kind != 11 { continue }        # SHT_SYMTAB, SHT_DYNSYM
         off := le(b, at + 0x18, 8)
@@ -293,14 +293,14 @@ fn functionSymbols(path String&) Vec<elfFn> {
         link := le(b, at + 0x28, 4)
         ent := le(b, at + 0x38, 8)
         strs := le(b, shoff + link * shsize + 0x18, 8)
-        if ent < 24 or off + size > b.Len() { continue }
+        if ent < 24 or off + size > b.Len(): continue
         for j in range size / ent {
             e := off + j * ent
             value := le(b, e + 8, 8)
             if (I64(b[e + 4]) & 0xF) != 2 or value == 0 { continue }       # STT_FUNC, defined here
             name := strs + le(b, e, 4)
             end := name
-            for end < b.Len() and b[end] != U8(0) { end++ }
+            for end < b.Len() and b[end] != U8(0): end++
             out.Push(elfFn(value, le(b, e + 16, 8), String(b[name:end])))
         }
     }
@@ -311,10 +311,10 @@ fn functionSymbols(path String&) Vec<elfFn> {
 # the function of syms (by address) holding address a, "" for none
 # Resolve's function at address a of the file at path, by its symbol table (read once per file); "??" where none holds it
 fn symbolIn(syms mut Map<String&, Vec<elfFn>>&, path String&, a I64) String {
-    if not syms.Has(path) { syms.Put($path, functionSymbols(path)) }
+    if not syms.Has(path): syms.Put($path, functionSymbols(path))
     ss := try syms.Ref(path) catch default Vec<elfFn>()
     fun := symbolAt(ss, a)
-    if fun == "" { fun = "??" }
+    if fun == "": fun = "??"
     return fun
 }
 
@@ -326,7 +326,7 @@ fn symbolAt(syms Vec<elfFn>&, a I64) String {
         if syms[mid].Addr <= a { lo = mid + 1 } else { hi = mid }
     }
     for k := lo - 1, k >= 0 and k >= lo - 4, k-- {
-        if a < syms[k].Addr + (syms[k].Size if syms[k].Size > 0 else 1) { return $syms[k].Name }
+        if a < syms[k].Addr + (syms[k].Size if syms[k].Size > 0 else 1): return $syms[k].Name
     }
     return ""
 }
@@ -339,12 +339,12 @@ fn Symbolizer() String {
         real := try os.RealPath(target.WhereIs(clang)) catch default ""
         if real != "" {
             beside := $filepath.Dir(real) + "/llvm-symbolizer"
-            if target.WhereIs(beside) != "" { return beside }
+            if target.WhereIs(beside) != "": return beside
         }
     }
     for n in Array<String&>["llvm-symbolizer-20", "llvm-symbolizer-19", "llvm-symbolizer-18", "llvm-symbolizer"] {
         w := target.WhereIs(n)
-        if w != "" { return w }
+        if w != "": return w
     }
     return ""
 }
@@ -373,14 +373,14 @@ fn Places.Resolve(p Profile&, tool String&) Places {
         path := ""
         r I64 = -1
         for m in maps {
-            if a < m.Start or a >= m.End { continue }
+            if a < m.Start or a >= m.End: continue
             path = m.Path
             off := a - m.Start + m.Offset
-            if not path.StartsWith("/") { break }
-            if not segs.Has(path) { segs.Put(path, segments(path)) }
+            if not path.StartsWith("/"): break
+            if not segs.Has(path): segs.Put(path, segments(path))
             ss := try segs.Ref(path) catch default Vec<I64>()
             for j in range 0, ss.Len(), 3 {
-                if off >= ss[j] and off < ss[j] + ss[j + 1] { r = off - ss[j] + ss[j + 2] }
+                if off >= ss[j] and off < ss[j] + ss[j + 1]: r = off - ss[j] + ss[j + 2]
             }
             break
         }
@@ -393,7 +393,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
         ask := StringBuilder()
         asked I64 = 0
         for i in range keys.Len() {
-            if rel[i] < 0 { continue }
+            if rel[i] < 0: continue
             ask.Push($"\"" + $files[i] + "\" 0x" + $U64(rel[i]).Format(16) + "\n")
             asked++
         }
@@ -401,7 +401,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
             out := try os.Output.Exec(tool, "--inlining", "--functions=short", input = ask.ToString())
                 catch os.Error default os.Output(1, "", "")
             if out.Status == 0 {
-                for l in out.Stdout.Lines() { said.Push(l) }
+                for l in out.Stdout.Lines(): said.Push(l)
             }
         }
     }
@@ -416,7 +416,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
                 place := said[at + 1]
                 at += 2
                 file, line := fileLine(place)
-                if fun == "??" and files[i].StartsWith("/") { fun = symbolIn(syms, files[i], rel[i]) }
+                if fun == "??" and files[i].StartsWith("/"): fun = symbolIn(syms, files[i], rel[i])
                 if fun == "??": fun = $"0x" + $U64(keys[i]).Format(16) + " (" + $filepath.Base(files[i]) + ")"
                 else: fun = Readable(fun)
                 pl.Frames.Push(Frame(pl.name(fun), pl.name(file), line))
@@ -426,7 +426,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
         }
         if frames == 0 and rel[i] >= 0 and files[i].StartsWith("/") {
             # no symbolizer: the symbol table alone
-            if not syms.Has(files[i]) { syms.Put($files[i], functionSymbols(files[i])) }
+            if not syms.Has(files[i]): syms.Put($files[i], functionSymbols(files[i]))
             ss := try syms.Ref(files[i]) catch default Vec<elfFn>()
             fun := symbolAt(ss, rel[i])
             if fun != "" {
@@ -447,10 +447,10 @@ fn Places.Resolve(p Profile&, tool String&) Places {
 # a symbolizer's place line, "FILE:LINE:COLUMN": its file ("??" for none) and line (0)
 fn fileLine(place String&) String, I64 {
     c2 := try place.FindLast(":") catch default -1
-    if c2 < 0 { return place, 0 }
+    if c2 < 0: return place, 0
     head := place[:c2]
     c1 := try head.FindLast(":") catch default -1
-    if c1 < 0 { return head, 0 }
+    if c1 < 0: return head, 0
     return $head[:c1], try head[c1 + 1:].ParseInt(10) catch default 0
 }
 
@@ -462,13 +462,13 @@ fn fileLine(place String&) String, I64 {
 fn Readable(sym String&) String {
     # only a symbol olang wrote names a module's member by "_2e", the "." escaped (a name the debug information
     # gives is written as source writes it, and never holds one)
-    if not sym.Contains("_2e") { return $sym }
+    if not sym.Contains("_2e"): return $sym
     text := types.Demangle(sym)
     # the leading identity: to its first "." past a relative path's "./" and "../"
     from I64 = 0
     for text[from:].StartsWith("./") or text[from:].StartsWith("../") { from += 2 if text[from:].StartsWith("./") else 3 }
     dot := try text[from:].Find(".") catch default -1
-    if dot < 0 { return text }
+    if dot < 0: return text
     lead := from + dot
     rest := text[lead + 1:]
     id := text[:lead]
@@ -476,13 +476,13 @@ fn Readable(sym String&) String {
     # a method's receiver names its own module
     restColon := try rest.Find(":") catch default -1
     restDot := try rest.Find(".") catch default rest.Len()
-    if restColon >= 0 and restColon < restDot { q = "" }
+    if restColon >= 0 and restColon < restDot: q = ""
     return $q + $typesRead(rest)
 }
 
 # a module identity's qualifier as errors print it (load.ErrQualifier) - the prelude's bare
 fn qualifier(id String&) String {
-    if id.StartsWith("std/prelude") or id == "" { return "" }
+    if id.StartsWith("std/prelude") or id == "": return ""
     k := try id.FindLast("/") catch default -1
     return $id[k + 1:] + "."
 }
@@ -492,9 +492,9 @@ fn typesRead(text String&) String {
     b := StringBuilder()
     at I64 = 0
     for i, ch in text {
-        if ch != ':' { continue }
+        if ch != ':': continue
         s := i
-        for s > at and identityChar(text[s - 1]) { s-- }
+        for s > at and identityChar(text[s - 1]): s--
         b.Push(text[at:s])
         b.Push(qualifier(text[s:i]))
         at = i + 1
@@ -513,8 +513,8 @@ fn (pl Places&) stack(p Profile&, s Sample) Vec<I64> {
     for k in range s.Count {
         a := p.Addrs[s.Start + k] - (0 if k == 0 else 1)
         i := try pl.Index.Get(a) catch default -1
-        if i < 0 { continue }
-        for j in range pl.Count[i] { out.Push(pl.First[i] + j) }
+        if i < 0: continue
+        for j in range pl.Count[i]: out.Push(pl.First[i] + j)
     }
     return out
 }
@@ -538,23 +538,23 @@ fn Tally.Tallied(p Profile&, pl mut Places&) Tally {
     t := Tally()
     for s in p.Samples {
         st := pl.stack(p, s)
-        if st.Len() == 0 { continue }
+        if st.Len() == 0: continue
         w := s.Weight
         leaf := pl.Frames[st[0]]
-        if not t.Total.Has(leaf.Fn) and not t.Self.Has(leaf.Fn) { t.Fns.Push(leaf.Fn) }
+        if not t.Total.Has(leaf.Fn) and not t.Self.Has(leaf.Fn): t.Fns.Push(leaf.Fn)
         add(t.Self, leaf.Fn, w)
         lk := pl.name($pl.Names[leaf.File] + ":" + $leaf.Line)
-        if not t.Lines.Has(lk) { t.LineKeys.Push(lk) }
+        if not t.Lines.Has(lk): t.LineKeys.Push(lk)
         add(t.Lines, lk, w)
         t.LineFn.Put(lk, leaf.Fn)
         seen Vec<I64>
         for j, f in st {
             fun := pl.Frames[f].Fn
-            if fun in seen { continue }
+            if fun in seen: continue
             seen.Push(fun)
-            if not t.Total.Has(fun) and not t.Self.Has(fun) { t.Fns.Push(fun) }
+            if not t.Total.Has(fun) and not t.Self.Has(fun): t.Fns.Push(fun)
             add(t.Total, fun, w)
-            if j + 1 < st.Len() { add(t.Callers, fun * (1 << 24) + pl.Frames[st[j + 1]].Fn, w) }
+            if j + 1 < st.Len(): add(t.Callers, fun * (1 << 24) + pl.Frames[st[j + 1]].Fn, w)
         }
     }
     return t
@@ -573,7 +573,7 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
     b := StringBuilder()
     secs := F64(total) * F64(p.PeriodNs) / 1e9
     b.Push($"\nolang profile: " + $name + " - " + $p.Samples.Len() + " samples, " + $secs.Fixed(3) + " s of CPU time on " + $p.Threads + $(" thread" if p.Threads == 1 else " threads") + "\n")
-    if p.Dropped > 0 { b.Push($"  (" + $p.Dropped + " samples dropped: the buffer was full)\n") }
+    if p.Dropped > 0: b.Push($"  (" + $p.Dropped + " samples dropped: the buffer was full)\n")
     if total == 0 {
         b.Push("  no samples: the program used less CPU time than one period\n")
         return b.ToString()
@@ -582,17 +582,17 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
     fns.Sort(fn(x I64, y I64) Bool {
         sx := try t.Self.Get(x) catch default 0
         sy := try t.Self.Get(y) catch default 0
-        if sx != sy { return sx > sy }
+        if sx != sy: return sx > sy
         tx := try t.Total.Get(x) catch default 0
         ty := try t.Total.Get(y) catch default 0
-        if tx != ty { return tx > ty }
+        if tx != ty: return tx > ty
         return pl.Names[x] < pl.Names[y]
     })
     b.Push("\n   self   total  function\n")
     shown I64 = 0
     for f in fns {
         sw := try t.Self.Get(f) catch default 0
-        if shown >= 25 or sw * 200 < total { break }
+        if shown >= 25 or sw * 200 < total: break
         tw := try t.Total.Get(f) catch default 0
         b.Push($"  " + $pct(sw, total).PadStart(6) + " " + $pct(tw, total).PadStart(6) + "  " + $pl.Names[f] + "\n")
         shown++
@@ -601,20 +601,20 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
     lines.Sort(fn(x I64, y I64) Bool {
         wx := try t.Lines.Get(x) catch default 0
         wy := try t.Lines.Get(y) catch default 0
-        if wx != wy { return wx > wy }
+        if wx != wy: return wx > wy
         return pl.Names[x] < pl.Names[y]
     })
     # a line is shown where it is known - code a compiler made, line 0, belongs to no line
     hot Vec<I64>
     for l in lines {
         lw := try t.Lines.Get(l) catch default 0
-        if hot.Len() >= 15 or lw * 200 < total { break }
-        if pl.Names[l].EndsWith(":0") { continue }
+        if hot.Len() >= 15 or lw * 200 < total: break
+        if pl.Names[l].EndsWith(":0"): continue
         hot.Push(l)
     }
     width I64 = 4
     for l in hot {
-        if shortPath(pl.Names[l]).Len() > width { width = shortPath(pl.Names[l]).Len() }
+        if shortPath(pl.Names[l]).Len() > width: width = shortPath(pl.Names[l]).Len()
     }
     b.Push($"\n   self  " + $"line".PadEnd(width) + "  function\n")
     for l in hot {
@@ -625,24 +625,24 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
     b.Push("\n  called from (the five hottest functions)\n")
     shown = 0
     for f in fns {
-        if shown >= 5 { break }
+        if shown >= 5: break
         sw := try t.Self.Get(f) catch default 0
-        if sw == 0 { break }
+        if sw == 0: break
         shown++
         tw := try t.Total.Get(f) catch default 0
         callers Vec<I64>
         for c in t.Fns {
-            if t.Callers.Has(f * (1 << 24) + c) { callers.Push(c) }
+            if t.Callers.Has(f * (1 << 24) + c): callers.Push(c)
         }
         callers.Sort(fn(x I64, y I64) Bool {
             wx := try t.Callers.Get(f * (1 << 24) + x) catch default 0
             wy := try t.Callers.Get(f * (1 << 24) + y) catch default 0
-            if wx != wy { return wx > wy }
+            if wx != wy: return wx > wy
             return pl.Names[x] < pl.Names[y]
         })
         parts Vec<String&>
         for c in callers {
-            if parts.Len() >= 4 { break }
+            if parts.Len() >= 4: break
             parts.Push($pl.Names[c] + " " + $pct(try t.Callers.Get(f * (1 << 24) + c) catch default 0, tw))
         }
         b.Push($"  " + $pl.Names[f] + "  <-  " + $("(the thread's first frame)" if parts.Len() == 0 else parts.Join(", ")) + "\n")
@@ -653,7 +653,7 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
 # a place's file written from where olang runs, where it is under it: "src/hot.olang:12"
 fn shortPath(place String&) String {
     cwd := try os.Cwd() catch default ""
-    if cwd != "" and place.StartsWith($cwd + "/") { return $place[cwd.Len() + 1:] }
+    if cwd != "" and place.StartsWith($cwd + "/"): return $place[cwd.Len() + 1:]
     return place
 }
 
@@ -700,7 +700,7 @@ fn FlameGraph(name String&, p Profile&, pl mut Places&) String {
             fun := pl.Frames[st[k]].Fn
             next I64 = -1
             for c in nodes[at].Kids {
-                if nodes[c].Fn == fun { next = c }
+                if nodes[c].Fn == fun: next = c
             }
             if next < 0 {
                 next = nodes.Len()
@@ -714,7 +714,7 @@ fn FlameGraph(name String&, p Profile&, pl mut Places&) String {
     }
     depth I64 = 0
     for n in nodes {
-        if n.Depth > depth { depth = n.Depth }
+        if n.Depth > depth: depth = n.Depth
     }
     total := nodes[0].Weight
     height := (depth + 1) * FrameHeight + 40
@@ -723,7 +723,7 @@ fn FlameGraph(name String&, p Profile&, pl mut Places&) String {
     order Vec<I64>
     order.Push(0)
     xs Vec<I64>
-    for _ in nodes { xs.Push(0) }
+    for _ in nodes: xs.Push(0)
     for i := 0, i < order.Len(), i++ {
         id := order[i]
         kids := nodes[id].Kids
@@ -793,7 +793,7 @@ fn twoStacks() Profile, Places {
     p.Threads = 1
     p.Samples.Push(Sample(3, 0, 2))
     p.Samples.Push(Sample(1, 2, 2))
-    for a in Array<I64>[100, 201, 300, 201] { p.Addrs.Push(a) }
+    for a in Array<I64>[100, 201, 300, 201]: p.Addrs.Push(a)
     pl := Places()
     for i, a in Array<I64>[100, 200, 300] {
         pl.Index.Put(a, i)
@@ -831,14 +831,14 @@ test FlameGraph "a frame for each stack's function, the root's at the bottom, na
 # the bytes of a samples file: the header, the records, the map
 fn sampleFile(words Array<I64>&, maps String&) Array<U8> {
     b := Vec<U8>()
-    for ch in "OLPROF01" { b.Push(U8(ch)) }
+    for ch in "OLPROF01": b.Push(U8(ch))
     for w in Array<I64>[1000000, words.Len(), 2, 1] {
-        for k in range 8 { b.Push(U8((w >> (k * 8)) & 0xFF)) }
+        for k in range 8: b.Push(U8((w >> (k * 8)) & 0xFF))
     }
     for w in words {
-        for k in range 8 { b.Push(U8((w >> (k * 8)) & 0xFF)) }
+        for k in range 8: b.Push(U8((w >> (k * 8)) & 0xFF))
     }
-    for ch in maps { b.Push(U8(ch)) }
+    for ch in maps: b.Push(U8(ch))
     return b.ToArray()
 }
 

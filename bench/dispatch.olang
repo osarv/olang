@@ -39,7 +39,7 @@ fn area(f Fig&) I64 {
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 4 { error Usage.Args }
+    if args.Len() < 4: error Usage.Args
     mode := args[1]
     n := try args[2].ParseInt()
     passes := try args[3].ParseInt()
@@ -56,7 +56,7 @@ fn main() ? {
         }
         all := xs.ToArray()
         for p in range passes {
-            for x in all { total += x.Area() ^ p }
+            for x in all: total += x.Area() ^ p
         }
     } else if mode == "enum" {
         xs := Vec<Fig>()
@@ -69,7 +69,7 @@ fn main() ? {
         }
         all := xs.ToArray()
         for p in range passes {
-            for x in all { total += area(x) ^ p }
+            for x in all: total += area(x) ^ p
         }
     } else if mode == "direct" {
         xs := Vec<Sq>()
@@ -79,7 +79,7 @@ fn main() ? {
         }
         all := xs.ToArray()
         for p in range passes {
-            for x in all { total += x.Area() ^ p }
+            for x in all: total += x.Area() ^ p
         }
     } else {
         error Usage.Mode

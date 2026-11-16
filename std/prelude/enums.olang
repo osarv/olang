@@ -10,7 +10,7 @@ type CaseError error {
 # E.From(v): the position of v among an enum's raw values, which the compiler passes in its cases' order
 fn caseIndex<R>(v R, values Array<R>&) I64 ? CaseError {
     for i, x in values {
-        if x == v { return i }
+        if x == v: return i
     }
     error CaseError.NoCase
 }

@@ -34,7 +34,7 @@ fn (l mut List&) drop() {
 fn peakKb() I64 {
     status := try os.ReadFile("/proc/self/status") catch default ""
     at := try status.Find("VmHWM:") catch default -1
-    if at < 0 { return -1 }
+    if at < 0: return -1
     line := status[at + 6:]
     end := try line.FindByte('\n') catch default line.Len()
     return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
@@ -44,7 +44,7 @@ fn main() {
     base := peakKb()
     assert base > 0
     l := List()
-    for i in range 100 { l.push(i) }
+    for i in range 100: l.push(i)
     for i in range 1000000 {
         l.drop()
         l.push(i)

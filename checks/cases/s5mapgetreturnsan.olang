@@ -9,9 +9,7 @@ fn first() Vec<I64> ? {
     lists := Vec<Vec<I64>>()
     lists.Push(Vec<I64>())
     l := try lists.First()
-    for i in range 30 {
-        l.Push(i + 7)
-    }
+    for i in range 30: l.Push(i + 7)
     return l
 }
 

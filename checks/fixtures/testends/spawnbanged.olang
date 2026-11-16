@@ -4,7 +4,7 @@ type TaskErr error {
 }
 Left mut I64 = 0
 fn step(n I64) I64 ? {
-    if n == 0 { error TaskErr.Lost }
+    if n == 0: error TaskErr.Lost
     return n
 }
 fn main() {

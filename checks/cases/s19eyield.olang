@@ -28,7 +28,7 @@ fn main() ? {
         break
     }
     assert Tidied == 1 and Failed == 0
-    for x in f() { assert x == 2 }
+    for x in f(): assert x == 2
     assert Tidied == 2 and Failed == 0
     for x in try g(2) { assert x == 2 } catch { unreachable }
     assert Failed == 0

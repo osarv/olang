@@ -13,7 +13,7 @@ fn show(p Node?&, e Shape) {
     }
     if e == Shape.Circle {
         defer io.PutLine("deferred r " + $e.r)!
-        if e.r > 1.0 { io.PutLine("large")! }
+        if e.r > 1.0: io.PutLine("large")!
     }
     p = null
     e = Shape.Sq(1.0)

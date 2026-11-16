@@ -148,7 +148,7 @@ fn layout(out mut io.Writer&, std String&, golden String&) ? io.Error {
             continue
         }
         end := i + 1
-        for end < lines.Len() and not lines[end].StartsWith("== ") { end++ }
+        for end < lines.Len() and not lines[end].StartsWith("== "): end++
         layoutGroup(out, std, lines, i, end)
         i = end
     }
@@ -164,7 +164,7 @@ fn layoutGroup(out mut io.Writer&, std String&, lines Array<String&>&, from I64,
     d := diag.Diagnostics(false)
     consts := cond.Consts()
     for k in range 1, words.Len() {
-        if words[k] == "-t" { testBuild = true }
+        if words[k] == "-t": testBuild = true
     }
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, testBuild)
     for k in range 1, words.Len() {
@@ -178,7 +178,7 @@ fn layoutGroup(out mut io.Writer&, std String&, lines Array<String&>&, from I64,
     prog := generic.Program(l, r)
     for k in range from + 1, end {
         line := lines[k]
-        if line == "" { continue }
+        if line == "": continue
         tab := try line.FindByte('\t') catch default line.Len()
         key := line[:tab]
         id := try prog.ParseCanon(key) catch {
@@ -194,13 +194,13 @@ fn layoutGroup(out mut io.Writer&, std String&, lines Array<String&>&, from I64,
 
 # a type's layout as the oracle prints it: "CANON\tSIZE ALIGN\tLLVM\tBODY\tPARTS"
 fn layoutLine(prog mut generic.Program&, id ty.TypeId, key String&) String {
-    if not prog.Layout(id) { return $key + "\tdeferred" }
+    if not prog.Layout(id): return $key + "\tdeferred"
     k := prog.T.KindOf(id)
     if k == ty.Kind.Func {
         for x in prog.T.Items(prog.T.Params(id)) {
-            if not prog.Layout(x) { return $key + "\tdeferred" }
+            if not prog.Layout(x): return $key + "\tdeferred"
         }
-        if prog.T.Result(id) != ty.VoidT and not prog.Layout(prog.T.Result(id)) { return $key + "\tdeferred" }
+        if prog.T.Result(id) != ty.VoidT and not prog.Layout(prog.T.Result(id)): return $key + "\tdeferred"
     }
     isStruct := k == ty.Kind.Named and prog.T.DeclKindOf(prog.T.DeclOf(id)) == ty.DeclKind.Struct
     body := prog.T.StructBody(id) if isStruct else "-"
@@ -217,7 +217,7 @@ fn layoutLine(prog mut generic.Program&, id ty.TypeId, key String&) String {
             xs := prog.T.Items(cases)
             for i in range xs.Len() {
                 if i > 0 { b.PushChar(';') }
-                if xs[i] != ty.UnknownT { b.Push(joinOffsets(prog.T.Offsets(xs[i]))) }
+                if xs[i] != ty.UnknownT: b.Push(joinOffsets(prog.T.Offsets(xs[i])))
             }
             parts = b.ToString()
         }
@@ -228,7 +228,7 @@ fn layoutLine(prog mut generic.Program&, id ty.TypeId, key String&) String {
 fn joinOffsets(xs Array<I64>&) String {
     b := StringBuilder()
     for i in range xs.Len() {
-        if i > 0 { b.PushChar(',') }
+        if i > 0: b.PushChar(',')
         b.Push($xs[i])
     }
     return b.ToString()
@@ -238,7 +238,7 @@ fn joinOffsets(xs Array<I64>&) String {
 fn tokens(out mut io.Writer&, src source.Source&) {
     ts := scan.Tokens.Scan(src.Text)
     for tk in ts.Toks {
-        if tk.Kind == token.Tok.Eof { break }
+        if tk.Kind == token.Tok.Eof: break
         out.Write($src.Line(tk.Start))
         out.WriteChar(' ')
         if tk.Kind == token.Tok.StmtEnd: out.WriteChar(';')
@@ -260,7 +260,7 @@ fn speed(out mut io.Writer&, src source.Source&) {
         ts := scan.Tokens.Scan(src.Text)
         d := time.Since(t)
         count = ts.Toks.Len()
-        if k == 0 or d < best { best = d }
+        if k == 0 or d < best: best = d
     }
     mbs := F64(src.Text.Len()) / 1e6 / (F64(best) / 1e9)
     out.Write($count + " tokens, " + $(F64(best) / 1e6).Fixed(1) + " ms, " + $mbs.Fixed(1) + " MB/s\n")
@@ -286,9 +286,9 @@ fn (l mut loader&) prelude() String {
     dir := filepath.Join(l.std, "prelude")
     names := try os.ReadDir(dir) catch os.Error { return " " }
     for n in names {
-        if not n.EndsWith(".olang") { continue }
+        if not n.EndsWith(".olang"): continue
         m := l.load(filepath.Join(dir, n))
-        if m >= 0 { b.Push(l.types[m][1:]) }
+        if m >= 0: b.Push(l.types[m][1:])
     }
     return b.ToString()
 }
@@ -297,9 +297,9 @@ fn (l mut loader&) prelude() String {
 fn (l loader&) target(importer String&, ipath String&) String {
     first := ipath
     slash := try ipath.FindByte('/') catch default -1
-    if slash >= 0 { first = ipath[:slash] }
-    if first.Contains(".") { return "" }
-    if ipath.StartsWith("std/") { return $filepath.Join(l.std, ipath[4:]) + ".olang" }
+    if slash >= 0: first = ipath[:slash]
+    if first.Contains("."): return ""
+    if ipath.StartsWith("std/"): return $filepath.Join(l.std, ipath[4:]) + ".olang"
     return $filepath.Join(filepath.Dir(importer), ipath) + ".olang"
 }
 
@@ -307,7 +307,7 @@ fn (l loader&) target(importer String&, ipath String&) String {
 fn (l mut loader&) load(path String&) I64 {
     real := try os.RealPath(path) catch os.Error { return -1 }
     for i in range l.paths.Len() {
-        if l.paths[i] == real { return i }
+        if l.paths[i] == real: return i
     }
     src := try source.Source.Read(real) catch os.Error { return -1 }
     ts := scan.Tokens.Scan(src.Text)
@@ -336,7 +336,7 @@ fn (l mut loader&) load(path String&) I64 {
             }
             if j < n and toks[j].Kind == token.Tok.StrLit {
                 ip := src.Text[toks[j].Start + 1:toks[j].End - 1]
-                if alias == "" { alias = $filepath.Base(ip) }
+                if alias == "": alias = $filepath.Base(ip)
                 aliases.Push($alias)
                 paths.Push($ip)
             }
@@ -346,7 +346,7 @@ fn (l mut loader&) load(path String&) I64 {
     for k in range aliases.Len() {
         t := l.target(real, paths[k])
         target I64 = -1
-        if t != "" { target = l.load(t) }
+        if t != "": target = l.load(t)
         l.impMod.Push(m)
         l.impAlias.Push($aliases[k])
         l.impTarget.Push(target)
@@ -359,7 +359,7 @@ fn (l mut loader&) load(path String&) I64 {
 fn (l loader&) oracle(o mut parse.Oracle&, names mut source.Names&, m I64, prelude String&) {
     l.addNames(o, names, "", l.types[m])
     for t in prelude.Split(" ") {
-        if t != "" and t[0].IsUpper() { o.Add(names, "", t) }
+        if t != "" and t[0].IsUpper(): o.Add(names, "", t)
     }
     o.Add(names, "", "Array")
     l.chains(o, names, m, "", 0)
@@ -367,14 +367,14 @@ fn (l loader&) oracle(o mut parse.Oracle&, names mut source.Names&, m I64, prelu
 
 fn (l loader&) addNames(o mut parse.Oracle&, names mut source.Names&, alias String&, list String&) {
     for t in list.Split(" ") {
-        if t != "" { o.Add(names, alias, t) }
+        if t != "": o.Add(names, alias, t)
     }
 }
 
 fn (l loader&) chains(o mut parse.Oracle&, names mut source.Names&, m I64, prefix String&, depth I64) {
-    if depth >= 4 { return }
+    if depth >= 4: return
     for i in range l.impMod.Len() {
-        if l.impMod[i] != m or l.impTarget[i] < 0 { continue }
+        if l.impMod[i] != m or l.impTarget[i] < 0: continue
         chain := $prefix + $l.impAlias[i]
         l.addNames(o, names, chain, l.types[l.impTarget[i]])
         l.chains(o, names, l.impTarget[i], $chain + ".", depth + 1)
@@ -400,7 +400,7 @@ type walker struct(src source.Source&) {
 fn itemOf(starts Vec<I32>&, at I64) I64 {
     lo I64 = 0
     hi := starts.Len() - 1
-    if hi < 0 or at < I64(starts[0]) { return 0 }
+    if hi < 0 or at < I64(starts[0]): return 0
     for lo < hi {
         mid := (lo + hi + 1) / 2
         if I64(starts[mid]) <= at { lo = mid } else { hi = mid - 1 }
@@ -419,87 +419,87 @@ fn (w mut walker&) line(kind String&, sp source.Span) {
 fn (w mut walker&) decl(d ast.Decl&) {
     match d {
         case ast.Decl.Fn(f) {
-            if w.skipped(f.Sp.Start) { return }
+            if w.skipped(f.Sp.Start): return
             w.line("FN", f.Sp)
             w.func(f)
         }
         case ast.Decl.Extern(f) {
-            if not w.skipped(f.Sp.Start) { w.line("EXTERN", f.Sp) }
+            if not w.skipped(f.Sp.Start): w.line("EXTERN", f.Sp)
         }
         case ast.Decl.Type(sp, t) {
-            if w.skipped(sp.Start) { return }
+            if w.skipped(sp.Start): return
             w.line("TYPE", sp)
             match t.Body {
                 case ast.TypeBody.Struct(s) { w.structBody(s) }
                 case ast.TypeBody.Over(_, ctor) {
-                    if ctor != null { w.func(ctor) }
+                    if ctor != null: w.func(ctor)
                 }
                 case _ { }
             }
         }
         case ast.Decl.Global(sp, v) {
-            if not w.skipped(sp.Start) { w.vars(v) }
+            if not w.skipped(sp.Start): w.vars(v)
         }
         case ast.Decl.Import(sp, _, _, _) {
-            if not w.skipped(sp.Start) { w.line("IMPORT", sp) }
+            if not w.skipped(sp.Start): w.line("IMPORT", sp)
         }
         case ast.Decl.ExternBlock(sp, _, ds) {
-            if w.skipped(sp.Start) { return }
+            if w.skipped(sp.Start): return
             w.line("EXTERNS", sp)
-            for x in ds { w.decl(x) }
+            for x in ds: w.decl(x)
         }
         case ast.Decl.Errors(sp, _, _, _, _) {
-            if not w.skipped(sp.Start) { w.line("ERRORS", sp) }
+            if not w.skipped(sp.Start): w.line("ERRORS", sp)
         }
         case ast.Decl.Test(sp, _, body, _) {
-            if w.skipped(sp.Start) { return }
+            if w.skipped(sp.Start): return
             w.line("TEST", sp)
             w.stmts(body)
         }
         case ast.Decl.If(_, i) { w.topIf(i) }
         case ast.Decl.Set(sp, target, value) {
-            if w.skipped(sp.Start) { return }
+            if w.skipped(sp.Start): return
             w.line("SET", sp)
             w.expr(target)
             w.expr(value)
         }
         case ast.Decl.Assert(sp, k, msg) {
-            if w.skipped(sp.Start) { return }
+            if w.skipped(sp.Start): return
             w.line("ASSERT", sp)
             w.expr(k)
-            if msg != null { w.expr(msg) }
+            if msg != null: w.expr(msg)
         }
     }
 }
 
 fn (w mut walker&) structBody(s ast.StructBody&) {
     w.params(s.Params)
-    if s.Body.Len() > 0 { w.stmts(s.Body) }
-    if s.Dtor.Len() == 0 { return }
+    if s.Body.Len() > 0: w.stmts(s.Body)
+    if s.Dtor.Len() == 0: return
     w.line("DTOR", s.DtorSp)
     w.stmts(s.Dtor)
 }
 
 fn (w mut walker&) topIf(i ast.TopIf?&) {
-    if i == null { return }
+    if i == null: return
     w.topBranch(i.Then)
     w.topIf(i.ElseIf)
     w.topBranch(i.Else)
 }
 
 fn (w mut walker&) topBranch(b ast.TopBranch?&) {
-    if b == null or b.Decls.Len() == 0 { return }
-    for d in b.Decls { w.decl(d) }
+    if b == null or b.Decls.Len() == 0: return
+    for d in b.Decls: w.decl(d)
 }
 
 fn (w mut walker&) func(f ast.Func&) {
     w.params(f.S.Params)
-    if f.Body.Len() > 0 { w.stmts(f.Body) }
+    if f.Body.Len() > 0: w.stmts(f.Body)
 }
 
 fn (w mut walker&) params(ps Array<ast.Param&>&) {
-    if ps.Len() == 0 { return }
-    for prm in ps { w.expr(prm.Dflt) }
+    if ps.Len() == 0: return
+    for prm in ps: w.expr(prm.Dflt)
 }
 
 # a declaration of names: one line a name, from the name to the end of its type or its value, whichever is later
@@ -508,26 +508,26 @@ fn (w mut walker&) vars(v ast.VarDecl&) {
     for k in range v.Names.Len() {
         sp := v.NameSps[k]
         end := sp.End
-        if v.Ty != null and v.Ty!.Span().End > end { end = v.Ty!.Span().End }
-        if k < v.Values.Len() and v.Values[k].Span().End > end { end = v.Values[k].Span().End }
+        if v.Ty != null and v.Ty!.Span().End > end: end = v.Ty!.Span().End
+        if k < v.Values.Len() and v.Values[k].Span().End > end: end = v.Values[k].Span().End
         w.line(kind, source.Span(sp.Start, end))
     }
     w.exprs(v.Values)
 }
 
 fn (w mut walker&) stmts(body Array<ast.Stmt&>&) {
-    if body.Len() == 0 { return }
-    for s in body { w.stmt(s) }
+    if body.Len() == 0: return
+    for s in body: w.stmt(s)
 }
 
 fn (w mut walker&) stmt(s ast.Stmt?&) {
-    if s == null { return }
+    if s == null: return
     match s {
         case ast.Stmt.ExprS(sp, x) {
             kind String& = "EXPR"
             match x {
                 case ast.Expr.Try(_, _, cl) {
-                    if cl.Len() > 0 { kind = "TRY" }
+                    if cl.Len() > 0: kind = "TRY"
                 }
                 case _ { }
             }
@@ -557,7 +557,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
         case ast.Stmt.If(sp, i) {
             w.line("IF", sp)
             w.expr(i.Cond)
-            if i.Then != null { w.stmts(i.Then!.Body) }
+            if i.Then != null: w.stmts(i.Then!.Body)
             match i.Else {
                 # a plain else: its block's statements
                 case ast.Stmt.If(_, e) if e.Cond == null { w.stmts(e.Then!.Body) }
@@ -614,7 +614,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
                 case _: "UNREACHABLE"
             }
             w.line(kind, sp)
-            if msg != null { w.expr(msg) }
+            if msg != null: w.expr(msg)
         }
         case ast.Stmt.Assert(sp, c, msg) {
             w.line("ASSERT", sp)
@@ -648,7 +648,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
 
 fn (w mut walker&) match(m ast.Match&) {
     w.expr(m.Subject)
-    for c in m.Cases { w.case(c, "CASE") }
+    for c in m.Cases: w.case(c, "CASE")
 }
 
 fn (w mut walker&) case(c ast.Case&, kind String&) {
@@ -659,7 +659,7 @@ fn (w mut walker&) case(c ast.Case&, kind String&) {
 }
 
 fn (w mut walker&) clauses(cl Array<ast.Catch&>&) {
-    if cl.Len() == 0 { return }
+    if cl.Len() == 0: return
     for c in cl {
         w.line("CATCH", c.Sp)
         w.stmts(c.Body)
@@ -668,12 +668,12 @@ fn (w mut walker&) clauses(cl Array<ast.Catch&>&) {
 }
 
 fn (w mut walker&) exprs(xs Array<ast.Expr&>&) {
-    if xs.Len() == 0 { return }
-    for x in xs { w.expr(x) }
+    if xs.Len() == 0: return
+    for x in xs: w.expr(x)
 }
 
 fn (w mut walker&) expr(x ast.Expr?&) {
-    if x == null { return }
+    if x == null: return
     match x {
         case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a)
              ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _), ast.Expr.Member(_, a, _) {
@@ -727,7 +727,7 @@ fn leavesWhole(rule String&) Bool { return rule == "T17, T19, C2" or rule == "D1
 
 # the item a diagnostic belongs to: an unclosed block's is said at the declaration after it, and is the one before
 fn itemOfSaid(starts Vec<I32>&, s diag.Said&, p parse.Parser&) I64 {
-    if s.Text.StartsWith("the block opened on line") { return itemOf(starts, s.Start - 1) }
+    if s.Text.StartsWith("the block opened on line"): return itemOf(starts, s.Start - 1)
     i := try p.SaidIn.Get(I32(s.Start)) catch default -1
     return i if i >= 0 else itemOf(starts, s.Start)
 }
@@ -738,7 +738,7 @@ fn astDump(out mut io.Writer&, src source.Source&, std String&, prelude String&)
     l := loader(std)
     m := l.load(src.Path)
     o := parse.Oracle()
-    if m >= 0 { l.oracle(o, names, m, prelude) }
+    if m >= 0: l.oracle(o, names, m, prelude)
     diags := diag.Diagnostics(false)
     file := diags.AddFile(src.Path, src.Text)
     ts := scan.Tokens.Scan(src.Text)
@@ -753,13 +753,13 @@ fn astDump(out mut io.Writer&, src source.Source&, std String&, prelude String&)
     }
     w.failed.Push(false)
     for s in said {
-        if s.File != file or s.Start < 0 or leavesWhole(s.Rule) { continue }
+        if s.File != file or s.Start < 0 or leavesWhole(s.Rule): continue
         i := itemOfSaid(w.starts, s, p)
         # L21 is said at a statement met at the limit, and stage 0 keeps the item when that statement nests nothing
-        if s.Rule == "L21" and i < p.ItemKept.Len() and p.ItemKept[i] { continue }
+        if s.Rule == "L21" and i < p.ItemKept.Len() and p.ItemKept[i]: continue
         w.failed[i] = true
     }
-    for d in decls { w.decl(d) }
+    for d in decls: w.decl(d)
     out.Write(w.b.ToString())
     out.Write("-- diagnostics\n")
     for d in ts.Diags {
@@ -773,10 +773,10 @@ fn astDump(out mut io.Writer&, src source.Source&, std String&, prelude String&)
             continue
         }
         # O3 is stage 0's checker's to report; the self-hosted parser reports it where it reads it
-        if s.Rule == "O3" { continue }
+        if s.Rule == "O3": continue
         i := itemOfSaid(w.starts, s, p)
         if not leavesWhole(s.Rule) {
-            if shown[i] { continue }
+            if shown[i]: continue
             shown[i] = true
         }
         line, col := src.LineCol(I32(s.Start))
@@ -793,7 +793,7 @@ fn parseSpeed(out mut io.Writer&, src source.Source&, std String&, prelude Strin
         l := loader(std)
         m := l.load(src.Path)
         o := parse.Oracle()
-        if m >= 0 { l.oracle(o, names, m, prelude) }
+        if m >= 0: l.oracle(o, names, m, prelude)
         diags := diag.Diagnostics(false)
         file := diags.AddFile(src.Path, src.Text)
         t := time.Now()
@@ -802,7 +802,7 @@ fn parseSpeed(out mut io.Writer&, src source.Source&, std String&, prelude Strin
         decls := p.File()
         d := time.Since(t)
         count = decls.Len()
-        if k == 0 or d < best { best = d }
+        if k == 0 or d < best: best = d
     }
     mbs := F64(src.Text.Len()) / 1e6 / (F64(best) / 1e9)
     out.Write($count + " items, " + $(F64(best) / 1e6).Fixed(1) + " ms, " + $mbs.Fixed(1) + " MB/s\n")
@@ -816,7 +816,7 @@ fn roundTrip(out mut io.Writer&, src source.Source&, std String&, prelude String
     l := loader(std)
     m := l.load(src.Path)
     o := parse.Oracle()
-    if m >= 0 { l.oracle(o, names, m, prelude) }
+    if m >= 0: l.oracle(o, names, m, prelude)
     diags := diag.Diagnostics(false)
     file := diags.AddFile(src.Path, src.Text)
     ts := scan.Tokens.Scan(src.Text)
@@ -857,7 +857,7 @@ fn roundTrip(out mut io.Writer&, src source.Source&, std String&, prelude String
     twice := unparse.Unparse(decls2, names, once, diags2)
     if twice != once {
         i I64 = 0
-        for i < once.Len() and i < twice.Len() and once[i] == twice[i] { i++ }
+        for i < once.Len() and i < twice.Len() and once[i] == twice[i]: i++
         out.Write("written again it differs: " + $lineCol(written, i) + "\n")
         return
     }
@@ -875,10 +875,10 @@ fn tokenTexts(text String&, ts scan.Tokens&) Vec<tokText> {
     l := Vec<tokText>()
     for t in ts.Toks {
         k := t.Kind
-        if k == token.Tok.Eof { break }
-        if k == token.Tok.StmtEnd or k == token.Tok.Comma { continue }
+        if k == token.Tok.Eof: break
+        if k == token.Tok.StmtEnd or k == token.Tok.Comma: continue
         if angles(text[t.Start:t.End]) {
-            for j in range t.Start, t.End { l.Push(tokText(text[j:j + 1], I64(j))) }
+            for j in range t.Start, t.End: l.Push(tokText(text[j:j + 1], I64(j)))
             continue
         }
         l.Push(tokText(text[t.Start:t.End], I64(t.Start)))
@@ -889,7 +889,7 @@ fn tokenTexts(text String&, ts scan.Tokens&) Vec<tokText> {
 # whether a token is made of "<", ">" and "=" alone: where a type-argument list opens or closes it may be split (">>=")
 fn angles(t String&) Bool {
     for c in t {
-        if c != '<' and c != '>' and c != '=' { return false }
+        if c != '<' and c != '>' and c != '=': return false
     }
     return true
 }

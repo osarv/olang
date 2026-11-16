@@ -6,7 +6,7 @@ type Stop error {
     Here
 }
 fn h(k I64) String ? {
-    if k < 5 { error Stop.Here }
+    if k < 5: error Stop.Here
     return "ok"
 }
 fn f(k I64) I64 {

@@ -3,7 +3,7 @@ type E error {
     Bad
 }
 fn h(k I64) I64 ? E {
-    if k > 0 { error E.Bad }
+    if k > 0: error E.Bad
     return k
 }
 fn main() ? {

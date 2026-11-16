@@ -24,20 +24,20 @@ fn id(p Pt&) Pt& { return p }
 fn churn() ? io.Error {
     for k in range 100 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { try io.PutLine("x") }
+        if a[0] == 3: try io.PutLine("x")
     }
 }
 fn clobber(n I64) I64 {
     a := Array<I64>(64)
-    for k in range 64 { a[k] = n * 1000 + k }
-    if n > 0 { return clobber(n - 1) + a[3] }
+    for k in range 64: a[k] = n * 1000 + k
+    if n > 0: return clobber(n - 1) + a[3]
     return a[5]
 }
 fn f(c mut V&, out mut Vec<Pt&>&) { out.Push(id(c.p)) }
 fn main() ? {
     s := Vs(Array<I64>(4))
     out := Vec<Pt&>()
-    for k in range 3 { f(s[k], out) }
+    for k in range 3: f(s[k], out)
     try churn()
     try io.PutLine($clobber(10) + " " + $out[0].X)
 }

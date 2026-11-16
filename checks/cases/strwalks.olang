@@ -20,8 +20,8 @@ type Bag struct(head mut Node&) {
 fn (b Bag&) mk() It { return It(b) }
 fn (b Bag&) Str() String {
     n I64 = 0
-    for e in b.m { n += e.Value }
-    for x in b.l { n += x }
+    for e in b.m: n += e.Value
+    for x in b.l: n += x
     it := b.mk()
     direct := It(b)
     return $n + "/" + $b.m.Len() + "/" + $it.slot.v + "/" + $direct.n + "/" + $b.l.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x })

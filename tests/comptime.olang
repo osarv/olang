@@ -41,7 +41,7 @@ fn dot(xs Array<I64>&) I64 {
 fn evens() I64 {
     t I64 = 0
     comptime for k in range 10 {
-        if k % 2 == 0 { t += k }
+        if k % 2 == 0: t += k
     }
     return t
 }

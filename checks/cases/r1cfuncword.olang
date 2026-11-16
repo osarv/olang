@@ -5,7 +5,7 @@ type LE error {
     Gone
 }
 fn g(n I64) I64 ? LE.Gone {
-    if n == 0 { error LE.Gone }
+    if n == 0: error LE.Gone
     return n
 }
 fn run(f fn&(n I64) I64 ? LE.Empty) I64 { return try f(0) catch default 3 }

@@ -29,12 +29,12 @@ fn main() {
         inner := Tally()
         lg := Logger(inner)
         lg.log = out
-        for k in range 100 { lg.Note(k) }
+        for k in range 100: lg.Note(k)
         inner.seen.Push(1)
     }
     churn()
     s := 0
-    for x in out.seen { s += x }
+    for x in out.seen: s += x
     assert out.seen.Len() == 100 and s == 4950
 
 }

@@ -108,7 +108,7 @@ fn Measurement.taken<? E>(body fn&() ? E, ops I64) Measurement ? E {
     allocs, bytes := __olang_bench_allocs_made(), __olang_bench_bytes_made()
     instructions := __olang_bench_instructions()
     start := time.Now()
-    for _ in range ops { try body() }
+    for _ in range ops: try body()
     took := time.Since(start)
     after := __olang_bench_instructions()
     spent := -1 if instructions < 0 or after < 0 else after - instructions
@@ -289,7 +289,7 @@ fn Comparison.interleave<? E>(a fn&() ? E, b fn&() ? E, opsA I64, opsB I64, runs
 # the running test's name, as its run reports it ("Sum: a million numbers"), "" outside a test
 fn running() String {
     n := __olang_test_running(Array<U8>(0), 0)
-    if n < 0 { return "" }
+    if n < 0: return ""
     buf := Array<U8>(n)
     __olang_test_running(buf, n)
     return String(buf)

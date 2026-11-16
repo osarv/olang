@@ -19,14 +19,14 @@ fn Counts.countWords(words Array<String&>&) Counts {
     return c
 }
 fn merge(into mut Map<String&, I64>&, from Counts&) {
-    for e in from.m { into.Put(e.Key, e.Value) }
+    for e in from.m: into.Put(e.Key, e.Value)
 }
 fn total(words Array<String&>&) I64 {
     parts := Array<Counts>(2, Counts())
     parts[0] = Counts.countWords(words)
     parts[1] = Counts.countWords(words)
     sum := Map<String&, I64>()
-    for p in parts { merge(sum, p) }
+    for p in parts: merge(sum, p)
     return sum.Len()
 }
 fn main() ? { try io.PutLine($total(Array<String&>["x", "y", "x"])) }

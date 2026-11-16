@@ -17,7 +17,7 @@ if Profile == "prod" {
 fn main() ? {
     assert Profile == "prod" and Port == 443 and Ratio == 2.0 and Banner == "production"
     v := 0
-    if Verbose { v = 1 }
-    if Quiet { v += 10 }
+    if Verbose: v = 1
+    if Quiet: v += 10
     assert v == 11
 }

@@ -8,15 +8,15 @@ fn lens() I64 {
     hs := Vec<holder>()
     for k in range 1, 6 {
         v := Vec<I64>()
-        for i in range k { v.Push(i) }
+        for i in range k: v.Push(i)
         hs.Push(holder(v))
     }
     s := 0
-    for h in hs { s += h.v.Len() }
+    for h in hs: s += h.v.Len()
     t := 0
     for k in range 1, 6 {
         v := Vec<I64>()
-        for i in range k { v.Push(i) }
+        for i in range k: v.Push(i)
         r := ref(v)
         t += r.v.Len()
     }

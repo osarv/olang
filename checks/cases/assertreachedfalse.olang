@@ -8,9 +8,9 @@ type Bad error { No }
 fn fails() ? Bad { error Bad.No }
 fn main() {
     n I64 = 0
-    for a in os.Args() { n += a.Len() }
-    if n > 3 { n = 0 }
+    for a in os.Args(): n += a.Len()
+    if n > 3: n = 0
     try fails() catch Bad { n++ }
-    if n > 1000 { assert false, "passed by" }
+    if n > 1000: assert false, "passed by"
     assert 1 + 1 == 3, "reached on every run"
 }

@@ -65,12 +65,12 @@ fn (a C64) Div(b C64) C64 {
     if absRe >= absIm {
         r F64 = b.Im / b.Re
         t F64 = b.Re + b.Im * r
-        if r != 0.0 { return C64((a.Re + a.Im * r) / t, (a.Im - a.Re * r) / t) }
+        if r != 0.0: return C64((a.Re + a.Im * r) / t, (a.Im - a.Re * r) / t)
         return C64((a.Re + b.Im * (a.Im / b.Re)) / t, (a.Im - b.Im * (a.Re / b.Re)) / t)
     }
     r F64 = b.Re / b.Im
     t F64 = b.Re * r + b.Im
-    if r != 0.0 { return C64((a.Re * r + a.Im) / t, (a.Im * r - a.Re) / t) }
+    if r != 0.0: return C64((a.Re * r + a.Im) / t, (a.Im * r - a.Re) / t)
     return C64((b.Re * (a.Re / b.Im) + a.Im) / t, (b.Re * (a.Im / b.Im) - a.Re) / t)
 }
 fn (a C64) Neg() C64 { return C64(-a.Re, -a.Im) }

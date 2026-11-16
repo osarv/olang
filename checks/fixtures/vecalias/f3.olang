@@ -15,7 +15,7 @@ fn grow(w mut Vec<I64>&) ? io.Error {
     join {
         spawn d = mid.Vl.View2(w)
     }
-    for i in range 1000 { w.Push(i + 100) }
+    for i in range 1000: w.Push(i + 100)
     churn()
     try io.PutLine($d[0] + " " + $d[1])
 }

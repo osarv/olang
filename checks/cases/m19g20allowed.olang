@@ -8,7 +8,7 @@
 # and -sanitize catch that - retire01assert)
 fn sum(v Vec<I64>&) I64 {
     t := 0
-    for x in v { t += x }
+    for x in v: t += x
     return t
 }
 fn setAll(v mut Vec<I64>&, x I64) { for i in range v.Len() { v[i] = x } }
@@ -31,7 +31,7 @@ fn main() {
     other(v, w)                                 # grows w, not v
     fresh(v)                                    # grows a Vec of its own
     assert d[0] == 5
-    for i in range 100 { v.Push(i) }
+    for i in range 100: v.Push(i)
     e := v.View()                               # taken after the growth
     assert e.Len() == 102
     t := 0

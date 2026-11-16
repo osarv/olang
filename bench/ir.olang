@@ -10,7 +10,7 @@ import "benchlib"
 
 fn main() {
     args := os.Args()
-    if args.Len() < 2 { benchlib.Fail("usage: ir PROG [CPROG]", 1) }
+    if args.Len() < 2: benchlib.Fail("usage: ir PROG [CPROG]", 1)
     prog := $args[1]
     cprog := $args[2] if args.Len() > 2 else prog
     dir := benchlib.Dir
@@ -18,8 +18,8 @@ fn main() {
     others := benchlib.Objects(dir, Array<String&>[".main.ll", ".test.ll"])
     link := Vec<String&>()
     for a in Array<String&>["clang", "-O3", "-flto", "-o", "build/lto/" + $prog + ".olang", "build/" + $prog + ".main.ll"] { link.Push($a) }
-    for o in others { link.Push($o) }
-    for a in Array<String&>["-lm", "-lpthread", "-Wl,-plugin-opt=save-temps"] { link.Push($a) }
+    for o in others: link.Push($o)
+    for a in Array<String&>["-lm", "-lpthread", "-Wl,-plugin-opt=save-temps"]: link.Push($a)
     benchlib.Must(link.ToArray())
     benchlib.Must(Array<String&>["llvm-dis", "build/lto/" + $prog + ".olang.0.5.precodegen.bc", "-o", "build/lto/" + $prog + ".olang.ll"])
     benchlib.MustInto(Array<String&>["llvm-objdump", "-d", "--no-show-raw-insn", "build/lto/" + $prog + ".olang"], dir, "build/lto/" + $prog + ".olang.s")

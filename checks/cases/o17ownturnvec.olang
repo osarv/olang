@@ -21,11 +21,11 @@ fn main() {
     hs := Vec<holder>()
     for k in range 1, 6 {
         v := Vec<I64>()
-        for i in range k { v.Push(i) }
+        for i in range k: v.Push(i)
         hs.Push(holder(v))
     }
     churn()
     s := 0
-    for h in hs { s += h.v.Len() + h.v[h.v.Len() - 1] }
+    for h in hs: s += h.v.Len() + h.v[h.v.Len() - 1]
     io.PutLine("vec lens and lasts " + $s + " (25)")!
 }

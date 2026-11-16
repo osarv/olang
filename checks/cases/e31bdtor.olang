@@ -6,7 +6,7 @@ import "std/io"
 type blk struct(n I64) { n }
 G mut Vec<blk>
 type guard unique struct() { } destruct {
-    for i in range 1000 { G.Push(blk(i)) }
+    for i in range 1000: G.Push(blk(i))
 }
 fn (b mut blk&) Bump() {
     {

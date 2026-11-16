@@ -71,7 +71,7 @@ test "a test that holds narrows: after an assert, a leaving if, inside and/or, t
     assert c != null
     assert c.v == 7
     d Cell?& = c.next
-    if d == null or d.v > 0 { assert d == null or d.v > 0 }
+    if d == null or d.v > 0: assert d == null or d.v > 0
     walked := 0
     at Cell?& = c
     for at != null {

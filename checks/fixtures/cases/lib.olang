@@ -15,7 +15,7 @@ type Rec struct(id I32) {
 fn (r Rec) peek() I32 { return r.Id }
 type hid struct(x I32) { x }
 fn Fail(n I32) ? Err {
-  if n == 1 { error Err.quiet }
+  if n == 1: error Err.quiet
   error Err.Loud
 }
 fn Dir.South() Dir { return Dir.south }

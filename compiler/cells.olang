@@ -146,7 +146,7 @@ fn dropped(line String&, plan Plan&) Bool {
 # the symbol written at i of an IR line, "" for a quoted one
 fn symbolAt(line String&, i I64) String& {
     j := i
-    for j < line.Len() and symbolChar(line[j]) { j++ }
+    for j < line.Len() and symbolChar(line[j]): j++
     return line[i:j]
 }
 
@@ -390,7 +390,7 @@ fn (w mut Worker&) relay(which I64) Bool {
 
 fn (w mut Worker&) drop(k I64) {
     n := w.buf.Len()
-    for i in range k, n { w.buf[i - k] = w.buf[i] }
+    for i in range k, n: w.buf[i - k] = w.buf[i]
     w.buf.Truncate(n - k)
 }
 

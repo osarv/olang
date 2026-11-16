@@ -61,12 +61,12 @@ fn (s Stop) Text(src source.Source&) String {
         case Stop.None { return "" }
         case Stop.Raised(code) { return "an error escapes, code " + $code }
         case Stop.Exited(kind, _, sp, msg) {
-            if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { return "" }
+            if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail: return ""
             if mir.Columned(kind) {
                 l, c := src.LineCol(sp.Start)
                 return $src.Path + ":" + $l + ":" + $c + ": " + $mir.ExitText(kind)
             }
-            if msg == "" { return $src.Path + ":" + $src.Line(sp.Start) + ": " + $mir.ExitText(kind) }
+            if msg == "": return $src.Path + ":" + $src.Line(sp.Start) + ": " + $mir.ExitText(kind)
             return $src.Path + ":" + $src.Line(sp.Start) + ": " + $mir.ExitText(kind) + ": " + $msg
         }
         case Stop.Refused(why, _, sp) { return $src.Path + ":" + $src.Line(sp.Start) + ": " + $why }
@@ -513,7 +513,7 @@ fn Machine.New(t mut types.Table&, mode Mode) Machine {
         m.DepthBudget = 10000000
     }
     m.scratch = m.allocate(64, aValue, m.program).Id
-    for i in range 3 { m.tmps[i] = m.allocate(64, aValue, m.program).Id }
+    for i in range 3: m.tmps[i] = m.allocate(64, aValue, m.program).Id
     m.deadMode = (try os.Env("OLANG_DEADREGIONS") catch default "") != ""
     return m
 }
@@ -528,7 +528,7 @@ fn (m mut Machine&) Define(f mir.Fn&) {
     if i >= m.cf.Len() {
         old := m.cf
         m.cf = Array<cfn>(2 * old.Len())
-        for k in range old.Len() { m.cf[k] = old[k] }
+        for k in range old.Len(): m.cf[k] = old[k]
     }
     m.cf[i] = m.decode(f)
     m.cf[i].ReadsBuild = m.BuildFns.Has(f.Of)
@@ -549,7 +549,7 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
     c.Calls = f.Calls.ToArray()
     c.Cases = f.Cases.ToArray()
     n I64 = 0
-    for blockIx in range f.Blocks.Len() { n += f.Blocks[blockIx].Stmts.Len() }
+    for blockIx in range f.Blocks.Len(): n += f.Blocks[blockIx].Stmts.Len()
     nb := f.Blocks.Len()
     c.Stmts = Array<mir.Stmt>(n)
     c.Global = Array<Bool>(n)
@@ -567,7 +567,7 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
         for st in b.Stmts {
             c.Stmts[k] = st
             c.Global[k] = stmtNamesGlobal(f, st)
-            if not c.Global[k] { m.flatten(f, st, c, k) }
+            if not c.Global[k]: m.flatten(f, st, c, k)
             k++
         }
         c.Terms[bi] = b.T
@@ -595,7 +595,7 @@ fn (m mut Machine&) flatten(f mir.Fn&, st mir.Stmt&, c mut cfn&, k I64) {
 # a number stored into a local - x = v, x = y, x = a[i], x = op a, x = a op b - in its flat form
 fn (m mut Machine&) flattenToLocal(f mir.Fn&, p mir.Lvalue, rv mir.Rvalue, c mut cfn&, k I64) {
     d := plainLocal(p)
-    if d < 0 or not m.number(f.Locals[d].Ty) { return }
+    if d < 0 or not m.number(f.Locals[d].Ty): return
     o := k * fastStride
     w := m.width(f.Locals[d].Ty)
     c.Fast[o + 1], c.Fast[o + 2], c.Fast[o + 9] = d, w, I64(f.Locals[d].Ty)
@@ -610,13 +610,13 @@ fn (m mut Machine&) flattenToLocal(f mir.Fn&, p mir.Lvalue, rv mir.Rvalue, c mut
 fn (m mut Machine&) flattenUse(f mir.Fn&, x mir.Operand, w I64, c mut cfn&, o I64) {
     match x {
         case mir.Operand.Const(ty, bits) {
-            if not m.number(ty) or m.width(ty) != w { return }
+            if not m.number(ty) or m.width(ty) != w: return
             c.Fast[o], c.Fast[o + 3], c.Fast[o + 4] = fConst, -1, m.canonBits(ty, bits)
         }
         case mir.Operand.Copy(q) {
             a := plainLocal(q)
             if q.Path.N == 0 {
-                if a < 0 or not m.number(f.Locals[a].Ty) or m.width(f.Locals[a].Ty) != w { return }
+                if a < 0 or not m.number(f.Locals[a].Ty) or m.width(f.Locals[a].Ty) != w: return
                 c.Fast[o], c.Fast[o + 3], c.Fast[o + 4] = fCopy, a, w
             } else if q.Path.N == 1 and a >= 0 { m.flattenLoad(f, q, a, w, c, o) }
         }
@@ -630,22 +630,22 @@ fn (m mut Machine&) flattenLoad(f mir.Fn&, q mir.Lvalue, a I64, w I64, c mut cfn
     if pr != mir.Proj.Index: return
     ix := I64(pr.l)
     el := m.elemOf(f.Locals[a].Ty)
-    if not m.number(el) or m.width(el) != w or m.size(el) != w { return }
-    if not m.number(f.Locals[ix].Ty) { return }
+    if not m.number(el) or m.width(el) != w or m.size(el) != w: return
+    if not m.number(f.Locals[ix].Ty): return
     c.Fast[o], c.Fast[o + 3], c.Fast[o + 5] = fLoad, a, ix
     c.Fast[o + 7], c.Fast[o + 8] = I64(f.Locals[a].Ty), I64(f.Locals[ix].Ty)
 }
 
 # x = op a or x = a op b in statement k's flat form: an operation prim computes from numbers' bits, of x's width w
 fn (m mut Machine&) flattenPrim(f mir.Fn&, op typed.PrimOp, ty types.TypeId, args mir.Range, w I64, c mut cfn&, k I64) {
-    if not m.number(ty) or m.width(ty) != w or not flatOp(op) { return }
+    if not m.number(ty) or m.width(ty) != w or not flatOp(op): return
     o := k * fastStride
     try m.flatOperand(f, f.Ops[I64(args.At)], c, o + 3, o + 7) catch { return }
     if op == typed.PrimOp.Neg or op == typed.PrimOp.BitNot or op == typed.PrimOp.Not {
-        if args.N != 1 { return }
+        if args.N != 1: return
         c.Fast[o] = fUn
     } else {
-        if args.N != 2 { return }
+        if args.N != 2: return
         try m.flatOperand(f, f.Ops[I64(args.At) + 1], c, o + 5, o + 8) catch { return }
         c.Fast[o] = fBin
         if m.i64(types.TypeId(I32(c.Fast[o + 7]))) and m.i64(types.TypeId(I32(c.Fast[o + 8]))) and wordOp(op): c.Fast[o + 10] = 1
@@ -656,20 +656,20 @@ fn (m mut Machine&) flattenPrim(f mir.Fn&, op typed.PrimOp, ty types.TypeId, arg
 # an element stored, x[i] = v, in statement k's flat form: a number of the elements' own width, by a local of a number
 fn (m mut Machine&) flattenToElem(f mir.Fn&, p mir.Lvalue, rv mir.Rvalue, c mut cfn&, k I64) {
     d := plainLocal(p)
-    if d < 0 { return }
+    if d < 0: return
     pr := f.Projs[I64(p.Path.At)]
     if pr != mir.Proj.Index: return
     ix := I64(pr.l)
     el := m.elemOf(f.Locals[d].Ty)
-    if not m.number(el) or m.size(el) != m.width(el) { return }
+    if not m.number(el) or m.size(el) != m.width(el): return
     w := m.width(el)
     if rv != mir.Rvalue.Use: return
     x := rv.x
     if x != mir.Operand.Const and x != mir.Operand.Copy: return
     o := k * fastStride
     try m.flatOperand(f, x, c, o + 3, o + 9) catch { return }
-    if m.width(types.TypeId(I32(c.Fast[o + 9]))) != w { return }
-    if not m.number(f.Locals[ix].Ty) { return }
+    if m.width(types.TypeId(I32(c.Fast[o + 9]))) != w: return
+    if not m.number(f.Locals[ix].Ty): return
     c.Fast[o], c.Fast[o + 1], c.Fast[o + 2], c.Fast[o + 5] = fStore, d, w, ix
     c.Fast[o + 7], c.Fast[o + 8] = I64(f.Locals[d].Ty), I64(f.Locals[ix].Ty)
 }
@@ -679,13 +679,13 @@ fn (m mut Machine&) flattenToElem(f mir.Fn&, p mir.Lvalue, rv mir.Rvalue, c mut 
 fn (m mut Machine&) flatOperand(f mir.Fn&, x mir.Operand, c mut cfn&, slot I64, tslot I64) ? NotFlat {
     match x {
         case mir.Operand.Const(ty, bits) {
-            if not m.number(ty) { error NotFlat }
+            if not m.number(ty): error NotFlat
             c.Fast[slot], c.Fast[slot + 1], c.Fast[tslot] = -1, m.canonBits(ty, bits), I64(ty)
         }
         case mir.Operand.Copy(q) {
-            if q.Path.N != 0 { error NotFlat }
+            if q.Path.N != 0: error NotFlat
             a := plainLocal(q)
-            if a < 0 or not m.number(f.Locals[a].Ty) { error NotFlat }
+            if a < 0 or not m.number(f.Locals[a].Ty): error NotFlat
             c.Fast[slot], c.Fast[slot + 1], c.Fast[tslot] = a, m.width(f.Locals[a].Ty), I64(f.Locals[a].Ty)
         }
         case _ { error NotFlat }
@@ -752,7 +752,7 @@ fn opNamesGlobal(x mir.Operand) Bool {
 
 fn rangeNamesGlobal(f mir.Fn&, r mir.Range) Bool {
     for i in range r.N {
-        if opNamesGlobal(f.Ops[I64(r.At) + i]) { return true }
+        if opNamesGlobal(f.Ops[I64(r.At) + i]): return true
     }
     return false
 }
@@ -787,7 +787,7 @@ fn termNamesGlobal(f mir.Fn&, t mir.Term) Bool {
 # an extern (X1), by generic.Program's function index, as the linker names it
 fn (m mut Machine&) DefineExtern(f I64, name String&, fixed I64 = -1) {
     m.externs.Put(f, name)
-    if fixed >= 0 { m.variadic.Put(f, fixed) }
+    if fixed >= 0: m.variadic.Put(f, fixed)
 }
 
 # the destructor of a type (C7): a function of one parameter, a reference to the instance, run when its scope closes
@@ -795,7 +795,7 @@ fn (m mut Machine&) DefineDestructor(t types.TypeId, k mir.FnKey) { m.dtors.Put(
 
 # a run-time trait value's table (T32): ti's instance type, and the function at each of its words after the identity
 fn (m mut Machine&) DefineTable(ti I64, concrete types.TypeId, keys Array<mir.FnKey>&) {
-    if m.tableKeys.Has(ti) { return }
+    if m.tableKeys.Has(ti): return
     m.tableTy.Put(ti, concrete)
     m.tableKeys.Put(ti, keys)
 }
@@ -804,7 +804,7 @@ fn (m mut Machine&) DefineTable(ti I64, concrete types.TypeId, keys Array<mir.Fn
 fn (m mut Machine&) typeid(t types.TypeId) Ptr {
     t2 := m.T.Plain(t)
     have := try m.typeidAt.Get(t2) catch default 0
-    if have != 0 { return Ptr(have, 0) }
+    if have != 0: return Ptr(have, 0)
     p := m.allocate(8, aData, m.program)
     m.typeidAt.Put(t2, p.Id)
     return p
@@ -813,7 +813,7 @@ fn (m mut Machine&) typeid(t types.TypeId) Ptr {
 # table ti as an allocation: its instance's type's identity, then a code pointer per function, made once
 fn (m mut Machine&) table(ti I64) Ptr {
     have := try m.tableAt.Get(ti) catch default 0
-    if have != 0 { return Ptr(have, 0) }
+    if have != 0: return Ptr(have, 0)
     keys := try m.tableKeys.Get(ti) catch {
         m.refuse(WhyNoBody)
         return NullPtr
@@ -821,7 +821,7 @@ fn (m mut Machine&) table(ti I64) Ptr {
     concrete := try m.tableTy.Get(ti) catch default types.UnknownT
     p := m.allocate(8 * (keys.Len() + 1), aData, m.program)
     m.wrPtr(p, m.typeid(concrete))
-    for i in range keys.Len() { m.wrPtr(Ptr(p.Id, 8 * (i + 1)), m.codePtr(keys[i])) }
+    for i in range keys.Len(): m.wrPtr(Ptr(p.Id, 8 * (i + 1)), m.codePtr(keys[i]))
     m.tableAt.Put(ti, p.Id)
     return p
 }
@@ -845,12 +845,12 @@ fn (m mut Machine&) DefineGlobal(module I64, name source.NameId, ty types.TypeId
 # B10c: the global is a build constant's default - reading it reads a build constant (S8a)
 fn (m mut Machine&) BuildGlobal(module I64, name source.NameId) {
     g := try m.globalOf.Get(gkey(module, name)) catch default -1
-    if g >= 0 { m.globals[g].Build = true }
+    if g >= 0: m.globals[g].Build = true
 }
 
 fn (m mut Machine&) codeIndex(k mir.FnKey) I64 {
     i := try m.codeOf.Get(k) catch default -1
-    if i >= 0 { return i }
+    if i >= 0: return i
     m.codeOf.Put(k, m.codeKeys.Len())
     m.codeKeys.Push(k)
     m.codeAllocs.Push(0)
@@ -860,7 +860,7 @@ fn (m mut Machine&) codeIndex(k mir.FnKey) I64 {
 # ---- stopping ----
 
 fn (m mut Machine&) stop(s Stop) {
-    if m.halted { return }
+    if m.halted: return
     m.halted = true
     m.Stopped = s
 }
@@ -880,13 +880,13 @@ fn (m mut Machine&) freedEarly() {
 fn (m mut Machine&) lay(ty types.TypeId) Bool {
     t := m.T
     st := t.LayoutState(ty)
-    if st == types.LaidOut { return true }
-    if st != types.NotLaidOut { return false }
+    if st == types.LaidOut: return true
+    if st != types.NotLaidOut: return false
     t.SetLayoutState(ty, types.LayingOut)
     ok := true
-    if t.KindOf(ty) == types.Kind.Ref { m.layRepr(t.Referent(ty)) }
+    if t.KindOf(ty) == types.Kind.Ref: m.layRepr(t.Referent(ty))
     for e in t.Embedded(ty) {
-        if not m.lay(e) { ok = false }
+        if not m.lay(e): ok = false
     }
     ok = ok and t.ComputeLayout(ty)
     t.SetLayoutState(ty, types.LaidOut if ok else types.NoLayout)
@@ -897,27 +897,27 @@ fn (m mut Machine&) lay(ty types.TypeId) Bool {
 fn (m mut Machine&) layRepr(ty types.TypeId) {
     t := m.T
     k := t.KindOf(ty)
-    if k == types.Kind.Named and t.DeclKindOf(t.DeclOf(ty)) == types.DeclKind.Over and t.HasBody(ty) { m.lay(ty) }
+    if k == types.Kind.Named and t.DeclKindOf(t.DeclOf(ty)) == types.DeclKind.Over and t.HasBody(ty): m.lay(ty)
 }
 
 # a type's size, shape and width, each kept the first time it is final - once the type's layout is decided (laid out,
 # or known to have none): the evaluator asks for them at every operand
 fn (m mut Machine&) size(ty types.TypeId) I64 {
     i := I64(ty)
-    if i < m.tySize.Len() and m.tySize[i] >= 0 { return m.tySize[i] }
+    if i < m.tySize.Len() and m.tySize[i] >= 0: return m.tySize[i]
     v I64 = 8 if ty == types.NullT else 0 if ty == types.VoidT or not m.lay(ty) else m.T.Size(ty)
-    if m.settled(ty) { m.tySize[i] = v }
+    if m.settled(ty): m.tySize[i] = v
     return v
 }
 
 # whether ty's layout is decided, the caches given room for it
 fn (m mut Machine&) settled(ty types.TypeId) Bool {
     st := m.T.LayoutState(ty)
-    if st != types.LaidOut and st != types.NoLayout { return false }
+    if st != types.LaidOut and st != types.NoLayout: return false
     i := I64(ty)
     if i >= m.tySize.Len() {
         n := 2 * m.tySize.Len()
-        for n <= i { n *= 2 }
+        for n <= i: n *= 2
         a, b, c := m.tySize, m.tyShape, m.tyWidth
         m.tySize = Array<I64>(n, -1)
         m.tyShape = Array<I64>(n, -1)
@@ -938,9 +938,9 @@ fn (m mut Machine&) rtArray(ty types.TypeId) Bool {
 
 fn (m mut Machine&) shape(ty types.TypeId) I64 {
     i := I64(ty)
-    if i < m.tyShape.Len() and m.tyShape[i] >= 0 { return m.tyShape[i] }
+    if i < m.tyShape.Len() and m.tyShape[i] >= 0: return m.tyShape[i]
     v := m.shapeOf(ty)
-    if m.settled(ty) { m.tyShape[i] = v }
+    if m.settled(ty): m.tyShape[i] = v
     return v
 }
 
@@ -997,7 +997,7 @@ fn (m mut Machine&) partOffset(ty types.TypeId, i I64) I64 {
     if at < 0 {
         m.lay(r)
         at = m.offs.Len()
-        for o in m.T.Offsets(r) { m.offs.Push(o) }
+        for o in m.T.Offsets(r): m.offs.Push(o)
         m.offAt.Put(r, at)
     }
     return m.offs[at + i]
@@ -1015,17 +1015,17 @@ fn (m mut Machine&) payloadType(ty types.TypeId, tag I64) types.TypeId {
 # the bytes one value of a number type takes
 fn (m mut Machine&) width(ty types.TypeId) I64 {
     i := I64(ty)
-    if i < m.tyWidth.Len() and m.tyWidth[i] >= 0 { return m.tyWidth[i] }
+    if i < m.tyWidth.Len() and m.tyWidth[i] >= 0: return m.tyWidth[i]
     v := m.widthOf(ty)
-    if m.settled(ty) { m.tyWidth[i] = v }
+    if m.settled(ty): m.tyWidth[i] = v
     return v
 }
 
 fn (m mut Machine&) widthOf(ty types.TypeId) I64 {
     sh := m.shape(ty)
-    if sh == vBool { return 1 }
-    if sh == vOrd { return 4 }
-    if sh == vPtr { return 8 }
+    if sh == vBool: return 1
+    if sh == vOrd: return 4
+    if sh == vPtr: return 8
     return types.IntBytes(m.T.Bits(m.T.Repr(ty))) if m.T.IsInt(m.T.Repr(ty)) else m.T.Bits(m.T.Repr(ty)) / 8
 }
 
@@ -1035,7 +1035,7 @@ fn (m mut Machine&) fixedLen(ty types.TypeId) I64 { return m.T.ConstValue(m.T.Le
 fn (m mut Machine&) elemOf(ty types.TypeId) types.TypeId {
     t := m.T
     r := t.Repr(ty)
-    if t.KindOf(r) == types.Kind.Ref { r = t.Repr(t.Referent(r)) }
+    if t.KindOf(r) == types.Kind.Ref: r = t.Repr(t.Referent(r))
     return t.Elem(r)
 }
 
@@ -1053,7 +1053,7 @@ fn (m mut Machine&) reachesWritable(ty types.TypeId) Bool {
         }
         case types.Kind.Array { yes = m.reachesWritable(t.Elem(r)) }
         case types.Kind.Tuple, types.Kind.Record, types.Kind.Named, types.Kind.AnonEnum {
-            for p in t.Items(m.partList(r)) { yes = yes or m.reachesWritable(p) }
+            for p in t.Items(m.partList(r)): yes = yes or m.reachesWritable(p)
             if t.KindOf(r) == types.Kind.AnonEnum or (t.KindOf(r) == types.Kind.Named and
                                                       t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum) {
                 cs := t.ShapeCases(r) if t.KindOf(r) == types.Kind.AnonEnum else t.Cases(r)
@@ -1073,34 +1073,34 @@ fn (m mut Machine&) reachesWritable(ty types.TypeId) Bool {
 # a size class: the smallest power of two from 8 holding n bytes
 fn classOf(n I64) I64 {
     c I64 = 3
-    for (1 << c) < n { c++ }
+    for (1 << c) < n: c++
     return c
 }
 
 fn (m mut Machine&) grow(need I64) {
-    if need <= 8 * m.hw.Len() { return }
+    if need <= 8 * m.hw.Len(): return
     n := 8 * m.hw.Len()
-    for n < need { n *= 2 }
+    for n < need: n *= 2
     old := m.hw
     m.hw = Array<I64>(n / 8)
-    for i in range (m.top + 7) / 8 { m.hw[i] = old[i] }
+    for i in range (m.top + 7) / 8: m.hw[i] = old[i]
     oldp := m.prov
     m.prov = Array<I64>(n / 8)
-    for i in range (m.top + 7) / 8 { m.prov[i] = oldp[i] }
+    for i in range (m.top + 7) / 8: m.prov[i] = oldp[i]
 }
 
 # a region of its own, a kid of scope parent
 fn (m mut Machine&) region(parent I64) I64 {
     id := m.newScope(sRegion)
     m.adopt(id, parent)
-    if m.scopes[parent & slotMask].Kind != sRegion { m.scopes[id & slotMask].Owner = parent }
+    if m.scopes[parent & slotMask].Kind != sRegion: m.scopes[id & slotMask].Owner = parent
     return id
 }
 
 # a new allocation of n bytes in scope s, zeroed: its id at offset 0; null, stopped, past the memory budget - in a slot
 # scope, in a region of its own inside it
 fn (m mut Machine&) allocate(n I64, kind I64, s0 I64) Ptr {
-    if m.halted { return NullPtr }
+    if m.halted: return NullPtr
     s := m.region(s0) if s0 != 0 and m.live(s0) and m.scopes[s0 & slotMask].Slots else s0
     if n < 0 or n > (1 << 40) {
         m.refuse(WhyLong)
@@ -1136,9 +1136,9 @@ fn (m mut Machine&) allocate(n I64, kind I64, s0 I64) Ptr {
         sc := s & slotMask
         head := m.scopes[sc].Allocs
         a.Next = head
-        if head != 0 { m.al[head].Prev = slot }
+        if head != 0: m.al[head].Prev = slot
         m.scopes[sc].Allocs = slot
-        if m.When == Mode.Compile and s == m.program and m.initGlobal >= 0 { a.Owner = m.initGlobal }
+        if m.When == Mode.Compile and s == m.program and m.initGlobal >= 0: a.Owner = m.initGlobal
     }
     m.al[slot] = a
     m.Live += n
@@ -1149,7 +1149,7 @@ fn (m mut Machine&) newSlot() I64 {
     if m.nAl >= m.al.Len() {
         old := m.al
         m.al = Array<alloc>(2 * old.Len())
-        for i in range m.nAl { m.al[i] = old[i] }
+        for i in range m.nAl: m.al[i] = old[i]
     }
     m.nAl++
     return m.nAl - 1
@@ -1158,13 +1158,13 @@ fn (m mut Machine&) newSlot() I64 {
 # frees an allocation: its block back to its class's list, its slot's generation moved on, out of its scope's list
 fn (m mut Machine&) release(slot I64) {
     a := m.al[slot]
-    if a.Kind == aFree { return }
+    if a.Kind == aFree: return
     if a.Scope != 0 {
         sc := a.Scope & slotMask
         if a.Prev != 0 { m.al[a.Prev].Next = a.Next } else { m.scopes[sc].Allocs = a.Next }
-        if a.Next != 0 { m.al[a.Next].Prev = a.Prev }
+        if a.Next != 0: m.al[a.Next].Prev = a.Prev
     }
-    for i in range (a.Size + 7) / 8 { m.prov[a.Base / 8 + i] = 0 }
+    for i in range (a.Size + 7) / 8: m.prov[a.Base / 8 + i] = 0
     m.wrRaw(a.Base, 8, m.free[a.Class])
     m.free[a.Class] = a.Base
     m.Live -= a.Size
@@ -1179,9 +1179,9 @@ fn (m mut Machine&) release(slot I64) {
 # the innermost frame of the program's own code (not the library's) is making, or the operation itself
 fn (m mut Machine&) retire(fi I64, p Ptr, ty types.TypeId) {
     data, _ := m.arrayView(p, ty)
-    if m.halted or data.Id == 0 { return }
+    if m.halted or data.Id == 0: return
     slot := data.Id & slotMask
-    if slot >= m.nAl or m.al[slot].Kind == aFree or m.al[slot].Retired >= 0 { return }
+    if slot >= m.nAl or m.al[slot].Kind == aFree or m.al[slot].Retired >= 0: return
     file, sp := m.stopFile, m.stopSp
     k := fi
     for k >= 0 and m.Library.Has(m.fns.At(m.fs[k].Fn).File): k--
@@ -1196,7 +1196,7 @@ fn (m mut Machine&) retire(fi I64, p Ptr, ty types.TypeId) {
 
 # M19g: where the program grew the collection whose retired array the last stale use stopped on (WhyStale)
 fn (m Machine&) StaleGrewAt() I64, source.Span {
-    if m.StaleAt < 0 or m.StaleAt >= m.retiredAt.Len() { return -1, source.Span(0, 0) }
+    if m.StaleAt < 0 or m.StaleAt >= m.retiredAt.Len(): return -1, source.Span(0, 0)
     e := m.retiredAt[m.StaleAt]
     return e.First, e.Second
 }
@@ -1204,7 +1204,7 @@ fn (m Machine&) StaleGrewAt() I64, source.Span {
 # the heap address of n bytes at p, checked: the allocation live, the bytes within it, a write allowed. -1, stopped,
 # where not
 fn (m mut Machine&) at(p Ptr, n I64, write Bool) I64 {
-    if m.halted { return -1 }
+    if m.halted: return -1
     if p.Id == 0 {
         m.refuse(WhyNull)
         return -1
@@ -1219,7 +1219,7 @@ fn (m mut Machine&) at(p Ptr, n I64, write Bool) I64 {
         return -1
     }
     if m.al[slot].Kind == aFree or m.al[slot].Gen != p.Id >> slotBits {
-        if m.deadMode and m.early.Has(p.Id) { m.freedEarly() }
+        if m.deadMode and m.early.Has(p.Id): m.freedEarly()
         m.refuse(WhyClosed)
         return -1
     }
@@ -1260,8 +1260,8 @@ fn (m mut Machine&) at(p Ptr, n I64, write Bool) I64 {
 # n bytes (at most 8) at addr, zero-extended: from one word, or the two it straddles
 fn (m mut Machine&) rdRaw(addr I64, n I64) I64 {
     w, o := addr >> 3, addr & 7
-    if o == 0 and n == 8 { return m.hw[w] }
-    if o + n <= 8 { return (m.hw[w] >> (8 * o)) & m.mask(n) }
+    if o == 0 and n == 8: return m.hw[w]
+    if o + n <= 8: return (m.hw[w] >> (8 * o)) & m.mask(n)
     lo := 8 - o
     return ((m.hw[w] >> (8 * o)) & m.mask(lo)) | ((m.hw[w + 1] & m.mask(n - lo)) << (8 * lo))
 }
@@ -1286,20 +1286,20 @@ fn (m mut Machine&) wrRaw(addr I64, n I64, v I64) {
 
 # a pointer stored at addr is no longer one where bytes over it are written
 fn (m mut Machine&) unmark(addr I64, n I64) {
-    if n <= 0 { return }
-    for w in range addr / 8, (addr + n - 1) / 8 + 1 { m.prov[w] = 0 }
+    if n <= 0: return
+    for w in range addr / 8, (addr + n - 1) / 8 + 1: m.prov[w] = 0
 }
 
 # n bytes at p, as an integer zero-extended from them
 fn (m mut Machine&) rd(p Ptr, n I64) I64 {
     a := m.at(p, n, false)
-    if a < 0 { return 0 }
+    if a < 0: return 0
     return m.rdRaw(a, n)
 }
 
 fn (m mut Machine&) wr(p Ptr, n I64, v I64) {
     a := m.at(p, n, true)
-    if a < 0 { return }
+    if a < 0: return
     m.unmark(a, n)
     m.wrRaw(a, n, v)
 }
@@ -1307,7 +1307,7 @@ fn (m mut Machine&) wr(p Ptr, n I64, v I64) {
 # the reference stored at p
 fn (m mut Machine&) rdPtr(p Ptr) Ptr {
     a := m.at(p, 8, false)
-    if a < 0 { return NullPtr }
+    if a < 0: return NullPtr
     off := m.rdRaw(a, 8)
     id := m.prov[a / 8] if a % 8 == 0 else 0
     if id == 0 and off != 0 {
@@ -1319,7 +1319,7 @@ fn (m mut Machine&) rdPtr(p Ptr) Ptr {
 
 fn (m mut Machine&) wrPtr(p Ptr, q Ptr) {
     a := m.at(p, 8, true)
-    if a < 0 { return }
+    if a < 0: return
     m.unmark(a, 8)
     m.wrRaw(a, 8, q.Off)
     if q.Id != 0 {
@@ -1333,15 +1333,15 @@ fn (m mut Machine&) wrPtr(p Ptr, q Ptr) {
 
 # n bytes from src to dst, the pointers among them with them; the two may overlap
 fn (m mut Machine&) copy(dst Ptr, src Ptr, n I64) {
-    if n <= 0 { return }
+    if n <= 0: return
     s := m.at(src, n, false)
     d := m.at(dst, n, true)
-    if s < 0 or d < 0 { return }
+    if s < 0 or d < 0: return
     m.move(d, s, n)
 }
 
 fn (m mut Machine&) move(d I64, s I64, n I64) {
-    if d == s { return }
+    if d == s: return
     # both on word boundaries, the commonest: whole words and their pointers moved together, a pointer not kept in
     # the part of a word after them
     if d % 8 == 0 and s % 8 == 0 {
@@ -1367,17 +1367,17 @@ fn (m mut Machine&) move(d I64, s I64, n I64) {
         return
     }
     if d < s {
-        for i in range n { m.wrRaw(d + i, 1, m.rdRaw(s + i, 1)) }
+        for i in range n: m.wrRaw(d + i, 1, m.rdRaw(s + i, 1))
     } else {
-        for i in range n { m.wrRaw(d + n - 1 - i, 1, m.rdRaw(s + n - 1 - i, 1)) }
+        for i in range n: m.wrRaw(d + n - 1 - i, 1, m.rdRaw(s + n - 1 - i, 1))
     }
-    for w in range d / 8, (d + n - 1) / 8 + 1 { m.prov[w] = 0 }
+    for w in range d / 8, (d + n - 1) / 8 + 1: m.prov[w] = 0
 }
 
 fn (m mut Machine&) zero(dst Ptr, n I64) {
-    if n <= 0 { return }
+    if n <= 0: return
     d := m.at(dst, n, true)
-    if d < 0 { return }
+    if d < 0: return
     m.unmark(d, n)
     i I64 = 0
     for i < n and (d + i) % 8 != 0 {
@@ -1388,7 +1388,7 @@ fn (m mut Machine&) zero(dst Ptr, n I64) {
         m.hw[(d + i) / 8] = 0
         i += 8
     }
-    if i < n { m.wrRaw(d + i, n - i, 0) }
+    if i < n: m.wrRaw(d + i, n - i, 0)
 }
 
 fn (m mut Machine&) allocOf(id I64) alloc { return m.al[id & slotMask] }
@@ -1396,10 +1396,10 @@ fn (m mut Machine&) allocOf(id I64) alloc { return m.al[id & slotMask] }
 # a scratch allocation of at least n bytes (k: 0 the register an aggregate is built in, 1-3 an operand's)
 fn (m mut Machine&) scratchFor(k I64, n I64) Ptr {
     id := m.scratch if k == 0 else m.tmps[k - 1]
-    if m.al[id & slotMask].Size >= n { return Ptr(id, 0) }
+    if m.al[id & slotMask].Size >= n: return Ptr(id, 0)
     m.release(id & slotMask)
     p := m.allocate(n * 2, aValue, m.program)
-    if m.halted { return NullPtr }
+    if m.halted: return NullPtr
     m.al[p.Id & slotMask].Owner = -1        # the machine's, whichever global was being initialized (K1)
     if k == 0 { m.scratch = p.Id } else { m.tmps[k - 1] = p.Id }
     return p
@@ -1438,7 +1438,7 @@ fn (m mut Machine&) addReg(s I64, kind I64, ty I64, p Ptr) {
     # C9b, O15: an instance in a region made in a scope that is no region is registered in that scope's list - its
     # close runs it in construction order with the rest - and on the region's chain, which a release runs first
     into := s
-    if m.scopes[sc].Kind == sRegion and m.live(m.scopes[sc].Owner) { into = m.scopes[sc].Owner }
+    if m.scopes[sc].Kind == sRegion and m.live(m.scopes[sc].Owner): into = m.scopes[sc].Owner
     ic := into & slotMask
     r := reg()
     r.Kind, r.Ty, r.Id, r.Off, r.Next, r.Prev, r.In = kind, ty, p.Id, p.Off, m.scopes[ic].Regs, -1, into
@@ -1446,7 +1446,7 @@ fn (m mut Machine&) addReg(s I64, kind I64, ty I64, p Ptr) {
         r.RNext = m.scopes[sc].DRegs
         m.scopes[sc].DRegs = slot
     }
-    if m.scopes[ic].Regs >= 0 { m.regs[m.scopes[ic].Regs].Prev = slot }
+    if m.scopes[ic].Regs >= 0: m.regs[m.scopes[ic].Regs].Prev = slot
     m.regs[slot] = r
     m.scopes[ic].Regs = slot
 }
@@ -1456,7 +1456,7 @@ fn (m mut Machine&) unlinkReg(slot I64) {
     g := m.regs[slot]
     if g.Prev >= 0: m.regs[g.Prev].Next = g.Next
     else if m.live(g.In): m.scopes[g.In & slotMask].Regs = g.Next
-    if g.Next >= 0 { m.regs[g.Next].Prev = g.Prev }
+    if g.Next >= 0: m.regs[g.Next].Prev = g.Prev
 }
 
 fn (m mut Machine&) newRegSlot() I64 {
@@ -1466,7 +1466,7 @@ fn (m mut Machine&) newRegSlot() I64 {
 
 # a region given to the own slot stored last: it closes when that slot's scope does, unless released before (O30)
 fn (m mut Machine&) adopt(region I64, parent I64) {
-    if not m.live(parent) or not m.live(region) { return }
+    if not m.live(parent) or not m.live(region): return
     r, p := region & slotMask, parent & slotMask
     m.scopes[r].Parent = parent
     m.scopes[r].Sibling = m.scopes[p].Child
@@ -1476,7 +1476,7 @@ fn (m mut Machine&) adopt(region I64, parent I64) {
 fn (m mut Machine&) disown(region I64) {
     r := region & slotMask
     parent := m.scopes[r].Parent
-    if parent == 0 or not m.live(parent) { return }
+    if parent == 0 or not m.live(parent): return
     p := parent & slotMask
     if m.scopes[p].Child == region {
         m.scopes[p].Child = m.scopes[r].Sibling
@@ -1510,14 +1510,14 @@ fn (m mut Machine&) stepClose() {
         m.unlinkReg(d)
         g := m.regs[d]
         m.freeRegs.Push(d)
-        if g.Kind == gDtor { m.runDtor(id, types.TypeId(I32(g.Ty)), Ptr(g.Id, g.Off)) }
+        if g.Kind == gDtor: m.runDtor(id, types.TypeId(I32(g.Ty)), Ptr(g.Id, g.Off))
         return
     }
     r := m.scopes[sc].Regs
     if r >= 0 {
         g := m.regs[r]
         m.scopes[sc].Regs = g.Next
-        if g.Next >= 0 { m.regs[g.Next].Prev = -1 }
+        if g.Next >= 0: m.regs[g.Next].Prev = -1
         m.freeRegs.Push(r)
         if g.Kind == gDtor: m.runDtor(id, types.TypeId(I32(g.Ty)), Ptr(g.Id, g.Off))
         else if g.Kind == gGen: m.closeGen(id, g.Ty)
@@ -1527,13 +1527,13 @@ fn (m mut Machine&) stepClose() {
     if c != 0 {
         m.scopes[sc].Child = m.scopes[c & slotMask].Sibling
         m.scopes[c & slotMask].Parent = 0
-        if m.live(c) { m.closing.Push(c) }
+        if m.live(c): m.closing.Push(c)
         return
     }
     if m.deadMode and m.scopes[sc].Early {
-        for a := m.scopes[sc].Allocs, a != 0, a = m.al[a].Next { m.early.Put(m.al[a].Gen << slotBits | a, true) }
+        for a := m.scopes[sc].Allocs, a != 0, a = m.al[a].Next: m.early.Put(m.al[a].Gen << slotBits | a, true)
     }
-    for m.scopes[sc].Allocs != 0 { m.release(m.scopes[sc].Allocs) }
+    for m.scopes[sc].Allocs != 0: m.release(m.scopes[sc].Allocs)
     s := m.scopes[sc]
     s.Live = false
     s.Early = false
@@ -1553,10 +1553,10 @@ fn (m mut Machine&) releaseHeld(p Ptr, ty types.TypeId, part Bool = false, slott
     empty := part and m.rd(p, 8) == 0
     region := m.regionOfObject(m.objectAt(p, ty)) if m.T.IsRef(ty) or m.T.OwnedPart(ty) else m.anchorRegion(p, ty)
     if empty: region = 0
-    if m.halted { return }
+    if m.halted: return
     m.zero(p, m.size(ty))
-    if region == 0 { return }
-    if part and not m.scopes[region & slotMask].Part { return }
+    if region == 0: return
+    if part and not m.scopes[region & slotMask].Part: return
     if slotted and not m.slotRegion(region): return
     m.closeRegion(region)
 }
@@ -1600,8 +1600,8 @@ fn (m mut Machine&) regionHomeOf(r I64) I64 {
 
 # O8d: the region an owner's value at p was built in (h) closed where none of its anchors names it - nothing reaches it
 fn (m mut Machine&) settle(h I64, p Ptr, ty types.TypeId) {
-    if h == 0 or not m.live(h) or m.scopes[h & slotMask].Kind != sRegion { return }
-    if m.anchorRegion(p, ty) == h or m.halted { return }
+    if h == 0 or not m.live(h) or m.scopes[h & slotMask].Kind != sRegion: return
+    if m.anchorRegion(p, ty) == h or m.halted: return
     m.closeRegion(h)
 }
 
@@ -1621,9 +1621,9 @@ fn (m mut Machine&) runDtor(closing I64, t types.TypeId, p Ptr) {
         return
     }
     fr := m.pushFrame(fi, rDtor, 0)
-    if fr < 0 { return }
+    if fr < 0: return
     f := m.fns.At(fi)
-    if f.Params.Len() > 0 { m.wrPtr(m.localPtr(fr, f.Params[0]), p) }
+    if f.Params.Len() > 0: m.wrPtr(m.localPtr(fr, f.Params[0]), p)
     # (O23a: its derived scopes found where it builds there - a scope's walk knows none)
     for i in range f.Vars.Len() { m.ws[m.fs[fr].Vars + i] = 0 if f.Vars[i] == mir.VarKind.Derived else closing }
 }
@@ -1635,7 +1635,7 @@ fn (m mut Machine&) runDtor(closing I64, t types.TypeId, p Ptr) {
 # a comparison too deep is said where it is written: the call into the first of the frames comparing
 fn (m mut Machine&) stopAtComparison() {
     k := m.nFs - 1
-    for k > 0 and m.cf[m.fs[k].Fn].Equal { k-- }
+    for k > 0 and m.cf[m.fs[k].Fn].Equal: k--
     if k < 0: return
     f := m.fns.At(m.fs[k].Fn)
     t := f.Blocks[m.fs[k].Block].T
@@ -1657,7 +1657,7 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
         }
         m.eqDepth++
     }
-    if m.cf[fi].ReadsBuild { m.UsedBuild = true }
+    if m.cf[fi].ReadsBuild: m.UsedBuild = true
     ls := m.cf[fi].Locals
     nl, ns, nv := ls.Len(), m.cf[fi].Scopes.Len(), m.cf[fi].NVars
     fr := frame()
@@ -1669,21 +1669,21 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
     if need > m.ws.Len() {
         old := m.ws
         n := old.Len()
-        for n < need { n *= 2 }
+        for n < need: n *= 2
         m.ws = Array<I64>(n)
-        for i in range m.nWs { m.ws[i] = old[i] }
+        for i in range m.nWs: m.ws[i] = old[i]
     }
     for i in range nl {
         id I64 = 0
         if ls[i].Home == mir.ScopeRef.Frame: id = m.allocate(m.size(ls[i].Ty), aValue, fr.Store).Id
         m.ws[m.nWs + i] = id
     }
-    for i in range nl, need - m.nWs { m.ws[m.nWs + i] = 0 }
+    for i in range nl, need - m.nWs: m.ws[m.nWs + i] = 0
     m.nWs = need
     if m.nFs >= m.fs.Len() {
         old := m.fs
         m.fs = Array<frame>(2 * old.Len())
-        for i in range m.nFs { m.fs[i] = old[i] }
+        for i in range m.nFs: m.fs[i] = old[i]
     }
     m.fs[m.nFs] = fr
     m.nFs++
@@ -1691,9 +1691,9 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
 }
 
 fn (m mut Machine&) popFrame() {
-    if m.nFs == 0 { return }
+    if m.nFs == 0: return
     m.nFs--
-    if m.cf[m.fs[m.nFs].Fn].Equal { m.eqDepth-- }
+    if m.cf[m.fs[m.nFs].Fn].Equal: m.eqDepth--
     m.nWs = m.fs[m.nFs].Locals
     m.dropOwnDefers(m.nFs)
 }
@@ -1737,7 +1737,7 @@ fn (m mut Machine&) flat(fi I64, fk I64, i I64, kind I64) {
     w := fast[o + 2]
     if kind == fStore {
         p, _ := m.element(m.localPtr(fi, mir.LocalId(I32(fast[o + 1]))), types.TypeId(I32(fast[o + 7])), m.flatIndex(fi, fast, o))
-        if m.halted { return }
+        if m.halted: return
         m.wr(p, w, m.flatValue(fi, fast, o + 3))
         return
     }
@@ -1746,7 +1746,7 @@ fn (m mut Machine&) flat(fi I64, fk I64, i I64, kind I64) {
         v = m.flatValue(fi, fast, o + 3)
     } else if kind == fLoad {
         p, _ := m.element(m.localPtr(fi, mir.LocalId(I32(fast[o + 3]))), types.TypeId(I32(fast[o + 7])), m.flatIndex(fi, fast, o))
-        if m.halted { return }
+        if m.halted: return
         v = m.rd(p, w)
     } else {
         op := m.cf[fk].FastOp[i]
@@ -1756,13 +1756,13 @@ fn (m mut Machine&) flat(fi I64, fk I64, i I64, kind I64) {
             v = m.unary(op, a, at, m.shape(at))
         } else {
             b := m.flatValue(fi, fast, o + 5)
-            if m.halted { return }
+            if m.halted: return
             v = wordValue(op, a, b) if fast[o + 10] == 1 else m.numOp(op, a, b, at, types.TypeId(I32(fast[o + 8])), m.shape(at))
         }
     }
-    if m.halted { return }
+    if m.halted: return
     d := m.localAt(fi, fast[o + 1], w, true)
-    if d < 0 { return }
+    if d < 0: return
     m.unmark(d, w)
     m.wrRaw(d, w, v)
 }
@@ -1776,9 +1776,9 @@ fn (m mut Machine&) localAt(fi I64, l I64, n I64, write Bool) I64 {
         return -1
     }
     slot := id & slotMask
-    if m.halted or slot >= m.nAl { return m.at(Ptr(id, 0), n, write) }
+    if m.halted or slot >= m.nAl: return m.at(Ptr(id, 0), n, write)
     a := m.al[slot]
-    if a.Kind == aFree or a.Gen != id >> slotBits or n > a.Size { return m.at(Ptr(id, 0), n, write) }
+    if a.Kind == aFree or a.Gen != id >> slotBits or n > a.Size: return m.at(Ptr(id, 0), n, write)
     if write and (a.ReadOnly or (a.Owner >= 0 and a.Owner != m.initGlobal and (m.When == Mode.Compile or not m.globals[a.Owner].Mutable))) {
         return m.at(Ptr(id, 0), n, write)
     }
@@ -1788,9 +1788,9 @@ fn (m mut Machine&) localAt(fi I64, l I64, n I64, write Bool) I64 {
 # a flat form's operand at slot: a local's bits (its width after it), or the constant's
 fn (m mut Machine&) flatValue(fi I64, fast Array<I64>&, slot I64) I64 {
     l := fast[slot]
-    if l < 0 { return fast[slot + 1] }
+    if l < 0: return fast[slot + 1]
     a := m.localAt(fi, l, fast[slot + 1], false)
-    if a < 0 { return 0 }
+    if a < 0: return 0
     return m.rdRaw(a, fast[slot + 1])
 }
 
@@ -1831,11 +1831,11 @@ fn (m mut Machine&) buildScope(fi I64, r mir.ScopeRef) I64 {
 fn (m mut Machine&) ownParams(nf I64, fi I64) {
     copied := m.cf[fi].Copied
     for i in range copied.Len() {
-        if not copied[i] { continue }
+        if not copied[i]: continue
         l := m.fns.At(fi).Params[i]
         p := m.localPtr(nf, l)
         n := m.rd(p, 8)
-        if n <= 0 or m.halted { continue }
+        if n <= 0 or m.halted: continue
         data := m.rdPtr(Ptr(p.Id, p.Off + 8))
         bytes := n * m.size(m.elemOf(m.cf[fi].Locals[I64(l)].Ty))
         q := m.allocate(bytes, aValue, m.program)
@@ -1874,7 +1874,7 @@ fn (m mut Machine&) place(fi I64, p mir.Lvalue) Ptr, types.TypeId {
         case mir.Base.None { }
     }
     for i in range p.Path.N {
-        if m.halted { return NullPtr, ty }
+        if m.halted: return NullPtr, ty
         match m.cf[k].Projs[I64(p.Path.At) + i] {
             case mir.Proj.Field(j) {
                 ptr = Ptr(ptr.Id, ptr.Off + m.partOffset(ty, j))
@@ -1888,12 +1888,12 @@ fn (m mut Machine&) place(fi I64, p mir.Lvalue) Ptr, types.TypeId {
             case mir.Proj.At(j) { ptr, ty = m.element(ptr, ty, j) }
             case mir.Proj.Deref {
                 r := t.Referent(t.Repr(ty))
-                if not m.rtArray(r) { ptr = m.rdPtr(ptr) }
-                if ptr.Id == 0 { m.refuse(WhyNull) }
+                if not m.rtArray(r): ptr = m.rdPtr(ptr)
+                if ptr.Id == 0: m.refuse(WhyNull)
                 ty = r
             }
             case mir.Proj.Payload(tag) {
-                if m.rd(ptr, 8) != tag { m.refuse(WhyPayload) }
+                if m.rd(ptr, 8) != tag: m.refuse(WhyPayload)
                 ptr = Ptr(ptr.Id, ptr.Off + 8)
                 ty = m.payloadType(ty, tag)
             }
@@ -1906,7 +1906,7 @@ fn (m mut Machine&) place(fi I64, p mir.Lvalue) Ptr, types.TypeId {
 fn (m mut Machine&) element(p Ptr, ty types.TypeId, i I64) Ptr, types.TypeId {
     e := m.elemOf(ty)
     data, n := m.arrayView(p, ty)
-    if m.halted { return NullPtr, e }
+    if m.halted: return NullPtr, e
     if i < 0 or i >= n {
         m.refuse(WhyOutside)
         return NullPtr, e
@@ -1921,13 +1921,13 @@ fn (m mut Machine&) arrayView(p Ptr, ty types.TypeId) Ptr, I64 {
     r := t.Repr(ty)
     if t.KindOf(r) == types.Kind.Ref {
         x := t.Repr(t.Referent(r))
-        if t.Length(x) != types.TypeId(0) { return m.rdPtr(p), m.fixedLen(x) }
+        if t.Length(x) != types.TypeId(0): return m.rdPtr(p), m.fixedLen(x)
     } else if t.Length(r) != types.TypeId(0) {
         return p, m.fixedLen(r)
     }
     n := m.rd(p, 8)
     data := m.rdPtr(Ptr(p.Id, p.Off + 8))
-    if n > 0 and data.Id == 0 { m.refuse(WhyNull) }
+    if n > 0 and data.Id == 0: m.refuse(WhyNull)
     return data, n
 }
 
@@ -2037,17 +2037,17 @@ fn bmask(b I64) I64 { return -1 if b >= 64 else (I64(1) << b) - 1 }
 # way whatever wrote it (a wide one's low word, its high word the constant's extension, wideConst)
 fn (m mut Machine&) canonBits(ty types.TypeId, bits I64) I64 {
     sh := m.shape(ty)
-    if sh == vInt or sh == vUint { return bits & bmask(m.ibits(ty)) }
-    if sh == vWide { return bits }
+    if sh == vInt or sh == vUint: return bits & bmask(m.ibits(ty))
+    if sh == vWide: return bits
     return bits & m.mask(m.width(ty))
 }
 
 # an integer's value from its bits: sign-extended for a signed type, as stored for an unsigned one
 fn (m mut Machine&) intValue(bits I64, ty types.TypeId) I64 {
     b := m.ibits(ty)
-    if b >= 64 { return bits }
+    if b >= 64: return bits
     v := bits & bmask(b)
-    if m.shape(ty) == vInt and ((v >> (b - 1)) & 1) == 1 { return v | ~bmask(b) }
+    if m.shape(ty) == vInt and ((v >> (b - 1)) & 1) == 1: return v | ~bmask(b)
     return v
 }
 
@@ -2066,7 +2066,7 @@ fn (m mut Machine&) dataFor(f mir.Fn&, ty types.TypeId, c I32, file I64, sp sour
     if id == 0 {
         e := m.elemOf(ty)
         p := m.allocate(n * m.size(e), aData, m.program)
-        if m.halted { return NullPtr, 0 }
+        if m.halted: return NullPtr, 0
         m.writeElems(f, p, e, node)
         m.al[p.Id & slotMask].ReadOnly = true
         m.al[p.Id & slotMask].Owner = -1    # constant data is no global's, whichever made it first (K2b)
@@ -2089,7 +2089,7 @@ fn (m mut Machine&) writeElems(f mir.Fn&, p Ptr, e types.TypeId, node mir.ConstN
     match node {
         case mir.ConstNode.Bits(v) { m.wr(p, m.width(e), v) }
         case mir.ConstNode.Bytes(r) {
-            for i in range r.N { m.wr(Ptr(p.Id, p.Off + i), 1, I64(f.Bytes[I64(r.At) + i])) }
+            for i in range r.N: m.wr(Ptr(p.Id, p.Off + i), 1, I64(f.Bytes[I64(r.At) + i]))
         }
         case mir.ConstNode.Items(r) {
             for i in range r.N {
@@ -2115,10 +2115,10 @@ fn (m mut Machine&) writeItem(f mir.Fn&, at Ptr, e types.TypeId, item mir.ConstN
     n := m.constLen(f, item)
     ee := m.elemOf(e)
     q := m.allocate(n * m.size(ee), aData, m.program)
-    if m.halted { error Halted }
+    if m.halted: error Halted
     m.writeElems(f, q, ee, item)
     m.al[q.Id & slotMask].ReadOnly = true
-    if sh == vPair { m.wr(at, 8, n) }
+    if sh == vPair: m.wr(at, 8, n)
     m.wrPtr(Ptr(at.Id, at.Off + (8 if sh == vPair else 0)), q)
 }
 
@@ -2133,7 +2133,7 @@ fn (m mut Machine&) putData(fi I64, dst Ptr, ty types.TypeId, c I32, file I64, s
         case _ { }
     }
     p, n := m.dataFor(f, ty, c, file, sp)
-    if m.halted { return }
+    if m.halted: return
     match m.shape(ty) {
         case vPair {
             m.wr(dst, 8, n)
@@ -2150,7 +2150,7 @@ fn (m mut Machine&) putData(fi I64, dst Ptr, ty types.TypeId, c I32, file I64, s
 # a statement's value stored into a place (S4): the place first, its index locals read, then the value, then the store
 fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
     dst, dt := m.place(fi, p)
-    if m.halted { return }
+    if m.halted: return
     match rv {
         case mir.Rvalue.Use(x) { m.put(fi, dst, dt, x) }
         case mir.Rvalue.Ref(q, ty) { m.ref(fi, dst, q, ty) }
@@ -2231,7 +2231,7 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
         # the built program's slot put back - the evaluator's dead-region mode the stricter oracle)
         case mir.Rvalue.Region(s), mir.Rvalue.Part(s), mir.Rvalue.Slots(s) {
             parent := m.buildScope(fi, s)
-            if m.halted { return }
+            if m.halted: return
             id := m.region(parent)
             m.scopes[id & slotMask].Slots = rv == mir.Rvalue.Slots
             m.scopes[id & slotMask].Part = rv == mir.Rvalue.Part
@@ -2239,7 +2239,7 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
         }
         case mir.Rvalue.RegionOr(x, s) {
             id := m.regionOfObject(m.objectOf(fi, x))
-            if id == 0 { id = m.scopeOf(fi, s) }
+            if id == 0: id = m.scopeOf(fi, s)
             m.wr(dst, 8, id)
         }
         case mir.Rvalue.ScopeOf(x) { m.wr(dst, 8, m.foundScope(m.objectOf(fi, x))) }
@@ -2274,10 +2274,10 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
 # compiling is refused, left to the run time (K1: the evaluator never guesses which of the two the run time gives)
 fn (m mut Machine&) weakRead(fi I64, dst Ptr, q mir.Lvalue) {
     src, _ := m.place(fi, q)
-    if m.halted { return }
+    if m.halted: return
     p := m.rdPtr(src)
     # (an instance reclaimed - O8e - reads null, as its bumped generation makes a built program's weak read)
-    if p.Id != 0 and not m.genLive(p) and m.When == Mode.Run { p = NullPtr }
+    if p.Id != 0 and not m.genLive(p) and m.When == Mode.Run: p = NullPtr
     if p.Id != 0 and m.genHeld(p) == 0 {
         if m.When == Mode.Compile {
             m.refuse(WhyWeakUnheld)
@@ -2381,7 +2381,7 @@ fn (m mut Machine&) genWalk(p Ptr, ty types.TypeId, top Bool, each fn&(q Ptr)) {
         if t.Length(r) == types.TypeId(0) and not top: return
         data, n := m.arrayView(p, r)
         es := m.size(t.Elem(r))
-        for i in range n { m.genWalk(Ptr(data.Id, data.Off + i * es), t.Elem(r), false, each) }
+        for i in range n: m.genWalk(Ptr(data.Id, data.Off + i * es), t.Elem(r), false, each)
         return
     }
     if mir.HasFields(t, r) {
@@ -2413,7 +2413,7 @@ fn (m mut Machine&) holderCheck(q Ptr) {
             continue
         }
         es := m.size(a.Ty)
-        for i in range a.Count { m.genWalk(Ptr(at.Id, i * es), a.Ty, false, look) }
+        for i in range a.Count: m.genWalk(Ptr(at.Id, i * es), a.Ty, false, look)
     }
     for g in m.globals {
         if g.State == 2 and g.Store != 0: m.genWalk(Ptr(g.Store, 0), types.TypeId(I32(g.Ty)), false, look)
@@ -2431,30 +2431,30 @@ fn (m mut Machine&) objectOf(fi I64, x mir.Operand) Ptr {
 
 fn (m mut Machine&) objectAt(p Ptr, ty types.TypeId) Ptr {
     a := m.arrayOf(ty)
-    if a != types.UnknownT and m.T.Length(a) == types.TypeId(0) { return m.rdPtr(Ptr(p.Id, p.Off + 8)) }
+    if a != types.UnknownT and m.T.Length(a) == types.TypeId(0): return m.rdPtr(Ptr(p.Id, p.Off + 8))
     return m.rdPtr(p)
 }
 
 # O8d: the region an object was built in - its allocation's scope, where that is a live region - else 0 (null, constant
 # data, anything built in a scope of another kind)
 fn (m mut Machine&) regionOfObject(q Ptr) I64 {
-    if q.Id == 0 { return 0 }
+    if q.Id == 0: return 0
     slot := q.Id & slotMask
-    if slot >= m.nAl or m.al[slot].Gen != q.Id >> slotBits { return 0 }
+    if slot >= m.nAl or m.al[slot].Gen != q.Id >> slotBits: return 0
     sc := m.al[slot].Scope
-    if not m.live(sc) or m.scopes[sc & slotMask].Kind != sRegion { return 0 }
+    if not m.live(sc) or m.scopes[sc & slotMask].Kind != sRegion: return 0
     return sc
 }
 
 # O29: the scope an object lives in, as the run time finds it from its address - its allocation's scope, a region read
 # as the scope it lives in - else the program's (null, constant data, a frame's own storage, a scope closed)
 fn (m mut Machine&) foundScope(q Ptr) I64 {
-    if q.Id == 0 { return m.program }
+    if q.Id == 0: return m.program
     slot := q.Id & slotMask
-    if slot >= m.nAl or m.al[slot].Gen != q.Id >> slotBits { return m.program }
+    if slot >= m.nAl or m.al[slot].Gen != q.Id >> slotBits: return m.program
     sc := m.al[slot].Scope
-    for m.live(sc) and m.scopes[sc & slotMask].Kind == sRegion { sc = m.regionHome(sc) }
-    if not m.live(sc) { return m.program }
+    for m.live(sc) and m.scopes[sc & slotMask].Kind == sRegion: sc = m.regionHome(sc)
+    if not m.live(sc): return m.program
     k := m.scopes[sc & slotMask].Kind
     return m.program if k == sStore or k == sInert or k == sBuilder else sc
 }
@@ -2469,7 +2469,7 @@ fn (m mut Machine&) regionHome(r I64) I64 {
 fn (m mut Machine&) arrayOf(ty types.TypeId) types.TypeId {
     t := m.T
     r := t.Repr(ty)
-    if t.KindOf(r) == types.Kind.Ref { r = t.Repr(t.Referent(r)) }
+    if t.KindOf(r) == types.Kind.Ref: r = t.Repr(t.Referent(r))
     return r if t.KindOf(r) == types.Kind.Array else types.UnknownT
 }
 
@@ -2481,20 +2481,20 @@ fn (m mut Machine&) convertArray(fi I64, dst Ptr, x mir.Operand, to types.TypeId
     from := m.opType(fi, x)
     fa, ga := m.arrayOf(from), m.arrayOf(to)
     p := m.addr(fi, x, 1)
-    if m.halted { return }
+    if m.halted: return
     fixedFrom, fixedTo := t.Length(fa) != types.TypeId(0), t.Length(ga) != types.TypeId(0)
     if fixedFrom and not t.IsRef(t.Repr(from)) and not fixedTo {
         n := m.fixedLen(fa)
         bytes := n * m.size(t.Elem(fa))
         q := m.allocate(bytes, aValue, m.program)
-        if m.halted { return }
+        if m.halted: return
         m.copy(q, p, bytes)
         m.wr(dst, 8, n)
         m.wrPtr(Ptr(dst.Id, dst.Off + 8), q)
         return
     }
     data, n := m.arrayView(p, from)
-    if m.halted { return }
+    if m.halted: return
     if fixedTo {
         if t.IsRef(t.Repr(to)): m.wrPtr(dst, data)
         else: m.copy(dst, data, m.size(ga))
@@ -2505,7 +2505,7 @@ fn (m mut Machine&) convertArray(fi I64, dst Ptr, x mir.Operand, to types.TypeId
 }
 
 fn (m mut Machine&) tagOf(p Ptr, ty types.TypeId) I64 {
-    if m.shape(ty) == vOrd { return m.intValue(m.rd(p, 4), mir.I32T) }
+    if m.shape(ty) == vOrd: return m.intValue(m.rd(p, 4), mir.I32T)
     return m.rd(p, 8)
 }
 
@@ -2513,7 +2513,7 @@ fn (m mut Machine&) tagOf(p Ptr, ty types.TypeId) I64 {
 # run-time-length array is (T11), a fixed array's length from its type
 fn (m mut Machine&) ref(fi I64, dst Ptr, q mir.Lvalue, ty types.TypeId) {
     src, st := m.place(fi, q)
-    if m.halted { return }
+    if m.halted: return
     if m.shape(ty) != vPair {
         m.wrPtr(dst, src)
         return
@@ -2535,7 +2535,7 @@ fn (m mut Machine&) aggregate(fi I64, dst Ptr, ty types.TypeId, tag I64, args mi
         pt := m.T.Repr(ty)
         fs := m.T.Items(m.T.Fields(pt))
         offs := m.T.BitOffsets(pt)
-        for i in range args.N { m.packInto(s, offs[i], fs[i], m.addr(fi, m.arg(fi, args, i), 1)) }
+        for i in range args.N: m.packInto(s, offs[i], fs[i], m.addr(fi, m.arg(fi, args, i), 1))
         m.copy(dst, s, n)
         return
     }
@@ -2569,7 +2569,7 @@ fn (m mut Machine&) packedOp(fi I64, dst Ptr, op typed.PrimOp, args mir.Range) {
     n := m.size(pt)
     s := m.scratchFor(0, n + m.size(ft))
     m.copy(s, m.addr(fi, x, 1), n)
-    if m.halted { return }
+    if m.halted: return
     if op == typed.PrimOp.Unpack {
         out := Ptr(s.Id, n)
         m.unpackInto(out, ft, s, off)
@@ -2637,7 +2637,7 @@ fn (m mut Machine&) copyBits(dst Ptr, doff I64, src Ptr, soff I64, n I64) {
         bit := (m.rd(Ptr(src.Id, src.Off + sb / 8), 1) >> (sb % 8)) & 1
         at := Ptr(dst.Id, dst.Off + db / 8)
         m.wr(at, 1, (m.rd(at, 1) & ~(I64(1) << (db % 8))) | (bit << (db % 8)))
-        if m.halted { return }
+        if m.halted: return
     }
 }
 
@@ -2646,27 +2646,27 @@ fn (m mut Machine&) newRef(fi I64, dst Ptr, s mir.ScopeRef, x mir.Operand, ty ty
     if m.rtArray(r) {
         # a run-time-length array value given storage of its own: its elements copied there, as the run time does
         p := m.addr(fi, x, 1)
-        if m.halted { return }
+        if m.halted: return
         data, n := m.arrayView(p, r)
-        if m.halted { return }
+        if m.halted: return
         sc := m.buildScope(fi, s)
-        if m.halted { return }
+        if m.halted: return
         bytes := n * m.size(m.elemOf(r))
         q := m.allocate(bytes, aValue, sc)
-        if m.halted { return }
+        if m.halted: return
         m.copy(q, data, bytes)
         m.wr(dst, 8, n)
         m.wrPtr(Ptr(dst.Id, dst.Off + 8), q)
         return
     }
     sc := m.buildScope(fi, s)
-    if m.halted { return }
+    if m.halted: return
     if m.Gen.IsGen(m.T, r) {
         m.wrPtr(dst, m.genNew(fi, sc, r, x))
         return
     }
     p := m.allocate(m.size(r), aValue, sc)
-    if m.Gen.Decls.Len() > 0 { m.al[p.Id & slotMask].Ty = r }
+    if m.Gen.Decls.Len() > 0: m.al[p.Id & slotMask].Ty = r
     m.put(fi, p, r, x)
     m.wrPtr(dst, p)
 }
@@ -2677,7 +2677,7 @@ fn (m mut Machine&) genNew(fi I64, sc I64, r types.TypeId, x mir.Operand) Ptr {
     al := m.T.Align(r)
     h := 8 if al <= 8 else al
     raw := m.allocate(m.size(r) + h, aValue, sc)
-    if m.halted { return NullPtr }
+    if m.halted: return NullPtr
     m.al[raw.Id & slotMask].Hdr, m.al[raw.Id & slotMask].Ty = h, r
     m.wr(Ptr(raw.Id, h - 8), 8, 1 | (3 << 16) if m.scopes[sc & slotMask].Kind == sStore else 1)
     p := Ptr(raw.Id, h)
@@ -2694,13 +2694,13 @@ fn (m mut Machine&) newArray(fi I64, dst Ptr, s mir.ScopeRef, ty types.TypeId, n
         return
     }
     sc := m.buildScope(fi, s)
-    if m.halted { return }
+    if m.halted: return
     p := m.allocate(count * es, aValue, sc)
-    if m.halted { return }
-    if m.Gen.Decls.Len() > 0 { m.al[p.Id & slotMask].Ty, m.al[p.Id & slotMask].Count = e, count }
+    if m.halted: return
+    if m.Gen.Decls.Len() > 0: m.al[p.Id & slotMask].Ty, m.al[p.Id & slotMask].Count = e, count
     if fill != mir.Operand.None and count > 0 {
         m.put(fi, p, e, fill)
-        for i in range 1, count { m.copy(Ptr(p.Id, i * es), p, es) }
+        for i in range 1, count: m.copy(Ptr(p.Id, i * es), p, es)
     }
     m.wr(dst, 8, count)
     m.wrPtr(Ptr(dst.Id, dst.Off + 8), p)
@@ -2708,11 +2708,11 @@ fn (m mut Machine&) newArray(fi I64, dst Ptr, s mir.ScopeRef, ty types.TypeId, n
 
 fn (m mut Machine&) slice(fi I64, dst Ptr, q mir.Lvalue, lo mir.Operand, hi mir.Operand, ty types.TypeId) {
     src, st := m.place(fi, q)
-    if m.halted { return }
+    if m.halted: return
     data, n := m.arrayView(src, st)
     a := m.intValue(m.scalar(fi, lo), m.opType(fi, lo))
     b := m.intValue(m.scalar(fi, hi), m.opType(fi, hi))
-    if m.halted { return }
+    if m.halted: return
     if a < 0 or a > b or b > n {
         m.refuse(WhyOutside)
         return
@@ -2756,10 +2756,10 @@ fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, arg
     }
     f := m.fnOfFrame(fi)
     tys := Array<types.TypeId>(I64(args.N))
-    for i in range args.N { tys[i] = m.opType(fi, f.Ops[I64(args.At) + i]) }
+    for i in range args.N: tys[i] = m.opType(fi, f.Ops[I64(args.At) + i])
     offs, total := m.pack(tys)
     sc := m.buildScope(fi, s)
-    if m.halted { return }
+    if m.halted: return
     env := m.allocate(total + 8 * I64(args.N), aValue, sc)
     for i in range args.N {
         x := f.Ops[I64(args.At) + i]
@@ -2768,7 +2768,7 @@ fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, arg
         held := sc
         if m.shape(tys[i]) == vPtr or m.shape(tys[i]) == vPair {
             q := m.rdPtr(Ptr(env.Id, offs[i] + (8 if m.shape(tys[i]) == vPair else 0)))
-            if q.Id != 0 { held = m.al[q.Id & slotMask].Scope }
+            if q.Id != 0: held = m.al[q.Id & slotMask].Scope
         }
         m.wr(Ptr(env.Id, total + 8 * i), 8, held)
     }
@@ -2782,10 +2782,10 @@ fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, arg
 fn (m mut Machine&) genClosure(fi I64, dst Ptr, cp Ptr, gi I64, s mir.ScopeRef, args mir.Range) {
     f := m.fnOfFrame(fi)
     tys := Array<types.TypeId>(I64(args.N))
-    for i in range args.N { tys[i] = m.opType(fi, f.Ops[I64(args.At) + i]) }
+    for i in range args.N: tys[i] = m.opType(fi, f.Ops[I64(args.At) + i])
     offs, total := m.pack(tys)
     sc := m.buildScope(fi, s)
-    if m.halted { return }
+    if m.halted: return
     env := m.allocate(total + 8 * I64(args.N) + 8, aValue, sc)
     for i in range args.N {
         x := f.Ops[I64(args.At) + i]
@@ -2793,7 +2793,7 @@ fn (m mut Machine&) genClosure(fi I64, dst Ptr, cp Ptr, gi I64, s mir.ScopeRef, 
         held := sc
         if m.shape(tys[i]) == vPtr or m.shape(tys[i]) == vPair {
             q := m.rdPtr(Ptr(env.Id, offs[i] + (8 if m.shape(tys[i]) == vPair else 0)))
-            if q.Id != 0 { held = m.al[q.Id & slotMask].Scope }
+            if q.Id != 0: held = m.al[q.Id & slotMask].Scope
         }
         m.wr(Ptr(env.Id, total + 8 * i), 8, held)
     }
@@ -2822,7 +2822,7 @@ fn (m mut Machine&) genClosure(fi I64, dst Ptr, cp Ptr, gi I64, s mir.ScopeRef, 
 # the index of the generator a Next's environment names (genClosure)
 fn (m mut Machine&) genIndex(g mir.Fn&, env Ptr) I64 {
     tys := Array<types.TypeId>(g.Captures.Len())
-    for i in range g.Captures.Len() { tys[i] = g.Locals[I64(g.Captures[i])].Ty }
+    for i in range g.Captures.Len(): tys[i] = g.Locals[I64(g.Captures[i])].Ty
     _, total := m.pack(tys)
     return m.rd(Ptr(env.Id, env.Off + total + 8 * g.Captures.Len()), 8)
 }
@@ -2841,11 +2841,11 @@ fn (m mut Machine&) restoreGen(ri I64, ret I64, retArg I64) I64 {
     if need > m.ws.Len() {
         old := m.ws
         n := old.Len()
-        for n < need { n *= 2 }
+        for n < need: n *= 2
         m.ws = Array<I64>(n)
-        for i in range m.nWs { m.ws[i] = old[i] }
+        for i in range m.nWs: m.ws[i] = old[i]
     }
-    for i in range rec.WsN { m.ws[m.nWs + i] = m.genWords[rec.At + i] }
+    for i in range rec.WsN: m.ws[m.nWs + i] = m.genWords[rec.At + i]
     fr.Locals, fr.Scopes, fr.Vars = m.nWs, m.nWs + nl, m.nWs + nl + ns
     fr.Ret, fr.RetArg = ret, retArg
     fr.Closing = m.closing.Len()
@@ -2854,7 +2854,7 @@ fn (m mut Machine&) restoreGen(ri I64, ret I64, retArg I64) I64 {
     if m.nFs >= m.fs.Len() {
         old := m.fs
         m.fs = Array<frame>(2 * old.Len())
-        for i in range m.nFs { m.fs[i] = old[i] }
+        for i in range m.nFs: m.fs[i] = old[i]
     }
     m.fs[m.nFs] = fr
     m.nFs++
@@ -2875,7 +2875,7 @@ fn (m mut Machine&) suspend(fi I64, x mir.Operand, resume mir.BlockId, held mir.
         return
     }
     m.deliver(fi, x)
-    if m.halted { return }
+    if m.halted: return
     fr := m.fs[fi]
     fr.Block = I64(resume)
     fr.Stmt = 0
@@ -2883,10 +2883,10 @@ fn (m mut Machine&) suspend(fi I64, x mir.Operand, resume mir.BlockId, held mir.
     n := m.nWs - fr.Locals
     if rec.At < 0 {
         rec.At = m.genWords.Len()
-        for _ in range n + m.cf[fr.Fn].Scopes.Len() + 1 { m.genWords.Push(0) }
+        for _ in range n + m.cf[fr.Fn].Scopes.Len() + 1: m.genWords.Push(0)
     }
     rec.WsN = n
-    for i in range n { m.genWords[rec.At + i] = m.ws[fr.Locals + i] }
+    for i in range n: m.genWords[rec.At + i] = m.ws[fr.Locals + i]
     f := m.fns.At(fr.Fn)
     k := rec.At + n
     for i in range held.N {
@@ -2925,13 +2925,13 @@ fn (m mut Machine&) closeGen(closing I64, ri I64) {
         m.gens[ri].NextFree = try m.freeGens.Get(rec.Fn) catch default -1
         m.freeGens.Put(rec.Fn, ri)
     }
-    if rec.State == 0 { m.freshDrops(closing, rec) }
-    if rec.State != 1 { return }
+    if rec.State == 0: m.freshDrops(closing, rec)
+    if rec.State != 1: return
     m.gens[ri].State = 3
     # S20: let go part way - its frame pushed again as it was, going on at its suspend's drop path (its deferred code
     # and holders' drops run, its scopes closed) as a destructor's frame is, returning nothing
     nf := m.restoreGen(ri, rDtor, 0)
-    if nf < 0 { return }
+    if nf < 0: return
     m.fs[nf].Block = rec.Drop
     m.fs[nf].Stmt = 0
     m.fs[nf].Gen = I32(-1)   # (its record free already: no one's walk now)
@@ -2987,14 +2987,14 @@ fn (m Machine&) dropWork(fi I64, b I64) Bool {
 # ended, last first, in the scope closing, as emit's freshDrops ends them (each a destructor's frame, pushed first ending last)
 fn (m mut Machine&) freshDrops(closing I64, rec genRec) {
     g := m.fns.At(rec.Fn)
-    if g.Captures.Len() == 0 or rec.Env.Id == 0 { return }
+    if g.Captures.Len() == 0 or rec.Env.Id == 0: return
     tys := Array<types.TypeId>(g.Captures.Len())
-    for i in range g.Captures.Len() { tys[i] = g.Locals[I64(g.Captures[i])].Ty }
+    for i in range g.Captures.Len(): tys[i] = g.Locals[I64(g.Captures[i])].Ty
     offs, _ := m.pack(tys)
     for i in range g.Captures.Len() {
         if m.T.IsRef(tys[i]) or not m.T.NeedsDrop(tys[i]): continue
         m.runDtor(closing, tys[i], Ptr(rec.Env.Id, rec.Env.Off + offs[i]))
-        if m.halted { return }
+        if m.halted: return
     }
 }
 
@@ -3006,7 +3006,7 @@ fn (m mut Machine&) pack(tys Array<types.TypeId>&) Array<I64>, I64 {
     for i in range tys.Len() {
         m.lay(tys[i])
         a := m.T.Align(tys[i]) if tys[i] != types.VoidT else 1
-        if a < 1 { a = 1 }
+        if a < 1: a = 1
         off = (off + a - 1) / a * a
         offs[i] = off
         off += m.size(tys[i])
@@ -3016,7 +3016,7 @@ fn (m mut Machine&) pack(tys Array<types.TypeId>&) Array<I64>, I64 {
 
 # an error code under one list as the same error under another (R6, R17)
 fn (m mut Machine&) recode(code I64, from types.ListId, to types.ListId) I64 {
-    if code == 0 { return 0 }
+    if code == 0: return 0
     xs := m.T.Items(from)
     k := (code >> 16) - 1
     if k < 0 or k >= xs.Len() {
@@ -3034,11 +3034,11 @@ fn (m mut Machine&) recode(code I64, from types.ListId, to types.ListId) I64 {
 fn (m mut Machine&) text(fi I64, dst Ptr, b mir.ScopeRef, into mir.ScopeRef) {
     bs := m.scopeOf(fi, b)
     sc := m.buildScope(fi, into)
-    if m.halted or not m.live(bs) { return }
+    if m.halted or not m.live(bs): return
     n := m.scopes[bs & slotMask].BufLen
     p := m.allocate(n, aValue, sc)
-    if m.halted { return }
-    if n > 0 { m.copy(p, Ptr(m.scopes[bs & slotMask].Buf, 0), n) }
+    if m.halted: return
+    if n > 0: m.copy(p, Ptr(m.scopes[bs & slotMask].Buf, 0), n)
     m.wr(dst, 8, n)
     m.wrPtr(Ptr(dst.Id, dst.Off + 8), p)
 }
@@ -3056,11 +3056,11 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
             p := m.addr(fi, x, 1)
             q := m.addr(fi, m.arg(fi, args, 1), 2)
             n := m.size(at)
-            if m.halted { return 0 }
+            if m.halted: return 0
             for w in range (n + 7) / 8 {
                 a := m.rdPtrOrBits(Ptr(p.Id, p.Off + 8 * w))
                 b := m.rdPtrOrBits(Ptr(q.Id, q.Off + 8 * w))
-                if a.Id != b.Id or a.Off != b.Off { return 0 }
+                if a.Id != b.Id or a.Off != b.Off: return 0
             }
             return 1
         }
@@ -3073,7 +3073,7 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
             # T34: the table's identity word against the type's - a null any's none
             p := m.addr(fi, x, 1)
             tab := m.rdPtr(Ptr(p.Id, p.Off + 8))
-            if m.halted or tab.Id == 0 { return 0 }
+            if m.halted or tab.Id == 0: return 0
             id := m.rdPtr(tab)
             return 1 if id.Id == m.typeid(m.opType(fi, m.arg(fi, args, 1))).Id else 0
         }
@@ -3086,9 +3086,9 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
         case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap
              typed.PrimOp.RotateLeft, typed.PrimOp.RotateRight {
             n I64 = 0
-            if op == typed.PrimOp.RotateLeft or op == typed.PrimOp.RotateRight { n = m.scalar(fi, m.arg(fi, args, 1)) }
+            if op == typed.PrimOp.RotateLeft or op == typed.PrimOp.RotateRight: n = m.scalar(fi, m.arg(fi, args, 1))
             a := m.scalar(fi, x)
-            if m.halted { return 0 }
+            if m.halted: return 0
             return bitOp(op, U64(a & bmask(m.ibits(at))), m.ibits(at), n)
         }
         case _ { }
@@ -3098,8 +3098,8 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
     if op == typed.PrimOp.Neg or op == typed.PrimOp.BitNot or op == typed.PrimOp.Not: return m.unary(op, a, at, sh)
     yt := m.opType(fi, m.arg(fi, args, 1))
     b := m.scalar(fi, m.arg(fi, args, 1))
-    if m.halted { return 0 }
-    if sh == vFloat or sh == vInt or sh == vUint or sh == vBool { return m.numOp(op, a, b, at, yt, sh) }
+    if m.halted: return 0
+    if sh == vFloat or sh == vInt or sh == vUint or sh == vBool: return m.numOp(op, a, b, at, yt, sh)
     # == and != of anything else (a reference, an error code, a plain enum): its words alike
     if op == typed.PrimOp.Eq or op == typed.PrimOp.Ne {
         p := m.addr(fi, x, 1)
@@ -3110,7 +3110,7 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
             k := 8 if n - 8 * w >= 8 else n - 8 * w
             pa := m.rdPtrOrBits(Ptr(p.Id, p.Off + 8 * w)) if k == 8 else Ptr(0, m.rd(Ptr(p.Id, p.Off + 8 * w), k))
             qa := m.rdPtrOrBits(Ptr(q.Id, q.Off + 8 * w)) if k == 8 else Ptr(0, m.rd(Ptr(q.Id, q.Off + 8 * w), k))
-            if pa.Id != qa.Id or pa.Off != qa.Off { same = false }
+            if pa.Id != qa.Id or pa.Off != qa.Off: same = false
         }
         return 1 if same == (op == typed.PrimOp.Eq) else 0
     }
@@ -3125,7 +3125,7 @@ fn bitOp(op typed.PrimOp, a U64, w I64, n I64) I64 {
         for i in range w {
             bit := (a >> U64(w - 1 - i)) & 1 if op == typed.PrimOp.LeadingZeros else (a >> U64(i)) & 1
             if op == typed.PrimOp.PopCount {
-                if bit == 1 { k++ }
+                if bit == 1: k++
             } else if bit == 1 {
                 return i
             }
@@ -3135,19 +3135,19 @@ fn bitOp(op typed.PrimOp, a U64, w I64, n I64) I64 {
     mask := U64(0) - 1 if w == 64 else (U64(1) << U64(w)) - 1
     if op == typed.PrimOp.ByteSwap {
         r U64 = 0
-        for i in range w / 8 { r = r | (((a >> U64(8 * i)) & 0xFF) << U64(w - 8 - 8 * i)) }
+        for i in range w / 8: r = r | (((a >> U64(8 * i)) & 0xFF) << U64(w - 8 - 8 * i))
         return I64(r)
     }
     k := U64(((n % w) + w) % w)
-    if op == typed.PrimOp.RotateRight { k = (U64(w) - k) % U64(w) }
-    if k == 0 { return I64(a) }
+    if op == typed.PrimOp.RotateRight: k = (U64(w) - k) % U64(w)
+    if k == 0: return I64(a)
     return I64(((a << k) | (a >> (U64(w) - k))) & mask)
 }
 
 # a binary operator on two numbers' bits, a's type at (sh its shape) and b's yt
 fn (m mut Machine&) numOp(op typed.PrimOp, a I64, b I64, at types.TypeId, yt types.TypeId, sh I64) I64 {
-    if sh == vFloat { return m.floatOp(op, a, b, at) }
-    if sh == vInt or sh == vUint { return m.intOp(op, a, b, at, yt) }
+    if sh == vFloat: return m.floatOp(op, a, b, at)
+    if sh == vInt or sh == vUint: return m.intOp(op, a, b, at, yt)
     if sh == vBool {
         return match op {
             case typed.PrimOp.BitAnd: a & b
@@ -3172,15 +3172,15 @@ fn (m mut Machine&) notModelled() I64 {
 # a word as a reference where one is stored there, else as bits
 fn (m mut Machine&) rdPtrOrBits(p Ptr) Ptr {
     a := m.at(p, 8, false)
-    if a < 0 { return NullPtr }
+    if a < 0: return NullPtr
     return Ptr(m.prov[a / 8] if a % 8 == 0 else 0, m.rdRaw(a, 8))
 }
 
 fn (m mut Machine&) lenOf(fi I64, x mir.Operand, at types.TypeId) I64 {
     t := m.T
     r := t.Repr(at)
-    if t.KindOf(r) == types.Kind.Ref { r = t.Repr(t.Referent(r)) }
-    if t.Length(r) != types.TypeId(0) { return m.fixedLen(r) }
+    if t.KindOf(r) == types.Kind.Ref: r = t.Repr(t.Referent(r))
+    if t.Length(r) != types.TypeId(0): return m.fixedLen(r)
     return m.rd(m.addr(fi, x, 1), 8)
 }
 
@@ -3223,7 +3223,7 @@ fn (m mut Machine&) intOp(op typed.PrimOp, a I64, b I64, at types.TypeId, bt typ
         }
         case typed.PrimOp.Shl, typed.PrimOp.Shr {
             n := m.intValue(b, bt)
-            if m.shape(bt) == vUint and m.ibits(bt) == 64 and b < 0 { n = 64 }
+            if m.shape(bt) == vUint and m.ibits(bt) == 64 and b < 0: n = 64
             if n < 0 or n >= w {
                 m.refuse(WhyShift)
                 return 0
@@ -3292,7 +3292,7 @@ fn (m mut Machine&) floatOp(op typed.PrimOp, a I64, b I64, ty types.TypeId) I64 
         case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div { }
         case _ { return m.floatCompare(op, F64(x), F64(y)) }
     }
-    if r == types.TypeId(13) { return I64(v.Bits()) }
+    if r == types.TypeId(13): return I64(v.Bits())
     return m.fromF64(F64(v), ty)
 }
 
@@ -3324,18 +3324,18 @@ fn (m mut Machine&) convert(bits I64, from types.TypeId, to types.TypeId) I64 {
     if fs == vInt or fs == vUint or fs == vBool {
         v := m.intValue(bits, from)
         unsigned := fs == vUint and m.ibits(from) == 64 and v < 0
-        if ts == vFloat { return m.intToFloat(v, unsigned, to) }
+        if ts == vFloat: return m.intToFloat(v, unsigned, to)
         return v & bmask(tw)
     }
-    if fs != vFloat { return m.notModelled() }
+    if fs != vFloat: return m.notModelled()
     x := m.toF64(bits, from)
-    if ts == vFloat { return m.fromF64(x, to) }
+    if ts == vFloat: return m.fromF64(x, to)
     # a float to an integer: in range after truncation, a NaN never
     if not floatFits(x, tw, ts == vInt) {
         m.refuse(WhyConvert)
         return 0
     }
-    if ts == vUint and tw == 64 { return I64(U64(x)) }
+    if ts == vUint and tw == 64: return I64(U64(x))
     return I64(x) & bmask(tw)
 }
 
@@ -3392,14 +3392,14 @@ fn (m mut Machine&) atomic(fi I64, op typed.PrimOp, args mir.Range, at types.Typ
     it := m.T.Referent(m.T.Repr(at))
     w := m.width(it)
     old := m.rd(p, w)
-    if m.halted { return 0 }
+    if m.halted: return 0
     match op {
         case typed.PrimOp.AtomicLoad { return old }
         case typed.PrimOp.AtomicStore { m.wr(p, w, m.scalar(fi, m.arg(fi, args, 1))) }
         case typed.PrimOp.AtomicAdd { m.wr(p, w, (old + m.scalar(fi, m.arg(fi, args, 1))) & m.mask(w)) }
         case typed.PrimOp.AtomicSwap { m.wr(p, w, m.scalar(fi, m.arg(fi, args, 1))) }
         case _ {
-            if old == (m.scalar(fi, m.arg(fi, args, 1)) & m.mask(w)) { m.wr(p, w, m.scalar(fi, m.arg(fi, args, 2))) }
+            if old == (m.scalar(fi, m.arg(fi, args, 1)) & m.mask(w)): m.wr(p, w, m.scalar(fi, m.arg(fi, args, 2)))
         }
     }
     return old
@@ -3413,7 +3413,7 @@ fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir
     w := m.ibits(ty)
     signed := m.shape(ty) == vInt
     if op == typed.PrimOp.Convert {
-        if m.shape(at) == vFloat { return not floatFits(m.toF64(a, at), w, signed) }
+        if m.shape(at) == vFloat: return not floatFits(m.toF64(a, at), w, signed)
         v := m.intValue(a, at)
         big := m.shape(at) == vUint and m.ibits(at) == 64 and v < 0
         return not fitsBits(v, big, w, signed)
@@ -3432,10 +3432,10 @@ fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir
             case _: false
         }
     }
-    if op == typed.PrimOp.Div { return x0 == minBits(w) and b == -1 }
+    if op == typed.PrimOp.Div: return x0 == minBits(w) and b == -1
     if w < 64 {
         # operands of at most 63 bits: a sum or a difference fits an I64, a product may not
-        if op == typed.PrimOp.Mul and overflows64(op, x0, b, true) { return true }
+        if op == typed.PrimOp.Mul and overflows64(op, x0, b, true): return true
         r := match op {
             case typed.PrimOp.Add: x0 + b
             case typed.PrimOp.Sub: x0 - b
@@ -3450,9 +3450,9 @@ fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir
 # whether a float's value, truncated toward zero, fits an integer of w bits and a signedness (E26) - a NaN never
 fn floatFits(v F64, w I64, signed Bool) Bool {
     lim := 1.0
-    for _ in range w - 1 { lim = lim * 2.0 }
-    if v != v { return false }
-    if not signed { return v > -1.0 and v < 2.0 * lim }
+    for _ in range w - 1: lim = lim * 2.0
+    if v != v: return false
+    if not signed: return v > -1.0 and v < 2.0 * lim
     # the least is -lim itself; from 54 bits -lim - 1 is not an F64 apart from -lim, so the test is >= there
     return (v >= -lim if w > 53 else v > -lim - 1.0) and v < lim
 }
@@ -3462,8 +3462,8 @@ fn minBits(w I64) I64 { return -9223372036854775807 - 1 if w >= 64 else -(I64(1)
 
 # whether an integer (big: a U64 above I64's maximum) fits w bits of a signedness
 fn fitsBits(v I64, big Bool, w I64, signed Bool) Bool {
-    if big { return w > 64 or not signed and w == 64 }
-    if signed { return w >= 64 or (v >= minBits(w) and v <= -(minBits(w) + 1)) }
+    if big: return w > 64 or not signed and w == 64
+    if signed: return w >= 64 or (v >= minBits(w) and v <= -(minBits(w) + 1))
     return v >= 0 and (w >= 63 or v <= bmask(w))
 }
 
@@ -3502,21 +3502,21 @@ fn (m mut Machine&) wideOf(fi I64, x mir.Operand) I64, I64 {
         }
     }
     v := m.intValue(m.scalar(fi, x), ty)
-    if m.shape(ty) == vBool { return v & 1, 0 }
+    if m.shape(ty) == vBool: return v & 1, 0
     return v, 0 if m.shape(ty) == vUint else v >> 63
 }
 
 # the low b bits of a 128-bit value (b of 1 to 128), sign-extended above them for a signed type, zero-extended else
 fn extend128(lo I64, hi I64, b I64, signed Bool) I64, I64 {
-    if b >= 128 { return lo, hi }
+    if b >= 128: return lo, hi
     if b > 64 {
         k := b - 64
         h := hi & bmask(k)
-        if signed and ((h >> (k - 1)) & 1) == 1 { h = h | ~bmask(k) }
+        if signed and ((h >> (k - 1)) & 1) == 1: h = h | ~bmask(k)
         return lo, h
     }
     l := lo & bmask(b)
-    if signed and ((l >> (b - 1)) & 1) == 1 { l = l | ~bmask(b) }
+    if signed and ((l >> (b - 1)) & 1) == 1: l = l | ~bmask(b)
     return l, 0 if not signed else l >> 63
 }
 
@@ -3550,20 +3550,20 @@ fn mul128(alo I64, ahi I64, blo I64, bhi I64) I64, I64 {
 }
 
 fn shl128(lo I64, hi I64, n I64) I64, I64 {
-    if n == 0 { return lo, hi }
-    if n >= 64 { return 0, lo << (n - 64) }
+    if n == 0: return lo, hi
+    if n >= 64: return 0, lo << (n - 64)
     return lo << n, (hi << n) | I64(U64(lo) >> U64(64 - n))
 }
 
 # a right shift by n (0 to 127): arithmetic (signed) or logical
 fn shr128(lo I64, hi I64, n I64, signed Bool) I64, I64 {
-    if n == 0 { return lo, hi }
+    if n == 0: return lo, hi
     if n >= 64 {
-        if signed { return hi >> (n - 64), hi >> 63 }
+        if signed: return hi >> (n - 64), hi >> 63
         return I64(U64(hi) >> U64(n - 64)), 0
     }
     l := I64(U64(lo) >> U64(n)) | (hi << (64 - n))
-    if signed { return l, hi >> n }
+    if signed: return l, hi >> n
     return l, I64(U64(hi) >> U64(n))
 }
 
@@ -3573,13 +3573,13 @@ fn cmp128(alo I64, ahi I64, blo I64, bhi I64, signed Bool) I64 {
         if signed { return -1 if ahi < bhi else 1 }
         return -1 if ult64(ahi, bhi) else 1
     }
-    if alo == blo { return 0 }
+    if alo == blo: return 0
     return -1 if ult64(alo, blo) else 1
 }
 
 # a divided by b, both read unsigned (b not zero): the quotient and the remainder, by long division
 fn udivmod128(alo I64, ahi I64, blo I64, bhi I64) I64, I64, I64, I64 {
-    if ahi == 0 and bhi == 0 { return I64(U64(alo) / U64(blo)), 0, I64(U64(alo) % U64(blo)), 0 }
+    if ahi == 0 and bhi == 0: return I64(U64(alo) / U64(blo)), 0, I64(U64(alo) % U64(blo)), 0
     qlo, qhi, rlo, rhi := I64(0), I64(0), I64(0), I64(0)
     for i in range 128 {
         k := 127 - i
@@ -3609,7 +3609,7 @@ fn sdivmod128(alo I64, ahi I64, blo I64, bhi I64) I64, I64, I64, I64 {
 
 # the least value of a signed integer of b bits (1 to 128), extended to 128
 fn wideMin(b I64) I64, I64 {
-    if b <= 64 { return minBits(b), -1 }
+    if b <= 64: return minBits(b), -1
     lo, hi := shl128(1, 0, b - 1)
     return neg128(lo, hi)
 }
@@ -3617,7 +3617,7 @@ fn wideMin(b I64) I64, I64 {
 # the greatest value of an integer of b bits (up to 128) and a signedness
 fn wideMax(b I64, signed Bool) I64, I64 {
     k := b - 1 if signed else b
-    if k >= 128 { return -1, -1 }
+    if k >= 128: return -1, -1
     lo, hi := shl128(1, 0, k)
     return sub128(lo, hi, 1, 0)
 }
@@ -3625,7 +3625,7 @@ fn wideMax(b I64, signed Bool) I64, I64 {
 # whether a value (read signed or not) lies within an integer type of b bits and a signedness
 fn fits128(lo I64, hi I64, srcSigned Bool, b I64, signed Bool) Bool {
     if srcSigned and hi < 0 {
-        if not signed { return false }
+        if not signed: return false
         mlo, mhi := wideMin(b)
         return cmp128(lo, hi, mlo, mhi, true) >= 0
     }
@@ -3639,7 +3639,7 @@ fn lz128(lo I64, hi I64, b I64) I64 {
     for i in range b {
         k := b - 1 - i
         bit := (hi >> (k - 64)) & 1 if k >= 64 else (lo >> k) & 1
-        if bit == 1 { return n }
+        if bit == 1: return n
         n++
     }
     return n
@@ -3657,11 +3657,11 @@ fn wideText(lo I64, hi I64, signed Bool) String {
         l, h = qlo, qhi
     }
     b := StringBuilder()
-    if neg { b.PushChar('-') }
+    if neg: b.PushChar('-')
     b.Push($U64(l))
     for i in range parts.Len() {
         d := $U64(parts[parts.Len() - 1 - i])
-        for _ in range 18 - d.Len() { b.PushChar('0') }
+        for _ in range 18 - d.Len(): b.PushChar('0')
         b.Push(d)
     }
     return b.ToString()
@@ -3669,9 +3669,9 @@ fn wideText(lo I64, hi I64, signed Bool) String {
 
 # whether an operation reads or makes an integer wider than 64 bits, so primWide computes it
 fn (m mut Machine&) wideOp(fi I64, ty types.TypeId, args mir.Range) Bool {
-    if m.shape(ty) == vWide { return true }
+    if m.shape(ty) == vWide: return true
     for i in range args.N {
-        if m.shape(m.opType(fi, m.arg(fi, args, i))) == vWide { return true }
+        if m.shape(m.opType(fi, m.arg(fi, args, i))) == vWide: return true
     }
     return false
 }
@@ -3696,7 +3696,7 @@ fn (m mut Machine&) primWide(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, 
     if op == typed.PrimOp.Convert {
         if m.shape(ty) == vFloat {
             lo, hi := m.wideOf(fi, x)
-            if m.halted { return }
+            if m.halted: return
             m.wr(dst, m.width(ty), m.wideToFloat(lo, hi, sat != vUint and not m.T.IsUnsigned(m.T.Repr(at)), ty))
             return
         }
@@ -3711,14 +3711,14 @@ fn (m mut Machine&) primWide(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, 
             return
         }
         lo, hi := m.wideOf(fi, x)
-        if m.halted { return }
+        if m.halted: return
         m.putInt(dst, ty, lo, hi)
         return
     }
     signed := sat != vUint and not m.T.IsUnsigned(m.T.Repr(at))
     ab := m.ibits(at)
     alo, ahi := m.wideOf(fi, x)
-    if m.halted { return }
+    if m.halted: return
     match op {
         case typed.PrimOp.Neg {
             lo, hi := neg128(alo, ahi)
@@ -3748,7 +3748,7 @@ fn (m mut Machine&) primWide(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, 
         case typed.PrimOp.RotateLeft, typed.PrimOp.RotateRight {
             n := m.intValue(m.scalar(fi, m.arg(fi, args, 1)), m.opType(fi, m.arg(fi, args, 1)))
             k := ((n % ab) + ab) % ab
-            if op == typed.PrimOp.RotateRight { k = (ab - k) % ab }
+            if op == typed.PrimOp.RotateRight: k = (ab - k) % ab
             lo, hi := extend128(alo, ahi, ab, false)
             if k == 0 {
                 m.putInt(dst, ty, lo, hi)
@@ -3763,7 +3763,7 @@ fn (m mut Machine&) primWide(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, 
     }
     y := m.arg(fi, args, 1)
     blo, bhi := m.wideOf(fi, y)
-    if m.halted { return }
+    if m.halted: return
     lo, hi := I64(0), I64(0)
     match op {
         case typed.PrimOp.Add { lo, hi = add128(alo, ahi, blo, bhi) }
@@ -3840,7 +3840,7 @@ fn (m mut Machine&) saturate(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, 
     signed := not m.T.IsUnsigned(m.T.Repr(ty))
     alo, ahi := m.wideOf(fi, m.arg(fi, args, 0))
     blo, bhi := m.wideOf(fi, m.arg(fi, args, 1))
-    if m.halted { return }
+    if m.halted: return
     if op == typed.PrimOp.SatShl {
         # the count within [0, the width) - the library's claim, a shift's
         if bhi != 0 or not ult64(blo, b) {
@@ -3897,13 +3897,13 @@ fn (m mut Machine&) overflowsWide(fi I64, op typed.PrimOp, ty types.TypeId, args
     b := m.ibits(ty)
     signed := not m.T.IsUnsigned(m.T.Repr(ty))
     if op == typed.PrimOp.Convert {
-        if m.shape(at) == vFloat { return not floatFits(m.toF64(m.scalar(fi, x), at), b, signed) }
+        if m.shape(at) == vFloat: return not floatFits(m.toF64(m.scalar(fi, x), at), b, signed)
         lo, hi := m.wideOf(fi, x)
         return not fits128(lo, hi, m.shape(at) != vUint and not m.T.IsUnsigned(m.T.Repr(at)), b, signed)
     }
     alo, ahi := m.wideOf(fi, x)
     if op == typed.PrimOp.Neg {
-        if not signed { return alo != 0 or ahi != 0 }
+        if not signed: return alo != 0 or ahi != 0
         mlo, mhi := wideMin(b)
         return alo == mlo and ahi == mhi
     }
@@ -3920,10 +3920,10 @@ fn (m mut Machine&) overflowsWide(fi I64, op typed.PrimOp, ty types.TypeId, args
         if signed and ahi < 0 { ma, mah = neg128(alo, ahi) }
         mb, mbh := blo, bhi
         if signed and bhi < 0 { mb, mbh = neg128(blo, bhi) }
-        if (ma == 0 and mah == 0) or (mb == 0 and mbh == 0) { return false }
+        if (ma == 0 and mah == 0) or (mb == 0 and mbh == 0): return false
         plo, phi := mul128(ma, mah, mb, mbh)
         qlo, qhi, _, _ := udivmod128(plo, phi, ma, mah)
-        if qlo != mb or qhi != mbh { return true }
+        if qlo != mb or qhi != mbh: return true
         xlo, xhi := wideMax(b, signed)
         if neg { xlo, xhi = add128(xlo, xhi, 1, 0) }
         return cmp128(plo, phi, xlo, xhi, false) > 0
@@ -3932,12 +3932,12 @@ fn (m mut Machine&) overflowsWide(fi I64, op typed.PrimOp, ty types.TypeId, args
     # the signs say it (or the carry, unsigned)
     lo, hi := sub128(alo, ahi, blo, bhi)
     if op == typed.PrimOp.Add { lo, hi = add128(alo, ahi, blo, bhi) }
-    if b < 128 { return not fits128(lo, hi, true, b, signed) }
+    if b < 128: return not fits128(lo, hi, true, b, signed)
     if not signed {
-        if op == typed.PrimOp.Add { return cmp128(lo, hi, alo, ahi, false) < 0 }
+        if op == typed.PrimOp.Add: return cmp128(lo, hi, alo, ahi, false) < 0
         return cmp128(alo, ahi, blo, bhi, false) < 0
     }
-    if op == typed.PrimOp.Add { return (ahi < 0) == (bhi < 0) and (hi < 0) != (ahi < 0) }
+    if op == typed.PrimOp.Add: return (ahi < 0) == (bhi < 0) and (hi < 0) != (ahi < 0)
     return (ahi < 0) != (bhi < 0) and (hi < 0) != (ahi < 0)
 }
 
@@ -3960,7 +3960,7 @@ fn floatToWide(v F64) I64, I64 {
     e := ((bits >> 52) & 0x7FF) - 1075
     mant := (bits & ((I64(1) << 52) - 1)) | (I64(1) << 52)
     lo, hi := shl128(mant, 0, e)
-    if neg { return neg128(lo, hi) }
+    if neg: return neg128(lo, hi)
     return lo, hi
 }
 
@@ -3976,11 +3976,11 @@ fn (m mut Machine&) wideToFloat(lo I64, hi I64, signed Bool, to types.TypeId) I6
         s = 128 - lz128(l, h, 128) - 63
         cl, ch := extend128(l, h, s, false)
         l, h = shr128(l, h, s, false)
-        if cl != 0 or ch != 0 { l = l | 1 }
+        if cl != 0 or ch != 0: l = l | 1
     }
     x := m.toF64(m.intToFloat(l, true, to), to)
-    for _ in range s { x = x * 2.0 }
-    if neg { x = -x }
+    for _ in range s: x = x * 2.0
+    if neg: x = -x
     return m.fromF64(x, to)
 }
 
@@ -3990,27 +3990,27 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
     fkind := m.cf[fk].Fast[i * fastStride]
     if fkind != 0 {
         m.flat(fi, fk, i, fkind)
-        if not m.halted { m.fs[fi].Stmt += 1 }
+        if not m.halted: m.fs[fi].Stmt += 1
         return
     }
     glob := m.cf[fk].Global[i]
     match m.cf[fk].Stmts[i] {
         case mir.Stmt.Assign(sp, p, rv) {
             m.atK(fk, sp)
-            if glob and not m.globalsReady(fi, p, rv) { return }
+            if glob and not m.globalsReady(fi, p, rv): return
             m.assign(fi, p, rv)
         }
         case mir.Stmt.Live(sp, l) {
             m.atK(fk, sp)
             loc := m.cf[fk].Locals[I64(l)]
             sc := m.buildScope(fi, loc.Home)
-            if m.halted { return }
+            if m.halted: return
             m.ws[m.fs[fi].Locals + I64(l)] = m.allocate(m.size(loc.Ty), aValue, sc).Id
         }
         case mir.Stmt.Dead(_, l) {
             slot := m.fs[fi].Locals + I64(l)
             id := m.ws[slot]
-            if id != 0 and m.al[id & slotMask].Gen == id >> slotBits { m.release(id & slotMask) }
+            if id != 0 and m.al[id & slotMask].Gen == id >> slotBits: m.release(id & slotMask)
             m.ws[slot] = 0
         }
         case mir.Stmt.Open(_, s) {
@@ -4024,7 +4024,7 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             }
             id := m.newScope(kind)
             m.ws[m.fs[fi].Scopes + I64(s)] = id
-            if kind == sJoin { m.scopes[id & slotMask].Errors = I64(si.Errors) }
+            if kind == sJoin: m.scopes[id & slotMask].Errors = I64(si.Errors)
             if kind == sBuilder {
                 b := m.allocate(64, aValue, id)
                 m.scopes[id & slotMask].Buf = b.Id
@@ -4125,7 +4125,7 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             dd, dn := m.arrayView(dp, dt)
             sd, sn := m.arrayView(sp2, srcT)
             k := m.intValue(m.scalar(fi, n), m.opType(fi, n))
-            if m.halted { return }
+            if m.halted: return
             if k < 0 or k > dn or k > sn {
                 m.refuse(WhyOutside)
                 return
@@ -4137,7 +4137,7 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             m.spawn(fi, j, k)
         }
     }
-    if not m.halted { m.fs[fi].Stmt += 1 }
+    if not m.halted: m.fs[fi].Stmt += 1
 }
 
 fn (m mut Machine&) atK(k I64, sp source.Span) {
@@ -4157,16 +4157,16 @@ fn (m mut Machine&) write(fi I64, b mir.ScopeRef, how mir.WriteKind, x mir.Opera
         case mir.WriteKind.Bytes {
             p := m.addr(fi, x, 1)
             data, n := m.arrayView(p, xt)
-            if m.halted { return }
-            for i in range n { m.appendByte(bs, m.rd(Ptr(data.Id, data.Off + i), 1)) }
+            if m.halted: return
+            for i in range n: m.appendByte(bs, m.rd(Ptr(data.Id, data.Off + i), 1))
         }
         case mir.WriteKind.Char { m.appendByte(bs, m.scalar(fi, x)) }
         case mir.WriteKind.Quoted {
             p := m.addr(fi, x, 1)
             data, n := m.arrayView(p, xt)
-            if m.halted { return }
+            if m.halted: return
             m.appendByte(bs, 34)
-            for i in range n { m.appendEscaped(bs, m.rd(Ptr(data.Id, data.Off + i), 1), 34) }
+            for i in range n: m.appendEscaped(bs, m.rd(Ptr(data.Id, data.Off + i), 1), 34)
             m.appendByte(bs, 34)
         }
         case mir.WriteKind.QuotedChar {
@@ -4220,7 +4220,7 @@ fn (m mut Machine&) appendEscaped(bs I64, c I64, quote I64) {
 }
 
 fn (m mut Machine&) appendText(bs I64, s String&) {
-    for c in s { m.appendByte(bs, I64(c)) }
+    for c in s: m.appendByte(bs, I64(c))
 }
 
 fn (m mut Machine&) appendByte(bs I64, c I64) {
@@ -4228,7 +4228,7 @@ fn (m mut Machine&) appendByte(bs I64, c I64) {
     buf, n := m.scopes[sc].Buf, m.scopes[sc].BufLen
     if n >= m.al[buf & slotMask].Size {
         nb := m.allocate(2 * n, aValue, bs)
-        if m.halted { return }
+        if m.halted: return
         m.copy(nb, Ptr(buf, 0), n)
         m.release(buf & slotMask)
         m.scopes[sc].Buf = nb.Id
@@ -4245,7 +4245,7 @@ fn (m mut Machine&) appendByte(bs I64, c I64) {
 # mutable one, or one whose value a writable reference reaches, is refused (K1). Whether the statement can run now
 fn (m mut Machine&) globalsReady(fi I64, p mir.Lvalue, rv mir.Rvalue) Bool {
     f := m.fns.At(m.fs[fi].Fn)
-    if m.When == Mode.Compile and not m.globalWritten(p) { return false }
+    if m.When == Mode.Compile and not m.globalWritten(p): return false
     return match rv {
         case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _): m.operandReady(fi, x)
         case mir.Rvalue.Ref(q, _), mir.Rvalue.Take(q), mir.Rvalue.Tag(q): m.placeReady(fi, q)
@@ -4259,7 +4259,7 @@ fn (m mut Machine&) globalsReady(fi I64, p mir.Lvalue, rv mir.Rvalue) Bool {
 
 fn (m mut Machine&) rangeReady(fi I64, f mir.Fn&, r mir.Range) Bool {
     for i in range r.N {
-        if not m.operandReady(fi, f.Ops[I64(r.At) + i]) { return false }
+        if not m.operandReady(fi, f.Ops[I64(r.At) + i]): return false
     }
     return true
 }
@@ -4290,13 +4290,13 @@ fn (m mut Machine&) placeReady(fi I64, p mir.Lvalue) Bool {
     match p.B {
         case mir.Base.Global(module, name, _) {
             g := try m.globalOf.Get(gkey(module, name)) catch default -1
-            if g < 0 or g == m.initGlobal { return true }
+            if g < 0 or g == m.initGlobal: return true
             gl := m.globals[g]
-            if gl.Build or gl.Used { m.UsedBuild = true }
+            if gl.Build or gl.Used: m.UsedBuild = true
             # under -i a global is set before main runs, each after the globals its initializer reads (B5a): one read
             # while another is initialized and not set yet is initialized first
             if m.When == Mode.Run {
-                if gl.State != 0 or gl.Init < 0 { return true }
+                if gl.State != 0 or gl.Init < 0: return true
                 m.startGlobal(g)
                 return false
             }
@@ -4308,7 +4308,7 @@ fn (m mut Machine&) placeReady(fi I64, p mir.Lvalue) Bool {
                 m.refuse(WhyChangeable)
                 return false
             }
-            if gl.State == 2 { return true }
+            if gl.State == 2: return true
             if gl.State == 1 {
                 m.refuse(WhyCycle)
                 return false
@@ -4327,7 +4327,7 @@ fn (m Machine&) writesAfter(fi I64, module I64, name source.NameId) Bool {
     f := m.fns.At(m.fs[fi].Fn)
     stmts := f.Blocks[m.fs[fi].Block].Stmts
     k := m.fs[fi].Stmt
-    if k >= stmts.Len() { return false }
+    if k >= stmts.Len(): return false
     at I32 = -1
     match stmts[k] {
         case mir.Stmt.Assign(sp, _, _) { at = sp.Start }
@@ -4359,8 +4359,8 @@ fn writesGlobal(p mir.Lvalue&, module I64, name source.NameId) Bool {
 # effect the baked value would skip (without a plan everything lowers into the program's scope, so where the instance
 # would land at run time is told by the frames, not the scope)
 fn (m Machine&) initFrame(fi I64) Bool {
-    if m.fs[fi].Ret == rGlobal { return true }
-    if fi == 0 or m.fs[fi - 1].Ret != rGlobal { return false }
+    if m.fs[fi].Ret == rGlobal: return true
+    if fi == 0 or m.fs[fi - 1].Ret != rGlobal: return false
     for v in m.fns.At(m.fs[fi].Fn).Vars {
         match v {
             case mir.VarKind.Instance { return true }
@@ -4396,7 +4396,7 @@ fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, I64 {
     match c {
         case mir.Callee.Fn(key, _) {
             i := try m.fnOf.Get(key) catch default -1
-            if i < 0 { m.refuse(WhyNoBody) }
+            if i < 0: m.refuse(WhyNoBody)
             return i, NullPtr, -1
         }
         case mir.Callee.Extern(e, _) { return -1, NullPtr, e }
@@ -4404,7 +4404,7 @@ fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, I64 {
             p := m.addr(fi, x, 3)
             code := m.rdPtr(p)
             env := m.rdPtr(Ptr(p.Id, p.Off + 8))
-            if m.halted { return -1, NullPtr, -1 }
+            if m.halted: return -1, NullPtr, -1
             if code.Id == 0 {
                 m.refuse(WhyNullCall)
                 return -1, NullPtr, -1
@@ -4414,28 +4414,28 @@ fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, I64 {
                 m.refuse(WhyNotModelled)
                 return -1, NullPtr, -1
             }
-            if a.Extern { return -1, env, a.Code }
+            if a.Extern: return -1, env, a.Code
             i := try m.fnOf.Get(m.codeKeys[a.Code]) catch default -1
-            if i < 0 { m.refuse(WhyNoBody) }
+            if i < 0: m.refuse(WhyNoBody)
             return i, env, -1
         }
         case mir.Callee.Dispatch(x, slot, _) {
             # T32b: the function the any's table holds for the slot
             p := m.addr(fi, x, 3)
             tab := m.rdPtr(Ptr(p.Id, p.Off + 8))
-            if m.halted { return -1, NullPtr, -1 }
+            if m.halted: return -1, NullPtr, -1
             if tab.Id == 0 {
                 m.refuse(WhyNullCall)
                 return -1, NullPtr, -1
             }
             code := m.rdPtr(Ptr(tab.Id, tab.Off + 8 * (types.AnySlotBase + slot)))
-            if m.halted { return -1, NullPtr, -1 }
+            if m.halted: return -1, NullPtr, -1
             if code.Id == 0 or m.allocOf(code.Id).Kind != aCode {
                 m.refuse(WhyNotModelled)
                 return -1, NullPtr, -1
             }
             i := try m.fnOf.Get(m.codeKeys[m.allocOf(code.Id).Code]) catch default -1
-            if i < 0 { m.refuse(WhyNoBody) }
+            if i < 0: m.refuse(WhyNoBody)
             return i, NullPtr, -1
         }
     }
@@ -4454,9 +4454,9 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
     f := m.fnOfFrame(fi)
     callee, env, ext := m.callee(fi, c)
     isExtern := ext >= 0
-    if m.halted { return -2 }
+    if m.halted: return -2
     vty := m.calleeType(fi, c)
-    if isExtern { return -2 }
+    if isExtern: return -2
     # D18: a generator's Next resumes its walk where it stopped - or, over, fails with Exhausted at once
     ri I64 = -1
     restored := false
@@ -4479,7 +4479,7 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
         restored = st == 1
     }
     nf := m.restoreGen(ri, ret, retArg) if restored else m.pushFrame(callee, ret, retArg)
-    if nf < 0 { return -2 }
+    if nf < 0: return -2
     g := m.fns.At(callee)
     dispatched := match c {
         case mir.Callee.Dispatch(_, _, _): true
@@ -4496,7 +4496,7 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
             m.put(fi, m.localPtr(nf, l), g.Locals[I64(l)].Ty, f.Ops[I64(args.At) + i])
         }
     }
-    if not restored { m.ownParams(nf, callee) }
+    if not restored: m.ownParams(nf, callee)
     # the passed scope variables: in order for a direct call, mapped through the value's type for a function value
     # whose code's own type differs (T22a)
     passed := 0
@@ -4515,7 +4515,7 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
         # (O23a: a derived scope no call passes is null, found where the body builds there)
         s := 0 if g.Vars[i] == mir.VarKind.Derived else m.program
         if direct or vvars.Len() == passed {
-            if i < I64(scopes.N) { s = m.scopeOf(fi, f.Refs[I64(scopes.At) + i]) }
+            if i < I64(scopes.N): s = m.scopeOf(fi, f.Refs[I64(scopes.At) + i])
         } else {
             want := match g.Vars[i] {
                 case mir.VarKind.Param(p): p
@@ -4543,8 +4543,8 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
         m.fs[nf].Gen = I32(ri)
         m.gens[ri].State = 2
     }
-    if not restored { m.loadCaptures(nf, g, env, passed) }
-    if m.halted { return -2 }
+    if not restored: m.loadCaptures(nf, g, env, passed)
+    if m.halted: return -2
     return nf
 }
 
@@ -4562,7 +4562,7 @@ fn (m mut Machine&) genOver(fi I64, callee I64, c mir.Callee, ret I64, retArg I6
     code := m.fns.At(callee).GenEnd
     its := m.T.Errors(m.fns.At(callee).Ty)
     seen := m.T.Errors(m.calleeType(fi, c))
-    if its != seen { code = m.recode(code, its, seen) }
+    if its != seen: code = m.recode(code, its, seen)
     m.wr(m.localPtr(fi, call.Code), 4, code)
     m.jump(fi, call.Err)
 }
@@ -4587,8 +4587,8 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
         m.refuse(WhyExtern)
         return false
     }
-    if name.StartsWith("__olang_") { return m.runtimeFn(fi, name, args, ty, dst, hasDst) }
-    if m.When == Mode.Run and m.waitsForTask(name) { return false }
+    if name.StartsWith("__olang_"): return m.runtimeFn(fi, name, args, ty, dst, hasDst)
+    if m.When == Mode.Run and m.waitsForTask(name): return false
     foreignRes := m.foreignRef(res)
     if not m.ffiScalar(res, true) and not foreignRes {
         m.refuse(WhyFfiPass)
@@ -4607,7 +4607,7 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
         if m.ffiScalar(pt, false) {
             kinds[i] = ffi.Code(m.ffiKind(pt))
             v := U64(m.scalar(fi, x))
-            if m.shape(pt) == vInt { v = U64(m.intValue(I64(v), pt)) }
+            if m.shape(pt) == vInt: v = U64(m.intValue(I64(v), pt))
             words1[i] = v
             nwords++
             continue
@@ -4661,7 +4661,7 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
         m.refuse(WhyFfiPass)
         return false
     }
-    if m.halted { return false }
+    if m.halted: return false
     words := Array<U64>(nwords)
     w I64 = 0
     for i in range n {
@@ -4720,7 +4720,7 @@ ForeignId I64 = slotMask
 fn (m mut Machine&) foreignRef(ty types.TypeId) Bool {
     t := m.T
     r := t.Repr(ty)
-    if t.KindOf(r) != types.Kind.Ref { return false }
+    if t.KindOf(r) != types.Kind.Ref: return false
     x := t.Repr(t.Referent(r))
     return t.KindOf(x) == types.Kind.Named and t.DeclKindOf(t.DeclOf(x)) == types.DeclKind.Foreign
 }
@@ -4728,12 +4728,12 @@ fn (m mut Machine&) foreignRef(ty types.TypeId) Bool {
 # whether a value of ty is numbers alone, as bytes C may read and write: a number, a Bool, or a struct or fixed array of
 # them
 fn (m mut Machine&) numbersOnly(ty types.TypeId) Bool {
-    if m.ffiScalar(ty, false) { return true }
+    if m.ffiScalar(ty, false): return true
     sh := m.shape(ty)
-    if sh == vFixed { return m.numbersOnly(m.elemOf(ty)) }
-    if sh != vAgg { return false }
+    if sh == vFixed: return m.numbersOnly(m.elemOf(ty))
+    if sh != vAgg: return false
     for p in m.T.Items(m.partList(ty)) {
-        if not m.numbersOnly(p) { return false }
+        if not m.numbersOnly(p): return false
     }
     return true
 }
@@ -4781,7 +4781,7 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
             } else {
                 s := m.Args[i]
                 b := Array<U8>(s.Len())
-                for k in range s.Len() { b[k] = U8(s[k]) }
+                for k in range s.Len(): b[k] = U8(s[k])
                 m.putBytes(fi, x(1), b, m.intArg(fi, x(2)))
                 v = s.Len()
             }
@@ -4796,7 +4796,7 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
             out := Array<I64>(3)
             v = I64(__olang_stat(m.bytesOf(fi, x(0)), out))
             b := Array<U8>(24)
-            for k in range 24 { b[k] = U8((out[k / 8] >> (8 * (k % 8))) & 0xFF) }
+            for k in range 24: b[k] = U8((out[k / 8] >> (8 * (k % 8))) & 0xFF)
             m.putBytes(fi, x(1), b, 24)
         }
         case "__olang_dir", "__olang_realpath" {
@@ -4822,12 +4822,12 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
         case "__olang_dyncall", "__olang_dyncall_var" {
             wb := m.bytesOf(fi, x(2))
             words := Array<U64>(wb.Len() / 8)
-            for k in range wb.Len() { words[k / 8] = words[k / 8] | (U64(wb[k]) << U64(8 * (k % 8))) }
+            for k in range wb.Len(): words[k / 8] = words[k / 8] | (U64(wb[k]) << U64(8 * (k % 8)))
             nm, kinds, ret := m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), U8(m.intArg(fi, x(3)))
             # a variadic C function's call (X21): its fixed arguments' count beside the rest
             v = (I64(__olang_dyncall_var(nm, kinds, words, ret, m.intArg(fi, x(4)))) if name == "__olang_dyncall_var" else
                  I64(__olang_dyncall(nm, kinds, words, ret)))
-            for k in range wb.Len() { wb[k] = U8((words[k / 8] >> U64(8 * (k % 8))) & 0xFF) }
+            for k in range wb.Len(): wb[k] = U8((words[k / 8] >> U64(8 * (k % 8))) & 0xFF)
             m.putBytes(fi, x(2), wb, wb.Len())
         }
         case "__olang_dyncall_check" {
@@ -4843,7 +4843,7 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
             v = -1
             if t != "" {
                 b := Array<U8>(t.Len())
-                for k in range t.Len() { b[k] = U8(t[k]) }
+                for k in range t.Len(): b[k] = U8(t[k])
                 m.putBytes(fi, x(0), b, m.intArg(fi, x(1)))
                 v = t.Len()
             }
@@ -4861,7 +4861,7 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
                 b := m.bytesOf(fi, x(0))
                 n := m.intArg(fi, x(1))
                 t := StringBuilder()
-                for k in range n { t.PushChar(Char(b[k])) }
+                for k in range n: t.PushChar(Char(b[k]))
                 t.Push(InterpCrash)
                 os.OnCrash(t.ToString())
             }
@@ -4871,11 +4871,11 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
             return false
         }
     }
-    if m.halted { return false }
+    if m.halted: return false
     # what the call left in errno, as after an extern's (X6)
-    if name != "__olang_err" and name != "__olang_arg_count" and name != "__olang_arg" { m.lastErr = __olang_err() }
+    if name != "__olang_err" and name != "__olang_arg_count" and name != "__olang_arg": m.lastErr = __olang_err()
     res := m.T.Result(ty)
-    if hasDst and res != types.VoidT { m.wr(dst, m.width(res), v) }
+    if hasDst and res != types.VoidT: m.wr(dst, m.width(res), v)
     return true
 }
 
@@ -4889,10 +4889,10 @@ fn (m mut Machine&) intArg(fi I64, x mir.Operand) I64 { return m.intValue(m.scal
 fn (m mut Machine&) bytesOf(fi I64, x mir.Operand) Array<U8> {
     xt := m.opType(fi, x)
     data, n := m.arrayView(m.addr(fi, x, 1), xt)
-    if m.halted { return Array<U8>(0) }
+    if m.halted: return Array<U8>(0)
     bytes := n * m.size(m.elemOf(xt))
     b := Array<U8>(bytes)
-    for k in range bytes { b[k] = U8(m.rd(Ptr(data.Id, data.Off + k), 1)) }
+    for k in range bytes: b[k] = U8(m.rd(Ptr(data.Id, data.Off + k), 1))
     return b
 }
 
@@ -4900,12 +4900,12 @@ fn (m mut Machine&) bytesOf(fi I64, x mir.Operand) Array<U8> {
 fn (m mut Machine&) putBytes(fi I64, x mir.Operand, b Array<U8>&, cap I64) {
     xt := m.opType(fi, x)
     data, n := m.arrayView(m.addr(fi, x, 1), xt)
-    if m.halted or m.al[data.Id & slotMask].ReadOnly { return }
+    if m.halted or m.al[data.Id & slotMask].ReadOnly: return
     room := n * m.size(m.elemOf(xt))
     k := b.Len()
-    if cap < k { k = cap }
-    if room < k { k = room }
-    for i in range k { m.wr(Ptr(data.Id, data.Off + i), 1, I64(b[i])) }
+    if cap < k: k = cap
+    if room < k: k = room
+    for i in range k: m.wr(Ptr(data.Id, data.Off + i), 1, I64(b[i]))
 }
 
 # whether a value of this type is one the dynamic call passes alone: a number or a Bool (or nothing, for a result)
@@ -4952,7 +4952,7 @@ fn (m mut Machine&) switchTo(fi I64, k I64, x mir.Operand, cases mir.Range, othe
 
 # whether a switch's value v (whi its high word, mk the mask of its width) is case value cv
 fn (m mut Machine&) caseHolds(xt types.TypeId, cv I64, v I64, whi I64, mk I64) Bool {
-    if m.shape(xt) != vWide { return (cv & mk) == v }
+    if m.shape(xt) != vWide: return (cv & mk) == v
     clo, chi := m.wideConst(xt, cv)
     return clo == v and chi == whi
 }
@@ -4961,12 +4961,12 @@ fn (m mut Machine&) caseHolds(xt types.TypeId, cv I64, v I64, whi I64, mk I64) B
 fn (m mut Machine&) callTerm(fi I64, k I64, sp source.Span, ci I32, glob Bool) {
     m.atK(k, sp)
     c := m.cf[k].Calls[I64(ci)]
-    if glob and not m.rangeReady(fi, m.fns.At(k), c.Args) { return }
+    if glob and not m.rangeReady(fi, m.fns.At(k), c.Args): return
     match c.Target {
         case mir.Callee.Extern(e, ty) { m.externCall(fi, c, e, ty) }
         case mir.Callee.Value(_) {
             _, _, e := m.callee(fi, c.Target)
-            if m.halted { return }
+            if m.halted: return
             if e >= 0: m.externCall(fi, c, e, m.calleeType(fi, c.Target)) else: m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(ci))
         }
         case _ { m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(ci)) }
@@ -4979,29 +4979,29 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
         case mir.Term.None { m.notModelled() }
         case mir.Term.Goto(b) { m.jump(fi, b) }
         case mir.Term.Branch(c, yes, no) {
-            if glob and not m.operandReady(fi, c) { return }
+            if glob and not m.operandReady(fi, c): return
             m.jump(fi, yes if m.scalar(fi, c) != 0 else no)
         }
         case mir.Term.Switch(x, cases, otherwise) {
-            if glob and not m.operandReady(fi, x) { return }
+            if glob and not m.operandReady(fi, x): return
             to := m.switchTo(fi, k, x, cases, otherwise)
-            if not m.halted { m.jump(fi, to) }
+            if not m.halted: m.jump(fi, to)
         }
         case mir.Term.Call(sp, ci) { m.callTerm(fi, k, sp, ci, glob) }
         case mir.Term.Return(sp, x) {
             m.atK(k, sp)
-            if not m.fs[fi].Done and glob and not m.operandReady(fi, x) { return }
+            if not m.fs[fi].Done and glob and not m.operandReady(fi, x): return
             m.leave(fi, false, x, 0)
         }
         case mir.Term.Tail(sp, ci) {
             m.atK(k, sp)
             c := m.cf[k].Calls[I64(ci)]
-            if glob and not m.rangeReady(fi, m.fns.At(k), c.Args) { return }
+            if glob and not m.rangeReady(fi, m.fns.At(k), c.Args): return
             m.tail(fi, c)
         }
         case mir.Term.Suspend(sp, x, resume, held, drop) {
             m.atK(k, sp)
-            if glob and not m.operandReady(fi, x) { return }
+            if glob and not m.operandReady(fi, x): return
             m.suspend(fi, x, resume, held, drop)
         }
         # S20: a walk let go, its drop path run: its frame's storage closed, then the frame gone, giving nothing back
@@ -5012,8 +5012,8 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
         case mir.Term.Raise(sp, x) {
             m.atK(k, sp)
             # D18a: a generator's walk is over once it fails, its end an Exhausted
-            if not m.fs[fi].Done and m.fs[fi].Gen >= I32(0) { m.gens[I64(m.fs[fi].Gen)].State = 3 }
-            if not m.fs[fi].Done { m.traced(fi, k, sp) }
+            if not m.fs[fi].Done and m.fs[fi].Gen >= I32(0): m.gens[I64(m.fs[fi].Gen)].State = 3
+            if not m.fs[fi].Done: m.traced(fi, k, sp)
             # read once: when the frame's storage has closed, the code is already kept on the frame
             code := m.fs[fi].Code if m.fs[fi].Done else m.intValue(m.scalar(fi, x), mir.I32T)
             m.leave(fi, true, mir.Operand.None, code)
@@ -5040,11 +5040,11 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
 fn (m mut Machine&) tail(fi I64, c mir.Call) {
     fr := m.fs[fi]
     nf := m.enter(fi, c.Target, c.Args, c.Scopes, fr.Ret, fr.RetArg)
-    if nf < 0 { return }
+    if nf < 0: return
     m.dropOwnDefers(fi)
     g := m.fs[nf]
     delta := g.Locals - fr.Locals
-    for i in range m.nWs - g.Locals { m.ws[fr.Locals + i] = m.ws[g.Locals + i] }
+    for i in range m.nWs - g.Locals: m.ws[fr.Locals + i] = m.ws[g.Locals + i]
     g.Locals -= delta
     g.Scopes -= delta
     g.Vars -= delta
@@ -5053,8 +5053,8 @@ fn (m mut Machine&) tail(fi I64, c mir.Call) {
     m.fs[fi] = g
     m.nFs--
     m.nWs -= delta
-    if m.cf[fr.Fn].Equal { m.eqDepth-- }
-    if m.live(fr.Store) { m.closing.Push(fr.Store) }
+    if m.cf[fr.Fn].Equal: m.eqDepth--
+    if m.live(fr.Store): m.closing.Push(fr.Store)
 }
 
 fn (m mut Machine&) jump(fi I64, b mir.BlockId) {
@@ -5080,7 +5080,7 @@ fn (m mut Machine&) externCall(fi I64, c mir.Call, e I64, ty types.TypeId) {
     if c.HasDest {
         dst, _ = m.place(fi, c.Dest)
     }
-    if m.callExtern(fi, e, ty, c.Args, dst, c.HasDest) { m.jump(fi, c.Ok) }
+    if m.callExtern(fi, e, ty, c.Args, dst, c.HasDest): m.jump(fi, c.Ok)
 }
 
 # a frame's block that ends in no call: the machine was asked for the call index of something else
@@ -5104,7 +5104,7 @@ fn (m mut Machine&) exit(fi I64, file I64, sp source.Span, kind mir.ExitKind, ms
         p := m.addr(fi, msg, 1)
         data, n := m.arrayView(p, m.opType(fi, msg))
         b := StringBuilder()
-        for i in range n { b.PushChar(Char(U8(m.rd(Ptr(data.Id, data.Off + i), 1)))) }
+        for i in range n: b.PushChar(Char(U8(m.rd(Ptr(data.Id, data.Off + i), 1))))
         text = b.ToString()
     }
     m.stop(Stop.Exited(kind, file, sp, text))
@@ -5115,12 +5115,12 @@ fn (m mut Machine&) exit(fi I64, file I64, sp source.Span, kind mir.ExitKind, ms
 fn (m mut Machine&) leave(fi I64, raised Bool, x mir.Operand, code I64) {
     fr := m.fs[fi]
     if not fr.Done {
-        if not raised { m.deliver(fi, x) }
-        if m.halted { return }
+        if not raised: m.deliver(fi, x)
+        if m.halted: return
         m.fs[fi].Done = true
         m.fs[fi].Raised = raised
         m.fs[fi].Code = code
-        if fr.Tail != 0 and m.live(fr.Tail) { m.closing.Push(fr.Tail) }
+        if fr.Tail != 0 and m.live(fr.Tail): m.closing.Push(fr.Tail)
         m.closing.Push(fr.Store)
         m.fs[fi].Pending = true
         return
@@ -5133,7 +5133,7 @@ fn (m mut Machine&) leave(fi I64, raised Bool, x mir.Operand, code I64) {
 # a global's storage
 fn (m mut Machine&) deliver(fi I64, x mir.Operand) {
     fr := m.fs[fi]
-    if x == mir.Operand.None { return }
+    if x == mir.Operand.None: return
     xt := m.opType(fi, x)
     match fr.Ret {
         case rCall {
@@ -5178,7 +5178,7 @@ fn (m mut Machine&) callReturned(fr frame) {
     if c.Target == mir.Callee.Value {
         its := m.T.Errors(m.fns.At(fr.Fn).Ty)
         seen := m.T.Errors(m.calleeType(caller, c.Target))
-        if its != seen { code = m.recode(code, its, seen) }
+        if its != seen: code = m.recode(code, its, seen)
     }
     m.wr(m.localPtr(caller, c.Code), 4, code)
     m.failedHere(caller, tCall)
@@ -5189,8 +5189,8 @@ fn (m mut Machine&) returned(fr frame) {
     match fr.Ret {
         case rCall { m.callReturned(fr) }
         case rRequest {
-            if fr.Raised { m.stop(Stop.Raised(fr.Code)) }
-            if m.When == Mode.Compile and m.walksLetGo() { m.refuse(WhyWalkLetGo) }
+            if fr.Raised: m.stop(Stop.Raised(fr.Code))
+            if m.When == Mode.Compile and m.walksLetGo(): m.refuse(WhyWalkLetGo)
         }
         case rGlobal {
             if fr.Raised {
@@ -5217,7 +5217,7 @@ fn (m mut Machine&) returned(fr frame) {
             m.TraceDropped = try m.traceStack.Pop() catch default 0
             n := try m.traceStack.Pop() catch default 0
             at := m.traceStack.Len() - n
-            for i in range n { m.trace.Push(m.traceStack[at + i]) }
+            for i in range n: m.trace.Push(m.traceStack[at + i])
             m.traceStack.Truncate(at)
             m.taskEnded(fr)
         }
@@ -5232,23 +5232,23 @@ fn (m mut Machine&) returned(fr frame) {
 # hanging. A timed wait with no task anywhere waits out its time, as the built program would with nothing to wake it
 fn (m mut Machine&) waitsForTask(name String&) Bool {
     untimed := name == "pthread_cond_wait"
-    if not untimed and name != "pthread_cond_timedwait" { return false }
+    if not untimed and name != "pthread_cond_timedwait": return false
     running := -1
     for i in range m.nFs {
-        if m.fs[i].Ret == rTask { running = m.fs[i].RetArg }
+        if m.fs[i].Ret == rTask: running = m.fs[i].RetArg
     }
     pending := false
     for i in range 1, m.scopes.Len() {
-        if m.scopes[i].Live and m.scopes[i].Tasks >= 0 { pending = true }
+        if m.scopes[i].Live and m.scopes[i].Tasks >= 0: pending = true
     }
-    if not untimed and not pending and running < 0 { return false }
+    if not untimed and not pending and running < 0: return false
     m.WaitTaskFile = -1
     if running >= 0 {
         tk := m.tasks[running]
         st := m.cf[tk.Fn].Stmts
         for i in range st.Len() {
             sw := st[i]
-            if sw == mir.Stmt.Spawn and I64(sw.task) == tk.Task { m.WaitTaskFile, m.WaitTaskSp = m.cf[tk.Fn].File, sw.sp }
+            if sw == mir.Stmt.Spawn and I64(sw.task) == tk.Task: m.WaitTaskFile, m.WaitTaskSp = m.cf[tk.Fn].File, sw.sp
         }
     }
     m.refuse(WhyWaits)
@@ -5309,7 +5309,7 @@ fn (m Machine&) TraceWhat(i I64) String& {
 # handed, then its function value where it calls through one - offsets in that order
 fn (m mut Machine&) taskLayout(f mir.Fn&, k mir.Task, fi I64) Array<I64>, I64 {
     tys := Array<types.TypeId>(I64(k.Args.N))
-    for i in range k.Args.N { tys[i] = m.opType(fi, f.Ops[I64(k.Args.At) + i]) }
+    for i in range k.Args.N: tys[i] = m.opType(fi, f.Ops[I64(k.Args.At) + i])
     offs, total := m.pack(tys)
     return offs, total
 }
@@ -5325,7 +5325,7 @@ fn (m mut Machine&) spawn(fi I64, j mir.ScopeId, ti I32) {
     offs, total := m.taskLayout(f, k, fi)
     nt, nc, ns := I64(k.Targets.N), I64(k.Clauses.N), I64(k.Scopes.N)
     buf := m.allocate(total + 8 * nt + 16 * nc + 8 * ns + 16 + 8 * nt, aValue, js)
-    if m.halted { return }
+    if m.halted: return
     for i in range k.Args.N {
         x := f.Ops[I64(k.Args.At) + i]
         m.put(fi, Ptr(buf.Id, offs[i]), m.opType(fi, x), x)
@@ -5338,10 +5338,10 @@ fn (m mut Machine&) spawn(fi I64, j mir.ScopeId, ti I32) {
     at += 8 * nt
     for i in range nc {
         h := f.Clauses[I64(k.Clauses.At) + i].Handler
-        if h != mir.Operand.None { m.put(fi, Ptr(buf.Id, at + 16 * i), m.opType(fi, h), h) }
+        if h != mir.Operand.None: m.put(fi, Ptr(buf.Id, at + 16 * i), m.opType(fi, h), h)
     }
     at += 16 * nc
-    for i in range ns { m.wr(Ptr(buf.Id, at + 8 * i), 8, m.scopeOf(fi, f.Refs[I64(k.Scopes.At) + i])) }
+    for i in range ns: m.wr(Ptr(buf.Id, at + 8 * i), 8, m.scopeOf(fi, f.Refs[I64(k.Scopes.At) + i]))
     at += 8 * ns
     match k.Target {
         case mir.Callee.Value(x) { m.put(fi, Ptr(buf.Id, at), m.opType(fi, x), x) }
@@ -5352,7 +5352,7 @@ fn (m mut Machine&) spawn(fi I64, j mir.ScopeId, ti I32) {
     for i in range k.Copies.N {
         r := f.Refs[I64(k.Copies.At) + i]
         w I64 = 0
-        if r != mir.ScopeRef.Frame { w = m.scopeOf(fi, r) }
+        if r != mir.ScopeRef.Frame: w = m.scopeOf(fi, r)
         m.wr(Ptr(buf.Id, at + 8 * i), 8, w)
     }
     slot := try m.freeTasks.Pop() catch default m.newTaskSlot()
@@ -5382,7 +5382,7 @@ fn (m mut Machine&) wait(fi I64, j mir.ScopeId, ok mir.BlockId, code mir.LocalId
     slot := m.scopes[sc].Tasks
     if slot >= 0 {
         m.scopes[sc].Tasks = m.tasks[slot].Next
-        if m.scopes[sc].Tasks < 0 { m.scopes[sc].TasksEnd = -1 }
+        if m.scopes[sc].Tasks < 0: m.scopes[sc].TasksEnd = -1
         m.startTask(fi, slot)
         return
     }
@@ -5390,7 +5390,7 @@ fn (m mut Machine&) wait(fi I64, j mir.ScopeId, ok mir.BlockId, code mir.LocalId
     m.scopes[sc].Kept = 0
     # P4b, T19b: a wait whose failed edge is its ok one takes no failure - an error of the block's own is leaving: the
     # kept task's payload dropped, as __olang_join_tasks_keep drops it, the leaving error's own record the one under it
-    if kept != 0 and failed == ok { m.payDrop(m.scopes[sc].KeptBase) }
+    if kept != 0 and failed == ok: m.payDrop(m.scopes[sc].KeptBase)
     if kept != 0 and failed != mir.NoBlock and failed != ok {
         m.wr(m.localPtr(fi, code), 4, kept)
         m.failedHere(fi, tJoin)
@@ -5426,9 +5426,9 @@ fn (m mut Machine&) startTask(fi I64, slot I64) {
         return
     }
     nf := m.pushFrame(callee, rTask, slot)
-    if nf < 0 { return }
+    if nf < 0: return
     # the task has a thread of its own, and so a trace of its own (S18d)
-    for w in m.trace { m.traceStack.Push(w) }
+    for w in m.trace: m.traceStack.Push(w)
     m.traceStack.Push(m.trace.Len())
     m.traceStack.Push(m.TraceDropped)
     m.trace.Clear()
@@ -5456,13 +5456,13 @@ fn (m mut Machine&) startTask(fi I64, slot I64) {
 }
 
 fn (m mut Machine&) loadCaptures(nf I64, g mir.Fn&, env Ptr, passed I64) {
-    if g.Captures.Len() == 0 { return }
+    if g.Captures.Len() == 0: return
     if env.Id == 0 {
         m.refuse(WhyNullCall)
         return
     }
     tys := Array<types.TypeId>(g.Captures.Len())
-    for i in range g.Captures.Len() { tys[i] = g.Locals[I64(g.Captures[i])].Ty }
+    for i in range g.Captures.Len(): tys[i] = g.Locals[I64(g.Captures[i])].Ty
     offs, total := m.pack(tys)
     for i in range g.Captures.Len() {
         m.copy(m.localPtr(nf, g.Captures[i]), Ptr(env.Id, env.Off + offs[i]), m.size(tys[i]))
@@ -5475,7 +5475,7 @@ fn (m mut Machine&) loadCaptures(nf I64, g mir.Fn&, env Ptr, passed I64) {
             case mir.VarKind.Capture(c): c
             case _: -1
         }
-        if ci >= 0 and ci < g.Captures.Len() { m.ws[m.fs[nf].Vars + v] = m.rd(Ptr(env.Id, env.Off + total + 8 * ci), 8) }
+        if ci >= 0 and ci < g.Captures.Len(): m.ws[m.fs[nf].Vars + v] = m.rd(Ptr(env.Id, env.Off + total + 8 * ci), 8)
     }
 }
 
@@ -5486,7 +5486,7 @@ fn (m mut Machine&) toTargets(fi I64, slot I64, x mir.Operand, xt types.TypeId) 
     k := f.Tasks[tk.Task]
     _, total := m.taskLayout(f, k, fi - 1)
     nt := I64(k.Targets.N)
-    if nt == 0 { return }
+    if nt == 0: return
     src := m.addr(fi, x, 1)
     for i in range nt {
         dst := m.rdPtr(Ptr(tk.Buf, total + 8 * i))
@@ -5517,7 +5517,7 @@ fn (m mut Machine&) arrayTarget(dst Ptr, src Ptr, ty types.TypeId, cs I64) {
         return
     }
     p := m.allocate(sn * es, aValue, cs)
-    if m.halted { return }
+    if m.halted: return
     m.copy(p, sd, sn * es)
     m.wr(dst, 8, sn)
     m.wrPtr(Ptr(dst.Id, dst.Off + 8), p)
@@ -5556,9 +5556,9 @@ fn (m mut Machine&) taskEnded(fr frame) {
         takes := cl.All
         for j in range cl.Items.N {
             it := f.Items[I64(cl.Items.At) + j]
-            if m.T.Same(it.Err, et) and (it.Word < 0 or it.Word == word) { takes = true }
+            if m.T.Same(it.Err, et) and (it.Word < 0 or it.Word == word): takes = true
         }
-        if not takes { continue }
+        if not takes: continue
         m.payDrop(tk.PayBase)   # T19b: a clause on the task's thread takes its payload
         if cl.Handler == mir.Operand.None {
             m.freeTask(slot)
@@ -5576,7 +5576,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
             return
         }
         nf := m.pushFrame(hf, rClause, slot)
-        if nf < 0 { return }
+        if nf < 0: return
         g := m.fns.At(hf)
         passed I64 = 0
         for kv in g.Vars {
@@ -5585,7 +5585,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
                 case _ { passed++ }
             }
         }
-        for v in range passed { m.ws[m.fs[nf].Vars + v] = m.program }
+        for v in range passed: m.ws[m.fs[nf].Vars + v] = m.program
         m.loadCaptures(nf, g, env, passed)
         return
     }
@@ -5673,10 +5673,10 @@ fn (m mut Machine&) loop(base I64) {
             fast := m.cf[k].Fast
             for {
                 m.flat(fi, k, i, fast[i * fastStride])
-                if m.halted { return }
+                if m.halted: return
                 m.fs[fi].Stmt += 1
                 i++
-                if i >= end or fast[i * fastStride] == 0 { break }
+                if i >= end or fast[i * fastStride] == 0: break
                 m.Steps++
                 if m.StepBudget >= 0 and m.Steps > m.StepBudget and m.overBudget(): return
             }
@@ -5701,7 +5701,7 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
     m.trace.Clear()
     m.traceStack.Clear()
     m.TraceDropped = 0
-    if m.Result.Id != 0 and m.al[m.Result.Id & slotMask].Kind != aFree { m.release(m.Result.Id & slotMask) }
+    if m.Result.Id != 0 and m.al[m.Result.Id & slotMask].Kind != aFree: m.release(m.Result.Id & slotMask)
     m.Result, m.ResultTy = NullPtr, types.VoidT
     fi := try m.fnOf.Get(k) catch {
         m.refuse(WhyNoBody)
@@ -5712,7 +5712,7 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
     m.stopFile, m.stopSp = f.File, f.Sp
     base := m.nFs
     nf := m.pushFrame(fi, rRequest, 0)
-    if nf < 0 { return m.Stopped }
+    if nf < 0: return m.Stopped
     for i in range args.Len() {
         if i < f.Params.Len() {
             l := f.Params[i]
@@ -5720,7 +5720,7 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
             m.wr(m.localPtr(nf, l), m.width(ty), args[i])
         }
     }
-    for i in range f.Vars.Len() { m.ws[m.fs[nf].Vars + i] = m.program }
+    for i in range f.Vars.Len(): m.ws[m.fs[nf].Vars + i] = m.program
     m.loop(base)
     m.unwind(base)
     return m.Stopped
@@ -5735,7 +5735,7 @@ fn (m mut Machine&) EndProgram(k mir.FnKey) Stop {
     fi := try m.fnOf.Get(k) catch { return Stop.None }
     base := m.nFs
     nf := m.pushFrame(fi, rRequest, 0)
-    if nf < 0 { return m.Stopped }
+    if nf < 0: return m.Stopped
     mark := m.closing.Len()
     m.closing.Push(m.program)
     for m.closing.Len() > mark and not m.halted {
@@ -5755,7 +5755,7 @@ fn (m mut Machine&) Global(module I64, name source.NameId, baking Bool = false, 
     m.halted = false
     m.Stopped = Stop.None
     m.Steps = 0
-    if m.Result.Id != 0 and m.al[m.Result.Id & slotMask].Kind != aFree { m.release(m.Result.Id & slotMask) }
+    if m.Result.Id != 0 and m.al[m.Result.Id & slotMask].Kind != aFree: m.release(m.Result.Id & slotMask)
     m.Result, m.ResultTy = NullPtr, types.VoidT
     g := try m.globalOf.Get(gkey(module, name)) catch {
         m.refuse(WhyNoBody)
@@ -5780,7 +5780,7 @@ fn (m mut Machine&) Global(module I64, name source.NameId, baking Bool = false, 
         m.startGlobal(g)
         m.loop(base)
         m.unwind(base)
-        if m.halted { return m.Stopped }
+        if m.halted: return m.Stopped
     }
     # O1b: a global whose initializer registers a destructor with the program's scope is not baked - the run's start
     # runs it, so the destructor runs as the program ends; its value is still read while compiling
@@ -5822,7 +5822,7 @@ fn (m mut Machine&) unwind(base I64) {
             case _ { }
         }
     }
-    for m.nFs > base { m.dropFrame() }
+    for m.nFs > base: m.dropFrame()
     if m.initGlobal >= 0 and m.halted {
         m.StoppedGlobal = -1
         match m.codeKeys[m.globals[m.initGlobal].Init] {
@@ -5830,7 +5830,7 @@ fn (m mut Machine&) unwind(base I64) {
             case _ { }
         }
         for g in range m.globals.Len() {
-            if m.globals[g].State == 1 { m.globals[g].State = 0 }
+            if m.globals[g].State == 1: m.globals[g].State = 0
         }
         m.initGlobal = -1
     }
@@ -5842,9 +5842,9 @@ fn (m mut Machine&) dropFrame() {
     fr := m.fs[fi]
     for i in range fr.Vars - fr.Scopes {
         id := m.ws[fr.Scopes + i]
-        if m.live(id) { m.dropScope(id) }
+        if m.live(id): m.dropScope(id)
     }
-    if m.live(fr.Store) { m.dropScope(fr.Store) }
+    if m.live(fr.Store): m.dropScope(fr.Store)
     m.closing.Truncate(fr.Closing)
     m.popFrame()
 }
@@ -5853,7 +5853,7 @@ fn (m mut Machine&) dropFrame() {
 # (s closes)
 fn (m mut Machine&) dropDefers(fi I64, s I64, newest Bool) {
     for k := m.defS.Len() - 1, k >= 0 and m.defF[k] == fi, k-- {
-        if m.defS[k] != s { continue }
+        if m.defS[k] != s: continue
         for j in range k, m.defS.Len() - 1 {
             m.defF[j] = m.defF[j + 1]
             m.defS[j] = m.defS[j + 1]
@@ -5862,14 +5862,14 @@ fn (m mut Machine&) dropDefers(fi I64, s I64, newest Bool) {
         m.defF.Truncate(m.defF.Len() - 1)
         m.defS.Truncate(m.defS.Len() - 1)
         m.defB.Truncate(m.defB.Len() - 1)
-        if newest { return }
+        if newest: return
     }
 }
 
 # the pending cleanups of frame fi and of every frame above it dropped - they are gone
 fn (m mut Machine&) dropOwnDefers(fi I64) {
     n := m.defF.Len()
-    for n > 0 and m.defF[n - 1] >= fi { n-- }
+    for n > 0 and m.defF[n - 1] >= fi: n--
     m.defF.Truncate(n)
     m.defS.Truncate(n)
     m.defB.Truncate(n)
@@ -5944,7 +5944,7 @@ fn (m mut Machine&) closeNow(fi I64, id I64) {
     for m.scopes[sc].Tasks >= 0 and not m.halted {
         slot := m.scopes[sc].Tasks
         m.scopes[sc].Tasks = m.tasks[slot].Next
-        if m.scopes[sc].Tasks < 0 { m.scopes[sc].TasksEnd = -1 }
+        if m.scopes[sc].Tasks < 0: m.scopes[sc].TasksEnd = -1
         m.startTask(fi, slot)
         if m.nFs > fi + 1: m.loop(fi + 1)
     }
@@ -5969,9 +5969,9 @@ fn (m mut Machine&) dropScope(id I64) {
         m.freeTasks.Push(t)
     }
     if m.deadMode and m.scopes[sc].Early {
-        for a := m.scopes[sc].Allocs, a != 0, a = m.al[a].Next { m.early.Put(m.al[a].Gen << slotBits | a, true) }
+        for a := m.scopes[sc].Allocs, a != 0, a = m.al[a].Next: m.early.Put(m.al[a].Gen << slotBits | a, true)
     }
-    for m.scopes[sc].Allocs != 0 { m.release(m.scopes[sc].Allocs) }
+    for m.scopes[sc].Allocs != 0: m.release(m.scopes[sc].Allocs)
     s := m.scopes[sc]
     s.Live = false
     s.Early = false
@@ -5986,7 +5986,7 @@ fn (m mut Machine&) Main(inits Array<mir.FnKey>&, main mir.FnKey) Stop {
     none := Array<I64>(0)
     for k in inits {
         s := m.Eval(k, none)
-        if s != Stop.None { return s }
+        if s != Stop.None: return s
     }
     return m.Eval(main, none)
 }
@@ -6025,13 +6025,13 @@ type NotBaked error {
 # the program's own storage made by its initializer. One reaching code (a function value), another global's storage
 # or storage the evaluator does not hold as data is set at startup instead
 fn (m mut Machine&) Image(module I64, name source.NameId, mutable Bool = false) Image ? NotBaked {
-    if m.Global(module, name, true, mutable) != Stop.None { error NotBaked.Refused }
+    if m.Global(module, name, true, mutable) != Stop.None: error NotBaked.Refused
     g := try m.globalOf.Get(gkey(module, name)) catch { error NotBaked.Refused }
     img := Image()
     blobOf Map<I64, I64>
     work Vec<I64>
     root := m.globals[g].Store & slotMask
-    if m.al[root].Size == 0 { error NotBaked.Refused }
+    if m.al[root].Size == 0: error NotBaked.Refused
     blobOf.Put(root, 0)
     work.Push(root)
     k I64 = 0
@@ -6043,23 +6043,23 @@ fn (m mut Machine&) Image(module I64, name source.NameId, mutable Bool = false) 
         b.Align = 64 if a.Size >= 64 else 32 if a.Size >= 32 else 8
         if k == 0 {
             al := m.T.Align(types.TypeId(I32(m.globals[g].Ty)))
-            if al > b.Align { b.Align = al }
+            if al > b.Align: b.Align = al
         }
-        for i in range a.Size { b.Bytes.Push(U8(m.rdRaw(a.Base + i, 1))) }
+        for i in range a.Size: b.Bytes.Push(U8(m.rdRaw(a.Base + i, 1)))
         if a.Hdr > 0 {
             # T13d: a generational instance's header in constant data - generation 0, pinned (genrefs 4.1), so nothing
             # writes its count and a weak word naming it (written with no generation) matches it forever
-            for i in range a.Hdr - 8, a.Hdr { b.Bytes[i] = U8(0) }
+            for i in range a.Hdr - 8, a.Hdr: b.Bytes[i] = U8(0)
             b.Bytes[a.Hdr - 6] = U8(3)
-            if a.Hdr > b.Align { b.Align = a.Hdr }
+            if a.Hdr > b.Align: b.Align = a.Hdr
         }
         for w in range a.Size / 8 {
             id := m.prov[a.Base / 8 + w]
-            if id == 0 { continue }
+            if id == 0: continue
             ts := id & slotMask
-            if ts >= m.nAl or m.al[ts].Kind == aFree or m.al[ts].Gen != id >> slotBits { error NotBaked.Refused }
-            if ts != root and m.al[ts].Kind != aValue and m.al[ts].Kind != aData { error NotBaked.Refused }
-            if m.al[ts].Kind == aValue and m.al[ts].Scope != m.program { error NotBaked.Refused }
+            if ts >= m.nAl or m.al[ts].Kind == aFree or m.al[ts].Gen != id >> slotBits: error NotBaked.Refused
+            if ts != root and m.al[ts].Kind != aValue and m.al[ts].Kind != aData: error NotBaked.Refused
+            if m.al[ts].Kind == aValue and m.al[ts].Scope != m.program: error NotBaked.Refused
             # an instance another global's initializer made is that global's: written once, with it, and named here
             # (K2b) - the caller resolves which global's image holds it
             if ts != root and m.al[ts].Owner >= 0 and m.al[ts].Owner != g {
@@ -6089,7 +6089,7 @@ fn (m mut Machine&) Image(module I64, name source.NameId, mutable Bool = false) 
     gt := types.TypeId(I32(m.globals[g].Ty))
     if m.T.IsRef(gt) and (m.T.PermOf(gt) & types.Writable) == 0 {
         for to in img.Blobs[0].To {
-            if to > 0 and img.Blobs[to].At.Len() == 0 { img.Blobs[to].Constant = true }
+            if to > 0 and img.Blobs[to].At.Len() == 0: img.Blobs[to].Constant = true
         }
     }
     return img
@@ -6100,13 +6100,13 @@ fn (m mut Machine&) Image(module I64, name source.NameId, mutable Bool = false) 
 # whether the value a request gave holds an address - a reference, an array's storage, a function value's environment:
 # a fill copying it into every element would share what it reaches (D13c)
 fn (m mut Machine&) ResultHoldsAddress() Bool {
-    if m.Result.Id == 0 { return false }
+    if m.Result.Id == 0: return false
     a := m.al[m.Result.Id & slotMask]
     from := a.Base + m.Result.Off
     to := from + m.size(m.ResultTy)
     w := from / 8
     for w * 8 < to {
-        if w < m.prov.Len() and m.prov[w] != 0 { return true }
+        if w < m.prov.Len() and m.prov[w] != 0: return true
         w++
     }
     return false
@@ -6127,7 +6127,7 @@ fn (m mut Machine&) Elems(p Ptr, ty types.TypeId, elem types.TypeId) Array<I64> 
     data, n := m.arrayView(p, ty)
     stride := m.size(elem)
     out := Array<I64>(n)
-    for i in range n { out[i] = m.Int(Ptr(data.Id, data.Off + i * stride), elem) }
+    for i in range n: out[i] = m.Int(Ptr(data.Id, data.Off + i * stride), elem)
     return out
 }
 
@@ -6135,7 +6135,7 @@ fn (m mut Machine&) Elems(p Ptr, ty types.TypeId, elem types.TypeId) Array<I64> 
 fn (m mut Machine&) Text(p Ptr, ty types.TypeId) String {
     data, n := m.arrayView(p, ty)
     b := StringBuilder()
-    for i in range n { b.PushChar(Char(U8(m.rd(Ptr(data.Id, data.Off + i), 1)))) }
+    for i in range n: b.PushChar(Char(U8(m.rd(Ptr(data.Id, data.Off + i), 1))))
     return b.ToString()
 }
 
@@ -6215,7 +6215,7 @@ fn (m mut Machine&) layoutOf(ty types.TypeId, b mut StringBuilder&, seen mut Map
         }
     }
     if (sh == vEnum or sh == vOrd) and named {
-        for n in t.CaseNames(r) { b.Push(" " + $t.Names.Text(n)) }
+        for n in t.CaseNames(r): b.Push(" " + $t.Names.Text(n))
     }
     if sh == vEnum {
         for k in range t.Items(t.Cases(r) if named else t.ShapeCases(r)).Len() {
@@ -6223,8 +6223,8 @@ fn (m mut Machine&) layoutOf(ty types.TypeId, b mut StringBuilder&, seen mut Map
             if pt != types.TypeId(0): m.layoutOf(pt, b, seen)
         }
     }
-    if sh == vPtr and t.KindOf(r) == types.Kind.Ref { m.layoutOf(t.Referent(r), b, seen) }
-    if sh == vPair or sh == vFixed { m.layoutOf(m.elemOf(ty), b, seen) }
+    if sh == vPtr and t.KindOf(r) == types.Kind.Ref: m.layoutOf(t.Referent(r), b, seen)
+    if sh == vPair or sh == vFixed: m.layoutOf(m.elemOf(ty), b, seen)
     b.Push(")")
 }
 
@@ -6261,12 +6261,12 @@ fn (s mut Snapshot&) drop(n I64, w I64) {
 # allocation id given an index in s - its words written once saveWords reaches it
 fn (m mut Machine&) saveAlloc(id I64, s mut Snapshot&, root Bool) I64 ? NotSaved {
     have := try s.ids.Get(id) catch default -1
-    if have >= 0 { return have }
+    if have >= 0: return have
     a := m.al[id & slotMask]
-    if a.Kind == aFree or a.Gen != id >> slotBits { error NotSaved.Gone }
-    if a.Kind == aCode or a.Extern { error NotSaved.Code }
-    if a.Kind == aGlobal and not root { error NotSaved.Global }
-    if a.Ty != types.TypeId(0) or a.Hdr != 0 { error NotSaved.Generational }
+    if a.Kind == aFree or a.Gen != id >> slotBits: error NotSaved.Gone
+    if a.Kind == aCode or a.Extern: error NotSaved.Code
+    if a.Kind == aGlobal and not root: error NotSaved.Global
+    if a.Ty != types.TypeId(0) or a.Hdr != 0: error NotSaved.Generational
     k := s.Starts.Len()
     s.ids.Put(id, k)
     s.Starts.Push(-id)    # (its id until saveWords writes it)
@@ -6282,7 +6282,7 @@ fn (m mut Machine&) saveWords(k I64, s mut Snapshot&) ? NotSaved {
     s.Words.Push(a.Kind)
     s.Words.Push(1 if a.ReadOnly else 0)
     nw := (a.Size + 7) / 8
-    for w in range nw { s.Words.Push(m.hw[a.Base / 8 + w]) }
+    for w in range nw: s.Words.Push(m.hw[a.Base / 8 + w])
     for w in range nw {
         p := m.prov[a.Base / 8 + w]
         if p == 0 {
@@ -6383,11 +6383,11 @@ fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
 fn (m mut Machine&) whyStmt(f mir.Fn&, s mir.Stmt) String, source.Span {
     match s {
         case mir.Stmt.Assign(sp, p, rv) {
-            if placeNamesGlobal(p) { return WhyWritesGlobalVar, sp }
-            if m.readsMutable(f, rv) { return WhyMutableGlobal, sp }
+            if placeNamesGlobal(p): return WhyWritesGlobalVar, sp
+            if m.readsMutable(f, rv): return WhyMutableGlobal, sp
         }
         case mir.Stmt.RegisterDtor(sp, s2, _, _) {
-            if s2 != mir.ScopeRef.Program { return WhyDestructor, sp }
+            if s2 != mir.ScopeRef.Program: return WhyDestructor, sp
         }
         case _ { }
     }
@@ -6399,7 +6399,7 @@ fn (m mut Machine&) whyStmt(f mir.Fn&, s mir.Stmt) String, source.Span {
 fn (m mut Machine&) whyTerm(f mir.Fn&, t mir.Term, seen mut Map<I64, Bool>&, work mut Vec<I64>&) String, source.Span {
     match t {
         case mir.Term.Exit(sp, kind, _) {
-            if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { return WhyEnds, sp }
+            if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail: return WhyEnds, sp
         }
         case mir.Term.Call(sp, c), mir.Term.Tail(sp, c) { return m.whyCall(f.Calls[I64(c)].Target, sp, seen, work) }
         case _ { }
@@ -6439,7 +6439,7 @@ fn (m mut Machine&) rangeMutable(f mir.Fn&, r mir.Range) Bool {
     for i in range r.N {
         match f.Ops[I64(r.At) + i] {
             case mir.Operand.Copy(p) {
-                if m.mutableGlobal(p) { return true }
+                if m.mutableGlobal(p): return true
             }
             case _ { }
         }
@@ -6469,7 +6469,7 @@ fn tcopy(i I64) mir.Operand { return mir.Operand.Copy(tl(i)) }
 # a test's function, keyed Body(id), of type ty: its parameters, its frame scope S0, and block 0 opening it
 fn tfn(t mut types.Table&, id I64, ty types.TypeId) mir.Fn {
     f := mir.Fn(mir.FnKey.Body(typed.BodyId(I32(id))), ty, 0, Sp0)
-    for p in t.Items(t.Params(ty)) { f.AddParam(source.NameId(0), Sp0, p) }
+    for p in t.Items(t.Params(ty)): f.AddParam(source.NameId(0), Sp0, p)
     f.AddScope(mir.ScopeKind.Frame, mir.NoScope, typed.BlockId(0), Sp0)
     f.NewBlock()
     f.Add(B0, mir.Stmt.Open(Sp0, S0))
@@ -6638,15 +6638,15 @@ fn overflows64(op typed.PrimOp, a I64, b I64, signed Bool) Bool {
             r := a - b
             return ((a ^ b) & (a ^ r)) < 0
         }
-        if a == 0 or b == 0 { return false }
+        if a == 0 or b == 0: return false
         least := I64(1) << 63
-        if (a == -1 and b == least) or (b == -1 and a == least) { return true }
+        if (a == -1 and b == least) or (b == -1 and a == least): return true
         return (a * b) / b != a
     }
     ua, ub := U64(a), U64(b)
-    if op == typed.PrimOp.Add { return ua + ub < ua }
-    if op == typed.PrimOp.Sub { return ub > ua }
-    if ua == 0 { return false }
+    if op == typed.PrimOp.Add: return ua + ub < ua
+    if op == typed.PrimOp.Sub: return ub > ua
+    if ua == 0: return false
     return (ua * ub) / ua != ub
 }
 

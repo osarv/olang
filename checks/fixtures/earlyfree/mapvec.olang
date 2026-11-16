@@ -9,7 +9,7 @@ N I64 = 1000000
 
 fn mk(i I64) Vec<I64> {
     v := Vec<I64>()
-    for j in range 8 { v.Push(i + j) }
+    for j in range 8: v.Push(i + j)
     return v
 }
 
@@ -17,7 +17,7 @@ fn main() {
     m := Map<I64, Vec<I64>>()
     for i in range N {
         m.Put(i % 64, mk(i))
-        if i % 7 == 0 { m.Remove((i + 3) % 64) }
+        if i % 7 == 0: m.Remove((i + 3) % 64)
     }
     t I64 = 0
     for k in range 64 { t += (try m.Get(k) catch { continue }).Len() }

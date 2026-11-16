@@ -24,7 +24,7 @@ fn churn() I64 {
     return n
 }
 fn main() ? {
-    for x in ids() { assert x == 1 or x == 2 }
+    for x in ids(): assert x == 1 or x == 2
     assert Closed == 1
     for x in ids() {
         churn()

@@ -10,27 +10,27 @@ fn churn(n I64) I64 {
 
 fn settle() I64 {
     s I64 = 0
-    for i in range 1, 50 { s += churn(i * 8) }
+    for i in range 1, 50: s += churn(i * 8)
     return s
 }
 
 # the words of a text, counted by their lengths: the pieces and each walk's element read where they stand
 fn letters(t String&) I64 {
     n I64 = 0
-    for w in t.Split(" ") { n += w.Len() }
+    for w in t.Split(" "): n += w.Len()
     return n
 }
 
 fn lineLengths(t String&) I64 {
     n I64 = 0
-    for l in t.Lines() { n += l.Len() * 10 }
+    for l in t.Lines(): n += l.Len() * 10
     return n
 }
 
 fn total(a Array<I64>&) I64 {
     s I64 = 0
     it := a.Iter()
-    for x in it { s += x }
+    for x in it: s += x
     return s + a.Iter().Fold(I64(0), fn(acc I64, x I64) I64 { return acc + x })
 }
 
@@ -66,7 +66,7 @@ test letters "elements of an array of text written in the walk are the elements 
 test letters "pieces kept in a Vec are its own" {
     t Array<Char> = $"pqr"
     kept := Vec<Array<Char>>()
-    for w in t.Windows(1) { kept.Push(w) }
+    for w in t.Windows(1): kept.Push(w)
     t[0] = 'P'
     assert settle() > 0 and kept.Len() == 3 and kept[0] == "p" and kept[2] == "r"
 }

@@ -8,9 +8,7 @@ fn grow(c mut Circle&) { c.r = c.r * 2.0 }
 type Shape enum { Round Circle, Sq(s F64) }
 
 fn bump(e mut Shape&) {
-    if e == Shape.Round {
-        grow(e)
-    }
+    if e == Shape.Round: grow(e)
 }
 
 fn main() {

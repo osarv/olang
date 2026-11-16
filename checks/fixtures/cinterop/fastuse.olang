@@ -5,9 +5,7 @@ import "std/io"
 
 fn work(n I64) I64 {
     t I64 = 0
-    for i in range n {
-        t += I64(f.fast_add(I32(i), 0)) + f.fast_sq(i) - f.FAST_TWICE(i)
-    }
+    for i in range n: t += I64(f.fast_add(I32(i), 0)) + f.fast_sq(i) - f.FAST_TWICE(i)
     return t
 }
 

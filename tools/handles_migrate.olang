@@ -98,7 +98,7 @@ fn declAfter(line String&, col I64, name String&) I64 {
     i := col - 1
     if i < 0 or i + name.Len() > line.Len() or line[i:i + name.Len()] != name: return 0
     j := i + name.Len()
-    for j < line.Len() and line[j] == ' ' { j++ }
+    for j < line.Len() and line[j] == ' ': j++
     if j + 2 > line.Len() or line[j:j + 2] != ":=": return 0
     return j
 }
@@ -251,7 +251,7 @@ fn apply(eds Vec<edit>&, left mut Vec<String&>&, cloned mut Vec<String>&) I64 {
         if not paths.Has(e.Path): paths.Push(e.Path)
     }
     done I64 = 0
-    for p in paths { done += applyFile(p, eds, left, cloned) }
+    for p in paths: done += applyFile(p, eds, left, cloned)
     return done
 }
 
@@ -323,7 +323,7 @@ fn compileAll(olang String&, files Array<String&>&, work Array<String&>&) Array<
     outputs mut Array<String&>& = Array<String&>(files.Len(), "")
     Taken = 0
     join {
-        for w in work { spawn worker(olang, files, w, outputs) }
+        for w in work: spawn worker(olang, files, w, outputs)
     }
     return outputs
 }
@@ -358,7 +358,7 @@ fn main() ? {
     files Vec<String&>
     diagedit.OlangFiles(via if via.Len() > 0 else paths, files)
     allowed Vec<String&>
-    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+    for p in paths: allowed.Push(diagedit.RealPathOf(p))
     tmp := try os.MkTemp("", "handles_migrate")
     defer try os.RemoveAll(tmp) catch { }
     work Vec<String&>
@@ -388,7 +388,7 @@ fn main() ? {
     srcmask.Say("total: " + $total + " edits")
     if left.Len() > 0 {
         srcmask.Say("for a person:")
-        for l in left { srcmask.Say("  " + $l) }
+        for l in left: srcmask.Say("  " + $l)
     }
 }
 

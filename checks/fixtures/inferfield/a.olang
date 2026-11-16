@@ -3,7 +3,7 @@
 # bodies are checked first - and the field's type is built for it, not "?"
 fn Total(s S&) I64 {
     n := 0
-    for x in s.xs { n += x }
+    for x in s.xs: n += x
     return n + s.ys.Len() + Box<I64>().vs.Len()
 }
 

@@ -32,7 +32,7 @@ fn main() {
     }
     churn()
     s := 0
-    for x in out.seen { s += x }
+    for x in out.seen: s += x
     assert out.seen.Len() == 100 and s == 4950
 
 }

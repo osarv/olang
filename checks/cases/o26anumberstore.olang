@@ -18,7 +18,7 @@ fn S.scan(n I64) S {
     for i in range n {
         line := mk(i)
         v := sneak(line, s)
-        if v > s.best { s.best = v }
+        if v > s.best: s.best = v
     }
     return s
 }

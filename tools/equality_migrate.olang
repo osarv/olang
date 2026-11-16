@@ -29,7 +29,7 @@ fn vtokens(src String&) Vec<VT> {
     ts := scan.Tokens.Scan(src)
     out Vec<VT>
     for tk in ts.Toks {
-        if tk.Kind == token.Tok.StmtEnd { continue }
+        if tk.Kind == token.Tok.StmtEnd: continue
         out.Push(VT(tk.Kind, I64(tk.Start), I64(tk.End)))
     }
     return out
@@ -51,9 +51,9 @@ type Edit struct(start I64, end I64, text String&) {
 # where the operand after an "is" at token i ends (the index past it): a dotted name, or -1 for anything else
 fn pathEnd(v Vec<VT>&, i I64) I64 {
     j := i
-    if j >= v.Len() or v[j].k != token.Tok.Iden { return -1 }
+    if j >= v.Len() or v[j].k != token.Tok.Iden: return -1
     j++
-    for j + 1 < v.Len() and v[j].k == token.Tok.Dot and v[j + 1].k == token.Tok.Iden { j += 2 }
+    for j + 1 < v.Len() and v[j].k == token.Tok.Dot and v[j + 1].k == token.Tok.Iden: j += 2
     return j
 }
 
@@ -63,11 +63,11 @@ fn migrate(src String&, n mut Counts&, path String&) String {
     for i in range v.Len() {
         t := v[i]
         # "is", a keyword until 2026-11-15 and a name since, never a member's
-        if src[t.start:t.end] != "is" or (i > 0 and v[i - 1].k == token.Tok.Dot) { continue }
+        if src[t.start:t.end] != "is" or (i > 0 and v[i - 1].k == token.Tok.Dot): continue
         at := i + 1
         negated := at < v.Len() and v[at].k == token.Tok.Not
-        if negated { at++ }
-        if at < v.Len() and v[at].k == token.Tok.NullLit { continue }
+        if negated: at++
+        if at < v.Len() and v[at].k == token.Tok.NullLit: continue
         e := pathEnd(v, at)
         op := "!=" if negated else "=="
         if e < 0 {
@@ -83,7 +83,7 @@ fn migrate(src String&, n mut Counts&, path String&) String {
         }
         edits.Push(Edit(t.start, v[at - 1].end, op))
     }
-    if edits.Len() == 0 { return src }
+    if edits.Len() == 0: return src
     out := StringBuilder()
     at I64 = 0
     for ed in edits {
@@ -116,9 +116,9 @@ fn migrateMarkdown(src String&, n mut Counts&, path String&) String {
             inBlock = true
         }
         out.Push(line)
-        if not last { out.PushChar('\n') }
+        if not last: out.PushChar('\n')
     }
-    if inBlock { out.Push(block.ToString()) }
+    if inBlock: out.Push(block.ToString())
     return out.ToString()
 }
 
@@ -144,16 +144,16 @@ fn main() ? {
     total := Counts()
     changed I64 = 0
     for path in files {
-        if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")): continue
         src := try srcmask.ReadText(path) catch {
             srcmask.SayErr("equality_migrate: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
         out := migrateMarkdown(src, total, path) if path.EndsWith(".md") else migrate(src, total, path)
-        if out == src { continue }
+        if out == src: continue
         changed++
-        if verbose { srcmask.Say(path) }
+        if verbose: srcmask.Say(path)
         if not check {
             try os.WriteFile(path, out) catch {
                 srcmask.SayErr("equality_migrate: cannot write " + $path)
@@ -161,10 +161,10 @@ fn main() ? {
             }
         }
     }
-    for l in total.listed { srcmask.Say(l) }
+    for l in total.listed: srcmask.Say(l)
     verb := "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.cases + " case tests, " + $total.identities + " identities")
-    if check and changed > 0 { os.Exit(1) }
+    if check and changed > 0: os.Exit(1)
 }
 
 test "case tests and identity are '==', null tests left for nulltest_migrate" {

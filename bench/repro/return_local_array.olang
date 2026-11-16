@@ -9,7 +9,7 @@ import "std/os"
 
 fn filled(n I64) Array<F32> {
     m := Array<F32>(n)
-    for i in range n { m[i] = F32(i) }
+    for i in range n: m[i] = F32(i)
     return m
 }
 

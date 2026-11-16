@@ -20,7 +20,7 @@ fn main() {
     dump := toolkit.Env("LAYOUTDIFF_DUMP", "build/compiler_tools_dump")
     golden := "compiler/goldens/layout.txt"
     deferred := "compiler/goldens/layout.deferred"
-    if not toolkit.Built(dump) { toolkit.Die("layoutdiff: " + $dump + " is not built (make " + $dump + ")") }
+    if not toolkit.Built(dump): toolkit.Die("layoutdiff: " + $dump + " is not built (make " + $dump + ")")
     o := toolkit.Run(Array<String&>[dump, "layout", golden])
     if o.Status != 0 {
         toolkit.Say(o.Stderr)
@@ -32,12 +32,12 @@ fn main() {
     }
     allowed := Vec<String&>()
     for r in toolkit.Rows(toolkit.Read(deferred)) {
-        if not r.StartsWith("#") and r != "" { allowed.Push($r) }
+        if not r.StartsWith("#") and r != "": allowed.Push($r)
     }
     report := outcome.compare(toolkit.Rows(toolkit.Read(golden)), toolkit.Rows(o.Stdout), allowed.ToArray())
     toolkit.Say(report.text)
     toolkit.Say("layoutdiff: " + $report.same + " types as stage 0 lays them out, " + $report.deferred + " deferred to the evaluator\n")
-    if report.bad > 0 { os.Exit(1) }
+    if report.bad > 0: os.Exit(1)
 }
 
 # what comparing the golden with the self-hosted rendering found: the report to print, the types that agree, the ones left
@@ -52,7 +52,7 @@ type outcome struct() {
 # the self-hosted rows against the golden's, row by row
 fn outcome.compare(golden Vec<String&>&, got Vec<String&>&, allowed Array<String&>&) outcome {
     ok := Map<String&, Bool>()
-    for a in allowed { ok.Put(a, true) }
+    for a in allowed: ok.Put(a, true)
     seen := Map<String&, Bool>()
     gbodies := bodies(golden)
     rbodies := bodies(got)
@@ -61,7 +61,7 @@ fn outcome.compare(golden Vec<String&>&, got Vec<String&>&, allowed Array<String
     for i, row in got {
         g String& = golden[i] if i < golden.Len() else ""
         if g == row or (g != "" and laidOut(g, gbodies, 0) == laidOut(row, rbodies, 0)) {
-            if not row.StartsWith("== ") { r.same++ }
+            if not row.StartsWith("== "): r.same++
             continue
         }
         gkey := key(g)
@@ -99,7 +99,7 @@ fn field(row String&, n I64) String& {
     at I64 = 0
     for _ in range n {
         tab := try row[at:].FindByte('\t') catch default -1
-        if tab < 0 { return row[row.Len():] }
+        if tab < 0: return row[row.Len():]
         at += tab + 1
     }
     tab := try row[at:].FindByte('\t') catch default (row.Len() - at)
@@ -111,7 +111,7 @@ fn bodies(rows Vec<String&>&) Map<String&, String&> {
     m := Map<String&, String&>()
     for row in rows {
         spelling := field(row, 2)
-        if isInstance(spelling) and not m.Has(spelling) { m.Put($spelling, $field(row, 3)) }
+        if isInstance(spelling) and not m.Has(spelling): m.Put($spelling, $field(row, 3))
     }
     return m
 }
@@ -122,13 +122,13 @@ fn isInstance(name String&) Bool { return genericLen(name) > 0 }
 
 # how much of an instance's name, after %", names its generic - 0 when the name is no instance's
 fn genericLen(name String&) I64 {
-    if not name.StartsWith("%\"") or not name.EndsWith("\"") or name.Len() < 4 { return 0 }
+    if not name.StartsWith("%\"") or not name.EndsWith("\"") or name.Len() < 4: return 0
     inner := name[2:name.Len() - 1]
     lt := try inner.FindByte('<') catch default -1
-    if lt > 0 { return lt }
-    if inner.Len() <= 33 or inner[inner.Len() - 33] != '.' { return 0 }
+    if lt > 0: return lt
+    if inner.Len() <= 33 or inner[inner.Len() - 33] != '.': return 0
     for c in inner[inner.Len() - 32:] {
-        if not c.IsDigit() and not (c >= 'a' and c <= 'f') { return 0 }
+        if not c.IsDigit() and not (c >= 'a' and c <= 'f'): return 0
     }
     return inner.Len() - 33
 }
@@ -140,10 +140,10 @@ fn laidOut(row String&, names Map<String&, String&>&, depth I64) String {
     at I64 = 0
     for at < row.Len() {
         q := try row[at:].Find("%\"") catch default -1
-        if q < 0 { break }
+        if q < 0: break
         start := at + q
         close := try row[start + 2:].FindByte('"') catch default -1
-        if close < 0 { break }
+        if close < 0: break
         end := start + 2 + close + 1
         name := row[start:end]
         b.Push(row[at:start])

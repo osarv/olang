@@ -9,7 +9,7 @@ type N struct(v I64) {
 }
 fn link(a mut N&, b N&) { a.next = b }
 fn pick(n I64) fn&(a mut N&, b N&) keeps b in a {
-    if n == 0 { return link }
+    if n == 0: return link
     return pick(n - 1)
 }
 fn churn() I64 {

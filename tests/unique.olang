@@ -52,7 +52,7 @@ fn names(f mut Token&) I64 {
 
 fn walked(v Vec<Token>&) I64 {
     n I64 = 0
-    for t in v { n += t.id * 10 + t.uses }
+    for t in v: n += t.id * 10 + t.uses
     return n
 }
 
@@ -111,10 +111,10 @@ test "a unique value is one place: copies are references, fresh values land by v
 test "a Vec of unique values: Push takes fresh ones, x[i] is the element in place, a walk names each where it is" {
     assert kept() == Kept
     v := Vec<Token>()
-    for i in range 4 { v.Push(Token(i)) }
-    for i in range 4 { v[i].Use() }
+    for i in range 4: v.Push(Token(i))
+    for i in range 4: v[i].Use()
     total I64 = 0
-    for t in v { total += t.uses }
+    for t in v: total += t.uses
     assert total == 4 and v.Len() == 4
     t := try v.TakeAt(1)
     assert t.id == 1 and v.Len() == 3 and v.Ref(1).id == 2
@@ -222,8 +222,8 @@ fn shelved(n I64) I64 {
         if s.m.Has(key): acc = acc * 3 + s.m.Ref(key)!.data[0]
         if s.w.Has(key): acc = acc * 5 + s.w.Ref(key)!.b.data[0] + s.w.Ref(key)!.tag
     }
-    for b in s.v { acc = acc * 7 + b.data[0] }
-    for kp in s.k { acc = acc * 11 + kp.inner.data[kp.inner.data.Len() - 1] }
+    for b in s.v: acc = acc * 7 + b.data[0]
+    for kp in s.k: acc = acc * 11 + kp.inner.data[kp.inner.data.Len() - 1]
     return acc
 }
 

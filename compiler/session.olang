@@ -63,39 +63,39 @@ fn Analysis.Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&
     nm mut source.Names& = source.Names()
     l mut load.Loader& = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
     l.Clang = cfg.Clang
-    for x in cfg.CFlags() { l.CFlags.Push(x) }
-    for e in overlay { l.Overlay.Put(e.Key, e.Value) }
+    for x in cfg.CFlags(): l.CFlags.Push(x)
+    for e in overlay: l.Overlay.Put(e.Key, e.Value)
     t0 := time.Now()
     l.Load(root)
     Log($"loaded " + $root + " (" + $l.Mods.Len() + " modules) in " + $(time.Since(t0) / 1000000) + " ms")
     a mut Analysis& = Analysis(l)
-    if l.Root < 0 or d.HasFatal() { return a }
+    if l.Root < 0 or d.HasFatal(): return a
     # (kept: the records under each module's key - the front records' summaries (W3a), and Hold's judgings (W3b) - as
     # "olang test" of the same root keeps them in the same directory)
     fr mut views.Kept& = views.Kept()
     fr.Later = kept
     c mut typecheck.Checker& = interp.Analyze(l, true, fr)
     a.C = c
-    if kept { a.Keys = records.ModuleKeys(l, cfg, true) }
+    if kept: a.Keys = records.ModuleKeys(l, cfg, true)
     if c.ViewsDue {
         records.FrontRecords(l, cfg, a.Keys, fr)
         interp.JudgeViews(c, fr)
     }
     asserts mut Map<pair.Pair<I64, I64>, Bool>& = Map<pair.Pair<I64, I64>, Bool>()
     clean := d.Errors() == 0
-    if clean { interp.DecideValues(c) }
+    if clean: interp.DecideValues(c)
     interp.DecideAsserts(c, asserts)
     baked mut Map<I64, eval.Image>& = Map<I64, eval.Image>()
-    if clean { baked = interp.Bake(c) }
-    if clean and kept { records.KeepFront(l, c, cfg, a.Keys, fr, baked) }
+    if clean: baked = interp.Bake(c)
+    if clean and kept: records.KeepFront(l, c, cfg, a.Keys, fr, baked)
     Log($"checked in " + $(time.Since(t0) / 1000000) + " ms")
-    if held { Hold(a, cfg) }
+    if held: Hold(a, cfg)
     return a
 }
 
 # a checked analysis held to section 8 - its scope errors reported - and made evaluable (explain's values)
 fn Hold(a mut Analysis&, cfg mut build.Config&) {
-    if a.C == null or a.Sc != null or a.L.Diags.HasFatal() { return }
+    if a.C == null or a.Sc != null or a.L.Diags.HasFatal(): return
     t0 := time.Now()
     c := a.C
     sc mut scope.Scoper& = scoper(c!)
@@ -103,7 +103,7 @@ fn Hold(a mut Analysis&, cfg mut build.Config&) {
     # again, the judging made over without them, from the marks the checker left (as a build's placement does)
     loaded Map<I64, String&>
     rec := a.Keys.Len() > 0
-    if rec { loaded = records.ScopeRecords(c!, cfg, a.Keys, sc) }
+    if rec: loaded = records.ScopeRecords(c!, cfg, a.Keys, sc)
     marks := sc.FieldMarks()
     mark := c!.P.L.Diags.Count()
     sc.Run()
@@ -114,7 +114,7 @@ fn Hold(a mut Analysis&, cfg mut build.Config&) {
         sc.DiskWrite = rec
         sc.Run()
     }
-    if rec and c!.P.L.Diags.Errors() == 0 and sc.Gaps.Len() == 0 { records.KeepScope(c!, cfg, a.Keys, sc, loaded) }
+    if rec and c!.P.L.Diags.Errors() == 0 and sc.Gaps.Len() == 0: records.KeepScope(c!, cfg, a.Keys, sc, loaded)
     Log($"held to section 8 in " + $(time.Since(t0) / 1000000) + " ms (" + $sc.DiskTaken + " judgings from records)")
     a.Sc = sc
     x mut interp.Exec& = interp.Exec(c!.P, c!.Bodies, eval.Mode.Compile)
@@ -132,7 +132,7 @@ fn scoper(c mut typecheck.Checker&) mut scope.Scoper& {
 # the module read from the file at real path, -1 for none
 fn (a Analysis&) ModuleOf(real String&) I64 {
     for i in range a.L.Mods.Len() {
-        if a.L.Mods[i].Real == real { return i }
+        if a.L.Mods[i].Real == real: return i
     }
     return -1
 }
@@ -143,7 +143,7 @@ fn (a Analysis&) TextOf(mi I64) String& { return a.L.Mods[mi].Src!.Text }
 # the real path of the file a diagnostics file number names, "" for none
 fn (a Analysis&) RealOfFile(file I64) String {
     for m in a.L.Mods {
-        if m.File == file { return $m.Real }
+        if m.File == file: return $m.Real
     }
     return ""
 }
@@ -156,12 +156,12 @@ type Nothing error { Here }
 # the identifier at or just before offset at of t: its span, empty where none is there
 fn WordAt(t String&, at I64) source.Span {
     s := at
-    if s > t.Len() { s = t.Len() }
-    for s > 0 and WordChar(t[s - 1]) { s-- }
+    if s > t.Len(): s = t.Len()
+    for s > 0 and WordChar(t[s - 1]): s--
     e := at
-    if e < s { e = s }
-    for e < t.Len() and WordChar(t[e]) { e++ }
-    if e == s or t[s].IsDigit() { return source.Span(I32(at), I32(at)) }
+    if e < s: e = s
+    for e < t.Len() and WordChar(t[e]): e++
+    if e == s or t[s].IsDigit(): return source.Span(I32(at), I32(at))
     return source.Span(I32(s), I32(e))
 }
 
@@ -190,10 +190,10 @@ type Found struct(Text String&, Real String&, At I64) {
 # its doc comment) and where it is declared
 fn (a Analysis&) Lookup(real String&, at I64) Found ? Nothing {
     mi := a.ModuleOf(real)
-    if mi < 0 or a.C == null { error Nothing.Here }
+    if mi < 0 or a.C == null: error Nothing.Here
     text := a.TextOf(mi)
     w := WordAt(text, at)
-    if w.Start == w.End { error Nothing.Here }
+    if w.Start == w.End: error Nothing.Here
     tg := a.target(mi, w)
     return try a.describe(tg)
 }
@@ -205,7 +205,7 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
     name := $a.TextOf(mi)[I64(w.Start):I64(w.End)]
     # a name the resolver read: a top-level item of this module or another, an import, a local
     ref := r.Use(file, w.Start)
-    if ref.Kind == names.What.None { ref = r.Member(file, w.End) }
+    if ref.Kind == names.What.None: ref = r.Member(file, w.End)
     match ref.Kind {
         case names.What.Func, names.What.Global, names.What.Type {
             return Target.Item(ref.Module, $c!.P.L.Names.Text(r.Tables[ref.Module].Entries[ref.Index].Name))
@@ -214,7 +214,7 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
         case names.What.Local, names.What.TypeVar {
             sp := r.LocalSpan(ref.Index)
             tl := a.localAt(file, I64(sp.Start))
-            if tl.First >= 0 { return Target.Local(tl.First, tl.Second) }
+            if tl.First >= 0: return Target.Local(tl.First, tl.Second)
             return Target.Decl(mi, I64(sp.Start), "", name)
         }
         case _ { }
@@ -228,17 +228,17 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
         }
     }
     tl := a.localAt(file, I64(w.Start))
-    if tl.First >= 0 { return Target.Local(tl.First, tl.Second) }
+    if tl.First >= 0: return Target.Local(tl.First, tl.Second)
     # a method's name where it is declared
     c!.P.AllFns()
     for f in range c!.P.FnCount() {
-        if c!.P.FnModule(f) != mi { continue }
+        if c!.P.FnModule(f) != mi: continue
         decl := c!.P.FnDecl(f)
         if decl.IsBuilder() and c!.P.L.Names.Text(decl.Member) == name and I64(decl.Sp.Start) <= I64(w.Start) and
            I64(w.Start) < I64(decl.Sp.End) and (decl.Body.Len() == 0 or I64(w.Start) < I64(decl.Body[0].Span().Start)) {
             return Target.Method(f)   # D19: a builder's name where it is declared
         }
-        if decl.Recv == null or c!.P.L.Names.Text(decl.Name) != name { continue }
+        if decl.Recv == null or c!.P.L.Names.Text(decl.Name) != name: continue
         if I64(decl.Sp.Start) <= I64(w.Start) and I64(w.Start) < I64(decl.Sp.End) and
            (decl.Body.Len() == 0 or I64(w.Start) < I64(decl.Body[0].Span().Start)) {
             return Target.Method(f)
@@ -247,8 +247,8 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
     # what the checked bodies say of the name: a field read, a method called, a global
     f := finder(I64(w.Start), I64(w.End), name, c!)
     for b in c!.Bodies {
-        if b.File != file or b.Root == null { continue }
-        if I64(b.Sp.End) < I64(w.Start) or I64(b.Sp.Start) > I64(w.End) { continue }
+        if b.File != file or b.Root == null: continue
+        if I64(b.Sp.End) < I64(w.Start) or I64(b.Sp.Start) > I64(w.End): continue
         f.body = I64(b.Id)
         f.block(b.Root)
     }
@@ -258,10 +258,10 @@ fn (a Analysis&) target(mi I64, w source.Span) Target {
 # the body and local declared at offset at of a file - (-1, 0) for none
 fn (a Analysis&) localAt(file I64, at I64) pair.Pair<I64, typed.LocalId> {
     for b in a.C!.Bodies {
-        if b.File != file { continue }
+        if b.File != file: continue
         for k in range b.Locals.Len() {
             l := b.Locals[k]
-            if l.Name != source.NameId(0) and I64(l.Sp.Start) == at { return pair.Pair(I64(b.Id), typed.LocalId(I32(k))) }
+            if l.Name != source.NameId(0) and I64(l.Sp.Start) == at: return pair.Pair(I64(b.Id), typed.LocalId(I32(k)))
         }
     }
     return pair.Pair(I64(-1), typed.LocalId(0))
@@ -308,7 +308,7 @@ fn (a Analysis&) describe(tg Target) Found ? Nothing {
 
 fn (a Analysis&) moduleOfFile(file I64) I64 {
     for i in range a.L.Mods.Len() {
-        if a.L.Mods[i].File == file { return i }
+        if a.L.Mods[i].File == file: return i
     }
     return -1
 }
@@ -317,7 +317,7 @@ fn (a Analysis&) moduleOfFile(file I64) I64 {
 # more there are; nothing where there are none
 fn exampleText(c mut typecheck.Checker&, mi I64, target String&) String {
     xs := doc.ExamplesOf(c, mi, target)
-    if xs.Len() == 0 { return "" }
+    if xs.Len() == 0: return ""
     b := StringBuilder()
     b.Push($"\n\nExample: " + $xs[0].Desc + "\n```olang\n" + $xs[0].Body + "\n```")
     if xs.Len() > 1 { b.Push($"\n\n+" + $(xs.Len() - 1) + " more test" + $("" if xs.Len() == 2 else "s")) }
@@ -328,7 +328,7 @@ fn exampleText(c mut typecheck.Checker&, mi I64, target String&) String {
 fn hover(sig String&, docText String&) String {
     b := StringBuilder()
     b.Push($"```olang\n" + $sig.TrimEnd() + "\n```")
-    if docText != "" { b.Push($"\n\n" + $docText) }
+    if docText != "": b.Push($"\n\n" + $docText)
     return b.ToString()
 }
 
@@ -337,7 +337,7 @@ fn declOf(c mut typecheck.Checker&, mi I64, name String&) I64 {
     dot := try name.Find(".") catch default -1
     id := c.P.L.Names.Intern(name if dot < 0 else name[:dot])
     for e in c.P.R.Tables[mi].Entries {
-        if e.Name == id { return I64(e.Sp.Start) }
+        if e.Name == id: return I64(e.Sp.Start)
     }
     return -1
 }
@@ -354,7 +354,7 @@ type memberInfo struct(Name String&, Ty types.TypeId, Doc String&, Real String&,
 fn (a Analysis&) field(t types.TypeId, index I64) memberInfo ? Nothing {
     c := a.C
     tt := c!.P.T.Referent(t) if c!.P.T.KindOf(t) == types.Kind.Ref else t
-    if c!.P.T.KindOf(tt) != types.Kind.Named { error Nothing.Here }
+    if c!.P.T.KindOf(tt) != types.Kind.Named: error Nothing.Here
     decl := c!.P.T.DeclOf(tt)
     for body in c!.Bodies {
         match body.Of {
@@ -362,7 +362,7 @@ fn (a Analysis&) field(t types.TypeId, index I64) memberInfo ? Nothing {
                 if c!.P.T.KindOf(bt) != types.Kind.Named or c!.P.T.DeclOf(bt) != decl or index >= body.Fields.Len() { continue }
                 l := body.Locals[I64(body.Fields[index])]
                 mi := a.moduleOfFile(body.File)
-                if mi < 0 { error Nothing.Here }
+                if mi < 0: error Nothing.Here
                 text := a.TextOf(mi)
                 name := $text[I64(l.Sp.Start):I64(l.Sp.End)] if l.Name == source.NameId(0) else $c!.P.L.Names.Text(l.Name)
                 tys := c!.P.T.Items(c!.P.T.Fields(tt))
@@ -395,12 +395,12 @@ fn (f mut finder&) take(sp source.Span, tg Target) {
 }
 
 fn (f mut finder&) block(b typed.Block?&) {
-    if b == null { return }
-    for s in b.Stmts { f.stmt(s) }
+    if b == null: return
+    for s in b.Stmts: f.stmt(s)
 }
 
 fn (f mut finder&) stmt(s typed.Stmt?&) {
-    if s == null { return }
+    if s == null: return
     match s {
         case typed.Stmt.Let(_, _, init) { f.expr(init) }
         case typed.Stmt.Assign(_, p, v) {
@@ -426,7 +426,7 @@ fn (f mut finder&) stmt(s typed.Stmt?&) {
         case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { f.block(b) }
         case typed.Stmt.Join(_, j) { f.block(j.Code) }
         case typed.Stmt.Spawn(_, sp) {
-            for t in sp.Targets { f.place(t) }
+            for t in sp.Targets: f.place(t)
             f.expr(sp.Task)
         }
         case typed.Stmt.Yield(_, x) { f.expr(x) }
@@ -435,14 +435,14 @@ fn (f mut finder&) stmt(s typed.Stmt?&) {
 }
 
 fn (f mut finder&) place(p typed.Lvalue?&) {
-    if p == null { return }
+    if p == null: return
     match p {
         case typed.Lvalue.Global(sp, _, mi, n) {
-            if I64(sp.End) == f.e and f.c.P.L.Names.Text(n) == f.name { f.take(sp, Target.Item(mi, f.name)) }
+            if I64(sp.End) == f.e and f.c.P.L.Names.Text(n) == f.name: f.take(sp, Target.Item(mi, f.name))
         }
         case typed.Lvalue.Deref(_, _, r) { f.expr(r) }
         case typed.Lvalue.Field(sp, _, base, index) {
-            if I64(sp.End) == f.e { f.take(sp, Target.Field(base.Type(), index)) }
+            if I64(sp.End) == f.e: f.take(sp, Target.Field(base.Type(), index))
             f.place(base)
         }
         case typed.Lvalue.Elem(_, _, el) {
@@ -456,16 +456,16 @@ fn (f mut finder&) place(p typed.Lvalue?&) {
 }
 
 fn (f mut finder&) expr(x typed.Expr?&) {
-    if x == null { return }
+    if x == null: return
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { f.place(p) }
         case typed.Expr.Promote(_, _, pr) { f.expr(pr.X) }
         case typed.Expr.Call(sp, _, cl) {
             f.callee(sp, cl.Target)
-            for arg in cl.Args { f.expr(arg) }
+            for arg in cl.Args: f.expr(arg)
         }
         case typed.Expr.Make(_, _, m) {
-            for it in m.Items { f.expr(it) }
+            for it in m.Items: f.expr(it)
             f.expr(m.Length)
         }
         case typed.Expr.Collect(_, _, cl) {
@@ -473,7 +473,7 @@ fn (f mut finder&) expr(x typed.Expr?&) {
             f.block(cl.Loop)
         }
         case typed.Expr.Prim(_, _, _, _, args) {
-            for arg in args { f.expr(arg) }
+            for arg in args: f.expr(arg)
         }
         case typed.Expr.Slice(_, _, sl) {
             f.place(sl.Base)
@@ -486,13 +486,13 @@ fn (f mut finder&) expr(x typed.Expr?&) {
             f.expr(cd.B)
         }
         case typed.Expr.Seq(_, _, sq) {
-            for s in sq.Stmts { f.stmt(s) }
+            for s in sq.Stmts: f.stmt(s)
             f.expr(sq.X)
         }
         case typed.Expr.Match(_, _, m) {
-            for s in m.Held { f.stmt(s) }
+            for s in m.Held: f.stmt(s)
             for arm in m.Arms {
-                for alt in arm.Alts { f.expr(alt.Test) }
+                for alt in arm.Alts: f.expr(alt.Test)
                 f.expr(arm.Guard)
                 f.block(arm.Code)
                 f.expr(arm.Value)
@@ -506,7 +506,7 @@ fn (f mut finder&) expr(x typed.Expr?&) {
             f.expr(t.X)
             for cl in t.Clauses {
                 f.block(cl.Code)
-                for dv in cl.Defaults { f.expr(dv) }
+                for dv in cl.Defaults: f.expr(dv)
             }
         }
         case typed.Expr.Fn(sp, _, fv) {
@@ -532,7 +532,7 @@ fn (f mut finder&) expr(x typed.Expr?&) {
 
 # a call's or a function value's target, where the identifier is its callee's name, written inside the call
 fn (f mut finder&) callee(sp source.Span, cl typed.Callee&) {
-    if I64(sp.Start) > f.s or f.e > I64(sp.End) { return }
+    if I64(sp.Start) > f.s or f.e > I64(sp.End): return
     match cl {
         case typed.Callee.Body(bid) { f.bodyCallee(sp, f.c.Bodies[I64(bid)].Of) }
         case typed.Callee.Value(v) { f.expr(v) }
@@ -547,16 +547,16 @@ fn (f mut finder&) bodyCallee(sp source.Span, of typed.BodyOf) {
             fi := f.c.P.InstanceFn(inst)
             if f.c.P.FnDecl(fi).IsBuilder() {
                 # D19: a builder called, by the name after its owner's "."
-                if f.c.P.L.Names.Text(f.c.P.FnDecl(fi).Member) == f.name { f.take(sp, Target.Method(fi)) }
+                if f.c.P.L.Names.Text(f.c.P.FnDecl(fi).Member) == f.name: f.take(sp, Target.Method(fi))
                 return
             }
-            if f.c.P.L.Names.Text(f.c.P.FnDecl(fi).Name) != f.name { return }
+            if f.c.P.L.Names.Text(f.c.P.FnDecl(fi).Name) != f.name: return
             if f.c.P.FnDecl(fi).Recv != null { f.take(sp, Target.Method(fi)) } else { f.take(sp, Target.Item(f.c.P.FnModule(fi), f.name)) }
         }
         case typed.BodyOf.Ctor(ct, _) {
-            if f.c.P.T.KindOf(ct) != types.Kind.Named { return }
+            if f.c.P.T.KindOf(ct) != types.Kind.Named: return
             d := f.c.P.T.DeclOf(ct)
-            if f.c.P.L.Names.Text(f.c.P.T.DeclName(d)) == f.name { f.take(sp, Target.Item(f.c.P.DeclModule(d), f.name)) }
+            if f.c.P.L.Names.Text(f.c.P.T.DeclName(d)) == f.name: f.take(sp, Target.Item(f.c.P.DeclModule(d), f.name))
         }
         case _ { }
     }
@@ -599,8 +599,8 @@ type Positions struct(Text String&, Utf8 Bool) {
 # the line and character of an offset
 fn (p Positions&) Pos(off I64) I64, I64 {
     o := off
-    if o > p.Text.Len() { o = p.Text.Len() }
-    if o < 0 { o = 0 }
+    if o > p.Text.Len(): o = p.Text.Len()
+    if o < 0: o = 0
     lo I64 = 0
     hi I64 = p.starts.Len() - 1
     for lo < hi {
@@ -608,14 +608,14 @@ fn (p Positions&) Pos(off I64) I64, I64 {
         if I64(p.starts[mid]) <= o { lo = mid } else { hi = mid - 1 }
     }
     start := I64(p.starts[lo])
-    if p.Utf8 { return lo, o - start }
+    if p.Utf8: return lo, o - start
     return lo, utf16Units(p.Text, start, o)
 }
 
 # the offset of a line and character - the line's end where the character is past it, the text's end past its last line
 fn (p Positions&) Offset(line I64, ch I64) I64 {
-    if line < 0 { return 0 }
-    if line >= p.starts.Len() { return p.Text.Len() }
+    if line < 0: return 0
+    if line >= p.starts.Len(): return p.Text.Len()
     start := I64(p.starts[line])
     end := I64(p.starts[line + 1]) - 1 if line + 1 < p.starts.Len() else p.Text.Len()
     if p.Utf8 { return start + ch if start + ch <= end else end }
@@ -668,7 +668,7 @@ fn Symbols(b mut StringBuilder&, p Positions&, decls Array<ast.Decl&>&, nm sourc
     b.PushChar('[')
     w := symWriter(p)
     if decls.Len() > 0 {
-        for d in decls { w.decl(b, d, nm) }
+        for d in decls: w.decl(b, d, nm)
     }
     b.PushChar(']')
 }
@@ -680,7 +680,7 @@ type symWriter struct(p Positions&) {
 
 # one DocumentSymbol, its children to follow: the caller closes it with end
 fn (w mut symWriter&) open(b mut StringBuilder&, name String&, kind I64, from I64, to I64, nameAt I64, nameEnd I64, detail String&) {
-    if w.n > 0 { b.PushChar(',') }
+    if w.n > 0: b.PushChar(',')
     w.n++
     b.Push("{\"name\":")
     JsonStr(b, name if name != "" else "?")
@@ -730,7 +730,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             }
             w.open(b, name, kind, I64(sp.Start), I64(sp.End), s, s + name.Len(), "")
             inner := symWriter(w.p)
-            if td.Body != null { inner.members(b, td.Body!, nm) }
+            if td.Body != null: inner.members(b, td.Body!, nm)
             b.Push("]}")
         }
         case ast.Decl.Global(sp, v) {
@@ -748,7 +748,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             for wd in words {
                 wname := nm.Text(wd)
                 at := doc.WordIn(t, s + name.Len(), wname)
-                if at >= 0 { inner.leaf(b, wname, KindEnumMember, at, at + wname.Len(), at, at + wname.Len(), "") }
+                if at >= 0: inner.leaf(b, wname, KindEnumMember, at, at + wname.Len(), at, at + wname.Len(), "")
             }
             b.Push("]}")
         }
@@ -757,7 +757,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
         }
         case ast.Decl.If(_, ti) { w.topIf(b, ti, nm) }
         case ast.Decl.ExternBlock(_, _, xs) {
-            for x in xs { w.decl(b, x, nm) }
+            for x in xs: w.decl(b, x, nm)
         }
         case _ { }
     }
@@ -767,9 +767,9 @@ fn (w mut symWriter&) members(b mut StringBuilder&, body ast.TypeBody&, nm sourc
     t := w.p.Text
     match body {
         case ast.TypeBody.Struct(sb) {
-            if sb.Body.Len() == 0 { return }
+            if sb.Body.Len() == 0: return
             for st in sb.Body {
-                if st != ast.Stmt.Var { continue }
+                if st != ast.Stmt.Var: continue
                 for k in range st.v.Names.Len() {
                     ns := st.v.NameSps[k]
                     w.leaf(b, nm.Text(st.v.Names[k]), KindField, I64(st.sp.Start), I64(st.sp.End), I64(ns.Start), I64(ns.End), "")
@@ -794,13 +794,13 @@ fn (w mut symWriter&) members(b mut StringBuilder&, body ast.TypeBody&, nm sourc
 }
 
 fn (w mut symWriter&) topIf(b mut StringBuilder&, ti ast.TopIf?&, nm source.Names&) {
-    if ti == null { return }
+    if ti == null: return
     if ti.Then != null and ti.Then!.Decls.Len() > 0 {
-        for d in ti.Then!.Decls { w.decl(b, d, nm) }
+        for d in ti.Then!.Decls: w.decl(b, d, nm)
     }
     w.topIf(b, ti.ElseIf, nm)
     if ti.Else != null and ti.Else!.Decls.Len() > 0 {
-        for d in ti.Else!.Decls { w.decl(b, d, nm) }
+        for d in ti.Else!.Decls: w.decl(b, d, nm)
     }
 }
 
@@ -817,16 +817,16 @@ fn nameIn(t String&, from I64, name String&) I64 {
 fn PromiseTargets(t String&, at I64) Array<String&> {
     out Vec<String&>
     ls := at
-    for ls > 0 and t[ls - 1] != '\n' { ls-- }
+    for ls > 0 and t[ls - 1] != '\n': ls--
     line := t[ls:at]
     words := line.TrimEnd().Split(" ")
-    if words.Len() < 2 or not line.Contains("fn") { return out.ToArray() }
+    if words.Len() < 2 or not line.Contains("fn"): return out.ToArray()
     prev := words[words.Len() - 1] if line.EndsWith(" ") else words[words.Len() - 2]
     ok := prev == "keeps" or prev == "borrows" or prev == "in"
-    if not ok { return out.ToArray() }
+    if not ok: return out.ToArray()
     close := line.Len() - 1
     for close >= 0 and line[close] != ')': close--
-    if close < 0 { return out.ToArray() }
+    if close < 0: return out.ToArray()
     open := close
     depth I64 = 0
     for open >= 0 {
@@ -835,7 +835,7 @@ fn PromiseTargets(t String&, at I64) Array<String&> {
         if depth == 0: break
         open--
     }
-    if open < 0 { return out.ToArray() }
+    if open < 0: return out.ToArray()
     fresh := true
     i := open + 1
     for i < close {
@@ -877,10 +877,10 @@ fn (it mut Items&) Add(label String&, kind I64, detail String&) { it.AddDep(labe
 # an item, tagged deprecated (LSP's CompletionItemTag.Deprecated, 1) where dep is true (L4b)
 fn (it mut Items&) AddDep(label String&, kind I64, detail String&, dep Bool) {
     for s in it.seen {
-        if s == label { return }
+        if s == label: return
     }
     it.seen.Push(label)
-    if it.n > 0 { it.B.PushChar(',') }
+    if it.n > 0: it.B.PushChar(',')
     it.n++
     it.B.Push("{\"label\":")
     JsonStr(it.B, label)
@@ -889,7 +889,7 @@ fn (it mut Items&) AddDep(label String&, kind I64, detail String&, dep Bool) {
         it.B.Push(",\"detail\":")
         JsonStr(it.B, detail)
     }
-    if dep { it.B.Push(",\"tags\":[1]") }
+    if dep: it.B.Push(",\"tags\":[1]")
     it.B.PushChar('}')
 }
 
@@ -897,14 +897,14 @@ fn (it mut Items&) AddDep(label String&, kind I64, detail String&, dep Bool) {
 # fields and methods of x's type
 fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
     mi := a.ModuleOf(real)
-    if mi < 0 or a.C == null { return }
+    if mi < 0 or a.C == null: return
     c := a.C
     text := a.TextOf(mi)
     file := a.L.Mods[mi].File
     w := WordAt(text, dot)
     if w.Start < w.End and I64(w.End) == dot {
         ref := c.P.R.Use(file, w.Start)
-        if ref.Kind == names.What.None { ref = c.P.R.Member(file, w.End) }
+        if ref.Kind == names.What.None: ref = c.P.R.Member(file, w.End)
         if ref.Kind == names.What.Import {
             a.moduleNames(it, ref.Module, false)
             return
@@ -915,7 +915,7 @@ fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
             for f in c.P.BuildersOf(self) {
                 decl := c.P.FnDecl(f)
                 bn := c.P.L.Names.Text(decl.Member)
-                if not doc.Exported(bn) and c.P.FnModule(f) != mi { continue }
+                if not doc.Exported(bn) and c.P.FnModule(f) != mi: continue
                 it.AddDep(bn, CompMethod, firstLine(explain.FnText(c, a.Sc!, f)), a.deprecatedAt(c.P.FnModule(f), I64(decl.Sp.Start), false))
             }
             return
@@ -923,14 +923,14 @@ fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
     }
     t := a.typeEndingAt(file, dot)
     Log($"completion after a '.' at " + $dot + ": " + $(c.Ty(t) if t != types.UnknownT else "no type"))
-    if t == types.UnknownT { return }
+    if t == types.UnknownT: return
     a.typeMembers(it, t)
 }
 
 # whether the declaration at offset at of module mi carries a "Deprecated:" note in its doc comment (L4b); a member or a
 # global may carry it as its trailing comment
 fn (a Analysis&) deprecatedAt(mi I64, at I64, member Bool) Bool {
-    if mi < 0 or at < 0 or a.L.Mods[mi].Src == null { return false }
+    if mi < 0 or at < 0 or a.L.Mods[mi].Src == null: return false
     return doc.Deprecation(doc.Comment(a.TextOf(mi), at, member)) != ""
 }
 
@@ -942,10 +942,10 @@ type Use struct(Start I64, End I64, Note String&) { Start, End, Note }
 fn (a Analysis&) Placed(real String&) Vec<Use> {
     out Vec<Use>
     mi := a.ModuleOf(real)
-    if mi < 0 or a.Sc == null { return out }
+    if mi < 0 or a.Sc == null: return out
     file := a.L.Mods[mi].File
     for p in a.Sc!.Placements() {
-        if p.File != file { continue }
+        if p.File != file: continue
         hint := " - handing on a value instead would let it go with its step" if p.Tail else " - a copy of what is kept ('$x') would let it go with its turn"
         out.Push(Use(p.Start, p.End, $p.Text + $hint))
     }
@@ -958,13 +958,13 @@ fn (a Analysis&) Placed(real String&) Vec<Use> {
 fn (a Analysis&) DeprecatedUses(real String&) Vec<Use> {
     out Vec<Use>
     mi := a.ModuleOf(real)
-    if mi < 0 or a.C == null { return out }
+    if mi < 0 or a.C == null: return out
     deprecated Vec<String&>
     for k in range a.L.Mods.Len() {
-        if a.L.Mods[k].Src == null { continue }
-        for n in doc.DeprecatedNames(a.TextOf(k)) { deprecated.Push(n) }
+        if a.L.Mods[k].Src == null: continue
+        for n in doc.DeprecatedNames(a.TextOf(k)): deprecated.Push(n)
     }
-    if deprecated.Len() == 0 { return out }
+    if deprecated.Len() == 0: return out
     text := a.TextOf(mi)
     pos I64 = 0
     for pos <= text.Len() {
@@ -978,9 +978,9 @@ fn (a Analysis&) DeprecatedUses(real String&) Vec<Use> {
                 continue
             }
             s := i
-            for i < stop and WordChar(text[i]) { i++ }
+            for i < stop and WordChar(text[i]): i++
             word := $text[s:i]
-            if not deprecated.Has(word) { continue }
+            if not deprecated.Has(word): continue
             tg := a.target(mi, source.Span(I32(s), I32(i)))
             note, at, home := a.noteOf(tg)
             if note != "" and not (home == mi and doc.LineStart(text, at) == doc.LineStart(text, s)) {
@@ -1021,11 +1021,11 @@ fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
     nm := c!.P.L.Names
     for e in c!.P.R.Tables[mi].Entries {
         name := nm.Text(e.Name)
-        if not own and not doc.Exported(name) { continue }
+        if not own and not doc.Exported(name): continue
         if name.Contains("$") { continue }              # an error type's hidden payload enum (T19b)
         if e.Kind == names.What.Func {
             f := c!.P.FnNamed(mi, e.Name)
-            if f < 0 or c!.P.FnDecl(f).Recv != null { continue }
+            if f < 0 or c!.P.FnDecl(f).Recv != null: continue
             it.AddDep(name, CompFunction, c!.Ty(c!.P.Sig(f)), a.deprecatedAt(mi, I64(e.Sp.Start), false))
         } else if e.Kind == names.What.Type {
             it.AddDep(name, CompStruct, "", a.deprecatedAt(mi, I64(e.Sp.Start), false))
@@ -1042,18 +1042,18 @@ fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
 fn (a Analysis&) typeEndingAt(file I64, end I64) types.TypeId {
     tf := typeFinder(end)
     for b in a.C!.Bodies {
-        if b.File != file or b.Root == null { continue }
+        if b.File != file or b.Root == null: continue
         tf.block(b.Root)
     }
-    if tf.found != types.UnknownT { return tf.found }
+    if tf.found != types.UnknownT: return tf.found
     text := a.L.Diags.TextOf(file)
     w := WordAt(text, end)
-    if w.Start == w.End { return types.UnknownT }
+    if w.Start == w.End: return types.UnknownT
     word := text[I64(w.Start):I64(w.End)]
     for b in a.C!.Bodies {
-        if b.File != file or I64(b.Sp.Start) > end or end > I64(b.Sp.End) { continue }
+        if b.File != file or I64(b.Sp.Start) > end or end > I64(b.Sp.End): continue
         for l in b.Locals {
-            if l.Name != source.NameId(0) and a.C!.P.L.Names.Text(l.Name) == word and I64(l.Sp.Start) < end { return l.Ty }
+            if l.Name != source.NameId(0) and a.C!.P.L.Names.Text(l.Name) == word and I64(l.Sp.Start) < end: return l.Ty
         }
     }
     return types.UnknownT
@@ -1066,7 +1066,7 @@ fn (a Analysis&) fieldMembers(it mut Items&, tt types.TypeId) {
     d := c!.P.T.DeclOf(tt)
     for body in c!.Bodies {
         bo := body.Of
-        if bo != typed.BodyOf.Ctor or c!.P.T.KindOf(bo.t) != types.Kind.Named or c!.P.T.DeclOf(bo.t) != d { continue }
+        if bo != typed.BodyOf.Ctor or c!.P.T.KindOf(bo.t) != types.Kind.Named or c!.P.T.DeclOf(bo.t) != d: continue
         tys := c!.P.T.Items(c!.P.T.Fields(tt))
         for i in range body.Fields.Len() {
             l := body.Locals[I64(body.Fields[i])]
@@ -1081,17 +1081,17 @@ fn (a Analysis&) fieldMembers(it mut Items&, tt types.TypeId) {
 fn (a Analysis&) typeMembers(it mut Items&, t types.TypeId) {
     c := a.C
     tt := c!.P.T.Referent(t) if c!.P.T.KindOf(t) == types.Kind.Ref else t
-    if c!.P.T.KindOf(tt) == types.Kind.Named { a.fieldMembers(it, tt) }
+    if c!.P.T.KindOf(tt) == types.Kind.Named: a.fieldMembers(it, tt)
     # methods: every function with a receiver whose type is t's - of its declaration, or of its kind for a built-in one
     c!.P.AllFns()
     for f in range c!.P.FnCount() {
         decl := c!.P.FnDecl(f)
-        if decl.Recv == null { continue }
+        if decl.Recv == null: continue
         recv := c!.P.T.Items(c!.P.T.Params(c!.P.Sig(f)))[0]
-        if c!.P.T.KindOf(recv) == types.Kind.Ref { recv = c!.P.T.Referent(recv) }
-        if not sameShape(c!, recv, tt) { continue }
+        if c!.P.T.KindOf(recv) == types.Kind.Ref: recv = c!.P.T.Referent(recv)
+        if not sameShape(c!, recv, tt): continue
         name := c!.P.L.Names.Text(decl.Name)
-        if not doc.Exported(name) and c!.P.FnModule(f) != a.L.Root { continue }
+        if not doc.Exported(name) and c!.P.FnModule(f) != a.L.Root: continue
         it.AddDep(name, CompMethod, firstLine(explain.FnText(c!, a.Sc!, f)), a.deprecatedAt(c!.P.FnModule(f), I64(decl.Sp.Start), false))
     }
 }
@@ -1105,8 +1105,8 @@ fn firstLine(t String&) String {
 fn sameShape(c typecheck.Checker&, r types.TypeId, t types.TypeId) Bool {
     kr := c.P.T.KindOf(r)
     kt := c.P.T.KindOf(t)
-    if kr == types.Kind.Named and kt == types.Kind.Named { return c.P.T.DeclOf(r) == c.P.T.DeclOf(t) }
-    if kr == types.Kind.Var { return false }
+    if kr == types.Kind.Named and kt == types.Kind.Named: return c.P.T.DeclOf(r) == c.P.T.DeclOf(t)
+    if kr == types.Kind.Var: return false
     return kr == kt
 }
 
@@ -1117,7 +1117,7 @@ type typeFinder struct(end I64) {
 }
 
 fn (f mut typeFinder&) take(sp source.Span, t types.TypeId) {
-    if I64(sp.End) != f.end or t == types.UnknownT { return }
+    if I64(sp.End) != f.end or t == types.UnknownT: return
     w := I64(sp.End) - I64(sp.Start)
     # the widest expression ending there is the whole receiver: "a.b" rather than "b"
     if w > f.width {
@@ -1127,12 +1127,12 @@ fn (f mut typeFinder&) take(sp source.Span, t types.TypeId) {
 }
 
 fn (f mut typeFinder&) block(b typed.Block?&) {
-    if b == null { return }
-    for s in b.Stmts { f.stmt(s) }
+    if b == null: return
+    for s in b.Stmts: f.stmt(s)
 }
 
 fn (f mut typeFinder&) stmt(s typed.Stmt?&) {
-    if s == null { return }
+    if s == null: return
     match s {
         case typed.Stmt.Let(_, _, init) { f.expr(init) }
         case typed.Stmt.Assign(_, p, v) {
@@ -1161,7 +1161,7 @@ fn (f mut typeFinder&) stmt(s typed.Stmt?&) {
 }
 
 fn (f mut typeFinder&) place(p typed.Lvalue?&) {
-    if p == null { return }
+    if p == null: return
     f.take(p.Span(), p.Type())
     match p {
         case typed.Lvalue.Deref(_, _, r) { f.expr(r) }
@@ -1177,19 +1177,19 @@ fn (f mut typeFinder&) place(p typed.Lvalue?&) {
 }
 
 fn (f mut typeFinder&) expr(x typed.Expr?&) {
-    if x == null { return }
+    if x == null: return
     f.take(x.Span(), x.Type())
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { f.place(p) }
         case typed.Expr.Promote(_, _, pr) { f.expr(pr.X) }
         case typed.Expr.Call(_, _, cl) {
-            for arg in cl.Args { f.expr(arg) }
+            for arg in cl.Args: f.expr(arg)
         }
         case typed.Expr.Make(_, _, m) {
-            for e in m.Items { f.expr(e) }
+            for e in m.Items: f.expr(e)
         }
         case typed.Expr.Prim(_, _, _, _, args) {
-            for arg in args { f.expr(arg) }
+            for arg in args: f.expr(arg)
         }
         case typed.Expr.Slice(_, _, sl) { f.place(sl.Base) }
         case typed.Expr.Cond(_, _, cd) {
@@ -1198,7 +1198,7 @@ fn (f mut typeFinder&) expr(x typed.Expr?&) {
             f.expr(cd.B)
         }
         case typed.Expr.Seq(_, _, sq) {
-            for s in sq.Stmts { f.stmt(s) }
+            for s in sq.Stmts: f.stmt(s)
             f.expr(sq.X)
         }
         case typed.Expr.Try(_, _, t) { f.expr(t.X) }
@@ -1215,24 +1215,24 @@ fn (f mut typeFinder&) expr(x typed.Expr?&) {
 # imports, the prelude's exported names, and the keywords
 fn (a Analysis&) Names(it mut Items&, real String&, at I64) {
     mi := a.ModuleOf(real)
-    if mi < 0 or a.C == null { return }
+    if mi < 0 or a.C == null: return
     # the parameters and locals declared before at, in the bodies around it
     file := a.L.Mods[mi].File
     for b in a.C!.Bodies {
-        if b.File != file or I64(b.Sp.Start) > at or at > I64(b.Sp.End) { continue }
+        if b.File != file or I64(b.Sp.Start) > at or at > I64(b.Sp.End): continue
         for l in b.Locals {
-            if l.Name == source.NameId(0) or I64(l.Sp.Start) >= at { continue }
+            if l.Name == source.NameId(0) or I64(l.Sp.Start) >= at: continue
             if l.Kind == typed.LocalKind.Param or l.Kind == typed.LocalKind.Var or l.Kind == typed.LocalKind.Binding {
                 it.Add(a.C!.P.L.Names.Text(l.Name), CompVariable, a.C!.Ty(l.Ty))
             }
         }
     }
     a.moduleNames(it, mi, true)
-    for m in a.L.Mods[mi].Imports { it.Add(m.Alias, CompModule, m.Spec) }
+    for m in a.L.Mods[mi].Imports: it.Add(m.Alias, CompModule, m.Spec)
     for k in range a.L.Mods.Len() {
-        if a.L.Mods[k].Prelude { a.moduleNames(it, k, false) }
+        if a.L.Mods[k].Prelude: a.moduleNames(it, k, false)
     }
-    for w in Keywords { it.Add(w, CompKeyword, "") }
+    for w in Keywords: it.Add(w, CompKeyword, "")
 }
 
 Keywords Array<String&> = Array<String&>["fn", "type", "struct", "enum", "trait", "extends", "import", "test", "extern", "if"
@@ -1293,8 +1293,8 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
         return 0
     }
     roots Vec<String&>
-    for f in files { roots.Push(f) }
-    if roots.Len() == 0 { stdModules(roots) }
+    for f in files: roots.Push(f)
+    if roots.Len() == 0: stdModules(roots)
     try os.MkDirAll(html) catch os.Error {
         say($"olang: " + $html + ": cannot be made\n")
         return 1
@@ -1359,7 +1359,7 @@ fn IdentityOf(path String&) String {
 
 # a line for whoever reads the tool's standard error, where OLANG_TOOL_LOG is set (B15, B16): what it is doing, timed
 fn Log(text String&) {
-    if (try os.Env("OLANG_TOOL_LOG") catch default "") == "" { return }
+    if (try os.Env("OLANG_TOOL_LOG") catch default "") == "": return
     try io.PutErr($"olang: " + $text + "\n") catch io.Error { }
 }
 
@@ -1375,7 +1375,7 @@ fn Exit(status I32) noreturn { unistd._exit(status) }
 # a pipe: its reading end and its writing end, -1 and -1 where none can be made
 fn Pipe() I32, I32 {
     fds := Array<I32>(2)
-    if unistd.pipe(fds) != 0 { return -1, -1 }
+    if unistd.pipe(fds) != 0: return -1, -1
     return fds[0], fds[1]
 }
 
@@ -1386,7 +1386,7 @@ fn Dup2(from I32, to I32) { unistd.dup2(from, to) }
 
 # the process pid ended (SIGKILL) and waited for
 fn KillAndReap(pid I32) {
-    if pid <= 0 { return }
+    if pid <= 0: return
     csignal.kill(pid, 9)
     Reap(pid)
 }
@@ -1394,7 +1394,7 @@ fn KillAndReap(pid I32) {
 # the process pid waited for: the status it ended with (ExitStatus's), -1 where it cannot be
 fn Reap(pid I32) I32 {
     st := Array<I32>(1)
-    if syswait.waitpid(pid, st, 0) < 0 { return -1 }
+    if syswait.waitpid(pid, st, 0) < 0: return -1
     return ExitStatus(st[0])
 }
 
@@ -1411,8 +1411,8 @@ fn Readable(fds Array<I32>&, timeout I32) Array<Bool> {
         raw[i].events = I16(cpoll.POLLIN)
     }
     out := Array<Bool>(n)
-    if cpoll.poll(raw, U64(n), timeout) <= 0 { return out }
-    for i in range n { out[i] = (raw[i].revents & I16(cpoll.POLLIN | cpoll.POLLERR | cpoll.POLLHUP)) != 0 }
+    if cpoll.poll(raw, U64(n), timeout) <= 0: return out
+    for i in range n: out[i] = (raw[i].revents & I16(cpoll.POLLIN | cpoll.POLLERR | cpoll.POLLHUP)) != 0
     return out
 }
 
@@ -1443,8 +1443,8 @@ fn (r mut Reader&) Next() String ? Incomplete {
     v := r.buf.View()
     n := v.Len()
     i I64 = 0
-    for i + 3 < n and not (v[i] == 13 and v[i + 1] == 10 and v[i + 2] == 13 and v[i + 3] == 10) { i++ }
-    if i + 3 >= n { error Incomplete.More }
+    for i + 3 < n and not (v[i] == 13 and v[i + 1] == 10 and v[i + 2] == 13 and v[i + 3] == 10): i++
+    if i + 3 >= n: error Incomplete.More
     headers := String(v[:i])
     length I64 = -1
     for h in headers.Lines() {
@@ -1458,7 +1458,7 @@ fn (r mut Reader&) Next() String ? Incomplete {
         r.drop(start)            # no length: the header block is dropped, the stream read on
         error Incomplete.More
     }
-    if n < start + length { error Incomplete.More }
+    if n < start + length: error Incomplete.More
     body := $String(v[start:start + length])
     r.drop(start + length)
     return body
@@ -1469,8 +1469,8 @@ fn (r mut Reader&) NextLine() String ? Incomplete {
     v := r.buf.View()
     n := v.Len()
     i I64 = 0
-    for i < n and v[i] != 10 { i++ }
-    if i >= n { error Incomplete.More }
+    for i < n and v[i] != 10: i++
+    if i >= n: error Incomplete.More
     end := i - 1 if i > 0 and v[i - 1] == 13 else i
     line := $String(v[:end])
     r.drop(i + 1)
@@ -1480,7 +1480,7 @@ fn (r mut Reader&) NextLine() String ? Incomplete {
 # the buffer's first k bytes gone, what follows moved to its front
 fn (r mut Reader&) drop(k I64) {
     n := r.buf.Len()
-    for i in range k, n { r.buf[i - k] = r.buf[i] }
+    for i in range k, n: r.buf[i - k] = r.buf[i]
     r.buf.Truncate(n - k)
 }
 
@@ -1493,7 +1493,7 @@ fn WriteFramed(fd I32, body String&) {
 # made, work runs here
 fn ChildOutput(work fn&() String) String, I32 {
     rd, wr := Pipe()
-    if rd < 0 { return work(), 0 }
+    if rd < 0: return work(), 0
     pid := unistd.fork()
     if pid < 0 {
         CloseFd(rd)
@@ -1518,10 +1518,10 @@ fn ChildOutput(work fn&() String) String, I32 {
 # one ends it. Where no process can be made, work runs here
 fn InChild(work fn&() I32) I32 {
     pid := unistd.fork()
-    if pid < 0 { return work() }
-    if pid == 0 { unistd._exit(work()) }
+    if pid < 0: return work()
+    if pid == 0: unistd._exit(work())
     st := Array<I32>(1)
-    if syswait.waitpid(pid, st, 0) < 0 { return 1 }
+    if syswait.waitpid(pid, st, 0) < 0: return 1
     return ExitStatus(st[0])
 }
 
@@ -1533,7 +1533,7 @@ fn ExitStatus(raw I32) I32 {
 
 # the file of a module named by its import path, "std/json" (M23): std's own; any other path with ".olang" after it
 fn StdModule(spec String&) String {
-    if spec.StartsWith("std/") { return $filepath.Join(load.StdDir(), spec[4:]) + ".olang" }
+    if spec.StartsWith("std/"): return $filepath.Join(load.StdDir(), spec[4:]) + ".olang"
     return $spec + ".olang"
 }
 
@@ -1544,7 +1544,7 @@ fn stdModules(out mut Vec<String&>&) {
         at := filepath.Join(std, dir) if dir != "" else $std
         found := try os.ReadDir(at) catch os.Error { continue }
         for n in found {
-            if n.EndsWith(".olang") { out.Push(filepath.Join(at, n)) }
+            if n.EndsWith(".olang"): out.Push(filepath.Join(at, n))
         }
     }
 }

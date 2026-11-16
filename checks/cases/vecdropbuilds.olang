@@ -18,7 +18,7 @@ type Logged unique struct(id I64, log mut Tally&) {
 } destruct { log.Saw(id) }
 
 fn fill(v mut Vec<Logged>&, t mut Tally&, n I64) {
-    for k in range n { v.Push(Logged(k, t)) }
+    for k in range n: v.Push(Logged(k, t))
 }
 
 fn churn() I64 {
@@ -54,7 +54,7 @@ type Sent unique struct(id I64, log mut Sink&) {
 } destruct { log.Saw(id) }
 
 fn send(v mut Vec<Sent>&, k mut Sink&, n I64) {
-    for i in range n { v.Push(Sent(i, k)) }
+    for i in range n: v.Push(Sent(i, k))
 }
 
 # the Sink the caller's: its Vec's elements end as the caller's scope holding the Sink closes, building into the Vec the
@@ -74,7 +74,7 @@ fn main() ? {
     }
     churn()
     s := 0
-    for x in out { s += x }
+    for x in out: s += x
     assert out.Len() == 20 and s == 190 and out[0] == 19 and out[19] == 0
     try io.PutLine($out.Len() + "/" + $s)
 }

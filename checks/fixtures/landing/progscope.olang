@@ -15,14 +15,14 @@ fn mk(p Node&, k I64) Node& { return Node(p.v + k) }
 fn workA(n I64) {
     for i in range n {
         x := mk(G, i)
-        if x.v != 5 + i { BadA = BadA + 1 }
+        if x.v != 5 + i: BadA = BadA + 1
     }
 }
 
 fn workB(n I64) {
     for i in range n {
         y := mk(G, 2 * i)
-        if y.v != 5 + 2 * i { BadB = BadB + 1 }
+        if y.v != 5 + 2 * i: BadB = BadB + 1
     }
 }
 

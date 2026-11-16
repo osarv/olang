@@ -16,7 +16,7 @@ fn Words.fromLocal() Words {
 }
 fn R.check(n I64) R {
     note := ""
-    if n > 3 { note = "big: " + $n }
+    if n > 3: note = "big: " + $n
     return R(n, note)
 }
 fn churn() I64 {

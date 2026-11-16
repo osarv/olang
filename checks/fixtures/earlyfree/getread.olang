@@ -10,7 +10,7 @@ fn main() {
     vv := Vec<Vec<I64>>()
     for k in range 16 {
         a := Vec<I64>()
-        for j in range 64 { a.Push(k + j) }
+        for j in range 64: a.Push(k + j)
         m.Put(k, a.Copy())
         vv.Push(a)
     }

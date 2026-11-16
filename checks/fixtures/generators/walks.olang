@@ -51,11 +51,11 @@ type Holder struct(g Generator<I64>) {
 
 fn main() ? {
     try io.PutLine("total " + $Total)
-    for s in slices("a,bb,,ccc") { try io.PutLine("[" + $s + "]") }
+    for s in slices("a,bb,,ccc"): try io.PutLine("[" + $s + "]")
     l := Vec<I64>()
     l.Push(1)
     l.Push(2)
-    for x in l.Twice() { try io.PutLine($x) }
+    for x in l.Twice(): try io.PutLine($x)
     {
         g := guarded(10)
         a := try g.Next() catch default -1
@@ -63,7 +63,7 @@ fn main() ? {
         try io.PutLine("got " + $a + " " + $b)
     }
     try io.PutLine("after")
-    for z in nested(2) { try io.PutLine($z) }
+    for z in nested(2): try io.PutLine($z)
     h := Holder(repeat(7, 2))
     c := h.g
     x1 := try h.g.Next() catch default -1
@@ -72,6 +72,6 @@ fn main() ? {
     try io.PutLine($x1 + " " + $x2 + " " + $x3)
     a mut any Iterator<I64>& = repeat(5, 3)
     n I64 = 0
-    for v in a { n += v }
+    for v in a: n += v
     try io.PutLine("any " + $n)
 }

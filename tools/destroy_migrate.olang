@@ -25,7 +25,7 @@ fn main() ? io.Error {
         }
         left Vec<String&>
         out := migrate(path, text, left)
-        for l in left { srcmask.Say("by hand: " + $l) }
+        for l in left: srcmask.Say("by hand: " + $l)
         if out == text: continue
         try os.WriteFile(path, out) catch os.Error { try io.PutErrLine("destroy_migrate: " + $path + ": cannot be written") }
         try io.PutLine(path)
@@ -37,7 +37,7 @@ fn migrate(path String&, text String&, left mut Vec<String&>&) String {
     mask := srcmask.Mask(text, false)
     lines := text.Split("\n")
     codes Vec<String&>
-    for i in range lines.Len() { codes.Push(codeOf(lines, mask, i)) }
+    for i in range lines.Len(): codes.Push(codeOf(lines, mask, i))
     drop := Array<Bool>(lines.Len(), false)
     for i in range lines.Len() {
         name := destroyed(codes[i])
@@ -60,7 +60,7 @@ fn migrate(path String&, text String&, left mut Vec<String&>&) String {
 # line i's code alone, its comments and literals taken out, trimmed
 fn codeOf(lines Array<String&>&, mask String&, i I64) String& {
     at I64 = 0
-    for k in range i { at += lines[k].Len() + 1 }
+    for k in range i: at += lines[k].Len() + 1
     b := StringBuilder()
     for k in range lines[i].Len() {
         if mask[at + k] == 'c': b.Push(lines[i][k:k + 1])
@@ -77,7 +77,7 @@ fn destroyed(code String&) String {
             break
         }
     }
-    if not rest.EndsWith(".Destroy()") { return "" }
+    if not rest.EndsWith(".Destroy()"): return ""
     name := rest[:rest.Len() - 10]
     if name.Len() == 0: return ""
     for c in name {
@@ -88,7 +88,7 @@ fn destroyed(code String&) String {
 
 fn indent(line String&) I64 {
     n I64 = 0
-    for n < line.Len() and line[n] == ' ' { n++ }
+    for n < line.Len() and line[n] == ' ': n++
     return n
 }
 

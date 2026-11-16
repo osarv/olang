@@ -29,18 +29,18 @@ type Deque<T> struct() {
 # E27): "deque.Deque<I64>[1, 2, 3]". Fails with what the iterator fails with
 fn Deque<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) Deque<T> ? E {
     d := Deque<T>()
-    for x in try it { d.PushBack(x) }
+    for x in try it: d.PushBack(x)
     return d
 }
 
 # room for one more, the elements moved into a buffer twice the size when the ring is full, front first - the rest of
 # it never filled, so no zero value is needed (D13c): each position is written by a Push before it is read
 fn (d mut Deque<T>&) room() {
-    if d.n < d.buf.Len() { return }
+    if d.n < d.buf.Len(): return
     old mut Array<T>& = d.buf
     size I64 = 8 if old.Len() == 0 else old.Len() * 2
     d.buf = old[:0].grown(size)
-    for i in range d.n { d.buf[i].occupy(old[(d.head + i) % old.Len()].vacate()) }
+    for i in range d.n: d.buf[i].occupy(old[(d.head + i) % old.Len()].vacate())
     old.retire()
     d.head = 0
 }
@@ -64,7 +64,7 @@ fn (d mut Deque<T>&) PushFront(x T) {
 
 # the front element, taken off
 fn (d mut Deque<T>&) PopFront() T ? Error.Empty {
-    if d.n == 0 { error Error.Empty }
+    if d.n == 0: error Error.Empty
     x := d.buf[d.head].vacate()
     d.head = (d.head + 1) % d.buf.Len()
     d.n--
@@ -73,18 +73,18 @@ fn (d mut Deque<T>&) PopFront() T ? Error.Empty {
 
 # the back element, taken off
 fn (d mut Deque<T>&) PopBack() T ? Error.Empty {
-    if d.n == 0 { error Error.Empty }
+    if d.n == 0: error Error.Empty
     d.n--
     return d.buf[(d.head + d.n) % d.buf.Len()].vacate()
 }
 
 fn (d Deque<T>&) Front() T ? Error.Empty {
-    if d.n == 0 { error Error.Empty }
+    if d.n == 0: error Error.Empty
     return d.buf[d.head]
 }
 
 fn (d Deque<T>&) Back() T ? Error.Empty {
-    if d.n == 0 { error Error.Empty }
+    if d.n == 0: error Error.Empty
     return d.buf[(d.head + d.n - 1) % d.buf.Len()]
 }
 
@@ -109,9 +109,9 @@ fn (d mut Deque<T>&) Clear() {
 # the elements front to back, in an array of their own
 fn (d Deque<T>&) ToArray() mut Array<T>& {
     out mut Array<T>& = Array<T>(0)
-    if d.n == 0 { return out }
+    if d.n == 0: return out
     out = Array<T>(d.n, d.buf[d.head])
-    for i in range d.n { out[i] = d.buf[(d.head + i) % d.buf.Len()] }
+    for i in range d.n: out[i] = d.buf[(d.head + i) % d.buf.Len()]
     return out
 }
 
@@ -122,7 +122,7 @@ type Iter<T> struct(of Deque<T>&) {
 }
 
 fn (it mut Iter<T>&) Next() T ? Exhausted {
-    if it.i >= it.d.Len() { error Exhausted.End }
+    if it.i >= it.d.Len(): error Exhausted.End
     it.i++
     return it.d.At(it.i - 1)
 }
@@ -131,7 +131,7 @@ fn (d Deque<T>&) Iter() Iter<T> { return Iter<T>(d) }
 
 # whether two Deques hold equal elements in the same order - "==" (E10a)
 fn (d Deque<T>&) Eq(o Deque<T>&) Bool {
-    if d.Len() != o.Len() { return false }
+    if d.Len() != o.Len(): return false
     for i in range d.Len() {
         if d.At(i) != o.At(i): return false
     }
@@ -140,7 +140,7 @@ fn (d Deque<T>&) Eq(o Deque<T>&) Bool {
 
 fn (d Deque<T>&) Hash() I64 {
     h I64 = -3750763034362895579
-    for i in range d.Len() { h = (h ^ d.At(i).Hash()) * 1099511628211 }
+    for i in range d.Len(): h = (h ^ d.At(i).Hash()) * 1099511628211
     return h
 }
 
@@ -156,13 +156,13 @@ if TestBuild {
 
 test "a Deque is pushed and popped at both ends" {
     d := Deque<I64>()
-    for i in range 20 { d.PushBack(i) }
+    for i in range 20: d.PushBack(i)
     d.PushFront(-1)
     d.PushFront(-2)
     assert d.Len() == 22 and d.Front()! == -2 and d.Back()! == 19 and d[2] == 0
     assert d.PopFront()! == -2 and d.PopBack()! == 19 and d.Len() == 20
     sum := 0
-    for x in d { sum += x }
+    for x in d: sum += x
     assert sum == -1 + 171
     d.Clear()
     v := try d.PopFront() catch Error.Empty default 99
@@ -179,7 +179,7 @@ test "a Deque used as a ring wraps and grows in order" {
     }
     assert d.Len() == 50
     a := d.ToArray()
-    for i in range a.Len() - 1 { assert a[i] != a[i + 1] }
+    for i in range a.Len() - 1: assert a[i] != a[i + 1]
     c := d                                          # a copy: a deque of its own
     c.PushBack(5)
     assert c.Len() == 51 and d.Len() == 50 and c != d

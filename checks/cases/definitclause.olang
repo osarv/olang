@@ -4,7 +4,7 @@
 type N struct(v I64) { v }
 type E error { Bad }
 fn N.g(k I64) N& ? E {
-    if k < 0 { error E.Bad }
+    if k < 0: error E.Bad
     return N(k)
 }
 fn a(k I64) I64 {

@@ -13,35 +13,35 @@ type Node struct(v I64) {
 }
 run mut I64 = 1
 fn sq(n I64) I64 ? E {
-    if n < 0 { error E.Neg }
-    if n > 1000 { error E.Big }
+    if n < 0: error E.Neg
+    if n > 1000: error E.Big
     return n * n
 }
 fn seven(n I64) ? F {
-    if n == 7 { error F.Seven }
+    if n == 7: error F.Seven
 }
 fn spin(n I64, k I64) I64 ? E {
     t I64 = 0
-    for i in range k { t = t + i }
-    if t < 0 { return 0 }
+    for i in range k: t = t + i
+    if t < 0: return 0
     return try sq(n)
 }
 fn Node.mk(n I64) Node& ? E {
-    if n < 0 { error E.Neg }
+    if n < 0: error E.Neg
     return Node(n * 10)
 }
 fn text(n I64) String ? E {
-    if n < 0 { error E.Neg }
+    if n < 0: error E.Neg
     return "n=" + $n
 }
 fn many(n I64) Vec<I64> ? E {
-    if n < 0 { error E.Neg }
+    if n < 0: error E.Neg
     l := Vec<I64>()
-    for i in range n { l.Push(i * i) }
+    for i in range n: l.Push(i * i)
     return l
 }
 fn divmod(a I64, b I64) I64, I64 ? E {
-    if b == 0 { error E.Neg }
+    if b == 0: error E.Neg
     return a / b, a % b
 }
 fn churn() I64 {
@@ -57,7 +57,7 @@ fn earliest() I64 {
     try join {
         spawn try spin(-run, 20000)
         spawn try spin(2000 * run, 0)
-        for i in range 10 { spawn try sq(5000 + i) }
+        for i in range 10: spawn try sq(5000 + i)
     } catch E.Neg { return 1 } catch E.Big { return 2 }
     return 0
 }
@@ -74,10 +74,10 @@ fn classify(a I64, b I64) I64 {
 fn sumSq(a Array<I64>&) I64 ? E {
     out := Array<I64>(a.Len())
     try join {
-        for i in range a.Len() { spawn out[i] = try sq(a[i]) }
+        for i in range a.Len(): spawn out[i] = try sq(a[i])
     }
     t I64 = 0
-    for x in out { t = t + x }
+    for x in out: t = t + x
     return t
 }
 fn defaulted(a Array<I64>&) String {
@@ -107,7 +107,7 @@ fn broken() I64 {
     for i in range 3 {
         try join {
             spawn try sq((I64(i) - 1) * run)
-            if i < 5 { break }
+            if i < 5: break
         } catch E { n = n + 10 }
         n = n + 1
     }

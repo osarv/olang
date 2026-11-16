@@ -10,7 +10,7 @@ fn Find(xs Array<I64>&, k I64) I64 ? {
 
 # a private error raised by name: no module but this one can name it, and a caller outside takes it with a bare catch
 fn Hidden(k I64) I64 ? {
-    if k < 0 { error negative }
+    if k < 0: error negative
     return k
 }
 
@@ -22,6 +22,6 @@ fn Pick(xs Array<I64>&, k I64) I64 ? LookupError {
     for x in xs {
         if x == k: n++
     }
-    if n > 1 { error Ambiguous }
+    if n > 1: error Ambiguous
     return try Find(xs, k)
 }

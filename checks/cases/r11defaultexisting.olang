@@ -6,7 +6,7 @@
 import "std/io"
 type Bad error { No }
 fn validate(text String&) Vec<String&> ? Bad {
-    if text.Len() == 0 { error Bad.No }
+    if text.Len() == 0: error Bad.No
     return Vec<String&>()
 }
 fn churn() {

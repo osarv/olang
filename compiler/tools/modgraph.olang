@@ -21,7 +21,7 @@ fn main() {
     args := os.Args()
     dump := toolkit.Env("MODGRAPH_DUMP", "build/compiler_tools_dump")
     capture := args.Len() > 1 and args[1] == "-capture"
-    if not toolkit.Built(dump) { toolkit.Die("modgraph: " + $dump + " is not built (make " + $dump + ")") }
+    if not toolkit.Built(dump): toolkit.Die("modgraph: " + $dump + " is not built (make " + $dump + ")")
     roots := defaultRoots() if capture else toolkit.FilesOr(args, defaultRoots())
     g := toolkit.Golden() if capture else toolkit.Golden.Read(Golden, "modgold")
     work := toolkit.Scratch("modgraph")
@@ -47,7 +47,7 @@ fn main() {
                 continue
             }
             n++
-            if want == new { continue }
+            if want == new: continue
             toolkit.Say("modgraph: " + $key + ": the golden (<) and the self-hosted loader (>) differ:\n")
             toolkit.Say(toolkit.Head(toolkit.Changes(toolkit.Diff(work, want, new)), 20))
             bad = true
@@ -55,7 +55,7 @@ fn main() {
     }
     if capture {
         r := remote(work, dump)
-        if r != "" { out.Push(toolkit.GoldenSection("remote", r)) }
+        if r != "": out.Push(toolkit.GoldenSection("remote", r))
         toolkit.GoldenWrite(Golden, out.ToString())
         toolkit.Say("modgraph: " + $n + " graphs captured from " + $dump + " into " + $Golden + "\n")
         return
@@ -70,7 +70,7 @@ fn main() {
             bad = true
         }
     }
-    if bad { os.Exit(1) }
+    if bad: os.Exit(1)
     toolkit.Say("modgraph: " + $n + " graphs, every one the same\n")
 }
 
@@ -79,7 +79,7 @@ fn loader(dump String&, mode String&, f String&) String {
     args := Vec<String&>()
     args.Push(dump)
     args.Push("modules")
-    if mode != "" { args.Push(mode) }
+    if mode != "": args.Push(mode)
     args.Push(f)
     return withoutHeaders(toolkit.RunShowing(args.ToArray()).Stdout)
 }
@@ -88,11 +88,11 @@ fn loader(dump String&, mode String&, f String&) String {
 fn defaultRoots() Vec<String&> {
     roots := Vec<String&>()
     for dir in Array<String&>["tests", "tests/geom", "std", "compiler", "compiler/tools"] {
-        for f in toolkit.Matching(dir, ".olang") { roots.Push($f) }
+        for f in toolkit.Matching(dir, ".olang"): roots.Push($f)
     }
     roots.Push("checks/checks.olang")
     for dir in Array<String&>["fuzz", "bench"] {
-        for f in toolkit.Matching(dir, ".olang") { roots.Push($f) }
+        for f in toolkit.Matching(dir, ".olang"): roots.Push($f)
     }
     return roots
 }
@@ -101,7 +101,7 @@ fn defaultRoots() Vec<String&> {
 fn withoutBuildModule(t String&) String {
     rows := Vec<String&>()
     for r in toolkit.Rows(t) {
-        if r != "module olang_build" { rows.Push($r) }
+        if r != "module olang_build": rows.Push($r)
     }
     return toolkit.Text(rows)
 }
@@ -109,7 +109,7 @@ fn withoutBuildModule(t String&) String {
 fn withoutHeaders(t String&) String {
     rows := Vec<String&>()
     for r in toolkit.Rows(t) {
-        if not r.StartsWith("== ") { rows.Push($r) }
+        if not r.StartsWith("== "): rows.Push($r)
     }
     return toolkit.Text(rows)
 }
@@ -118,7 +118,7 @@ fn withoutHeaders(t String&) String {
 fn lockKeys(t String&) String {
     rows := Vec<String&>()
     for r in toolkit.Rows(t) {
-        if r.StartsWith("#") { continue }
+        if r.StartsWith("#"): continue
         sp := try r.FindByte(' ') catch default r.Len()
         rows.Push($r[0:sp])
     }
@@ -129,7 +129,7 @@ fn lockKeys(t String&) String {
 fn gitIn(dir String&, rest Array<String&>&) {
     args := Vec<String&>()
     for a in Array<String&>["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"] { args.Push(a) }
-    for a in rest { args.Push($a) }
+    for a in rest: args.Push($a)
     toolkit.Run(args.ToArray(), Array<String&>(0), dir)
 }
 

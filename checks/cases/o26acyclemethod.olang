@@ -10,7 +10,7 @@ type Ref struct(r Info&) { r }
 type W struct(x Ref) { x }
 type G struct() { n I64 = 0 }
 fn (g G&) h(i Info&, d I64) Ref {
-    if d < 5 { return g.m(i, d + 1) }
+    if d < 5: return g.m(i, d + 1)
     return Ref(i)
 }
 fn (g G&) m(i Info&, d I64) Ref { return g.h(i, d) }

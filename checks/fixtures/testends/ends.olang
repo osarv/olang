@@ -6,8 +6,8 @@ import "std/os"
 Finished mut I64 = 0
 fn slowly(n I64) {
     s I64 = 0
-    for i in range n { s += i }
-    if s >= 0 { Finished = 1 }
+    for i in range n: s += i
+    if s >= 0: Finished = 1
 }
 test "fails inside a join" {
     Finished = 0
@@ -27,7 +27,7 @@ fn deeper() {
     h Handle& = Handle(1)
     for i in range 1 {
         g Handle& = Handle(2)
-        if i == 0 { unreachable }
+        if i == 0: unreachable
     }
 }
 test "fails two frames down" {
@@ -61,7 +61,7 @@ type bag struct(n I64) {
 fn (b bag&) Str() String {
     r res& = res(1)
     q := res(2)
-    if b.n == 7 { unreachable }
+    if b.n == 7: unreachable
     return "b" + $r.k + $q.k
 }
 test "fails inside a Str" {
@@ -76,7 +76,7 @@ type step unique struct(k I64) {
     k
 } destruct {
     Steps = Steps * 10 + k
-    if k == 2 { unreachable }
+    if k == 2: unreachable
 }
 fn steps() {
     s1 step& = step(1)
@@ -104,7 +104,7 @@ type FxErr error {
     Gone
 }
 fn inner(n I64) I64 ? {
-    if n > 0 { error FxErr.Gone }
+    if n > 0: error FxErr.Gone
     return n
 }
 fn middle(n I64) I64 ? {
@@ -133,7 +133,7 @@ fn reason(n I64) String {
     return "n is " + $n
 }
 fn pick(n I64) I64 {
-    if n < 10 { return n }
+    if n < 10: return n
     unreachable reason(n)
 }
 test "an unreachable says why" {

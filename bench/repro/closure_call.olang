@@ -15,7 +15,7 @@ fn main() ? {
     n := try args[1].ParseInt()
     passes := try args[2].ParseInt()
     a := Array<I64>(n)
-    for i in range n { a[i] = i * 7 }
+    for i in range n: a[i] = i * 7
     total I64 = 0
     for p in range passes {
         total += a.Iter().Fold(I64(0), fn(acc, x) { return acc + (x ^ p) })        # captures p: indirect call

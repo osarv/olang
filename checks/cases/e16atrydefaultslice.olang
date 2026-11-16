@@ -7,14 +7,14 @@ import "std/io"
 fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { try io.PutLine("x") }
+        if a[0] == 3: try io.PutLine("x")
     }
 }
 fn view(a Array<Array<I64>>&) Array<I64>& { return (try a.Get(0) catch default Array<I64>(2))[0:2] }
 fn deep(n I64) I64 {
     b := Array<I64>(8)
-    for i in range 8 { b[i] = n * 1000 + i }
-    if n == 0 { return b[3] }
+    for i in range 8: b[i] = n * 1000 + i
+    if n == 0: return b[3]
     return deep(n - 1) + b[1]
 }
 fn main() ? {

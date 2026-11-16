@@ -7,7 +7,7 @@ type Money struct(c I64) {
     c
 }
 fn (a Money&) Minus(b Money&) Money ? MoneyError {
-    if b.c > a.c { error MoneyError.Negative }
+    if b.c > a.c: error MoneyError.Negative
     return Money(a.c - b.c)
 }
 fn main() {

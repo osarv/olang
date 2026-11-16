@@ -24,7 +24,7 @@ fn main() {
     s mut Server& = Server()
     for i in range N {
         s.open(i)
-        if i >= 64 { s.close(i - 64) }
+        if i >= 64: s.close(i - 64)
     }
     io.PutLine($Closed + " " + $s.conns.Len())!
 }

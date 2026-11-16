@@ -18,7 +18,7 @@ fn (it mut Interp&) call(d I64) I64 {
     f.vars.Put("x" + $d, d)
     depth := f.depth
     r := d
-    if d > 0 { r += it.call(d - 1) }
+    if d > 0: r += it.call(d - 1)
     try it.frames.Pop() catch { unreachable }
     return r + depth
 }
@@ -26,6 +26,6 @@ fn (it mut Interp&) call(d I64) I64 {
 fn main() {
     it := Interp()
     total I64 = 0
-    for _ in range N { total += it.call(5) }
+    for _ in range N: total += it.call(5)
     io.PutLine($total)!
 }

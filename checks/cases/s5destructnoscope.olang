@@ -7,7 +7,7 @@
 import "std/io"
 fn mk2(n I64) Vec<String&>, I64 {
     l := Vec<String&>()
-    for i in range n { l.Push($i) }
+    for i in range n: l.Push($i)
     return l, n + 1
 }
 

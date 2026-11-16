@@ -5,7 +5,7 @@ type E error {
     Bad
 }
 fn work(n I32) ? E {
-    if n < 0 { error E.Bad }
+    if n < 0: error E.Bad
 }
 fn run() I32 {
     join {

@@ -7,7 +7,7 @@ N I64 = 20000
 
 fn mk(i I64) Vec<String> {
     w Vec<String>
-    for j in range 20 { w.Push($i + "-" + $j + " padded out a little") }
+    for j in range 20: w.Push($i + "-" + $j + " padded out a little")
     return w
 }
 

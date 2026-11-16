@@ -47,7 +47,7 @@ fn main() {
             continue
         }
         out := migrateMarkdown(text, kn) if path.EndsWith(".md") else migrate(path, text, kn)
-        if out == text { continue }
+        if out == text: continue
         changed++
         if verbose or check: srcmask.Say(path)
         if not check: os.WriteFile(path, out)!
@@ -69,16 +69,16 @@ Prims Array<String&> = Array<String&>["Bool", "Char", "String", "F16", "BF16", "
 fn known.load(std String&) known {
     k := known()
     k.std = $std
-    for p in Prims { k.bare.Put($p, true) }
+    for p in Prims: k.bare.Put($p, true)
     for i in range 1, 129 {
         k.bare.Put($"I" + $i, true)
         k.bare.Put($"U" + $i, true)
     }
     names := try os.ReadDir($std + "/prelude") catch default Array<String&>(0)
     for n in names {
-        if not n.EndsWith(".olang") { continue }
+        if not n.EndsWith(".olang"): continue
         text := try srcmask.ReadText($std + "/prelude/" + $n) catch os.Error { continue }
-        for t in declaredTypes(text) { k.bare.Put($t, true) }
+        for t in declaredTypes(text): k.bare.Put($t, true)
     }
     return k
 }
@@ -88,7 +88,7 @@ fn (k mut known&) typesOf(path String&) Map<String, Bool>& {
     if k.mods.Has($path) { return try k.mods.Ref($path) catch { unreachable } }
     m Map<String, Bool>
     text := try srcmask.ReadText(path) catch default ""
-    for t in declaredTypes(text) { m.Put($t, true) }
+    for t in declaredTypes(text): m.Put($t, true)
     k.mods.Put($path, m)
     return try k.mods.Ref($path) catch { unreachable }
 }
@@ -98,7 +98,7 @@ fn (k mut known&) makersOf(path String&) Map<String, Bool>& {
     if k.makers.Has($path) { return try k.makers.Ref($path) catch { unreachable } }
     m Map<String, Bool>
     text := try srcmask.ReadText(path) catch default ""
-    for n in fromIterOwners(text) { m.Put($n, true) }
+    for n in fromIterOwners(text): m.Put($n, true)
     k.makers.Put($path, m)
     return try k.makers.Ref($path) catch { unreachable }
 }
@@ -108,7 +108,7 @@ fn fromIterOwners(text String&) Vec<String> {
     out Vec<String>
     for line in text.Split("\n") {
         t := srcmask.Strip(line)
-        if not t.StartsWith("fn ") or not (".FromIter" in t) { continue }
+        if not t.StartsWith("fn ") or not (".FromIter" in t): continue
         n := word(t, 3)
         if n.Len() > 0: out.Push($n)
     }
@@ -120,8 +120,8 @@ fn declaredTypes(text String&) Vec<String> {
     out Vec<String>
     for line in text.Split("\n") {
         t := srcmask.Strip(line)
-        if t.StartsWith("extern type ") { t = t[7:] }
-        if not t.StartsWith("type ") { continue }
+        if t.StartsWith("extern type "): t = t[7:]
+        if not t.StartsWith("type "): continue
         n := word(t, 5)
         if n.Len() > 0: out.Push($n)
     }
@@ -130,9 +130,9 @@ fn declaredTypes(text String&) Vec<String> {
 
 # the name starting at i of t, "" where none does
 fn word(t String&, i I64) String& {
-    if i >= t.Len() or not srcmask.IsIdStart(t[i]) { return "" }
+    if i >= t.Len() or not srcmask.IsIdStart(t[i]): return ""
     j := i
-    for j < t.Len() and srcmask.IsWord(t[j]) { j++ }
+    for j < t.Len() and srcmask.IsWord(t[j]): j++
     return t[i:j]
 }
 
@@ -147,12 +147,12 @@ type scope struct() {
 
 fn scope.of(path String&, text String&, mask String&, k mut known&) scope {
     s := scope()
-    for t in declaredTypes(text) { s.own.Put($t, true) }
-    for n in fromIterOwners(text) { s.builders.Put($n, true) }
+    for t in declaredTypes(text): s.own.Put($t, true)
+    for n in fromIterOwners(text): s.builders.Put($n, true)
     for line in text.Split("\n") {
         t := srcmask.Strip(line)
-        if t.StartsWith("import ") { s.addImport(path, t, k) }
-        if t.StartsWith("fn ") or t.StartsWith("type ") or t.StartsWith("extern type ") { s.addVars(t, k) }
+        if t.StartsWith("import "): s.addImport(path, t, k)
+        if t.StartsWith("fn ") or t.StartsWith("type ") or t.StartsWith("extern type "): s.addVars(t, k)
     }
     return s
 }
@@ -169,13 +169,13 @@ fn importOf(path String&, line String&, std String&) String, String {
     rest := line[q + 1:]
     e := try rest.FindByte('"') catch { return "", "" }
     mod := rest[:e]
-    if mod.EndsWith(".h") or mod.EndsWith(".c") { return "", "" }
+    if mod.EndsWith(".h") or mod.EndsWith(".c"): return "", ""
     head := srcmask.Strip(line[7:q])
     alias := $head if head.Len() > 0 else $filepath.Base(mod)
     file := ""
     if mod.StartsWith("std/"): file = $std + "/" + $mod[4:] + ".olang"
     else if not ("." in filepath.Base(mod) and "/" in mod): file = $filepath.Join(filepath.Dir(path), mod) + ".olang"
-    if file.Len() == 0 or not os.Exists(file) { return "", "" }
+    if file.Len() == 0 or not os.Exists(file): return "", ""
     return alias, file
 }
 
@@ -200,10 +200,10 @@ fn (s mut scope&) addVars(line String&, k known&) {
     for i in range line.Len() {
         c := line[i]
         if c == '<' { depth++ } else if c == '>' { depth-- }
-        if depth <= 0 or not c.IsUpper() { continue }
-        if i > 0 and (srcmask.IsWord(line[i - 1]) or line[i - 1] == '.') { continue }
+        if depth <= 0 or not c.IsUpper(): continue
+        if i > 0 and (srcmask.IsWord(line[i - 1]) or line[i - 1] == '.'): continue
         n := word(line, i)
-        if k.bare.Has($n) or s.own.Has($n) { continue }
+        if k.bare.Has($n) or s.own.Has($n): continue
         s.vars.Put($n, true)
     }
 }
@@ -234,7 +234,7 @@ fn front.read(text String&, mask String&, i I64) front {
     path Vec<String>
     for {
         n := word(text, j)
-        if n.Len() == 0 { return front.none() }
+        if n.Len() == 0: return front.none()
         path.Push($n)
         j += n.Len()
         if j < text.Len() - 1 and text[j] == '.' and srcmask.IsIdStart(text[j + 1]) {
@@ -246,17 +246,17 @@ fn front.read(text String&, mask String&, i I64) front {
     generic := false
     if j < text.Len() and text[j] == '<' {
         e := closeAngle(text, mask, j)
-        if e < 0 { return front.none() }
+        if e < 0: return front.none()
         generic = true
         j = e
     }
     marked := false
-    if j < text.Len() and text[j] == '?' { j++ }
+    if j < text.Len() and text[j] == '?': j++
     if j < text.Len() and text[j] == '&' {
         marked = true
         j++
     }
-    if j >= text.Len() or text[j] != '[' or mask[j] != 'c' { return front.none() }
+    if j >= text.Len() or text[j] != '[' or mask[j] != 'c': return front.none()
     return front(j, marked, generic, anyForm, path)
 }
 
@@ -266,11 +266,11 @@ fn closeAngle(text String&, mask String&, i I64) I64 {
     for j in range i, text.Len() {
         c := text[j]
         if c == '\n' or c == '{' or c == '}' or c == ';' { return -1 }
-        if mask[j] != 'c' { continue }
-        if c == '<' { depth++ }
+        if mask[j] != 'c': continue
+        if c == '<': depth++
         if c == '>' and j > 0 and text[j - 1] != '-' {
             depth--
-            if depth == 0 { return j + 1 }
+            if depth == 0: return j + 1
         }
     }
     return -1
@@ -278,16 +278,16 @@ fn closeAngle(text String&, mask String&, i I64) I64 {
 
 # whether a front is the old form: an element type before an array's "["
 fn (k mut known&) old(s scope&, f front&) Bool {
-    if f.Any { return true }
+    if f.Any: return true
     if f.Marked { return true }                   # no type is written "T&[" any more: an element type's marker
-    if f.Generic { return false }
+    if f.Generic: return false
     if f.Path.Len() == 1 {
         n := f.Path[0]
         # a type variable or a type of the file declaring a FromIter in front is today's literal (E19): `C[a, b]`
-        if s.vars.Has(n) or s.builders.Has(n) { return false }
+        if s.vars.Has(n) or s.builders.Has(n): return false
         return s.names(n, k)
     }
-    if not s.aliases.Has(f.Path[0]) { return false }
+    if not s.aliases.Has(f.Path[0]): return false
     file := try s.aliases.Get(f.Path[0]) catch { return false }
     for i in range 1, f.Path.Len() - 1 {
         file = try k.aliasesOf(file).Get(f.Path[i]) catch { return false }
@@ -322,7 +322,7 @@ fn rewrite(text String&, mask String&, s scope&, k mut known&) String {
         }
         i += word(text, i).Len()
     }
-    if edits.Len() == 0 { return $text }
+    if edits.Len() == 0: return $text
     b := StringBuilder()
     at := 0
     for e := 0, e < edits.Len(), e += 2 {
@@ -342,9 +342,9 @@ fn migrateMarkdown(text String&, k mut known&) String {
     s := scope()
     names := try os.ReadDir(k.std) catch default Array<String&>(0)
     for n in names {
-        if n.EndsWith(".olang") { s.aliases.Put($n[:n.Len() - 6], $k.std + "/" + $n) }
+        if n.EndsWith(".olang"): s.aliases.Put($n[:n.Len() - 6], $k.std + "/" + $n)
     }
-    for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" { s.vars.Put($c, true) }
+    for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ": s.vars.Put($c, true)
     b := StringBuilder()
     fenced := false
     first := true
@@ -366,7 +366,7 @@ fn migrateMarkdown(text String&, k mut known&) String {
 
 # a prose line's inline `code` spans migrated, the rest as it is
 fn spans(line String&, s scope&, k mut known&) String {
-    if not ("`" in line) { return $line }
+    if not ("`" in line): return $line
     b := StringBuilder()
     i := 0
     for i < line.Len() {
@@ -392,7 +392,7 @@ if TestBuild {
 
 test "old fronts become the array they made; new ones are left as they are" {
     k := known()
-    for p in Prims { k.bare.Put($p, true) }
+    for p in Prims: k.bare.Put($p, true)
     k.bare.Put("I64", true)
     k.bare.Put("I32", true)
     text := "type Node struct() { }\nfn f<T>(a T) {\n    x := I64[1, 2]\n    y := String&[\"a\"]\n    z := Node?&[null]\n    w := T[a, a]\n    wm := T&[a]\n    v := Vec<I64>[1, 2]\n    u := any Shape&[c]\n    c := I32[x * 2 for x in a]\n    q := Array<I32>&[r]\n    r := a[0]\n    s := xs.Node[0]\n    # I64[3] in a comment\n    t := \"I64[3]\"\n}\n"

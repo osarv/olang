@@ -3,7 +3,7 @@
 type N struct(v I64, next N?&) { v, next }
 fn f(h N&) I64 {
     p := h.next
-    if p == null { return 0 }
+    if p == null: return 0
     p = p.next
     return p.v
 }

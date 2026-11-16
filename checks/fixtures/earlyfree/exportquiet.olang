@@ -9,7 +9,7 @@ export fn olang_total(n I64) I64 { return n * 2 }
 
 fn mk(k I64) Vec<I64> {
     v := Vec<I64>()
-    for i in range 100 { v.Push(i + k) }
+    for i in range 100: v.Push(i + k)
     return v
 }
 

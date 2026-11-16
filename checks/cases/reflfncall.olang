@@ -3,5 +3,5 @@
 type Box struct(v I64) { v }
 fn (b Box&) Get() I64 { return b.v }
 fn main() {
-    for m in Box.Methods { assert m() == 1 }
+    for m in Box.Methods: assert m() == 1
 }

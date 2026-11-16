@@ -28,7 +28,7 @@ fn churn() I64 {
 
 fn sum(t Tally&) I64 {
     s := 0
-    for x in t.seen { s += x }
+    for x in t.seen: s += x
     return s
 }
 type Holder struct(t mut Tally&) {
@@ -41,10 +41,10 @@ fn (h mut Holder&) Set(k I64, id I64) { h.m.Put(k, Logged(id, h.t)) }
 fn main() ? {
     t := Tally()
     m := Map<I64, Logged>()
-    for k in range 40 { m.Put(k % 3, Logged(k, t)) }
+    for k in range 40: m.Put(k % 3, Logged(k, t))
     {
         h := Holder(t)
-        for k in range 30 { h.Set(k % 2, 1000 + k) }
+        for k in range 30: h.Set(k % 2, 1000 + k)
     }
     churn()
     assert t.seen.Len() >= 37 + 28 and t.seen.Len() <= 37 + 30

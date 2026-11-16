@@ -8,16 +8,16 @@ type Stop error {
 }
 fn total<C Indexable<T>, T>(c C&) I64 {
     s I64 = 0
-    for x in c { s += x }
+    for x in c: s += x
     return s
 }
 
 fn main() ? {
     l := list.List<I16>()
-    for i in range 30 { l.Push(I16(i)) }
+    for i in range 30: l.Push(I16(i))
     sum I16 = 0
-    for x in l { sum += x }
+    for x in l: sum += x
     evens := Array<I16>[x for x in l if x % 2 == 0]
     big := l.Iter().Count(fn(x) { return x > 20 })
-    if sum != 435 or evens.Len() != 15 or big != 9 or total(l) != 435 { error Stop.Here }
+    if sum != 435 or evens.Len() != 15 or big != 9 or total(l) != 435: error Stop.Here
 }

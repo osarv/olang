@@ -22,22 +22,22 @@ fn f8Pow2(e I32) F64 {
 # x (finite, not NaN) to the nearest value with mant mantissa bits and the given bias, ties to even: the bits below the
 # sign, or -1 when it is past the format's largest normal exponent (the caller decides what overflow means)
 fn f8Encode(x F64, mant I32, bias I32, topExp I32) I32 {
-    if x == 0 { return 0 }
+    if x == 0: return 0
     e I32 = 0
-    for f F64 = x, f >= 2, f = f / 2 { e++ }
-    for f F64 = x, f < 1, f = f * 2 { e-- }
+    for f F64 = x, f >= 2, f = f / 2: e++
+    for f F64 = x, f < 1, f = f * 2: e--
     if e < 1 - bias { e = 1 - bias }                     # a subnormal: the smallest exponent, no implied one
     scaled F64 = x / f8Pow2(e) * f8Pow2(mant)            # the significand in units of the last mantissa bit
     r I64 = I64(scaled)
     rest F64 = scaled - F64(r)
-    if rest > 0.5 or (rest == 0.5 and r % 2 == 1) { r++ }
+    if rest > 0.5 or (rest == 0.5 and r % 2 == 1): r++
     full I64 = I64(f8Pow2(mant))
     if r >= full * 2 {                                   # rounded up to the next power of two
         r = r / 2
         e++
     }
     if r < full { return I32(r) }                        # subnormal (or rounded into the smallest normal: exact)
-    if e + bias > topExp { return -1 }
+    if e + bias > topExp: return -1
     return ((e + bias) << mant) | I32(r - full)
 }
 
@@ -45,7 +45,7 @@ fn f8Encode(x F64, mant I32, bias I32, topExp I32) I32 {
 fn f8Decode(b I32, mant I32, bias I32) F64 {
     ex I32 = b >> mant
     m F64 = F64(b & ((1 << mant) - 1))
-    if ex == 0 { return m * f8Pow2(1 - bias - mant) }
+    if ex == 0: return m * f8Pow2(1 - bias - mant)
     return (1 + m / f8Pow2(mant)) * f8Pow2(ex - bias)
 }
 
@@ -69,7 +69,7 @@ fn f8E4M3Bits(x F64) U8 {
 # the value it holds
 fn (f F8E4M3) F64() F64 {
     b I32 = I32(f.Bits) & 127
-    if b == 127 { return 0.0 / 0.0 }
+    if b == 127: return 0.0 / 0.0
     v F64 = f8Decode(b, 3, 7)
     return -v if f.Bits >= 128 else v
 }
@@ -88,7 +88,7 @@ fn f8E5M2Bits(x F64) U8 {
     a F64 = -x if sign != 0 else x
     if a > 57344 { return U8(sign | 123) }               # saturates, infinity included
     b I32 = f8Encode(a, 2, 15, 30)
-    if b < 0 { return U8(sign | 123) }
+    if b < 0: return U8(sign | 123)
     return U8(sign | b)
 }
 

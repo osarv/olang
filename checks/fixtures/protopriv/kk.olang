@@ -23,7 +23,7 @@ type Gen struct() {
     i I64 = 0
 }
 fn (g mut Gen&) next() I64 ? Exhausted {
-    if g.i == 3 { error Exhausted.End }
+    if g.i == 3: error Exhausted.End
     g.i++
     return g.i
 }
@@ -48,9 +48,9 @@ fn Inside() Bool {
     b.items.Push(4)
     b.items.Push(5)
     total I64 = 0
-    for x in b { total += x }
+    for x in b: total += x
     g := Gen()
-    for y in g { total += y }
+    for y in g: total += y
     keys := Array<Key>[Key(1), Key(2)]
     add := Adder(2)
     ok := Key(1) == Key(11) and $Key(5) == "K5" and (Vec2(1) + Vec2(2)).X == 3 and Vec2(1) < Vec2(2) and Vec2(3) > Vec2(2)

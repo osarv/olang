@@ -10,7 +10,7 @@ type Cell struct() {
 
 # one frame per level, kept from becoming a loop by the call after it
 fn deep(n I64) I64 {
-    if n == 0 { return 0 }
+    if n == 0: return 0
     r := deep(n - 1)
     return r * 3 + (1 if os.IsTerminal(-1) else 0)
 }

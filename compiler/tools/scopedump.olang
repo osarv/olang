@@ -73,16 +73,16 @@ fn run(args Array<String&>&) {
         s.Spell = fn(t types.TypeId) String { return cr.Ty(t) }
         s.Run()
         out.Write(d.Render())
-        for g in s.Gaps { out.Write("gap " + $d.Locate(g.File, I64(g.Sp.Start)) + " " + $g.What + "\n") }
+        for g in s.Gaps: out.Write("gap " + $d.Locate(g.File, I64(g.Sp.Start)) + " " + $g.What + "\n")
         judged I64 = 0
         unjudged I64 = 0
         for b in range c.Bodies.Len() {
             if s.Judged(b): judged++
             else if c.Bodies[b].Root != null: unjudged++
-            if planAt.Len() == 0 { continue }
+            if planAt.Len() == 0: continue
             body := c.Bodies[b]
             where := d.Locate(body.File, I64(body.Sp.Start))
-            if (try where.Find(planAt) catch default -1) < 0 { continue }
+            if (try where.Find(planAt) catch default -1) < 0: continue
             out.Write("-- plan B" + $b + " " + $where + "\n" + $body.Print(p.T) + $varsText(body) + $planText(s.Plans[b]) + $s.Summary(b))
         }
         out.Write("bodies " + $c.Bodies.Len() + " judged " + $judged + " unjudged " + $unjudged + "\n")
@@ -93,7 +93,7 @@ fn run(args Array<String&>&) {
 # a body's scope variables as text, in the order a call passes them
 fn varsText(b typed.Body&) String {
     t := StringBuilder()
-    for k in range b.Vars.Len() { t.Push("var " + $k + " " + $b.Vars[k] + "\n") }
+    for k in range b.Vars.Len(): t.Push("var " + $k + " " + $b.Vars[k] + "\n")
     for k in range b.Locals.Len() { t.Push("local " + $k + " " + $b.Locals[k].Kind + " " + $b.Locals[k].Marked + " in " + $b.Locals[k].In + "\n") }
     return t.ToString()
 }
@@ -106,14 +106,14 @@ fn planText(pl typed.Plan&) String {
         n I64 = 0
         for {
             sc := pl.Passed(typed.SiteId(I32(i)), n)
-            if sc == typed.Scope.Unset { break }
+            if sc == typed.Scope.Unset: break
             b.Push($(" passes" if n == 0 else ",") + " " + $sc)
             n++
         }
         b.PushChar('\n')
     }
     for i in range pl.Stored.Len() {
-        if pl.Stored[i] != typed.Scope.Frame { b.Push("local " + $i + " stored " + $pl.Stored[i] + "\n") }
+        if pl.Stored[i] != typed.Scope.Frame: b.Push("local " + $i + " stored " + $pl.Stored[i] + "\n")
     }
     return b.ToString()
 }

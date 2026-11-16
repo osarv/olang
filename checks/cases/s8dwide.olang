@@ -20,7 +20,7 @@ fn width(e Shape) I64 {
     return e.w
 }
 fn both(a Shape, b Shape) I64 {
-    if a == Shape.Circle and not (b != Shape.Rect) { return a.r + b.w }
+    if a == Shape.Circle and not (b != Shape.Rect): return a.r + b.w
     return -1
 }
 fn walk(e Shape) I64 {
@@ -32,16 +32,12 @@ fn walk(e Shape) I64 {
     return total
 }
 fn until(e Shape) I64 {
-    for e != Shape.Rect {
-        e = Shape.Rect(2, 5)
-    }
+    for e != Shape.Rect: e = Shape.Rect(2, 5)
     return e.h
 }
 fn three(e Shape) I64 {
     n := 0
-    for i := 0, e == Shape.Circle and i < 10, i += e.r {
-        n++
-    }
+    for i := 0, e == Shape.Circle and i < 10, i += e.r: n++
     return n
 }
 fn onlyA(x AErr) I64 { return 1 if x == AErr.X else 2 }

@@ -62,15 +62,15 @@ fn (p mut Plot&) Scatter<X Number, Y Number>(xs Array<X>&, ys Array<Y>&, name St
 
 # a histogram: bars counting how many values fall in each of `bins` equal ranges from the least value to the greatest
 fn (p mut Plot&) Histogram<T Number>(values Array<T>&, bins I64 = 10, name String = "") ? Error {
-    if bins < 1 { error Error.BadBins }
-    if values.Len() == 0 { error Error.Empty }
+    if bins < 1: error Error.BadBins
+    if values.Len() == 0: error Error.Empty
     v := toF64(values)
     lo, hi := least(v), greatest(v)
     if not (hi > lo) { lo, hi = lo - 0.5, hi + 0.5 }
     step := (hi - lo) / F64(bins)
     edges := Array<F64>(bins + 1)
     counts := Array<F64>(bins)
-    for i in range bins + 1 { edges[i] = lo + step * F64(i) }
+    for i in range bins + 1: edges[i] = lo + step * F64(i)
     for x in v {
         k := I64((x - lo) / step)
         if k >= bins: k = bins - 1
@@ -81,8 +81,8 @@ fn (p mut Plot&) Histogram<T Number>(values Array<T>&, bins I64 = 10, name Strin
 
 # a heatmap of `cells`, row by row, `columns` to a row: row 0 on top, the colour running from light (the least) to dark
 fn (p mut Plot&) Heatmap<T Number>(cells Array<T>&, columns I64) ? Error {
-    if cells.Len() == 0 { error Error.Empty }
-    if columns < 1 or cells.Len() % columns != 0 { error Error.BadShape }
+    if cells.Len() == 0: error Error.Empty
+    if columns < 1 or cells.Len() % columns != 0: error Error.BadShape
     try p.add2(form.Heat, "", Array<F64>(0), toF64(cells), columns)
 }
 
@@ -97,21 +97,21 @@ fn (p mut Plot&) YRange(lo F64, hi F64) {
 }
 
 fn (p mut Plot&) add<X Number, Y Number>(k form, name String, xs Array<X>&, ys Array<Y>&) ? Error {
-    if xs.Len() != ys.Len() { error Error.Uneven }
-    if xs.Len() == 0 { error Error.Empty }
+    if xs.Len() != ys.Len(): error Error.Uneven
+    if xs.Len() == 0: error Error.Empty
     try p.add2(k, name, toF64(xs), toF64(ys), 0)
 }
 
 fn (p mut Plot&) add2(k form, name String, xs Array<F64>&, ys Array<F64>&, cols I64) ? Error {
     for s in p.items.View() {
-        if (s.kind == form.Heat) != (k == form.Heat) { error Error.Mixed }
+        if (s.kind == form.Heat) != (k == form.Heat): error Error.Mixed
     }
     p.items.Push(series(k, name, xs, ys, cols))
 }
 
 fn toF64<T Number>(a Array<T>&) Array<F64> {
     out := Array<F64>(a.Len())
-    for i, x in a { out[i] = F64(x) }
+    for i, x in a: out[i] = F64(x)
     return out
 }
 
@@ -130,7 +130,7 @@ fn (p Plot&) Svg() String {
     c.drawAxes(b, p)
     b.Push(("<clipPath id=\"area\"><rect x=\"" + $f(c.left) + "\" y=\"" + $f(c.top) + "\" width=\"" + $f(c.right - c.left) +
         "\" height=\"" + $f(c.bottom - c.top) + "\"/></clipPath>\n<g clip-path=\"url(#area)\">\n"))
-    for i, s in p.items.View() { c.drawSeries(b, s, i) }
+    for i, s in p.items.View(): c.drawSeries(b, s, i)
     b.Push("</g>\n")
     c.drawLegend(b, p)
     b.Push("</svg>\n")
@@ -164,10 +164,10 @@ fn viewerFor(system String&, wsl Bool, interop Bool, distro String&, wslview Boo
         win := "\\\\wsl.localhost\\" + $distro + $file.Replace("/", "\\")
         error os.Error.NotFound("WSL interop is off, so Windows programs cannot be started: " + $file + " is at " + $win + " in Windows. Enable it with [interop] enabled=true in /etc/wsl.conf, or with systemd: echo ':WSLInterop:M::MZ::/init:PF' > /usr/lib/binfmt.d/WSLInterop.conf; then wsl --shutdown")
     }
-    if wsl and wslview { return "wslview" }
-    if wsl and explorer { return "explorer.exe" }
-    if system == "macos" and open { return "open" }
-    if system != "macos" and not wsl and xdgOpen { return "xdg-open" }
+    if wsl and wslview: return "wslview"
+    if wsl and explorer: return "explorer.exe"
+    if system == "macos" and open: return "open"
+    if system != "macos" and not wsl and xdgOpen: return "xdg-open"
     want := "open" if system == "macos" else "wslu (wslview)" if wsl else "xdg-utils (xdg-open)"
     error os.Error.NotFound("no viewer found: install " + $want + " to open " + $file)
 }
@@ -196,7 +196,7 @@ fn (p Plot&) extent() F64, F64, F64, F64 {
         }
         xlo, xhi = min2(xlo, least(s.xs)), max2(xhi, greatest(s.xs))
         ylo, yhi = min2(ylo, least(s.ys)), max2(yhi, greatest(s.ys))
-        if s.kind == form.Bars { ylo = min2(ylo, 0.0) }
+        if s.kind == form.Bars: ylo = min2(ylo, 0.0)
     }
     if p.items.Len() == 0 { xlo, xhi, ylo, yhi = 0.0, 1.0, 0.0, 1.0 }
     if not exact { xlo, xhi = nice(xlo, xhi) }
@@ -236,7 +236,7 @@ fn niceStep(extent F64) F64, I64 {
     for mag * 10.0 <= raw { mag, digits = mag * 10.0, digits - 1 }
     frac := raw / mag
     step := mag * (1.0 if frac < 1.5 else 2.0 if frac < 3.5 else 5.0 if frac < 7.5 else 10.0)
-    if frac >= 7.5 { digits-- }
+    if frac >= 7.5: digits--
     return step, (digits if digits > 0 else 0)
 }
 
@@ -245,7 +245,7 @@ fn ticks(lo F64, hi F64) Array<F64>, Array<String> {
     step, digits := niceStep(hi - lo)
     first := (lo / step - 1e-9).Ceil()
     n := I64((hi / step + 1e-9).Floor() - first) + 1
-    if n < 1 { n = 1 }
+    if n < 1: n = 1
     vs := Array<F64>(n)
     ts := Array<String>(n)
     for i in range n {
@@ -332,7 +332,7 @@ fn (c canvas&) drawSeries(b mut StringBuilder&, s series&, i I64) {
 
 fn (c canvas&) drawLine(b mut StringBuilder&, s series&, colour String) {
     b.Push("<polyline fill=\"none\" stroke=\"" + $colour + "\" stroke-width=\"2\" points=\"")
-    for i, x in s.xs { b.Push($f(c.X(x)) + "," + $f(c.Y(s.ys[i])) + " ") }
+    for i, x in s.xs: b.Push($f(c.X(x)) + "," + $f(c.Y(s.ys[i])) + " ")
     b.Push("\"/>\n")
 }
 

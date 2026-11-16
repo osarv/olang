@@ -6,6 +6,6 @@ fn main() ? {
     v.Push(5)
     d := v.View()
     f := fn() I64 { return d[0] }
-    for i in range 100 { v.Push(i) }
+    for i in range 100: v.Push(i)
     try io.PutLine($f())
 }

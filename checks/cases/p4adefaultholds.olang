@@ -12,7 +12,7 @@ type Node struct(v I64, next Node?&) {
     next
 }
 fn Node.mk(n I64) Node& ? E {
-    if n < 0 { error E.Bad }
+    if n < 0: error E.Bad
     return Node(n, null)
 }
 fn churn() {

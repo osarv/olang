@@ -6,7 +6,7 @@ import "std/os"
 fn main() ? {
     args := os.Args()
     n I64 = 1000
-    if args.Len() > 1 { n = try args[1].ParseInt() }
+    if args.Len() > 1: n = try args[1].ParseInt()
     b := StringBuilder()
     for i in range n {
         b.Push($(i * 7919 % 1000003 - 500000))
@@ -15,7 +15,7 @@ fn main() ? {
     t := b.ToString()
     total I64 = 0
     for w in t.Split(" ") {
-        if w.Len() > 0 { total += try w.ParseInt() }
+        if w.Len() > 0: total += try w.ParseInt()
     }
     try io.Put($t.Len() + " " + $total + "\n")
 }

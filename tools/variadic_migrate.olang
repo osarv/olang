@@ -52,7 +52,7 @@ fn main() {
         }
         r := migrated.migrate(path, text)
         hand += r.Hand
-        if r.Text == text { continue }
+        if r.Text == text: continue
         changed++
         if verbose or check: srcmask.Say(path)
         if not check: os.WriteFile(path, r.Text)!
@@ -90,11 +90,11 @@ fn aliasOf(text String&, module String&) String {
     bare := module[(try module.Find("/") catch default -1) + 1:]
     for line in text.Split("\n") {
         t := srcmask.Strip(line)
-        if not t.StartsWith("import ") { continue }
+        if not t.StartsWith("import "): continue
         path := $module if t.EndsWith($"\"" + $module + "\"") else ($bare if t.EndsWith($" \"" + $bare + "\"") else "")
-        if path.Len() == 0 { continue }
+        if path.Len() == 0: continue
         head := srcmask.Strip(t[7:t.Len() - path.Len() - 2])
-        if head.Len() > 0 { return $head }
+        if head.Len() > 0: return $head
         return $bare
     }
     return ""
@@ -109,11 +109,11 @@ fn migrated.rewriteCalls(path String&, text String&, head String&, m moved&) mig
     for {
         i := try out[:at].FindLast(head) catch { break }
         at = i
-        if mask[i] != 'c' or (i > 0 and (srcmask.IsWord(out[i - 1]) or out[i - 1] == '.')) { continue }
+        if mask[i] != 'c' or (i > 0 and (srcmask.IsWord(out[i - 1]) or out[i - 1] == '.')): continue
         if out[:i].EndsWith("fn ") { continue }   # its declaration
         o := i + head.Len() - 1
         close := srcmask.CloseOf(out, mask, o)
-        if close < 0 { continue }
+        if close < 0: continue
         args := try splitArgs(out, mask, o + 1, close - 1) catch NotOneLine {
             hand++
             sayHand(path, out, i, "an argument list across lines")
@@ -143,7 +143,7 @@ fn splitArgs(text String&, mask String&, from I64, to I64) Vec<String&>& ? NotOn
     depth := 0
     start := from
     for i in range from, to {
-        if mask[i] != 'c' { continue }
+        if mask[i] != 'c': continue
         c := text[i]
         if c == '(' or c == '[' or c == '{': depth++
         else if c == ')' or c == ']' or c == '}': depth--
@@ -161,7 +161,7 @@ fn splitArgs(text String&, mask String&, from I64, to I64) Vec<String&>& ? NotOn
 # the arguments of a call of m written the new way - failing with Unchanged where it is written so already, or has no
 # array to move, and with Unclear where the array is one it cannot tell from a single argument
 fn newArgs(args Vec<String&>&, m moved&) String ? Unchanged, Unclear {
-    if newForm(args, m) { error Unchanged }
+    if newForm(args, m): error Unchanged
     before Vec<String&>
     named Vec<String&>
     spread := ""
@@ -183,22 +183,22 @@ fn newArgs(args Vec<String&>&, m moved&) String ? Unchanged, Unclear {
             named.Push($nameOf(p) + " = " + $a)
         }
     }
-    if not seen { error Unchanged }
+    if not seen: error Unchanged
     all Vec<String&>
-    for b in before { all.Push(b) }
+    for b in before: all.Push(b)
     if spread.Len() > 0: all.Push(spread)
-    for n in named { all.Push(n) }
+    for n in named: all.Push(n)
     return $all.Join(", ")
 }
 
 # what an old call's array becomes among the variadic arguments: a literal's items, or an array a ToArray(), a View()
 # or an Array<T>(n) gives passed on with "..."; Unchanged for what the new form already holds there - "...", text - and Unclear for any other value
 fn spreadOf(a String&) String ? Unchanged, Unclear {
-    if a.StartsWith("...") or a.StartsWith("\"") or a.StartsWith("$") { error Unchanged }
+    if a.StartsWith("...") or a.StartsWith("\"") or a.StartsWith("$"): error Unchanged
     lb := try a.Find("[") catch default -1
-    if lb > 0 and a.EndsWith("]") and typeText(a[:lb]) { return $srcmask.Strip(a[lb + 1:a.Len() - 1]) }
+    if lb > 0 and a.EndsWith("]") and typeText(a[:lb]): return $srcmask.Strip(a[lb + 1:a.Len() - 1])
     # a call that gives an array by its name - another call may give a String, the new form's first argument
-    if a.EndsWith(".ToArray()") or a.EndsWith(".View()") or a.StartsWith("Array<") { return $"..." + $a }
+    if a.EndsWith(".ToArray()") or a.EndsWith(".View()") or a.StartsWith("Array<"): return $"..." + $a
     error Unclear
 }
 
@@ -214,7 +214,7 @@ fn typeText(t String&) Bool {
 # the positional parameters before it, is "..." or text
 fn newForm(args Vec<String&>&, m moved&) Bool {
     k := m.Before.Len()
-    if k == 0 or k >= args.Len() { return false }
+    if k == 0 or k >= args.Len(): return false
     a := args[k]
     return a.StartsWith("...") or a.StartsWith("\"") or a.StartsWith("$")
 }
@@ -225,8 +225,8 @@ fn nameOf(p String&) String& { return p[:try p.Find("=") catch default p.Len()] 
 # whether an argument is given by name, "name = value"
 fn isNamed(a String&) Bool {
     i := 0
-    for i < a.Len() and srcmask.IsWord(a[i]) { i++ }
-    if i == 0 { return false }
+    for i < a.Len() and srcmask.IsWord(a[i]): i++
+    if i == 0: return false
     rest := srcmask.StripStart(a[i:])
     return rest.StartsWith("=") and not rest.StartsWith("==")
 }

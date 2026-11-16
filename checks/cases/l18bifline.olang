@@ -5,6 +5,6 @@ import "std/io"
 fn main() ? {
     c := true
     f := fn() I64 { return 1 }
-    if c else fn() I64 { return 2 }
+    if c else fn() I64: return 2
     try io.PutLine($f())
 }

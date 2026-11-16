@@ -8,7 +8,7 @@ fn pick(x I32, y I32) I32 ? {
 
 fn main() ? {
     a := I32(5)
-    if os.Args().Len() > 5 { a = 0 }
+    if os.Args().Len() > 5: a = 0
     b := try pick(1, a) catch ArgumentError.Invalid default -1
     assert b == 4
     a = 0

@@ -10,7 +10,7 @@ fn countWords(words Array<String&>&) Map<String&, I64> {
     return m
 }
 fn merge(into mut Map<String&, I64>&, from Map<String&, I64>&) {
-    for e in from { into.Put(e.Key, e.Value) }
+    for e in from: into.Put(e.Key, e.Value)
 }
 fn churn() I64 {
     t I64 = 0
@@ -26,7 +26,7 @@ fn total(words Array<String&>&) I64 {
     parts[0] = countWords(words)
     parts[1] = countWords(words)
     sum := Map<String&, I64>()
-    for i in range parts.Len() { merge(sum, parts[i]) }
+    for i in range parts.Len(): merge(sum, parts[i])
     assert churn() > 0
     assert (try sum.Get("x") catch default 0) == 2 and (try sum.Get("y") catch default 0) == 1
     return sum.Len()

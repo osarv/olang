@@ -39,19 +39,19 @@ type State struct(On Bool, Set Bool, Why Cause, At source.Span) {
 fn State.dead() State { return State(false, false, Cause.Decl, source.Span(0, 0)) }
 
 fn meet(a State, b State) State {
-    if not a.On { return b }
-    if not b.On { return a }
-    if a.Set and b.Set { return a }
-    if not a.Set { return a }
+    if not a.On: return b
+    if not b.On: return a
+    if a.Set and b.Set: return a
+    if not a.Set: return a
     return b
 }
 
 # a branch's out-state that has not assigned it where the other side did - its path through this construct the reason,
 # unless it was already one inside the branch
 fn retag(out State, from State, other State, why Cause, at source.Span) State {
-    if not out.On or out.Set { return out }
-    if other.On and not other.Set { return out }
-    if out.Why == from.Why and out.At == from.At { return State(true, false, why, at) }
+    if not out.On or out.Set: return out
+    if other.On and not other.Set: return out
+    if out.Why == from.Why and out.At == from.At: return State(true, false, why, at)
     return out
 }
 
@@ -71,7 +71,7 @@ type Walker struct(B typed.Body&, L typed.LocalId) {
 fn Verdict.Judge(b typed.Body&, l typed.LocalId, field Bool) Verdict {
     w := Walker(b, l)
     s := w.Run()
-    if field and s.On and not s.Set { w.read(s, b.Sp) }
+    if field and s.On and not s.Set: w.read(s, b.Sp)
     return Verdict(w.Found, w.ReadAt, w.Why, w.WhyAt)
 }
 
@@ -84,7 +84,7 @@ type Verdict struct(Found Bool, ReadAt source.Span, Why Cause, WhyAt source.Span
 
 # the first read on a path that has not assigned the local: Found, where (ReadAt) and why
 fn (w mut Walker&) read(s State, sp source.Span) {
-    if w.Found or not s.On or s.Set { return }
+    if w.Found or not s.On or s.Set: return
     w.Found = true
     w.ReadAt = sp
     w.Why = s.Why
@@ -103,14 +103,14 @@ fn (w mut Walker&) blockSp(b typed.Block&) source.Span {
 }
 
 fn (w mut Walker&) block(b typed.Block?&, s State) State {
-    if b == null { return s }
+    if b == null: return s
     return w.stmts(b.Stmts, s)
 }
 
 fn (w mut Walker&) stmts(ss Array<typed.Stmt&>&, s State) State {
     cur := s
-    if ss.Len() == 0 { return cur }
-    for st in ss { cur = w.stmt(st, cur) }
+    if ss.Len() == 0: return cur
+    for st in ss: cur = w.stmt(st, cur)
     return cur
 }
 
@@ -125,7 +125,7 @@ fn (w mut Walker&) stmt(st typed.Stmt&, s State) State {
     match st {
         case typed.Stmt.Let(sp, l, init) {
             s1 := w.expr(init, s)
-            if l == w.L { return State(true, false, Cause.Decl, sp) }
+            if l == w.L: return State(true, false, Cause.Decl, sp)
             return s1
         }
         case typed.Stmt.Assign(_, target, value) {
@@ -134,7 +134,7 @@ fn (w mut Walker&) stmt(st typed.Stmt&, s State) State {
             w.targets.Push(direct)
             s2 := w.expr(value, s1)
             try w.targets.Pop() catch { }
-            if direct and s2.On { return State(true, true, s2.Why, s2.At) }
+            if direct and s2.On: return State(true, true, s2.Why, s2.At)
             return s2
         }
         case typed.Stmt.Eval(_, x) { return w.expr(x, s) }
@@ -142,8 +142,8 @@ fn (w mut Walker&) stmt(st typed.Stmt&, s State) State {
             s1 := w.expr(i.Test, s)
             # a branch the build decided (S8b): "if true", the one taken
             k := litBool(i.Test)
-            if k == 1 { return w.block(i.Then, s1) }
-            if k == 0 { return w.block(i.Else, s1) }
+            if k == 1: return w.block(i.Then, s1)
+            if k == 0: return w.block(i.Else, s1)
             a := w.block(i.Then, s1)
             if i.Else == null: return meet(a, retag(s1, s1, a, Cause.NoElse, sp))
             b := w.block(i.Else, s1)
@@ -155,8 +155,8 @@ fn (w mut Walker&) stmt(st typed.Stmt&, s State) State {
             a := w.block(body, s)
             w.block(post, s)
             # a do-while's condition, and so its break, is in its post clause
-            if not typed.BreaksOut(body, body.Id) and not typed.BreaksOut(post, body.Id) { return State.dead() }
-            if a.On and a.Set { return retag(s, s, a, Cause.Loop, sp) }
+            if not typed.BreaksOut(body, body.Id) and not typed.BreaksOut(post, body.Id): return State.dead()
+            if a.On and a.Set: return retag(s, s, a, Cause.Loop, sp)
             return s
         }
         case typed.Stmt.Jump(_, _, _) { return State.dead() }
@@ -187,16 +187,16 @@ fn (w mut Walker&) stmt(st typed.Stmt&, s State) State {
         }
         case typed.Stmt.Join(_, j) {
             a := w.block(j.Code, s)
-            if not j.Tried { return a }
+            if not j.Tried: return a
             return w.clauses(j.Clauses, s, a)
         }
         case typed.Stmt.Spawn(_, sw) {
             cur := s
             for t in sw.Targets {
-                if t != null and not w.isL(t) { cur = w.place(t, cur) }
+                if t != null and not w.isL(t): cur = w.place(t, cur)
             }
             cur = w.expr(sw.Task, cur)
-            for tc in sw.Clauses { w.expr(tc.Handler, cur) }
+            for tc in sw.Clauses: w.expr(tc.Handler, cur)
             return cur
         }
         case typed.Stmt.Yield(_, x) { return w.expr(x, s) }
@@ -207,10 +207,10 @@ fn (w mut Walker&) stmt(st typed.Stmt&, s State) State {
 # a try's clauses: each run from where the try began, meeting what its operand gave
 fn (w mut Walker&) clauses(cs Array<typed.Clause&>&, from State, out State) State {
     r := out
-    if cs.Len() == 0 { return r }
+    if cs.Len() == 0: return r
     for cl in cs {
         c := w.block(cl.Code, from)
-        for d in cl.Defaults { c = w.expr(d, c) }
+        for d in cl.Defaults: c = w.expr(d, c)
         r = meet(r, retag(c, from, r, Cause.Clause, cl.Sp))
     }
     return r
@@ -218,15 +218,15 @@ fn (w mut Walker&) clauses(cs Array<typed.Clause&>&, from State, out State) Stat
 
 fn (w mut Walker&) exprs(xs Array<typed.Expr&>&, s State) State {
     cur := s
-    if xs.Len() == 0 { return cur }
-    for x in xs { cur = w.expr(x, cur) }
+    if xs.Len() == 0: return cur
+    for x in xs: cur = w.expr(x, cur)
     return cur
 }
 
 fn (w mut Walker&) expr(x typed.Expr?&, s State) State {
-    if x == null { return s }
+    if x == null: return s
     r := w.expr1(x, s)
-    if x.Type() == types.NoreturnT { return State.dead() }
+    if x.Type() == types.NoreturnT: return State.dead()
     return r
 }
 
@@ -262,8 +262,8 @@ fn (w mut Walker&) expr1(x typed.Expr&, s State) State {
         case typed.Expr.Match(_, _, m) {
             s1 := w.stmts(m.Held, s)
             r := State.dead()
-            for a in m.Arms { r = w.arm(a, s1, r) }
-            if m.NoMatch != null { r = w.arm(m.NoMatch!, s1, r) }
+            for a in m.Arms: r = w.arm(a, s1, r)
+            if m.NoMatch != null: r = w.arm(m.NoMatch!, s1, r)
             return r
         }
         case typed.Expr.Try(_, _, t) {
@@ -297,7 +297,7 @@ fn (w mut Walker&) arm(a typed.Arm&, from State, out State) State {
     cur := from
     for alt in a.Alts {
         cur = w.expr(alt.Test, cur)
-        for bd in alt.Binds { cur = w.expr(bd.From, cur) }
+        for bd in alt.Binds: cur = w.expr(bd.From, cur)
     }
     cur = w.expr(a.Guard, cur)
     cur = w.block(a.Code, cur)
@@ -308,7 +308,7 @@ fn (w mut Walker&) arm(a typed.Arm&, from State, out State) State {
 fn (w mut Walker&) place(p typed.Lvalue&, s State) State {
     match p {
         case typed.Lvalue.Local(sp, _, id) {
-            if id == w.L { w.read(s, sp) }
+            if id == w.L: w.read(s, sp)
             return s
         }
         case typed.Lvalue.Global(_, _, _, _) { return s }
@@ -319,7 +319,7 @@ fn (w mut Walker&) place(p typed.Lvalue&, s State) State {
         case typed.Lvalue.Temp(_, _, v, _) { return w.expr(v, s) }
         case typed.Lvalue.Target(sp, _) {
             # a compound assignment's old value: a read of its target
-            if w.targets.Len() > 0 and w.targets[w.targets.Len() - 1] { w.read(s, sp) }
+            if w.targets.Len() > 0 and w.targets[w.targets.Len() - 1]: w.read(s, sp)
             return s
         }
     }
@@ -341,7 +341,7 @@ fn litBool(x typed.Expr&) I64 {
 # there. Then nothing but the walk reaches the generator, which is made and finished there as a for-in's own is. The
 # body g's declaration calls where it is so walked - the caller says whether that is a generator's - else -1
 fn HeldWalk(b typed.Body&, g typed.LocalId, it typed.LocalId) I64 {
-    if b.Root == null { return -1 }
+    if b.Root == null: return -1
     w := heldWalker(g, it)
     w.block(b.Root!, false)
     return w.callee if w.count == 1 and w.once else -1
@@ -357,7 +357,7 @@ type heldWalker struct(g typed.LocalId, it typed.LocalId) {
 
 # a block's statements; armed where g is declared in a block around these, with no loop or deferred code between
 fn (w mut heldWalker&) block(bl typed.Block?&, armed Bool) {
-    if bl == null { return }
+    if bl == null: return
     a := armed
     for s in bl.Stmts {
         match s {
@@ -367,7 +367,7 @@ fn (w mut heldWalker&) block(bl typed.Block?&, armed Bool) {
                     id := typed.CalledBody(init)
                     if id >= 0: w.callee = id
                 }
-                if l == w.it and a and w.readsG(init) { w.once = true }
+                if l == w.it and a and w.readsG(init): w.once = true
             }
             case _ { }
         }
@@ -390,7 +390,7 @@ fn (w mut heldWalker&) isG(p typed.Lvalue&) Bool {
 }
 
 fn (w mut heldWalker&) stmts(ss Array<typed.Stmt&>&, armed Bool) {
-    if ss.Len() == 0 { return }
+    if ss.Len() == 0: return
     w.block(typed.Block(typed.BlockId(-1), ss), armed)
 }
 
@@ -427,7 +427,7 @@ fn (w mut heldWalker&) stmt(s typed.Stmt&, a Bool) {
         }
         case typed.Stmt.Spawn(_, sp) {
             for p in sp.Targets {
-                if p != null { w.place(p, false) }
+                if p != null: w.place(p, false)
             }
             w.expr(sp.Task, false)
         }
@@ -435,12 +435,12 @@ fn (w mut heldWalker&) stmt(s typed.Stmt&, a Bool) {
 }
 
 fn (w mut heldWalker&) exprs(xs Array<typed.Expr&>&, a Bool) {
-    if xs.Len() == 0 { return }
-    for x in xs { w.expr(x, a) }
+    if xs.Len() == 0: return
+    for x in xs: w.expr(x, a)
 }
 
 fn (w mut heldWalker&) expr(x typed.Expr?&, a Bool) {
-    if x == null { return }
+    if x == null: return
     match x {
         case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { w.place(p, a) }
@@ -478,8 +478,8 @@ fn (w mut heldWalker&) expr(x typed.Expr?&, a Bool) {
         }
         case typed.Expr.Match(_, _, m) {
             w.stmts(m.Held, a)
-            for arm in m.Arms { w.arm(arm, a) }
-            if m.NoMatch != null { w.arm(m.NoMatch!, a) }
+            for arm in m.Arms: w.arm(arm, a)
+            if m.NoMatch != null: w.arm(m.NoMatch!, a)
         }
         case typed.Expr.Try(_, _, t) {
             w.expr(t.X, a)
@@ -506,7 +506,7 @@ fn (w mut heldWalker&) expr(x typed.Expr?&, a Bool) {
 fn (w mut heldWalker&) arm(arm typed.Arm&, a Bool) {
     for alt in arm.Alts {
         w.expr(alt.Test, a)
-        for bd in alt.Binds { w.expr(bd.From, a) }
+        for bd in alt.Binds: w.expr(bd.From, a)
     }
     w.expr(arm.Guard, a)
     w.block(arm.Code, a)
@@ -514,7 +514,7 @@ fn (w mut heldWalker&) arm(arm typed.Arm&, a Bool) {
 }
 
 fn (w mut heldWalker&) clauses(cs Array<typed.Clause&>&, a Bool) {
-    if cs.Len() == 0 { return }
+    if cs.Len() == 0: return
     for k in cs {
         w.block(k.Code, a)
         w.exprs(k.Defaults, a)

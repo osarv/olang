@@ -2,11 +2,11 @@
 # R3b: a name one edit from another is meant where the function raising it names it after its '?'
 import "std/io"
 fn a(k I64) I64 ? {
-    if k < 0 { error NotFound }
+    if k < 0: error NotFound
     return k
 }
 fn b(k I64) I64 ? NotFond {
-    if k < 0 { error NotFond }
+    if k < 0: error NotFond
     return k
 }
 fn main() ? {

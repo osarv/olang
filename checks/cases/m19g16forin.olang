@@ -4,5 +4,5 @@
 fn main() {
     v := Vec<I64>()
     v.Push(1)
-    for x in v.View() { v.Push(x) }
+    for x in v.View(): v.Push(x)
 }

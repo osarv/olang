@@ -17,16 +17,16 @@ fn Encode(data Array<U8>&) String {
 }
 
 fn digit(c Char) U8 ? Error.Invalid {
-    if c >= '0' and c <= '9' { return U8(c - '0') }
-    if c >= 'a' and c <= 'f' { return U8(c - 'a') + 10 }
-    if c >= 'A' and c <= 'F' { return U8(c - 'A') + 10 }
+    if c >= '0' and c <= '9': return U8(c - '0')
+    if c >= 'a' and c <= 'f': return U8(c - 'a') + 10
+    if c >= 'A' and c <= 'F': return U8(c - 'A') + 10
     error Error.Invalid
 }
 
 fn Decode(t String&) Array<U8> ? Error.Invalid {
-    if t.Len() % 2 != 0 { error Error.Invalid }
+    if t.Len() % 2 != 0: error Error.Invalid
     out := Array<U8>(t.Len() / 2)
-    for i in range out.Len() { out[i] = ((try digit(t[2 * i])) << 4) | (try digit(t[2 * i + 1])) }
+    for i in range out.Len(): out[i] = ((try digit(t[2 * i])) << 4) | (try digit(t[2 * i + 1]))
     return out
 }
 
@@ -38,7 +38,7 @@ test "bytes are written as hex and read back" {
     assert HelloHex == "48656c6c6f" and Encode("") == ""
     assert String(Decode("48656C6c6F")!) == "Hello"
     all := Array<U8>(256)
-    for i in range 256 { all[i] = U8(i) }
+    for i in range 256: all[i] = U8(i)
     assert Decode(Encode(all))! == all
     for bad in Array<String&>["4", "4g", "zz", "123"] {
         try Decode(bad) catch Error.Invalid { continue }

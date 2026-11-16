@@ -29,7 +29,7 @@ type Error error {
 
 fn Input() Array<U8> ? Error {
     n := __olang_fuzz_input(Array<U8>(0), 0)
-    if n < 0 { error Error.None }
+    if n < 0: error Error.None
     data := Array<U8>(n)
     __olang_fuzz_input(data, n)
     return data
@@ -56,22 +56,22 @@ fn Saved() Vec<String&> {
     out Vec<String&>
     name := Running()
     file := source()
-    if name == "" or file == "" { return out }
+    if name == "" or file == "": return out
     dir := Corpus(file, name)
     names := try os.ReadDir(dir) catch os.Error { return out }
     sorted := Vec<String&>()
     for n in names {
-        if not n.StartsWith(".") { sorted.Push($n) }
+        if not n.StartsWith("."): sorted.Push($n)
     }
     sorted.Sort(fn(a String&, b String&) Bool { return a < b })
-    for n in sorted { out.Push(filepath.Join(dir, n)) }
+    for n in sorted: out.Push(filepath.Join(dir, n))
     return out
 }
 
 # the running test's name, as its run reports it ("Twice: doubles"), "" outside a test
 fn Running() String {
     n := __olang_test_running(Array<U8>(0), 0)
-    if n < 0 { return "" }
+    if n < 0: return ""
     buf := Array<U8>(n)
     __olang_test_running(buf, n)
     return String(buf)
@@ -80,7 +80,7 @@ fn Running() String {
 # the file whose tests run, as the command line named it, "" outside a test
 fn source() String {
     n := __olang_test_source(Array<U8>(0), 0)
-    if n < 0 { return "" }
+    if n < 0: return ""
     buf := Array<U8>(n)
     __olang_test_source(buf, n)
     return String(buf)
@@ -93,14 +93,14 @@ fn Slug(name String&) String {
     gap := false
     for c in name {
         if c.IsLetter() or c.IsDigit() {
-            if gap and b.Len() > 0 { b.PushChar('_') }
+            if gap and b.Len() > 0: b.PushChar('_')
             b.PushChar(c)
             gap = false
         } else {
             gap = true
         }
     }
-    if b.Len() == 0 { return "test" }
+    if b.Len() == 0: return "test"
     return b.ToString()
 }
 
@@ -114,7 +114,7 @@ fn Corpus(file String&, name String&) String {
 fn Save(data Array<U8>&) String {
     name := Running()
     file := source()
-    if name == "" or file == "" { return "" }
+    if name == "" or file == "": return ""
     dir := Corpus(file, name)
     try os.MkDirAll(dir) catch os.Error { return "" }
     path := filepath.Join(dir, $"input-" + $U64(data.HashElements()).Format(16))

@@ -60,10 +60,10 @@ type Rows struct(of String&, sep Char = ',') {
 # the next record's fields - failing with Exhausted when the text has no more, and with Error when the next one is
 # not CSV, the reader then staying where it was
 fn (r mut Rows&) Next() Array<String&> ? Error, Exhausted {
-    if r.sep == '"' or r.sep == '\n' or r.sep == '\r' { error Error.BadSeparator }
+    if r.sep == '"' or r.sep == '\n' or r.sep == '\r': error Error.BadSeparator
     t := r.text
     n I64 = t.Len()
-    if r.at >= n { error Exhausted.End }
+    if r.at >= n: error Exhausted.End
     r.Line = r.next
     count I64 = 1                    # first the fields are counted, and the record checked, so the row is made once
     i I64 = try fieldEnd(t, r.at, r.sep, r.Line)
@@ -80,20 +80,20 @@ fn (r mut Rows&) Next() Array<String&> ? Error, Exhausted {
             inner := t[i + 1:e - 1]
             quotes I64 = 0
             for c in inner {
-                if c == '"' { quotes++ }
-                if c == '\n' { lines++ }
+                if c == '"': quotes++
+                if c == '\n': lines++
             }
             row[k] = inner if quotes == 0 else unquote(inner, quotes / 2)
         } else {
             last I64 = e
-            if last > i and t[last - 1] == '\r' and (last == n or t[last] == '\n') { last-- }
+            if last > i and t[last - 1] == '\r' and (last == n or t[last] == '\n'): last--
             row[k] = t[i:last]
         }
         i = e + 1
     }
     i--                              # at the record's end: its line break, or the text's end
-    if i < n and t[i] == '\r' { i++ }
-    if i < n and t[i] == '\n' { i++ }
+    if i < n and t[i] == '\r': i++
+    if i < n and t[i] == '\n': i++
     r.at = i
     r.next += lines
     return row
@@ -106,7 +106,7 @@ fn fieldEnd(t String&, i I64, sep Char, line I64) I64 ? Error {
     if i < n and t[i] == '"' {
         j I64 = i + 1
         for {
-            if j >= n { error Error.UnclosedQuote(line) }
+            if j >= n: error Error.UnclosedQuote(line)
             if t[j] == '"' {
                 if j + 1 < n and t[j + 1] == '"' {
                     j += 2
@@ -124,7 +124,7 @@ fn fieldEnd(t String&, i I64, sep Char, line I64) I64 ? Error {
     }
     j I64 = i
     for j < n and t[j] != sep and t[j] != '\n' {
-        if t[j] == '"' { error Error.BareQuote(line) }
+        if t[j] == '"': error Error.BareQuote(line)
         j++
     }
     return j

@@ -96,7 +96,7 @@ fn main() {
         l := loop("l")
         churn()
         if a.B == "a-made" and b.B == "b-two" and c.X!.B == "c-made" and d.Q.B == "d-made" and d.N == i and e.X!.B == "e" {
-            if f.B == "f-made" and h.L[i] == "g-made" and l[3].B == "l-made" { n += 1 }
+            if f.B == "f-made" and h.L[i] == "g-made" and l[3].B == "l-made": n += 1
         }
     }
     io.PutLine($n + " " + $h.L.Len())!

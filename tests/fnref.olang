@@ -21,7 +21,7 @@ type Button struct(name String&, on Handler?&, must fn&(n I64) I64 = fn(n): retu
 # a function value that may be null, tested before it is called (S8e)
 fn press(b Button&, n I64) I64 {
     on := b.on
-    if on == null { return b.must(n) }
+    if on == null: return b.must(n)
     return on(Event(n))
 }
 
@@ -31,13 +31,13 @@ fn fire(h Handler&, e Event) I64 { return h(e) }
 fn longest(words Array<String&>&) String?& {
     best String?& = null
     for w in words {
-        if best == null or w.Len() > best.Len() { best = w }
+        if best == null or w.Len() > best.Len(): best = w
     }
     return best
 }
 
 fn lenOr(s String?&, d I64) I64 {
-    if s == null { return d }
+    if s == null: return d
     return s.Len()
 }
 

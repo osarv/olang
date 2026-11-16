@@ -44,9 +44,9 @@ fn Format(text String&, ts scan.Tokens&, argAngles Vec<I64>&, closeAngles Vec<I6
           held Array<source.Span>&, groups Vec<I64>&, subscripts Vec<I64>& = Vec<I64>()) String {
     f := formatter(text, ts.Toks)
     for i in subscripts: f.subscript[i] = true
-    for i in argAngles { f.argOpen[i] = f.argOpen[i] + 1 }
-    for i in groups { f.group[i] = true }
-    for i in closeAngles { f.closes[i] = f.closes[i] + 1 }
+    for i in argAngles: f.argOpen[i] = f.argOpen[i] + 1
+    for i in groups: f.group[i] = true
+    for i in closeAngles: f.closes[i] = f.closes[i] + 1
     for sp in held {
         f.heldS.Push(lineStartOf(text, I64(sp.Start)))
         f.heldE.Push(lineEndOf(text, I64(sp.End) - 1))
@@ -58,13 +58,13 @@ fn Format(text String&, ts scan.Tokens&, argAngles Vec<I64>&, closeAngles Vec<I6
 # where the line holding offset at starts, and where it ends - its newline, or the end of the text
 fn lineStartOf(t String&, at I64) I64 {
     i := at
-    for i > 0 and t[i - 1] != '\n' { i-- }
+    for i > 0 and t[i - 1] != '\n': i--
     return i
 }
 
 fn lineEndOf(t String&, at I64) I64 {
     i := at if at > 0 else 0
-    for i < t.Len() and t[i] != '\n' { i++ }
+    for i < t.Len() and t[i] != '\n': i++
     return i
 }
 
@@ -131,7 +131,7 @@ fn (f mut formatter&) run() {
     opens Vec<I64>
     for j in f.real {
         k := f.kind(j)
-        if k == token.Tok.LParen { opens.Push(j) }
+        if k == token.Tok.LParen: opens.Push(j)
         if k == token.Tok.RParen and opens.Len() > 0 { f.match_[j] = try opens.Pop() catch default 0 }
     }
     # S1b: a ":" whose innermost open bracket is a block's "{" (or none), or a "(" (a lambda's in an argument list,
@@ -139,8 +139,8 @@ fn (f mut formatter&) run() {
     inner Vec<token.Tok>
     for j in f.real {
         k := f.kind(j)
-        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace { inner.Push(k) }
-        if (k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace) and inner.Len() > 0 { inner.Pop()! }
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace: inner.Push(k)
+        if (k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace) and inner.Len() > 0: inner.Pop()!
         if k == token.Tok.Colon { f.bodyColon[j] = inner.Len() == 0 or (try inner.Last() catch default token.Tok.LBrace) != token.Tok.LBrack }
     }
     f.markEntries()
@@ -154,10 +154,10 @@ fn (f mut formatter&) run() {
             ls := f.heldS[h]
             le := f.heldE[h]
             for h2 in range f.heldS.Len() {
-                if f.heldS[h2] <= le and f.heldE[h2] > le { le = f.heldE[h2] }
+                if f.heldS[h2] <= le and f.heldE[h2] > le: le = f.heldE[h2]
             }
             f.gap(at, ls, r)
-            if f.open { f.finish() }
+            if f.open: f.finish()
             line := ls
             for line <= le and line < f.text.Len() + 1 {
                 e := lineEndOf(f.text, line)
@@ -184,7 +184,7 @@ fn (f mut formatter&) run() {
         r++
     }
     f.gap(at, f.text.Len(), -1)
-    if f.open { f.finish() }
+    if f.open: f.finish()
 }
 
 # what stands between two tokens, from offset a to b: spaces, line ends and comments; next is the real index of the
@@ -203,10 +203,10 @@ fn (f mut formatter&) gap(a I64, b I64, next I64) {
             block := e < b and t[e] == '#'
             if block {
                 e++
-                for e + 1 < b and not (t[e] == '#' and t[e + 1] == '#') { e++ }
+                for e + 1 < b and not (t[e] == '#' and t[e + 1] == '#'): e++
                 e = e + 2 if e + 1 < b else b
             } else {
-                for e < b and t[e] != '\n' { e++ }
+                for e < b and t[e] != '\n': e++
             }
             f.comment(i, e, block, next)
             i = e
@@ -220,8 +220,8 @@ fn (f mut formatter&) gap(a I64, b I64, next I64) {
 fn (f mut formatter&) comment(s I64, e I64, block Bool, next I64) {
     if not block {
         # trailing spaces are not part of it
-        for e > s and (f.text[e - 1] == ' ' or f.text[e - 1] == '\t') { e-- }
-        if not f.open { f.begin(f.levelAt(next)) }
+        for e > s and (f.text[e - 1] == ' ' or f.text[e - 1] == '\t'): e--
+        if not f.open: f.begin(f.levelAt(next))
         f.curComS = s
         f.curComE = e
         return
@@ -229,7 +229,7 @@ fn (f mut formatter&) comment(s I64, e I64, block Bool, next I64) {
     if not f.open: f.begin(f.levelAt(next))
     else if f.last != 0: f.codes.PushChar(' ')
     for i in range s, e {
-        if f.text[i] == '\n' { f.curMulti = true }
+        if f.text[i] == '\n': f.curMulti = true
     }
     f.codes.Push(f.text[s:e])
     f.last = 2
@@ -238,13 +238,13 @@ fn (f mut formatter&) comment(s I64, e I64, block Bool, next I64) {
 # the level a line beginning with something other than a closing bracket takes before the token at real index next
 fn (f formatter&) levelAt(next I64) I64 {
     base := f.child()
-    if next < 0 { return base }
+    if next < 0: return base
     return base + f.cont(next)
 }
 
 fn (f formatter&) child() I64 {
     n := f.stKind.Len()
-    if n == 0 { return 0 }
+    if n == 0: return 0
     return f.stChild[n - 1]
 }
 
@@ -252,15 +252,15 @@ fn (f formatter&) child() I64 {
 # the token before it neither opens a bracket, nor ends a statement where no end is marked ("}", a type's ">", a
 # marker "&", L20a), nor is a "," between a bracket's items
 fn (f formatter&) cont(r I64) I64 {
-    if r <= 0 or f.ended[r] { return 0 }
+    if r <= 0 or f.ended[r]: return 0
     p := f.real[r - 1]
     k := f.kind(p)
-    if k == token.Tok.LBrace or k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.RBrace { return 0 }
-    if f.argOpen[p] > 0 or f.closes[p] > 0 { return 0 }
-    if k == token.Tok.Amp and not f.toks[p].Has(token.Space) { return 0 }
+    if k == token.Tok.LBrace or k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.RBrace: return 0
+    if f.argOpen[p] > 0 or f.closes[p] > 0: return 0
+    if k == token.Tok.Amp and not f.toks[p].Has(token.Space): return 0
     if k == token.Tok.Comma {
         n := f.stKind.Len()
-        if n > 0 and f.stKind[n - 1] == 1 { return 0 }
+        if n > 0 and f.stKind[n - 1] == 1: return 0
     }
     return 1
 }
@@ -268,7 +268,7 @@ fn (f formatter&) cont(r I64) I64 {
 # the held range offset at lies in, or -1
 fn (f formatter&) heldAt(at I64) I64 {
     for h in range f.heldS.Len() {
-        if f.heldS[h] <= at and at <= f.heldE[h] { return h }
+        if f.heldS[h] <= at and at <= f.heldE[h]: return h
     }
     return -1
 }
@@ -314,7 +314,7 @@ fn (f mut formatter&) finish() {
     f.lCodeS.Push(f.curStart)
     f.lCodeE.Push(f.codes.Len())
     f.lMulti.Push(f.curMulti)
-    if f.lastTok >= 0 { f.prevLineEnd = f.lastTok }
+    if f.lastTok >= 0: f.prevLineEnd = f.lastTok
     f.open = false
     f.newlines = 0
 }
@@ -328,7 +328,7 @@ fn (f mut formatter&) token(r I64) {
         lv := f.level(r)
         f.begin(lv)
         # a blank line is never kept before a closing bracket
-        if f.closing(j) { f.dropBlank() }
+        if f.closing(j): f.dropBlank()
     } else if f.last == 2 {
         f.codes.PushChar(' ')
     } else if f.last == 1 {
@@ -373,7 +373,7 @@ fn (f mut formatter&) level(r I64) I64 {
 fn (f mut formatter&) track(j I64) {
     k := f.kind(j)
     pops := f.closes[j]
-    if isCloser(k) { pops = 1 }
+    if isCloser(k): pops = 1
     for _ in range pops {
         n := f.stKind.Len()
         if n > 0 {
@@ -389,7 +389,7 @@ fn (f mut formatter&) track(j I64) {
     } else if k == token.Tok.LParen or k == token.Tok.LBrack {
         f.push(1, f.curIndent + 1, f.curIndent)
     } else {
-        for _ in range f.argOpen[j] { f.push(1, f.curIndent + 1, f.curIndent) }
+        for _ in range f.argOpen[j]: f.push(1, f.curIndent + 1, f.curIndent)
     }
 }
 
@@ -402,7 +402,7 @@ fn (f mut formatter&) push(kind I64, child I64, close I64) {
 # the blank line just written, taken back
 fn (f mut formatter&) dropBlank() {
     n := f.lKind.Len()
-    if n == 0 or f.lKind[n - 1] != 1 { return }
+    if n == 0 or f.lKind[n - 1] != 1: return
     f.lKind.Truncate(n - 1)
     f.lIndent.Truncate(n - 1)
     f.lCodeS.Truncate(n - 1)
@@ -415,7 +415,7 @@ fn (f mut formatter&) dropBlank() {
 # whether a token ends an operand: what comes after it is an operator applied to it, not one starting another
 fn (f formatter&) operandEnd(j I64) Bool {
     k := f.kind(j)
-    if f.closes[j] > 0 { return true }
+    if f.closes[j] > 0: return true
     return match k {
         case token.Tok.Iden, token.Tok.IntLit, token.Tok.FloatLit, token.Tok.CharLit, token.Tok.StrLit: true
         case token.Tok.BoolLit, token.Tok.NullLit, token.Tok.RParen, token.Tok.RBrack, token.Tok.RBrace: true
@@ -426,9 +426,9 @@ fn (f formatter&) operandEnd(j I64) Bool {
 
 # the real token before index r, on the same line, or -1
 fn (f formatter&) before(r I64) I64 {
-    if r <= 0 { return -1 }
+    if r <= 0: return -1
     p := f.real[r - 1]
-    if f.toks[f.real[r]].Has(token.LineBreak) { return -1 }
+    if f.toks[f.real[r]].Has(token.LineBreak): return -1
     return p
 }
 
@@ -436,9 +436,9 @@ fn (f formatter&) before(r I64) I64 {
 # or the "@" an attribute begins with (G39), which the parser marks
 fn (f formatter&) prefix(j I64, r I64) Bool {
     k := f.kind(j)
-    if k == token.Tok.Tilde or k == token.Tok.Dollar { return true }
-    if k == token.Tok.At { return f.group[j] }
-    if k != token.Tok.Minus and k != token.Tok.Inc and k != token.Tok.Dec { return false }
+    if k == token.Tok.Tilde or k == token.Tok.Dollar: return true
+    if k == token.Tok.At: return f.group[j]
+    if k != token.Tok.Minus and k != token.Tok.Inc and k != token.Tok.Dec: return false
     p := f.before(r)
     return p < 0 or not f.operandEnd(p)
 }
@@ -446,7 +446,7 @@ fn (f formatter&) prefix(j I64, r I64) Bool {
 # a word that is a keyword: not a name and not a value (true, false, null)
 fn (f formatter&) keyword(j I64) Bool {
     k := f.kind(j)
-    if k == token.Tok.Iden or k == token.Tok.BoolLit or k == token.Tok.NullLit { return false }
+    if k == token.Tok.Iden or k == token.Tok.BoolLit or k == token.Tok.NullLit: return false
     c := f.text[f.toks[j].Start]
     return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z')
 }
@@ -454,8 +454,8 @@ fn (f formatter&) keyword(j I64) Bool {
 # the space the file had between two tokens, written as one space or none
 # whether the "." at index b begins "...": two more after it, nothing between them, and no "." before it
 fn (f formatter&) ellipsisAt(b I64) Bool {
-    if b + 2 >= f.toks.Len() or (b > 0 and f.kind(b - 1) == token.Tok.Dot) { return false }
-    if f.kind(b + 1) != token.Tok.Dot or f.kind(b + 2) != token.Tok.Dot { return false }
+    if b + 2 >= f.toks.Len() or (b > 0 and f.kind(b - 1) == token.Tok.Dot): return false
+    if f.kind(b + 1) != token.Tok.Dot or f.kind(b + 2) != token.Tok.Dot: return false
     return not f.toks[b + 1].Has(token.Space) and not f.toks[b + 2].Has(token.Space)
 }
 
@@ -469,29 +469,29 @@ fn (f formatter&) receiver(j I64, r I64) Bool {
     q := r + 1
     for q < f.real.Len() {
         k := f.kind(f.real[q])
-        if k == token.Tok.LParen { depth++ }
+        if k == token.Tok.LParen: depth++
         if k == token.Tok.RParen {
             depth--
-            if depth == 0 { break }
+            if depth == 0: break
         }
         q++
     }
-    if q + 2 >= f.real.Len() { return false }
+    if q + 2 >= f.real.Len(): return false
     name := f.real[q + 1]
-    if not (f.kind(name) == token.Tok.Iden or f.keyword(name)) { return false }
+    if not (f.kind(name) == token.Tok.Iden or f.keyword(name)): return false
     # a method's own type parameters (QW) between its name and its parameters: "fn (p T&) Read<Q>(...)"
     at := q + 2
     if f.kind(f.real[at]) == token.Tok.Lt {
         open I64 = 0
         for at < f.real.Len() {
             k := f.kind(f.real[at])
-            if k == token.Tok.Lt { open++ }
-            if k == token.Tok.Gt { open-- }
-            if k == token.Tok.Shr { open -= 2 }
+            if k == token.Tok.Lt: open++
+            if k == token.Tok.Gt: open--
+            if k == token.Tok.Shr: open -= 2
             at++
-            if open <= 0 { break }
+            if open <= 0: break
         }
-        if at >= f.real.Len() { return false }
+        if at >= f.real.Len(): return false
     }
     return f.kind(f.real[at]) == token.Tok.LParen
 }
@@ -500,20 +500,20 @@ fn (f formatter&) receiver(j I64, r I64) Bool {
 # beginning its line or a block, as a trait's method does, or a call: 2; no: 0
 fn (f formatter&) params(o I64) I64 {
     p := o - 1
-    for p >= 0 and f.kind(p) == token.Tok.StmtEnd { p-- }
-    if p < 0 { return 0 }
+    for p >= 0 and f.kind(p) == token.Tok.StmtEnd: p--
+    if p < 0: return 0
     k := f.kind(p)
-    if k == token.Tok.Fn or k == token.Tok.Struct { return 1 }
-    if k != token.Tok.Iden and not f.keyword(p) { return 0 }
+    if k == token.Tok.Fn or k == token.Tok.Struct: return 1
+    if k != token.Tok.Iden and not f.keyword(p): return 0
     q := p - 1
-    for q >= 0 and f.kind(q) == token.Tok.StmtEnd { q-- }
-    if q >= 0 and f.kind(q) == token.Tok.Fn { return 1 }
+    for q >= 0 and f.kind(q) == token.Tok.StmtEnd: q--
+    if q >= 0 and f.kind(q) == token.Tok.Fn: return 1
     if q >= 0 and f.kind(q) == token.Tok.RParen {
         b := f.match_[q] - 1
-        for b >= 0 and f.kind(b) == token.Tok.StmtEnd { b-- }
-        if b >= 0 and f.kind(b) == token.Tok.Fn { return 1 }
+        for b >= 0 and f.kind(b) == token.Tok.StmtEnd: b--
+        if b >= 0 and f.kind(b) == token.Tok.Fn: return 1
     }
-    if q < 0 or f.kind(q) == token.Tok.LBrace or f.toks[p].Has(token.LineBreak) { return 2 }
+    if q < 0 or f.kind(q) == token.Tok.LBrace or f.toks[p].Has(token.LineBreak): return 2
     return 0
 }
 
@@ -521,28 +521,28 @@ fn (f formatter&) params(o I64) I64 {
 fn (f formatter&) space(a I64, b I64, rb I64) String& {
     ka := f.kind(a)
     kb := f.kind(b)
-    if kb == token.Tok.Comma { return "" }
-    if kb == token.Tok.RParen or kb == token.Tok.RBrack { return "" }
-    if ka == token.Tok.LParen or ka == token.Tok.LBrack { return "" }
-    if f.closes[b] > 0 { return "" }
-    if f.argOpen[a] > 0 { return "" }
+    if kb == token.Tok.Comma: return ""
+    if kb == token.Tok.RParen or kb == token.Tok.RBrack: return ""
+    if ka == token.Tok.LParen or ka == token.Tok.LBrack: return ""
+    if f.closes[b] > 0: return ""
+    if f.argOpen[a] > 0: return ""
     # a reference marker, and the scope name after it (T24, E25): as the file had them
     if ka == token.Tok.Amp and kb == token.Tok.LBrace { return " " }    # a body after a reference result
-    if ka == token.Tok.Amp and not f.toks[a].Has(token.Space) { return f.asWritten(b) }
-    if kb == token.Tok.Amp { return f.asWritten(b) }
+    if ka == token.Tok.Amp and not f.toks[a].Has(token.Space): return f.asWritten(b)
+    if kb == token.Tok.Amp: return f.asWritten(b)
     # a nullable marker "?&" (T2c) belongs to the type before it, as "&" does - never an error set's "?"
     if kb == token.Tok.Question and rb + 1 < f.real.Len() and f.kind(f.real[rb + 1]) == token.Tok.Amp: return ""
     if (ka == token.Tok.Iden or ka == token.Tok.Return) and rb >= 2 and not f.toks[a].Has(token.Space) and kb != token.Tok.LBrace {
         pa := f.real[rb - 2]
-        if f.kind(pa) == token.Tok.Amp and not f.toks[pa].Has(token.Space) { return f.asWritten(b) }
+        if f.kind(pa) == token.Tok.Amp and not f.toks[pa].Has(token.Space): return f.asWritten(b)
     }
     # "..." (D8g, S13h, X21): a space before it, as before a prefix operator, none inside or after it
-    if kb == token.Tok.Dot and f.ellipsisAt(b) { return " " }
-    if ka == token.Tok.Dot or kb == token.Tok.Dot { return "" }
+    if kb == token.Tok.Dot and f.ellipsisAt(b): return " "
+    if ka == token.Tok.Dot or kb == token.Tok.Dot: return ""
     if kb == token.Tok.Bang { return "" }    # "!" is postfix only (E35)
-    if ka == token.Tok.Colon and (f.bodyColon[a] or f.entryColon[a]) { return " " }
+    if ka == token.Tok.Colon and (f.bodyColon[a] or f.entryColon[a]): return " "
     if ka == token.Tok.Comma and kb == token.Tok.Colon: return " "    # "m[i, :]" (E16f)
-    if ka == token.Tok.Colon or kb == token.Tok.Colon { return "" }
+    if ka == token.Tok.Colon or kb == token.Tok.Colon: return ""
     if f.prefix(a, rb - 1) {
         # "- -x" stays apart, or it would read as "--"
         if (ka == token.Tok.Minus and (kb == token.Tok.Minus or kb == token.Tok.Dec)) or
@@ -551,35 +551,35 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
         }
         return ""
     }
-    if (kb == token.Tok.Inc or kb == token.Tok.Dec) and f.operandEnd(a) { return "" }
+    if (kb == token.Tok.Inc or kb == token.Tok.Dec) and f.operandEnd(a): return ""
     if kb == token.Tok.LParen {
-        if f.group[b] { return " " }
+        if f.group[b]: return " "
         if ka == token.Tok.Fn { return " " if f.receiver(a, rb - 1) else "" }
-        if ka == token.Tok.Struct { return "" }
-        if ka == token.Tok.RBrace { return f.asWritten(b) }
+        if ka == token.Tok.Struct: return ""
+        if ka == token.Tok.RBrace: return f.asWritten(b)
         # a method named by a keyword, after its receiver (L9a)
         if f.keyword(a) and rb >= 2 and f.kind(f.real[rb - 2]) == token.Tok.RParen {
             o := f.match_[f.real[rb - 2]]
-            if o > 0 and f.kind(o - 1) == token.Tok.Fn { return "" }
+            if o > 0 and f.kind(o - 1) == token.Tok.Fn: return ""
         }
         # a grouped result after a parameter list: "fn f() (fn() I32, I32)" (L18c)
         if ka == token.Tok.RParen {
             pl := f.params(f.match_[a])
-            if pl == 1 { return " " }
-            if pl == 2 { return f.asWritten(b) }
+            if pl == 1: return " "
+            if pl == 2: return f.asWritten(b)
         }
-        if f.operandEnd(a) and ka != token.Tok.Inc and ka != token.Tok.Dec { return "" }
+        if f.operandEnd(a) and ka != token.Tok.Inc and ka != token.Tok.Dec: return ""
         return " "
     }
     if kb == token.Tok.LBrack {
-        if ka == token.Tok.RBrace { return f.asWritten(b) }
+        if ka == token.Tok.RBrace: return f.asWritten(b)
         if f.operandEnd(a) and ka != token.Tok.Inc and ka != token.Tok.Dec and ka != token.Tok.IntLit and
            ka != token.Tok.FloatLit {
             return ""
         }
         return " "
     }
-    if f.argOpen[b] > 0 { return "" }
+    if f.argOpen[b] > 0: return ""
     return " "
 }
 
@@ -589,7 +589,7 @@ fn (f formatter&) write() String {
     out := StringBuilder()
     n := f.lKind.Len()
     # no blank lines at the end
-    for n > 0 and f.lKind[n - 1] == 1 { n-- }
+    for n > 0 and f.lKind[n - 1] == 1: n--
     i I64 = 0
     for i < n {
         # a run: lines with code and a comment after it, one after another
@@ -597,11 +597,11 @@ fn (f formatter&) write() String {
         col I64 = 0
         for e < n and f.lKind[e] == 0 and f.lComS[e] >= 0 and f.lCodeE[e] > f.lCodeS[e] and not f.lMulti[e] {
             w := f.lIndent[e] * 4 + f.lCodeE[e] - f.lCodeS[e]
-            if w > col { col = w }
+            if w > col: col = w
             e++
         }
-        if e == i { e = i + 1 }
-        for l in range i, e { f.writeLine(out, codes, l, col) }
+        if e == i: e = i + 1
+        for l in range i, e: f.writeLine(out, codes, l, col)
         i = e
     }
     return out.ToString()
@@ -615,14 +615,14 @@ fn (f formatter&) writeLine(out mut StringBuilder&, codes String&, l I64, col I6
     }
     code := codes[f.lCodeS[l]:f.lCodeE[l]]
     if code.Len() > 0 or f.lComS[l] >= 0 {
-        for _ in range f.lIndent[l] { out.Push("    ") }
+        for _ in range f.lIndent[l]: out.Push("    ")
     }
     out.Push(code)
     if f.lComS[l] >= 0 {
         if code.Len() > 0 {
             w := f.lIndent[l] * 4 + code.Len()
             pad := col - w + 1 if col > 0 else 1
-            for _ in range pad { out.PushChar(' ') }
+            for _ in range pad: out.PushChar(' ')
         }
         out.Push(f.text[f.lComS[l]:f.lComE[l]])
     }
@@ -706,7 +706,7 @@ fn OracleFor(path String&, std String&, prelude String&, names mut source.Names&
     l := loader(std)
     m := l.load(path)
     o := parse.Oracle()
-    if m >= 0 { l.oracle(o, names, m, prelude) }
+    if m >= 0: l.oracle(o, names, m, prelude)
     return o
 }
 
@@ -733,9 +733,9 @@ fn (l mut loader&) prelude() String {
     dir := filepath.Join(l.std, "prelude")
     names := try os.ReadDir(dir) catch os.Error { return " " }
     for n in names {
-        if not n.EndsWith(".olang") { continue }
+        if not n.EndsWith(".olang"): continue
         m := l.load(filepath.Join(dir, n))
-        if m >= 0 { b.Push(l.types[m][1:]) }
+        if m >= 0: b.Push(l.types[m][1:])
     }
     return b.ToString()
 }
@@ -744,9 +744,9 @@ fn (l mut loader&) prelude() String {
 fn (l loader&) target(importer String&, ipath String&) String {
     first := ipath
     slash := try ipath.FindByte('/') catch default -1
-    if slash >= 0 { first = ipath[:slash] }
-    if (first.Contains(".") and first != "." and first != "..") { return "" }
-    if ipath.StartsWith("std/") { return $filepath.Join(l.std, ipath[4:]) + ".olang" }
+    if slash >= 0: first = ipath[:slash]
+    if (first.Contains(".") and first != "." and first != ".."): return ""
+    if ipath.StartsWith("std/"): return $filepath.Join(l.std, ipath[4:]) + ".olang"
     return $filepath.Join(filepath.Dir(importer), ipath) + ".olang"
 }
 
@@ -754,7 +754,7 @@ fn (l loader&) target(importer String&, ipath String&) String {
 fn (l mut loader&) load(path String&) I64 {
     real := try os.RealPath(path) catch os.Error { return -1 }
     for i in range l.paths.Len() {
-        if l.paths[i] == real { return i }
+        if l.paths[i] == real: return i
     }
     src := try source.Source.Read(real) catch os.Error { return -1 }
     ts := scan.Tokens.Scan(src.Text)
@@ -788,7 +788,7 @@ fn (l mut loader&) load(path String&) I64 {
             }
             if j < n and toks[j].Kind == token.Tok.StrLit {
                 ip := scan.LiteralText(src.Text[toks[j].Start:toks[j].End])
-                if alias == "" { alias = $filepath.Base(ip) }
+                if alias == "": alias = $filepath.Base(ip)
                 aliases.Push(alias)
                 paths.Push(ip)
             }
@@ -798,7 +798,7 @@ fn (l mut loader&) load(path String&) I64 {
     for k in range aliases.Len() {
         t := l.target(real, paths[k])
         target I64 = -1
-        if t != "" { target = l.load(t) }
+        if t != "": target = l.load(t)
         l.impMod.Push(m)
         l.impAlias.Push($aliases[k])
         l.impTarget.Push(target)
@@ -811,7 +811,7 @@ fn (l mut loader&) load(path String&) I64 {
 fn (l loader&) oracle(o mut parse.Oracle&, names mut source.Names&, m I64, prelude String&) {
     l.addNames(o, names, "", l.types[m])
     for t in prelude.Split(" ") {
-        if t != "" and t[0].IsUpper() { o.Add(names, "", t) }
+        if t != "" and t[0].IsUpper(): o.Add(names, "", t)
     }
     o.Add(names, "", "Array")
     l.chains(o, names, m, "", 0)
@@ -825,9 +825,9 @@ fn (l loader&) addNames(o mut parse.Oracle&, names mut source.Names&, alias Stri
 }
 
 fn (l loader&) chains(o mut parse.Oracle&, names mut source.Names&, m I64, prefix String&, depth I64) {
-    if depth >= 4 { return }
+    if depth >= 4: return
     for i in range l.impMod.Len() {
-        if l.impMod[i] != m or l.impTarget[i] < 0 { continue }
+        if l.impMod[i] != m or l.impTarget[i] < 0: continue
         chain := $prefix + $l.impAlias[i]
         l.addNames(o, names, chain, l.types[l.impTarget[i]])
         l.chains(o, names, l.impTarget[i], $chain + ".", depth + 1)

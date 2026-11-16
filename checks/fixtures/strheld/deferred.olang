@@ -10,12 +10,12 @@ fn f(b Bag&, k I64) I64 {
         G = G + s.Len() }
     {
         x := Array<I64>(4, k)
-        if x[0] == k { return 5 }
+        if x[0] == k: return 5
     }
     return 0
 }
 fn main() ? {
     t I64 = 0
-    for i in range 500 { t += f(Bag(i), i) }
+    for i in range 500: t += f(Bag(i), i)
     try io.PutLine($t)
 }

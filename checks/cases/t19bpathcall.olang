@@ -4,7 +4,7 @@ type ReadError error { Bad(line I64), Eof }
 type Box struct(e ReadError) { e }
 fn touch(b Box&) I64 { return 1 }
 fn line(b Box&) I64 {
-    if b.e != ReadError.Bad { return 0 }
+    if b.e != ReadError.Bad: return 0
     t := touch(b)
     return b.e.line + t
 }

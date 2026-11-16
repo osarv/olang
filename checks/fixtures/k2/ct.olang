@@ -5,12 +5,12 @@ type CtPair struct(a I32, b F64) {
     b
 }
 fn fib(n I32) I32 {
-    if n < 2 { return n }
+    if n < 2: return n
     return fib(n - 1) + fib(n - 2)
 }
 fn table() Array<I32>& {
     t mut Array<I32>& = Array<I32>(4)
-    for i in range I32(4) { t[i] = fib(i + 10) }
+    for i in range I32(4): t[i] = fib(i + 10)
     return t
 }
 type Node struct(v I32, next mut Node?&) {

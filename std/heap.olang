@@ -20,7 +20,7 @@ type Heap<T> struct(less fn&(a T, b T) Bool) {
 # no literal (E19): "heap.Heap.FromIter(xs.Iter(), less)". Fails with what the iterator fails with
 fn Heap<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&, less fn&(a T, b T) Bool) Heap<T> ? E {
     h := Heap<T>(less)
-    for x in try it { h.Push(x) }
+    for x in try it: h.Push(x)
     return h
 }
 
@@ -33,7 +33,7 @@ fn (h mut Heap<T>&) Push(x T) {
     i := v.Len() - 1
     for i > 0 {
         up := (i - 1) / 2
-        if not h.less(x, v[up]) { break }
+        if not h.less(x, v[up]): break
         v[i] = v[up]
         i = up
     }
@@ -42,24 +42,24 @@ fn (h mut Heap<T>&) Push(x T) {
 
 # the top element - the least by the order - left in the heap
 fn (h Heap<T>&) Peek() T ? Error.Empty {
-    if h.items.Len() == 0 { error Error.Empty }
+    if h.items.Len() == 0: error Error.Empty
     return h.items[0]
 }
 
 # the top element, taken off
 fn (h mut Heap<T>&) Pop() T ? Error.Empty {
     v mut Vec<T>& = h.items
-    if v.Len() == 0 { error Error.Empty }
+    if v.Len() == 0: error Error.Empty
     top := v[0]
     last := try v.Pop() catch VecError { unreachable }
     n := v.Len()
-    if n == 0 { return top }
+    if n == 0: return top
     i I64 = 0
     for {
         c := 2 * i + 1
-        if c >= n { break }
+        if c >= n: break
         if c + 1 < n and h.less(v[c + 1], v[c]): c++
-        if not h.less(v[c], last) { break }
+        if not h.less(v[c], last): break
         v[i] = v[c]
         i = c
     }
@@ -81,7 +81,7 @@ if TestBuild {
 
 test "a Heap gives its elements least first" {
     h := Heap<I64>(fn(a I64, b I64) Bool { return a < b })
-    for x in Array<I64>[5, 1, 9, 3, 7, 3, 8, 2] { h.Push(x) }
+    for x in Array<I64>[5, 1, 9, 3, 7, 3, 8, 2]: h.Push(x)
     assert h.Len() == 8 and h.Peek()! == 1
     assert h.Drain() == Array<I64>[1, 2, 3, 3, 5, 7, 8, 9]
     assert h.Len() == 0

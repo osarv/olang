@@ -2,6 +2,6 @@
 # T19/QY: words on one line are separated by ",", on different lines by the line break
 type E error { A, B }
 fn f(b Bool) ? E {
-    if b { error E.B }
+    if b: error E.B
 }
 fn main() ? { try f(false) catch E.A, E.B { unreachable } }

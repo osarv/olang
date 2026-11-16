@@ -8,5 +8,5 @@ GB Box = Box(Array<I64>(3))
 G Vec<I64> = Vec<I64>()
 GA Array<Box> = Array<Box>[Box(Array<I64>(1)), Box(Array<I64>(2))]
 fn main() ? {
-    for b in GA { b.P[0] = 1 }
+    for b in GA: b.P[0] = 1
 }

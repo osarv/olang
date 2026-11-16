@@ -38,7 +38,7 @@ fn main() {
         b := E.direct("y", i)
         c := E.constFirst("z", i)
         churn()
-        if a.B == "x-made" and b.B == "y-made" and c.B == "z-made" { n += 1 }
+        if a.B == "x-made" and b.B == "y-made" and c.B == "z-made": n += 1
     }
     io.PutLine($n + " " + $E.viaLocal("w", -1).B.Len())!
 }

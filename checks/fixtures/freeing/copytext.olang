@@ -7,7 +7,7 @@ N I64 = 80000
 
 fn mk(i I64) Vec<String> {
     w Vec<String>
-    for j in range 20 { w.Push($i + "-" + $j + " padded out a little") }
+    for j in range 20: w.Push($i + "-" + $j + " padded out a little")
     return w
 }
 
@@ -15,7 +15,7 @@ fn mk(i I64) Vec<String> {
 fn longest(v Vec<String>) I64 {
     v.Push("one more, long enough to count")
     n I64 = 0
-    for s in v { n = n.Max(s.Len()) }
+    for s in v: n = n.Max(s.Len())
     return n
 }
 
