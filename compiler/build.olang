@@ -1345,6 +1345,16 @@ fn CacheDir(what String&) String {
     return $"/tmp/olang-" + $what + "-" + $unistd.getuid()
 }
 
+# where a tool that only analyzes (lsp, mcp, explain, doc, api: B15) keeps its records and objects: olang's cache, one
+# directory per project - the directory of the file it was given, else the working directory - so it writes nothing
+# beside the program and two projects never share records
+fn AnalysisDir(file String&) String {
+    at := $filepath.Dir(try os.RealPath(file) catch default $file) if file != "" else $(try os.Cwd() catch default "")
+    parts Vec<String&>
+    parts.Push(at)
+    return $CacheDir("analysis") + "/" + $Readable(filepath.Base(at)) + "-" + $HashOf(parts)[:16]
+}
+
 # explain FILE NAME (B11b): the item, as the front end sees it, on the standard output; a program with errors says them
 fn Explain<F Frontend>(fe mut F&, c mut Config&, file String&, name String&, d mut diag.Diagnostics&) I32 {
     text := try fe.Explain(file, name, c, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }

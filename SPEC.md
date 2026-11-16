@@ -8669,7 +8669,9 @@ in its module and evaluated, and the program is checked again with the branches 
 chosen branch holds further such conditions (to an implementation-defined depth). Diagnostics from every
 attempt but the last are not reported. A condition that cannot be evaluated (K1) is a compile-time error
 naming the operation that prevents it and where it is written; so is one using a declaration that exists
-only inside a branch still being decided, since its value would depend on the choice it is making. Text
+only inside a branch still being decided, since its value would depend on the choice it is making - an error
+naming that declaration and where it is; a condition that does not check for any other reason is an error saying its
+own errors. Text
 compares here as it does everywhere else: a `String` by content, through its `Eq` (E10a).
 
 **B10.** `-define Name=value`, given any number of times to a mode that loads a program (B1), defines a
@@ -8954,6 +8956,12 @@ that does not parse has its diagnostics and answers nothing else; no request end
 carries the tag `Deprecated` (`"tags":[1]`), and each use of it in an open file is published as a diagnostic of severity
 Hint (4) tagged `Deprecated` (`"tags":[2]`) carrying the note - the only diagnostic published that is not an error; the
 compiler never prints it.
+
+**B15a (where the analyzing tools write).** The modes that only analyze - `lsp`, `mcp` (B16), `explain` (B11b), `doc`
+(B14) and `api` - write nothing beside the program or in the working directory: the records and objects their checking
+keeps go to olang's cache of what it builds for itself (`analysis/` in `$XDG_CACHE_HOME/olang`, else `~/.cache/olang`),
+one directory per project - the directory of the file named, else the working directory, named by its hash - so two
+projects never share them. What they write that was asked for (`doc -html DIR`) goes where it was asked.
 
 **B16.** `mcp` serves the Model Context Protocol on the standard input and output (JSON-RPC 2.0, one message a line)
 with the tools `check` (a file's diagnostics, each its file, line, column, rule and message), `explain` (B11b),

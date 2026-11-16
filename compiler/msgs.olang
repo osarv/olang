@@ -872,7 +872,8 @@ type Diag enum {
     NoteTextCopyWhere
     NoteLoopCopy
     CondUndecidable
-    CondUnseen
+    CondInBranch
+    CondOwnError
     CondUnknownBuild
     CondDecidedNotBool
     GlobalReadsItself
@@ -1999,7 +2000,8 @@ fn NoteSliceOfTemporary() r.Msg { return r.Msg(Diag.NoteSliceOfTemporary, "", "t
 fn NoteTextCopyWhere(text String&) r.Msg { return r.Msg(Diag.NoteTextCopyWhere, "", "this text lives in a block that closes first - pass a copy, which is made where '" + $text + "' lives: write '$' before it") }
 fn NoteLoopCopy(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.NoteLoopCopy, "", "'" + $text1 + "' is the loop's copy of an element, made in the loop's block - lend the element itself: '" + $text2 + "[i]', with 'for i in range " + $text3 + ".Len()'") }
 fn CondUndecidable(text String&) r.Msg { return r.Msg(Diag.CondUndecidable, "B9c", "this top-level condition cannot be decided while compiling", $text) }
-fn CondUnseen() r.Msg { return r.Msg(Diag.CondUnseen, "B9c", "this top-level condition uses what exists only in the branches it decides, or does not check") }
+fn CondInBranch(name String&) r.Msg { return r.Msg(Diag.CondInBranch, "B9c", "this top-level condition uses '" + $name + "', declared only inside a branch still being decided", "its value would depend on the choice the condition is making", "declare '" + $name + "' outside the conditional, or decide on something that exists either way") }
+fn CondOwnError() r.Msg { return r.Msg(Diag.CondOwnError, "B9c", "this top-level condition has an error of its own") }
 fn CondUnknownBuild(text String&) r.Msg { return r.Msg(Diag.CondUnknownBuild, "B10", "unknown name " + $text) }
 fn CondDecidedNotBool() r.Msg { return r.Msg(Diag.CondDecidedNotBool, "B9", "a top-level condition is true or false") }
 fn GlobalReadsItself(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.GlobalReadsItself, "B5a", $text1 + "'s initializer reads " + $text2 + ", which is not set until the initializer is done") }

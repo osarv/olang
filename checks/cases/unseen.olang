@@ -1,4 +1,4 @@
-# check: fail error[B9c]: this top-level condition uses what exists only in the branches it decides, or does not check
+# check: fail error[B9c]: this top-level condition uses 'h', declared only inside a branch still being decided
 type E error { X }
 fn f() Bool { return true }
 if f() {

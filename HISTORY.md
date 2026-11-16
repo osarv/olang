@@ -38624,3 +38624,19 @@ declared external, so the seed (and master's compiler) could no longer build the
 RunMain returns 2 or 1 and sets `Failed`, and `interp.FailureEnd` aborts only under OLANG_CORE=1 (a detached test
 child too). Real crashes - a segmentation fault and the like - keep their signals and os.OnCrash's report. SPEC: E35,
 S16d, S18, P6, B6, the os.OnCrash entry; the checks that expected status 134 and the shell's "Aborted" line migrated.
+### The analyzing tools write into olang's cache (B15a); B9c's message split (2026-11-16)
+
+The user found `olang lsp` leaving a `build/` directory wherever Neovim was started: build.Config's `Dir` defaults to
+`build`, and the language server's checking keeps its records (B3i) in `$Dir/rec`. Now every mode that only analyzes -
+`lsp`, `mcp`, `explain`, `doc`, `api` - sets `Dir` to `build.AnalysisDir`: `analysis/` in olang's cache (B3g's
+`$XDG_CACHE_HOME/olang`, else `~/.cache/olang`), one directory per project, named by the hash of the directory of the file
+given (else the working directory), so two projects never share records. SPEC B15a states it. Test: compiler/lsp.olang's
+"lsp and explain write nothing in the directory they run in", a session and an explain in a fresh temporary directory
+that must hold only the program afterwards.
+
+B9c's `CondUnseen` ("uses what exists only in the branches it decides, or does not check") said two things at once. The
+checker now notes the names a condition body could not find (`CondMissing`) and keeps what its failed check said
+(`CondOwn`, a `diag.Taken`) instead of only forgetting it. A missing name that some top-level if's branch declares is
+`CondInBranch`: the name, a note where it is declared, help to declare it outside the conditional or decide on something
+that exists either way. Any other condition that does not check is `CondOwnError` ("has an error of its own"), followed
+by the condition's own errors replayed. Cases: checks/cases/unseen.olang (reworded), b9cown.olang (new).

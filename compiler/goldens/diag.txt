@@ -1,4 +1,4 @@
-=== anynocopy.olang
+anynocopy.olang
 anynocopy.olang:16:17: error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none
    16 |     for x in it.Take(2) { n += x }
       |                 ^~~~
@@ -327,6 +327,14 @@ b9anomeet.olang:5:6: error[T6b]: '>': these numbers' types do not meet - convert
     5 | if X > 0.5 {
       |      ^
 compilation failed with 1 error
+=== b9cown.olang
+b9cown.olang:6:4: error[B9c]: this top-level condition has an error of its own
+    6 | if f() == 3 {
+      |    ^~~~~~~~
+b9cown.olang:6:4: error[E12]: expected Bool, found I64
+    6 | if f() == 3 {
+      |    ^~~~~~~~
+compilation failed with 2 errors
 === badcond.olang
 badcond.olang:5:4: error[B9c]: this top-level condition cannot be decided while compiling
     5 | if f() == 1 {
@@ -7467,9 +7475,14 @@ unreachvaluemsg.olang:3:51: error[S18a]: an unreachable's message is text, found
       |                                                   ^
 compilation failed with 1 error
 === unseen.olang
-unseen.olang:7:4: error[B9c]: this top-level condition uses what exists only in the branches it decides, or does not check
+unseen.olang:7:4: error[B9c]: this top-level condition uses 'h', declared only inside a branch still being decided
     7 | if h() {
       |    ^~~
+unseen.olang:7:4: note: its value would depend on the choice the condition is making
+unseen.olang:5:5: note: 'h' is declared here
+    5 |     fn h() Bool { return true }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+unseen.olang:7:4: help: declare 'h' outside the conditional, or decide on something that exists either way
 compilation failed with 1 error
 === vacate01outside.olang
 vacate01outside.olang:5:7: error[M19]: I64 has no method 'vacate'
