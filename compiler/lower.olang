@@ -4329,8 +4329,11 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     task := ln.taskArgs
     ln.taskArgs = false
     # (D9h: an argument for a read-only parameter of a call whose result holds no reference is only read
-    # before the call returns - not a task's, which is read beside its spawner)
-    reads := not t.HoldsRefs(t.Result(ty)) and not task
+    # before the call returns - not a task's, which is read beside its spawner; nor is one of a call itself only read
+    # where it stands (readHere), its result dead by its statement's end whatever it views - `v[i][2][0]`, gap 20 -
+    # though its window is then the whole statement's)
+    plain := not t.HoldsRefs(t.Result(ty))
+    reads := (plain or ln.readWin.Has(I64(c.Site))) and not task
     body := match c.Target {
         case typed.Callee.Body(id): I64(id)
         case _: I64(-1)
@@ -4340,10 +4343,10 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     gone mut Vec<typed.Stmt&>& = Vec<typed.Stmt&>()
     for i in range c.Args.Len() {
         a := ln.handedOver(c.Args[i], gone)
-        if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a, c) }
+        if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a, c if plain else null) }
         if not task: ln.argView(a, body, i)
         ro := i < ps.Len() and t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) == 0
-        v := ln.stackArg(a, body, i) if reads and ro else mir.Operand.None
+        v := ln.stackArg(a, body, i) if reads and plain and ro else mir.Operand.None
         if v == mir.Operand.None { v = ln.val(a) }
         if i < ps.Len() { v = ln.fit(v, a, ps[i], a.Span()) }
         # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
@@ -4892,6 +4895,8 @@ fn (ln mut lowering&) stablePlace(p typed.Lvalue&) Bool {
         case typed.Lvalue.Field(_, _, base, _): ln.stablePlace(base)
         case typed.Lvalue.Elem(_, _, e): ln.stablePlace(e.Base)
         case typed.Lvalue.Payload(_, _, py): ln.stablePlace(py.Base)
+        # (a temporary's storage: what the call made there, or a view it read as it is - `v[i][2]`, gap 20)
+        case typed.Lvalue.Temp(_, _, x, _): ln.stableMade(x)
         case _: false
     }
 }
