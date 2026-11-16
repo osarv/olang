@@ -1728,11 +1728,11 @@ test "explain FILE NAME prints an item as the compiler sees it: inferred errors,
     assert explained("Sh") == "type Sh enum\n    Whole N\n    Parts(a I64, b I64)\n    None\n"
     # D17: its requirements, the check and the assert its body begins with; a scope relation the body asks among the
     # obligations, inferred (O10b). T19b: the check's ArgumentError carries its text, a copy made where it is raised -
-    # so it allocates
+    # only on the way that fails, so G42 counts it apart: noalloc, "allocates only where it fails"
     assert explained("pct") == ("fn pct(part I64, whole I64) I64 ? ArgumentError.Invalid   # its error set inferred\n" + $
             "    # requires: whole > 0\n    # requires: part >= 0\n" + $
-            "    # fits: fn&(part I64, whole I64) I64 ? ArgumentError.Invalid noblock nospawn norecurse noextern pure\n" + $
-            "    # effects: allocates; never blocks; always ends; may be computed while compiling\n")
+            "    # fits: fn&(part I64, whole I64) I64 ? ArgumentError.Invalid noalloc noblock nospawn norecurse noextern pure\n" + $
+            "    # effects: allocates only where it fails; never blocks; always ends; may be computed while compiling\n")
     assert explained("link") == ("fn link(a mut N&, b N&)\n    # scopes: b outlives a\n" + $
             "    # fits: fn&(a mut N&, b N&) returns noalloc noblock nospawn norecurse noextern pure keeps b in a   # held in locals and results only (T22a)\n" + $
             "    # effects: writes through 'a'; allocates nothing; never blocks; always ends; may be computed while compiling\n")

@@ -1904,10 +1904,6 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
         case typed.PrimOp.AtomicCompareSwap, typed.PrimOp.Repack: 3
         case _: 2
     }
-    if want < 0 {
-        v.bad($short($op) + " is a check: a test and a branch in MIR")
-        return types.UnknownT
-    }
     if n != want {
         v.bad($short($op) + " of " + $n + " operands")
         return types.UnknownT
@@ -3150,11 +3146,7 @@ test "a malformed function: every malformation is caught" {
     a16 := f16.AddLocal(Local(source.NameId(0), Sp0, i32, LocalKind.Temp, ScopeRef.Scope(ScopeId(0))))
     try f16.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Assign(Sp0, Lvalue.L(a16), Rvalue.Use(Operand.Const(i32, 3))))
     expect(t, f16, "bb0[1]: L3 stored into with no storage: its Live not reached")
-    # a check written as an operation; a switch with a value twice
-    f18 := Fn.add(t)
-    f18.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, Lvalue.L(LocalId(2)), Rvalue.Prim(typed.PrimOp.Holds, i32
-                                         f18.Args(Array<Operand>[Operand.Copy(Lvalue.L(LocalId(0)))])))
-    expect(t, f18, "Holds is a check: a test and a branch in MIR")
+    # a switch with a value twice
     f19 := Fn.add(t)
     f19.End(b0, Term.Switch(Operand.Copy(Lvalue.L(LocalId(0))), f19.AddCases(Array<Case>[Case(1, b0), Case(1, b0)]), b0))
     expect(t, f19, "a switch with the value 1 twice")

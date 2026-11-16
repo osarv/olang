@@ -1400,6 +1400,7 @@ f02aeb4c42ad7a79 31dd411e117a4713 checks/cases/s19eline.olang
 93d6a233c5908f92 78e566502ba72e6f checks/cases/s19try.olang
 427baa3d630d787a af67d248983a0ed9 checks/cases/s1ablock.olang
 0707551b913a1e28 c5d34fb0a4bb7f58 checks/cases/s1bblock.olang
+cf68e6b207b227b9 35fa4bb4581742cb checks/cases/s1bcatchdecl.olang
 3170e57dc0c92206 3c7f5720be55d0a6 checks/cases/s1bdecl.olang
 9862b610e3949f44 e33b564ab8b9f0ad checks/cases/s1blambdaif.olang
 88d7ecbda3a92e46 97f7812871a74044 checks/cases/s1blambdaitem.olang
@@ -2227,7 +2228,7 @@ d81a069bb3b59724 35168ea98bfb61c7 checks/fixtures/print/print.olang
 69bc88433d300709 80d34705452faaf1 checks/fixtures/protopriv/kk.olang
 2581f343a4d5f27f 27ae8703177b4b2e checks/fixtures/protopriv/use.olang
 d07e11341e624359 3e3203f5e64f7199 checks/fixtures/racetests/clean.olang
-39dda910ff71bad9 0d26db47047b8f43 checks/fixtures/racetests/race.olang
+a4bef28899fdbe1f f35c30ff93f51bb0 checks/fixtures/racetests/race.olang
 5715d896eb44cb11 764d7e7caf1c5129 checks/fixtures/regions/stub.olang
 bfe56a1d437a26d5 45b560f293831397 checks/fixtures/remote/mathx/add.olang
 176e74b753db177e e36710efa3d28af5 checks/fixtures/remote/mathy/inc.olang
@@ -2367,12 +2368,12 @@ b397e51ded4ef5a1 40f33b7be31f0b7d compiler/lower.olang
 2f63e0e3577845b1 3a5a502cc11028c1 compiler/lsp.olang
 4808a3244f55bddf ae10a105fc075221 compiler/mcp.olang
 1d03d8a7a1b103a4 e992ca9a4e59d559 compiler/measure.olang
-0bfb7816823ce84f 396b22ae55a7f122 compiler/mir.olang
+378edb697eb766b4 5263f2aba7147fc1 compiler/mir.olang
 6f2982bddfd6d021 58740c194b9e9f4e compiler/msgs.olang
 9a6f5aa11409f53c cc848979f5086107 compiler/names.olang
 3f072b84e716c304 59b46a3ae1383924 compiler/needs.olang
 8c0126f803fe9900 3d8dcaa37df36f12 compiler/notebook.olang
-cbff498da47fd465 97954d0b4100cdbe compiler/olang.olang
+fa70468857dfa8e7 05f8b969d84b338d compiler/olang.olang
 b39996c18bbe72bf ac116c53952c20fd compiler/paint.olang
 442346ea59bdc5b5 8f8d1d0fe5715c86 compiler/parse.olang
 4ba4b66a887cb42b c7ddda08529a2b5c compiler/profile.olang
