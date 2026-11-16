@@ -38896,3 +38896,19 @@ compiler/lsp.olang kept `PutLine`; they are renamed, and the tool now reads thos
   `defer: stmt` nor `catch E: stmt`, so std/ and compiler/ (what the seed builds) keep the bare form, and refusing it
   would break the self-build until the seed is written again. Left for that commit: std/cancel.olang,
   std/prelude/array.olang, compiler/fix.olang, compiler/generic.olang, compiler/parse.olang (their bare defers).
+
+### The seed written again; the bare `defer stmt` refused (2026-11-16, wt-seed)
+
+- **Why now.** The seed of 51e49bf read neither S1b's one-line bodies in every place, `defer: stmt` nor `catch E:
+  stmt`, so std/ and compiler/ (what it builds) were held in the older forms and the bare-defer refusal waited.
+  Master cc83bf0d still bootstrapped from it (`make boot` from a clean clone passed), because nothing there used the
+  new forms yet.
+- **What was done.** The seed was written again from wt-fixtools' tip (278969b6) and proved (`make clean; make boot;
+  make fixedpoint`); then the parser's refusal landed (S19/S19e's grammar `"defer" body`, msgs.BareDefer naming S19
+  and saying to write `defer: stmt`, checks/cases s19bare and s19ebare); defer_migrate and oneline_migrate ran over
+  std/ and compiler/, compiler/fix.olang's two `catch NotBuilt e { ... }` became one-line bodies, `olang fix` put
+  fuzz/'s one-line blocks right; the seed was written again from those sources and proved the same way. `olang fix
+  -check` over std, tests, tools, compiler, checks, bench and fuzz changes 0 files.
+- **A bug found.** defer_migrate gave a deferred declaration the `:` (`defer: z := later`), which S1b refuses - a one-line
+  body is one simple statement; checks/cases s19later and s19try had been migrated so and failed with S1b instead of
+  their own diagnostic. A deferred declaration now goes in a block, `defer { z := later }`, as a deferred defer does.
