@@ -1,0 +1,7 @@
+# check: fail error[G4a]: type variable 'U' has no default, and one before it has
+# a generic type's defaults are trailing too (G4a)
+type Pair<T = I64, U> struct(a T, b U) {
+    A T = a
+    B U = b
+}
+fn main() { }

@@ -1,0 +1,78 @@
+# G4a, G4b, G32: default type arguments - a variable's default bound where nothing else binds it, the type a call is
+# wanted as before it, written arguments before both - and T.Total, the type a total is worked in. Each test holds the
+# run time to what the compile-time evaluator bakes (K2) and decides (S18c)
+
+type Meters extends F64
+type Percent extends U8
+
+# a default naming an earlier variable's reflected type
+fn total<T Number, A Number = T.Total>(xs Array<T>&) A {
+    s A = 0
+    for x in xs: s += x
+    return s
+}
+
+fn widest<T, A = T.Total>(x T) A { return x }
+
+fn asF64(x F64) F64 { return x }
+fn asU32(x U32) U32 { return x }
+
+# a generic type's default, read where the type is written
+type Acc<T Number, A Number = T.Total> struct(v T) {
+    V T = v
+    S A = v
+}
+
+fn (a mut Acc<T, A>&) Add(x T) { a.S += x }
+
+fn defaults() Bool {
+    b := Array<U8>[200, 100, 50]
+    used := b.Sum() == 350 and b.Iter().Sum() == 350 and total(b) == 350 and b.Cumsum() == Array<U64>[200, 300, 350]
+    over := b.Sum<U8>() == 94 and b.Iter().Sum<U8>() == 94 and total<U8, U8>(b) == 94 and b.Cumsum<U8>()[2] == 94
+    partial := total<U8>(b) == 350
+    t U32 = b.Sum()
+    w U16 = total(b)
+    expected := t == 350 and w == 350 and asU32(b.Iter().Sum()) == 350 and asF64(Array<F32>[1.5, 2.5].Sum()) == 4.0
+    c := Array<I32>[2000000000, 2000000000]
+    wide := c.Sum() == 4000000000 and c.Iter().Product() == 4000000000000000000 and Array<I8>[100, 100].Sum() == 200
+    m := Array<Meters>[Meters(1.5), Meters(2.0)]
+    p := Array<Percent>[Percent(200), Percent(100)]
+    own := m.Sum() == Meters(3.5) and p.Sum() == Percent(44) and widest(Meters(1.0)) == Meters(1.0)
+    a := Acc<U8>(200)
+    a.Add(100)
+    n := Acc<U8, U8>(200)
+    n.Add(100)
+    typed := a.S == 300 and n.S == 44
+    return used and over and partial and expected and wide and own and typed
+}
+
+fn totals() Bool {
+    i8 I8.Total = 0
+    u16 U16.Total = 0
+    i32 I32.Total = 0
+    h F16.Total = 0.0
+    bf BF16.Total = 0.0
+    f F64.Total = 0.0
+    m Meters.Total = Meters(1.0)
+    p Percent.Total = Percent(3)
+    return I8.Total.Name == "I64" and U16.Total.Name == "U64" and U32.Total.Name == "U64" and I32.Total.Name == "I64" and
+        F16.Total.Name == "F32" and BF16.Total.Name == "F32" and F32.Total.Name == "F32" and F64.Total.Name == "F64" and
+        I64.Total.Name == "I64" and U64.Total.Name == "U64" and Meters.Total.Name == "Meters" and Percent.Total.Name == "Percent" and
+        i8 + i32 == 0 and u16 == 0 and h + bf == 0.0 and f == 0.0 and m == Meters(1.0) and p == Percent(3)
+}
+
+DefaultsBaked := defaults()
+TotalsBaked := totals()
+Run mut Bool = true # read at run time, so the functions run as the program as well as in the evaluator
+
+test "G4a, G4b: a default type argument where nothing else gives one, the wanted type before it, written ones first" {
+    assert Run and defaults()
+    assert defaults() # S18c: decided while compiling
+    assert DefaultsBaked
+}
+
+test "G32: T.Total - the narrow built-in numbers total wider, every other type as itself" {
+    assert Run and totals()
+    assert totals() # S18c: decided while compiling
+    assert TotalsBaked
+}
