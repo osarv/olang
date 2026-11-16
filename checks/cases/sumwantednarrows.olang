@@ -1,0 +1,7 @@
+# check: fail error[E39]: 'Sum<U8>' would narrow the I64 elements
+# the type a total is wanted as picks its A (G4b) - one the elements do not widen to is Sum<A>'s narrowing error
+fn main() {
+    a := Array<I64>[1, 2]
+    s U8 = a.Sum()
+    Println($s)
+}

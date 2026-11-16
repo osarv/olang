@@ -1196,7 +1196,7 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>& ? Fail {
         also mut Vec<ast.TypeRef&>& = Vec<ast.TypeRef&>()
         # its constraint: a trait, or several side by side - their intersection (G19)
         for not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.closesAngle() and
-            not p.sees(token.Tok.Question) {
+            not p.sees(token.Tok.Question) and not p.sees(token.Tok.Assign) {
             wasNoGt, wasItem := p.noGt, p.item
             p.noGt = true
             p.item = true
@@ -1205,7 +1205,17 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>& ? Fail {
             p.item = wasItem
             if ty == null { ty = t } else { also.Push(t) }
         }
-        l.Push(ast.TypeParam(p.from(pat), pn, ty, also.ToArray()))
+        # G4a: "= type", the type the variable takes where nothing else gives one
+        dflt ast.TypeRef?& = null
+        if p.accept(token.Tok.Assign) {
+            wasNoGt, wasItem := p.noGt, p.item
+            p.noGt = true
+            p.item = true
+            dflt = try p.typeExpr()
+            p.noGt = wasNoGt
+            p.item = wasItem
+        }
+        l.Push(ast.TypeParam(p.from(pat), pn, ty, also.ToArray(), false, dflt))
         if p.sees(token.Tok.Question): continue
         if not try p.sep(token.Tok.Gt): break
     }
@@ -2598,7 +2608,7 @@ fn (p mut Parser&) matchBody(value Bool) ast.Match& ? Fail {
         steps := 0
         for ok and p.ts.Toks[i].Kind == token.Tok.Dot and p.ts.Toks[i + 1].Kind == token.Tok.Iden {
             w := p.text(p.ts.Toks[i + 1])
-            if w != "Type" and w != "Base" and w != "Element" and w != "Target": ok = false
+            if w != "Type" and w != "Base" and w != "Element" and w != "Target" and w != "Accumulator": ok = false
             i += 2
             steps++
         }

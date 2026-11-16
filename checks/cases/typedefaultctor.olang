@@ -1,0 +1,6 @@
+# check: fail error[G4a]: a constructor's type variable 'U' has a default
+# a constructor's own variables are inferred from its arguments (G10d) - none takes a default (G4a)
+type Box struct<U = I64>(x U) {
+    N I64 = 0
+}
+fn main() { }

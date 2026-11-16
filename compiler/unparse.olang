@@ -376,6 +376,10 @@ fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
             w.put(" ")
             w.ty(a)
         }
+        if x.Dflt != null {
+            w.put(" = ")
+            w.ty(x.Dflt!)
+        }
     }
     w.item = was
     w.put(">")

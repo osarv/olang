@@ -1338,6 +1338,10 @@
 === test tests/topassert.olang
 | status 0
 | ok - a file whose top-level asserts hold builds and runs
+=== test tests/typedefaults.olang
+| status 0
+| ok - G4a, G4b: a default type argument where nothing else gives one, the wanted type before it, written ones first
+| ok - G32: T.Accumulator - the narrow built-in numbers total wider, every other type as itself
 === test tests/unique.olang
 | status 0
 | ok - a unique value is one place: copies are references, fresh values land by value

@@ -64,6 +64,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `file_migrate.olang` | os.File (2026-11-16, the user's call): an open file is a unique `os.File` whose destructor closes it - `os.Open(p)`/`os.Create(p)` become the builders `os.File.Open(p)`/`os.File.Create(p)`, a line only closing a name (`defer os.Close(f)`, `try os.Close(f)`, `os.Close(f)!`) is deleted, `io.Write(f, x)`/`io.Read(f, b)` on a File's name become `f.Write(x)`/`f.Read(b)`, a literal descriptor given to `io.Reader`/`io.Writer`/`io.Lines` is named (`io.Stdin`/`Stdout`/`Stderr`, else `I32(n)`); any other `os.Close` and a File's name used as a number listed `by hand:` (`f.Fd()`); code only; idempotent | `build/tools_file_migrate [--check] [-v] FILE\|DIR...` |
 | `putln_rename.olang` | PutLn (2026-11-16, the user's call): the output verbs end in `Ln` - `io.PutLine` -> `io.PutLn`, `io.PutErrLine` -> `io.PutErrLn`, `Writer.PutLine` -> `PutLn`; in code a name after a `.`, in comments, text and non-olang files every whole word, inside std/io.olang every whole word; the nouns (`Reader.Line`, `io.Lines`) stay; idempotent | `build/tools_putln_rename [--check] [-v] FILE\|DIR...` |
 | `defer_migrate.olang` | S19, S19e (2026-11-16, one way to write each thing): the bare `defer stmt` and `errdefer stmt` are gone - a deferral starting a statement and followed by neither `{` nor `:` gains the `:` of S1b's one-line body, `defer f.Close()` -> `defer: f.Close()`; code only; idempotent | `build/tools_defer_migrate FILE...` |
+| `total_migrate.olang` | G4a, G4b, G32 (2026-11-16): `Sum()`, `Product()` and `Cumsum()` left to the call are worked in the type it is wanted as, else `T.Accumulator` (`Array<U8>.Sum()` a `U64`) - each call whose type changed is given the one it had (`b.Sum()` -> `b.Sum<U8>()`), from the compiler's report (`OLANG_TOTALS=1`); a generic body's call whose instances differ is listed. Not in `olang fix`: run on code written since, it would undo what it means | `build/tools_total_migrate [--olang PATH] [-j N] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.
@@ -121,7 +122,8 @@ so `unused_migrate` runs last: D3b is said only of a file with no other error).
 `io_fix` (M19f: they take `try` and `catch` off a call of `io.Print` and put `try` back without the `catch`, and `!`
 forms are lost), `precedence_migrate` (E5: it reads every `a & b == c` as written for the old precedence and wraps
 the comparison), `handles_migrate` (QCE: a reference it made of a copy reads back as a sharing to keep, and a
-copy of today's code it would make a reference). Run them by hand, on a tree written under the old rule, as before.
+copy of today's code it would make a reference), `total_migrate` (G4a: a total left to the call today means `T.Accumulator`,
+which it would write back as the values' own type). Run them by hand, on a tree written under the old rule, as before.
 
 The compiler's own tools are in `compiler/tools/` (the acceptance diffs and golden captures, which were shell scripts and
 are olang programs now, run by their make targets - `compiler/README.md`); the benchmark drivers are in `bench/`

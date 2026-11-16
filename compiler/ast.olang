@@ -343,14 +343,16 @@ type StructBody struct(Params Array<Param&>&, Errs Sig?&, Body Array<Stmt&>&, Dt
 }
 
 # a type parameter: its name and its constraint (null for none) - several traits side by side its intersection (G19),
-# the first in Ty and the rest in Also; ErrSet for the error-set parameter "? E" closing a list (G1a, QAH)
+# the first in Ty and the rest in Also; ErrSet for the error-set parameter "? E" closing a list (G1a, QAH); Dflt its
+# default type, "= T.Total" (G4a), null for none
 type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Also Array<TypeRef&>& = Array<TypeRef&>(0)
-                      ErrSet Bool = false) {
+                      ErrSet Bool = false, Dflt TypeRef?& = null) {
     Sp
     Name
     Ty
     Also
     ErrSet
+    Dflt
 }
 
 type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool, Body TypeBody?&

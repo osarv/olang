@@ -27,11 +27,12 @@ import "std/os"
 # a variable of a declaration or a function (G1-G3, G19, G29): its owner (types.Var's), its name, the constant's type
 # (Unknown for a type variable; I64 for a length an instance binds, G29) and its constraint (a trait type, Unknown for
 # none)
-type varRow struct(Owner I64, Name source.NameId, Const types.TypeId, Bound types.TypeId) {
+type varRow struct(Owner I64, Name source.NameId, Const types.TypeId, Bound types.TypeId, Dflt types.TypeId = types.UnknownT) {
     Owner
     Name
     Const
     Bound
+    Dflt   # G4a: its default type, over the owner's earlier variables; Unknown for none
 }
 
 # a constant still to be computed (T7c): its expression, written in a module, over an owner's variables
@@ -414,10 +415,10 @@ fn (p mut Program&) declVars(d types.DeclId) {
     base := try p.varsAt.Get(owner) catch default 0
     for i in range td.Params.Len() {
         tp := td.Params[i]
-        if tp.Ty == null: continue
-        t := p.BoundOf(c, tp)
+        if tp.Ty == null and tp.Dflt == null: continue
+        t := p.BoundOf(c, tp) if tp.Ty != null else types.UnknownT
         row := p.vars[base + i]
-        p.vars[base + i] = varRow(owner, row.Name, types.UnknownT, t)
+        p.vars[base + i] = varRow(owner, row.Name, types.UnknownT, t, p.Resolve(c, tp.Dflt) if tp.Dflt != null else types.UnknownT)
     }
 }
 
@@ -1124,22 +1125,35 @@ fn (p mut Program&) Apply(c Context&, d types.DeclId, args Array<ast.TypeRef&>&)
     p.declVars(d)
     n := p.T.DeclParams(d)
     # G1a: a list ending in an error-set parameter takes its set after "?", the empty set where none is written
-    written := args.Len()
-    given := written > 0 and isErrsArg(args[written - 1])
-    if p.HasErrParam(d) {
-        if (written if given else written + 1) != n: return types.UnknownT
-    } else if given or n != written {
-        return types.UnknownT
-    }
+    given := args.Len() > 0 and isErrsArg(args[args.Len() - 1])
+    if given and not p.HasErrParam(d): return types.UnknownT
+    wt := WrittenTypes(args)
+    if wt > p.WrittenArity(d) or wt < p.MinArity(d): return types.UnknownT
+    owner := DeclOwner(d)
     vs := Array<types.TypeId>(n)
+    for i in range n { vs[i] = p.T.Var(owner, i, types.ReadOnly) }
     for i in range n {
         if i == n - 1 and p.HasErrParam(d) {
-            vs[i] = p.errsArg(c, args[i]) if given else p.ErrSetOf(types.ListId(0))
-        } else {
+            vs[i] = p.errsArg(c, args[wt]) if given else p.ErrSetOf(types.ListId(0))
+        } else if i < wt {
             vs[i] = p.Resolve(c, args[i])
+        } else {
+            # G4a: a parameter left off takes its default, read with the arguments before it
+            vs[i] = p.Subst(p.VarAt(owner, i).Dflt, owner, p.T.List(vs))
         }
     }
     return p.Instance(d, p.T.List(vs))
+}
+
+# the fewest types a declared type's argument list may write (G4a): its parameters up to the first with a default
+fn (p mut Program&) MinArity(d types.DeclId) I64 {
+    p.declVars(d)
+    owner := DeclOwner(d)
+    m := p.WrittenArity(d)
+    for i in range m {
+        if p.VarAt(owner, i).Dflt != types.UnknownT: return i
+    }
+    return m
 }
 
 # how many types a declared type's argument list writes (G7): its parameters, less an error-set one (G1a)
@@ -1156,7 +1170,8 @@ fn WrittenTypes(args Array<ast.TypeRef&>&) I64 {
 fn (p mut Program&) ArgsFit(d types.DeclId, args Array<ast.TypeRef&>&) Bool {
     n := args.Len()
     if n > 0 and isErrsArg(args[n - 1]) and not p.HasErrParam(d): return false
-    return WrittenTypes(args) == p.WrittenArity(d)
+    wt := WrittenTypes(args)
+    return wt <= p.WrittenArity(d) and wt >= p.MinArity(d)
 }
 
 # whether a written type argument is an error set's, "? A, B" (G1a)
@@ -3534,6 +3549,7 @@ fn (p mut Program&) OwnVarIndexes(f I64) Vec<I64> {
         }
         for tp in row.F.TypeParams {
             if row.F.Recv != null and mentionsName(row.F.Recv!.Ty, tp.Name): continue
+            if row.F.Recv != null and p.recvBinds(row.F, tp.Name) { continue }   # G12: the receiver's constraint gives it (G9c)
             if row.F.Owner != null and mentionsName(row.F.Owner, tp.Name) { continue }   # D19: the owner's, given there
             if tp.ErrSet { continue }   # G1a: an error-set parameter is given after "?", or inferred
             for i, n in ns {
@@ -3542,6 +3558,19 @@ fn (p mut Program&) OwnVarIndexes(f I64) Vec<I64> {
         }
     }
     return out
+}
+
+# whether a method's receiver gives its variable n through a constraint (G9c): n named in the constraint of a variable
+# the receiver's type names - T in "fn (it mut I&) Sum<I Iterator<T ? E>, T Number ...>"
+fn (p mut Program&) recvBinds(f ast.Func&, n source.NameId) Bool {
+    for tp in f.TypeParams {
+        if tp.Name == n or not mentionsName(f.Recv!.Ty, tp.Name): continue
+        if mentionsName(tp.Ty, n): return true
+        for a in tp.Also {
+            if mentionsName(a, n): return true
+        }
+    }
+    return false
 }
 
 # whether a written type names n as one of its parts (a bare name, or in type arguments)
@@ -3771,13 +3800,16 @@ fn errIntroductions(t ast.TypeRef?&, out mut Vec<source.NameId>&) {
 # a list item's type, read once every variable is known (a constraint may name a later one): its variable's
 # constraint (G19) - one that names no trait is the checker's G6 error
 fn (p mut Program&) constraint(c Context&, tp ast.TypeParam&) {
-    if tp.Ty == null: return
+    if tp.Ty == null and tp.Dflt == null: return
     v := try c.Vars.Get(tp.Name) catch default types.UnknownT
     if p.T.KindOf(v) != types.Kind.Var: return
     i := (try p.varsAt.Get(c.Owner) catch default 0) + p.T.B(v)
     row := p.vars[i]
-    if row.Const != types.UnknownT or row.Bound != types.UnknownT: return
-    p.vars[i] = varRow(c.Owner, tp.Name, types.UnknownT, p.BoundOf(c, tp))
+    if row.Const != types.UnknownT or row.Bound != types.UnknownT or row.Dflt != types.UnknownT: return
+    bound := p.BoundOf(c, tp) if tp.Ty != null else types.UnknownT
+    # G4a: the default, read where the list is, over the variables before it
+    dflt := p.Resolve(c, tp.Dflt) if tp.Dflt != null else types.UnknownT
+    p.vars[i] = varRow(c.Owner, tp.Name, types.UnknownT, bound, dflt)
 }
 
 # a type parameter's constraint (G19): its trait, or for several written side by side their intersection - held as a
@@ -5455,6 +5487,7 @@ fn (p mut Program&) Project(t types.TypeId, name String&) types.TypeId, String {
         if p.T.KindOf(t) == types.Kind.Named and p.Body(t) and p.T.DeclKindOf(p.T.DeclOf(t)) == types.DeclKind.Over { return p.T.Base(t), "" }
         return t, ""
     }
+    if name == "Accumulator": return p.Accumulator(t), ""
     if name == "Element" {
         r := p.ReflUnder(t)
         if p.T.KindOf(r) == types.Kind.Array: return p.T.Elem(r), ""
@@ -5471,11 +5504,20 @@ fn (p mut Program&) Project(t types.TypeId, name String&) types.TypeId, String {
         if fd.K == DescFunc: return p.ErrSetOf(p.T.Errors(fd.Of)), ""
         return types.UnknownT, "only a function type has Errors"
     }
-    return types.UnknownT, "a type's reflected types are Base, Element and Target, a field's, a parameter's and a result's Type"
+    return types.UnknownT, "a type's reflected types are Base, Element, Target and Accumulator, a field's, a parameter's and a result's Type"
+}
+
+# T.Accumulator (G32): the type a total of T's values is worked in - the type itself, but for a built-in integer narrower
+# than 64 bits (I64, or U64 where it is unsigned) and F16 and BF16 (F32). The one place it is looked up
+fn (p mut Program&) Accumulator(t types.TypeId) types.TypeId {
+    if p.T.KindOf(t) == types.Kind.Named: return t
+    if p.T.IsInt(t) and p.T.Bits(t) < 64: return p.T.Prim("U64") if p.T.IsUnsigned(t) else p.T.Prim("I64")
+    if t == p.T.Prim("F16") or t == p.T.Prim("BF16"): return p.T.Prim("F32")
+    return t
 }
 
 # whether a reflected member's name is one Project reads
-fn ProjectsType(name String&) Bool { return name == "Type" or name == "Base" or name == "Element" or name == "Target" }
+fn ProjectsType(name String&) Bool { return name == "Type" or name == "Base" or name == "Element" or name == "Target" or name == "Accumulator" }
 
 # what a path's first name stands for as a type to project from (G38): a type variable bound to a type, or a name a
 # body holds a descriptor in; -1 for neither

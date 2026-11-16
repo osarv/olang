@@ -4649,7 +4649,7 @@ compilation failed with 1 error
 reflnomember.olang:9:24: error[G32]: Point has no reflected member 'Width'
     9 | fn main() { n := Point.Width }
       |                        ^~~~~
-reflnomember.olang:9:24: note: a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align
+reflnomember.olang:9:24: note: a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Accumulator, Nullable, Size and Align
 compilation failed with 1 error
 === reflnotlist.olang
 reflnotlist.olang:9:18: error[G33]: I64 has no Fields - only a struct and an enum's case have fields
@@ -5537,6 +5537,13 @@ compilation failed with 2 errors
 strofnothing.olang:5:10: error[E11a]: '$' has nothing to render - this call returns no value
     5 |     t := $nothing()
       |          ^
+compilation failed with 1 error
+=== sumwantednarrows.olang
+sumwantednarrows.olang:5:14: error[E39]: 'Sum<U8>' would narrow the I64 elements
+    5 |     s U8 = a.Sum()
+      |              ^~~
+sumwantednarrows.olang:5:14: note: I64 does not widen to U8 with nothing lost (T6b)
+sumwantednarrows.olang:5:14: help: name a type I64 widens to, or convert the operands first
 compilation failed with 1 error
 === sweepeval.olang
 sweepeval.olang:94:29: error[S18c]: this assertion is false, evaluated while compiling: I33
@@ -7156,13 +7163,13 @@ t32anyconvert.olang:12:40: error[T32a]: an 'any aShape&' is never made an 'any a
       |                                        ^
 compilation failed with 1 error
 === t32anydefaultunmet.olang
-t32anydefaultunmet.olang:17:36: error[G19, T31a]: String does not satisfy the constraint Number on T
-   17 |     it mut any Iterator<String>& = w
-      |                                    ^
-t32anydefaultunmet.olang:17:36: note: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
-t32anydefaultunmet.olang:18:18: note: 'Sum' is called through an 'any Iterator<String>&' here, so aWords needs it
-   18 |     io.PutLn($it.Sum())!
-      |                  ^~~
+t32anydefaultunmet.olang:17:30: error[G19, T31a]: String does not satisfy the constraint Number on T
+   17 |     it any Source<String>& = w
+      |                              ^
+t32anydefaultunmet.olang:17:30: note: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
+t32anydefaultunmet.olang:18:18: note: 'Twice' is called through an 'any Source<String>&' here, so aWords needs it
+   18 |     io.PutLn($it.Twice())!
+      |                  ^~~~~
 compilation failed with 1 error
 === t32anyhash.olang
 t32anyhash.olang:10:14: error[G19]: any aShape& does not satisfy the constraint Hashable on K
@@ -7480,6 +7487,34 @@ compilation failed with 1 error
 traitunknowntype.olang:6:13: error[T2]: unknown type 'Tensor'
     6 |     Value() Tensor<F32>
       |             ^~~~~~~~~~~
+compilation failed with 1 error
+=== typedefaultctor.olang
+typedefaultctor.olang:3:21: error[G4a]: a constructor's type variable 'U' has a default
+    3 | type Box struct<U = I64>(x U) {
+      |                     ^~~
+typedefaultctor.olang:3:21: note: a constructor's own variables are inferred from its arguments (G10d)
+typedefaultctor.olang:3:21: help: remove '= ...', or give the type's own parameter the default
+compilation failed with 1 error
+=== typedefaulttrailing.olang
+typedefaulttrailing.olang:4:18: error[G4a]: type variable 'B' has no default, and one before it has
+    4 | fn pick<A = I64, B>(x B) A { return 0 }
+      |                  ^
+typedefaulttrailing.olang:4:18: note: the variables a call may leave off are the last ones
+typedefaulttrailing.olang:4:18: help: give 'B' a default, or move it before the variables that have one
+compilation failed with 1 error
+=== typedefaulttrailingtype.olang
+typedefaulttrailingtype.olang:3:20: error[G4a]: type variable 'U' has no default, and one before it has
+    3 | type Pair<T = I64, U> struct(a T, b U) {
+      |                    ^
+typedefaulttrailingtype.olang:3:20: note: the variables a call may leave off are the last ones
+typedefaulttrailingtype.olang:3:20: help: give 'U' a default, or move it before the variables that have one
+compilation failed with 1 error
+=== typedefaultunmet.olang
+typedefaultunmet.olang:5:22: error[G4a]: type variable 'A' of widen defaults to String, which its constraint does not take
+    5 | fn main() { Println($widen("text")) }
+      |                      ^~~~~
+typedefaultunmet.olang:5:22: note: nothing at the call gives A a type, so its default would
+typedefaultunmet.olang:5:22: help: write the type: widen<...>(...), or say where the value goes, as 't T = ...'
 compilation failed with 1 error
 === typenoctor.olang
 typenoctor.olang:8:8: error: type 'Color' has no constructor - an enum's values are its cases

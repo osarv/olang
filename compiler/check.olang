@@ -263,6 +263,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     atRecs Vec<atRec>                     # each x[i] read through At as a place: what writing back through it needs
     laneNodes Vec<laneNode>               # E39: the lane operations not built yet, a placeholder naming each
     laneAccept Bool = false                # E39: the expression checked next may be left as lanes for its taker
+    callWant types.TypeId = types.UnknownT  # G4b: the type the call at callWantAt is wanted as, for a variable only its result names
+    callWantAt source.Span = source.Span(0, 0)
+    totals Map<String, String>              # OLANG_TOTALS: each total worked in a type other than its values' (totalSite)
     spawning I64 = 0                       # E31b: inside a spawn's task, where no call through x[i] is made in place
     lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
     tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
@@ -731,6 +734,7 @@ fn (c mut Checker&) CheckProgram() {
             c.settleWeak()
             c.P.L.MutStorage = c.mutStorage()
             if (try os.Env("OLANG_HANDLES") catch default "") != "": c.handleReport()
+            if (try os.Env("OLANG_TOTALS") catch default "") != "": c.totalsReport()
             return
         }
         c.P.L.Diags.Forget(mark)
@@ -1300,6 +1304,12 @@ fn (c mut Checker&) fnTypeParams(f I64) {
     fd := c.P.FnDecl(f)
     mi := c.P.FnModule(f)
     c.push(-1, mi, types.VoidT, types.ListId(0))
+    # G4a: a default is trailing - every variable after one that declares a default declares one too
+    defaulted := false
+    for tp in fd.TypeParams {
+        if tp.ErrSet: continue
+        if tp.Dflt != null { defaulted = true } else if defaulted { c.err(tp.Sp, msgs.TypeDefaultNotTrailing(c.tok(tp.Name))) }
+    }
     if fd.TypeParams.Len() > 0 {
         for tp in fd.TypeParams {
             if c.namesType(mi, tp.Name) { c.err(source.Span(tp.Sp.Start, tp.Sp.Start + I32(c.text(tp.Name).Len())), msgs.TypeVarNamesType(c.tok(tp.Name))) }
@@ -2058,6 +2068,21 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
         for tp in td.Params {
             if c.namesType(mi, tp.Name) { c.err(source.Span(tp.Sp.Start, tp.Sp.Start + I32(c.text(tp.Name).Len())), msgs.TypeVarNamesType(c.tok(tp.Name))) }
         }
+    }
+    # G4a: a default is trailing - every parameter after one that has a default has one too
+    defaulted := false
+    for tp in td.Params {
+        if tp.ErrSet: continue
+        if tp.Dflt != null { defaulted = true } else if defaulted { c.err(tp.Sp, msgs.TypeDefaultNotTrailing(c.tok(tp.Name))) }
+    }
+    # G4a, G10d: a constructor's own variables are inferred from its arguments - none has a default
+    match td.Body {
+        case ast.TypeBody.Struct(sb) {
+            for tp in sb.TypeParams {
+                if tp.Dflt != null: c.err(tp.Dflt!.Span(), msgs.TypeDefaultOnCtor(c.tok(tp.Name)))
+            }
+        }
+        case _ { }
     }
     # G6, G19: a parameter's constraint is a trait - a length is never a parameter (T7)
     if td.Params.Len() > 0 {
@@ -8561,10 +8586,12 @@ fn (c mut Checker&) explicitArgs(f I64, targs Array<ast.TypeRef&>&, sp source.Sp
         c.err(targs[0].Span(), msgs.TypeArgsOnNonGeneric(tn))
         return Array<types.TypeId>(0)
     }
-    if np != nt {
+    # G4a: the variables after those written may be left off where each declares a default
+    if np != nt and not (nt < np and c.defaultsFrom(f, at, nt)) {
         c.err(targs[0].Span(), msgs.TypeArgCount(tn, np, nt))
         return Array<types.TypeId>(0)
     }
+    np = nt
     width I64 = ev + 1
     for k in at {
         if k + 1 > width: width = k + 1
@@ -8578,6 +8605,15 @@ fn (c mut Checker&) explicitArgs(f I64, targs Array<ast.TypeRef&>&, sp source.Sp
     }
     if targs.Len() > nt: out[ev] = c.P.ErrsArgOf(c.fr().Ctx, targs[nt])
     return out
+}
+
+# G4a: whether every own variable of f from the n-th on declares a default
+fn (c mut Checker&) defaultsFrom(f I64, at Vec<I64>&, n I64) Bool {
+    owner := generic.FnOwner(f)
+    for j in range n, at.Len() {
+        if c.P.VarAt(owner, at[j]).Dflt == types.UnknownT: return false
+    }
+    return true
 }
 
 # ---- builders (D19) ----
@@ -12326,7 +12362,8 @@ fn (c mut Checker&) typeArgCountMet(path Array<source.NameId>&, args Array<ast.T
         c.err(args[0].Span(), msgs.TypeArgsOnNonGeneric(tn))
         return false
     }
-    if not (np > 0 and na > 0 and np != na): return true
+    # G4a: the arguments after those written may be left off where each has a default
+    if not (np > 0 and na > 0 and np != na) or na < np and na >= c.P.MinArity(dd): return true
     rec := c.err(args[0].Span(), msgs.TypeArgCount(tn, np, na))
     if np >= args.Len(): return false
     # L18c: a function type of several results, unparenthesized, took the arguments after it as its own
@@ -12378,6 +12415,23 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
         c.spreadBad = false
         return c.unknown(sp)
     }
+    # G4b: the type this call is wanted as, for the one call at sp to read (wantedAt)
+    wasWant, wasAt := c.callWant, c.callWantAt
+    c.callWant, c.callWantAt = want, sp
+    r := c.call1(sp, f, args, want)
+    c.callWant, c.callWantAt = wasWant, wasAt
+    return r
+}
+
+# G4b: the type the call at sp is wanted as - where a value of the call goes - Unknown where nothing wants one
+fn (c mut Checker&) wantedAt(sp source.Span) types.TypeId {
+    if c.callWantAt.Start != sp.Start or c.callWantAt.End != sp.End: return types.UnknownT
+    w := c.callWant
+    if w == types.UnknownT or w == types.VoidT or w == types.NoreturnT or not c.P.T.Closed(w): return types.UnknownT
+    return w
+}
+
+fn (c mut Checker&) call1(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, want types.TypeId) typed.Expr& {
     match f {
         case ast.Expr.Name(nsp, n) { return c.callNamed(sp, f, nsp, n, args, want) }
         case ast.Expr.Member(msp, x, n) { return c.callMember(sp, f, msp, x, n, args, want) }
@@ -13086,6 +13140,10 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     # G9e: a parameter left off whose type is a variable of the call nothing else bound takes its default's type
     c.defaultBinds(nsp, f, owner, ps, k, recv != null, b)
     c.P.InferThroughBounds(b)
+    # G4b: a variable only the result names takes the type the call is wanted as; G4a: then its default
+    c.resultBinds(sig, owner, b, c.wantedAt(sp))
+    try c.defaultTypes(nsp, f, owner, b) catch { return c.unknown(sp) }
+    c.totalSites(nsp, f, owner, b, explicit)
     # QAH: an error-set variable nothing fallible bound is the empty set - its instance cannot fail by it
     for i in range nv {
         if b.Vals[i] == types.UnknownT and c.P.ErrVarAt(owner, i): b.Vals[i] = c.P.ErrSetOf(types.ListId(0))
@@ -13141,6 +13199,52 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         }
     }
     return x
+}
+
+# G4b: the call's result a bare variable nothing bound, and the call wanted as a type its constraint takes - that type
+fn (c mut Checker&) resultBinds(sig types.TypeId, owner I64, b mut generic.Binding&, want types.TypeId) {
+    if want == types.UnknownT: return
+    r := c.P.T.Result(sig)
+    if c.P.T.KindOf(r) != types.Kind.Var or c.P.T.A(r) != owner: return
+    i := c.P.T.B(r)
+    if i >= b.N or b.Vals[i] != types.UnknownT or c.P.ErrVarAt(owner, i): return
+    if not c.P.MeetsBound(owner, i, c.P.T.List(b.Vals), want): return
+    b.Vals[i] = want
+    c.P.InferThroughBounds(b)
+}
+
+# G4a: each variable still unbound that declares a default takes it, read with the variables before it bound - in
+# order, so a default may name one an earlier default gave. A default its constraint does not take is an error saying
+# to write the type arguments, failing with DefaultUnmet
+type DefaultUnmet error {
+    Said
+}
+
+fn (c mut Checker&) defaultTypes(nsp source.Span, f I64, owner I64, b mut generic.Binding&) ? DefaultUnmet {
+    for i in range b.N {
+        if b.Vals[i] != types.UnknownT: continue
+        dt := c.P.VarAt(owner, i).Dflt
+        if dt == types.UnknownT: continue
+        part := Array<types.TypeId>(b.N)
+        for j in range b.N { part[j] = b.Vals[j] if b.Vals[j] != types.UnknownT else c.P.T.Var(owner, j, types.ReadOnly) }
+        t := c.P.Subst(dt, owner, c.P.T.List(part))
+        if t == types.UnknownT or not c.P.T.Closed(t): continue
+        # a variable bound before it that fails its own constraint is G19's error, said by bound
+        if not c.P.MeetsBound(owner, i, c.P.T.List(b.Vals), t) and c.boundsMet(owner, b) {
+            c.err(nsp, msgs.TypeDefaultUnmet(c.text(c.P.VarAt(owner, i).Name), c.text(c.P.FnDecl(f).Name), c.ty(t)))
+            error DefaultUnmet.Said
+        }
+        b.Vals[i] = t
+        c.P.InferThroughBounds(b)
+    }
+}
+
+# whether every variable a binding has bound meets its constraint (G19)
+fn (c mut Checker&) boundsMet(owner I64, b generic.Binding&) Bool {
+    for j in range b.N {
+        if b.Vals[j] != types.UnknownT and not c.P.ErrVarAt(owner, j) and not c.P.MeetsBound(owner, j, c.P.T.List(b.Vals), b.Vals[j]) { return false }
+    }
+    return true
 }
 
 # invoke's argument i as written, for inference (G9): a literal binds its parameter as a literal does, a lambda or a
@@ -22082,6 +22186,15 @@ fn (c mut Checker&) laneTotal(sp source.Span, nsp source.Span, name String&, k I
     n := c.laneNodes[k]
     e := n.Elem
     if e == types.UnknownT: return c.laneSay(sp, k)
+    # Sum<A Number = T.Accumulator> (E39, G4a, G4b): A the number the call is wanted as, else the lanes' total type
+    if name == "Sum" {
+        a := c.wantedAt(sp)
+        if a == types.UnknownT or c.isRef(a) or c.isNamed(a) or not c.isNumber(a): a = c.P.Accumulator(c.deref(e))
+        if not c.P.T.Same(a, e) {
+            c.totalSite(nsp, c.deref(e))
+            return c.laneSumIn(sp, nsp, k, a, nsp)
+        }
+    }
     if (name == "Some" or name == "Every") and e != types.BoolT {
         c.err(nsp, msgs.LaneMaskBool("'" + $name + "()'", c.ty(e)))
         return c.unknown(sp)
@@ -28193,6 +28306,49 @@ fn (c mut Checker&) lentAt(u typed.LocalUses&, i I64) Bool {
         if k == i: return true
     }
     return false
+}
+
+# OLANG_TOTALS (tools/total_migrate.olang): a call whose total, left to the call (G4a, G4b), is worked in a type other
+# than the one named before ".Accumulator" - the variable whose default is "X.Accumulator" bound to another type than X - noted with
+# X, the type it was worked in before totals were. Calls in the prelude, and written type arguments, are not noted
+fn (c mut Checker&) totalSites(nsp source.Span, f I64, owner I64, b generic.Binding&, explicit Array<types.TypeId>&) {
+    if c.P.L.Mods[c.fr().Mi].Prelude or (try os.Env("OLANG_TOTALS") catch default "") == "": return
+    tps := c.P.FnDecl(f).TypeParams
+    for tp in tps {
+        if tp.Dflt == null: continue
+        match tp.Dflt! {
+            case ast.TypeRef.Named(_, path, _) if path.Len() == 2 and c.text(path[1]) == "Accumulator" {
+                i, j := c.varIndex(owner, tp.Name), c.varIndex(owner, path[0])
+                if i < 0 or j < 0 or i < explicit.Len() and explicit[i] != types.UnknownT: continue
+                if not c.P.T.Same(b.Vals[i], b.Vals[j]): c.totalSite(nsp, b.Vals[j])
+            }
+            case _ { }
+        }
+    }
+}
+
+# the index of owner's variable named n; -1 for none
+fn (c mut Checker&) varIndex(owner I64, n source.NameId) I64 {
+    for i in range c.P.VarCount(owner) {
+        if c.P.VarAt(owner, i).Name == n: return i
+    }
+    return -1
+}
+
+# a total at nsp worked, before totals were, in t (totalSites); a site two instances note differently is noted "?"
+fn (c mut Checker&) totalSite(nsp source.Span, t types.TypeId) {
+    mi := c.fr().Mi
+    if c.P.L.Mods[mi].Prelude or (try os.Env("OLANG_TOTALS") catch default "") == "": return
+    at := c.P.L.Diags.Locate(c.fr().File, I64(nsp.Start))
+    c.spellMod = mi
+    ty := c.ty(t)
+    c.spellMod = -1
+    was := try c.totals.Get(at) catch default ty
+    c.totals.Put(at, ty if was == ty else "?")
+}
+
+fn (c mut Checker&) totalsReport() {
+    for e in c.totals: try io.PutErrLn("totals: " + $e.Key + ": " + $e.Value) catch io.Error { }
 }
 
 fn (c mut Checker&) handleLine(b typed.Body&, l typed.Local&, mi I64, kind String&, root String&) {

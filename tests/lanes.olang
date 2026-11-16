@@ -44,7 +44,7 @@ fn all(n I64) Bool {
     sel Bool = $lesser(a, b * 3.0) == "Array<F64>[0, 1, 2, 3]" and $lesser(b * 3.0, a) == "Array<F64>[0, 1, 2, 3]" and
         $a.LanesLess(b * 3.0).Select(a, 0.0) == "Array<F64>[0, 1, 2, 3]" and $i.LanesEqual(i * 0 + 1).Select(i, -1) == "Array<I32>[-1, 1, -1, -1]"
     fixed Bool = $(Array<F64>[1.0, 2.0] + Array<F64>[3.0, 4.0]) == "Array<F64>[4, 6]" and (Array<F64>[1.0, 2.0] * Array<F64>[3.0, 4.0]).Sum() == 11.0
-    wrap Bool = Array<U8>[200, 100].Sum() == 44 and $(Array<U8>[250, 5] + Array<U8>[10, 1]) == "Array<U8>[4, 6]"
+    wrap Bool = Array<U8>[200, 100].Sum<U8>() == 44 and $(Array<U8>[250, 5] + Array<U8>[10, 1]) == "Array<U8>[4, 6]"
     v := Vec3(Array<F64>[1.0, 2.0])
     w Vec3 = v + v * 2.0 # an extending type's operands give it again (T29e)
     kept Bool = $w == "Array<F64>[3, 6]" and w.Sum() == 9.0
@@ -215,7 +215,7 @@ fn wide() Bool {
     u := Array<U8>(3, 200)
     f := Array<BF16>[1.5, 2.0, 0.25]
     h := Array<F16>[2.0, 3.0, 4.0]
-    return c.Sum<I32>() == 1000 and c.Sum() == -24 and (c * c).Sum<I32>() == 100000 and (c + c).Sum<I16>() == 2000 and
+    return c.Sum<I32>() == 1000 and c.Sum<I8>() == -24 and (c * c).Sum<I32>() == 100000 and (c + c).Sum<I16>() == 2000 and
         (u * u).Sum<U32>() == 120000 and (f * h).Sum<F32>() == 10.0 and (h * h).Sum<F32>() == 29.0 and
         (c * 3).Sum<I32>() == 3000 and (-c).Sum<I32>() == -1000
 }

@@ -1798,6 +1798,12 @@ fn listed(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build prog.olang > out.txt 2>&1") == 0 and
                  sh(dir, "for f in build/*.ll; do case $f in *.listing.ll) ;; *) grep -l DILocation $f;; esac; done | grep -q .") != 0
                  "a plain build carries no line tables", dir)
+    # E39: a byte product summed in I32 (Sum<I32>, its A written past the default) is the target's byte dot instruction
+    # where it has one
+    if sh(dir, "grep -q avx512_vnni /proc/cpuinfo") == 0 {
+        try r.expect(sh(dir, $xp + "explain -asm vnni.olang main > out.txt 2>&1") == 0 and outOf(dir).Contains("vpdpbusd")
+                     "Sum<I32> of a byte product: vpdpbusd", dir)
+    }
     try r.expect(sh(dir, "\"$OLANG\" help explain > out.txt 2>&1") == 0 and outOf(dir).Contains("  -asm") and
                  outOf(dir).Contains("  -quick"), "help explain", dir)
 }

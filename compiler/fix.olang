@@ -11,7 +11,8 @@
 #
 # Not in the table, because they are not idempotent - run on code of today they would damage it - and are for one change
 # only: io_print, io_try and io_fix (M19f: they take the `try` and the `catch` off a call of io.Put and put it back
-# where it was not), and precedence_migrate (E5: it reads every `a & b == c` as written for the old precedence).
+# where it was not), precedence_migrate (E5: it reads every `a & b == c` as written for the old precedence) and
+# total_migrate (G4a: it gives every total left to the call the type it was worked in before T.Accumulator).
 import "std/os"
 import "std/io"
 import "std/filepath"

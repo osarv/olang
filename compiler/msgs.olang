@@ -318,6 +318,9 @@ type Diag enum {
     DefaultNotTrailing
     TypeVarNamesType
     TypeVarNotInferable
+    TypeDefaultNotTrailing
+    TypeDefaultOnCtor
+    TypeDefaultUnmet
     TypeVarNotErrorSet
     ErrVarNotType
     ErrSetArgUnwanted
@@ -1044,7 +1047,7 @@ fn ByteSwapWidth(ty String&, bits I64) r.Msg { return r.Msg(Diag.ByteSwapWidth, 
 fn AtomicWidth(ty String&) r.Msg { return r.Msg(Diag.AtomicWidth, "P9, T4a", $ty + " is no atomic width", "the atomic operations take integers of 8, 16, 32 or 64 bits", "hold the value as one of those") }
 
 # compile-time reflection (G32-G38)
-fn ReflNoMember(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoMember, "G32", $ty + " has no reflected member '" + $name + "'", "a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align") }
+fn ReflNoMember(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoMember, "G32", $ty + " has no reflected member '" + $name + "'", "a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Accumulator, Nullable, Size and Align") }
 fn ReflNoKind(ty String&) r.Msg { return r.Msg(Diag.ReflNoKind, "G32", $ty + " has no TypeKind", "only a struct, an enum, a number, Bool, an array, a reference, a function type and an error value have one") }
 fn ReflNoLength(ty String&) r.Msg { return r.Msg(Diag.ReflNoLength, "G32", $ty + " has no Length - only an array whose length is known while compiling has one") }
 fn ReflNoLayout(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoLayout, "G32", $ty + " has no " + $name + " - it is not laid out (a trait, an error type, an extern type)") }
@@ -1341,6 +1344,9 @@ fn TraitMethodGeneric(tok String&) r.Msg { return r.Msg(Diag.TraitMethodGeneric,
 fn CtorFieldNoValue(tok String&) r.Msg { return r.Msg(Diag.CtorFieldNoValue, "C4", "field " + $tok + " names no parameter of the constructor - give it a value, with '=' or ':='") }
 fn DefaultNotTrailing(tok String&) r.Msg { return r.Msg(Diag.DefaultNotTrailing, "D8a", $tok + " has no default, but a parameter before it does - defaulted parameters come last") }
 fn TypeVarNamesType(tok String&) r.Msg { return r.Msg(Diag.TypeVarNamesType, "G1", "type variable " + $tok + " is named after a type - choose a name no type has, as '<T>'") }
+fn TypeDefaultNotTrailing(name String&) r.Msg { return r.Msg(Diag.TypeDefaultNotTrailing, "G4a", "type variable " + $name + " has no default, and one before it has", "the variables a call may leave off are the last ones", "give " + $name + " a default, or move it before the variables that have one") }
+fn TypeDefaultOnCtor(name String&) r.Msg { return r.Msg(Diag.TypeDefaultOnCtor, "G4a", "a constructor's type variable " + $name + " has a default", "a constructor's own variables are inferred from its arguments (G10d)", "remove '= ...', or give the type's own parameter the default") }
+fn TypeDefaultUnmet(name String&, fname String&, ty String&) r.Msg { return r.Msg(Diag.TypeDefaultUnmet, "G4a", "type variable '" + $name + "' of " + $fname + " defaults to " + $ty + ", which its constraint does not take", "nothing at the call gives " + $name + " a type, so its default would", "write the type: " + $fname + "<...>(...), or say where the value goes, as 't T = ...'") }
 fn TypeVarNotInferable(text String&, name String&) r.Msg { return r.Msg(Diag.TypeVarNotInferable, "G4", "type variable " + $text + " of " + $name + " appears in no parameter's type", "so the call writes it", "write " + $name + "<...>(...)") }
 fn TypeVarNotErrorSet(tok String&) r.Msg { return r.Msg(Diag.TypeVarNotErrorSet, "G1a", $tok + " is a type variable, not an error set", "", "an error-set parameter is written after '?' in its list, '<T ? E>'") }
 fn ErrVarNotType(tok String&, name String&) r.Msg { return r.Msg(Diag.ErrVarNotType, "G1a", $tok + " is an error-set parameter, not a type", "it stands where an error set is written", "write '? " + $name + "'") }

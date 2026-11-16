@@ -1,0 +1,8 @@
+# E39, G4a: a byte product summed in I32 - LaneDot, the target's byte dot instruction where it has one (vpdpbusd)
+N mut I64 = 512
+fn dot(a Array<U8>&, b Array<I8>&) I32 { return (a * b).Sum<I32>() }
+fn main() {
+    a := Array<U8>(N, 3)
+    b := Array<I8>(N, -2)
+    Println($dot(a, b))
+}

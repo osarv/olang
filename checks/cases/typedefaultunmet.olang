@@ -1,0 +1,5 @@
+# check: fail error[G4a]: type variable 'A' of widen defaults to String, which its constraint does not take
+# also: help: write the type: widen<...>(...), or say where the value goes, as 't T = ...'
+# a default its variable's constraint does not take, at a call that left the variable to it (G4a)
+fn widen<T, A Number = T>(x T) A { return A(0) }
+fn main() { Println($widen("text")) }

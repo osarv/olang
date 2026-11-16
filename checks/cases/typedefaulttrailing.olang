@@ -1,0 +1,5 @@
+# check: fail error[G4a]: type variable 'B' has no default, and one before it has
+# also: help: give 'B' a default, or move it before the variables that have one
+# a default type argument is trailing (G4a), as a value's default is (D8b)
+fn pick<A = I64, B>(x B) A { return 0 }
+fn main() { Println($pick(true)) }

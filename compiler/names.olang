@@ -925,6 +925,8 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
         r.receiverVars(f.Owner, false)
         r.typeRef(f.Owner)
     }
+    # G4a: a default may name what the receiver introduces ("Cumsum<A = T.Accumulator>" on an Array<T>)
+    for tp in f.TypeParams: r.typeRef(tp.Dflt)
     for p in s.Params: r.typeRef(p.Ty)
     for t in s.Results: r.typeRef(t)
     for e in s.Errors: r.path(e)
@@ -1018,6 +1020,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
         for p in t.Params {
             r.typeRef(p.Ty)
             for a in p.Also: r.typeRef(a)
+            r.typeRef(p.Dflt)
             r.bind(p.Name, p.Sp, What.TypeVar)
         }
     }
@@ -1026,6 +1029,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
         case ast.TypeBody.Struct(s) {
             m0 := r.mark()
             r.typeParams(s.TypeParams)
+            for p in s.TypeParams: r.typeRef(p.Dflt)
             for p in s.Params: r.typeRef(p.Ty)
             if s.Errs != null {
                 for e in s.Errs!.Errors: r.path(e)
