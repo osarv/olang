@@ -277,12 +277,12 @@ bfloat`, instruction selection rounded a promoted value back through `__truncsfb
 exhaustive test's loop - which, every F32 narrowed and every BF16 through `+ - * /` against ten others, took 43.8 s
 with the previous compiler and 8.5 s now. `bench/repro/bf16_narrow.olang`.
 
-## Vec as a handle (`vec.olang`, round 1 of docs/memory.md, 2026-10-17)
+## Vec as a handle (`vec.olang`, docs/memory.md)
 
 `vec.olang MODE KIND N PASSES` runs one row of `docs/memory.md` section 4.6 over a `Vec`, an `Array` or a `List`;
 `c/vec.c` computes the same over arrays (`run.olang`'s "Vec:" and "Array:" rows). Instructions from callgrind at
 `-target x86-64-v3` (valgrind cannot run AVX-512), the loop alone - the run at PASSES 10 less the run at 0, 1M
-elements - against today's own Vec (a build at 61739c9, the commit before round 1):
+elements - against the Vec that held its own storage (a build at 61739c9):
 
 | row | new Vec | own Vec | Array | List | C | budget |
 |---|---|---|---|---|---|---|
@@ -304,7 +304,7 @@ fields 0.346/0.081 (Array 0.240/0.094), opaque call 0.280/0.150 (Array 0.294/0.1
 
 The two misses, and what the store loop's optimized IR shows:
 - **The handle's reference is untagged.** T36 tags no reference, so the load of `v.s` may alias every element store and
-  is reloaded each iteration - section 4.2's reference tags (decided there, not part of round 1) are what lets it hoist.
+  is reloaded each iteration - section 4.2's reference tags (decided there) are what lets it hoist.
 - **A block scope per iteration survives** when the loop body calls a method with a hidden scope argument (`SetAt`):
   the inlined `__olang_scope_close` passes the header to calls it cannot see, so it counts as captured, an element store
   may alias it, and each iteration zeroes and closes it - about 15 instructions an element on a Vec's and a List's
@@ -312,11 +312,11 @@ The two misses, and what the store loop's optimized IR shows:
   stores past them.
 - An Array's own store loop through a reference parameter is not vectorized either (18 against C's 1.2 an element).
 
-## Round 2: alias tags for references and the runtime's headers (T36, 2026-10-18)
+## Alias tags for references and the runtime's headers (T36)
 
 The two misses above, fixed: a reference to a struct or an enum has alias tags of its own (the handle's `v.s` hoists),
 and the runtime's scope and chunk headers have theirs (a loop body's empty scope folds away). Same measurement, the
-loop alone, round 1's compiler (aa372d1) before:
+loop alone, the compiler before the tags (aa372d1):
 
 | row | Vec before | Vec after | Array before | Array after | List before | List after | C |
 |---|---|---|---|---|---|---|---|

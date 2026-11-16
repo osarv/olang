@@ -38640,3 +38640,11 @@ checker now notes the names a condition body could not find (`CondMissing`) and 
 `CondInBranch`: the name, a note where it is declared, help to declare it outside the conditional or decide on something
 that exists either way. Any other condition that does not check is `CondOwnError` ("has an error of its own"), followed
 by the condition's own errors replayed. Cases: checks/cases/unseen.olang (reworded), b9cown.olang (new).
+
+## READMEs describe how things work (2026-11-16)
+
+The READMEs were stripped of development history. For the record: `compiler/README.md` used to say the compiler was "in progress" with
+checking, scope pass, lowering and emission still being built (M5b-M9), that it was first built by the C compiler (stage 0, tagged
+`stage0-final`; `git checkout stage0-final -- bootstrap`), and that its acceptance tools compared passes with what stage 0 gave
+(the goldens are that captured output). `bench/README.md`'s Vec sections were "round 1" and "round 2" of docs/memory.md (before: the
+Vec that held its own storage, build 61739c9; round 1's compiler aa372d1).

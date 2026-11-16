@@ -1,22 +1,19 @@
 # compiler - the self-hosted olang compiler
 
-The olang compiler written in olang, in progress. `DESIGN.md` is the design: architecture, grammar decisions,
-the order of work (M1, M2, ...), acceptance for each step, and the bootstrap. The C compiler that came first, stage 0, is
-removed (tagged `stage0-final`; `git checkout stage0-final -- bootstrap` brings it back); its output is kept in `goldens/`,
-the reference for behaviour (diagnostics, edge cases, test results).
+The olang compiler written in olang. `DESIGN.md` is the design: architecture, grammar decisions, acceptance for each
+pass, and the bootstrap. `goldens/` keeps recorded output (diagnostics, edge cases, test results) as the reference for behaviour.
 `SPEC.md` says what olang means.
 
-Built so far: the front end (source, tokens, parser, diagnostics, loader, name resolution) and the type table. The
-typed core and the MIR are written as contracts. Checking (`check.olang`), the scope pass (`scope.olang`) and lowering
-(`lower.olang`, which reads the scope pass's placement where it is given, else a stand-in) are in progress, and so is
-emission (`emit.olang`): the pipeline writes one LLVM object per module (and one for the root's instances), which
-clang compiles and links with the runtime the port fills in (`make emitdiff` compares whole programs with stage 0's); and evaluation (`eval.olang`, `interp.olang`), which runs what lowering makes -
+The pipeline: the front end (source, tokens, parser, diagnostics, loader, name resolution) and the type table; the
+typed core and the MIR; checking (`check.olang`), the scope pass (`scope.olang`) and lowering (`lower.olang`, which reads
+the scope pass's placement); emission (`emit.olang`), which writes one LLVM object per module (and one for the root's
+instances), compiled by clang and linked with the runtime (`make emitdiff` compares whole programs with the recorded output); and evaluation (`eval.olang`, `interp.olang`), which runs what lowering makes -
 while compiling (B9c, S8b, S18c) and as `OLANG_EVALUATE=1 olang FILE` (`make evaldiff`, the testing tools' route, not an option); `olang FILE` itself builds the program into the cache as `build` does and runs it (B3g). The driver (`olang.olang`,
 `build/compiler_olang`) builds, runs, tests, compiles and interprets through the pipeline, with the runtime filled in
-by `runtime.olang`; built by the C compiler first, it builds itself (`build/compiler_olang build -output build/stage1
-compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but the seed, its own IR
+by `runtime.olang`; it builds itself (`build/compiler_olang build -output build/stage1
+compiler/olang.olang`), and `make bootstrap` rebuilds it from nothing but the seed, its own IR
 (`seed/`, written by `tools/seed.olang` - `make seed`), in two stages (the seed's compiler builds a `-quick` compiler,
-which builds the optimized one); `make fixedpoint` checks that compiler builds itself byte for byte (DESIGN.md section 5). The command line is stage 0's (`build`, `compile`, `test`, ...).
+which builds the optimized one); `make fixedpoint` checks that compiler builds itself byte for byte (DESIGN.md section 5). The commands are `build`, `compile`, `test`, ...
 
 ## Modules (one file per pass)
 
@@ -35,13 +32,13 @@ which builds the optimized one); `make fixedpoint` checks that compiler builds i
 | `names.olang` | declaration tables and name resolution |
 | `types.olang`, `generic.olang` | interned types and layouts; instances, unification, constraints |
 | `typed.olang`, `mir.olang` | the typed core language and the mid-level IR (contracts) |
-| `check.olang` | the checker: the resolved tree elaborated into the typed core (M5b/M5c, in progress) |
+| `check.olang` | the checker: the resolved tree elaborated into the typed core |
 | `definit.olang` | D13d: whether a local or field with no value is read before every path assigns it, judged structurally as D10a judges leaving |
 | `free.olang` | early freeing (O8d, docs/memory.md): which places are the only holders of what they hold, so a let-go frees at once; the `-memory` report |
-| `scope.olang` | section 8: scope terms, obligations over the call graph's components, the O rules, placement (M6, in progress); placements and field bindings inferred, no scope written (O28; docs/rework.md 9, 20 and 21; `OLANG_SCOPESTATS`, `OLANG_INFERDUMP`; a component's judging taken again by later rounds, `OLANG_SCOPECHECK` checking it, `OLANG_NOREUSE` turning it off; judgings kept in records across builds, B3i W3b - `OLANG_NOSCOPEREC` turning them off, `OLANG_CHECKINCR` holding the pass with them to the pass without, `OLANG_SCOPEDEBUG` saying what a component read) |
+| `scope.olang` | section 8: scope terms, obligations over the call graph's components, the O rules, placement; placements and field bindings inferred, no scope written (O28; docs/rework.md 9, 20 and 21; `OLANG_SCOPESTATS`, `OLANG_INFERDUMP`; a component's judging taken again by later rounds, `OLANG_SCOPECHECK` checking it, `OLANG_NOREUSE` turning it off; judgings kept in records across builds, B3i W3b - `OLANG_NOSCOPEREC` turning them off, `OLANG_CHECKINCR` holding the pass with them to the pass without, `OLANG_SCOPEDEBUG` saying what a component read) |
 | `views.olang` | M19g: a Vec's view used after the same Vec may have grown, from summaries over the call graph's components and a dataflow walk of each body, once a program has checked cleanly |
-| `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function (M7, in progress); which clones pay (docs/fnvalues.md 4.4: `KnownValues`, `LoopDepths`, `DecideClones`) |
-| `eval.olang` | the MIR abstract machine (M8): allocations, scopes and K1's refusals, while compiling or running |
+| `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function; which clones pay (docs/fnvalues.md 4.4: `KnownValues`, `LoopDepths`, `DecideClones`) |
+| `eval.olang` | the MIR abstract machine: allocations, scopes and K1's refusals, while compiling or running |
 | `interp.olang` | evaluation in the pipeline: the build's conditions and asserts decided, a program's main or tests run |
 | `explain.olang` | `olang explain FILE NAME` (B11b): one top-level item as the compiler sees it - signature, inferred errors, obligations, effects, needs, a type's members, a global's baked value; `explain -caps` (B11c); `Codes`, the function `explain -asm` and `-ir` show (B11d) |
 | `effects.olang` | what each body may do - writes, storage, C and what it reaches, waits, tasks, loops, recursion - read off the typed core and settled over the call graph, on demand: explain's `# effects:` line (B11b), `explain -caps` (B11c) and the function facts (G42) |
@@ -60,37 +57,37 @@ which builds the optimized one); `make fixedpoint` checks that compiler builds i
 | `session.olang` | the front end held for a tool: an analysis with an editor's unsaved text standing in for files, what a name at an offset is, symbols, completion, the processes and message framing the servers share |
 | `lsp.olang` | `olang lsp` (B15): the Language Server Protocol, each analysis in a forked worker, keeping and taking the records builds keep (B3i) |
 | `mcp.olang` | `olang mcp` (B16): the Model Context Protocol - check, explain, doc, format, test as tools |
-| `emit.olang` | MIR written as LLVM IR text, one object per module - each module's, the root's instances', the root's with main or the harness (M9, in progress); clones in the root's object, their sites and choice printed by `OLANG_CLONES` |
+| `emit.olang` | MIR written as LLVM IR text, one object per module - each module's, the root's instances', the root's with main or the harness; clones in the root's object, their sites and choice printed by `OLANG_CLONES` |
 | `cabi.olang` | the C calling conventions (X11): how a plain-data struct crosses to C by value on x86-64 (System V) and AArch64 (AAPCS64), as clang passes it |
 | `bindgen.olang` | a C import translated (X17-X19: the declarations clang reads, macros, the C to compile beside), and `olang bindgen HEADER.h` (X16) writing them down |
 | `fix.olang` | `olang fix` (B17): the migration tools of `tools/`, built into the cache and run over the files in the order the changes were made |
 | `profile.olang` | `olang profile` (B20): the program built with the runtime's sampler (`std/runtime/prof.ll`) and run, its samples read and named by `llvm-symbolizer`, the report and the HTML flame graph |
 | `fmt.olang` | the formatter (B13): the layout, over the scanner's tokens, and `olang format` over files |
 | `unparse.olang` | a syntax tree written back as source: the formatter's held branches, `dump roundtrip` |
-| `runtime.olang` | the runtime's IR (`std/runtime/*.ll`) filled in for a build, as stage 0 fills it |
+| `runtime.olang` | the runtime's IR (`std/runtime/*.ll`) filled in for a build |
 | `target.olang` | the machine a build is for (B12): clang asked, without clang for `-evaluate`; which clang (B12d: `OLANG_CLANG`, a release's own, the newest of LLVM 20, 19, 18 on PATH); another architecture's C library and emulator (B12a) |
 | `build.olang` | objects named by their content, compiled side by side, the link, the modes, over a `Frontend` trait |
 | `spin.olang` | the busy indicator (B25): six dots drawn on the terminal beside what is waited on, erased as the wait ends |
-| `olang.olang` | the driver: the command line in words (B1), as stage 0 reads it, and the passes behind it |
+| `olang.olang` | the driver: the command line in words (B1), and the passes behind it |
 
 ## Subfolders
 
 - `tools/` - the acceptance tools (below), all olang programs (the shell scripts they began as are gone):
-  `tokdiff`, `astdiff`, `namesdiff`, `layoutdiff` and `modgraph` compare the self-hosted passes with what stage 0 gave,
-  as `goldens/` stores it (each tool's `-capture`, `layoutgold`, `diaggold_capture` and `rungold` capture the goldens
+  `tokdiff`, `astdiff`, `namesdiff`, `layoutdiff` and `modgraph` compare the passes with the recorded output
+  `goldens/` stores (each tool's `-capture`, `layoutgold`, `diaggold_capture` and `rungold` capture the goldens
   again, from the port), and `toolkit.olang` is what they share
   (running a program without a shell, reading a tool's output as rows, a scratch directory, `diff`). Each is built and
   run by its make target (`make tokdiff`), or by hand from the repository root: `build/olang build
   compiler/tools/tokdiff.olang && build/compiler_tools_tokdiff [FILE...]`. Also `dump.olang` (prints what the passes
   make of a file), `checkdump.olang` (what the checker says of a program), `scopedump.olang` (what the
   scope pass says of a program, `-plan` for its placement), `drvdiff.olang` (the driver's command lines
-  and whole builds against stage 0's), `lowerdump.olang` (every function of a program lowered and verified, `-mir` to dump, `-standin`
+  and whole builds against the goldens), `lowerdump.olang` (every function of a program lowered and verified, `-mir` to dump, `-standin`
   for the placement of before the scope pass), `emitdump.olang` (a program written as LLVM IR), `emitdiff.olang`
-  (programs built by stage 0 and by the pipeline, run, and their outcomes compared), `evaldiff.olang` (the built runs
+  (programs built by the pipeline, run, and their outcomes compared), `evaldiff.olang` (the built runs
   against `OLANG_EVALUATE=1 olang test`'s and `OLANG_EVALUATE=1 olang FILE`'s, the interpreter's known differences listed by name - in
   `make verify`, a file a target: `interp@FILE`),
   `consistency.olang` (the parts that must agree, held to each other: `make consistency`, DEPENDENTS.md), `seed.olang` (writes the bootstrap seed, `make seed` - `seed/README.md`), `diaggold.olang`, `nesting.olang` (every function of compiler/ with its deepest block nesting and its length, worst first: `build/olang build compiler/tools/nesting.olang && build/compiler_tools_nesting [-n N] [FILE...]`), `memgate.olang` (the suite's memory gate: a command started once the machine has the memory its last run peaked at - `peaks.txt` the committed figures, `-table` the measured ones; docs/testmem.md).
-- `goldens/` - what stage 0 gave, captured: `drv.txt` (the driver's command lines and whole builds), `run.txt` (the
+- `goldens/` - recorded output: `drv.txt` (the driver's command lines and whole builds), `run.txt` (the
   corpus's and std's test runs and the checks' run cases, for emitdiff and evaldiff), `tokens.txt`/`tokens.full.txt` and
   `ast.txt`/`ast.full.txt` (a hash per file of the C tokenizer's stream and the C parser's tree, whole for small files
   with errors - a file edited since is stale, and `make tokgold astgold` captures it again from the port), `modgraph.txt` (module
@@ -105,19 +102,19 @@ build/olang test compiler/scan.olang        # the tests of one module
 make test                               # every module's tests, with the rest of the suite
 make tokdiff       # the scanner's tokens equal the C tokenizer's, on every file of the repository
 make astdiff       # the parser's trees and syntax errors equal the C parser's; each tree round-trips
-make namesdiff     # load and name errors equal stage 0's, on every checks case
-make layoutdiff    # every type's size, alignment and offsets equal stage 0's
-make modgraph      # the module graph equals stage 0's, from every root program
+make namesdiff     # load and name errors equal the goldens', on every checks case
+make layoutdiff    # every type's size, alignment and offsets equal the goldens'
+make modgraph      # the module graph equals the goldens', from every root program
 make diagtest      # diagnostics (msgs, diag) against the goldens
 make layoutgold    # capture layout.txt again from the port
 make diaggold      # capture diag.txt again from the port
 make drvgold       # capture drv.txt again; rungold run.txt (minutes); tokgold, astgold, modgold the rest
                    # (all from the port; GOLD_OLANG names its driver)
 make fmtdiff       # every file formatted reads back as the same tree, keeps its comments, and is its own layout
-make drvdiff       # the driver says what stage 0 says: command lines decided before code generation, and whole builds
+make drvdiff       # the driver says what the goldens say: command lines decided before code generation, and whole builds
 make lowerdump     # every body and helper of the corpus and the checks' run cases lowered to MIR and verified
 make dumptool      # scopedump's own module compiled - the dump tools still check (in the suite)
-make emitdiff      # the corpus and std's tests built through emit, run, and each test's outcome compared with stage 0's
+make emitdiff      # the corpus and std's tests built through emit, run, and each test's outcome compared with the goldens'
 make evaldiff      # the corpus, std's tests and the checks' run cases interpreted, compared with the built runs
 ```
 
