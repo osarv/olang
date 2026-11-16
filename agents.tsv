@@ -210,6 +210,7 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	oannprune2	opus	medium	done						XOR skip bug, cubic prune schedule, Tiles/LowRank prune, compaction, MNIST prune
 2026-11-16	oannmnist	sonnet	medium	done						fetch MNIST+shakespeare, measure, prune mnist_learn
 2026-11-16	oannvnni	opus	medium	done						packed INT8 GEMM via vpdpbusd (k-quad packing)
-2026-11-16	merge-sumnarrow	sonnet	low	running
+2026-11-16	merge-sumnarrow	sonnet	low	stopped	91	5	1			quick failed: seed lacks new syntax
 2026-11-16	members	opus	high	running						type members + in-place enum
 2026-11-16	oannconv	sonnet	medium	running						INT8 conv depth-9 profile + dense pruning control
+2026-11-16	seed-sumnarrow	sonnet	medium	running						seed rewrite + merge
