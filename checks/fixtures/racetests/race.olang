@@ -9,13 +9,21 @@ fn bump(c mut Counter&, times I64) {
 
 # a flag one task raises and the other waits on: both tasks of the racing test meet before writing, so each runs on a
 # thread of its own while the other does - never one after the other on one cached thread (P1e), where the detector
-# would see no race. The flags are atomics, which order nothing between the two counters' writes
+# would see no race. The flags are atomics, which order nothing between the two tasks' writes
 type Flag struct(v I64) { v }
 
-fn meetThenBump(c mut Counter&, mine mut Flag&, theirs mut Flag&, times I64) {
+# then each adds one to every counter, one task from the front, the other from the back. The detector checks a
+# thread's first write to a word only (a repeat of the same access is skipped), and two first writes made at the same
+# instant - as both tasks leave the meeting - can pass each other in its shadow cells unseen; walking in opposite
+# directions, each task writes the far end's words long after the other did (P1e, HISTORY)
+fn meetThenSweep(c mut Array<I64>&, mine mut Flag&, theirs mut Flag&, up Bool) {
     mine.v.AtomicStore(1)
     for theirs.v.AtomicLoad() == 0 { }
-    bump(c, times)
+    n := c.Len()
+    for i in range n {
+        j := i if up else n - 1 - i
+        c[j] = c[j] + 1
+    }
 }
 
 fn says(what String&) {
@@ -50,14 +58,14 @@ fn tasked() I64 {
 
 test "two tasks writing one counter" {
     says("racing")
-    a mut Counter& = Counter(0)
+    a mut Array<I64>& = Array<I64>(4096)
     l mut Flag& = Flag(0)
     r mut Flag& = Flag(0)
     join {
-        spawn meetThenBump(a, l, r, 100000)
-        spawn meetThenBump(a, r, l, 100000)
+        spawn meetThenSweep(a, l, r, true)
+        spawn meetThenSweep(a, r, l, false)
     }
-    assert a.n > 0
+    assert a[0] > 0
 }
 
 test "after the race" {
