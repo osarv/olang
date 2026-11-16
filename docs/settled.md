@@ -480,6 +480,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **No shadowing (D3a, the user's call)**, types included: no local or parameter named like a global, function, build
   constant or type; a type and a function or global of one module may not share a name (D2).
 - **`:=` declares any settled expression's type (D15, the user's call).** `null` and a call giving nothing are errors.
+  A `:=` field the declaration cannot type alone takes its constructor's checked type, settled before any holder of it
+  is judged (its destructors, C11).
 - **Traits are constraints; `any Trait&` is the run-time form (T30-T35, G19, the user's calls 2026-10-08 and
   2026-10-24).** `trait` declares method signatures, satisfied implicitly (Go-style); a bare trait written as a type
   is an error naming `any R&`. Defaults are methods on a constrained type variable, overridable (M19e).

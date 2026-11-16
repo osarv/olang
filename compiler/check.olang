@@ -238,6 +238,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     state Vec<I64>                        # by body: 0 waiting, 1 being checked, 2 checked
     fnBodies Map<I64, I64>                 # a function instance's body
     ctorBodies Map<pair.Pair<I64, I64>, I64>   # a type's constructor's body, by type and twin (G10d)
+    settledTypes Map<types.TypeId, Bool>   # D15: a type whose ":=" fields, and its parts', are all typed (settleFields)
     instsOf Map<I64, I64>                  # by generic function: how many instances were made (G17)
     ctorCalled types.TypeId = types.UnknownT  # the type whose constructor callBody is calling: its defaults (D8a)
     # E40: while the defaults of a call are built, the call's place, which Place.Here in one is - the outermost call's
@@ -878,7 +879,7 @@ fn (c mut Checker&) settleUnset() {
             d.Drop(u.Group)
             if u.ValueAt >= 0: c.ValueAsks[u.ValueAt].Gone = true
             # (a zero with destructors to run is a value its holder lets go of - written, but where there is none)
-            if c.unsetLowers(u.Ty) and (u.NoZero or not c.P.T.NeedsDrop(u.Ty)): b.Locals[u.Local].Unset = true
+            if c.unsetLowers(u.Ty) and (u.NoZero or not c.needsDrop(u.Ty)): b.Locals[u.Local].Unset = true
             continue
         }
         if not u.NoZero {
@@ -1917,7 +1918,7 @@ fn (c mut Checker&) payloadRules(mi I64, name source.NameId, cases Array<ast.Cas
 fn (c mut Checker&) payloadBad(t types.TypeId) String {
     if c.payloadRef(t, 0): return "a reference"
     if c.P.T.Unique(t): return "a unique value"
-    if c.P.T.NeedsDrop(t): return "a value with destructors to run"
+    if c.needsDrop(t): return "a value with destructors to run"
     if c.P.T.KindOf(t) == types.Kind.Func: return "a function value"
     return ""
 }
@@ -4217,6 +4218,59 @@ fn (c mut Checker&) fieldTypes(t types.TypeId) {
     if filled: c.P.T.SetStructBody(t, c.P.T.List(out), c.P.T.DtorWritten(t))
 }
 
+# C11, D15: whether a value of type t has destructors to run - its ":=" fields typed first (settleFields), so a holder
+# judged before its constructor is checked is judged by what it holds
+fn (c mut Checker&) needsDrop(t types.TypeId) Bool {
+    c.settleFields(t, 0)
+    return c.P.T.NeedsDrop(t)
+}
+
+# D15: a ":=" field the declaration could not type (a builder's call, a fallible call's "!") is typed by its
+# constructor's check (fieldTypes) - checked now where it has not been, for t and every part it holds by value, before
+# anything is judged by what the type holds (its destructor, C11)
+fn (c mut Checker&) settleFields(t types.TypeId, depth I64) {
+    if depth > 16 or t == types.UnknownT or t == types.TypeId(0): return
+    r := c.P.T.Repr(t)
+    match c.P.T.KindOf(r) {
+        case types.Kind.Named { c.settleNamed(r, depth) }
+        case types.Kind.Array { c.settleFields(c.P.T.Elem(r), depth + 1) }
+        case types.Kind.Record, types.Kind.Tuple { c.settleParts(c.P.T.Parts(r), depth) }
+        case types.Kind.AnonEnum { c.settleParts(c.P.T.ShapeCases(r), depth) }
+        case _ { }
+    }
+}
+
+fn (c mut Checker&) settleParts(l types.ListId, depth I64) {
+    for x in c.P.T.Items(l) {
+        if not c.P.T.IsRef(x): c.settleFields(x, depth + 1)
+    }
+}
+
+fn (c mut Checker&) settleNamed(t types.TypeId, depth I64) {
+    if c.settledTypes.Has(t) or not c.P.T.HasBody(t): return
+    k := c.P.T.DeclKindOf(c.P.T.DeclOf(t))
+    if k == types.DeclKind.Enum {
+        c.settledTypes.Put(t, true)
+        c.settleParts(c.P.T.Cases(t), depth)
+        return
+    }
+    if k != types.DeclKind.Struct: return
+    if c.fieldUntyped(t) and not c.mentionsVar(t, -1) and c.P.CtorSig(t) != types.UnknownT {
+        id := c.ctorBody(t)
+        if c.state[id] == 0: c.checkNow(id)
+    }
+    if c.fieldUntyped(t): return
+    c.settledTypes.Put(t, true)
+    c.settleParts(c.P.T.Fields(t), depth)
+}
+
+fn (c mut Checker&) fieldUntyped(t types.TypeId) Bool {
+    for x in c.P.T.Items(c.P.T.Fields(t)) {
+        if x == types.UnknownT: return true
+    }
+    return false
+}
+
 # a type's destructor's body (C9), made once its constructor is checked: a function of "mut T&" in the scope closing
 fn (c mut Checker&) dtorBody(t types.TypeId, mi I64) I64 {
     for i in range c.Bodies.Len() {
@@ -5995,7 +6049,7 @@ fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
     # after the call that gave it has returned
     # T13b: a unique value is named where it is held, as a value array is - and one with destructors to run (O15),
     # whose holder is the variable captured
-    if not c.isRef(ot) and (c.arrayOf(ot) != types.UnknownT or c.P.Unique(ot) or c.P.T.NeedsDrop(ot)) and not fr.Gen {
+    if not c.isRef(ot) and (c.arrayOf(ot) != types.UnknownT or c.P.Unique(ot) or c.needsDrop(ot)) and not fr.Gen {
         it = c.P.T.Ref(ot, types.ReadOnly)
         ox = typed.Expr.Borrow(sp, it, op)
     } else {
@@ -7487,7 +7541,7 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
         # O15, T13b: a value with destructors to run a call gave, held where the call lands - a slot laid out for the
         # value takes it as it is, and its destructors with it
         v := heldValue(x)
-        if v != null and c.P.T.NeedsDrop(want) and c.P.T.Same(typeOf(v), want): return v
+        if v != null and c.needsDrop(want) and c.P.T.Same(typeOf(v), want): return v
         r := c.P.T.Referent(have)
         if c.P.T.Same(r, want) or c.flowsInto(r, want) {
             if c.P.T.IsNullable(have) { c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(have), bangOf(c.src(x.Span())), c.endedWhy(c.src(x.Span())))) }
@@ -13422,7 +13476,7 @@ fn (c mut Checker&) writtenArg(target typed.Callee&, f I64, k I64, arg ast.Expr&
 # a reference to it the call's value. A slot laid out for the value takes it as it is (fit's held value)
 fn (c mut Checker&) held(sp source.Span, call typed.Expr&) typed.Expr& {
     r := typeOf(call)
-    if r == types.UnknownT or r == types.VoidT or c.isRef(r) or not c.P.T.NeedsDrop(r): return call
+    if r == types.UnknownT or r == types.VoidT or c.isRef(r) or not c.needsDrop(r): return call
     # (O15: what such a value may hold is judged with its body's holders - settleDropOrder)
     if c.frames.Len() > 0 and c.fr().Body >= 0: c.dropBodies.Put(c.fr().Body, true)
     return typed.Expr.Promote(sp, c.P.T.Ref(r, types.Writable), typed.Promote(call, c.site(typed.SiteKind.Promote, sp)))
@@ -13464,7 +13518,7 @@ fn (c mut Checker&) heldTemp(a typed.Expr&) typed.Expr& {
     if a != typed.Expr.Promote: return none
     rt := a.ty
     vt := typeOf(a.pr.X)
-    if (c.P.T.PermOf(rt) & types.Writable) == 0 or not c.P.T.NeedsDrop(vt): return none
+    if (c.P.T.PermOf(rt) & types.Writable) == 0 or not c.needsDrop(vt): return none
     sp := a.Span()
     h := c.hidden(sp, vt)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), a.pr.X))
@@ -19106,7 +19160,7 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
             }
             # O15: the library's vacate standing as a statement ends what the place held - its destructors run there, the
             # place then let go of as before (C11: a collection ending the elements it removes or holds as it is ended)
-            if e == typed.Expr.Take and not c.isRef(e.ty) and c.P.T.NeedsDrop(e.ty): c.emit(c.dropIfHeld(sp, e.p, -1))
+            if e == typed.Expr.Take and not c.isRef(e.ty) and c.needsDrop(e.ty): c.emit(c.dropIfHeld(sp, e.p, -1))
             # S3: a call giving a value it drops is judged once every body is checked - one doing nothing else is an
             # error. Not in a generic's body, where what a call does differs between instances
             t := typeOf(e)
@@ -19565,7 +19619,7 @@ fn (c mut Checker&) declName(v ast.VarDecl&, i I64, declared types.TypeId, mark 
             # value lands in it as it is, held by the instance, never a reference to storage the call's landing made;
             # a ":=" local so given is a holder of its block (O15), ended in its order (QCZ) as it is left
             hv := heldValue(x!)
-            if hv != null and c.P.T.NeedsDrop(typeOf(hv)) {
+            if hv != null and c.needsDrop(typeOf(hv)) {
                 x = hv
                 t = typeOf(hv)
                 landed = not v.Field
@@ -23516,7 +23570,7 @@ fn (c mut Checker&) puns(body Array<ast.Stmt&>&) Map<source.NameId, Bool> {
 # holds a value (set: from its declaration), cleared where the value goes on
 fn (c mut Checker&) dropOnExit(l I64, sp source.Span, set Bool) {
     t := c.localType(l)
-    if t == types.UnknownT or c.isRef(t) or not c.P.T.NeedsDrop(t): return
+    if t == types.UnknownT or c.isRef(t) or not c.needsDrop(t): return
     # (a constructor's field goes into its instance on every way out of one that cannot fail)
     if c.cur().Local(typed.LocalId(I32(l))).Kind == typed.LocalKind.Field and c.fr().InCtor and
        c.P.T.Items(c.P.T.Errors(c.cur().Ty)).Len() == 0: return
@@ -23612,7 +23666,7 @@ fn (c mut Checker&) handOn(x typed.Expr&, l I64, moved Bool = false) typed.Expr&
 # a whole by-value local returned, its type no unique one's (whose landing says it, T13b): the result itself (O26a)
 fn (c mut Checker&) retLand(x typed.Expr&) typed.Expr& {
     t := typeOf(x)
-    if t == types.UnknownT or c.isRef(t) or c.P.Unique(t) or not c.P.T.NeedsDrop(t): return x
+    if t == types.UnknownT or c.isRef(t) or c.P.Unique(t) or not c.needsDrop(t): return x
     l := c.handedOn(x, true)
     return c.handOn(x, l) if l >= 0 else x
 }
@@ -23630,7 +23684,7 @@ fn (c mut Checker&) bufferField(p typed.Lvalue&) Bool {
 # (a variable's only while it holds one), then the store - Rust's order
 fn (c mut Checker&) storeOver(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     t := p.Type()
-    if t == types.UnknownT or c.isRef(t) or not c.P.T.NeedsDrop(t) or c.bufferField(p) {
+    if t == types.UnknownT or c.isRef(t) or not c.needsDrop(t) or c.bufferField(p) {
         c.emit(typed.Stmt.Assign(sp, p, x))
         return
     }

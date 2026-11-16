@@ -38675,3 +38675,26 @@ in code; every whole word in comments, text and other files). This HISTORY and t
 as they were. Tests: std/os.olang's "a File closes its descriptor where its holder lets go of it" (read through
 /proc/self/fd, the number taken again by the next open), "io.Reader reads a File, taken by reference", the File's
 Read/Write; checks/cases/o27destructorfiles.olang now holds an os.File in a unique struct with no destructor of its own.
+
+### A `:=` field made by a call other than its constructor was never destroyed (2026-11-16, wt-osfile)
+
+Found with os.File: a struct holding `f := os.File.Open(path)!` never closed the descriptor. Any `:=` field whose value
+came from a call other than its type's own constructor - a builder (`Res.Plain(1)`), a fallible call's `!`, a `try ...
+catch default` - was never destroyed when its holder let go of it; `r := Res()` and a local made by the same call were.
+The cause was order, not the type table's walks (types' NeedsDrop/FieldHolds and mir's DropsParts were right): the
+declaration types such a field only where it can without the checker (generic.Infer: literals, a constructor's call);
+any other initializer leaves the field Unknown until its constructor's body is checked (fieldTypes, D15). The checker
+queues every function before the constructors no call asked for, and judges a holder as it meets it - whether a call's
+value is held where it lands with its destructors (O15/O16's `held`), whether a block's end drops it (dropIfHeld) - by
+`NeedsDrop`, which read the Unknown field as holding nothing. A function made `A()` before A's constructor was checked,
+so its holder got no drop and the type no Drop helper; reading a field first (which already checked the constructor on
+demand) hid it.
+
+The fix is in the checker: every question it asks about destructors goes through `needsDrop`, which first settles the
+type (settleFields) - each struct it holds by value, through fields, arrays, records and enum payloads, whose `:=` fields
+are still untyped has its constructor checked now, as a field read already did - and remembers the types found fully
+typed. The passes after checking (scope, free, lower, mir, emit, the evaluator) see the filled table, so a holder in a
+Vec, a Map or an array, a store over one and early freeing (O8d's condition 4 keeps a value with destructors to its
+scope's end) follow. tests/heldfields.olang covers the builder, `!`, `catch default` and a declared type, held by a
+variable, a store, a Vec, a Map and an array, with constructors taking references and taking nothing, each destructor
+counted once; the typed holders' run is also baked while compiling (K2).
