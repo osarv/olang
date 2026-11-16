@@ -165,4 +165,5 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	factsreg	opus	medium	completed	449	268	83	yes		RefsKept.Kept too pessimistic (freeing6); NoneKept
 2026-11-16	facts3	opus	medium	completed	254	153	33	yes		array copies counted; quant growth = test self-measure under race
 2026-11-16	oannfix2	sonnet	low	completed	95	8	12	yes		settle copies to refs, resident warm-up
-2026-11-16	oneline2	sonnet	low	running
+2026-11-16	oneline2	sonnet	low	completed	110	22	45	yes		13007 blocks; catch NAME e: rejected (parser bug)
+2026-11-16	predverify	opus	medium	running
