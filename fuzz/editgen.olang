@@ -69,7 +69,7 @@ fn Root(p Prog&) String {
 
 # the program written into dir: its modules and root, main.olang
 fn Write(p Prog&, dir String&) ? os.Error {
-    for k in range p.n { try os.WriteFile($dir + "/m" + $k + ".olang", Module(p, k)) }
+    for k in range p.n: try os.WriteFile($dir + "/m" + $k + ".olang", Module(p, k))
     try os.WriteFile($dir + "/main.olang", Root(p))
 }
 
@@ -178,7 +178,7 @@ fn Seed(olang String&, dir String&, seed I64, steps I64, n I64) String ? os.Erro
     u.sh("rm -rf inc && mkdir inc")
     r := Rng(U64(seed))
     p := Prog(n)
-    for k in range n { p.seeds[k] = U64(seed * 1000 + k) }
+    for k in range n: p.seeds[k] = U64(seed * 1000 + k)
     found := try u.step(p, false)
     if found != "": return $"the first build: " + $found
     before := Copy(p)
@@ -216,9 +216,9 @@ test Edit "every edit changes the program, and a copy undoes it" {
         before := Copy(p)
         Edit(p, r, i)
         changed := p.callback != before.callback
-        for k in range 3 { changed = changed or Module(p, k) != Module(before, k) }
+        for k in range 3: changed = changed or Module(p, k) != Module(before, k)
         assert changed
         q := Copy(before)
-        for k in range 3 { assert Module(q, k) == Module(before, k) }
+        for k in range 3: assert Module(q, k) == Module(before, k)
     }
 }
