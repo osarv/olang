@@ -19,7 +19,7 @@ fn main() {
         os.Exit(2)
     }
     r := count(text)
-    try io.PutLine($r.First + " " + $r.Second) catch io.Error { }
+    try io.PutLn($r.First + " " + $r.Second) catch io.Error { }
 }
 
 # the pairs whose environment is an alloca of their function, and the others

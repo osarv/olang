@@ -31,5 +31,5 @@ fn main() {
     r0 := resident()
     sweeps(xs, N * 5)
     r1 := resident()
-    io.PutLine($flat(r1 - r0, 100) + " " + $xs[0])!
+    io.PutLn($flat(r1 - r0, 100) + " " + $xs[0])!
 }

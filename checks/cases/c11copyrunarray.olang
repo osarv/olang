@@ -26,9 +26,9 @@ fn main() {
     {
         ks := Array<Kept>[Kept(R(i)) for i in range os.Args().Len() + 2]
         assert cp(ks) == 4
-        io.PutLine("the copy " + $Ended)!
+        io.PutLn("the copy " + $Ended)!
         churn()
         assert ks[2].r.id == 2
     }
-    io.PutLine("and its source " + $Ended)!
+    io.PutLn("and its source " + $Ended)!
 }

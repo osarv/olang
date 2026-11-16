@@ -22,5 +22,5 @@ fn main() ? io.Error {
     kernel(depth, a, b, acc, nr)
     total I64 = 0
     for v in acc: total += v
-    try io.PutLine($"total " + $total)
+    try io.PutLn($"total " + $total)
 }

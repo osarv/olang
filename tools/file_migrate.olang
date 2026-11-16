@@ -1,0 +1,313 @@
+# file_migrate - os.File (the user's call, 2026-11-16): an open file is a unique os.File whose destructor closes its
+# descriptor, as net.Conn is, so closing is never written; io.Reader, io.Writer and io.Lines take it, or a bare I32
+# descriptor, as an io.Descriptor. In code, through the aliases std/os and std/io are imported by:
+# - `os.Open(p)` and `os.Create(p)` become the builders `os.File.Open(p)` and `os.File.Create(p)` (D19a);
+# - a line that only closes a name - `defer os.Close(f)`, `os.Close(f)!`, `try os.Close(f)`, the last with a catch of
+#   an empty block - is deleted; any other `os.Close` is listed `by hand:`;
+# - for a name bound to a File (`f := try os.File.Open(p)`, `f := os.File.Create(p)!`), `io.Write(f, x)` becomes
+#   `f.Write(x)` and `io.Read(f, b)` `f.Read(b)`; any other use of the name as a value (a descriptor's number passed
+#   on, compared) is listed `by hand:` - `f.Fd()` gives the number - as is a binding with a `catch default`;
+# - a literal descriptor given to io.Reader, io.Writer or io.Lines - an "any" makes a literal an I64, which has no Fd -
+#   is named: 0, 1 and 2 `io.Stdin`, `io.Stdout` and `io.Stderr`, any other `I32(n)`.
+# Comments and text are left alone; std/os.olang and std/io.olang are not touched. Idempotent.
+#
+#     olang build tools/file_migrate.olang && build/tools_file_migrate [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+
+type Count struct() {
+    n I64 = 0
+    hand I64 = 0
+}
+
+# the name a module is imported by in text: the alias written, or the path's last element; "" where it is not imported
+fn aliasOf(text String&, path String&) String {
+    base := path[path.FindLast("/")! + 1:]
+    for line in text.Lines() {
+        t := srcmask.Strip(line)
+        if not t.StartsWith("import ") or not t.EndsWith("\"" + $path + "\"") and not t.EndsWith("\"" + $base + "\""): continue
+        words := t.Split(" ")
+        return $words[1] if words.Len() == 3 else $base
+    }
+    return ""
+}
+
+# where word stands whole in src at or after from, in code; Exhausted where it does not
+fn find(src String&, mask String&, word String&, from I64) I64 ? Exhausted {
+    i := from
+    for i + word.Len() <= src.Len() {
+        at := try src[i:].Find(word) catch default -1
+        if at < 0: break
+        i += at
+        before := i == 0 or not srcmask.IsWord(src[i - 1]) and src[i - 1] != '.'
+        end := i + word.Len()
+        after := end == src.Len() or not srcmask.IsWord(word[word.Len() - 1]) or not srcmask.IsWord(src[end])
+        if before and after and mask[i] == 'c': return i
+        i++
+    }
+    error Exhausted.End
+}
+
+# src with every whole, code occurrence of from replaced by to
+fn replace(src String&, from String&, to String&, c mut Count&) String {
+    mask := srcmask.Mask(src, false)
+    out := StringBuilder()
+    at I64 = 0
+    for {
+        i := try find(src, mask, from, at) catch default -1
+        if i < 0: break
+        out.Push(src[at:i])
+        out.Push(to)
+        at = i + from.Len()
+        c.n++
+    }
+    if at == 0: return $src
+    out.Push(src[at:])
+    return out.ToString()
+}
+
+# whether a line, stripped, only closes a name: "defer A.Close(n)", "A.Close(n)", "A.Close(n)!", "try A.Close(n)", the
+# last with "catch ... { }" after it
+fn closeLine(t String&, osA String&) Bool {
+    rest := $t
+    if rest.StartsWith("defer "): rest = rest[6:]
+    else if rest.StartsWith("try "): rest = rest[4:]
+    call := osA + ".Close("
+    if not rest.StartsWith(call): return false
+    end := try rest.Find(")") catch default -1
+    if end < 0: return false
+    for ch in rest[call.Len():end] {
+        if not srcmask.IsWord(ch) and ch != '.': return false
+    }
+    tail := srcmask.Strip(rest[end + 1:])
+    if tail == "" or tail == "!": return true
+    return tail.StartsWith("catch") and (tail.EndsWith("{ }") or tail.EndsWith("{}"))
+}
+
+# the names bound to a File: "n := try A.File.Open(", "n := A.File.Create(", ...
+fn fileNames(src String&, osA String&) Vec<String&> {
+    out Vec<String&>
+    for line in src.Lines() {
+        t := srcmask.Strip(line)
+        eq := try t.Find(" := ") catch default -1
+        if eq <= 0: continue
+        name := t[:eq]
+        if not every(name): continue
+        rhs := t[eq + 4:]
+        if rhs.StartsWith("try "): rhs = rhs[4:]
+        if rhs.StartsWith(osA + ".File.Open(") or rhs.StartsWith(osA + ".File.Create("): out.Push($name)
+    }
+    return out
+}
+
+# whether every character of t is a name's
+fn every(t String&) Bool {
+    for ch in t {
+        if not srcmask.IsWord(ch): return false
+    }
+    return t.Len() > 0
+}
+
+# the literal descriptors given to io's three types named: 0, 1, 2 the standard streams, any other number I32(n)
+fn descriptors(src String&, io String&, c mut Count&) String {
+    out := $src
+    for t in Array<String&>["Reader", "Writer", "Lines"] {
+        call := io + "." + $t + "("
+        out = replace(out, call + "0", call + io + ".Stdin", c)
+        out = replace(out, call + "1", call + io + ".Stdout", c)
+        out = replace(out, call + "2", call + io + ".Stderr", c)
+        out = numbered(out, call, c)
+    }
+    return out
+}
+
+# call followed by any other integer literal: the literal made I32(n)
+fn numbered(src String&, call String&, c mut Count&) String {
+    mask := srcmask.Mask(src, false)
+    out := StringBuilder()
+    at I64 = 0
+    from I64 = 0
+    for {
+        i := try src[from:].Find(call) catch default -1
+        if i < 0: break
+        i += from
+        from = i + call.Len()
+        if mask[i] != 'c' or i > 0 and (srcmask.IsWord(src[i - 1]) or src[i - 1] == '.'): continue
+        end := from
+        if end < src.Len() and src[end] == '-': end++
+        for end < src.Len() and src[end].IsDigit(): end++
+        if end == from or end < src.Len() and src[end] != ',' and src[end] != ')': continue
+        out.Push(src[at:from])
+        out.Push("I32(" + $src[from:end] + ")")
+        at = end
+        c.n++
+    }
+    if at == 0: return $src
+    out.Push(src[at:])
+    return out.ToString()
+}
+
+# the text migrated; what is left for a person said through hand
+fn migrate(src String&, path String&, c mut Count&, hand mut Vec<String&>&) String {
+    osA := aliasOf(src, "std/os")
+    io := aliasOf(src, "std/io")
+    out := $src
+    if osA != "" {
+        out = replace(out, osA + ".Open(", osA + ".File.Open(", c)
+        out = replace(out, osA + ".Create(", osA + ".File.Create(", c)
+        out = dropCloses(out, osA, c)
+        if io != "": out = methods(out, fileNames(out, osA), io, c)
+    }
+    if io != "": out = descriptors(out, io, c)
+    if osA != "": listLeft(out, path, osA, fileNames(out, osA), io, hand)
+    return out
+}
+
+# the lines only closing a name dropped
+fn dropCloses(src String&, osA String&, c mut Count&) String {
+    mask := srcmask.Mask(src, true)
+    b := StringBuilder()
+    at I64 = 0
+    for line in src.Lines() {
+        end := at + line.Len()
+        lead := line.Len() - srcmask.StripStart(line).Len()
+        code := lead < line.Len() and mask[at + lead] == 'c'
+        if code and closeLine(srcmask.Strip(line), osA) { c.n++ } else { b.Push(src[at:(end + 1).Min(src.Len())]) }
+        at = end + 1
+    }
+    return b.ToString()
+}
+
+# io.Write(f, x) and io.Read(f, b) on a File's name made its methods
+fn methods(src String&, names Vec<String&>&, io String&, c mut Count&) String {
+    out := $src
+    for n in names {
+        out = replace(out, io + ".Write(" + $n + ", ", $n + ".Write(", c)
+        out = replace(out, io + ".Read(" + $n + ", ", $n + ".Read(", c)
+    }
+    return out
+}
+
+# what is left for a person: an os.Close not on a line of its own, a File's name used as a number, a File bound with a
+# default
+fn listLeft(src String&, path String&, osA String&, names Vec<String&>&, io String&, hand mut Vec<String&>&) {
+    mask := srcmask.Mask(src, true)
+    at I64 = 0
+    row I64 = 1
+    for line in src.Lines() {
+        why := leftIn(line, mask[at:at + line.Len()], osA, names, io)
+        if why != "": hand.Push("by hand: " + $path + ":" + $row + ": " + $why)
+        at += line.Len() + 1
+        row++
+    }
+}
+
+# why a line needs a person, "" where it does not
+fn leftIn(line String&, mask String&, osA String&, names Vec<String&>&, io String&) String {
+    if (try find(line, mask, osA + ".Close", 0) catch default -1) >= 0: return "an os.Close a File's holder now does - drop it"
+    for n in names {
+        if line.Contains($n + " := ") and line.Contains("catch default"): return "a default for os.File's builder - a File, not a number"
+        if usedAsNumber(line, mask, n, io): return $n + " is an os.File - " + $n + ".Fd() where its number is wanted"
+    }
+    return ""
+}
+
+# whether name stands in line as a value other than a receiver, an io type's argument or the binding itself
+fn usedAsNumber(line String&, mask String&, name String&, io String&) Bool {
+    from I64 = 0
+    for {
+        i := try find(line, mask, name, from) catch default -1
+        if i < 0: return false
+        from = i + 1
+        end := i + name.Len()
+        if end < line.Len() and line[end] == '.': continue
+        if line[end:].StartsWith(" := ") or line[end:].StartsWith(" = "): continue
+        before := srcmask.StripEnd(line[:i])
+        if before.EndsWith(io + ".Reader(") or before.EndsWith(io + ".Writer(") or before.EndsWith(io + ".Lines("): continue
+        return true
+    }
+    unreachable
+}
+
+# the files under a directory, build/ and names beginning with "." left out
+fn walk(dir String&, out mut Vec<String&>&) {
+    names := try os.ReadDir(dir) catch default Array<String&>(0)
+    for n in names {
+        if n.StartsWith(".") or n == "build": continue
+        p := srcmask.PathJoin(dir, n)
+        if os.IsDir(p): walk(p, out)
+        else if n.EndsWith(".olang"): out.Push($p)
+    }
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths Vec<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check": check = true
+        else if a == "-v": verbose = true
+        else: paths.Push($a)
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_file_migrate [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files Vec<String&>
+    for p in paths {
+        if os.IsDir(p) { walk(p, files) } else { files.Push($p) }
+    }
+    total := Count()
+    hand Vec<String&>
+    changed I64 = 0
+    for path in files {
+        if path.EndsWith("std/os.olang") or path.EndsWith("std/io.olang"): continue
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("file_migrate: cannot read " + $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := migrate(src, path, total, hand)
+        if out == src: continue
+        changed++
+        if verbose: srcmask.Say(path)
+        if check: continue
+        try os.WriteFile(path, out) catch {
+            srcmask.SayErr("file_migrate: cannot write " + $path)
+            os.Exit(1)
+        }
+    }
+    for h in hand: srcmask.Say(h)
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb + $changed + " files: " + $total.n + " rewrites")
+    if check and changed > 0: os.Exit(1)
+}
+
+test migrate "opens become File's builders, closes go, a File's reads and writes its methods" {
+    c := Count()
+    hand Vec<String&>
+    src := "import \"std/io\"\nimport \"std/os\"\n\nfn f(p String&) ? {\n    fd := try os.Open(p)\n    defer os.Close(fd)\n" +
+        "    try io.Write(fd, \"x\")\n    got := try io.Read(fd, buf)\n    r := io.Reader(fd)\n    try os.Close(fd) catch os.Error { }\n}\n"
+    want := "import \"std/io\"\nimport \"std/os\"\n\nfn f(p String&) ? {\n    fd := try os.File.Open(p)\n" +
+        "    try fd.Write(\"x\")\n    got := try fd.Read(buf)\n    r := io.Reader(fd)\n}\n"
+    assert migrate(src, "a.olang", c, hand) == want
+    assert hand.Len() == 0
+    assert migrate(want, "a.olang", c, hand) == want
+}
+
+test migrate "a literal descriptor is named, an alias followed, what a person must decide listed" {
+    c := Count()
+    hand Vec<String&>
+    src := "import o \"std/os\"\nimport \"std/io\"\n    w := io.Writer(1)\n    e := io.Writer(2, 16)\n    l := io.Lines(3)\n" +
+        "    in := io.Reader(0)\n    f := o.Create(p)!\n    flock(f, 2)\n    # o.Close(f)\n    s := \"o.Open(p)\"\n"
+    want := "import o \"std/os\"\nimport \"std/io\"\n    w := io.Writer(io.Stdout)\n    e := io.Writer(io.Stderr, 16)\n" +
+        "    l := io.Lines(I32(3))\n    in := io.Reader(io.Stdin)\n    f := o.File.Create(p)!\n    flock(f, 2)\n    # o.Close(f)\n" +
+        "    s := \"o.Open(p)\"\n"
+    assert migrate(src, "b.olang", c, hand) == want
+    assert hand.Len() == 1 and hand[0].Contains("b.olang:8:") and hand[0].Contains("f.Fd()")
+    none := "fn main() { x := 1 }\n"
+    assert migrate(none, "c.olang", c, hand) == none
+}

@@ -7,7 +7,7 @@
 #         try io.Put(p.Help())
 #         return
 #     } catch flags.Error {
-#         try io.PutErrLine(p.Message())
+#         try io.PutErrLn(p.Message())
 #         os.Exit(2)
 #     }
 #     ... count.Get() ... quiet.Get() ... p.Args() ...

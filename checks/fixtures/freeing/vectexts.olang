@@ -22,5 +22,5 @@ fn main() {
         rows[(i + 5) % 10] = Vec<String>[$i, "constant", $i + " and more"]
         t += rows[i % 10][19].Len() + v[i % 10][0].Len() + rows[(i + 5) % 10][2].Len()
     }
-    io.PutLine($t + " " + $rows[3][0] + " " + $v[3].Len())!
+    io.PutLn($t + " " + $rows[3][0] + " " + $v[3].Len())!
 }

@@ -1,7 +1,7 @@
 # printing with nothing to handle, part of the prelude (M19d): "Print(x)" writes any value as "$x" renders it to the
 # standard output, "Println(x)" with a line end after it, "Println()" a line end alone. Each call is one write, as
 # std/io's are. A write the system refuses ends the program like "!" (E35) - in a test, it fails the test - so no
-# "try" is written; a program that handles a failed write uses std/io's Put and PutLine, which fail with io.Error.
+# "try" is written; a program that handles a failed write uses std/io's Put and PutLn, which fail with io.Error.
 
 import unistd "unistd.h"
 

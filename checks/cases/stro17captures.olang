@@ -51,11 +51,11 @@ fn churn() I64 {
 }
 fn main() ? {
     w := W(Box(3))
-    try io.PutLine($readIt(w))
+    try io.PutLn($readIt(w))
     bump2(w)
     churn()
-    try io.PutLine($w.b.head.next!.v)
+    try io.PutLn($w.b.head.next!.v)
     bump3(w)
     churn()
-    try io.PutLine($w.b.head.next!.v)
+    try io.PutLn($w.b.head.next!.v)
 }

@@ -30,5 +30,5 @@ fn main() ? {
     r := get(s)
     s.v = 4
     churn()
-    try io.PutLine($r.v + " " + $s.v)
+    try io.PutLn($r.v + " " + $s.v)
 }

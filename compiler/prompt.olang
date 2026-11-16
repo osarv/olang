@@ -1083,7 +1083,7 @@ fn Run(cfg mut build.Config&) I32 {
     edit := tty and os.IsTerminal(1)
     ed := lineedit.Editor(Vi = lineedit.ViChosen(), Colour = paint.Wanted(1))
     if edit: ed.Load(lineedit.HistoryPath())
-    lines := io.Lines(0)
+    lines := io.Lines(io.Stdin)
     # on a terminal a cell's output is relayed, so that one newline follows whatever a cell printed before the editor draws the
     # next prompt - never over the line it left unfinished
     s.Relay = edit

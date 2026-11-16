@@ -261,7 +261,7 @@ b11near.olang:22:22: error[M19]: Box has no method 'Aera' - did you mean 'Area'?
 b11near.olang:23:16: error[T17]: Shape has no case 'Cricle' - did you mean 'Circle'?
    23 |     s := Shape.Cricle
       |                ^~~~~~
-b11near.olang:24:12: error[M9]: module std/io declares no 'PutLin' - did you mean 'PutLine'?
+b11near.olang:24:12: error[M9]: module std/io declares no 'PutLin' - did you mean 'PutLn'?
    24 |     try io.PutLin($n + $s)
       |            ^~~~~~
 compilation failed with 6 errors
@@ -327,6 +327,14 @@ b9anomeet.olang:5:6: error[T6b]: '>': these numbers' types do not meet - convert
     5 | if X > 0.5 {
       |      ^
 compilation failed with 1 error
+=== b9cown.olang
+b9cown.olang:6:4: error[B9c]: this top-level condition has an error of its own
+    6 | if f() == 3 {
+      |    ^~~~~~~~
+b9cown.olang:6:4: error[E12]: expected Bool, found I64
+    6 | if f() == 3 {
+      |    ^~~~~~~~
+compilation failed with 2 errors
 === b9linebodytwo.olang
 b9linebodytwo.olang:4:11: error[S1b]: a top-level branch's one-line body is one declaration on the line of its ':' - write a block, '{ ... }'
     4 | if Debug: fn f() I64 {
@@ -620,7 +628,7 @@ cascadee14.olang:27:14: error[E14]: expected 1 argument, found 2
 compilation failed with 1 error
 === cascademember.olang
 cascademember.olang:12:10: error: S has no member 'flag' - it is a parameter of the constructor, not a field (C2a): name it alone on a line of the constructor's body
-   12 |     if s.flag: try io.PutLine("yes")
+   12 |     if s.flag: try io.PutLn("yes")
       |          ^~~~
 compilation failed with 1 error
 === charnopad.olang
@@ -1283,9 +1291,9 @@ d8gtwo.olang:3:19: error[D8g]: a variadic parameter is the last one but defaulte
 d8gtwo.olang:3:19: note: one variadic parameter, and only parameters with a default after it, given by name
 compilation failed with 1 error
 === d9alambdawritten.olang
-d9alambdawritten.olang:8:31: error[D16a]: this lambda's signature disagrees with fn&(x Array<I32>) Bool ? E - leave that part out, or make them agree
-    8 |     try io.PutLine($a.Some(fn(x Array<I32>) Bool { return x[0] == 5 }))
-      |                               ^~~~~~~~~~~~
+d9alambdawritten.olang:8:29: error[D16a]: this lambda's signature disagrees with fn&(x Array<I32>) Bool ? E - leave that part out, or make them agree
+    8 |     try io.PutLn($a.Some(fn(x Array<I32>) Bool { return x[0] == 5 }))
+      |                             ^~~~~~~~~~~~
 compilation failed with 1 error
 === d9cgrowing.olang
 d9cgrowing.olang:7:12: error[G17]: this generic's instantiations never end - each one requires a larger one
@@ -2698,9 +2706,9 @@ g16boutermost.olang:7:19: note: instantiated here, with a.Len() = 1
 g16boutermost.olang:7:19: note: instantiated here, with a.Len() = 2
     7 |     return a[1] + Total(a[1:])
       |                   ^~~~~
-g16boutermost.olang:11:21: note: instantiated here, with a.Len() = 3
-   11 |     try io.PutLine($Total(x))
-      |                     ^~~~~
+g16boutermost.olang:11:19: note: instantiated here, with a.Len() = 3
+   11 |     try io.PutLn($Total(x))
+      |                   ^~~~~
 compilation failed with 1 error
 === g16note.olang
 g16note.olang:5:9: error[G15]: no case covers I64, which this generic is instantiated with - add one, or 'case _'
@@ -2975,11 +2983,11 @@ g9dctorreadonly.olang:15:10: error[T25b]: this writes through a read-only refere
       |          ^
 compilation failed with 1 error
 === g9dhashable.olang
-g9dhashable.olang:11:22: error[G19, E10b]: Res& does not satisfy the constraint Hashable on T
-   11 |     try io.PutLine($(hashOf(Res(2)) != 0))
-      |                      ^~~~~~
-g9dhashable.olang:11:22: note: it has no Hash
-g9dhashable.olang:11:22: help: declare 'Hash() I64', agreeing with '=='
+g9dhashable.olang:11:20: error[G19, E10b]: Res& does not satisfy the constraint Hashable on T
+   11 |     try io.PutLn($(hashOf(Res(2)) != 0))
+      |                    ^~~~~~
+g9dhashable.olang:11:20: note: it has no Hash
+g9dhashable.olang:11:20: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
 === genericarray.olang
 genericarray.olang:3:10: error[G6]: only a struct, an enum or a trait takes type parameters
@@ -3435,25 +3443,25 @@ m19doccupyuser.olang:6:10: error[M19]: I64 has no method 'occupy'
       |          ^~~~~~
 compilation failed with 1 error
 === m19g01push.olang
-m19g01push.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-   11 |     try io.PutLine($d[0])
-      |                     ^
+m19g01push.olang:11:19: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+   11 |     try io.PutLn($d[0])
+      |                   ^
 m19g01push.olang:10:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    10 |     for i in range 100: v.Push(i)
       |                           ^~~~
 compilation failed with 1 error
 === m19g02secondname.olang
-m19g02secondname.olang:12:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-   12 |     try io.PutLine($d[0])
-      |                     ^
+m19g02secondname.olang:12:19: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+   12 |     try io.PutLn($d[0])
+      |                   ^
 m19g02secondname.olang:11:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    11 |     for i in range 100: w.Push(i)
       |                           ^~~~
 compilation failed with 1 error
 === m19g03callgrows.olang
-m19g03callgrows.olang:12:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-   12 |     try io.PutLine($d[0])
-      |                     ^
+m19g03callgrows.olang:12:19: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+   12 |     try io.PutLn($d[0])
+      |                   ^
 m19g03callgrows.olang:11:5: note: 'v' may grow here, in 'fill' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    11 |     fill(v, 100)
       |     ^~~~
@@ -3462,9 +3470,9 @@ m19g03callgrows.olang:6:56: note: 'fill' may grow it here
       |                                                        ^~~~
 compilation failed with 1 error
 === m19g04struct.olang
-m19g04struct.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
-   15 |     try io.PutLine($d[0])
-      |                     ^
+m19g04struct.olang:15:19: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
+   15 |     try io.PutLn($d[0])
+      |                   ^
 m19g04struct.olang:14:5: note: 'l.toks' may grow here, in 'scan' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    14 |     scan(l)
       |     ^~~~
@@ -3473,9 +3481,9 @@ m19g04struct.olang:9:53: note: 'scan' may grow it here
       |                                                     ^~~~
 compilation failed with 1 error
 === m19g05global.olang
-m19g05global.olang:11:21: error[M19g]: 'd' holds a view of 'Toks' taken before 'Toks' may have grown
-   11 |     try io.PutLine($d[0])
-      |                     ^
+m19g05global.olang:11:19: error[M19g]: 'd' holds a view of 'Toks' taken before 'Toks' may have grown
+   11 |     try io.PutLn($d[0])
+      |                   ^
 m19g05global.olang:10:5: note: 'Toks' may grow here, in 'more' - take the view or the reference after it, or copy the elements first ('Toks.ToArray()')
    10 |     more()
       |     ^~~~
@@ -3484,9 +3492,9 @@ m19g05global.olang:6:39: note: 'more' may grow it here
       |                                       ^~~~
 compilation failed with 1 error
 === m19g06chain.olang
-m19g06chain.olang:14:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-   14 |     try io.PutLine($d[0])
-      |                     ^
+m19g06chain.olang:14:19: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+   14 |     try io.PutLn($d[0])
+      |                   ^
 m19g06chain.olang:13:5: note: 'v' may grow here, in 'outer' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    13 |     outer(v)
       |     ^~~~~
@@ -3495,33 +3503,33 @@ m19g06chain.olang:8:29: note: 'outer' may grow it here
       |                             ^~~~~~
 compilation failed with 1 error
 === m19g07funcvalue.olang
-m19g07funcvalue.olang:12:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-   12 |     try io.PutLine($d[0])
-      |                     ^
+m19g07funcvalue.olang:12:19: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+   12 |     try io.PutLn($d[0])
+      |                   ^
 m19g07funcvalue.olang:11:5: note: 'v' may grow here, in a call through a function value - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    11 |     f(v)
       |     ^
 compilation failed with 1 error
 === m19g08givenboth.olang
-m19g08givenboth.olang:12:31: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
-   12 |     try io.PutLine($grow(v, v.View()))
-      |                               ^~~~
+m19g08givenboth.olang:12:29: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
+   12 |     try io.PutLn($grow(v, v.View()))
+      |                             ^~~~
 m19g08givenboth.olang:6:27: note: 'grow' may grow it here
     6 |     for i in range 100: w.Push(i)
       |                           ^~~~
 compilation failed with 1 error
 === m19g09element.olang
-m19g09element.olang:12:37: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
-   12 |     try io.PutLine($grow(v, v.View()[0]))
-      |                                     ^
+m19g09element.olang:12:35: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
+   12 |     try io.PutLn($grow(v, v.View()[0]))
+      |                                   ^
 m19g09element.olang:6:27: note: 'grow' may grow it here
     6 |     for i in range 100: v.Push(Pt(i))
       |                           ^~~~
 compilation failed with 1 error
 === m19g10through.olang
-m19g10through.olang:14:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
-   14 |     try io.PutLine($d[0])
-      |                     ^
+m19g10through.olang:14:19: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
+   14 |     try io.PutLn($d[0])
+      |                   ^
 m19g10through.olang:13:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    13 |     l.toks.Push(2)
       |            ^~~~
@@ -3544,9 +3552,9 @@ m19g11column.olang:18:7: note: 'v' may grow here, in 'Push' - take the view or t
       |       ^~~~
 compilation failed with 2 errors
 === m19g11lambda.olang
-m19g11lambda.olang:10:21: error[M19g]: 'f' holds a view of 'v' taken before 'v' may have grown
-   10 |     try io.PutLine($f())
-      |                     ^
+m19g11lambda.olang:10:19: error[M19g]: 'f' holds a view of 'v' taken before 'v' may have grown
+   10 |     try io.PutLn($f())
+      |                   ^
 m19g11lambda.olang:9:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
     9 |     for i in range 100: v.Push(i)
       |                           ^~~~
@@ -3560,17 +3568,17 @@ m19g12task.olang:10:9: note: the task holding a view of 'v' is started here
       |         ^~~~~~~~~~~~~
 compilation failed with 1 error
 === m19g13kept.olang
-m19g13kept.olang:10:21: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
-   10 |     try io.PutLine($l[0])
-      |                     ^
+m19g13kept.olang:10:19: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
+   10 |     try io.PutLn($l[0])
+      |                   ^
 m19g13kept.olang:9:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
     9 |     for _ in range 100: v.Push('b')
       |                           ^~~~
 compilation failed with 1 error
 === m19g14byvalue.olang
-m19g14byvalue.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-   11 |     try io.PutLine($d[0])
-      |                     ^
+m19g14byvalue.olang:11:19: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+   11 |     try io.PutLn($d[0])
+      |                   ^
 m19g14byvalue.olang:10:5: note: 'v' may grow here, in 'add' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    10 |     add(v)
       |     ^~~
@@ -3622,9 +3630,9 @@ m19gfnpuregrows.olang:10:5: note: 'v' may grow here, in a call through a functio
       |     ^
 compilation failed with 1 error
 === m19gmapnote.olang
-m19gmapnote.olang:12:24: error[M19g]: 'r' holds a view of 'm' taken before 'm' may have grown
-   12 |     io.PutLine("r " + $r.n)!
-      |                        ^
+m19gmapnote.olang:12:22: error[M19g]: 'r' holds a view of 'm' taken before 'm' may have grown
+   12 |     io.PutLn("r " + $r.n)!
+      |                      ^
 m19gmapnote.olang:11:31: note: 'm' may grow here, in 'Put' - take the view or the reference after it, or copy the value first ('m.Get(k)')
    11 |     for k in range 2, 3000: m.Put(k, blk(k))
       |                               ^~~
@@ -4054,7 +4062,7 @@ p4cjoinundeclared.olang:12:9: help: write '?' after its result (its errors infer
 compilation failed with 1 error
 === p4dtargetfallsthrough.olang
 p4dtargetfallsthrough.olang:15:7: error[P4d]: a task of this join binds a target it leaves unwritten when it fails - this clause must leave
-   15 |     } catch E { try io.PutLine("failed") }
+   15 |     } catch E { try io.PutLn("failed") }
       |       ^~~~~
 compilation failed with 1 error
 === p4spawnnotry.olang
@@ -4317,7 +4325,7 @@ r1draise.olang:4:26: help: write '?' after its result (its errors inferred), or 
 compilation failed with 1 error
 === r1dtry.olang
 r1dtry.olang:5:5: error[R1d]: io.Error can escape here, and this function writes no '?'
-    5 |     try io.PutLine("hi")
+    5 |     try io.PutLn("hi")
       |     ^~~
 r1dtry.olang:5:5: note: a function that can fail says so
 r1dtry.olang:5:5: help: write '?' after its result (its errors inferred), or catch it
@@ -4504,7 +4512,7 @@ r9buncaught.olang:10:10: error[R9]: F can escape here, and this function does no
 compilation failed with 1 error
 === r9qualified.olang
 r9qualified.olang:7:5: error[R1d]: io.Error can escape here, and this function writes no '?'
-    7 |     try io.PutLine("hello")
+    7 |     try io.PutLn("hello")
       |     ^~~
 r9qualified.olang:7:5: note: a function that can fail says so
 r9qualified.olang:7:5: help: write '?' after its result (its errors inferred), or catch it
@@ -5318,11 +5326,11 @@ s8dassigned.olang:9:22: note: a test narrowed it, and an assignment since has en
 s8dassigned.olang:9:22: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8ddefercase.olang
-s8ddefercase.olang:10:45: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
-   10 |         defer io.PutLine("deferred r " + $e.r)!
-      |                                             ^
-s8ddefercase.olang:10:45: note: a test narrowed it, and an assignment since has ended that
-s8ddefercase.olang:10:45: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
+s8ddefercase.olang:10:43: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
+   10 |         defer io.PutLn("deferred r " + $e.r)!
+      |                                           ^
+s8ddefercase.olang:10:43: note: a test narrowed it, and an assignment since has ended that
+s8ddefercase.olang:10:43: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8dnarrowlentfield.olang
 s8dnarrowlentfield.olang:11:24: error[S8d]: a narrowed payload field is read, never written or lent writably
@@ -5411,18 +5419,18 @@ s8dwideor.olang:4:53: error[S8d]: Shape is an enum, and its payload's 'r' is rea
 s8dwideor.olang:4:53: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8edefernull.olang
-s8edefernull.olang:10:47: error[T2c]: 'p' is a Node?&, which may be null
-   10 |         defer io.PutLine("deferred reads " + $p.V)!
-      |                                               ^
-s8edefernull.olang:10:47: note: a test narrowed it, and an assignment since has ended that
-s8edefernull.olang:10:47: help: read through it where a test says it is not ('if x != null'), or write 'p!'
+s8edefernull.olang:10:45: error[T2c]: 'p' is a Node?&, which may be null
+   10 |         defer io.PutLn("deferred reads " + $p.V)!
+      |                                             ^
+s8edefernull.olang:10:45: note: a test narrowed it, and an assignment since has ended that
+s8edefernull.olang:10:45: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === s8eerrdefernull.olang
-s8eerrdefernull.olang:10:46: error[T2c]: 'p' is a Node?&, which may be null
-   10 |     errdefer io.PutLine("errdefer reads " + $p.V)!
-      |                                              ^
-s8eerrdefernull.olang:10:46: note: a test narrowed it, and an assignment since has ended that
-s8eerrdefernull.olang:10:46: help: read through it where a test says it is not ('if x != null'), or write 'p!'
+s8eerrdefernull.olang:10:44: error[T2c]: 'p' is a Node?&, which may be null
+   10 |     errdefer io.PutLn("errdefer reads " + $p.V)!
+      |                                            ^
+s8eerrdefernull.olang:10:44: note: a test narrowed it, and an assignment since has ended that
+s8eerrdefernull.olang:10:44: help: read through it where a test says it is not ('if x != null'), or write 'p!'
 compilation failed with 1 error
 === satadd01outside.olang
 satadd01outside.olang:5:12: error[M19]: I16 has no method 'satAdd'
@@ -6328,9 +6336,9 @@ t22bnoalloc.olang:9:16: error[T22b]: this lambda may allocate
     9 |     k := Apply(fn(x I64) I64 {
       |                ^~~~~~~~~~~~~~~
 t22bnoalloc.olang:9:16: note: 'fn&(x I64) I64 noalloc', the type it is held as here, promises 'noalloc'
-t22bnoalloc.olang:10:9: note: its call of 'PutLine' may allocate
-   10 |         try io.PutLine($x) catch { }
-      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+t22bnoalloc.olang:10:9: note: its call of 'PutLn' may allocate
+   10 |         try io.PutLn($x) catch { }
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~
 t22bnoalloc.olang:9:16: help: give a function that does not, or hold it as a type without 'noalloc'
 compilation failed with 1 error
 === t22bnoblock.olang
@@ -6388,12 +6396,12 @@ t22btypebeyond.olang:10:13: note: which functions it holds is not known here
 t22btypebeyond.olang:10:13: help: write 'keeps b in a' after the signature of the type it is held as, or give a function directly
 compilation failed with 1 error
 === t22callunsafe.olang
-t22callunsafe.olang:20:29: error[E12]: expected fn&(n P&) I64, found fn&(n mut P&) I64
-   20 |     try io.PutLine($applyRo(w, p) + " " + $applyRo(R(3), p))
-      |                             ^
-t22callunsafe.olang:20:52: error[E12]: expected fn&(n P&) I64, found R
-   20 |     try io.PutLine($applyRo(w, p) + " " + $applyRo(R(3), p))
-      |                                                    ^~~~
+t22callunsafe.olang:20:27: error[E12]: expected fn&(n P&) I64, found fn&(n mut P&) I64
+   20 |     try io.PutLn($applyRo(w, p) + " " + $applyRo(R(3), p))
+      |                           ^
+t22callunsafe.olang:20:50: error[E12]: expected fn&(n P&) I64, found R
+   20 |     try io.PutLn($applyRo(w, p) + " " + $applyRo(R(3), p))
+      |                                                  ^~~~
 compilation failed with 2 errors
 === t22climit.olang
 t22climit.olang:43:9: error[T22b]: 'link16' keeps 'b' in 'a'
@@ -6548,11 +6556,11 @@ t25ccopyarg.olang:9:13: note: 'b' is declared here
 t25ccopyarg.olang:11:14: help: pass one of its own, made from its parts
 compilation failed with 1 error
 === t25ccopycallvalue.olang
-t25ccopycallvalue.olang:18:27: error[T25c]: 'Call' cannot be a function value
-   18 |     try io.PutLine($apply(s, GB))
-      |                           ^
-t25ccopycallvalue.olang:18:27: note: it writes through or keeps its by-value parameter 'b', and a caller of a function value may pass a read-only copy
-t25ccopycallvalue.olang:18:27: help: work on one of its own, made from its parts
+t25ccopycallvalue.olang:18:25: error[T25c]: 'Call' cannot be a function value
+   18 |     try io.PutLn($apply(s, GB))
+      |                         ^
+t25ccopycallvalue.olang:18:25: note: it writes through or keeps its by-value parameter 'b', and a caller of a function value may pass a read-only copy
+t25ccopycallvalue.olang:18:25: help: work on one of its own, made from its parts
 compilation failed with 1 error
 === t25ccopyfield.olang
 t25ccopyfield.olang:11:8: error[T25c]: this writes through a reference a read-only copy holds
@@ -6666,10 +6674,10 @@ t25crefkept.olang:7:26: note: 'x' is declared here
 t25crefkept.olang:12:12: help: pass a writable one
 compilation failed with 1 error
 === t25dconstmut.olang
-t25dconstmut.olang:13:22: error[T25d]: this hands data written in the program where it may be written
-   13 |     io.PutLine($take("abc"))!
-      |                      ^~~~~
-t25dconstmut.olang:13:22: help: pass a copy of its own: '$"abc"'
+t25dconstmut.olang:13:20: error[T25d]: this hands data written in the program where it may be written
+   13 |     io.PutLn($take("abc"))!
+      |                    ^~~~~
+t25dconstmut.olang:13:20: help: pass a copy of its own: '$"abc"'
 compilation failed with 1 error
 === t27anonenum.olang
 t27anonenum.olang:13:10: error[E12]: expected enum { A B }, found enum { X Y Z }
@@ -7118,9 +7126,9 @@ t32anydefaultunmet.olang:17:36: error[G19, T31a]: String does not satisfy the co
    17 |     it mut any Iterator<String>& = w
       |                                    ^
 t32anydefaultunmet.olang:17:36: note: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
-t32anydefaultunmet.olang:18:20: note: 'Sum' is called through an 'any Iterator<String>&' here, so aWords needs it
-   18 |     io.PutLine($it.Sum())!
-      |                    ^~~
+t32anydefaultunmet.olang:18:18: note: 'Sum' is called through an 'any Iterator<String>&' here, so aWords needs it
+   18 |     io.PutLn($it.Sum())!
+      |                  ^~~
 compilation failed with 1 error
 === t32anyhash.olang
 t32anyhash.olang:10:14: error[G19]: any aShape& does not satisfy the constraint Hashable on K
@@ -7528,9 +7536,14 @@ unreachvaluemsg.olang:3:51: error[S18a]: an unreachable's message is text, found
       |                                                   ^
 compilation failed with 1 error
 === unseen.olang
-unseen.olang:7:4: error[B9c]: this top-level condition uses what exists only in the branches it decides, or does not check
+unseen.olang:7:4: error[B9c]: this top-level condition uses 'h', declared only inside a branch still being decided
     7 | if h() {
       |    ^~~
+unseen.olang:7:4: note: its value would depend on the choice the condition is making
+unseen.olang:5:5: note: 'h' is declared here
+    5 |     fn h() Bool { return true }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+unseen.olang:7:4: help: declare 'h' outside the conditional, or decide on something that exists either way
 compilation failed with 1 error
 === vacate01outside.olang
 vacate01outside.olang:5:7: error[M19]: I64 has no method 'vacate'
@@ -7543,65 +7556,65 @@ varlistcount.olang:4:5: error[D12b]: 2 names need as many values, found 1
       |     ^
 compilation failed with 1 error
 === vec01view.olang
-vec01view.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-   11 |     try io.PutLine($d[0])
-      |                     ^
+vec01view.olang:11:19: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+   11 |     try io.PutLn($d[0])
+      |                   ^
 vec01view.olang:10:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    10 |     for i in range 100: v.Push(i)
       |                           ^~~~
 compilation failed with 1 error
 === vec04lend.olang
-vec04lend.olang:12:31: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
-   12 |     try io.PutLine($grow(v, v.View()))
-      |                               ^~~~
+vec04lend.olang:12:29: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
+   12 |     try io.PutLn($grow(v, v.View()))
+      |                             ^~~~
 vec04lend.olang:6:27: note: 'grow' may grow it here
     6 |     for i in range 100: v.Push(i)
       |                           ^~~~
 compilation failed with 1 error
 === vec05elem.olang
-vec05elem.olang:13:37: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
-   13 |     try io.PutLine($grow(v, v.View()[0]))
-      |                                     ^
+vec05elem.olang:13:35: error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first ('v.ToArray()')
+   13 |     try io.PutLn($grow(v, v.View()[0]))
+      |                                   ^
 vec05elem.olang:7:27: note: 'grow' may grow it here
     7 |     for i in range 100: v.Push(Pt(i))
       |                           ^~~~
 compilation failed with 1 error
 === vec06through.olang
-vec06through.olang:11:21: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-   11 |     try io.PutLine($d)
-      |                     ^
+vec06through.olang:11:19: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+   11 |     try io.PutLn($d)
+      |                   ^
 vec06through.olang:10:7: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    10 |     v.Push(5)
       |       ^~~~
 compilation failed with 1 error
 === vec103refview.olang
-vec103refview.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
-   15 |     try io.PutLine($d[0])
-      |                     ^
+vec103refview.olang:15:19: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
+   15 |     try io.PutLn($d[0])
+      |                   ^
 vec103refview.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    14 |     l.toks.Push(2)
       |            ^~~~
 compilation failed with 1 error
 === vec104viewfn.olang
-vec104viewfn.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
-   15 |     try io.PutLine($d[0])
-      |                     ^
+vec104viewfn.olang:15:19: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
+   15 |     try io.PutLn($d[0])
+      |                   ^
 vec104viewfn.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    14 |     l.toks.Push(2)
       |            ^~~~
 compilation failed with 1 error
 === vec13nominal.olang
-vec13nominal.olang:19:21: error[M19g]: 't' holds a view of 'w' taken before 'w' may have grown
-   19 |     try io.PutLine($t)
-      |                     ^
+vec13nominal.olang:19:19: error[M19g]: 't' holds a view of 'w' taken before 'w' may have grown
+   19 |     try io.PutLn($t)
+      |                   ^
 vec13nominal.olang:17:29: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()')
    17 |     for _ in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
       |                             ^~~~
 compilation failed with 1 error
 === vec14nominalconv.olang
-vec14nominalconv.olang:18:21: error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown
-   18 |     try io.PutLine($d[0] + " " + $d[1])
-      |                     ^
+vec14nominalconv.olang:18:19: error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown
+   18 |     try io.PutLn($d[0] + " " + $d[1])
+      |                   ^
 vec14nominalconv.olang:16:28: note: 'w' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('w.ToArray()')
    16 |     for i in range 1000: w.Push(i + 100)
       |                            ^~~~
@@ -7615,9 +7628,9 @@ vec160genericselfhold.olang:9:12: note: instantiated here, with T = I64
       |            ^~~
 compilation failed with 1 error
 === vec19listconv.olang
-vec19listconv.olang:13:21: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
-   13 |     try io.PutLine($l[0])
-      |                     ^
+vec19listconv.olang:13:19: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
+   13 |     try io.PutLn($l[0])
+      |                   ^
 vec19listconv.olang:12:27: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
    12 |     for _ in range 100: v.Push('b')
       |                           ^~~~
@@ -7628,17 +7641,17 @@ vec54assertmsgreturn.olang:26:51: error[S17]: an assert's message may not return
       |                                                   ^~~~~~
 compilation failed with 1 error
 === vec88fieldviewpush.olang
-vec88fieldviewpush.olang:14:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
-   14 |     try io.PutLine($d[0])
-      |                     ^
+vec88fieldviewpush.olang:14:19: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
+   14 |     try io.PutLn($d[0])
+      |                   ^
 vec88fieldviewpush.olang:13:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    13 |     l.toks.Push(9)
       |            ^~~~
 compilation failed with 1 error
 === vec92methodgrows.olang
-vec92methodgrows.olang:15:21: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
-   15 |     try io.PutLine($d[0])
-      |                     ^
+vec92methodgrows.olang:15:19: error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
+   15 |     try io.PutLn($d[0])
+      |                   ^
 vec92methodgrows.olang:14:7: note: 'l.toks' may grow here, in 'grow' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    14 |     l.grow()
       |       ^~~~
@@ -7647,9 +7660,9 @@ vec92methodgrows.olang:9:35: note: 'grow' may grow it here
       |                                   ^~~~
 compilation failed with 1 error
 === vec94lambdakeeps.olang
-vec94lambdakeeps.olang:15:21: error[M19g]: 'f' holds a view of 'l.toks' taken before 'l.toks' may have grown
-   15 |     try io.PutLine($f())
-      |                     ^
+vec94lambdakeeps.olang:15:19: error[M19g]: 'f' holds a view of 'l.toks' taken before 'l.toks' may have grown
+   15 |     try io.PutLn($f())
+      |                   ^
 vec94lambdakeeps.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('l.toks.ToArray()')
    14 |     l.toks.Push(4)
       |            ^~~~
@@ -7670,9 +7683,9 @@ vec96taskkeeps.olang:14:9: note: the task holding a view of 'l.toks' is started 
       |         ^~~~~~~~~~~~~
 compilation failed with 1 error
 === vec97globalfieldgrows.olang
-vec97globalfieldgrows.olang:15:21: error[M19g]: 'd' holds a view of 'GL.toks' taken before 'GL.toks' may have grown
-   15 |     try io.PutLine($d[0])
-      |                     ^
+vec97globalfieldgrows.olang:15:19: error[M19g]: 'd' holds a view of 'GL.toks' taken before 'GL.toks' may have grown
+   15 |     try io.PutLn($d[0])
+      |                   ^
 vec97globalfieldgrows.olang:14:5: note: 'GL.toks' may grow here, in 'bump' - take the view or the reference after it, or copy the elements first ('GL.toks.ToArray()')
    14 |     bump()
       |     ^~~~

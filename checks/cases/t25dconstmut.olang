@@ -10,5 +10,5 @@ fn take(a mut Array<Char>&) I64 {
 }
 
 fn main() {
-    io.PutLine($take("abc"))!
+    io.PutLn($take("abc"))!
 }

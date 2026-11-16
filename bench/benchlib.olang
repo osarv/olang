@@ -90,14 +90,15 @@ fn Objects(dir String&, leaveOut Array<String&>&) Vec<String&> {
     return l
 }
 
-# $BENCH_LOCK, when set, locked for the rest of the run - on a shared machine, the lock other heavy jobs take, so nothing
-# heavy runs beside the measurements
-fn TakeLock() {
-    path := try os.Env("BENCH_LOCK") catch default ""
-    if path.Len() == 0: return
-    fd := try os.Create(path) catch os.Error { Fail("cannot open " + $path, 1) }
-    Warn("waiting for " + $path + " ...\n")
-    flock(fd, 2)
+# $BENCH_LOCK, when set, locked for as long as the File given back is held (its destructor closes it, and the lock goes
+# with it) - on a shared machine, the lock other heavy jobs take, so nothing heavy runs beside the measurements; with no
+# lock named, /dev/null, which no other job locks
+fn TakeLock() os.File {
+    path := try os.Env("BENCH_LOCK") catch default "/dev/null"
+    f := try os.File.Create(path) catch os.Error { Fail("cannot open " + $path, 1) }
+    if path != "/dev/null": Warn("waiting for " + $path + " ...\n")
+    flock(f.Fd(), 2)
+    return f
 }
 
 # the words of a text split at blanks, none of them empty

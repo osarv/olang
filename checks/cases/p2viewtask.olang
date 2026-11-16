@@ -25,5 +25,5 @@ fn main() {
         }
     }
     churn()
-    io.PutLine($outs)!
+    io.PutLn($outs)!
 }

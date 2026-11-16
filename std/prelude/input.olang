@@ -26,6 +26,10 @@ type InputBuffer struct(fd I32, size I64, adapt Bool = false) {
     end I64 = 0
 }
 
+# the number itself: an I32 is a descriptor's number, so io.Reader, io.Writer and io.Lines take one (io.Stdin, a pipe's
+# end) as they take an os.File (its Fd)
+fn (fd I32) Fd() I32 { return fd }
+
 # the buffer of standard input, shared by everything that reads it, reached through the Stdin functions below
 stdinBuffer mut InputBuffer = InputBuffer(0, 4096, true)
 

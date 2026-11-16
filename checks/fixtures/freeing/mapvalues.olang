@@ -19,5 +19,5 @@ fn main() {
         if i > 0: m.Remove("key number " + $(i - 1) + " padded out to some length ......")
         s.Put("k" + $(i % 10), "value " + $i + " padded out to some length .........................")
     }
-    io.PutLine($m.Len() + " " + $s.Len() + " " + s.Get("k3")!)!
+    io.PutLn($m.Len() + " " + $s.Len() + " " + s.Get("k3")!)!
 }

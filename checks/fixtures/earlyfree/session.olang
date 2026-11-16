@@ -14,5 +14,5 @@ fn (s mut Session&) tick(n I64) {
 fn main() {
     s := Session()
     for n in range N: s.tick(n)
-    io.PutLine(s.status)!
+    io.PutLn(s.status)!
 }

@@ -159,7 +159,8 @@
 | status 1
 === olang build -define X main.olang
 | stdout:
-| olang: error[B10]: -define takes Name=value, found 'X'
+| main.olang: error: cannot open this file
+| compilation failed with 1 error
 | stderr:
 | status 1
 === olang build -define X=1 -define X=2 main.olang
@@ -270,7 +271,7 @@
 | usage: olang MODE [OPTION...] FILE...   or   olang [OPTION...] FILE.olang [ARGUMENT...]
 | 
 | modes:
-|   FILE.olang  scripting mode: builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file (B3g)
+|   FILE.olang  scripting mode: builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file, options before it (B3g)
 |   build       builds one program, FILE.olang its root module, into build/ (B3)
 |   compile     compiles one module to an object, linking nothing (B2)
 |   test        runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked, the tests that start a task under the race detector (B3a, E16g, P7a)
@@ -312,7 +313,7 @@
 |   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
-|   -define Name=value defines a build constant (B10)
+|   -define Name=value defines a build constant, one word with no spaces; Name alone is true (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -check             rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17); in a build, fails where early freeing does not follow a let-go (B18a)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
@@ -324,14 +325,14 @@
 === olang help file
 | stdout:
 | usage: olang [OPTION...] FILE.olang [ARGUMENT...]
-| scripting mode: builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file (B3g)
+| scripting mode: builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file, options before it (B3g)
 | 
 | options:
 |   -debug             builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)
 |   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
-|   -define Name=value defines a build constant (B10)
+|   -define Name=value defines a build constant, one word with no spaces; Name alone is true (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -check             rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17); in a build, fails where early freeing does not follow a let-go (B18a)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
@@ -352,7 +353,7 @@
 |   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
-|   -define Name=value defines a build constant (B10)
+|   -define Name=value defines a build constant, one word with no spaces; Name alone is true (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
@@ -368,7 +369,7 @@
 |   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
-|   -define Name=value defines a build constant (B10)
+|   -define Name=value defines a build constant, one word with no spaces; Name alone is true (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -check             rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17); in a build, fails where early freeing does not follow a let-go (B18a)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
@@ -390,7 +391,7 @@
 |   -race              builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)
 |   -sanitize          builds with the scope sanitizer (B2f)
 |   -target NAME       builds for another machine (B12)
-|   -define Name=value defines a build constant (B10)
+|   -define Name=value defines a build constant, one word with no spaces; Name alone is true (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -check             rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17); in a build, fails where early freeing does not follow a let-go (B18a)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
@@ -416,7 +417,7 @@
 | 
 | options:
 |   -target NAME       builds for another machine (B12)
-|   -define Name=value defines a build constant (B10)
+|   -define Name=value defines a build constant, one word with no spaces; Name alone is true (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -caps              prints what each module the program loads may reach - files, network, processes, environment, threads, C (B11c)
@@ -437,7 +438,7 @@
 | 
 | options:
 |   -target NAME       builds for another machine (B12)
-|   -define Name=value defines a build constant (B10)
+|   -define Name=value defines a build constant, one word with no spaces; Name alone is true (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -html DIR          writes the documentation as HTML into DIR, a page a module: of each FILE, or of std where none is named (B14)
 | stderr:
@@ -449,7 +450,7 @@
 | 
 | options:
 |   -target NAME       builds for another machine (B12)
-|   -define Name=value defines a build constant (B10)
+|   -define Name=value defines a build constant, one word with no spaces; Name alone is true (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 | stderr:
 | status 0
@@ -460,7 +461,7 @@
 | 
 | options:
 |   -target NAME       builds for another machine (B12)
-|   -define Name=value defines a build constant (B10)
+|   -define Name=value defines a build constant, one word with no spaces; Name alone is true (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 | stderr:
 | status 0
@@ -533,7 +534,9 @@
 | `build`, `compile`, `run`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
 | file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 | `-html`) any number, `lsp` and `mcp` none; for scripting mode, for `run` and for `profile`
-| every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
+| every argument after the file belongs to the program (B3f, B4a), one beginning with `-` included - except one of olang's
+| own options by name (`-define`, `-debug`, `-quick`, ...), which is an error: options go before the file. `--` right
+| after the file gives the program everything after it unchecked (`olang s.olang -- -debug`). There are no other
 | spellings: a flag of one character is an unknown option.
 | stderr:
 | status 0

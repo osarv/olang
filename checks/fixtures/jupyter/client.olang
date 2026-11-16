@@ -32,11 +32,11 @@ fn main() ? {
     kernel := try os.Process.Start(olang, "jupyter", "conn.json", capture = false)
     c := client(dial(ports[0], "DEALER"), dial(ports[1], "DEALER"), dial(ports[3], "SUB"), dial(ports[4], "REQ"))
     try c.Beat.Send("ping")
-    try io.PutLine($"heartbeat: " + $(try c.Beat.Recv())[0])
+    try io.PutLn($"heartbeat: " + $(try c.Beat.Recv())[0])
     try c.ask(false, "kernel_info_request", "{}", "implementation")
     try c.run("x := 41")
     try c.run("x + 1")
-    try c.run("import \"std/io\"\nio.PutLine(\"hello\")!")
+    try c.run("import \"std/io\"\nio.PutLn(\"hello\")!")
     try c.run("import \"display\"\ndisplay.Table(Array<String&>[\"n\", \"square\"], Array<I64>[2, 4, 3, 9])")
     try c.run("y := nothing_here")
     try c.interrupt()
@@ -45,7 +45,7 @@ fn main() ? {
     try c.ask(false, "complete_request", "{\"code\":\"print(x\",\"cursor_pos\":7}", "matches")
     try c.ask(true, "shutdown_request", "{\"restart\":false}", "status")
     out := try kernel.Wait()
-    try io.PutLine($"kernel ended: " + $out.Status)
+    try io.PutLn($"kernel ended: " + $out.Status)
 }
 
 # a port nothing listens at: one the system gives a listener, let go at once
@@ -87,7 +87,7 @@ fn (c mut client&) send(control Bool, kind String&, content String&) String ? {
     sig := sign(h, "{}", "{}", content)
     if control: try c.Control.Send(Delimiter, sig, h, "{}", "{}", content)
     else: try c.Shell.Send(Delimiter, sig, h, "{}", "{}", content)
-    try io.PutLine($"> " + $kind)
+    try io.PutLn($"> " + $kind)
     return id
 }
 
@@ -95,7 +95,7 @@ fn (c mut client&) send(control Bool, kind String&, content String&) String ? {
 fn (c mut client&) answer(control Bool, id String&, field String&) ? {
     if not control: try c.published(id)
     m := try message.Parse(try c.Control.Recv() if control else try c.Shell.Recv())
-    try io.PutLine($"  " + $m.kind + ": " + $field + "=" + $json.Encode(try m.content[field]))
+    try io.PutLn($"  " + $m.kind + ": " + $field + "=" + $json.Encode(try m.content[field]))
 }
 
 # a cell run: execute_request, then what iopub carries and the reply's status
@@ -122,7 +122,7 @@ fn (c mut client&) published(id String&) ? {
             if state == "idle": return
             continue
         }
-        try io.PutLine($"  iopub " + $m.kind + ": " + $shown(m))
+        try io.PutLn($"  iopub " + $m.kind + ": " + $shown(m))
     }
 }
 

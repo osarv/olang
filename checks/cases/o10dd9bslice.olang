@@ -9,5 +9,5 @@ fn main() ? io.Error {
     t String = "tttttttttt"
     h := headOf(t)
     t = "uuuuuuuuuu"
-    try io.PutLine(String(h))
+    try io.PutLn(String(h))
 }

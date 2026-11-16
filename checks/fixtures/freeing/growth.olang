@@ -38,5 +38,5 @@ fn main() {
     w Vec<I64>
     for i in range N: w.Push(v[i])
     gained := (peak() - p0) / 1024
-    io.PutLine($t + " " + $w[N - 1] + " " + $("three buffers" if gained < 27 else "kept, " + $gained + " MB"))!
+    io.PutLn($t + " " + $w[N - 1] + " " + $("three buffers" if gained < 27 else "kept, " + $gained + " MB"))!
 }

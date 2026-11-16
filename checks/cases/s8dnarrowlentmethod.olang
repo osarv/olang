@@ -12,7 +12,7 @@ fn main() {
     e := Shape.Round(Circle(1.0))
     if e == Shape.Round {
         e.Grow()
-        io.PutLine("inside: " + $e.r)!
+        io.PutLn("inside: " + $e.r)!
     }
-    io.PutLine("after: " + $e)!
+    io.PutLn("after: " + $e)!
 }

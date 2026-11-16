@@ -28,5 +28,5 @@ fn main() {
         v.RefMut(i % 10)[2] = inner(i * 2)
         t += rows[i % 10].Ref(4)[29] + v.Ref(i % 10).Ref(2)[0]
     }
-    io.PutLine($t + " " + $rows[3].Len() + " " + $v.Ref(3).Ref(2).Len())!
+    io.PutLn($t + " " + $rows[3].Len() + " " + $v.Ref(3).Ref(2).Len())!
 }

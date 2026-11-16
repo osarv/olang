@@ -7,7 +7,7 @@ fn main() ? {
     c mut chan.Chan<I32>& = chan.Chan<I32>(2)
     try chan.Send(c, 1)
     chan.Close(c)
-    try io.PutLine("got " + $(try chan.Recv(c) catch default -1))
+    try io.PutLn("got " + $(try chan.Recv(c) catch default -1))
     try chan.Send(c, 2)
-    try io.PutLine("not reached")
+    try io.PutLn("not reached")
 }

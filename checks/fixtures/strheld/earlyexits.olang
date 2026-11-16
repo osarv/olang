@@ -27,5 +27,5 @@ fn main() ? {
         t += s.Len()
         t += try h(b, i) catch default 0
     }
-    try io.PutLine($t)
+    try io.PutLn($t)
 }

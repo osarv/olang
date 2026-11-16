@@ -662,8 +662,8 @@ fn FileLayout(given source.Source&, std String&, prelude String&, color Bool, sa
 # as it is, its diagnostics written as the compiler writes them. 1 when a file did not parse, could not be read or
 # written, or (-l) is not in the layout
 fn Files(mode String&, files Array<String&>&, std String&) I32 {
-    out := io.Writer(1)
-    errs := io.Writer(2)
+    out := io.Writer(io.Stdout)
+    errs := io.Writer(io.Stderr)
     prelude := PreludeTypes(std)
     status I32 = 0
     for path in files {

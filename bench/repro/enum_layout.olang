@@ -31,5 +31,5 @@ fn main() ? {
             for x in a { if x.has { s += x.v } }
         }
     }
-    try io.PutLine($s)
+    try io.PutLn($s)
 }

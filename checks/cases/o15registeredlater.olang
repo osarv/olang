@@ -49,5 +49,5 @@ fn main() ? {
     t := Tally()
     twoVecs(t, 4)
     assert t.n == 44
-    try io.PutLine("n " + $t.n)
+    try io.PutLn("n " + $t.n)
 }

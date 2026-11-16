@@ -8,12 +8,12 @@ type Shape enum { Circle(r F64), Sq(s F64) }
 
 fn show(p Node?&, e Shape) {
     if p != null {
-        defer io.PutLine("deferred reads " + $p.V)!
-        io.PutLine("in the block")!
+        defer io.PutLn("deferred reads " + $p.V)!
+        io.PutLn("in the block")!
     }
     if e == Shape.Circle {
-        defer io.PutLine("deferred r " + $e.r)!
-        if e.r > 1.0: io.PutLine("large")!
+        defer io.PutLn("deferred r " + $e.r)!
+        if e.r > 1.0: io.PutLn("large")!
     }
     p = null
     e = Shape.Sq(1.0)

@@ -1806,7 +1806,7 @@ fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, inclu
 
 # "olang bindgen HEADER.h": the declarations on the standard output, or into output; the status
 fn Run(path String&, output String&, clang String&) I32 {
-    said := io.Writer(2)
+    said := io.Writer(io.Stderr)
     status := run(path, output, clang, said)
     try said.Flush() catch io.Error { }
     return status

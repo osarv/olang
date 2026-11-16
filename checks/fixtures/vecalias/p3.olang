@@ -2,5 +2,5 @@ import "genlib"
 import "std/io"
 fn main() ? {
     f := genlib.Id
-    try io.PutLine($f(1))
+    try io.PutLn($f(1))
 }

@@ -26,5 +26,5 @@ fn main() ? {
         stash(g, h)
     }
     churn()
-    try io.PutLine($h.e!.n)
+    try io.PutLn($h.e!.n)
 }

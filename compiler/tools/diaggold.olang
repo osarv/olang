@@ -210,7 +210,7 @@ test "diag renders stage 0's diagnostics on every checks/cases program byte for 
         count++
         why := check(c)
         if why.Len() > 0 {
-            try io.PutErrLine($c.name + ": " + $why) catch io.Error { }
+            try io.PutErrLn($c.name + ": " + $why) catch io.Error { }
             bad++
         }
     }
@@ -250,7 +250,7 @@ test "-e prints each rule a message names as stage 0 does" {
         want := try os.ReadFile($out + "/e.txt") catch default ""
         got := try diag.Explain(spec, r) catch default "(none)"
         if got != want {
-            try io.PutErrLine("-e " + $r + ": differs") catch io.Error { }
+            try io.PutErrLn("-e " + $r + ": differs") catch io.Error { }
             bad++
         }
     }

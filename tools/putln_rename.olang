@@ -1,0 +1,137 @@
+# putln_rename - the output verbs end in "Ln" as Println and Scanln do (the user's call, 2026-11-16): std/io's PutLn
+# becomes PutLn, PutErrLn PutErrLn, and io.Writer's PutLn method PutLn. In code, a name after a "." - `io.PutLn`
+# through any alias, `w.PutLn(x)` on a Writer, `test Writer.PutLn` - and in comments, text and the non-olang files
+# (Markdown, .txt, .want) every whole word; inside std/io.olang itself every whole word. The nouns stay: Reader.Line,
+# io.Lines. A function of a program's own named PutLn, called bare, is left. Files are rewritten in place and a count
+# printed; --check writes nothing and the exit status says whether anything would change. Idempotent.
+#
+#     $OLANG build tools/putln_rename.olang && build/tools_putln_rename [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+
+type Count struct() { n I64 = 0 }
+
+# the old names, written in pieces so that the tool run over itself changes nothing, and the new
+Olds Array<String&> = Array<String&>["Put" + "ErrLine", "Put" + "Line"]
+News Array<String&> = Array<String&>["PutErrLn", "PutLn"]
+
+# whether the word at i..i+n of src is to be renamed: a whole word, and in code (where mask says so, and the file is
+# not std/io.olang itself) only after a "."
+fn renamed(src String&, mask String&, i I64, n I64, bare Bool) Bool {
+    if i > 0 and srcmask.IsWord(src[i - 1]): return false
+    if i + n < src.Len() and srcmask.IsWord(src[i + n]): return false
+    if bare or mask.Len() == 0 or mask[i] != 'c': return true
+    return i > 0 and src[i - 1] == '.'
+}
+
+# src with every old name renamed where renamed says
+fn rename(src String&, path String&, c mut Count&) String {
+    code := path.EndsWith(".olang")
+    bare := path.EndsWith("std/io.olang") or not code
+    mask := srcmask.Mask(src, false) if code else ""
+    out := StringBuilder()
+    at I64 = 0
+    i I64 = 0
+    for i < src.Len() {
+        k := try oldAt(src, i) catch default -1
+        if k < 0 or not renamed(src, mask, i, Olds[k].Len(), bare) {
+            i++
+            continue
+        }
+        out.Push(src[at:i])
+        out.Push(News[k])
+        i += Olds[k].Len()
+        at = i
+        c.n++
+    }
+    if at == 0: return $src
+    out.Push(src[at:])
+    return out.ToString()
+}
+
+# no old name begins there
+type NoName error { Absent }
+
+# which old name begins at i
+fn oldAt(src String&, i I64) I64 ? NoName {
+    for k in range Olds.Len() {
+        n := Olds[k].Len()
+        if i + n <= src.Len() and src[i:i + n] == Olds[k]: return k
+    }
+    error NoName.Absent
+}
+
+# the files under a directory with one of the extensions read, build/ and .git/ left out
+fn walk(dir String&, out mut Vec<String&>&) {
+    names := try os.ReadDir(dir) catch default Array<String&>(0)
+    for n in names {
+        if n.StartsWith(".") or n == "build": continue
+        p := srcmask.PathJoin(dir, n)
+        if os.IsDir(p): walk(p, out)
+        else if wanted(p): out.Push($p)
+    }
+}
+
+fn wanted(path String&) Bool {
+    return path.EndsWith(".olang") or path.EndsWith(".md") or path.EndsWith(".txt") or path.EndsWith(".want")
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths Vec<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check": check = true
+        else if a == "-v": verbose = true
+        else: paths.Push($a)
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_putln_rename [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files Vec<String&>
+    for p in paths {
+        if os.IsDir(p) { walk(p, files) } else { files.Push($p) }
+    }
+    total := Count()
+    changed I64 = 0
+    for path in files {
+        if not wanted(path): continue
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("putln_rename: cannot read " + $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := rename(src, path, total)
+        if out == src: continue
+        changed++
+        if verbose: srcmask.Say(path)
+        if check: continue
+        try os.WriteFile(path, out) catch {
+            srcmask.SayErr("putln_rename: cannot write " + $path)
+            os.Exit(1)
+        }
+    }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb + $changed + " files: " + $total.n + " names")
+    if check and changed > 0: os.Exit(1)
+}
+
+test rename "renames after a dot in code, every word in comments, text and other files, and leaves the nouns" {
+    n := Count()
+    old := "Put" + "Line"
+    oldErr := "Put" + "ErrLine"
+    src := "    try io." + old + "(\"a\")\n    w." + old + "(x)\n    try out." + oldErr + "(e)\n"
+    assert rename(src, "x.olang", n) == "    try io.PutLn(\"a\")\n    w.PutLn(x)\n    try out.PutErrLn(e)\n"
+    own := "fn " + old + "(x I64) { }\n    " + old + "(1)  # " + old + " writes\n    r.Line()\n    io.Lines(f)\n"
+    assert rename(own, "x.olang", n) == "fn " + old + "(x I64) { }\n    " + old + "(1)  # PutLn writes\n    r.Line()\n    io.Lines(f)\n"
+    assert rename("fn " + old + "<T>(x T) { }", "std/io.olang", n) == "fn PutLn<T>(x T) { }"
+    assert rename("Use `" + old + "` and " + oldErr + "s.\n", "README.md", n) == "Use `PutLn` and " + oldErr + "s.\n"
+    keep := "    io." + old + "r(x)\n    my" + old + "(x)\n"
+    assert rename(keep, "x.olang", n) == keep
+    done := rename(src, "x.olang", n)
+    assert rename(done, "x.olang", n) == done
+}

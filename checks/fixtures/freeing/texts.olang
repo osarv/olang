@@ -26,5 +26,5 @@ fn main() {
         }
         t += a.Len() + b.Len()
     }
-    io.PutLine($("flat" if peak() < 60000 else "peak " + $peak() + " KB") + " " + $t)!
+    io.PutLn($("flat" if peak() < 60000 else "peak " + $peak() + " KB") + " " + $t)!
 }

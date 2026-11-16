@@ -44,5 +44,5 @@ fn global(n I64) I64 {
 }
 
 fn main() {
-    io.PutLine($local(40) + " " + $global(40))!
+    io.PutLn($local(40) + " " + $global(40))!
 }

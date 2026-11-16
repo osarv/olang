@@ -3143,7 +3143,7 @@ with no import, and no module may declare a type, a global, a function, a local 
 other prelude name (M6) and reserved the same way: each writes `$x` (E11a) - `Println` with a line end after it, a line end alone
 with nothing - to the standard output in one write, and a write the system refuses ends the program as `!` does (E35, reported at the
 caller's place, the trailing parameter `at Place = Place.Here`, E40; in a test, the test fails), so neither is fallible and no `try` is written. A program that handles a failed write uses
-`std/io`'s `Put` and `PutLine` (M19f), which fail with `io.Error`. Their reading counterparts are `Scanln(prompt = "")`
+`std/io`'s `Put` and `PutLn` (M19f), which fail with `io.Error`. Their reading counterparts are `Scanln(prompt = "")`
 (the prompt, if any, written with no line end, then the next line of the standard input without its line end and without a
 carriage return before it) and `Scan<T>(prompt = "")` (the prompt likewise, then the next whitespace-separated word as a `T`,
 as `io.Reader`'s `Next<T>` parses it); both fail with `Exhausted` at the end of the input (`Scan` also with `ParseError`, the word
@@ -3463,14 +3463,14 @@ program where a write fails - with no words of the compiler's own:
 
 ```
 fn Put<T>(x T) ? io.Error             # x as $ renders it, to the standard output
-fn PutLine<T>(x T = "") ? io.Error     # x as $ renders it and a line end, to the standard output
+fn PutLn<T>(x T = "") ? io.Error      # x as $ renders it and a line end, to the standard output
 fn PutErr<T>(x T) ? io.Error          # x as $ renders it, to the standard error
-fn PutErrLine<T>(x T = "") ? io.Error  # x as $ renders it and a line end, to the standard error
+fn PutErrLn<T>(x T = "") ? io.Error   # x as $ renders it and a line end, to the standard error
 ```
 
-Each takes one value of any type and writes it as `$` renders it (E11a) - text as it is, `try io.PutLine(n)`, `try
-io.PutLine("n is " + $n)` - as the prelude's `Print` and `Println` do.
-`PutLine` and `PutErrLine` write the text and its line end as one write. Each call writes at once, with nothing held
+Each takes one value of any type and writes it as `$` renders it (E11a) - text as it is, `try io.PutLn(n)`, `try
+io.PutLn("n is " + $n)` - as the prelude's `Print` and `Println` do.
+`PutLn` and `PutErrLn` write the text and its line end as one write. Each call writes at once, with nothing held
 back - a buffered writer for much output is `std/io`'s `Writer`. A write the system does not complete fails with
 `io.Error`, as `io.Write` does, and is written with `try` like any other fallible call. A write is an effect, so a call
 of one is never evaluated while compiling (K1) and is performed under the evaluator (B3e).
@@ -3480,7 +3480,25 @@ and the value rendered (E11a) - and its line end to the standard error, then giv
 where it stands: `y := io.Show(f(x)) + 1`. A failed write is ignored, the one call of std that does not report one:
 a look that could fail would need a `try` at every use, and a lost look changes nothing the program computes.
 
-The read counterpart of `Writer` is `io.Reader(fd)`, a buffered input (4 KiB at first, doubling while a read fills it up to 64 KiB, and for a longer line; a reader's size changes nothing a program can see, so it is not a parameter) also behind `io.Lines(fd)`: `Line()` (the next
+The output verbs end in `Ln`, as `Println` and `Scanln` do (the user's call, 2026-11-16): `io.PutLn`, `io.PutErrLn`,
+`Writer.PutLn`; the nouns keep `Line` (`Reader.Line`, `io.Lines`).
+
+**M19h (files and descriptors).** An open file is a `std/os` `File`: `type File unique struct(fd I32)` whose destructor
+closes its descriptor (C9, O15) - where its holder lets go of it, as `net.Conn` closes its socket - so no program writes
+a close (the user's call, 2026-11-16; principle 1: a resource has a destructor). `os.File.Open(path)` (to read) and
+`os.File.Create(path)` (to write, created or emptied) are its builders (D19), failing with `os.Error`; `f.Read(buf)` and
+`f.Write(data)` read and write it as `io.Read`/`io.Write` do, and `f.Fd()` gives the descriptor's number for a C function
+(the `File` still closes it). A failure the system reports only at the close is not reported - a destructor has no
+caller; a buffered `Writer`'s `Flush` is where a write's failure is seen, and stays explicit. `io.Reader`, `io.Writer`
+and `io.Lines` take what they read or write as an `any io.Descriptor&` (T32): `type Descriptor trait { Fd() I32 }`, met
+by `os.File` and by `I32` itself (the prelude's `fn (fd I32) Fd() I32`), so they take a `File` by reference and a bare
+descriptor alike - `io.Stdin`, `io.Stdout` and `io.Stderr` stay the `I32`s 0, 1 and 2, closed by nothing, and a pipe's
+end is an `I32`. The descriptor's number is read once, when the reader or writer is made; the `File` must outlive it, as
+it must outlive any use of its `Fd()`. An integer literal given there is an `I64` (an `any` gives a literal no target
+type), which has no `Fd`: a literal descriptor is written `io.Stdout` or `I32(3)`. `io.Write(fd, data)` and
+`io.Read(fd, buf)` stay on the bare `I32`.
+
+The read counterpart of `Writer` is `io.Reader(from)`, a buffered input (4 KiB at first, doubling while a read fills it up to 64 KiB, and for a longer line; a reader's size changes nothing a program can see, so it is not a parameter) also behind `io.Lines(from)`: `Line()` (the next
 line, as `Lines.Next` gives it), `Word()` (the next run of non-whitespace, line ends skipped), `Next<T>()` (the next word as
 a `T`: an integer by `T.Parse`, a float by `ParseFloat`, a `Bool` from `true`/`false`; failing with `io.Error`, `Exhausted`
 or the prelude's `ParseError`), `Bytes(n)` (exactly `n` bytes; `Exhausted` if the input ends first, the bytes read
@@ -5103,7 +5121,7 @@ of its path (`io.Error.Failed`), and its word - to standard error and ends. Its 
 meant - bad input to a script - where a failed assert is a bug (B6). Its value is the expression's on
 success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; a check is a call
 that can fail, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
-`fn main() { io.PutLine("Hello World!")! }` is a program. On a value of a nullable reference type (T2c) - an array's
+`fn main() { io.PutLn("Hello World!")! }` is a program. On a value of a nullable reference type (T2c) - an array's
 included - `x!` is that reference as a `T&`, and on a function value that may be null (`fn?&(...)`, T21) that value as
 a `fn&(...)` (`f!(x)` calls it), ending the program as a failed `assert` does (`FILE:LINE: null reached`) when it is
 null - after handling a failure first, where the expression can also fail. `!` on an expression that neither can fail
@@ -5134,7 +5152,7 @@ is read through the type's name only (as E36's limits are), and any other member
 
 ```
 fn expectEq(got I64, want I64, at Place = Place.Here) {
-    if got != want: io.PutErrLine($at ": got " $got ", want " $want)!
+    if got != want: io.PutErrLn($at ": got " $got ", want " $want)!
 }
 expectEq(f(2), 4)                       # reports this line, not expectEq's
 ```
@@ -6363,7 +6381,7 @@ runs both before the wait, in order. The error is no value inside (T20), as in a
 (D18a) are no error leaving: its `defer`s run there, its errdefers do not; an error its body raises runs them.
 
 ```
-f := try os.Create(path)
+f := try os.File.Create(path)
 errdefer os.Remove(path)!
 try write(f, data)            # if this fails, the half-written file is removed
 ```
@@ -9170,7 +9188,7 @@ ends - by returning from `main`, by `os.Exit` (B5b), by an error leaving `main`,
 crashes; a process the program forks writes none.
 
 **B20a (names).** A function is named in a profile as source writes it outside its module: a module's function by the
-module's alias and its name (`io.PutLine`), a method by its receiver's type and its name (`check.Checker.Expr`,
+module's alias and its name (`io.PutLn`), a method by its receiver's type and its name (`check.Checker.Expr`,
 `Vec<I64>.Push` - the type written as `$` spells types), a constructor by its type, a destructor `T.destruct`, a lambda
 by the function it is written in (`main.lambda`), a global's initializer `NAME.init`; the root module's own and the
 prelude's are bare (`burn`, `Vec<I64>.Push`), as error names print (B5). A function inlined into another is still named

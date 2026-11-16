@@ -33,5 +33,5 @@ fn main() {
     v := fill(100)
     m2 := Model(v)
     for _ in range N: m2.w = step(m2.w)
-    io.PutLine($d.text.Len() + " " + $e.text.Len() + " " + $m.w[0] + " " + $m2.w[99])!
+    io.PutLn($d.text.Len() + " " + $e.text.Len() + " " + $m.w[0] + " " + $m2.w[99])!
 }

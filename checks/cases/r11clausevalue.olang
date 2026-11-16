@@ -14,9 +14,9 @@ fn half(n I64) I64 ? {
 }
 fn main() ? {
     a := try half(3) catch {
-        try io.PutErrLine("odd")
+        try io.PutErrLn("odd")
         -1
     }
     b := try half(5) catch { 0 }
-    try io.PutLine($a + " " + $b)
+    try io.PutLn($a + " " + $b)
 }

@@ -86,8 +86,8 @@ fn main() ? {
     for k in range 3 {
         for x in try g.Get(k): t = $t + $x
     }
-    try io.PutLine(t)
-    try io.PutLine(try aliases())
-    try io.PutLine(try builders())
-    try io.PutLine($(try counters()))
+    try io.PutLn(t)
+    try io.PutLn(try aliases())
+    try io.PutLn(try builders())
+    try io.PutLn($(try counters()))
 }

@@ -38744,3 +38744,60 @@ beside the run-time test. The compiler's own sources keep the braced forms (the 
 The evaldiff row the coordinator reported on "S1b, R11: a catch clause's one-line body ..." (since wt-predverify) was no
 disagreement of the evaluator's: the interpreted run passes it; the test was missing from compiler/goldens/run.txt
 ("not in the built run"), as were this round's. `make rungold` captured them again.
+### os.File with a destructor; PutLine becomes PutLn (2026-11-16, the user's calls)
+
+Principle 1 says a resource has a destructor, and files were the one resource left without: `os.Open` and `os.Create`
+gave a bare `I32` and the program wrote `defer os.Close(fd)`. The user agreed ("this makes sense") to a `unique`
+`os.File` whose destructor closes its descriptor, the way std/net's Conn, Listener and UDP already did. `os.Close` is
+gone. D19a turned the plan's `os.Open(p)` into the builders `os.File.Open(p)` and `os.File.Create(p)` - a function of a
+module giving that module's type is the type's builder, as `net.Conn.Dial` is - and the File has `Read`, `Write` and
+`Fd()`. `os.ReadFile` and `os.WriteFile` use it inside. What is lost: a write the system defers and refuses only at the
+close (NFS) was reported by WriteFile's `try Close(fd)`; a destructor has no caller, so it is not. `io.Writer`'s `Flush`
+is where a buffered write fails, and stays explicit for that reason.
+
+The harder part was letting `io.Reader`, `io.Writer` and `io.Lines` take a File by reference while io.Stdin, Stdout and
+Stderr stay plain descriptors. olang has no overloads, and io cannot name `os.File` (os imports io). Three mechanisms
+were weighed: a non-owning File (io.Stdin would become a File, breaking `io.Write(io.Stdout, ...)`,
+`os.IsTerminal(io.Stderr)` and every pipe's end, which are `I32`s); making the three types generic over a trait (every
+`mut io.Writer&` in a signature would need a type argument); and a small trait taken as an `any`. The last was chosen:
+`io.Descriptor` is `trait { Fd() I32 }`, the constructors take `any Descriptor&`, `os.File` meets it with its own `Fd`,
+and `I32` with the prelude's `fn (fd I32) Fd() I32` (only the prelude declares an I32 method, M19d). The number is read
+once at construction - the run-time trait value costs one indirect call per reader or writer made, nothing per read -
+so the reader holds the number, as before; the File has to outlive it, as it outlives any use of `Fd()`. One rough edge
+surfaced: an integer literal turned into an `any` is an I64 (no target type reaches it), and I64 has no `Fd`, so the
+compiler's `io.Writer(1)` and `io.Lines(3)` became `io.Writer(io.Stdout)` and `io.Lines(I32(3))`. bench's lock
+(`TakeLock`) had leaked its descriptor on purpose to hold the lock for the run; it now returns the File, held to the end
+of main.
+
+At the same time the user renamed the output verbs ("PutLine should probably be called PutLn and so should most if not
+all other methods that have Line in them"): `io.PutLine` -> `io.PutLn`, `io.PutErrLine` -> `io.PutErrLn`,
+`Writer.PutLine` -> `Writer.PutLn`, matching Println and Scanln; the nouns stay (`Reader.Line`, `io.Lines`). Two text
+tools migrate, placed last in olang fix's table: tools/file_migrate (builders, the closing lines dropped, `io.Write(f,
+x)` made `f.Write(x)`, literal descriptors named, other uses listed by hand) and tools/putln_rename (a name after a `.`
+in code; every whole word in comments, text and other files). This HISTORY and the archived memory keep the old names
+as they were. Tests: std/os.olang's "a File closes its descriptor where its holder lets go of it" (read through
+/proc/self/fd, the number taken again by the next open), "io.Reader reads a File, taken by reference", the File's
+Read/Write; checks/cases/o27destructorfiles.olang now holds an os.File in a unique struct with no destructor of its own.
+
+### A `:=` field made by a call other than its constructor was never destroyed (2026-11-16, wt-osfile)
+
+Found with os.File: a struct holding `f := os.File.Open(path)!` never closed the descriptor. Any `:=` field whose value
+came from a call other than its type's own constructor - a builder (`Res.Plain(1)`), a fallible call's `!`, a `try ...
+catch default` - was never destroyed when its holder let go of it; `r := Res()` and a local made by the same call were.
+The cause was order, not the type table's walks (types' NeedsDrop/FieldHolds and mir's DropsParts were right): the
+declaration types such a field only where it can without the checker (generic.Infer: literals, a constructor's call);
+any other initializer leaves the field Unknown until its constructor's body is checked (fieldTypes, D15). The checker
+queues every function before the constructors no call asked for, and judges a holder as it meets it - whether a call's
+value is held where it lands with its destructors (O15/O16's `held`), whether a block's end drops it (dropIfHeld) - by
+`NeedsDrop`, which read the Unknown field as holding nothing. A function made `A()` before A's constructor was checked,
+so its holder got no drop and the type no Drop helper; reading a field first (which already checked the constructor on
+demand) hid it.
+
+The fix is in the checker: every question it asks about destructors goes through `needsDrop`, which first settles the
+type (settleFields) - each struct it holds by value, through fields, arrays, records and enum payloads, whose `:=` fields
+are still untyped has its constructor checked now, as a field read already did - and remembers the types found fully
+typed. The passes after checking (scope, free, lower, mir, emit, the evaluator) see the filled table, so a holder in a
+Vec, a Map or an array, a store over one and early freeing (O8d's condition 4 keeps a value with destructors to its
+scope's end) follow. tests/heldfields.olang covers the builder, `!`, `catch default` and a declared type, held by a
+variable, a store, a Vec, a Map and an array, with constructors taking references and taking nothing, each destructor
+counted once; the typed holders' run is also baked while compiling (K2).

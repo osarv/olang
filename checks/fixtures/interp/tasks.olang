@@ -18,25 +18,25 @@ fn consume(c mut chan.Chan<I32>&, total mut Array<I64>&) {
 fn square(n I64) I64 { return n * n }
 
 fn main() ? {
-    defer try io.PutLine("cleanup ran") catch io.Error { }
+    defer try io.PutLn("cleanup ran") catch io.Error { }
     out := Array<I64>(4)
     join {
         for i in range 4: spawn out[i] = square(i + 1)
     }
-    try io.PutLine("squares " + $out)
+    try io.PutLn("squares " + $out)
     small mut chan.Chan<I32>& = chan.Chan<I32>(8)
     t mut Array<I64>& = Array<I64>(1)
     join {
         spawn produce(small, 5)
         spawn consume(small, t)
     }
-    try io.PutLine("sum " + $t[0])
+    try io.PutLn("sum " + $t[0])
     if os.Args().Len() > 1 {
         big mut chan.Chan<I32>& = chan.Chan<I32>(4)
         join {
             spawn produce(big, 100)
             spawn consume(big, t)
         }
-        try io.PutLine("sum " + $t[0])
+        try io.PutLn("sum " + $t[0])
     }
 }

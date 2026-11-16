@@ -17,5 +17,5 @@ type H struct(p P) {
 fn main() ? {
     h := H(P(42))
     deep(50)
-    try io.PutLine($h.keep.v)
+    try io.PutLn($h.keep.v)
 }

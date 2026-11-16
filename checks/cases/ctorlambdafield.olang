@@ -15,7 +15,7 @@ fn main() {
     d := Array<I64>(4, 7)
     m := M(2, d)
     churn()
-    io.PutLine($m.F())!
+    io.PutLn($m.F())!
 }
 
 fn churn() {

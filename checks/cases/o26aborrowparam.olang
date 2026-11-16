@@ -14,5 +14,5 @@ fn put(p mut Holder&) {
 fn main() ? {
     h := Holder()
     put(h)
-    try io.PutLine($h.name)
+    try io.PutLn($h.name)
 }

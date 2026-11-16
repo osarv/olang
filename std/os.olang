@@ -365,13 +365,12 @@ fn readBack(fd I32) String& ? Error {
 # ("os.ReadFile&x(p)" builds it where x lives)
 fn ReadFile(path String&) String& ? Error {
     if IsDir(path) { error Error.IsDir(path) }      # a directory opens, and its size means nothing
-    fd := fcntl.open($path + "\0", 0)
-    try check(fd, path)
+    f := try File.Open(path)
     # the size is where reading starts from, nothing more: the end is where a read finds it. A byte past the size, so the
     # read that finds the end is the next one, and room doubled for a file longer than it said - one in /proc, or a pipe,
     # has no size to give (lseek fails or says 0), and a file may grow while it is read
-    size := unistd.lseek(fd, 0, 2)
-    if size < 0 { size = 0 } else { unistd.lseek(fd, 0, 0) }
+    size := unistd.lseek(f.fd, 0, 2)
+    if size < 0 { size = 0 } else { unistd.lseek(f.fd, 0, 0) }
     text := Array<U8>(size + 1)
     got I64 = 0
     for {
@@ -380,12 +379,11 @@ fn ReadFile(path String&) String& ? Error {
             for i in range got: more[i] = text[i]
             text = more
         }
-        n := unistd.read(fd, text[got:], U64(text.Len() - got))
-        if n < 0: try closeAndRaise(fd, __olang_err(), path)
+        n := unistd.read(f.fd, text[got:], U64(text.Len() - got))
+        if n < 0: try raise(__olang_err(), path)
         if n == 0: break
         got += n
     }
-    unistd.close(fd)
     return String(text[:got])        # the file's bytes, read as text (T29c)
 }
 
@@ -398,32 +396,44 @@ fn closeAndRaise(fd I32, code I32, path String&) ? Error {
 
 # the file at "path" holding "data" and nothing else: created, or emptied first when it is there already
 fn WriteFile(path String&, data Array<U8>&) ? Error {
-    fd := try Create(path)
-    try io.Write(fd, data) catch io.Error {
-        try closeAndRaise(fd, __olang_err(), path)
-    }
-    try Close(fd)
+    f := try File.Create(path)
+    try f.Write(data) catch io.Error { try raise(__olang_err(), path) }
 }
 
-# a descriptor to write the file at "path" through (io.Write), created or emptied - 0666 less the process's umask,
-# as C's creat gives it. Close it once written.
-fn Create(path String&) I32 ? Error {
+# an open file: read and written through its descriptor - by io.Reader, io.Writer and io.Lines, which take it by
+# reference, by its own Read and Write, and by Fd() for a C function wanting the number - and closed when its holder
+# lets go of it (a destructor, C9, O15), as net.Conn is; held by reference (C11), never copied. Closing is never written.
+# A write the system deferred and refused only at the close is not reported (a destructor has no caller to report to):
+# io.Writer's Flush is where a buffered write's failure is seen
+type File unique struct(fd I32) {
+    fd
+} destruct {
+    unistd.close(fd)
+}
+
+# the file at "path", to write: created or emptied - 0666 less the process's umask, as C's creat gives it
+fn File.Create(path String&) File ? Error {
     fd := fcntl.creat($path + "\0", 0x1B6)
     try check(fd, path)
-    return fd
+    return File(fd)
 }
 
-# a descriptor to read the file at "path" through (io.Read). Close it once read.
-fn Open(path String&) I32 ? Error {
+# the file at "path", to read
+fn File.Open(path String&) File ? Error {
     fd := fcntl.open($path + "\0", 0)
     try check(fd, path)
-    return fd
+    return File(fd)
 }
 
-# closes a descriptor Open or Create gave - which is also where a write the system deferred can still fail
-fn Close(fd I32) ? Error {
-    try check(unistd.close(fd))
-}
+# the descriptor's number, for a C function taking one; the File still closes it
+fn (f File&) Fd() I32 { return f.fd }
+
+# every byte of data, written at the file's position (io.Write)
+fn (f File&) Write(data Array<U8>&) ? io.Error { try io.Write(f.fd, data) }
+
+# what comes next, up to buf's length, read into the front of buf and handed back as that front (io.Read); empty at
+# the end of the file
+fn (f File&) Read(buf mut Array<U8>&) Array<U8>& ? io.Error { return try io.Read(f.fd, buf) }
 
 # what a path names
 type FileKind enum {
@@ -651,46 +661,77 @@ test "WriteFile creates a file, and empties one that is there" {
     assert denied
 }
 
-test "Create writes through a descriptor, a piece at a time" {
+test "Create writes through a File, a piece at a time" {
     assert Run("mkdir -p build/os_files") == 0
-    fd := try Create("build/os_files/pieces") catch default -1
-    assert fd >= 0
-    try io.Write(fd, "one ")
-    try io.Write(fd, "two")
-    try Close(fd)
+    f := try File.Create("build/os_files/pieces")
+    try f.Write("one ")
+    try f.Write("two")
     assert (try ReadFile("build/os_files/pieces") catch default "") == "one two"
-    rd := try Open("build/os_files/pieces") catch default -1
+    rd := try File.Open("build/os_files/pieces")
     buf := Array<U8>(16)
-    got := try io.Read(rd, buf) catch default buf[:0]
+    got := try rd.Read(buf)
     assert got.Len() == 7
-    try Close(rd)
-    closed := false
-    try Close(rd) catch Error.Failed { closed = true } catch { }
-    assert closed
+    assert (try rd.Read(buf)).Len() == 0
+}
+
+# whether "fd" is open in this process, as /proc/self/fd lists it
+fn isOpen(fd I32) Bool { return Exists("/proc/self/fd/" + $fd) }
+
+# the File's descriptor, once it was let go of: open while the File is held, closed where its holder let go
+fn openedAndLetGo(path String&) I32 {
+    f := try File.Open(path) catch default File(-1)
+    assert isOpen(f.Fd())
+    return f.Fd()
+}
+
+test "a File closes its descriptor where its holder lets go of it" {
+    assert Run("mkdir -p build/os_files && printf x > build/os_files/held") == 0
+    fd := openedAndLetGo("build/os_files/held")
+    assert fd >= 0 and not isOpen(fd)
+    for _ in range 3 {
+        f := try File.Open("build/os_files/held")
+        assert f.Fd() == fd                  # the number the closed one freed, taken again
+    }
+    assert not isOpen(fd)
+}
+
+test "io.Reader reads a File, taken by reference" {
+    assert Run("mkdir -p build/os_files") == 0
+    try WriteFile("build/os_files/reader", "3\n1 2 3\nlast line")
+    f := try File.Open("build/os_files/reader")
+    r := io.Reader(f)
+    n := try r.Next<I64>()
+    total I64 = 0
+    for _ in range n: total += try r.Next<I64>()
+    assert total == 6
+    assert (try r.Line()) == ""
+    assert (try r.Line()) == "last line"
+    out := try File.Create("build/os_files/writer")
+    w := io.Writer(out)
+    w.PutLn("written")
+    try w.Flush()
+    assert (try ReadFile("build/os_files/writer")) == "written\n"
 }
 
 # io.Lines never remembers the end of a file: after Exhausted, Next reads again, so a reader follows a file being
 # appended to (tail -f) - a line given whole, and one the writer ended the file in the middle of given as it stands
 test "io.Lines follows a file another descriptor is still writing" {
     assert Run("mkdir -p build/os_files") == 0
-    w := try Create("build/os_files/follow") catch default -1
-    assert w >= 0
-    try io.Write(w, "first\n")
-    r := try Open("build/os_files/follow") catch default -1
+    w := try File.Create("build/os_files/follow")
+    try w.Write("first\n")
+    r := try File.Open("build/os_files/follow")
     lines := io.Lines(r)
     assert (try lines.Next() catch default "?") == "first"
     assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
     assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
-    try io.Write(w, "second line\nthi")
+    try w.Write("second line\nthi")
     assert (try lines.Next() catch default "?") == "second line"
     assert (try lines.Next() catch default "?") == "thi"
     assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
-    try io.Write(w, "rd\n\n")
+    try w.Write("rd\n\n")
     assert (try lines.Next() catch default "?") == "rd"
     assert (try lines.Next() catch default "?") == ""
     assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
-    try Close(w)
-    try Close(r)
 }
 
 test "Stat gives the kind, the size, and the modification time to the nanosecond" {
@@ -827,9 +868,8 @@ test "what os gives back lives where it is put" {
 
 test "IsTerminal tells a terminal from a file, a pipe and no descriptor" {
     assert not IsTerminal(-1) and not IsTerminal(1000000)
-    fd := try Open("/dev/null") catch default -1
-    assert fd >= 0 and not IsTerminal(fd)
-    try Close(fd)
+    dev := try File.Open("/dev/null")
+    assert not IsTerminal(dev.Fd())
     p := Array<I32>(2)
     assert unistd.pipe(p) == 0 and not IsTerminal(p[0]) and not IsTerminal(p[1])
     unistd.close(p[0])

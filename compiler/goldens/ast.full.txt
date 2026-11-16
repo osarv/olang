@@ -99,7 +99,7 @@
 | -- diagnostics
 | error  5:23
 === checks/cases/d10adroppedbranch.olang
-| EXPR 11:5-11:25
+| EXPR 11:5-11:23
 | FN 10:1-12:2
 | IMPORT 4:1-4:16
 | -- diagnostics
@@ -163,7 +163,7 @@
 | error  4:11
 | error L13 4:10
 === checks/cases/l13newline.olang
-| EXPR 9:5-9:23
+| EXPR 9:5-9:21
 | FN 6:1-10:2
 | IMPORT 5:1-5:16
 | VAR 7:5-7:12
@@ -199,7 +199,7 @@
 | error  4:14
 | error L14 4:10
 === checks/cases/l14newline.olang
-| EXPR 9:5-9:23
+| EXPR 9:5-9:21
 | FN 6:1-10:2
 | IMPORT 5:1-5:16
 | VAR 7:5-7:14
@@ -257,13 +257,13 @@
 | -- diagnostics
 | error  9:14
 === checks/cases/l18operatorline.olang
-| EXPR 9:15-9:44
-| FN 9:1-9:46
+| EXPR 9:15-9:42
+| FN 9:1-9:44
 | IMPORT 3:1-3:16
 | -- diagnostics
 | error L18 6:9
 === checks/cases/l18semicolon.olang
-| EXPR 8:5-8:26
+| EXPR 8:5-8:24
 | FN 6:1-9:2
 | IMPORT 5:1-5:16
 | LAMBDA 7:10-7:48
@@ -273,7 +273,7 @@
 | -- diagnostics
 | error L18 7:36
 === checks/cases/l1junkline.olang
-| EXPR 10:5-10:23
+| EXPR 10:5-10:21
 | FN 6:1-11:2
 | IMPORT 5:1-5:16
 | VAR 7:5-7:11
@@ -304,7 +304,7 @@
 | -- diagnostics
 | error L9 3:4
 === checks/cases/l9typeunparsed.olang
-| EXPR 21:5-21:37
+| EXPR 21:5-21:35
 | FN 17:1-17:35
 | FN 18:1-22:2
 | IMPORT 5:1-5:16
@@ -359,7 +359,7 @@
 | -- diagnostics
 | error S12b 6:16
 === checks/cases/s12bvaluecomma.olang
-| EXPR 13:5-13:28
+| EXPR 13:5-13:26
 | FN 11:1-14:2
 | IMPORT 4:1-4:16
 | MULTI 12:5-12:23
@@ -1316,7 +1316,7 @@
 | EXPR 127:5-127:12
 | EXPR 14:13-14:20
 | EXPR 19:18-19:30
-| EXPR 23:34-23:51
+| EXPR 23:34-23:49
 | EXPR 41:23-41:33
 | FIELD 47:34-47:35
 | FIELD 47:37-47:38
@@ -1325,7 +1325,7 @@
 | FN 14:1-14:22
 | FN 19:1-19:32
 | FN 21:1-21:62
-| FN 23:1-23:53
+| FN 23:1-23:51
 | FN 25:1-25:44
 | FN 27:1-31:2
 | FN 33:1-39:2
@@ -1447,16 +1447,16 @@
 | FN 47:1-53:2
 | FN 61:1-64:2
 | IF 29:5-29:41
-| IF 37:5-37:40
-| IF 38:5-38:41
+| IF 37:5-37:44
+| IF 38:5-38:45
 | IF 39:5-39:42
 | IMPORT 16:1-16:14
 | IMPORT 17:1-17:19
 | IMPORT 4:1-4:19
 | LAMBDA 188:10-188:49
 | RAISE 29:15-29:41
-| RAISE 37:15-37:40
-| RAISE 38:18-38:41
+| RAISE 37:15-37:44
+| RAISE 38:18-38:45
 | RAISE 39:16-39:42
 | RETURN 169:5-169:13
 | RETURN 174:40-174:59

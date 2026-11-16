@@ -41,5 +41,5 @@ fn main() ? {
     c.text = $2 + "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
     assert c.text == "2-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-    try io.PutLine("ok")
+    try io.PutLn("ok")
 }

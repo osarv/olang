@@ -26,5 +26,5 @@ fn main() ? {
     h := pick(2)
     h(x, N(7))
     churn()
-    try io.PutLine($x.next!.v)
+    try io.PutLn($x.next!.v)
 }

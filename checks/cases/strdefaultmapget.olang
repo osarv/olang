@@ -26,8 +26,8 @@ fn (b Bag&) Str() String {
 }
 fn main() ? {
     b := Bag(Node(1), Map<I64, mut Node&>())
-    try io.PutLine($b)
+    try io.PutLn($b)
     t := churn(100)
     w := 0 if b.head.next == null else b.head.next!.v
-    try io.PutLine($w + " " + $t)
+    try io.PutLn($w + " " + $t)
 }

@@ -20,7 +20,7 @@ type WorkerError error {
     BadInput
 }
 
-type InputError error {
+type WorkInputError error {
     Negative
     TooBig
 }
@@ -33,14 +33,14 @@ fn Classify(n I32) I32 ? sh.RangeError, WorkerError {
 # combines this file's own two error types in declaration order (WorkerError first) - Reclassify below
 # re-declares the same pair in the OPPOSITE order when it propagates this, exercising the error-union
 # ABI's ordinal remap the same way shared.ComputeChecked/worker.Reclassify do across modules
-fn classifyInput(n I32) I32 ? WorkerError, InputError {
-    if n < 0: error InputError.Negative
-    if n > 1000: error InputError.TooBig
+fn classifyInput(n I32) I32 ? WorkerError, WorkInputError {
+    if n < 0: error WorkInputError.Negative
+    if n > 1000: error WorkInputError.TooBig
     if n == 0: error WorkerError.BadInput
     return n
 }
 
-fn reclassifyInput(n I32) I32 ? InputError, WorkerError {
+fn reclassifyInput(n I32) I32 ? WorkInputError, WorkerError {
     return try classifyInput(n)
 }
 
@@ -94,7 +94,7 @@ test "checkRangeOk reports success and failure correctly" {
 
 test "reordered propagation identifies negative correctly" {
     caught Bool = false
-    try reclassifyInput(-1) catch InputError, WorkerError {
+    try reclassifyInput(-1) catch WorkInputError, WorkerError {
         caught = true
     }
     assert caught
@@ -102,7 +102,7 @@ test "reordered propagation identifies negative correctly" {
 
 test "reordered propagation identifies too-big correctly" {
     caught Bool = false
-    try reclassifyInput(2000) catch InputError, WorkerError {
+    try reclassifyInput(2000) catch WorkInputError, WorkerError {
         caught = true
     }
     assert caught
@@ -110,7 +110,7 @@ test "reordered propagation identifies too-big correctly" {
 
 test "reordered propagation identifies bad-input correctly" {
     caught Bool = false
-    try reclassifyInput(0) catch InputError, WorkerError {
+    try reclassifyInput(0) catch WorkInputError, WorkerError {
         caught = true
     }
     assert caught
@@ -118,7 +118,7 @@ test "reordered propagation identifies bad-input correctly" {
 
 test "reordered propagation: catching both combined error types with +" {
     caught Bool = false
-    try reclassifyInput(-1) catch InputError, WorkerError {
+    try reclassifyInput(-1) catch WorkInputError, WorkerError {
         caught = true
     }
     assert caught
@@ -126,7 +126,7 @@ test "reordered propagation: catching both combined error types with +" {
 
 test "reordered propagation: success path is unaffected by the reordering" {
     caught Bool = false
-    try reclassifyInput(50) catch InputError, WorkerError {
+    try reclassifyInput(50) catch WorkInputError, WorkerError {
         caught = true
     }
     assert not caught

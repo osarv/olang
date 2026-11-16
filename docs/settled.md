@@ -487,6 +487,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **No shadowing (D3a, the user's call)**, types included: no local or parameter named like a global, function, build
   constant or type; a type and a function or global of one module may not share a name (D2).
 - **`:=` declares any settled expression's type (D15, the user's call).** `null` and a call giving nothing are errors.
+  A `:=` field the declaration cannot type alone takes its constructor's checked type, settled before any holder of it
+  is judged (its destructors, C11).
 - **Traits are constraints; `any Trait&` is the run-time form (T30-T35, G19, the user's calls 2026-10-08 and
   2026-10-24).** `trait` declares method signatures, satisfied implicitly (Go-style); a bare trait written as a type
   is an error naming `any R&`. Defaults are methods on a constrained type variable, overridable (M19e).
@@ -1138,12 +1140,24 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   scope closes, so a stale view reads old elements, never freed memory. `View()`/`ViewMut()` give the elements as an
   array. **M19g**: using a view or Ref after the same Vec may have grown is a compile-time error where the compiler
   sees the same Vec on both sides. Array and Vec stay two types (QCV, the user's "Yeah, okay, keep them" 2026-11-06).
-- **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Put`, `io.PutLine(t = "")`,
-  `io.PutErr`, `io.PutErrLine` fail with `io.Error` and are written with `try`. `io.Show<T>(v T, at Place =
+- **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Put`, `io.PutLn(t = "")`,
+  `io.PutErr`, `io.PutErrLn` fail with `io.Error` and are written with `try`. `io.Show<T>(v T, at Place =
   Place.Here) T` (QBP 4) writes `FILE:LINE:COLUMN: $v` to the standard error and gives `v` back. `io.Writer` buffers
   (errors at `Flush`); `io.Lines` reads lines; **`io.Reader(fd)` (M19f, the user's request 2026-11-15; no public size, an adaptive buffer - 4 KiB, doubling while reads fill it up to 64 KiB, beyond for a long line - 2026-11-16: a reader's size changes nothing a program sees, unlike Writer's)** is the buffered read counterpart of `Writer`, sharing Lines' buffer: `Line`, `Word`, `Next<T>` (integers by `T.Parse`, floats, Bool; errors `io.Error`, `Exhausted`, `ParseError`), `Bytes(n)`, `All`, `Available` (for streams: the buffer's contents, else one read's, never splitting a UTF-8 character). **Scanln and Scan, the user's call: the opposite of Println** (2026-11-16, "read is opposite to write"; named for Go's Scan/Scanln): prelude `Scanln(prompt = "")` and `Scan<T>(prompt = "")` (std/prelude/input.olang) write the prompt, then give the next line or the next word parsed as T; `Exhausted` at the end, a failed read ends the program as Print's write does; one shared stdin buffer with io.Reader/io.Lines of fd 0; the evaluator refuses them while compiling. **`Print(x)` and `Println(x = "")` (M19d, the user's "make the language
   as easy to use as python", 2026-11-13; capitalized 2026-11-13, "no carveout for them")**: the prelude's two exported functions reached bare, any value as `$x` renders it, no
-  `try` - a failed write ends the program as `!` does, reported at the caller's place (`at Place = Place.Here`; in a test, fails it); reserved by D3a. **std/io's printing functions renamed (M19f, mine 2026-11-13, for the user's no-carveout and no-shadowing rules - D3a would reject `io.Put` beside the prelude's `Print`)**: `io.Put`, `io.PutLine`, `io.PutErr`, `io.PutErrLine`, same signatures, still `? io.Error`; **they take any value (the user, 2026-11-15: "any printable type really")**, written as `$` renders it, as Print does; the buffered `io.Writer` has `Put`/`PutLine` of any value too (`io.Write`, the coordinator's first choice, is the raw `Write(fd, data)`); tools/io_rename migrates.
+  `try` - a failed write ends the program as `!` does, reported at the caller's place (`at Place = Place.Here`; in a test, fails it); reserved by D3a. **std/io's printing functions renamed (M19f, mine 2026-11-13, for the user's no-carveout and no-shadowing rules - D3a would reject `io.Put` beside the prelude's `Print`)**: `io.Put`, `io.PutLn`, `io.PutErr`, `io.PutErrLn`, same signatures, still `? io.Error`; **they take any value (the user, 2026-11-15: "any printable type really")**, written as `$` renders it, as Print does; the buffered `io.Writer` has `Put`/`PutLn` of any value too (`io.Write`, the coordinator's first choice, is the raw `Write(fd, data)`); tools/io_rename migrates.
+- **os.File and io's descriptors (M19h, the user's call 2026-11-16: "this makes sense"):** an open file is `os.File`, `unique`, its
+  destructor closing the descriptor as net.Conn's does - no close is ever written (`os.Close` gone); made by the builders
+  `os.File.Open`/`os.File.Create` (D19a makes a function giving its module's type a builder, so not `os.Open`), with
+  `Read`, `Write` and `Fd()`. A failure only the close would report is lost; `Writer.Flush` stays explicit. `io.Reader`,
+  `io.Writer` and `io.Lines` take an `any io.Descriptor&` (`trait { Fd() I32 }`), met by `os.File` and by `I32` through
+  the prelude's `I32.Fd()` - mine: olang has no overloads, io cannot name os.File (os imports io), and keeping Stdin/
+  Stdout/Stderr the bare `I32`s means io.Write, os.IsTerminal and every pipe's end stay as they are; a non-owning File
+  would have changed all of those. The number is read once at construction (one `any` per reader or writer, no cost per
+  read). A literal descriptor there is an I64 (an `any` gives no target type): `io.Stdout`, `I32(3)`. tools/file_migrate.
+- **PutLn (the user's call 2026-11-16: "PutLine should probably be called PutLn"):** the output verbs end in `Ln` as
+  Println/Scanln do - `io.PutLn`, `io.PutErrLn`, `Writer.PutLn`; the nouns stay (`Reader.Line`, `io.Lines`).
+  tools/putln_rename.
 - **Libraries:** `std/os`, `std/json` (immutable recursive enum tree), `std/http` (over curl), `std/csv`, `std/stats`, `std/plot` (SVG charts, 2026-11-14: line, scatter, histogram, heatmap on a `Plot` value built by calls, `Svg()`/`Save`, `Display()` for notebooks; errors `plot.Error`),
   `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi), `std/sync` (`Mutex<T>` reached
   only in `m.With(fn(v mut T&) { })`, `RWLock`, `Once`), `std/net` (blocking TCP and UDP), `std/set`, `std/deque`, `std/pool` (a slotmap of generational handles: `Add`, `try p.Get(h)`/`Ref`/`RefMut`/`Remove` failing with `pool.Error.Stale`; the user 2026-11-08),

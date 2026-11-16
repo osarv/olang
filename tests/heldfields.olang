@@ -1,0 +1,151 @@
+# D15, C11: a ":=" field given a call other than its type's constructor - a builder's, a fallible call's "!", a "try ...
+# catch default" - takes its type from its constructor's check, and that check runs before anything judges a holder by
+# what it holds: a holder made before its constructor's body was checked (the functions here come before the types, and
+# every function is checked before a constructor no call asked for) still ends the field, once - held by a variable,
+# replaced by a store, held by a Vec, a Map and an array. (os.File comes from os.File.Open: a struct holding one leaked
+# its descriptor.)
+
+# what the destructors saw, in order
+type Tally struct() {
+    seen := Vec<I64>()
+}
+
+fn (t Tally&) Sum() I64 {
+    s := 0
+    for x in t.seen: s += x
+    return s
+}
+
+type Res unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.seen.Push(id) }
+
+fn Res.make(id I64, log mut Tally&) Res { return Res(id, log) }
+
+fn Res.tried(id I64, bad Bool, log mut Tally&) Res ? Gone {
+    if bad: error Gone
+    return Res(id, log)
+}
+
+# (a generic's body is checked per instance, after its caller's: its field read asks for no constructor's check while
+# the caller is checked)
+fn rid<H>(h H&) I64 { return h.r.id }
+
+fn rn<H>(h H&) I64 { return h.r.n }
+
+# holders declared with their type, and one given a new value: decided while compiling too
+fn heldByType() String {
+    t := Tally()
+    {
+        a ByBuilder = ByBuilder(1, t)
+        b ByBang = ByBang(2, t)
+        c ByCatch = ByCatch(3, t)
+        d ByType = ByType(4, t)
+        assert rid(a) + rid(b) + rid(c) + rid(d) == 10 and t.seen.Len() == 0
+    }
+    {
+        h ByBuilder = ByBuilder(5, t)
+        h = ByBuilder(6, t)
+        assert rid(h) == 6 and t.seen.Len() == 5
+    }
+    return $t.seen.Len() + "/" + $t.Sum()
+}
+
+# holders held where their constructor's call lands, and in collections
+fn heldByCall() String {
+    t := Tally()
+    {
+        a := ByBuilder(1, t)
+        b := ByBang(2, t)
+        c := ByCatch(3, t)
+        assert rid(a) + rid(b) + rid(c) == 6 and t.seen.Len() == 0
+    }
+    {
+        v := Vec<ByBuilder>()
+        for k in range 4, 7: v.Push(ByBuilder(k, t))
+        m := Map<I64, ByBang>()
+        m.Put(7, ByBang(7, t))
+        m.Put(8, ByBang(8, t))
+        arr := Array<ByCatch>[ByCatch(9, t), ByCatch(10, t)]
+        assert v.Len() + m.Len() + arr.Len() == 7 and t.seen.Len() == 3
+    }
+    return $t.seen.Len() + "/" + $t.Sum()
+}
+
+type ByBuilder struct(id I64, log mut Tally&) {
+    r := Res.make(id, log)
+}
+
+type ByBang struct(id I64, log mut Tally&) {
+    r := Res.tried(id, false, log)!
+}
+
+type ByCatch struct(id I64, log mut Tally&) {
+    r := try Res.tried(id, true, log) catch default Res(id, log)
+}
+
+type ByType struct(id I64, log mut Tally&) {
+    r Res = Res.make(id, log)
+}
+
+# the same with constructors taking nothing, whose bodies no call's scopes ask to have checked first
+ShutCount mut I64 = 0
+
+type Shut unique struct() {
+    n := 1
+} destruct { ShutCount++ }
+
+fn Shut.made() Shut { return Shut() }
+
+fn Shut.tried(bad Bool) Shut ? Gone {
+    if bad: error Gone
+    return Shut()
+}
+
+fn shutHeld() I64 {
+    ShutCount = 0
+    {
+        a := ShutByBuilder()
+        b := ShutByBang()
+        c := ShutByCatch()
+        d := ShutByType()
+        assert rn(a) + rn(b) + rn(c) + rn(d) == 4 and ShutCount == 0
+    }
+    assert ShutCount == 4
+    {
+        v := Vec<ShutByBuilder>()
+        for _ in range 3: v.Push(ShutByBuilder())
+        m := Map<I64, ShutByBang>()
+        m.Put(1, ShutByBang())
+        arr := Array<ShutByCatch>[ShutByCatch(), ShutByCatch()]
+        assert v.Len() + m.Len() + arr.Len() == 6 and ShutCount == 4
+        v.Pop()!
+    }
+    return ShutCount
+}
+
+type ShutByBuilder struct() {
+    r := Shut.made()
+}
+
+type ShutByBang struct() {
+    r := Shut.tried(false)!
+}
+
+type ShutByCatch struct() {
+    r := try Shut.tried(true) catch default Shut()
+}
+
+type ShutByType struct() {
+    r Shut = Shut.made()
+}
+
+test ByBuilder "ends a field a builder's, a fallible call's or a catch default's value made, once, wherever it is held" {
+    assert heldByType() == "6/21"
+    assert heldByCall() == "10/55"
+    assert shutHeld() == 10
+}
+
+HeldByType := heldByType()
+
+assert HeldByType == "6/21", "decided while compiling: " + $HeldByType

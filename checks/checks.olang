@@ -1052,7 +1052,7 @@ fn reuse(r mut report&) ? Failed {
     # built - its slot is the root's, so the reused object of anylib still reaches the default (it reached an
     # "unreachable" when the slot was in anylib's object)
     try r.expect(sh(dir, "\"$OLANG\" build anyapp.olang > out.txt 2>&1 && ./build/anyapp > run.txt") == 0, "anyapp's build", dir)
-    try r.expect(sh(dir, "sed -i 's/^}$/    try io.PutLine(\"count \" + $anylib.Make(5).Count(fn(x I64) Bool { return x > 2 })) " + $
+    try r.expect(sh(dir, "sed -i 's/^}$/    try io.PutLn(\"count \" + $anylib.Make(5).Count(fn(x I64) Bool { return x > 2 })) " + $
                     "catch { }\\n}/' anyapp.olang && OLANG_CHECKREUSE=1 \"$OLANG\" build anyapp.olang > out.txt 2>&1 && " + $
                     "./build/anyapp > run.txt") == 0, "anyapp's build calling Count through the any", dir)
     try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'count 3' run.txt") == 0, "anyapp's run calling Count", dir)
@@ -1565,9 +1565,9 @@ fn interpbuilt(r mut report&) ? Failed {
         import "std/os"
 
         fn main() ? io.Error {
-            for a in os.Args(): try io.PutLine(a)
+            for a in os.Args(): try io.PutLn(a)
             lines := io.Lines(io.Stdin)
-            for { try io.PutLine($"in: " + $(try lines.Next() catch Exhausted { break })) }
+            for { try io.PutLn($"in: " + $(try lines.Next() catch Exhausted { break })) }
             os.Exit(7)
         }
         """
@@ -1689,7 +1689,7 @@ fn osexit(r mut report&) ? Failed {
 
 # M19f: io.Put, Println, PrintErr and PrintErrln write to the standard output and error, built and interpreted alike -
 # and a write that fails is an io.Error like any other
-test "io.Put and io.PutLine write, and fail with io.Error when the write fails" { assert passed("print") }
+test "io.Put and io.PutLn write, and fail with io.Error when the write fails" { assert passed("print") }
 
 fn printing(r mut report&) ? Failed {
     dir := fresh("print")

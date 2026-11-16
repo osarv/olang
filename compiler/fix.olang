@@ -33,8 +33,9 @@ ToolNames Array<String&> = Array<String&>["bare_typevars", "perm_mut", "int_lite
     "try_migrate", "as_migrate", "errortype_migrate", "list_vec", "link_migrate", "match_migrate", "question_migrate"
     "unused_migrate", "errorcase_rename", "variadic_migrate", "scopes_migrate", "fnref_migrate", "clone_migrate"
     "textbuild_migrate", "unique_migrate", "builder_migrate", "literal_migrate", "keyword_rename", "destroy_migrate", "io_rename", "oneline_migrate"
-    "nulltest_migrate", "textjoin_migrate", "requires_migrate", "chaninit_migrate"]
-ToolKinds Array<I64> = Array<I64>[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0]
+    "nulltest_migrate", "textjoin_migrate", "requires_migrate", "chaninit_migrate", "file_migrate"
+    "putln_rename"]
+ToolKinds Array<I64> = Array<I64>[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]
 
 fn driven(kind I64) Bool { return kind >= DrivenOpt }
 
@@ -104,7 +105,7 @@ fn ToolsDir(exe String&, std String&) String {
 ToolTriggers Array<String&> = Array<String&>["", "mut", "", "", "olang|flags", "done|fail|abort", "", "math", "Array<", ""
     "is", "Any|All", "", "Builtin", "Error", "checked|Check", "[", "try", "as", "error", "List", "link", "nomatch|=>", ""
     "", "", "Exec|Start|http.|Record", "&", "fn", "Clone", "String", "destruct", "", "[", ToolKeywords, "Destroy", "Print"
-    "{", "is", "\"|$", "[", "Init("]
+    "{", "is", "\"|$", "[", "Init(", "Open(|Create(|Close(|Reader(|Writer(|Lines(", "Line"]
 
 # keyword_rename's words (L9, one tier)
 ToolKeywords String& = "any|unique|immut|packed|commutes|weak|returns|noalloc|noblock|nospawn|norecurse|noextern|pure|keeps|borrows|noborrow"
@@ -270,8 +271,8 @@ Batch I64 = 200
 # are put back as they were - and the status is 1 where any would change. 2 where a tool could not be built or run.
 # OLANG_TIMES says each tool's time on the standard error
 fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
-    said := io.Writer(2)
-    out := io.Writer(1)
+    said := io.Writer(io.Stderr)
+    out := io.Writer(io.Stdout)
     files := expand(paths).ToArray()
     before Vec<String&>
     for f in files {
