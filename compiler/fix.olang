@@ -67,15 +67,24 @@ fn arguments(program String&, kind I64, exe String&, std String&, files Array<St
     return out.ToArray()
 }
 
-# the .olang files under a directory, sorted; build/ and names beginning with "." are left out
+# the .olang files under a directory, sorted; build/ and names beginning with "." are left out, and so is a migration
+# tool's own source (B17): one of Tools, or a tool its directory's README lists in its table ("| `NAME.olang` |") - its
+# comments and tests hold the old spellings on purpose
 fn walk(dir String&, out mut Vec<String&>&) {
     names := try os.ReadDir(dir) catch default Array<String&>(0)
+    readme := try os.ReadFile(filepath.Join(dir, "README.md")) catch default ""
     for n in names {
-        if n.StartsWith(".") or n == "build" { continue }
+        if n.StartsWith(".") or n == "build": continue
         p := filepath.Join(dir, n)
         if os.IsDir(p): walk(p, out)
-        else if n.EndsWith(".olang"): out.Push(p)
+        else if n.EndsWith(".olang") and not migrationTool(n, readme): out.Push(p)
     }
+}
+
+# whether the file named n is a migration tool's source: a tool of fix's table, or one its directory's README lists
+fn migrationTool(n String&, readme String&) Bool {
+    if n[:n.Len() - 6] in ToolNames: return true
+    return readme.Contains("| `" + $n + "` |")
 }
 
 # the files the command line names: a directory is every .olang file under it
@@ -439,6 +448,8 @@ test "the text tools run before the driven ones, each group in the order the cha
 }
 
 test "a tool's command line has its compiler or std before the files" {
+    assert migrationTool("clone_migrate.olang", "") and migrationTool("io_try.olang", "| `io_try.olang` | old |")
+    assert not migrationTool("srcmask.olang", "| `clone_migrate.olang` |")
     f := Array<String&>["a.olang", "b.olang"]
     assert arguments("p", TextTool, "olang", "std", f).Len() == 3
     s := arguments("p", StdTool, "olang", "std", f)

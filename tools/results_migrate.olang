@@ -240,8 +240,11 @@ fn (g migration&) oldResults(j I64) Bool {
     n := g.v.Len()
     if j + 1 >= n or g.m[j] < 0: return false
     if g.v[j + 1].k != token.Tok.Fn: return true
-    if j + 2 >= n or g.v[j + 2].k != token.Tok.LParen: return true
-    _, oldRes, oldErr := g.sigEnd(j + 2)
+    # a reference to a function, "fn&(" or "fn?&(", is a function type as "fn(" is
+    p := j + 2
+    for p < n and (g.v[p].k == token.Tok.Amp or g.v[p].k == token.Tok.Question): p++
+    if p >= n or g.v[p].k != token.Tok.LParen: return true
+    _, oldRes, oldErr := g.sigEnd(p)
     return oldRes >= 0 or oldErr >= 0
 }
 
@@ -441,6 +444,11 @@ fn main() ? {
 fn run(src String&) String {
     c := Counts()
     return migrate(src, c)
+}
+
+test "a function reference grouped as the one result is the new form, left" {
+    kept := "fn pairer() (fn&(x I64) I64, I64) { return fn(x I64) I64, I64 { return x, x + 1 } }\n"
+    assert run(kept) == kept
 }
 
 test "a declaration's results lose their parentheses" {

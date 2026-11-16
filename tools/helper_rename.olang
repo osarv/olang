@@ -38,6 +38,9 @@ fn rename(src String&, c mut Count&) String {
         after := v[i + 1].k
         if before != token.Tok.Dot and before != token.Tok.RParen: continue
         if after != token.Tok.LParen and after != token.Tok.Lt: continue
+        # a receiver clause's ")" stands on the method's line; one ending the line before is no receiver's
+        if before == token.Tok.RParen and src[v[i - 1].end:t.start].Contains("\n"): continue
+        if enumCase(src, v, i): continue
         out.Push(src[at:t.start])
         out.Push("Some" if word == "Any" else "Every")
         at = t.end
@@ -46,6 +49,27 @@ fn rename(src String&, c mut Count&) String {
     if at == 0: return src
     out.Push(src[at:])
     return out.ToString()
+}
+
+# whether the word at v[i], after a ".", names an enum's case rather than the helper method: what stands before the dot
+# is a type's name - capitalized, with at most an imported module's alias before it ("TypeRef.Any(sp, _)",
+# "ast.TypeRef.Any(sp, of)"); a value's capitalized field ("s.Items.Any(f)") has a value before it
+fn enumCase(src String&, v Vec<VT>&, i I64) Bool {
+    if v[i - 1].k != token.Tok.Dot or i < 2 or v[i - 2].k != token.Tok.Iden: return false
+    r := src[v[i - 2].start:v[i - 2].end]
+    if not r[0].IsUpper(): return false
+    # a type path ("ast.TypeRef", "TypeRef") rather than a value's field: nothing but a lower-case alias before it
+    if i < 4 or v[i - 3].k != token.Tok.Dot: return true
+    return imported(src, src[v[i - 4].start:v[i - 4].end])
+}
+
+# whether name is a module's alias in src: `import name "..."`, or the last part of an import's path
+fn imported(src String&, name String&) Bool {
+    for l in src.Lines() {
+        if not l.StartsWith("import "): continue
+        if l.StartsWith("import " + $name + " ") or l.Contains("/" + $name + "\"") or l.Contains("\"" + $name + "\""): return true
+    }
+    return false
 }
 
 # a Markdown file: its olang code blocks renamed, the rest kept
@@ -127,4 +151,7 @@ test "Any and All, called or declared, become Some and Every; anything else is l
     src := "    Any := 3\n    # a.Any(f)\n    s := \"a.All(f)\"\n    e := Opt.Any\n"
     assert rename(src, n) == src
     assert n.n == 4
+    kept := "import \"../compiler/ast\"\ntype TypeRef enum {\n    Ref(of I64)\n    Any(sp I64, of I64)\n}\nfn f(t TypeRef) { match t { case TypeRef.Any(sp, _), ast.TypeRef.Any(_, of) { } } }\n"
+    assert rename(kept, n) == kept
+    assert rename("b := s.Items.Any(f)\n", n) == "b := s.Items.Some(f)\n"
 }
