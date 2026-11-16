@@ -74,6 +74,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     lamItem Bool = false               # ... and the lambda an item of a list: its "," is the list's (L18c)
     inLam Bool = false                 # in a lambda's one-line body (S1b, D16): what closes its bracket ends it, a line end is left
     keepEnd Bool = false               # in a catch clause's one-line body (S1b, R11): its line end is left to the statement it is in
+    doLine Bool = false                # in a do loop's one-line body (S1b): the "for" after it ends its statement too
     ctorBody Bool = false              # the next block is a constructor's body
     brackets I64 = 0                   # open "(" and "[" around here, outside every block (L18b)
     skip Bool = false                  # in a parenthesized expression or a comprehension: a line's end separates
@@ -374,6 +375,7 @@ fn (p mut Parser&) endStmt() ? Fail {
     }
     if k == token.Tok.RBrace or k == token.Tok.Eof: return
     if p.inLine and (k == token.Tok.Else or k == token.Tok.Catch): return
+    if p.doLine and k == token.Tok.For: return
     if p.inLam and (k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.Comma): return
     pk := p.prevKind
     if (pk == token.Tok.Amp or pk == token.Tok.Gt or pk == token.Tok.RBrace) and p.breakBefore(): return
@@ -386,6 +388,7 @@ fn (p mut Parser&) atEnd() Bool {
     k := p.peek()
     if k == token.Tok.StmtEnd or k == token.Tok.RBrace or k == token.Tok.Eof: return true
     if p.inLam and (k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.Comma): return true
+    if p.doLine and k == token.Tok.For: return true
     return p.inLine and (k == token.Tok.Else or k == token.Tok.Catch)
 }
 
@@ -592,7 +595,7 @@ fn (p mut Parser&) decl() ast.Decl?& ? Fail {
             if not p.sees(token.Tok.StrLit): try p.fail(token.Tok.StrLit.Describe())
             nt := p.tk()
             p.advance()
-            body := try p.block()
+            body := try p.body()
             return ast.Decl.Test(p.from(at), source.Span(nt.Start, nt.End), body, target)
         }
         case token.Tok.If { return try p.topIf() }
@@ -956,12 +959,12 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
             params := try p.params(false)
             errs := try p.errorSet()
             p.ctorBody = true
-            body := try p.block()
+            body := try p.ctorBlock()
             dsp := source.Span(0, 0)
             dtor Array<ast.Stmt&>& = Array<ast.Stmt&>(0)
             if p.sees(token.Tok.Destruct) {
                 dat := p.advance()
-                dtor = try p.block()
+                dtor = try p.body()
                 dsp = p.from(dat)
             }
             return ast.TypeBody.Struct(ast.StructBody(params, errs, body, dsp, dtor, tps))
@@ -969,7 +972,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
         case token.Tok.Enum {
             p.advance()
             raw ast.TypeRef?& = null
-            if not p.sees(token.Tok.LBrace) { raw = try p.typeExpr() }   # T17e: "enum String {"
+            if not p.sees(token.Tok.LBrace) and not p.sees(token.Tok.Colon) { raw = try p.typeExpr() }   # T17e: "enum String {"
             try p.want(token.Tok.LBrace)
             cases mut Vec<ast.CaseDecl&>& = Vec<ast.CaseDecl&>()
             p.skipEnds()
@@ -1047,7 +1050,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
                 cat := p.advance()
                 cp := try p.params(false)
                 ce := try p.errorSet()
-                cb := try p.block()
+                cb := try p.body()
                 s := ast.Sig(cp, Array<ast.TypeRef&>(0), ce.HasErrors, ce.Errors)
                 return ast.TypeBody.Over(base, ast.Func(p.from(cat), null, source.NameId(0), s, cb))
             }
@@ -1097,7 +1100,7 @@ fn (p mut Parser&) function() ast.Func& ? Fail {
     s := try p.sig(false, false, true)
     p.valueAfter = false
     braced := p.sees(token.Tok.LBrace)
-    body := try p.block() catch {
+    body := try p.body() catch {
         if braced {
             p.salvage.Push(ast.Decl.Fn(ast.Func(p.from(at), recv, name, s, Array<ast.Stmt&>(0), tps, false, false
                                                 Array<ast.Attr&>(0), owner, member)))
@@ -1773,11 +1776,12 @@ fn (p mut Parser&) block() Array<ast.Stmt&>& ? Fail {
     wasItem := p.item
     p.item = false
     defer { p.item = wasItem }
-    wasLine, wasKeep := p.inLine, p.keepEnd
-    p.inLine, p.keepEnd = false, false
+    wasLine, wasKeep, wasDo := p.inLine, p.keepEnd, p.doLine
+    p.inLine, p.keepEnd, p.doLine = false, false, false
     defer {
         p.inLine = wasLine
         p.keepEnd = wasKeep
+        p.doLine = wasDo
     }
     wasLam, wasLamItem := p.inLam, p.lamItem
     p.inLam, p.lamItem = false, false
@@ -1875,7 +1879,7 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
         }
         case token.Tok.Do {
             p.advance()
-            body := try p.block()
+            body := try p.doBody()
             try p.want(token.Tok.For)
             cond := try p.expr()
             sp := p.from(at)
@@ -1984,6 +1988,10 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
                 sp := p.from(at)
                 if p.sees(token.Tok.StmtEnd): p.advance()
                 return ast.Stmt.Defer(sp, ast.Stmt.Block(sp, body), onError)
+            }
+            if p.sees(token.Tok.Colon) {
+                line := try p.lineBody()
+                return ast.Stmt.Defer(p.from(at), line[0], onError)
             }
             s := try p.stmt()
             return ast.Stmt.Defer(p.from(at), s, onError)
@@ -2308,7 +2316,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt& ? Fail {
 # "join { body } [catch ...]" - "try" already read when tried
 fn (p mut Parser&) joinRest(tried Bool) ast.JoinS& ? Fail {
     try p.want(token.Tok.Join)
-    body := try p.block()
+    body := try p.body()
     cl := try p.clauses(false)
     if p.sees(token.Tok.StmtEnd): p.advance()
     return ast.JoinS(tried, body, cl)
@@ -2364,10 +2372,35 @@ fn (p mut Parser&) branch() ast.Branch& ? Fail {
     return ast.Branch(p.from(at), body, g)
 }
 
-# a loop's body: a block, or a one-line body (S1b)
+# a body: a block, or a one-line body (S1b)
 fn (p mut Parser&) body() Array<ast.Stmt&>& ? Fail {
     if p.sees(token.Tok.Colon): return try p.lineBody()
     return try p.block()
+}
+
+# a struct's constructor body (C2, S1b): a block, or a one-line body - which may be a field's declaration, the type's,
+# as the block's top-level declarations are
+fn (p mut Parser&) ctorBlock() Array<ast.Stmt&>& ? Fail {
+    if not p.sees(token.Tok.Colon): return try p.block()
+    p.ctorBody = false
+    return try p.lineBody(true)
+}
+
+# a do loop's body (S1b): a block, or a one-line body its "for" ends, on the same line - "do: n++ for n < 3"
+fn (p mut Parser&) doBody() Array<ast.Stmt&>& ? Fail {
+    if not p.sees(token.Tok.Colon): return try p.block()
+    wasDo, wasKeep := p.doLine, p.keepEnd
+    p.doLine, p.keepEnd = true, true
+    defer {
+        p.doLine = wasDo
+        p.keepEnd = wasKeep
+    }
+    body := try p.lineBody()
+    if not p.sees(token.Tok.StmtEnd): return body
+    # its "for" on the next line: said, and read as the loop's, so nothing more is said of it
+    p.reportAt(p.pos, msgs.DoLineFor())
+    if p.look(1) == token.Tok.For: p.advance()
+    return body
 }
 
 # a lambda's body (D16): a block, or a one-line body (S1b) - its statement ending at its line's end, or at what closes
@@ -2386,7 +2419,7 @@ fn (p mut Parser&) lambdaBody(item Bool) Array<ast.Stmt&>& ? Fail {
 # S1b: ":" and one simple statement on its line - an assignment, a call or an increment, a return, a break or continue,
 # an error, unreachable, assert or spawn statement - never a declaration, an if, a loop, a match, a join, a defer or a
 # block
-fn (p mut Parser&) lineBody() Array<ast.Stmt&>& ? Fail {
+fn (p mut Parser&) lineBody(field Bool = false) Array<ast.Stmt&>& ? Fail {
     colon := p.tk()
     p.advance()
     t := p.tk()
@@ -2404,9 +2437,10 @@ fn (p mut Parser&) lineBody() Array<ast.Stmt&>& ? Fail {
     defer { p.inLine = wasLine }
     # a constructor's fields are declared at its body's top level only (C2), never in a one-line body
     wasCtor := p.inCtor
-    p.inCtor = false
+    p.inCtor = field
     defer { p.inCtor = wasCtor }
     st := try p.stmt()
+    if field: return Array<ast.Stmt&>[st]
     match st {
         case ast.Stmt.Var(sp, _) {
             p.report(sp.Start, sp.End, msgs.LineBodyNotSimple("a declaration"))
@@ -2444,8 +2478,8 @@ fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt& ? Fail {
     at := try p.want(token.Tok.For)
     unrolled := comptimeAt >= 0
     if unrolled { at = comptimeAt }
-    if p.sees(token.Tok.LBrace) {
-        body := try p.block()
+    if p.sees(token.Tok.LBrace) or p.sees(token.Tok.Colon) {
+        body := try p.body()
         sp := p.from(at)
         if p.sees(token.Tok.StmtEnd): p.advance()
         return ast.Stmt.Forever(sp, body)

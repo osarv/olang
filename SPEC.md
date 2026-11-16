@@ -2220,7 +2220,7 @@ set, error types, their words and other sets (T19a).
 
 ### 3.4 Function declarations
 
-**D7.** `func-decl ::= "fn" [ receiver ] IDEN [ fn-type-params ] func-sig block`, with
+**D7.** `func-decl ::= "fn" [ receiver ] IDEN [ fn-type-params ] func-sig body` (`body`, S1b: a block, or `:` and one statement on its line), with
 `receiver ::= "(" param ")"`.
 The declared name enters the module's `vars` set (D2). `block` is specified in §6.1. `fn-type-params` lists the
 function's own type variables (§12.2 G3).
@@ -5154,11 +5154,18 @@ block. It runs once, and it leaves (D10a) when its statements do.
 
 **S1b (a one-line body).** `body ::= block | ":" line-stmnt`, where `line-stmnt` is one assignment (S4, a parallel one
 included: `if a > b: a, b = b, a`), expression statement (S3, an increment included), `return`, `break`, `continue`,
-`error`, `unreachable`, `assert` or `spawn` statement, beginning on the line of its `:`. An `if`'s and an `else`'s
-body and a `for` loop's body (but not the forever form's, nor a `do` loop's) may be one, and so may a lambda's (D16):
-`if x < 0: return 0`, `for x in xs: total += x`, `else: count++`, `fn(x): return x > 3`; so may a match statement's clause, `case 0: n++` (S12), and a
-catch clause's, `catch ParseError e: bad++` (R11), and a
-match used as a value takes the same `:` for its clauses' values (S12b). It is
+`error`, `unreachable`, `assert` or `spawn` statement, beginning on the line of its `:`. **Every body that is a block
+of statements may be one** (the user's rule, 2026-11-16: "any place where we can have {} should take : starting on the
+same line with one statement"): an `if`'s and an `else`'s, a `for` loop's in each form, the forever form's included
+(`for: step()`), a `do` loop's, a function's and a method's (`fn twice(x I64) I64: return 2 * x`), a lambda's (D16), a
+test's (`test "adds": assert add(1, 2) == 3`), a `join`'s (`join: spawn work()`), a `defer`'s and an `errdefer`'s
+(`defer: f.Close()`), a constructor's (C2) and a destructor's (C7), a constructor over a primitive's (T29d), a match
+statement's clause, `case 0: n++` (S12), and a catch clause's, `catch ParseError e: bad++` (R11); a match used as a
+value takes the same `:` for its clauses' values (S12b). A `do` loop's one-line body ends at its `for`, which stands
+on the same line (`do: n++ for n < 3`): on the next line it would begin a loop of its own. A constructor's one
+statement may be the declaration of a field, the type's as at a braced body's top level (`type Meters struct(v F64):
+V F64 = v`); after a one-line constructor body, `destruct` begins the next line. `defer stmt` without the `:` stays
+(S19): a deferred statement is a statement, not a body. It is
 exactly the block holding that one statement - a scope of its own (S1), so a declaration in one would name nothing
 after it and is a compile-time error, as are an `if`, a loop, a `match`, a `join`, a `defer` and a block (write the
 block, with braces and no `:`). Its statement ends at the end of its line, or at an `else` or a `catch` on that line;
@@ -5166,8 +5173,9 @@ an `else` (`else:`, `else if`) may also begin the next line, as a `catch` clause
 ends where D16 says. A `:` inside square brackets is a slice's (E16a), never a body's. A top-level `if`'s branch (B9) may take
 the `:` too, holding one top-level declaration on the line of its `:` (`if Debug: import "std/os"`, `else: Limit I64 =
 2`): a top-level branch is no scope, so its declaration is the module's as in braces; a declaration that does not end
-on that line, or a second one, is a compile-time error (write the braces). A `:` where a construct takes no one-line
-body (a function's, a type's, a forever loop's) is a compile-time error saying it takes a block.
+on that line, or a second one, is a compile-time error (write the braces). What is not a block of statements takes no
+one-line body: an enum's cases, a trait's methods, an `extern` block's declarations and a `match`'s clauses are lists,
+and a `:` before one is a compile-time error saying it takes a block, `{ }`.
 
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
@@ -5377,7 +5385,7 @@ except that a function one of whose branches is still being decided is not evalu
 **S9.** A `for` statement has four forms, all using the one keyword:
 
 ```
-for-stmnt ::= "for" block                                   (forever)
+for-stmnt ::= "for" body                                    (forever)
             | "for" expr body                               (while expr holds)
             | "for" for-init "," expr "," simple-stmnt body (three clauses)
             | "for" IDEN [ "," IDEN ] "in" expr body         (S9a)
@@ -5479,7 +5487,7 @@ A step that is a literal zero or negative is a compile-time error. The number of
 the first iteration, so the loop costs what the three-clause form does.
 `range` is a keyword (L9).
 
-**S10.** `do-stmnt ::= "do" block "for" expr STMNT_END`. Runs body once unconditionally, then
+**S10.** `do-stmnt ::= "do" body "for" expr STMNT_END` (a one-line body, S1b, has its `for` on its line). Runs body once unconditionally, then
 repeats: evaluate `expr` (must be `Bool`); if true, run body again and repeat; if false, stop. The
 loop always executes its body at least once. `expr` is evaluated in the turn it decides, as a `for` loop's condition
 is (S9): what it builds is reclaimed with that turn.
@@ -5873,7 +5881,7 @@ actually open (§6.8 P1d), which also lets a `join` among them wait for its task
 ### 6.8 Concurrency
 
 **P1.** `spawn-stmnt ::= "spawn" [ target { "," target } "=" ] [ "try" ] ( call | lambda ) { catch-clause } STMNT_END` and
-`join-stmnt ::= [ "try" ] "join" block { catch-clause }` (the `try` and the clauses: P4-P4d). A `spawn` statement
+`join-stmnt ::= [ "try" ] "join" body { catch-clause }` (the `try` and the clauses: P4-P4d). A `spawn` statement
 starts one **task**: the call runs on its own thread, and the statement itself completes immediately. A
 `join` block is an ordinary block in every other respect, and its end is where every task spawned in it is
 waited for.
@@ -6286,7 +6294,7 @@ follows to tell a synchronised program from a racy one.
 
 ### 6.9 `defer`
 
-**S19.** `defer-stmnt ::= "defer" ( block | statement )`. A `defer` does nothing where it stands: it registers its
+**S19.** `defer-stmnt ::= "defer" ( body | statement )` (`body`, S1b: `defer: f.Close()`). A `defer` does nothing where it stands: it registers its
 block - in the second form a block holding just that one statement, so `defer x = y` is `defer { x = y }` - as
 **deferred code** of the block it is written in. Deferred code runs when that block is left, by **every** way out of
 it: falling off its end; a `return`, once the value returned has been computed; a `break` or `continue` (S11a); and an
@@ -6326,7 +6334,7 @@ deferred code.
 
 **S19d.** A `defer` is not a statement that leaves (D10a), whatever its deferred code holds.
 
-**S19e.** `errdefer-stmnt ::= "errdefer" ( block | statement )`. An `errdefer` registers deferred code as `defer` does
+**S19e.** `errdefer-stmnt ::= "errdefer" ( body | statement )`. An `errdefer` registers deferred code as `defer` does
 (S19), checked as S19a and S19b check it, but its code runs only when its block is left by an **error moving
 outward**: an error leaving the function (an `error` statement, a `try` whose error no clause inside the block takes),
 an error going to a clause of a `try` outside the block - a `for x in try c` ended by its own error (S9e) included -
@@ -7925,8 +7933,11 @@ compiler-recognized blocks a struct type can declare; its methods are ordinary f
 **C1.** A constructor-bearing struct is declared:
 
 ```
-type IDEN [ type-params ] "struct" [ fn-type-params ] "(" param-list ")" [ "?" error-list ] "{" ctor-body "}" [ destruct-block ]
+type IDEN [ type-params ] "struct" [ fn-type-params ] "(" param-list ")" [ "?" error-list ] ( "{" ctor-body "}" | ":" ctor-line ) [ destruct-block ]
 ```
+
+`ctor-line` is a one-line body (S1b): one statement, or one field's declaration, on the line of its `:` (`type Meters
+struct(v F64): V F64 = v`).
 
 `param-list` and `error-list` are as in a function declaration
 (§3 D8), the error set carrying the same leading `?` it does there —
@@ -8086,7 +8097,7 @@ struct type assembled from those bindings' final values. If it instead reaches a
 produces that error instead and no instance at all — so a field declared after the failing point is
 never evaluated.
 
-**C7.** `destruct-block ::= "destruct" block`. A destructor's body has no error union of its own —
+**C7.** `destruct-block ::= "destruct" body`. A destructor's body has no error union of its own —
 every fallible call within it must be fully caught by a `catch` that leaves nothing uncaught
 (§7.5),
 since a destructor is never invoked by ordinary calling code and so has no caller to propagate an
@@ -8601,7 +8612,7 @@ decision.
 
 ### 10.4 Test blocks
 
-**B7.** `test-decl ::= "test" [ IDEN [ "." IDEN ] ] STR_LIT block`, valid as a top-level declaration in any module.
+**B7.** `test-decl ::= "test" [ IDEN [ "." IDEN ] ] STR_LIT body`, valid as a top-level declaration in any module.
 `STR_LIT` is the test's description. A `test` block has no error union of its own and raises nothing with
 `error` (R3); a `try` in it need not catch everything it covers, and an error that leaves its body fails the test
 (S16).

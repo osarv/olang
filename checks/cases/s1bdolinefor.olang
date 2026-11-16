@@ -1,0 +1,7 @@
+# check: fail error[S1b]: a do loop's one-line body ends at its 'for', on the same line
+# S1b: a do loop's one-line body ends at its "for", which stands on the same line
+fn main() {
+    n := 0
+    do: n++
+    for n < 3
+}

@@ -1,0 +1,4 @@
+# check: fail error[S1b]: this takes a block here, not a one-line body: write { }
+# S1b: an enum's cases are a list in braces, never a one-line body
+type Color enum: Red
+fn main() { }

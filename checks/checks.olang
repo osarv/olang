@@ -3225,7 +3225,7 @@ fn output(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" test -output out/t prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("-output applies to build, compile, run, bindgen, profile and notebook, not to test"), "test -output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -output out/q prog.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("not to running a file"), "running a file with -output", dir)
+                 outOf(dir).Contains("not to scripting mode"), "scripting mode with -output", dir)
 }
 
 # B13: format rewrites a file in the layout and -check lists the files not in it; a file that does not parse is left as
@@ -3303,7 +3303,7 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -b prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("unknown option '-b'"), "an old flag", dir)
     try r.expect(sh(dir, "\"$OLANG\" -output o prog.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("-output applies to build, compile, run, bindgen, profile and notebook, not to running a file")
+                 outOf(dir).Contains("-output applies to build, compile, run, bindgen, profile and notebook, not to scripting mode")
                  "an option for another mode", dir)
     try r.expect(sh(dir, "\"$OLANG\" -debug prog > out.txt 2>&1") == 1 and outOf(dir).Contains("'prog' is no olang file")
                  "running a file without .olang", dir)
@@ -3316,7 +3316,7 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" help format > out.txt 2>&1") == 0 and outOf(dir).Contains("-check"), "help format", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain b.olang Color > out.txt 2>&1") == 0 and outOf(dir).Contains("    fn Color.FromHex(t String&) Color ? ColorError\n    fn Color.Gray(level U8) Color&\n    fn (c Color&) Hex()")
                  "explain lists a type's builders before its methods (B11b)", dir)
-    try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("running a file"), "explain", dir)
+    try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("scripting mode"), "explain", dir)
     # B11b: a method of a type its file does not declare - an array's, a trait's default - named as a test names it
     array := os.Quote($root() + "/std/prelude/array.olang")
     try r.expect(sh(dir, $"\"$OLANG\" explain " + $array + " Array.Windows > out.txt 2>&1") == 0 and

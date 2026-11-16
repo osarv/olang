@@ -18707,3 +18707,35 @@ test "S4c, E31: a parallel assignment of elements stores through SetAt" {
     want := "Vec<s4cPt>[s4cPt(2, 20), s4cPt(2, 20), s4cPt(0, 0)] Vec<I32>[7, 1] 6 5 2"
     assert S4cSwapsBaked == want and s4cSwaps(3 + I64(ctRuntimeZero)) == want
 }
+
+# S1b, the user's rule (2026-11-16): every body that is a block of statements takes ":" and one statement on its line -
+# a function's, a test's, a constructor's (its one statement may be the field it declares), a destructor's, a forever
+# loop's, a do loop's (its "for" on the same line), a join's, a defer's and an errdefer's - run at run time and while
+# compiling alike
+fn s1bTwice(x I64) I64: return 2 * x
+type s1bMeters struct(v F64): V F64 = v
+type s1bHeld unique struct(n I64): N I64 = n
+destruct: s1bGone = s1bGone + N
+s1bGone mut I64 = 0
+fn s1bDo(n I64) I64 {
+    k I64 = 0
+    do: k += n for k < 10
+    for: break
+    {
+        defer: k = k * 100
+        errdefer: k = -1
+    }
+    return k
+}
+fn s1bJoin() I64 {
+    join: spawn s1bTwice(1)
+    return 3
+}
+S1bLineBaked I64 = s1bTwice(4) + s1bDo(4) + s1bJoin()
+test "S1b: a one-line body for every block of statements": assert S1bLineBaked == 8 + 1200 + 3
+test "S1b: one-line bodies of functions, types and loops at run time" {
+    n I64 = 4
+    assert s1bTwice(n) == 8 and s1bDo(n) == 1200 and s1bJoin() == 3 and s1bMeters(2.5).V == 2.5
+    { h := s1bHeld(n) }
+    assert s1bGone == 4
+}

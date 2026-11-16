@@ -38596,3 +38596,26 @@ takes no one-line body now says "this takes a block here, not a one-line body: w
 The user named `olang FILE` **scripting mode** on 2026-11-16: B3g's heading, the spec's option table and prose, settled,
 the command line's mode name (its messages: "-race applies to scripting mode, build, ...", "scripting mode needs a
 file") and the B12a refusal.
+
+### S1b: a one-line body for every block of statements (the user's rule: "any place where we can have {} should take : starting on the same line with one statement")
+Before, `:` took the place of a block after `if`/`else`, a `for` loop (not the forever form), a lambda, a match clause
+and a catch clause; a function's, a test's, a `do` loop's, a `join`'s or a type's body said "expected '{', found ':'".
+Now `parse.olang` reads each through `body()` (a block, or `lineBody()`): a function's and a method's (`function`), a
+test's, the forever loop's, a join's (`joinRest`), a constructor over a primitive's (T29d), a destructor's; `defer:` and
+`errdefer:` take a one-line body beside their bare statement (the bare form stays: a deferred statement is a statement,
+and removing it would be a migration of its own). Two needed more than `body()`:
+- **A `do` loop** (`doBody`): its `for` follows the body, so a one-line body ends at a `for` on its line (`doLine`,
+  read by `endStmt`/`atEnd` as `inLine` reads `else`/`catch`) and keeps its line end (`keepEnd`), so the `for` must stand
+  on that line: on the next line it would begin a loop of its own. Mine: that is the one place the line matters; a
+  `for` on the next line is said (S1b: "a do loop's one-line body ends at its 'for', on the same line") and read as the
+  loop's, so nothing more is said. Not an exception: `do: n++ for n < 3` is unambiguous on one line.
+- **A struct's constructor** (`ctorBlock`, `lineBody(field)`): a constructor's top-level declaration is a field, the
+  type's, so its one-line body may be one (`type Meters struct(v F64): V F64 = v`) - the "a declaration reaches
+  nothing" refusal is a function body's. After a one-line constructor body `destruct` begins the next line.
+What stays a block, said with "this takes a block here, not a one-line body: write { }": lists that are no statements -
+an enum's cases (the parser no longer reads `enum:` as a raw type), a trait's methods, an `extern` block, a match
+statement's clause list. Inside a function a declaration as a one-line body is still refused (that body is a scope).
+`unparse.olang` writes each body as it was written (`body`, `colonBefore`, `dtor`); the formatter is token-based and
+needed nothing. The AST is the same as for the braced form, so the checker and the evaluator needed nothing either -
+`tests/shared.olang` "S1b: a one-line body for every block of statements" bakes a global through each (the evaluator)
+beside the run-time test. The compiler's own sources keep the braced forms (the seed reads them).

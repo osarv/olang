@@ -30,7 +30,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   the statement the try is in.
   **A top-level branch too (B9, the user's call 2026-11-16):** `if Debug: import "std/os"`, `else: Limit I64 = 2` - one
   declaration on the colon's line, the module's (a top-level branch is no scope); more is an error naming the braces.
-  A `:` where a construct takes no one-line body says it takes a block ("write { }").
+  **Every block of statements too (the user's rule 2026-11-16: "any place where we can have {} should take :"):**
+  `fn twice(x I64) I64: return 2 * x`, `test "t": assert f()`, `for: step()`, `do: n++ for n < 3` (its `for` on the
+  same line), `join: spawn work()`, `defer: f.Close()`, `errdefer: ...`, a constructor's (its statement may be a field,
+  `type Meters struct(v F64): V F64 = v`) and a destructor's. Lists that are no statements (enum cases, trait methods,
+  extern blocks, a match's clauses) say "this takes a block here, not a one-line body: write { }".
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build compile
   test run format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target
   -define -update -check -quick -checked -html -library -memory -fuzz -fuzztime -caps -asm -ir -bench`, each checked against

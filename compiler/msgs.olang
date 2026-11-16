@@ -630,6 +630,7 @@ type Diag enum {
     LitCompare
     TopLineOne
     NoLineBody
+    DoLineFor
     NoZeroNonNull
     ReadMaybeNull
     NullToArray
@@ -1110,6 +1111,7 @@ fn ExplainNeedsRule() r.Msg { return r.Msg(Diag.ExplainNeedsRule, "B11a", "expla
 fn ExplainNeedsName(file String&) r.Msg { return r.Msg(Diag.ExplainNeedsName, "B11b", $"explain " + $file + " takes the name of one of its items, as 'olang explain " + $file + " main'") }
 fn TopLineOne() r.Msg { return r.Msg(Diag.TopLineOne, "S1b", "a top-level branch's one-line body is one declaration on the line of its ':' - write a block, '{ ... }'") }
 fn NoLineBody() r.Msg { return r.Msg(Diag.NoLineBody, "S1b", "this takes a block here, not a one-line body: write { }") }
+fn DoLineFor() r.Msg { return r.Msg(Diag.DoLineFor, "S1b", "a do loop's one-line body ends at its 'for', on the same line", "", "write 'do: n++ for n < 3', or a block") }
 fn LineBodyOnLine() r.Msg { return r.Msg(Diag.LineBodyOnLine, "S1b", "a one-line body stands on the line of its ':' - write a block, '{ ... }'") }
 fn LineBodyNotSimple(what String&) r.Msg { return r.Msg(Diag.LineBodyNotSimple, "S1b", $"a one-line body is one simple statement, not " + $what + " - write a block, '{ ... }'") }
 fn NotebookUsage() r.Msg { return r.Msg(Diag.NotebookUsage, "B24", "notebook takes the word run and one notebook", "write 'olang notebook run FILE.ipynb'") }
