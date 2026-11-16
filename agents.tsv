@@ -195,4 +195,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	extfix	opus	medium	completed	203	103	74	yes		extends generic methods, print exit 1
 2026-11-16	oannmig2	sonnet	low	completed	112	29	45	partial		fix tools misfired 5 ways
 2026-11-16	fixtools	opus	low	running
-2026-11-16	steward3	sonnet	medium	running
+2026-11-16	steward3	sonnet	medium	completed	106	26	57	yes		merged extfix, serve
