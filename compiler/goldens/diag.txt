@@ -5111,6 +5111,17 @@ s1bdecl.olang:4:23: error[S1b]: a one-line body is one simple statement, not a d
     4 |     for i in range 3: y := i
       |                       ^~~~~~
 compilation failed with 1 error
+=== s1bdolinefor.olang
+s1bdolinefor.olang:5:12: error[S1b]: a do loop's one-line body ends at its 'for', on the same line
+    5 |     do: n++
+      |            ^
+s1bdolinefor.olang:5:12: help: write 'do: n++ for n < 3', or a block
+compilation failed with 1 error
+=== s1benumline.olang
+s1benumline.olang:3:16: error[S1b]: this takes a block here, not a one-line body: write { }
+    3 | type Color enum: Red
+      |                ^
+compilation failed with 1 error
 === s1blambdaif.olang
 s1blambdaif.olang:4:25: error[S1b]: a one-line body is one simple statement, not an if - write a block, '{ ... }'
     4 |     f := fn(x I64) I64: if x > 0 { return 1 }
@@ -5141,9 +5152,9 @@ s1bnested.olang:5:10: error[S8a]: this condition is the same on every build, so 
 s1bnested.olang:5:10: help: depend on a build constant, or remove it
 compilation failed with 2 errors
 === s1bnolinebody.olang
-s1bnolinebody.olang:3:11: error[S1b]: this takes a block here, not a one-line body: write { }
-    3 | fn f() I64: return 1
-      |           ^
+s1bnolinebody.olang:5:12: error[S1b]: this takes a block here, not a one-line body: write { }
+    5 |     match x: case 1: x++
+      |            ^
 compilation failed with 1 error
 === s1bsameline.olang
 s1bsameline.olang:5:13: error[S1b]: a one-line body stands on the line of its ':' - write a block, '{ ... }'

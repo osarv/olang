@@ -180,24 +180,38 @@ fn (w mut writer&) errorDecl(name source.NameId, words Array<source.NameId>&, me
 fn (w mut writer&) topIf(i ast.TopIf&) {
     w.put("if ")
     w.expr(i.Cond!)
-    w.put(" ")
     w.topBranch(i.Then!)
+    if i.ElseIf == null and i.Else == null: return
+    # after a one-line branch (S1b) the "else" begins the next line
+    if w.text[I64(i.Then!.Sp.Start)] == ':' {
+        w.nl()
+        w.put("else")
+    } else {
+        w.put(" else")
+    }
     if i.ElseIf != null {
-        w.put(" else ")
+        w.put(" ")
         w.topIf(i.ElseIf!)
-    } else if i.Else != null {
-        w.put(" else ")
+    } else {
         w.topBranch(i.Else!)
     }
 }
 
+# a top-level branch, after its condition or "else": " {" and its declarations, or ": " and its one (S1b)
 fn (w mut writer&) topBranch(b ast.TopBranch&) {
+    line := w.text[I64(b.Sp.Start)] == ':'
     if w.diags.Holds(b.Group) {
+        if not line: w.put(" ")
         w.span(b.Sp)
         w.held.Push(b.Sp)
         return
     }
-    w.put("{")
+    if line and b.Decls.Len() == 1 {
+        w.put(": ")
+        w.decl(b.Decls[0])
+        return
+    }
+    w.put(" {")
     w.ind++
     for d in b.Decls {
         if hidden(d): continue
