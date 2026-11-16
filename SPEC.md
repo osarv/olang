@@ -8963,7 +8963,12 @@ that does not parse has its diagnostics and answers nothing else; no request end
 `exit`. For a deprecated item (L4b) the hover shows the note with the rest of the doc comment, its completion item
 carries the tag `Deprecated` (`"tags":[1]`), and each use of it in an open file is published as a diagnostic of severity
 Hint (4) tagged `Deprecated` (`"tags":[2]`) carrying the note - the only diagnostic published that is not an error; the
-compiler never prints it.
+compiler never prints it. Inside the quotes of an `import` line, completion offers the next segment of the path: after
+`"std/` the modules of the std in use (its `.olang` files without the extension and its folders, `prelude` left out),
+after `"./` or `"../` the `.olang` files and folders relative to the edited file's folder, at the opening quote the
+roots `std/`, `./` and `../`, and nothing for a remote path; `/` and `"` trigger completion as `.` does. For the
+diagnostic M10 a `textDocument/codeAction` request is answered with a quick fix inserting the import M10 names after
+the file's last `import` line, or at its start where there is none (`codeActionProvider`).
 
 **B15a (where the analyzing tools write).** The modes that only analyze - `lsp`, `mcp` (B16), `explain` (B11b), `doc`
 (B14) and `api` - write nothing beside the program or in the working directory: the records and objects their checking

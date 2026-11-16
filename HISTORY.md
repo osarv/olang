@@ -38672,3 +38672,15 @@ begins with `=` it is an error, "write -define IO=true, with no spaces" - the `=
 name given to a B10c default of another type (`Port I64 = 8080`) is an error asking for a value (`-define Port=443`):
 cond.Consts records the bare names, names.olang checks them where it fits a default. Tests: compiler/olang.olang's
 command-line tests, the checks scenario `cmdline`.
+### B15: import path completion and M10's quick fix (2026-11-16, wt-lspimport)
+
+Asked for by the user. Inside the quotes of an `import` line the language server now completes the path one segment
+at a time: `"std/` lists the std in use (its .olang files without the extension and its folders, the prelude left out,
+since it is never imported), `"./` and `"../` list the .olang files and folders beside the edited file, the bare
+opening quote offers the three roots, and a remote path offers nothing (there is nothing local to list). `/` and `"`
+joined `.` as trigger characters so the menu opens as the path is typed. Second, `codeActionProvider`: for an M10
+diagnostic ("'json' is no import here - std has it: 'import "std/json"'") the server answers a quick fix inserting
+the named import after the last import line, or at the file's start. The import line is read back out of M10's own
+message, so the fix and the diagnostic cannot disagree. Helpers in compiler/session.olang (ImportTyped, ImportPaths,
+ImportFix); the scripted LSP test in compiler/lsp.olang covers both. Neovim maps `<localleader>a` to `:OlangFix`
+(`vim.lsp.buf.code_action()`).

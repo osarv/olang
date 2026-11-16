@@ -166,6 +166,7 @@ function M.commands(bufnr)
     vim.lsp.util.open_floating_preview(out, "olang", { border = "rounded", focus_id = "olang_explain" })
   end)
   cmd("OlangRepl", function() term({ "olang" }) end)
+  cmd("OlangFix", function() vim.lsp.buf.code_action() end)
   cmd("OlangDebug", function(o) require("olang.debug").debug(o.fargs) end, "*")
   cmd("OlangDebugTest", function(o) require("olang.debug").debug_test(o.fargs) end, "*")
   require("olang.debug").attach()
@@ -183,7 +184,7 @@ function M.commands(bufnr)
   local function mapgd() vim.keymap.set("n", "gd", gd, { buffer = bufnr, desc = "olang: matching bracket, else definition" }) end
   mapgd()
   vim.api.nvim_create_autocmd("LspAttach", { buffer = bufnr, callback = function() vim.schedule(mapgd) end })
-  local keys = { r = "OlangRun", b = "OlangBuild", t = "OlangTest", f = "OlangFormat", F = "OlangFormatOnSave", e = "OlangExplain", i = "OlangRepl", d = "OlangDebug" }
+  local keys = { r = "OlangRun", b = "OlangBuild", t = "OlangTest", f = "OlangFormat", F = "OlangFormatOnSave", e = "OlangExplain", i = "OlangRepl", d = "OlangDebug", a = "OlangFix" }
   for k, c in pairs(keys) do
     local lhs = "<localleader>" .. k
     if vim.fn.maparg(lhs, "n") == "" then
