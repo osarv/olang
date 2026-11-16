@@ -38512,3 +38512,8 @@ three. The checker now refuses a fourth argument at its span (RangeArgs: "a rang
 "write 'range END', 'range START, END' or 'range START, END, STEP'"); the evaluator and interpret run the checked tree,
 so they need nothing. `range` with no argument was already refused by the parser ("expected an expression"). Cases:
 checks/cases/rangefourargs.olang, rangenoargs.olang.
+
+**2026-11-16, `!` keeps covering the whole expression (E35).** The user found `Print(r.All())!` builds and asked
+whether `!` should cover only the call it follows; kept as it is (the user: "we gain nothing from it right? all possible
+cases are writable and this simplifies the two failing args case"): `!` covers what a `try` in its place would (R8),
+so `f(a(), b())!` handles both arguments with one `!`, and `f(a()!, b())` still says exactly which may end the program.
