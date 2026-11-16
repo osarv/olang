@@ -38428,3 +38428,43 @@ facts change no code. Left to the slot-scope work (wt-freeing8) and oann's test 
 
 Tests: tests/keptfacts.olang (the reduced cases, kept and not, and their runs). oann's `make test` passes with this
 compiler but for that quant check; every `Allocates` assert and `noalloc` promise in it holds.
+
+## 2026-11-16: G42 counts an array value's copies (wt-facts3)
+
+**The gap.** wt-factsreg found `pre := h.S; pre[0] = 5.0` allocating with `Allocates` false: no fact counted T7b's copy
+of an array of a run-time length held by value. Reduced further, none of lowering's array copies were counted: a local
+declared or a place assigned from existing storage (`copiesArray`), a fixed array widened where a run-time one is kept
+(T7c, `q := Array<F32>(4); q = h.S` builds twice), a return copying existing storage into the result's scope
+(`retArrays`), and the caller's copy of a value a view function hands back (D9h, `x := handedBack(h); x[0] = 1.0`).
+
+**The rule now.** effects.olang counts each (`copyBuilds` at a Let and an Assign, `retBuilds` at a Return, `viewCall`
+at a call) wherever it is written. Two places where lowering leaves a copy out are followed exactly: a body handing back
+a view of its arguments copies nothing itself (its callers do), and a view read where it stands - a value owning
+nothing read out of the call's temporary, the indices on the way literals, locals and operations storing nothing
+(`typed.Call.QuietRead`), every argument it may view rooted in a place of the function (`typed.PlaceRooted`, lowering's
+placeRooted moved there) - copies nothing; lowering's `windowQuiet` now takes such a read as quiet at once (nothing runs
+between the call and the read, so no mutable global can write what it views), the one judgement both read. The rest of
+lowering's views in place of copies (viewLocals: a local only read, the storage it views stable while it lives) is not
+proved by the facts, which count the copy: a pessimism, never a miss. Views are settled before the facts are summarized
+(`check.viewsForFacts`: ViewResults and CtorViews cleared and settled afresh for each attempt's bodies, the final
+attempt's exactly as before, so the code generated keeps the same views) - before, the facts ran before any view was
+settled.
+
+**What it found in oann.** `dyn/settle.olang`'s `constant` copies `pre := e.Pops[l.Pre].R0.S` once a folded connection
+(it is lent to `Link.Forward`'s `s mut Array<T>&`, so it is a copy, not a view; OLANG_VIEWDUMP: "no candidate lent"),
+and `totals` copies `from := p.lif(k).Trace if p.Spiking else p.rate(k).S` on a nudged readout - both real per-call
+arena allocations (`__olang_scope_alloc` and a memmove in their IR), so `settleOf`, `settle64Of`, system's two settles
+and learn's `ImplicitGrad` now read `Allocates` true; with the two locals made references (`carried`), every assert
+holds again. Left to oann.
+
+**quant's resident test (nn/quant.olang:716, "grew by 28 kB").** Not the model: `olang test` builds the file under
+`-race` (a test starts a task, P7a), and the growth is the measurement's own. `resident()` reads /proc/self/status with
+`os.ReadFile`, whose buffer doubles from one byte (/proc reports size 0) - about 4 kB of arena pages a read touches the
+first times (4, 8, 8 kB over three reads with no Forward between, either compiler), times TSan's shadow: 24, 40, 48 kB.
+The model's 400 calls add nothing (per-call RSS, race or not: no growth after the second call, master and the
+freeing5-era compiler alike). The test reads it once before the loop and once after, so whether those pages are new
+depends on what earlier tests left in the chunk pool - 8 kB under the old compiler, 28 kB under master, 40 kB for the test
+run alone under either. Calling `resident()` a few times before `before :=` makes it pass (checked on a copy). Left to oann.
+
+Tests: tests/keptfacts.olang (copiedOut, widenedThenAssigned, storedInto, keptView allocate; handedBack does not;
+their runs).

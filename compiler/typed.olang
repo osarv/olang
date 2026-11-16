@@ -607,6 +607,69 @@ fn (w ViewWalk&) copyViews(x Expr?&) I64 {
 # leaves out, its caller copying where it keeps the result (D9h)
 fn (w ViewWalk&) ElidedCopy(x Expr?&) Bool { return w.copyViews(x) > 0 }
 
+# D9h: whether a value is rooted in a place of the function reading it - a local's, through parts, references read
+# out of such places and the conversions passing references on - so a view of it is of storage the function names
+fn PlaceRooted(r Expr&) Bool {
+    return match r {
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p): LocalRooted(p)
+        case Expr.Slice(_, _, sl): LocalRooted(sl.Base)
+        case Expr.Prim(_, _, op, _, args): PassesRefs(op) and args.Len() > 0 and PlaceRooted(args[0])
+        case Expr.Away(_, _, y): PlaceRooted(y)
+        case _: false
+    }
+}
+
+fn LocalRooted(p Lvalue&) Bool {
+    return match p {
+        case Lvalue.Local(_, _, _): true
+        case Lvalue.Field(_, _, base, _): LocalRooted(base)
+        case Lvalue.Elem(_, _, e): LocalRooted(e.Base)
+        case Lvalue.Payload(_, _, py): LocalRooted(py.Base)
+        case Lvalue.Deref(_, _, x): PlaceRooted(x)
+        case _: false
+    }
+}
+
+# D9h by evaluation order: the call whose temporary place p is read out of (`v.At(i).w`, `v[i].xs[j]`) where nothing
+# runs between the call handing its value back and the read - the indices on the way are numbers read out of locals and
+# operations writing nothing - so nothing can write what the value views while it is alive; null for any other place
+fn Call.QuietRead(p Lvalue&) Call?& {
+    return match p {
+        case Lvalue.Field(_, _, base, _): Call.QuietRead(base)
+        case Lvalue.Payload(_, _, py): Call.QuietRead(py.Base)
+        case Lvalue.Elem(_, _, e): Call.QuietRead(e.Base) if inert(e.Index) else null
+        case Lvalue.Temp(_, _, x, _): match x {
+            case Expr.Call(_, _, c): c
+            case _: null
+        }
+        case _: null
+    }
+}
+
+# whether evaluating x runs nothing that writes: literals, locals read, and operations on them that store nothing
+fn inert(x Expr&) Bool {
+    return match x {
+        case Expr.Lit(_, _, _): true
+        case Expr.Read(_, _, p, _): p == Lvalue.Local
+        case Expr.Prim(_, _, op, _, args): storesNothing(op) and allInert(args)
+        case _: false
+    }
+}
+
+fn allInert(xs Array<Expr&>&) Bool {
+    for x in xs {
+        if not inert(x): return false
+    }
+    return true
+}
+
+fn storesNothing(op PrimOp) Bool {
+    return match op {
+        case PrimOp.AtomicStore, PrimOp.AtomicAdd, PrimOp.AtomicSwap, PrimOp.AtomicCompareSwap, PrimOp.Drop, PrimOp.Retire: false
+        case _: true
+    }
+}
+
 # (exported for lowering's views kept in place of copies)
 fn CopiedOf(t types.Table&, x Expr&) Expr?& { return copied(t, x) }
 
