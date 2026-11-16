@@ -62,8 +62,8 @@ type Error error {
 # after it. Four zeros are no state xoshiro256** can be in - from them it would give zeros forever, and State never
 # gives them - so they fail with ZeroState, and other than four words with WrongLength, the generator left as it was
 fn (r mut Rand&) SetState(s Array<U64>&) ? Error {
-    if s.Len() != 4 { error Error.WrongLength }
-    if s[0] == 0 and s[1] == 0 and s[2] == 0 and s[3] == 0 { error Error.ZeroState }
+    if s.Len() != 4: error Error.WrongLength
+    if s[0] == 0 and s[1] == 0 and s[2] == 0 and s[3] == 0: error Error.ZeroState
     r.s0 = s[0]
     r.s1 = s[1]
     r.s2 = s[2]
@@ -76,7 +76,7 @@ fn (r mut Rand&) Below(n I64) I64 {
     limit U64 = U64(0) - (U64(0) - m) % m        # the largest multiple of m that fits, wrapping to 0 for m = 2^k
     for {
         x := r.Next()
-        if limit == 0 or x < limit { return I64(x % m) }
+        if limit == 0 or x < limit: return I64(x % m)
     }
     unreachable
 }
@@ -112,21 +112,21 @@ fn (r mut Rand&) Uniforms(n I64, lo F64 = 0.0, hi F64 = 1.0) Array<F64> {
 
 # one element of "a", each as likely - failing with Empty where it has none
 fn (r mut Rand&) Choice<T>(a Array<T>&) T ? Error.Empty {
-    if a.Len() == 0 { error Error.Empty }
+    if a.Len() == 0: error Error.Empty
     return a[r.Below(a.Len())]
 }
 
 # k elements of "a" drawn with replacement, so one may come again (Python's random.choices) - failing with Empty where
 # it has none and k is above zero
 fn (r mut Rand&) Choices<T>(a Array<T>&, k I64) Array<T> ? Error.Empty {
-    if k > 0 and a.Len() == 0 { error Error.Empty }
+    if k > 0 and a.Len() == 0: error Error.Empty
     return Array<T>[a[r.Below(a.Len())] for _ in range k]
 }
 
 # k elements of "a" drawn without replacement, in the order drawn (Python's random.sample): k different positions -
 # failing with TooFew where "a" has fewer than k
 fn (r mut Rand&) Sample<T>(a Array<T>&, k I64) Array<T> ? Error.TooFew {
-    if k > a.Len() { error Error.TooFew }
+    if k > a.Len(): error Error.TooFew
     order := Array<I64>[i for i in range a.Len()]
     for i in range k {
         j := i + r.Below(a.Len() - i)              # Fisher-Yates, stopped after k places
@@ -175,7 +175,7 @@ test "from the state 1, 2, 3, 4 xoshiro256** gives its reference outputs" {
 # into the same one after it has drawn on
 fn restoredDraws() U64 {
     r := Rand(2024)
-    for _ in range 5 { r.Next() }
+    for _ in range 5: r.Next()
     saved := r.State()
     a := r.Next()
     b := r.Below(1000)
@@ -183,7 +183,7 @@ fn restoredDraws() U64 {
     other := Rand(1)
     try other.SetState(saved) catch { unreachable }
     assert other.Next() == a and other.Below(1000) == b and other.Float() == c
-    for _ in range 100 { r.Next() }
+    for _ in range 100: r.Next()
     try r.SetState(saved) catch { unreachable }
     assert r.Next() == a and r.State()[0] != saved[0]
     return a
@@ -213,8 +213,8 @@ test "Below is uniform and in range" {
         assert k >= 0 and k < 10
         counts[k]++
     }
-    for c in counts { assert c > 9500 and c < 10500 }
-    for _ in range 1000 { assert r.Below(1) == 0 }
+    for c in counts: assert c > 9500 and c < 10500
+    for _ in range 1000: assert r.Below(1) == 0
 }
 
 test "Float lies in [0, 1) with the mean of a uniform" {
@@ -247,7 +247,7 @@ test "Normal has mean 0 and standard deviation 1" {
 
 test "Shuffle permutes, and one seed gives one order" {
     a := Array<I64>(1000)
-    for i in range 1000 { a[i] = i }
+    for i in range 1000: a[i] = i
     r := Rand(11)
     r.Shuffle(a)
     seen := Array<Bool>(1000)
@@ -255,14 +255,14 @@ test "Shuffle permutes, and one seed gives one order" {
     for i, x in a {
         assert not seen[x]
         seen[x] = true
-        if x != i { moved++ }
+        if x != i: moved++
     }
     assert moved > 900
     b := Array<I64>(1000)
-    for i in range 1000 { b[i] = i }
+    for i in range 1000: b[i] = i
     again := Rand(11)
     again.Shuffle(b)
-    for i in range 1000 { assert a[i] == b[i] }
+    for i in range 1000: assert a[i] == b[i]
 }
 
 # draws over arrays, the same while compiling as at run time

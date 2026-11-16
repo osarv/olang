@@ -27,7 +27,7 @@ fn churn() I64 {
 
 fn main() {
     h := Holder(1)
-    for k in range 10 { h.Set(k % 2) }
+    for k in range 10: h.Set(k % 2)
     h.m.Put(5, File(50))
     churn()
     assert h.m.Len() == 3 and h.m.Ref(1)!.fd == 2 and h.m.Ref(5)!.fd == 50

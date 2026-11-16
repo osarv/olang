@@ -15,6 +15,6 @@ fn gen(c mut Cell&) Iterator<I64> {
 fn main() {
     c := Cell()
     c.g = gen(c)
-    for x in c.g { io.PutLine($x)! }
+    for x in c.g: io.PutLine($x)!
     io.PutLine("not reached")!
 }

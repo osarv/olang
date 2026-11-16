@@ -8,7 +8,7 @@ type H struct(r String&) {
 fn H.mk(n I64, s String&) H {
     e := H(s)
     for i in range 3 {
-        if i == 2 { return e }
+        if i == 2: return e
         e = H($n + $n)
     }
     return H(s)

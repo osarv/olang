@@ -158,14 +158,14 @@ type source struct(fd I32, size I64) {
 fn (s mut source&) fill() ? Error, Exhausted {
     waiting := s.end - s.start
     if s.start > 0 {
-        for k in range waiting { s.buf[k] = s.buf[s.start + k] }
+        for k in range waiting: s.buf[k] = s.buf[s.start + k]
         s.start = 0
         s.end = waiting
     }
     if s.end == s.buf.Len() {
         old := s.buf
         s.buf = String(Array<U8>(old.Len() * 2))
-        for k in range s.end { s.buf[k] = old[k] }
+        for k in range s.end: s.buf[k] = old[k]
     }
     got := unistd.read(s.fd, s.buf[s.end:], U64(s.buf.Len() - s.end))
     if got < 0: error Error.Failed
@@ -223,7 +223,7 @@ fn (s mut source&) word() String& ? Error, Exhausted {
 # buf[first:last] as new text
 fn (s source&) text(first I64, last I64) String& {
     t := Array<U8>(last - first)
-    for k in range last - first { t[k] = s.buf[first + k] }
+    for k in range last - first: t[k] = s.buf[first + k]
     return String(t)
 }
 
@@ -267,7 +267,7 @@ fn (r mut Reader&) Bytes(n I64) Array<U8>& ? Error, Exhausted {
     for got < out.Len() {
         if r.src.start == r.src.end: try r.src.fill()
         take := (r.src.end - r.src.start).Min(out.Len() - got)
-        for k in range take { out[got + k] = r.src.buf[r.src.start + k] }
+        for k in range take: out[got + k] = r.src.buf[r.src.start + k]
         r.src.start += take
         got += take
     }
@@ -309,7 +309,7 @@ type Writer struct(fd I32, size I64 = 65536) {
 
 # t, after what is written already
 fn (w mut Writer&) Write(t Array<U8>&) {
-    if w.refused != null { return }
+    if w.refused != null: return
     n := t.Len()
     if n > w.buf.Len() - w.used {
         w.drain()
@@ -319,7 +319,7 @@ fn (w mut Writer&) Write(t Array<U8>&) {
         }
     }
     at := w.used
-    for i in range n { w.buf[at + i] = t[i] }
+    for i in range n: w.buf[at + i] = t[i]
     w.used = at + n
 }
 
@@ -334,8 +334,8 @@ fn (w mut Writer&) PutLine<T>(x T = "") {
 
 # one character, after what is written already
 fn (w mut Writer&) WriteChar(c Char) {
-    if w.used == w.buf.Len() { w.drain() }
-    if w.refused != null { return }
+    if w.used == w.buf.Len(): w.drain()
+    if w.refused != null: return
     w.buf[w.used] = c
     w.used++
 }
@@ -344,12 +344,12 @@ fn (w mut Writer&) WriteChar(c Char) {
 fn (w mut Writer&) Flush() ? Error {
     w.drain()
     refused := w.refused
-    if refused != null { error refused }
+    if refused != null: error refused
 }
 
 # what waits in the buffer, to the descriptor - or dropped, once a write has failed
 fn (w mut Writer&) drain() {
-    if w.used > 0 and w.refused == null { w.send(w.buf[:w.used]) }
+    if w.used > 0 and w.refused == null: w.send(w.buf[:w.used])
     w.used = 0
 }
 
@@ -643,7 +643,7 @@ fn reportTo(fd I32, n I64) ? Error {
     w := Writer(fd)
     defer w.Flush()!
     for i in range n {
-        if i == 3 { error Error.Partial(i) }
+        if i == 3: error Error.Partial(i)
         w.Write("line " + $i + "\n")
     }
 }

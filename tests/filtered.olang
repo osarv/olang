@@ -12,7 +12,7 @@ fn flMix(n I64) String {
     g := Array<I64>[x for x in range 1000 if x % 97 == 0]       # past its first room of 100 elements: grown, then given
     none := Array<I64>[x for x in a if x < 0]
     kept Vec<Array<I64>&>
-    for k in range 3 { kept.Push(Array<I64>[x * k for x in a if x % 4 == 0]) }
+    for k in range 3: kept.Push(Array<I64>[x * k for x in a if x % 4 == 0])
     return $e + " " + $f + " " + $g.Len() + " " + $g[10] + " " + $none.Len() + " " + $kept[2]
 }
 

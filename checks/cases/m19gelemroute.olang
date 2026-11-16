@@ -9,7 +9,7 @@ fn main() {
     vs.Push(Vec<blk>())
     vs[0].Push(blk(1, 2))
     r := vs.RefMut(0).RefMut(0)
-    for i in range 1000 { vs[0].Push(blk(i, i)) }
+    for i in range 1000: vs[0].Push(blk(i, i))
     r.n = 77
     io.PutLine("vs[0][0].n " + $vs[0][0].n + " r.n " + $r.n)!
 }

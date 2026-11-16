@@ -13,9 +13,9 @@ fn main() ? {
     down(s[0], 3)
 }
 fn down(v mut V&, k I64) {
-    if k > 0 { up(v, k - 1) }
+    if k > 0: up(v, k - 1)
 }
 fn up(v mut V&, k I64) {
-    if k == 1 { v.n = 9 }
+    if k == 1: v.n = 9
     down(v, k)
 }

@@ -5,9 +5,9 @@ fn f() I32 {
     for i in range I32(3) {
         defer {
             for j in range 2 {
-                if j == 1 { break }
+                if j == 1: break
             }
-            if t > 1 { break }
+            if t > 1: break
         }
         t += i
     }

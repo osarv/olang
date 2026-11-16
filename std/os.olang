@@ -59,7 +59,7 @@ fn raise(code I32, path String&) ? Error {
 
 # fails with what errno says when "result" - a C call's on "path", made just before - says it failed, by being negative
 fn check(result I64, path String& = "") ? Error {
-    if result < 0 { try raise(__olang_err(), path) }
+    if result < 0: try raise(__olang_err(), path)
 }
 
 # text a runtime function copies out (X6): fill(buf) copies what fits of it into buf and gives its whole length, or
@@ -137,7 +137,7 @@ fn IsTerminal(fd I32) Bool { return unistd.isatty(fd) == 1 }
 # all, or one ended by a signal, is reported as a nonzero status like any other failure.
 fn Run(cmd String&) I32 {
     status := stdlib.system($cmd + "\0")
-    if status < 0 { return 127 }
+    if status < 0: return 127
     if status % 256 != 0 { return 128 + status % 128 }        # ended by a signal
     return status / 256
 }
@@ -181,17 +181,17 @@ fn Output.ExecUntil(tok cancel.Token&, args ...String&, input Array<U8>& = "", c
 # program cannot be started, failing as Exec does - NotFound, Denied, or Failed for no arguments or one holding a zero
 # byte
 fn ExecInPlace(path String&, args ...String&) ? Error {
-    if args.Len() == 0 { error Error.Failed(path) }
+    if args.Len() == 0: error Error.Failed(path)
     size I64 = 0
     for a in args {
         zero := true
         try a.FindByte(0) catch { zero = false }
-        if zero { error Error.Failed(path) }
+        if zero: error Error.Failed(path)
         size += a.Len() + 1
     }
     zero := true
     try path.FindByte(0) catch { zero = false }
-    if zero { error Error.Failed(path) }
+    if zero: error Error.Failed(path)
     line := Array<U8>(size)                         # the arguments, each ended by a zero byte
     at I64 = 0
     for a in args {
@@ -224,20 +224,20 @@ fn (p Process&) Pid() I32 { return p.pid }
 # running, without waiting for it: a program to run beside this one (a server a test talks to, several commands at
 # once), or one to give up on. Fails as Exec does when it cannot be started
 fn Process.Start(args ...String&, input Array<U8>& = "", capture Bool = true, dir String& = "") Process ? Error {
-    if args.Len() == 0 { error Error.Failed("") }
+    if args.Len() == 0: error Error.Failed("")
     size I64 = 0
     for a in args {
         zero := true
         try a.FindByte(0) catch { zero = false }
-        if zero { error Error.Failed(a) }
+        if zero: error Error.Failed(a)
         size += a.Len() + 1
     }
     zero := true
     try dir.FindByte(0) catch { zero = false }
-    if zero { error Error.Failed(dir) }
+    if zero: error Error.Failed(dir)
     if dir.Len() > 0 {                                  # said here, where a missing program could not be mistaken for it
         info := try FileInfo.Stat(dir)
-        if info.Kind != FileKind.DIR { error Error.NotDir(dir) }
+        if info.Kind != FileKind.DIR: error Error.NotDir(dir)
     }
     line := Array<U8>(size)                         # the arguments, each ended by a zero byte
     at I64 = 0
@@ -257,7 +257,7 @@ fn Process.Start(args ...String&, input Array<U8>& = "", capture Bool = true, di
     if capture {                                        # the Process keeps both: closed by Wait, or here if Start fails
         out = try memFile()
         e := mman.memfd_create("olang\0", 1)
-        if e < 0 { try closeAndRaise(out, __olang_err(), "") }
+        if e < 0: try closeAndRaise(out, __olang_err(), "")
         errs = e
     }
     pid := __olang_spawn(line, args.Len(), feed, out, errs, $dir + "\0")
@@ -275,9 +275,9 @@ fn Process.Start(args ...String&, input Array<U8>& = "", capture Bool = true, di
 # waits for the program to end and gives what it did - its status, and what it wrote when Start captured it, built where
 # the caller puts it. Fails with Failed when it was waited for already
 fn (p mut Process&) Wait() Output ? Error {
-    if p.waited { error Error.Failed("") }
+    if p.waited: error Error.Failed("")
     waited := Array<I32>(1)
-    if syswait.waitpid(p.pid, waited, 0) < 0 { try p.lost(__olang_err()) }
+    if syswait.waitpid(p.pid, waited, 0) < 0: try p.lost(__olang_err())
     return try p.ended(waited[0])
 }
 
@@ -295,24 +295,24 @@ fn (p mut Process&) lost(code I32) ? Error {
 # program has ended. Asks every few milliseconds at most - sooner while the program is young, so a short one is not
 # kept waiting - as nothing can wait for a child and a token at once
 fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? Error, cancel.Stopped {
-    if p.waited { error Error.Failed("") }
+    if p.waited: error Error.Failed("")
     waited := Array<I32>(1)
     nap := ctime.timespec()
     left := ctime.timespec()
     step I64 = 50000                                    # nanoseconds, doubling up to cancel.PollNs
     for {
         got := syswait.waitpid(p.pid, waited, 1)                # WNOHANG
-        if got < 0 { try p.lost(__olang_err()) }
-        if got == p.pid { return try p.ended(waited[0]) }
+        if got < 0: try p.lost(__olang_err())
+        if got == p.pid: return try p.ended(waited[0])
         if tok.Cancelled() {
             p.Kill()
-            if syswait.waitpid(p.pid, waited, 0) < 0 { try p.lost(__olang_err()) }
+            if syswait.waitpid(p.pid, waited, 0) < 0: try p.lost(__olang_err())
             try p.ended(waited[0]) catch Error { }
             try tok.Reason()
         }
         nap.tv_nsec = step
         ctime.nanosleep(nap, left)
-        if step < cancel.PollNs { step = step * 2 }
+        if step < cancel.PollNs: step = step * 2
     }
     unreachable
 }
@@ -320,7 +320,7 @@ fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? Error, cancel.Stopped 
 # ends the program now (SIGKILL), unless it has ended and been waited for - then nothing, since its process id may
 # already be another program's. Wait still has to be called, and gives a status of 137 (128 + 9) when this ended it
 fn (p mut Process&) Kill() {
-    if not p.waited { csignal.kill(p.pid, 9) }
+    if not p.waited: csignal.kill(p.pid, 9)
 }
 
 # what the program did, from its wait status, its descriptors closed after what it wrote is read back
@@ -328,7 +328,7 @@ fn (p mut Process&) ended(waitStatus I32) Output ? Error {
     p.waited = true
     status I32 = (waitStatus >> 8) & 0xFF
     if (waitStatus & 0x7F) != 0 { status = 128 + (waitStatus & 0x7F) }      # ended by a signal
-    if not p.capture { return Output(status, "", "") }
+    if not p.capture: return Output(status, "", "")
     defer {
         unistd.close(p.out)
         unistd.close(p.errs)
@@ -347,14 +347,14 @@ fn memFile() I32 ? Error {
 # everything written to the file fd, from its start, as text built where the caller puts it
 fn readBack(fd I32) String& ? Error {
     size := unistd.lseek(fd, 0, 2)
-    if size < 0 { try raise(__olang_err(), "") }
+    if size < 0: try raise(__olang_err(), "")
     unistd.lseek(fd, 0, 0)
     text := Array<U8>(size)
     got I64 = 0
     for got < size {
         n := unistd.read(fd, text[got:], U64(size - got))
-        if n < 0 { try raise(__olang_err(), "") }
-        if n == 0 { error Error.Failed("") }
+        if n < 0: try raise(__olang_err(), "")
+        if n == 0: error Error.Failed("")
         got += n
     }
     return String(text)
@@ -376,12 +376,12 @@ fn ReadFile(path String&) String& ? Error {
     for {
         if got == text.Len() {
             more := Array<U8>(text.Len() * 2)
-            for i in range got { more[i] = text[i] }
+            for i in range got: more[i] = text[i]
             text = more
         }
         n := unistd.read(fd, text[got:], U64(text.Len() - got))
-        if n < 0 { try closeAndRaise(fd, __olang_err(), path) }
-        if n == 0 { break }
+        if n < 0: try closeAndRaise(fd, __olang_err(), path)
+        if n == 0: break
         got += n
     }
     unistd.close(fd)
@@ -444,8 +444,8 @@ fn FileInfo.Stat(path String&) FileInfo ? Error {
     out := Array<I64>(3)
     try check(__olang_stat($path + "\0", out), path)
     kind := FileKind.OTHER
-    if out[0] == 1 { kind = FileKind.FILE }
-    if out[0] == 2 { kind = FileKind.DIR }
+    if out[0] == 1: kind = FileKind.FILE
+    if out[0] == 2: kind = FileKind.DIR
     return FileInfo(kind, out[1], out[2])
 }
 
@@ -469,14 +469,14 @@ fn MkDir(path String&) ? Error {
 # makes the directory "path" and every one above it that is missing; a directory already there is left as it is, and
 # anything else in the way fails with NotDir
 fn MkDirAll(path String&) ? Error {
-    if IsDir(path) { return }
+    if IsDir(path): return
     for i in range 1, path.Len() + 1 {
-        if i < path.Len() and path[i] != '/' { continue }
+        if i < path.Len() and path[i] != '/': continue
         part := path[:i]
         if sysstat.mkdir($part + "\0", 0x1FF) != 0 {
             code := __olang_err()
             if code != 2 { try raise(code, part) }      # 2 is Exists: fine, when what exists is a directory
-            if not IsDir(part) { error Error.NotDir(part) }
+            if not IsDir(part): error Error.NotDir(part)
         }
     }
 }
@@ -495,21 +495,21 @@ fn RemoveAll(path String&) ? Error {
     e := path.Len()
     for e > 1 and path[e - 1] == '/' { e -= 1 }      # "a/b/" names b
     s := e
-    for s > 0 and path[s - 1] != '/' { s -= 1 }
+    for s > 0 and path[s - 1] != '/': s -= 1
     name := path[s:e]
-    if name == "." or name == ".." { error Error.Failed(path) }
+    if name == "." or name == "..": error Error.Failed(path)
     try removeTree(path)
 }
 
 # "path" and what is under it, gone
 fn removeTree(path String&) ? Error {
-    if path.Len() == 0 { return }
+    if path.Len() == 0: return
     p := $path + "\0"
-    if stdio.remove(p) == 0 { return }
+    if stdio.remove(p) == 0: return
     code := __olang_err()
     if code == 1 { return }                            # NotFound: nothing to remove
     if code != 6 and code != 2 { try raise(code, path) }   # NotEmpty, or Exists, which POSIX allows rmdir to say
-    for n in try ReadDir(path) { try removeTree($path + "/" + $n) }
+    for n in try ReadDir(path): try removeTree($path + "/" + $n)
     try check(stdio.remove(p), path)
 }
 
@@ -522,15 +522,15 @@ fn MkTemp(dir String& = "", prefix String& = "") String& ? Error {
     base := tempDir(dir)
     sep := "" if base.EndsWith("/") else "/"
     path Array<Char> = $base + $sep + $prefix + "XXXXXX\0"      # (mkdtemp writes the six characters: no String's)
-    if __olang_mkdtemp(path) != 0 { try raise(__olang_err(), base) }
+    if __olang_mkdtemp(path) != 0: try raise(__olang_err(), base)
     return String(path[:path.Len() - 1])
 }
 
 # where MkTemp makes a directory: "dir", else TMPDIR, else /tmp
 fn tempDir(dir String&) String {
-    if dir.Len() > 0 { return $dir }
+    if dir.Len() > 0: return $dir
     env := try Env("TMPDIR") catch default ""
-    if env.Len() > 0 { return $env }
+    if env.Len() > 0: return $env
     return "/tmp"
 }
 
@@ -575,7 +575,7 @@ fn Cwd() String& ? Error {
 fn ReadDir(path String&) Array<String&>& ? Error {
     p := $path + "\0"
     all String& = try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_dir(p, buf, buf.Len()) }, path)
-    if all.Len() == 0 { return Array<String&>(0) }
+    if all.Len() == 0: return Array<String&>(0)
     names := all[:all.Len() - 1].Split("\0")      # each name ends in a NUL, the last one included
     names.Sort(fn(a, b) { return a.Compare(b) < 0 })
     return names
@@ -1023,7 +1023,7 @@ if TestBuild {
 
     # 1 + 2 + ... + n, one frame per number - a million of them is far more than a thread's ordinary 8MB holds
     fn stackSum(n I64) I64 {
-        if n == 0 { return 0 }
+        if n == 0: return 0
         return n + stackSum(n - 1)
     }
 

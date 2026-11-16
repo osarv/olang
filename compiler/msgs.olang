@@ -19,7 +19,7 @@ import r "diagmsg"
 fn Tok(text String&) String {
     b := StringBuilder()
     b.PushChar('\'')
-    for c in text { b.Push(Esc(c)) }
+    for c in text: b.Push(Esc(c))
     b.PushChar('\'')
     return b.ToString()
 }
@@ -28,10 +28,10 @@ fn Tok(text String&) String {
 
 # the edit distance between two names, letters compared without their case (Levenshtein's); 99 past 60 characters
 fn Distance(a String&, b String&) I64 {
-    if a.Len() > 60 or b.Len() > 60 { return 99 }
+    if a.Len() > 60 or b.Len() > 60: return 99
     prev := Array<I64>(b.Len() + 1)
     cur := Array<I64>(b.Len() + 1)
-    for j in range b.Len() + 1 { prev[j] = j }
+    for j in range b.Len() + 1: prev[j] = j
     for i in range 1, a.Len() + 1 {
         cur[0] = i
         for j in range 1, b.Len() + 1 {
@@ -41,7 +41,7 @@ fn Distance(a String&, b String&) I64 {
             k := sub if sub < del else del
             cur[j] = k if k < ins else ins
         }
-        for j in range b.Len() + 1 { prev[j] = cur[j] }
+        for j in range b.Len() + 1: prev[j] = cur[j]
     }
     return prev[b.Len()]
 }
@@ -59,7 +59,7 @@ type Nearest struct(Word String&) {
 
 # a candidate offered: kept where it is nearer than any before it (the first of two as near)
 fn (n mut Nearest&) Offer(cand String&) {
-    if cand == n.Word or cand.Len() == 0 { return }
+    if cand == n.Word or cand.Len() == 0: return
     d := Distance(n.Word, cand)
     if Near(n.Word, d) and d < n.Far {
         n.Best = cand
@@ -74,12 +74,12 @@ fn (n mut Nearest&) OfferBuilder(cand String&) {
     dot := try cand.FindByte('.') catch { return }
     owner := cand[:dot]
     member := cand[dot + 1:]
-    if owner.Len() == 0 or owner.Len() >= n.Word.Len() or n.Far == 0 { return }
+    if owner.Len() == 0 or owner.Len() >= n.Word.Len() or n.Far == 0: return
     at := try n.Word.Find(owner) catch { return }
     end := at + owner.Len()
     before := at == 0 or n.Word[at - 1].IsLower() or n.Word[at - 1].IsDigit()
     after := end == n.Word.Len() or n.Word[end].IsUpper()
-    if not before or not after or $n.Word[:at] + $n.Word[end:] != member { return }
+    if not before or not after or $n.Word[:at] + $n.Word[end:] != member: return
     n.Best = cand
     n.Far = 0
 }
@@ -93,10 +93,10 @@ EndOfFile := "end of file"
 
 # a byte as a message shows it: itself where it prints, else escaped - \t, \n, \r, \0, or \xHH
 fn Esc(c Char) String {
-    if c == '\t' { return "\\t" }
-    if c == '\n' { return "\\n" }
-    if c == '\r' { return "\\r" }
-    if c == '\0' { return "\\0" }
+    if c == '\t': return "\\t"
+    if c == '\n': return "\\n"
+    if c == '\r': return "\\r"
+    if c == '\0': return "\\0"
     if U8(c) < 32 or U8(c) >= 127 {
         hex := U8(c).Format(16)
         return "\\x" + $(hex.PadStart(2, '0'))

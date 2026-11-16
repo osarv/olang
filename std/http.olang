@@ -51,15 +51,15 @@ type HeaderError error {
 # failing with Missing when it has none
 fn (r Response&) Header(name String&) String& ? HeaderError {
     for h in r.Headers {
-        if sameName(h.Name, name) { return h.Value }
+        if sameName(h.Name, name): return h.Value
     }
     error HeaderError.Missing
 }
 
 fn sameName(a String&, b String&) Bool {
-    if a.Len() != b.Len() { return false }
+    if a.Len() != b.Len(): return false
     for i in range a.Len() {
-        if a[i].ToLower() != b[i].ToLower() { return false }
+        if a[i].ToLower() != b[i].ToLower(): return false
     }
     return true
 }
@@ -72,7 +72,7 @@ fn Response.Get(url String&, headers ...Header) Response ? Error {
 # the response to a POST of body to url, as contentType ("application/json", say), with the header fields given after it
 fn Response.Post(url String&, contentType String&, body Array<U8>&, headers ...Header) Response ? Error {
     all := Array<Header>(headers.Len() + 1, Header("Content-Type", contentType))     # every field written below
-    for i, h in headers { all[i] = h }
+    for i, h in headers: all[i] = h
     all[headers.Len()] = Header("Content-Type", contentType)
     return try Response.Send("POST", url, all, body)
 }
@@ -123,7 +123,7 @@ fn Response.Send(method String&, url String&, headers Array<Header>&, body Array
     run os.Output& = try os.Output.Exec(...args.ToArray(), input = body if sending else "")
         catch os.Error.NotFound, os.Error.Denied { error Error.NoCurl }
         catch os.Error { error Error.Failed }
-    if run.Status != 0 { try transportError(run.Status) }
+    if run.Status != 0: try transportError(run.Status)
     return try Response.response(run.Stderr, run.Stdout)
 }
 
@@ -149,15 +149,15 @@ fn Response.response(dump String&, body String&) Response ? Error {
     lines := dump.Split("\n")
     start I64 = -1
     for i, line in lines {
-        if line.StartsWith("HTTP/") { start = i }
+        if line.StartsWith("HTTP/"): start = i
     }
-    if start < 0 { error Error.Transfer }
+    if start < 0: error Error.Transfer
     status := lines[start].Trim()
     space := try status.FindByte(' ') catch { error Error.Transfer }
     code := try status[space + 1:].Trim().Split(" ")[0].ParseInt() catch { error Error.Transfer }
     n I64 = 0
     for line in lines[start + 1:] {
-        if line.Trim().Len() == 0 { break }
+        if line.Trim().Len() == 0: break
         n++
     }
     fields mut Array<Header>& = Array<Header>(n, Header("", ""))     # every field written below
@@ -233,14 +233,14 @@ if TestBuild {
     # the port the test server, started in the background, answers on - or -1 when curl is missing, or -2 when the
     # server (checks/fixtures/http/server.olang, built here with the compiler running the tests: $OLANG, else build/olang) could not be built or did not start
     fn startServer() I64 {
-        if os.Run("command -v curl >/dev/null 2>&1") != 0 { return -1 }
+        if os.Run("command -v curl >/dev/null 2>&1") != 0: return -1
         try os.Remove("build/http_port") catch { }      # a port written by an earlier run is not this server's
         given := try os.Env("OLANG") catch default "build/olang"
         compiler := try os.RealPath(given) catch { return -2 }
-        if os.Run($os.Quote(compiler) + " build checks/fixtures/http/server.olang >/dev/null 2>&1") != 0 { return -2 }
+        if os.Run($os.Quote(compiler) + " build checks/fixtures/http/server.olang >/dev/null 2>&1") != 0: return -2
         os.Run("build/checks_fixtures_http_server build/http_port >/dev/null 2>&1 &")
         for _ in range 200 {
-            if os.Exists("build/http_port") { break }
+            if os.Exists("build/http_port"): break
             os.Run("sleep 0.05")
         }
         text := try os.ReadFile("build/http_port") catch { return -2 }
@@ -280,7 +280,7 @@ if TestBuild {
 
     test "requests against a local server" {
         port := startServer()
-        if port == -1 { return }
+        if port == -1: return
         assert port > 0, "the test server did not start"
         try live(port)
     }

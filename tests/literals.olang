@@ -19,7 +19,7 @@ fn Bag<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) Bag<T> ? E {
         case ArrayIter<T> { b.reserved = it.Rest().Len() }   # a literal's count known before the first element
         case _ { }
     }
-    for x in try it { b.items.Push(x) }
+    for x in try it: b.items.Push(x)
     return b
 }
 
@@ -147,7 +147,7 @@ fn walked(k I64, xs Array<I64>&) String {
     d := deque.Deque<String>[$x for x in xs]
     c := Columns<Pt>[Pt(x, -x) for x in xs]
     total := 0
-    for r in l { total += r.Len() }
+    for r in l: total += r.Len()
     return $s.Len() + " " + $total + " " + $d + " " + $c
 }
 
@@ -170,6 +170,6 @@ test Strict.FromIter "takes a comprehension through the array its elements make"
     assert strictSum(4)! == 0 + 1 + 9
     assert StrictSum == 10
     churn := 0
-    for i in range 1000 { churn += ($"x" + $i).Len() }
+    for i in range 1000: churn += ($"x" + $i).Len()
     assert strictSum(5)! == 26 and churn > 0
 }

@@ -40,9 +40,9 @@ fn main() {
         k++
     }
     if files.Len() == 0 {
-        for f in toolkit.Matching("tests", ".olang") { files.Push($f) }
-        for f in toolkit.Matching("std", ".olang") { files.Push($f) }
-        for f in toolkit.Matching("std/prelude/tests", ".olang") { files.Push($f) }
+        for f in toolkit.Matching("tests", ".olang"): files.Push($f)
+        for f in toolkit.Matching("std", ".olang"): files.Push($f)
+        for f in toolkit.Matching("std/prelude/tests", ".olang"): files.Push($f)
     }
     dir := "build/emitdiff"
     try os.MkDirAll($dir + "/rt") catch os.Error { toolkit.Die("emitdiff: cannot make " + $dir) }
@@ -72,7 +72,7 @@ fn main() {
 }
 
 fn absolute(p String&) String {
-    if p.StartsWith("/") { return $p }
+    if p.StartsWith("/"): return $p
     cwd := try os.Cwd() catch os.Error { return $p }
     return $cwd + "/" + $p
 }
@@ -83,7 +83,7 @@ fn absolute(p String&) String {
 fn runtime(olang String&, emitdump String&, dir String&) Array<String&> {
     try os.MkDirAll($dir + "/rtport") catch os.Error { toolkit.Die("emitdiff: cannot make " + $dir + "/rtport") }
     e := toolkit.Run(Array<String&>[emitdump, "-rt", $dir + "/rtport"])
-    if e.Status != 0 { toolkit.Die("emitdiff: the port's runtime was not filled in: " + $e.Stderr) }
+    if e.Status != 0: toolkit.Die("emitdiff: the port's runtime was not filled in: " + $e.Stderr)
     prt String& = $dir + "/rtport/olang_runtime.ll"
     pdc String& = $dir + "/rtport/olang_dyncall.ll"
     if not toolkit.Built(olang) {
@@ -95,10 +95,10 @@ fn runtime(olang String&, emitdump String&, dir String&) Array<String&> {
     rt String& = ""
     dc String& = ""
     for n in toolkit.Matching($dir + "/rt/build", ".ll") {
-        if (try n.Find("olang_runtime.") catch default -1) >= 0 { rt = $n }
-        if (try n.Find("olang_dyncall.") catch default -1) >= 0 { dc = $n }
+        if (try n.Find("olang_runtime.") catch default -1) >= 0: rt = $n
+        if (try n.Find("olang_dyncall.") catch default -1) >= 0: dc = $n
     }
-    if rt == "" or dc == "" { toolkit.Die("emitdiff: " + $olang + " left no runtime in " + $dir + "/rt/build") }
+    if rt == "" or dc == "": toolkit.Die("emitdiff: " + $olang + " left no runtime in " + $dir + "/rt/build")
     same := toolkit.Read(prt) == toolkit.Read(rt) and toolkit.Read(pdc) == toolkit.Read(dc)
     toolkit.Say("runtime: " + $(("the text " + $olang + " fills in") if same else ("differs from the text " + $olang + " fills in")) + "\n")
     return Array<String&>[prt, pdc]
@@ -124,8 +124,8 @@ fn result.compare(gold toolkit.Golden&, emitdump String&, level String&, rt Arra
     # the port's
     dump := Vec<String&>()
     dump.Push(emitdump)
-    if not program { dump.Push("-t") }
-    if standin { dump.Push("-standin") }
+    if not program: dump.Push("-t")
+    if standin: dump.Push("-standin")
     dump.Push("-o")
     dump.Push($out + ".ll")
     dump.Push(f)
@@ -160,7 +160,7 @@ fn result.compare(gold toolkit.Golden&, emitdump String&, level String&, rt Arra
             r.Same++
         } else {
             diffs++
-            if v { rows.Push("    " + $name + ": golden " + $x + ", port " + $y + "\n") }
+            if v: rows.Push("    " + $name + ": golden " + $x + ", port " + $y + "\n")
         }
     }
     r.Equal = diffs == 0 and p.Status == s0.Status
@@ -178,7 +178,7 @@ fn result.compare(gold toolkit.Golden&, emitdump String&, level String&, rt Arra
 fn gapCount(t String&) I64 {
     n I64 = 0
     for row in toolkit.Rows(t) {
-        if row.StartsWith("gap ") { n++ }
+        if row.StartsWith("gap "): n++
     }
     return n
 }
@@ -187,7 +187,7 @@ fn gapsText(n I64) String { return "" if n == 0 else " (" + $n + " gaps)" }
 
 fn firstLine(t String&) String {
     for row in toolkit.Rows(t) {
-        if row.Len() > 0 { return $row }
+        if row.Len() > 0: return $row
     }
     return ""
 }

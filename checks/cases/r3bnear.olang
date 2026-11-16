@@ -1,15 +1,15 @@
 # check: fail error[R3b]: no error of this module is named 'NotFond' - did you mean 'NotFound'?
 # R3b: a name raised one edit from another error of its module is taken for a misspelling of the one raised more often
 fn a(k I64) I64 ? {
-    if k < 0 { error NotFound }
+    if k < 0: error NotFound
     return k
 }
 fn b(k I64) I64 ? {
-    if k < 0 { error NotFound }
+    if k < 0: error NotFound
     return k
 }
 fn c(k I64) I64 ? {
-    if k < 0 { error NotFond }
+    if k < 0: error NotFond
     return k
 }
 fn main() ? {

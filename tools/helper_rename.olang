@@ -17,7 +17,7 @@ fn vtokens(src String&) Vec<VT> {
     ts := scan.Tokens.Scan(src)
     out Vec<VT>
     for tk in ts.Toks {
-        if tk.Kind == token.Tok.StmtEnd { continue }
+        if tk.Kind == token.Tok.StmtEnd: continue
         out.Push(VT(tk.Kind, I64(tk.Start), I64(tk.End)))
     }
     return out
@@ -31,19 +31,19 @@ fn rename(src String&, c mut Count&) String {
     at I64 = 0
     for i in range 1, v.Len() - 1 {
         t := v[i]
-        if t.k != token.Tok.Iden { continue }
+        if t.k != token.Tok.Iden: continue
         word := src[t.start:t.end]
-        if word != "Any" and word != "All" { continue }
+        if word != "Any" and word != "All": continue
         before := v[i - 1].k
         after := v[i + 1].k
-        if before != token.Tok.Dot and before != token.Tok.RParen { continue }
-        if after != token.Tok.LParen and after != token.Tok.Lt { continue }
+        if before != token.Tok.Dot and before != token.Tok.RParen: continue
+        if after != token.Tok.LParen and after != token.Tok.Lt: continue
         out.Push(src[at:t.start])
         out.Push("Some" if word == "Any" else "Every")
         at = t.end
         c.n++
     }
-    if at == 0 { return src }
+    if at == 0: return src
     out.Push(src[at:])
     return out.ToString()
 }
@@ -69,9 +69,9 @@ fn renameMarkdown(src String&, n mut Count&) String {
             inBlock = true
         }
         out.Push(line)
-        if not last { out.PushChar('\n') }
+        if not last: out.PushChar('\n')
     }
-    if inBlock { out.Push(block.ToString()) }
+    if inBlock: out.Push(block.ToString())
     return out.ToString()
 }
 
@@ -97,16 +97,16 @@ fn main() ? {
     total := Count()
     changed I64 = 0
     for path in files {
-        if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")): continue
         src := try srcmask.ReadText(path) catch {
             srcmask.SayErr("helper_rename: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
         out := renameMarkdown(src, total) if path.EndsWith(".md") else rename(src, total)
-        if out == src { continue }
+        if out == src: continue
         changed++
-        if verbose { srcmask.Say(path) }
+        if verbose: srcmask.Say(path)
         if not check {
             try os.WriteFile(path, out) catch {
                 srcmask.SayErr("helper_rename: cannot write " + $path)
@@ -116,7 +116,7 @@ fn main() ? {
     }
     verb := "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.n + " names")
-    if check and changed > 0 { os.Exit(1) }
+    if check and changed > 0: os.Exit(1)
 }
 
 test "Any and All, called or declared, become Some and Every; anything else is left" {

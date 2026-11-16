@@ -6,7 +6,7 @@
 type blk struct(n I64, home mut Vec<blk>&) { n, home }
 
 fn (b mut blk&) Bump() {
-    for i in range 1000 { b.home.Push(blk(i, b.home)) }
+    for i in range 1000: b.home.Push(blk(i, b.home))
     b.n = 99
 }
 

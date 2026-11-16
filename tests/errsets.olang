@@ -17,15 +17,15 @@ type AnyErr error LoadErr, NetErr.Down
 Live mut I64 = 0
 
 fn load(n I64) I64 ? LoadErr {
-    if n == 0 { error ParseErr.Empty }
-    if n == 1 { error ParseErr.Bad }
-    if n == 2 { error LoadErr.Timeout }
-    if n == 3 { error os.Error.Denied("d") }
+    if n == 0: error ParseErr.Empty
+    if n == 1: error ParseErr.Bad
+    if n == 2: error LoadErr.Timeout
+    if n == 3: error os.Error.Denied("d")
     return n * 10
 }
 
 fn fetch(n I64) I64 ? AnyErr {
-    if n == 9 { error NetErr.Down }
+    if n == 9: error NetErr.Down
     return try load(n)
 }
 
@@ -59,7 +59,7 @@ fn kindValue(n I64) I64 {
 # what a test narrows: after "e != ParseErr" leaves, e can only be ParseErr, which the set promises
 fn onlyParse(n I64) I64 ? ParseErr {
     return try load(n) catch e {
-        if e != ParseErr { return -1 }
+        if e != ParseErr: return -1
         error e
     }
 }
@@ -94,7 +94,7 @@ test "a caught error renders as its name prints, decided while compiling and at 
 
 test "a caught error is compared, narrowed and matched" {
     assert BakedKinds == Array<I64>[100, 200, 300, 500, 400, 50]
-    for i, n in Array<I64>[0, 1, 2, 3, 9, 5] { assert kind(n + Live) == BakedKinds[i] }
+    for i, n in Array<I64>[0, 1, 2, 3, 9, 5]: assert kind(n + Live) == BakedKinds[i]
     assert BakedValues == Array<I64>[1, 2, 3, 2]
     assert kindValue(Live + 9) == 2 and kindValue(Live + 3) == 3
 }

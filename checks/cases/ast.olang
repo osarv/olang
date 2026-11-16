@@ -25,7 +25,7 @@ fn simplify(e Expr&) Expr& {
 }
 
 fn Expr.build(d I64) Expr& {
-    if d == 0 { return Expr.Neg(Expr.Lit(1)) }
+    if d == 0: return Expr.Neg(Expr.Lit(1))
     return Expr.Add(Expr.build(d - 1), Expr.build(d - 1))
 }
 
@@ -36,9 +36,7 @@ fn count(e Expr&) I64 {
 fn main() {
     p := Program()
     p.root = Expr.build(4)
-    for _ in range 100 {
-        p.root = simplify(p.root)
-    }
+    for _ in range 100: p.root = simplify(p.root)
     assert count(p.root) == 47
 }
 # also: ast.olang:40:9: memory: 'p.root' keeps what it lets go of until main's scope closes

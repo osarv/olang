@@ -53,11 +53,11 @@ fn flat(kb I64) String { return "flat" if kb < 1024 else "grew by " + $kb + " kB
 fn main() ? io.Error, os.Error {
     o := Owner(16)
     t F64 = 0.0
-    for _ in range 1000 { t += temporary(o) }
+    for _ in range 1000: t += temporary(o)
     a := try resident()
-    for _ in range N { t += temporary(o) }
+    for _ in range N: t += temporary(o)
     b := try resident()
-    for _ in range N { t += bound(o) }
+    for _ in range N: t += bound(o)
     c := try resident()
     try io.Put(flat(b - a) + " " + flat(c - b) + " " + $t + "\n")
 }

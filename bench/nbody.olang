@@ -87,10 +87,10 @@ fn advance(bodies mut Array<Body>&, dt F64) {
 fn main() ? {
     args := os.Args()
     n I64 = 1000
-    if args.Len() > 1 { n = try args[1].ParseInt() }
+    if args.Len() > 1: n = try args[1].ParseInt()
     bodies := planets()
     offsetMomentum(bodies)
     try io.Put($energy(bodies) + "\n")
-    for _ in range n { advance(bodies, 0.01) }
+    for _ in range n: advance(bodies, 0.01)
     try io.Put($energy(bodies) + "\n")
 }

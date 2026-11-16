@@ -34,8 +34,8 @@ fn main() ? {
     s := Vs(Array<I64>(8))
     for put(s[0], 1) < 5000 { }
     t := 0
-    for i := 0, put(s[1], 1) + key(Node(i)) < 10000, i++ { t++ }
+    for i := 0, put(s[1], 1) + key(Node(i)) < 10000, i++: t++
     do { t++ } for put(s[2], 1) < 5000
-    for i := 0, i < 5000, i = keyB(BigN(i)) + 1 { t++ }
+    for i := 0, i < 5000, i = keyB(BigN(i)) + 1: t++
     try io.PutLine($s.d[0] + $" " + $s.d[1] + $" " + $s.d[2] + $" " + $t)
 }

@@ -6,7 +6,7 @@ type Err error {
 }
 run mut I64 = 1
 fn inner(n I64) ? Err {
-    if n > 0 { error Err.Loud }
+    if n > 0: error Err.Loud
 }
 fn outer(n I64) ? {
     try inner(n)

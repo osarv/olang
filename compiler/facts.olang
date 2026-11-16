@@ -59,7 +59,7 @@ fn (t mut Table&) Forget(kind String&) {
         t.carried.Remove(k)
     }
     read Vec<String&>
-    for k in t.reads.Keys() { read.Push(k) }
+    for k in t.reads.Keys(): read.Push(k)
     for k in read {
         at := try k.Find(" ") catch { continue }
         if k[at + 1:].StartsWith(kind): t.reads.Remove(k)

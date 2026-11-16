@@ -37,25 +37,25 @@ fn (c Columns<T>&) At(i I64) T { return T(cell(c, p, i) for p in T.Params) }
 # row i's value of the field p - a record's parameter is its field, of the same name
 fn cell<T, P>(c Columns<T>&, p P, i I64) P.Type {
     for f in Columns<T>.Fields {
-        if f.Name == p.Name { return f.Of(c)[i] }
+        if f.Name == p.Name: return f.Of(c)[i]
     }
     unreachable
 }
 
 # row i, failing with OutOfRange where i is no row - "c[i]" checked, as an array's Get is (E16d)
 fn (c Columns<T>&) Get(i I64) T ? ArrayError.OutOfRange {
-    if i < 0 or i >= c.Len() { error ArrayError.OutOfRange }
+    if i < 0 or i >= c.Len(): error ArrayError.OutOfRange
     return c.At(i)
 }
 
 # row i replaced by x, each of x's fields written into its column - "c[i] = x" (E31b), unchecked as At is
 fn (c mut Columns<T>&) SetAt(i I64, x T) {
-    for k, f in T.Fields { Columns<T>.Fields[k].Of(c)[i] = f.Of(x) }
+    for k, f in T.Fields: Columns<T>.Fields[k].Of(c)[i] = f.Of(x)
 }
 
 # rows i and j exchanged, in every column
 fn (c mut Columns<T>&) Swap(i I64, j I64) {
-    for f in Columns<T>.Fields { swapIn(f.Of(c), i, j) }
+    for f in Columns<T>.Fields: swapIn(f.Of(c), i, j)
 }
 
 fn swapIn<F>(a mut Array<F>&, i I64, j I64) {
@@ -69,15 +69,15 @@ fn swapIn<F>(a mut Array<F>&, i I64, j I64) {
 fn (c mut Columns<T>&) Sort<? E>(less fn&(x T, y T) Bool ? E) ? E {
     order := Array<I64>[k for k in range c.Len()]
     try order.Sort(fn(a I64, b I64) Bool ? E: return less(c[a], c[b]))
-    for f in Columns<T>.Fields { reorder(f.Of(c), order) }
+    for f in Columns<T>.Fields: reorder(f.Of(c), order)
 }
 
 # a's elements laid out in the order given - element k the one at order[k]
 fn reorder<F>(a mut Array<F>&, order Array<I64>&) {
-    if a.Len() == 0 { return }
+    if a.Len() == 0: return
     was := Array<F>(a.Len(), a[0])
-    for k in range a.Len() { was[k] = a[order[k]] }
-    for k in range a.Len() { a[k] = was[k] }
+    for k in range a.Len(): was[k] = a[order[k]]
+    for k in range a.Len(): a[k] = was[k]
 }
 
 # the rows, copied into one array in the caller's scope
@@ -85,16 +85,16 @@ fn (c Columns<T>&) ToArray() Array<T> { return rowsOf(c, c.Len()) }
 
 # the first n rows of c, in order
 fn rowsOf<T>(c Columns<T>&, n I64) Array<T> {
-    if n == 0 { return Array<T>(0) }
+    if n == 0: return Array<T>(0)
     out := Array<T>(n, c[0])
-    for i in range 1, n { out[i] = c[i] }
+    for i in range 1, n: out[i] = c[i]
     return out
 }
 
 # the rows, copied into a Vec
 fn (c Columns<T>&) ToVec() Vec<T> {
     v := Vec<T>(c.Len())
-    for i in range c.Len() { v.Push(c[i]) }
+    for i in range c.Len(): v.Push(c[i])
     return v
 }
 
@@ -121,7 +121,7 @@ fn Columns<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) Columns<T> ? E {
 # the rows, held as columns: a Columns of an array's elements
 fn (a Array<T>&) ToColumns() Columns<T> {
     out Columns<T>
-    for k, f in T.Fields { Columns<T>.Fields[k].Of(out) = columnOf(a, f) }
+    for k, f in T.Fields: Columns<T>.Fields[k].Of(out) = columnOf(a, f)
     return out
 }
 
@@ -135,9 +135,9 @@ fn (v Vec<T>&) ToColumnVec() ColumnVec<T> { return v.View().ToColumns().ToColumn
 
 # the field d of every element of a, in order
 fn columnOf<T, D>(a Array<T>&, d D) Array<D.Type> {
-    if a.Len() == 0 { return Array<D.Type>(0) }
+    if a.Len() == 0: return Array<D.Type>(0)
     out := Array<D.Type>(a.Len(), d.Of(a[0]))
-    for i in range 1, a.Len() { out[i] = d.Of(a[i]) }
+    for i in range 1, a.Len(): out[i] = d.Of(a[i])
     return out
 }
 
@@ -165,7 +165,7 @@ fn ColumnVec<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) ColumnVec<T> ? E {
         case ArrayIter<T> { out.Reserve(it.Rest().Len()) }
         case _ { }
     }
-    for x in try it { out.Push(x) }
+    for x in try it: out.Push(x)
     return out
 }
 
@@ -173,10 +173,10 @@ fn ColumnVec<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) ColumnVec<T> ? E {
 # for, whichever is most - grown from the old as a Vec's is, the old one retired (M19d)
 fn (v mut ColumnVec<T>&) room(need I64) {
     have := v.data.Len()
-    if need <= have { return }
+    if need <= have: return
     r I64 = 8 if have < 4 else have * 2
-    if r < need { r = need }
-    if r < v.want { r = v.want }
+    if r < need: r = need
+    if r < v.want: r = v.want
     for f in Columns<T>.Fields {
         old f.Type& = f.Of(v.data)
         f.Of(v.data) = old[:v.n].grown(r)
@@ -191,17 +191,17 @@ fn (v ColumnVec<T>&) Cap() I64 { return v.data.Len() if v.data.Len() > v.want el
 
 # room for k more rows, the buffers replaced at most once
 fn (v mut ColumnVec<T>&) Reserve(k I64) {
-    if v.n + k <= v.Cap() { return }
+    if v.n + k <= v.Cap(): return
     r I64 = v.Cap() * 2
-    if r < v.n + k { r = v.n + k }
+    if r < v.n + k: r = v.n + k
     v.want = r
-    if v.n > 0 { v.room(r) }
+    if v.n > 0: v.room(r)
 }
 
 # x after the last row - each of its fields after its column's last element
 fn (v mut ColumnVec<T>&) Push(x T) {
-    if v.n == v.data.Len() { v.room(v.n + 1) }
-    for k, f in T.Fields { Columns<T>.Fields[k].Of(v.data)[v.n].occupy(f.Of(x)) }
+    if v.n == v.data.Len(): v.room(v.n + 1)
+    for k, f in T.Fields: Columns<T>.Fields[k].Of(v.data)[v.n].occupy(f.Of(x))
     v.n++
 }
 
@@ -210,7 +210,7 @@ fn (v ColumnVec<T>&) At(i I64) T { return v.data[i] }
 
 # row i, failing with OutOfRange where i is no row
 fn (v ColumnVec<T>&) Get(i I64) T ? VecError.OutOfRange {
-    if i < 0 or i >= v.n { error VecError.OutOfRange }
+    if i < 0 or i >= v.n: error VecError.OutOfRange
     return v.data[i]
 }
 
@@ -219,10 +219,10 @@ fn (v mut ColumnVec<T>&) SetAt(i I64, x T) { v.data[i] = x }
 
 # removes the last row and gives it - failing with Empty when there is none
 fn (v mut ColumnVec<T>&) Pop() T ? VecError.Empty {
-    if v.n == 0 { error VecError.Empty }
+    if v.n == 0: error VecError.Empty
     v.n--
     x := v.data[v.n]
-    for f in Columns<T>.Fields { f.Of(v.data)[v.n].vacate() }
+    for f in Columns<T>.Fields: f.Of(v.data)[v.n].vacate()
     return x
 }
 
@@ -231,51 +231,51 @@ fn (v mut ColumnVec<T>&) Clear() { v.Truncate(0) }
 
 # keeps the first k rows and removes the rest - nothing changes for k at or above Len()
 fn (v mut ColumnVec<T>&) Truncate(k I64) {
-    if k >= v.n { return }
+    if k >= v.n: return
     keep I64 = k if k > 0 else 0
-    for f in Columns<T>.Fields { vacateFrom(f.Of(v.data), keep, v.n) }
+    for f in Columns<T>.Fields: vacateFrom(f.Of(v.data), keep, v.n)
     v.n = keep
 }
 
 fn vacateFrom<F>(a mut Array<F>&, from I64, n I64) {
-    for i := n - 1, i >= from, i-- { a[i].vacate() }
+    for i := n - 1, i >= from, i--: a[i].vacate()
 }
 
 # removes row i, the rows after it each moving down one place - failing with OutOfRange where i is no row
 fn (v mut ColumnVec<T>&) RemoveAt(i I64) ? VecError.OutOfRange {
-    if i < 0 or i >= v.n { error VecError.OutOfRange }
-    for f in Columns<T>.Fields { removeIn(f.Of(v.data), i, v.n) }
+    if i < 0 or i >= v.n: error VecError.OutOfRange
+    for f in Columns<T>.Fields: removeIn(f.Of(v.data), i, v.n)
     v.n--
 }
 
 fn removeIn<F>(a mut Array<F>&, i I64, n I64) {
     a[i].vacate()
-    for k in range i, n - 1 { a[k].occupy(a[k + 1].vacate()) }
+    for k in range i, n - 1: a[k].occupy(a[k + 1].vacate())
 }
 
 # removes row i, the last row moving into its place - so the order is not kept
 fn (v mut ColumnVec<T>&) SwapRemove(i I64) ? VecError.OutOfRange {
-    if i < 0 or i >= v.n { error VecError.OutOfRange }
+    if i < 0 or i >= v.n: error VecError.OutOfRange
     v.n--
-    for f in Columns<T>.Fields { swapRemoveIn(f.Of(v.data), i, v.n) }
+    for f in Columns<T>.Fields: swapRemoveIn(f.Of(v.data), i, v.n)
 }
 
 fn swapRemoveIn<F>(a mut Array<F>&, i I64, last I64) {
     a[i].vacate()
-    if i < last { a[i].occupy(a[last].vacate()) }
+    if i < last: a[i].occupy(a[last].vacate())
 }
 
 # rows i and j exchanged - failing with OutOfRange where either is no row
 fn (v mut ColumnVec<T>&) Swap(i I64, j I64) ? VecError.OutOfRange {
-    if i < 0 or i >= v.n or j < 0 or j >= v.n { error VecError.OutOfRange }
+    if i < 0 or i >= v.n or j < 0 or j >= v.n: error VecError.OutOfRange
     v.data.Swap(i, j)
 }
 
 # puts x at row i, the rows from i on each moving up one place - Insert(Len(), x) is Push(x)
 fn (v mut ColumnVec<T>&) Insert(i I64, x T) ? VecError.OutOfRange {
-    if i < 0 or i > v.n { error VecError.OutOfRange }
-    if v.n == v.data.Len() { v.room(v.n + 1) }
-    for k, f in T.Fields { insertIn(Columns<T>.Fields[k].Of(v.data), i, v.n, f.Of(x)) }
+    if i < 0 or i > v.n: error VecError.OutOfRange
+    if v.n == v.data.Len(): v.room(v.n + 1)
+    for k, f in T.Fields: insertIn(Columns<T>.Fields[k].Of(v.data), i, v.n, f.Of(x))
     v.n++
 }
 
@@ -292,13 +292,13 @@ fn insertIn<F>(a mut Array<F>&, i I64, n I64, x F) {
 fn (v mut ColumnVec<T>&) Sort<? E>(less fn&(x T, y T) Bool ? E) ? E {
     order := Array<I64>[k for k in range v.n]
     try order.Sort(fn(a I64, b I64) Bool ? E: return less(v.data[a], v.data[b]))
-    for f in Columns<T>.Fields { reorder(f.Of(v.data)[:v.n], order) }
+    for f in Columns<T>.Fields: reorder(f.Of(v.data)[:v.n], order)
 }
 
 # the rows, copied into a Columns of their own
 fn (v ColumnVec<T>&) ToColumns() Columns<T> {
     out Columns<T>
-    for f in Columns<T>.Fields { f.Of(out) = f.Of(v.data)[:v.n] }
+    for f in Columns<T>.Fields: f.Of(out) = f.Of(v.data)[:v.n]
     return out
 }
 
@@ -308,15 +308,15 @@ fn (v ColumnVec<T>&) ToArray() Array<T> { return rowsOf(v.data, v.n) }
 # the rows, copied into a Vec
 fn (v ColumnVec<T>&) ToVec() Vec<T> {
     out := Vec<T>(v.n)
-    for i in range v.n { out.Push(v.data[i]) }
+    for i in range v.n: out.Push(v.data[i])
     return out
 }
 
 # whether two hold equal rows in the same order - "==" (E10a), column by column
 fn (v ColumnVec<T>&) Eq(o ColumnVec<T>&) Bool {
-    if v.n != o.n { return false }
+    if v.n != o.n: return false
     for f in Columns<T>.Fields {
-        if f.Of(v.data)[:v.n] != f.Of(o.data)[:o.n] { return false }
+        if f.Of(v.data)[:v.n] != f.Of(o.data)[:o.n]: return false
     }
     return true
 }
@@ -324,7 +324,7 @@ fn (v ColumnVec<T>&) Eq(o ColumnVec<T>&) Bool {
 # the rows' hash, from each column's - so equal ColumnVecs hash alike (E10b)
 fn (v ColumnVec<T>&) Hash() I64 {
     h I64 = v.n
-    for f in Columns<T>.Fields { h = h * 31 + f.Of(v.data)[:v.n].HashElements() }
+    for f in Columns<T>.Fields: h = h * 31 + f.Of(v.data)[:v.n].HashElements()
     return h
 }
 
@@ -347,17 +347,17 @@ fn (v ColumnVec<T>&) Display() Display { return Display.Html(tableHtml(v.data, v
 fn tableHtml<T>(c Columns<T>&, n I64) String {
     b := StringBuilder()
     b.Push("<table><thead><tr><th></th>")
-    for f in T.Fields { b.Push($"<th>" + $htmlEscaped(f.Name) + "</th>") }
+    for f in T.Fields: b.Push($"<th>" + $htmlEscaped(f.Name) + "</th>")
     b.Push("</tr></thead><tbody>")
     shown I64 = n if n <= 50 else 50
     for i in range shown {
         row := c[i]
         b.Push($"<tr><th>" + $i + "</th>")
-        for f in T.Fields { b.Push($"<td>" + $htmlEscaped(cellText(f.Of(row))) + "</td>") }
+        for f in T.Fields: b.Push($"<td>" + $htmlEscaped(cellText(f.Of(row))) + "</td>")
         b.Push("</tr>")
     }
     b.Push("</tbody></table>")
-    if shown < n { b.Push($"<p>" + $(n - shown) + " more rows</p>") }
+    if shown < n: b.Push($"<p>" + $(n - shown) + " more rows</p>")
     b.Push($"<p>" + $n + " rows \u{00D7} " + $T.Fields.Len() + " columns</p>")
     return b.ToString()
 }

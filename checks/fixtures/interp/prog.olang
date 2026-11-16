@@ -34,7 +34,7 @@ type Oops error {
     Bad
 }
 fn risky(n I32) I32 ? Oops {
-    if n > 2 { error Oops.Bad }
+    if n > 2: error Oops.Bad
     return n * 10
 }
 
@@ -42,8 +42,8 @@ fn steps() String {
     b := StringBuilder()
     for i in range 4 {
         defer b.Push("d" + $i + " ")
-        if i == 1 { continue }
-        if i == 3 { break }
+        if i == 1: continue
+        if i == 3: break
         b.Push("s" + $i + " ")
     }
     return b.ToString()
@@ -52,12 +52,12 @@ fn main() ? Oops, io.Error, os.Error {
     defer try io.Put("main's deferred code ran\n") catch io.Error { }
     Count++
     m := Map<String&, I32>()
-    for i, n in Names { m.Put(n, I32(i) + Count) }
+    for i, n in Names: m.Put(n, I32(i) + Count)
     total I32 = 0
-    for e in m { total += e.Value }
+    for e in m: total += e.Value
     p := P(3, 4)
     l := Vec<I64>()
-    for i in range 5 { l.Push(i * i) }
+    for i in range 5: l.Push(i * i)
     try io.Put("count " + $Count + " total " + $total + " sum " + $p.Sum() + " squares " + $l.ToArray() + "\n")
     try io.Put("steps " + $steps() + "\n")
     tree Expr& = Expr.Add(Expr.Add(Expr.Lit(1), Expr.Lit(2)), Expr.Neg(Expr.Add(Expr.Lit(3), Expr.Neg(Expr.Lit(4)))))

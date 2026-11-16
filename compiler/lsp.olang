@@ -72,10 +72,10 @@ fn Serve(cfg mut build.Config&) I32 {
         }
         timeout I32 = -1
         now := time.Now()
-        if s.DueAt > 0 { timeout = I32(I64(0).Max((s.DueAt - now) / 1000000) + 1) }
-        if s.W.Pid > 0 and (s.Waiting.Len() > 0 or s.Pending.Len() > 0) and timeout < 0 { timeout = 1000 }
+        if s.DueAt > 0: timeout = I32(I64(0).Max((s.DueAt - now) / 1000000) + 1)
+        if s.W.Pid > 0 and (s.Waiting.Len() > 0 or s.Pending.Len() > 0) and timeout < 0: timeout = 1000
         ready := session.Readable(fds[:n], timeout)
-        if n == 2 and ready[1] { s.fromWorker() }
+        if n == 2 and ready[1]: s.fromWorker()
         if ready[0] {
             if not input.Fill() {
                 # the editor went away: what is asked is answered, then the server ends
@@ -87,7 +87,7 @@ fn Serve(cfg mut build.Config&) I32 {
                 s.handle(body)
             }
         }
-        if s.DueAt > 0 and time.Now() >= s.DueAt { s.startWorker() }
+        if s.DueAt > 0 and time.Now() >= s.DueAt: s.startWorker()
         if s.W.Pid > 0 and s.W.Started > 0 and time.Now() - s.W.Started > StuckNs and (s.Waiting.Len() > 0 or s.Pending.Len() > 0) {
             s.workerLost("checking took more than a minute - it was stopped")
         }
@@ -132,7 +132,7 @@ fn (s mut Server&) handle(body String&) {
         p := try msg["params"] catch json.Error { return }
         uri := str(try p["textDocument"] catch json.Error { return }, "uri")
         changes := try p["contentChanges"].AsArr() catch json.Error { return }
-        if changes.Len() == 0 { return }
+        if changes.Len() == 0: return
         # full sync: the last change is the whole text
         s.changed(uri, str(changes[changes.Len() - 1], "text"))
         return
@@ -158,7 +158,7 @@ fn (s mut Server&) initialize(msg json.Json&, id String&) {
     encs := try msg["params"]["capabilities"]["general"]["positionEncodings"].AsArr() catch json.Error default Array<json.Json&>(0)
     if encs.Len() > 0 {
         for e in encs {
-            if (try e.AsStr() catch json.Error default "") == "utf-8" { s.Utf8 = true }
+            if (try e.AsStr() catch json.Error default "") == "utf-8": s.Utf8 = true
         }
     }
     caps := $"{\"positionEncoding\":\"" + $("utf-8" if s.Utf8 else "utf-16") + "\",\"textDocumentSync\":{\"openClose\":true," + $
@@ -171,7 +171,7 @@ fn (s mut Server&) initialize(msg json.Json&, id String&) {
 
 fn (s Server&) slotOf(uri String&) I64 {
     for i in range s.Docs.Len() {
-        if s.Docs[i].Open and s.Docs[i].Uri == uri { return i }
+        if s.Docs[i].Open and s.Docs[i].Uri == uri: return i
     }
     return -1
 }
@@ -222,13 +222,13 @@ fn (s mut Server&) setText(k I64, text String&) {
 
 fn (s mut Server&) closed(uri String&) {
     k := s.slotOf(uri)
-    if k < 0 { return }
+    if k < 0: return
     d := s.Docs[k]
     d.Open = false
     d.Text.Clear()
     # what was said of a closed file goes with it, as editors expect
     s.send(publish(d.Uri, "[]"))
-    for f in d.Foreign { s.send(publish(f, "[]")) }
+    for f in d.Foreign: s.send(publish(f, "[]"))
     s.stopWorker()
     s.Pending.Remove(k)
     s.DueAt = time.Now() + SettleNs if s.Pending.Len() > 0 else 0
@@ -240,7 +240,7 @@ fn (s mut Server&) due(k I64) {
     s.stopWorker()
     s.addPending(k)
     for i in range s.Docs.Len() {
-        if i != k and s.Docs[i].Open and k in s.Docs[i].Deps { s.addPending(i) }
+        if i != k and s.Docs[i].Open and k in s.Docs[i].Deps: s.addPending(i)
     }
     s.DueAt = time.Now() + SettleNs
 }
@@ -256,7 +256,7 @@ fn (s mut Server&) addPending(k I64) {
 # a worker for the files as they are now, to check what is pending
 fn (s mut Server&) startWorker() {
     s.DueAt = 0
-    if s.W.Pid > 0 { return }
+    if s.W.Pid > 0: return
     toR, toW := session.Pipe()
     fromR, fromW := session.Pipe()
     if toR < 0 or fromR < 0 {
@@ -267,7 +267,7 @@ fn (s mut Server&) startWorker() {
         return
     }
     pid := session.Fork()
-    if pid < 0 { return }
+    if pid < 0: return
     if pid == 0 {
         session.CloseFd(toW)
         session.CloseFd(fromR)
@@ -286,10 +286,10 @@ fn (s mut Server&) startWorker() {
 
 # the worker of the moment ended, and its fds closed; what it was asked and had not answered gets null
 fn (s mut Server&) stopWorker() {
-    if s.W.Pid <= 0 { return }
+    if s.W.Pid <= 0: return
     session.KillAndReap(s.W.Pid)
     s.closeWorker()
-    for id in s.Waiting { s.send(errorReply($id, -32801, "the files changed")) }
+    for id in s.Waiting: s.send(errorReply($id, -32801, "the files changed"))
     s.Waiting.Clear()
 }
 
@@ -308,10 +308,10 @@ fn (s mut Server&) workerLost(why String&) {
         s.closeWorker()
     }
     for k in s.Pending {
-        if k < s.Docs.Len() and s.Docs[k].Open { s.send(publish(s.Docs[k].Uri, lostDiagnostic(why))) }
+        if k < s.Docs.Len() and s.Docs[k].Open: s.send(publish(s.Docs[k].Uri, lostDiagnostic(why)))
     }
     s.Pending.Clear()
-    for id in s.Waiting { s.send(reply($id, "null")) }
+    for id in s.Waiting: s.send(reply($id, "null"))
     s.Waiting.Clear()
 }
 
@@ -326,7 +326,7 @@ fn lostDiagnostic(why String&) String {
 
 # a request handed to a worker - one made now if none is running
 fn (s mut Server&) ask(body String&, id String&) {
-    if s.W.Pid <= 0 { s.startWorker() }
+    if s.W.Pid <= 0: s.startWorker()
     if s.W.Pid <= 0 {
         s.send(reply(id, "null"))
         return
@@ -368,7 +368,7 @@ fn (s mut Server&) fromWorker() {
 fn (s mut Server&) note(body String&) {
     msg := try json.Json.Parse(body) catch json.Error { return }
     k := try msg["slot"].AsInt() catch json.Error default -1
-    if k < 0 or k >= s.Docs.Len() { return }
+    if k < 0 or k >= s.Docs.Len(): return
     s.Pending.Remove(k)
     d := s.Docs[k]
     d.Deps.Clear()
@@ -381,7 +381,7 @@ fn (s mut Server&) note(body String&) {
 
 # everything asked answered and everything pending checked, before a shutdown or the end: at most StuckNs
 fn (s mut Server&) drain() {
-    if s.Pending.Len() > 0 and s.W.Pid <= 0 { s.startWorker() }
+    if s.Pending.Len() > 0 and s.W.Pid <= 0: s.startWorker()
     from := time.Now()
     for s.W.Pid > 0 and (s.Pending.Len() > 0 or s.Waiting.Len() > 0) {
         if time.Now() - from > StuckNs {
@@ -390,7 +390,7 @@ fn (s mut Server&) drain() {
         }
         fds := Array<I32>(1, s.W.From!.Fd)
         ready := session.Readable(fds, 1000)
-        if ready[0] { s.fromWorker() }
+        if ready[0]: s.fromWorker()
     }
 }
 
@@ -410,7 +410,7 @@ type worker struct(s Server&, Cfg mut build.Config&, In I32, Out I32) {
 
 # the analysis of the open file in slot k as the files are now: the last one where it is that file's
 fn (w mut worker&) analysis(k I64, d mut diag.Diagnostics&) mut session.Analysis& {
-    if k == w.lastSlot and w.last != null { return w.last! }
+    if k == w.lastSlot and w.last != null: return w.last!
     a := session.Analysis.Analyze(w.s.Docs[k].Path, w.Cfg, d, w.overlay, kept = true)
     w.last = a
     w.lastSlot = k
@@ -420,9 +420,9 @@ fn (w mut worker&) analysis(k I64, d mut diag.Diagnostics&) mut session.Analysis
 # checks what is pending, then answers requests until the server closes the pipe
 fn (w mut worker&) Run() {
     for d in w.s.Docs {
-        if d.Open { w.overlay.Put(d.Real, d.Text.ToString()) }
+        if d.Open: w.overlay.Put(d.Real, d.Text.ToString())
     }
-    for k in w.s.Pending { w.check(k) }
+    for k in w.s.Pending: w.check(k)
     r := session.Reader(w.In)
     for r.Fill() {
         for {
@@ -446,7 +446,7 @@ fn (w mut worker&) check(k I64) {
     said := d.Errors()
     foreign := w.publishAll(k, a, d, doc.Foreign)
     session.Hold(a, cfg)
-    if d.Errors() != said { foreign = w.publishAll(k, a, d, foreign) }
+    if d.Errors() != said: foreign = w.publishAll(k, a, d, foreign)
     w.last = a
     w.lastSlot = k
     # the note: which open files this one's program reaches
@@ -456,7 +456,7 @@ fn (w mut worker&) check(k I64) {
     for m in a.L.Mods {
         for i in range w.s.Docs.Len() {
             if i != k and w.s.Docs[i].Open and w.s.Docs[i].Real == m.Real {
-                if not first { nb.PushChar(',') }
+                if not first: nb.PushChar(',')
                 first = false
                 nb.Push($i)
             }
@@ -464,7 +464,7 @@ fn (w mut worker&) check(k I64) {
     }
     nb.Push("],\"foreign\":[")
     for i in range foreign.Len() {
-        if i > 0 { nb.PushChar(',') }
+        if i > 0: nb.PushChar(',')
         session.JsonStr(nb, foreign[i])
     }
     nb.Push("]}")
@@ -482,12 +482,12 @@ fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics
     items := d.Items()
     for i in range items.Len() {
         it := items[i]
-        if not it.Error { continue }
+        if not it.Error: continue
         real := a.RealOfFile(it.File) if it.File >= 0 else $doc.Real
-        if real == "" { real = $doc.Real }
+        if real == "": real = $doc.Real
         at := -1
         for j in range files.Len() {
-            if files[j] == real { at = j }
+            if files[j] == real: at = j
         }
         if at < 0 {
             files.Push(real)
@@ -495,25 +495,25 @@ fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics
             at = files.Len() - 1
         }
         b := lists.RefMut(at)
-        if b.Len() > 0 { b.PushChar(',') }
+        if b.Len() > 0: b.PushChar(',')
         w.diagnostic(b, a, d, items, i, real)
     }
     # this file's - empty to clear what was said before - and every other file's not checked as a root of its own here
     mine := StringBuilder()
     foreign Vec<String&>
     for j in range files.Len() {
-        if files[j] == doc.Real { mine = lists[j] }
+        if files[j] == doc.Real: mine = lists[j]
     }
     w.deprecations(mine, a, doc.Real)
     w.send(publish(doc.Uri, $"[" + $mine.ToString() + "]"))
     for j in range files.Len() {
-        if files[j] == doc.Real or w.slotPending(files[j]) { continue }
+        if files[j] == doc.Real or w.slotPending(files[j]): continue
         uri := w.uriOf(files[j])
         w.send(publish(uri, $"[" + $lists[j].ToString() + "]"))
         foreign.Push(uri)
     }
     for f in before {
-        if f not in foreign { w.send(publish(f, "[]")) }
+        if f not in foreign: w.send(publish(f, "[]"))
     }
     return foreign
 }
@@ -523,7 +523,7 @@ fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics
 fn (w worker&) deprecations(b mut StringBuilder&, a session.Analysis&, real String&) {
     p := session.Positions(w.textOf(a, real), w.s.Utf8)
     for u in a.DeprecatedUses(real) {
-        if b.Len() > 0 { b.PushChar(',') }
+        if b.Len() > 0: b.PushChar(',')
         b.Push("{\"range\":")
         p.Range(b, u.Start, u.End)
         b.Push(",\"severity\":4,\"source\":\"olang\",\"tags\":[2],\"message\":")
@@ -532,7 +532,7 @@ fn (w worker&) deprecations(b mut StringBuilder&, a session.Analysis&, real Stri
     }
     # (and where section 8 built storage longer for a view kept past it - O27, as -memory says it: a hint, untagged)
     for u in a.Placed(real) {
-        if b.Len() > 0 { b.PushChar(',') }
+        if b.Len() > 0: b.PushChar(',')
         b.Push("{\"range\":")
         p.Range(b, u.Start, u.End)
         b.Push(",\"severity\":4,\"source\":\"olang\",\"code\":\"O27\",\"message\":")
@@ -544,7 +544,7 @@ fn (w worker&) deprecations(b mut StringBuilder&, a session.Analysis&, real Stri
 # whether a file is itself one of the open files to be checked here, as a root
 fn (w worker&) slotPending(real String&) Bool {
     for k in w.s.Pending {
-        if w.s.Docs[k].Real == real { return true }
+        if w.s.Docs[k].Real == real: return true
     }
     return false
 }
@@ -552,7 +552,7 @@ fn (w worker&) slotPending(real String&) Bool {
 # a file's URI: an open file's as the editor named it, else made from its real path
 fn (w worker&) uriOf(real String&) String {
     for d in w.s.Docs {
-        if d.Open and d.Real == real { return $d.Uri }
+        if d.Open and d.Real == real: return $d.Uri
     }
     return UriOf(real)
 }
@@ -560,7 +560,7 @@ fn (w worker&) uriOf(real String&) String {
 # the text a file has here: an open file's as the editor holds it, else the analysis's
 fn (w worker&) textOf(a session.Analysis&, real String&) String {
     t := try w.overlay.Get(real) catch default ""
-    if t != "" { return $t }
+    if t != "": return $t
     mi := a.ModuleOf(real)
     return $a.TextOf(mi) if mi >= 0 else ""
 }
@@ -586,8 +586,8 @@ fn (w mut worker&) diagnostic(b mut StringBuilder&, a session.Analysis&, d mut d
     rel := StringBuilder()
     for j in range i + 1, items.Len() {
         nt := items[j]
-        if nt.Error { break }
-        if rel.Len() > 0 { rel.PushChar(',') }
+        if nt.Error: break
+        if rel.Len() > 0: rel.PushChar(',')
         nreal := a.RealOfFile(nt.File) if nt.File >= 0 else $real
         np := session.Positions(w.textOf(a, nreal), w.s.Utf8)
         rel.Push("{\"location\":{\"uri\":")
@@ -598,7 +598,7 @@ fn (w mut worker&) diagnostic(b mut StringBuilder&, a session.Analysis&, d mut d
         session.JsonStr(rel, $"help: " + $nt.Text if nt.Help else nt.Text)
         rel.PushChar('}')
     }
-    if rel.Len() > 0 { b.Push($",\"relatedInformation\":[" + $rel.ToString() + "]") }
+    if rel.Len() > 0: b.Push($",\"relatedInformation\":[" + $rel.ToString() + "]")
     b.PushChar('}')
 }
 
@@ -702,17 +702,17 @@ fn (w mut worker&) answer(body String&) {
 # taken out, so the line is what it was before they were typed - else the names that may stand there
 fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut build.Config&, d mut diag.Diagnostics&) {
     start := at
-    for start > 0 and session.WordChar(text[start - 1]) { start-- }
+    for start > 0 and session.WordChar(text[start - 1]): start--
     it := session.Items()
     for n in session.PromiseTargets(text, start) { it.Add(n, session.CompVariable, "a parameter a promise word names (T21c)") }
     if start > 0 and text[start - 1] == '.' {
         dot := start - 1
         # the word the cursor stands in goes too, so what follows does not join x
         end := at
-        for end < text.Len() and session.WordChar(text[end]) { end++ }
+        for end < text.Len() and session.WordChar(text[end]): end++
         cut := $text[:dot] + $text[end:]
         overlay := Map<String&, String&>()
-        for e in w.overlay { overlay.Put(e.Key, e.Value) }
+        for e in w.overlay: overlay.Put(e.Key, e.Value)
         overlay.Put(doc.Real, cut)
         a := session.Analysis.Analyze(doc.Path, cfg, d, overlay)
         a.Members(it, doc.Real, dot)
@@ -758,7 +758,7 @@ fn publish(uri String&, diagnostics String&) String {
 
 # a file URI's path: "file://" taken off, %XX decoded; a URI of another scheme as it is
 fn PathOf(uri String&) String {
-    if not uri.StartsWith("file://") { return $uri }
+    if not uri.StartsWith("file://"): return $uri
     t := uri[7:]
     b := StringBuilder()
     i I64 = 0
@@ -821,7 +821,7 @@ fn frames(out String&) Vec<String&>& {
         rest := r[at + 16:]
         nl := try rest.Find("\r\n\r\n") catch { break }
         n := try rest[:nl].Trim().ParseInt() catch { break }
-        if rest.Len() < nl + 4 + n { break }
+        if rest.Len() < nl + 4 + n: break
         l.Push(rest[nl + 4:nl + 4 + n])
         r = rest[nl + 4 + n:]
     }
@@ -867,9 +867,9 @@ test "olang lsp answers a scripted session: diagnostics, hover, definition, symb
     diags := ""
     for m in frames(out.Stdout) {
         msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
-        if str(msg, "method") == "textDocument/publishDiagnostics" { diags = $m }
+        if str(msg, "method") == "textDocument/publishDiagnostics": diags = $m
         id := idOf(msg)
-        if id != "" { got.Put(id, m) }
+        if id != "": got.Put(id, m)
     }
     assert got.Has("1") and (got.Get("1")!).Contains("\"positionEncoding\":\"utf-8\"")
     assert diags.Contains("\"code\":\"E12\"") and diags.Contains("\"start\":{\"line\":16,\"character\":14}"), diags
@@ -944,7 +944,7 @@ fn lspSaid(dir String&, main String&) String, String {
 
 fn baseName(path String&) String {
     at := path.Len()
-    for at > 0 and path[at - 1] != '/' { at-- }
+    for at > 0 and path[at - 1] != '/': at--
     return $path[at:]
 }
 
@@ -1049,8 +1049,8 @@ test "a deprecated item: hover shows the note, completion tags it, its uses get 
     diags := ""
     for m in frames(out.Stdout) {
         msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
-        if str(msg, "method") == "textDocument/publishDiagnostics" { diags = $m }
-        if idOf(msg) != "" { got.Put(idOf(msg), m) }
+        if str(msg, "method") == "textDocument/publishDiagnostics": diags = $m
+        if idOf(msg) != "": got.Put(idOf(msg), m)
     }
     assert (got.Get("2")!).Contains("Deprecated: use New"), got.Get("2")!
     comp := got.Get("3")!
@@ -1114,7 +1114,7 @@ test "a hover on a function shows its # fits: line; a promise word is followed b
     got := Map<String&, String&>()
     for m in frames(out.Stdout) {
         msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
-        if idOf(msg) != "" { got.Put(idOf(msg), m) }
+        if idOf(msg) != "": got.Put(idOf(msg), m)
     }
     assert (got.Get("2")!).Contains("# fits: fn&(a mut N&, b N&) returns noalloc"), got.Get("2")!
     line := "fn Keep(f fn&(a mut N&, b N&) keeps b in "

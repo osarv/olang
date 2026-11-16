@@ -32,7 +32,7 @@ fn vtokens(src String&) Vec<VT> {
     ts := scan.Tokens.Scan(src)
     out Vec<VT>
     for tk in ts.Toks {
-        if tk.Kind == token.Tok.StmtEnd { continue }
+        if tk.Kind == token.Tok.StmtEnd: continue
         out.Push(VT(tk.Kind, I64(tk.Start), I64(tk.End)))
     }
     return out
@@ -47,7 +47,7 @@ type Report struct() {
 fn (r mut Report&) leave(path String&, src String&, at I64, why String&) {
     line I64 = 1
     for i in range at {
-        if src[i] == '\n' { line++ }
+        if src[i] == '\n': line++
     }
     r.left.Push($path + ":" + $line + ": " + $why)
 }
@@ -56,10 +56,10 @@ fn (r mut Report&) leave(path String&, src String&, at I64, why String&) {
 fn declares(src String&, v Vec<VT>&, kind token.Tok, name String&) Bool {
     for i in range 1, v.Len() {
         if v[i].k == token.Tok.Iden and src[v[i].start:v[i].end] == name {
-            if kind == token.Tok.Type and v[i - 1].k == token.Tok.Type { return true }
+            if kind == token.Tok.Type and v[i - 1].k == token.Tok.Type: return true
             if kind == token.Tok.Fn and (v[i - 1].k == token.Tok.RParen or v[i - 1].k == token.Tok.Fn) and i + 1 < v.Len() {
                 n := v[i + 1].k
-                if n == token.Tok.LParen or n == token.Tok.Lt { return true }
+                if n == token.Tok.LParen or n == token.Tok.Lt: return true
             }
         }
     }
@@ -72,14 +72,14 @@ fn importAt(src String&, v Vec<VT>&) I64 {
     for i in range v.Len() {
         if v[i].k == token.Tok.Import and (v[i].start == 0 or src[v[i].start - 1] == '\n') {
             e I64 = v[i].end
-            for e < src.Len() and src[e] != '\n' { e++ }
+            for e < src.Len() and src[e] != '\n': e++
             at = e + 1 if e < src.Len() else e
         }
     }
-    if at >= 0 { return at }
-    if v.Len() == 0 { return 0 }
+    if at >= 0: return at
+    if v.Len() == 0: return 0
     s I64 = v[0].start
-    for s > 0 and src[s - 1] != '\n' { s-- }
+    for s > 0 and src[s - 1] != '\n': s--
     return s
 }
 
@@ -98,7 +98,7 @@ fn rewrite(path String&, src String&, keep Bool, r mut Report&) String {
             r.leave(path, src, t.start, "a string holds List<: a program written in a string wants it by hand")
             continue
         }
-        if t.k != token.Tok.Iden { continue }
+        if t.k != token.Tok.Iden: continue
         word := src[t.start:t.end]
         afterDot := i > 0 and v[i - 1].k == token.Tok.Dot
         next := v[i + 1].k if i + 1 < v.Len() else token.Tok.StmtEnd
@@ -118,14 +118,14 @@ fn rewrite(path String&, src String&, keep Bool, r mut Report&) String {
         } else if word == "RunFrom" and afterDot and next == token.Tok.LParen and not keep {
             r.leave(path, src, t.start, "RunFrom: a List's alone - keep the List (no --vec), or walk a Vec by its positions")
         }
-        if with == "" { continue }
-        if with.StartsWith("list.") { usedList = true }
+        if with == "": continue
+        if with.StartsWith("list."): usedList = true
         out.Push(src[at:t.start])
         out.Push(with)
         at = t.end
         r.n++
     }
-    if at == 0 { return src }
+    if at == 0: return src
     out.Push(src[at:])
     res := out.ToString()
     if usedList {
@@ -168,9 +168,9 @@ fn rewriteMarkdown(path String&, src String&, keep Bool, r mut Report&) String {
             inBlock = true
         }
         out.Push(line)
-        if not last { out.PushChar('\n') }
+        if not last: out.PushChar('\n')
     }
-    if inBlock { out.Push(block.ToString()) }
+    if inBlock: out.Push(block.ToString())
     return out.ToString()
 }
 
@@ -182,7 +182,7 @@ fn walk(dir String&, out mut Vec<String&>&) {
         if os.IsDir(path) {
             linked := true
             try os.ReadLink(path) catch { linked = false }
-            if name != "build" and name != ".git" and not linked { walk(path, out) }
+            if name != "build" and name != ".git" and not linked: walk(path, out)
         } else if name.EndsWith(".olang") or name.EndsWith(".md") {
             out.Push($path)
         }
@@ -213,16 +213,16 @@ fn main() ? {
     r := Report()
     changed I64 = 0
     for path in files {
-        if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")): continue
         src := try srcmask.ReadText(path) catch {
             srcmask.SayErr("list_vec: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
         out := rewriteMarkdown(path, src, keep, r) if path.EndsWith(".md") else rewrite(path, src, keep, r)
-        if out == src { continue }
+        if out == src: continue
         changed++
-        if verbose { srcmask.Say(path) }
+        if verbose: srcmask.Say(path)
         if not check {
             try os.WriteFile(path, out) catch {
                 srcmask.SayErr("list_vec: cannot write " + $path)
@@ -230,10 +230,10 @@ fn main() ? {
             }
         }
     }
-    for l in r.left { srcmask.Say("by hand: " + $l) }
+    for l in r.left: srcmask.Say("by hand: " + $l)
     verb := "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $r.n + " names")
-    if check and changed > 0 { os.Exit(1) }
+    if check and changed > 0: os.Exit(1)
 }
 
 test "List onto Vec: types, the error type and ToList; anything else is left" {

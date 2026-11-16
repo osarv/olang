@@ -23,7 +23,7 @@ fn Add<T Number>(a T, b T) T ? {
     match T {
         case F16, BF16, F32, F64 { try floatResult(a, b, r) }
         case _ {
-            if (r < a) != (b < 0) { error Error.Overflow }
+            if (r < a) != (b < 0): error Error.Overflow
         }
     }
     return r
@@ -35,7 +35,7 @@ fn Sub<T Number>(a T, b T) T ? {
     match T {
         case F16, BF16, F32, F64 { try floatResult(a, b, r) }
         case _ {
-            if (r > a) != (b < 0) { error Error.Overflow }
+            if (r > a) != (b < 0): error Error.Overflow
         }
     }
     return r
@@ -50,13 +50,13 @@ fn Mul<T Number>(a T, b T) T ? {
             return r
         }
         case _ {
-            if a == 0 or b == 0 { return 0 }
+            if a == 0 or b == 0: return 0
             if T.Min < 0 {
                 # the least value times -1 does not fit, and "r / b" would divide it by -1 (E6a)
-                if (a == -1 and b == T.Min) or (b == -1 and a == T.Min) { error Error.Overflow }
+                if (a == -1 and b == T.Min) or (b == -1 and a == T.Min): error Error.Overflow
             }
             r := a * b
-            if r / b != a { error Error.Overflow }
+            if r / b != a: error Error.Overflow
             return r
         }
     }
@@ -66,15 +66,15 @@ fn Mul<T Number>(a T, b T) T ? {
 fn Div<T Number>(a T, b T) T ? {
     match T {
         case F16, BF16, F32, F64 {
-            if b == 0 and a != 0 and a.IsFinite() { error Error.DivideByZero }
+            if b == 0 and a != 0 and a.IsFinite(): error Error.DivideByZero
             r := a / b
             try floatResult(a, b, r)
             return r
         }
         case _ {
-            if b == 0 { error Error.DivideByZero }
+            if b == 0: error Error.DivideByZero
             if T.Min < 0 {
-                if a == T.Min and b == -1 { error Error.Overflow }
+                if a == T.Min and b == -1: error Error.Overflow
             }
             return a / b
         }
@@ -84,9 +84,9 @@ fn Div<T Number>(a T, b T) T ? {
 # a % b, an integer's remainder, of a's sign - the least value's by -1 is 0, which fits (the "%" itself is undefined
 # there, E6a, so it is not asked)
 fn Rem<T Integer>(a T, b T) T ? {
-    if b == 0 { error Error.DivideByZero }
+    if b == 0: error Error.DivideByZero
     if T.Min < 0 {
-        if b == -1 { return 0 }
+        if b == -1: return 0
     }
     return a % b
 }
@@ -97,10 +97,10 @@ fn Neg<T Number>(a T) T ? {
         case F16, BF16, F32, F64 { return -a }
         case _ {
             if T.Min < 0 {
-                if a == T.Min { error Error.Overflow }
+                if a == T.Min: error Error.Overflow
                 return -a
             }
-            if a != 0 { error Error.Overflow }
+            if a != 0: error Error.Overflow
             return a
         }
     }
@@ -108,15 +108,15 @@ fn Neg<T Number>(a T) T ? {
 
 # a << n: Invalid for an amount outside [0, the width), Overflow where the true value a * 2^n does not fit
 fn ShiftLeft<T Integer>(a T, n I64) T ? {
-    if n < 0 or n >= widthOf(a) { error Error.Invalid }
+    if n < 0 or n >= widthOf(a): error Error.Invalid
     r := a << n
-    if (r >> n) != a { error Error.Overflow }
+    if (r >> n) != a: error Error.Overflow
     return r
 }
 
 # a >> n: Invalid for an amount outside [0, the width)
 fn ShiftRight<T Integer>(a T, n I64) T ? {
-    if n < 0 or n >= widthOf(a) { error Error.Invalid }
+    if n < 0 or n >= widthOf(a): error Error.Invalid
     return a >> n
 }
 
@@ -137,7 +137,7 @@ fn Pow<T Integer>(x T, n U32) T ? {
             started = true
         }
         e = e >> 1
-        if e > 0 { b = try Mul(b, b) }
+        if e > 0: b = try Mul(b, b)
     }
     return r
 }
@@ -198,8 +198,8 @@ fn (a Saturating<T>) Pow(n U32) Saturating<T> {
 # a float result r of a and b, checked: Invalid for a NaN made from operands that are not, Overflow for an infinity
 # made from finite operands
 fn floatResult<T Float>(a T, b T, r T) ? {
-    if r.IsNan() and not a.IsNan() and not b.IsNan() { error Error.Invalid }
-    if r.IsInf() and a.IsFinite() and b.IsFinite() { error Error.Overflow }
+    if r.IsNan() and not a.IsNan() and not b.IsNan(): error Error.Invalid
+    if r.IsInf() and a.IsFinite() and b.IsFinite(): error Error.Overflow
 }
 
 # an integer type's width in bits, of any width (T4a): the bits its largest value sets, and a signed one's sign bit

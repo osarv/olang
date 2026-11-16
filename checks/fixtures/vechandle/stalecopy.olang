@@ -13,7 +13,7 @@ fn main() {
     ss.Push(s)
     pm mut Map<I64, blk>& = ss.RefMut(0).m
     grow := fn() {
-        for i in range 2, 5000 { pm.Put(i, blk(i, i)) }
+        for i in range 2, 5000: pm.Put(i, blk(i, i))
     }
     r := ss.RefMut(0).m.RefMut(1)!
     grow()

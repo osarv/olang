@@ -24,7 +24,7 @@ fn evens(n I64) Iterator<I64> {
 
 fn countdown(n I64) Iterator<I64 ? Bad> {
     for n > 0 {
-        if n == 3 { error Bad.Neg }
+        if n == 3: error Bad.Neg
         yield n
         n--
     }
@@ -43,7 +43,7 @@ fn (l Vec<T>&) Twice() Iterator<T> {
 
 fn words(t String&) Iterator<String> {
     for w in t.Split(" ") {
-        if w.Len() == 0 { continue }
+        if w.Len() == 0: continue
         yield $w + "!"
     }
 }
@@ -63,7 +63,7 @@ fn nested(n I64) Iterator<I64> {
 
 fn firstTwo(n I64) Iterator<I64> {
     yield n
-    if n > 5 { return }
+    if n > 5: return
     yield n + 1
 }
 
@@ -89,7 +89,7 @@ test "D18: a generator walked by for-in and by the iterator helpers, while compi
     assert evens(Ten).Sum() == Total
     assert evens(4).Sum() == 2 # decided while compiling (S18c)
     n I64 = 0
-    for x in evens(Ten) { n += x }
+    for x in evens(Ten): n += x
     assert n == 20
     assert Walked == 44
     assert nested(Ten - 6).Sum() == Walked
@@ -102,12 +102,12 @@ test "D18: a generic generator, a generator method, text built for each value" {
     l.Push(1)
     l.Push(Ten)
     out := Vec<I64>()
-    for x in l.Twice() { out.Push(x) }
+    for x in l.Twice(): out.Push(x)
     assert out.Len() == 4 and out[2] == 10 and out[3] == 10
     n I64 = 0
     for w in words("the  quick brown") {
         n++
-        if n == 2 { assert w == "quick!" }
+        if n == 2: assert w == "quick!"
     }
     assert n == 3
 }
@@ -150,7 +150,7 @@ test "D18: a copy of a Generator is the same walk; a field holds one" {
     assert x1 == 7 and x2 == 7 and x3 == -1
     a mut any Iterator<I64>& = repeat(5, 3)
     n I64 = 0
-    for v in a { n += v }
+    for v in a: n += v
     assert n == 15
 }
 
@@ -165,7 +165,7 @@ test "D18b: a walk stopped part way closes its scopes with the scope the generat
     }
     assert Dropped == d + 2 # the second's, as the walk was dropped
     for x in guarded(3) {
-        if x == 1 { break }
+        if x == 1: break
     }
     assert Dropped == d + 4
     for _ in guarded(2) { }
@@ -175,7 +175,7 @@ test "D18b: a walk stopped part way closes its scopes with the scope the generat
 test "D18: a walk churned between values reads what it made, not reused storage" {
     for w in words("one two three") {
         junk := Vec<I64>()
-        for i in range 50 { junk.Push(($i + "-" + $i).Len()) }
+        for i in range 50: junk.Push(($i + "-" + $i).Len())
         assert w.EndsWith("!") and junk.Len() == 50
     }
 }
@@ -190,7 +190,7 @@ fn logged(n I64, log mut Vec<String&>&) Iterator<I64> {
 test "D18b: a generator builds into what it was given, where that lives" {
     log := Vec<String&>()
     s I64 = 0
-    for x in logged(Ten - 6, log) { s += x }
+    for x in logged(Ten - 6, log): s += x
     assert s == 6 and log.Len() == 4 and log[3] == "3!"
 }
 
@@ -209,8 +209,8 @@ test "D18c: a generator yields copies of what it was given" {
     n I64 = 0
     for p in copies("a,bb,,ccc") {
         n++
-        if n == 2 { assert p == "bb" }
-        if n == 3 { assert p.Len() == 0 }
+        if n == 2: assert p == "bb"
+        if n == 3: assert p.Len() == 0
     }
     assert n == 4
 }
@@ -219,7 +219,7 @@ test "D18c: a generator yields copies of what it was given" {
 EdLog mut I64 = 0
 
 fn edCheck(n I64) ? Bad {
-    if n < 0 { error Bad.Neg }
+    if n < 0: error Bad.Neg
 }
 
 fn edWalk(n I64) Iterator<I64 ? Bad> {
@@ -276,11 +276,11 @@ test "D18b: walks holding no scope and walks holding one, stopped part way, side
     t I64 = 0
     for _ in range 1000 {
         for x in evens(Ten) {
-            if x == 4 { break }
+            if x == 4: break
             t += x
         }
         for y in guarded(Ten) {
-            if y == 1 { break }
+            if y == 1: break
             t += y
         }
     }
@@ -294,7 +294,7 @@ test "D18b: walks holding no scope and walks holding one, stopped part way, side
 fn firstOver(n I64, k I64) I64 {
     for p in range 3 {
         for x in guarded(n) {
-            if x + p > k { return x + 10 * p }
+            if x + p > k: return x + 10 * p
         }
     }
     return -1
@@ -303,7 +303,7 @@ fn firstOver(n I64, k I64) I64 {
 fn guardedFails(n I64) I64 ? Bad {
     t I64 = 0
     for x in guarded(n) {
-        if x == 2 { error Bad.Neg }
+        if x == 2: error Bad.Neg
         t += x
     }
     return t
@@ -323,9 +323,9 @@ test "D18e: a walk left by a return out of two loops, or by an error, closes its
 fn spans(t String&) Iterator<String&> {
     i I64 = 0
     for i < t.Len() {
-        for i < t.Len() and t[i] == ' ' { i++ }
+        for i < t.Len() and t[i] == ' ': i++
         j := i
-        for j < t.Len() and t[j] != ' ' { j++ }
+        for j < t.Len() and t[j] != ' ': j++
         if j > i { yield t[i:j] }
         i = j
     }
@@ -333,12 +333,12 @@ fn spans(t String&) Iterator<String&> {
 
 # what spans gives, kept where the caller's text lives - an obligation on the caller (O10b)
 fn keepSpans(t String&, out mut Vec<String&>&) {
-    for w in spans(t) { out.Push(w) }
+    for w in spans(t): out.Push(w)
 }
 
 fn spanTotal(t String&) I64 {
     n I64 = 0
-    for w in spans(t) { n += w.Len() }
+    for w in spans(t): n += w.Len()
     return n
 }
 
@@ -347,7 +347,7 @@ fn churnText() I64 {
     n I64 = 0
     for i in range 200 {
         junk := Vec<String&>()
-        for k in range 4 { junk.Push($i + "-churn-" + $k) }
+        for k in range 4: junk.Push($i + "-churn-" + $k)
         n += junk[3].Len()
     }
     return n
@@ -401,7 +401,7 @@ fn labels(n I64) Iterator<String&> {
 
 fn labelTotal(n I64) I64 {
     t I64 = 0
-    for s in labels(n) { t += s.Len() }
+    for s in labels(n): t += s.Len()
     return t
 }
 
@@ -424,7 +424,7 @@ test "D18c: a generator's elements kept by its walk live where the generator doe
     churnText()
     assert seen.Len() == 6 and seen[1].x == 10 and seen[4].x == 10 and seen[5].x == 20
     total I64 = 0
-    for p in points(4) { total += p.x }
+    for p in points(4): total += p.x
     assert total == 120
     assert LabelTotal == 21 and labelTotal(2) == 14 # decided while compiling (S18c)
 }
@@ -493,10 +493,10 @@ fn holding(t String&) Iterator<I64> {
 
 test "D18e: a walk a for-in makes is dropped as the loop's block is left, whatever it was given" {
     d := Dropped
-    for _ in holding("constant") { break }
+    for _ in holding("constant"): break
     assert Dropped == d + 1
     n I64 = 0
-    for x in holding("eight ch") { n += x }
+    for x in holding("eight ch"): n += x
     assert n == 17 and Dropped == d + 2
 }
 
@@ -519,9 +519,9 @@ fn heldTwice() I64 {
     g := heldEach(HeldData)
     for x in g {
         t += x
-        if x == 4 { break }
+        if x == 4: break
     }
-    for x in g { t += 100 * x }
+    for x in g: t += 100 * x
     return t
 }
 
@@ -531,7 +531,7 @@ fn heldInLoop() I64 {
     for _ in range 2 {
         for x in g {
             t += x
-            if x == 1 { break }
+            if x == 1: break
         }
     }
     return t
@@ -539,9 +539,9 @@ fn heldInLoop() I64 {
 
 fn heldEarly(k I64) I64 {
     g := heldEach(HeldData)
-    if k > 0 { return -1 }
+    if k > 0: return -1
     t I64 = 0
-    for x in g { t += x }
+    for x in g: t += x
     return t
 }
 
@@ -569,7 +569,7 @@ test "D18e: a generator held in a local and walked once there is dropped as the 
     assert HeldBaked == 506 * 1000000 + 2308 * 100 + 9
     d := Dropped
     assert heldDropped("constant") == 8 and Dropped == d + 1
-    for _ in range 1000 { assert heldCompr() == 506 }
+    for _ in range 1000: assert heldCompr() == 506
 }
 
 # review 6b F3: a coroutine's stack slots put into an aggregate value - a lambda's environment, made before the loop, in
@@ -590,7 +590,7 @@ fn lambdaBefore(k I64) Iterator<I64> {
 
 fn sumOf(r Array<I64>&) I64 {
     t I64 = 0
-    for x in r { t += x }
+    for x in r: t += x
     return t
 }
 
@@ -603,14 +603,14 @@ fn arrayLent(k I64) Iterator<I64> {
 # a call's frame written over where a Next call's frame was
 fn stackChurn(k I64) I64 {
     a := Array<I64>(64, 0)
-    for i in range 64 { a[i] = i * 7777 + k }
+    for i in range 64: a[i] = i * 7777 + k
     return a[63] - a[63]
 }
 
 fn keptWalks() I64 {
     t I64 = 0
-    for x in lambdaBefore(5) { t += x + stackChurn(x) + churnText() - churnText() }
-    for x in arrayLent(5) { t += 1000 * x + stackChurn(x) + churnText() - churnText() }
+    for x in lambdaBefore(5): t += x + stackChurn(x) + churnText() - churnText()
+    for x in arrayLent(5): t += 1000 * x + stackChurn(x) + churnText() - churnText()
     return t
 }
 
@@ -630,7 +630,7 @@ type Seen struct() {
 
 fn (s Seen&) Text() String {
     b := StringBuilder()
-    for x in s.ids { b.Push(" " + $x) }
+    for x in s.ids: b.Push(" " + $x)
     return b.ToString()
 }
 
@@ -668,7 +668,7 @@ fn walkedHeld() String {
     s := Seen()
     # walked to the end: b as its block closes, then a, then the deferred code
     t I64 = 0
-    for x in heldAcross(Witness(s), 10) { t += x }
+    for x in heldAcross(Witness(s), 10): t += x
     assert t == 23 + 12 + 11
     # left part way, at each of its yields
     for x in heldAcross(Witness(s), 20) {
@@ -701,7 +701,7 @@ fn unstarted(g Generator<I64>&) Bool { return g == g }
 fn walkedOwned() String {
     s := Seen()
     t I64 = 0
-    for x in owned(Held(5, s), 3) { t += x }
+    for x in owned(Held(5, s), 3): t += x
     assert t == 18
     for x in owned(Held(6, s), 3) {
         assert x == 6
@@ -726,8 +726,8 @@ fn walkedOwned() String {
 fn walkedFull() String {
     s := Seen()
     t I64 = 0
-    for x in heldAcross(Witness(s), 50) { t += x }
-    for x in owned(Held(9, s), 2) { t += x }
+    for x in heldAcross(Witness(s), 50): t += x
+    for x in owned(Held(9, s), 2): t += x
     return $t + $s.Text()
 }
 

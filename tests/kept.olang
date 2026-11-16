@@ -32,7 +32,7 @@ fn churn() I64 {
 
 fn sumOf(hs Vec<H>&) I64 {
     s := 0
-    for h in hs { s += h.R.x * 10 + h.R.y }
+    for h in hs: s += h.R.x * 10 + h.R.y
     return s
 }
 
@@ -62,11 +62,11 @@ fn vecs(n I64) I64 {
     for i in range n {
         v := Vec<I64>()
         hs.Push(VH(v))
-        for j in range i + 1 { v.Push(i * 100 + j) }
+        for j in range i + 1: v.Push(i * 100 + j)
     }
     churn()
     s := 0
-    for h in hs { s += h.V.Len() * 1000 + h.V[h.V.Len() - 1] }
+    for h in hs: s += h.V.Len() * 1000 + h.V[h.V.Len() - 1]
     return s
 }
 
@@ -79,7 +79,7 @@ fn arrays(n I64) I64 {
     }
     churn()
     s := 0
-    for h in hs { s += h.A.Len() * 100 + h.A[0] }
+    for h in hs: s += h.A.Len() * 100 + h.A[0]
     return s
 }
 
@@ -123,7 +123,7 @@ fn rows(n I64) I64 {
     }
     churn()
     s := 0
-    for r in all { s += r[0].Len() * 100 + r[1].Len() }
+    for r in all: s += r[0].Len() * 100 + r[1].Len()
     return s
 }
 

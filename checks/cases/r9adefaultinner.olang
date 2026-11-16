@@ -12,7 +12,7 @@ type Node struct(v I32) {
     v
 }
 fn Node.mk(k I64) Node& ? {
-    if k > -5 { error Stop.Here }
+    if k > -5: error Stop.Here
     return Node(7)
 }
 fn churn() {

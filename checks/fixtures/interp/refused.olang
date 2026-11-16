@@ -10,7 +10,7 @@ type Node struct(v I64, next mut Node?&) {
     next
 }
 fn Node.make(v I64) mut Node& ? E {
-    if v < 0 { error E.Empty }
+    if v < 0: error E.Empty
     return Node(v, null)
 }
 fn main() {
@@ -19,7 +19,7 @@ fn main() {
     {
         b mut Node& = Node(2, null)
         d := a
-        if n > 0 { d = b }
+        if n > 0: d = b
         m := try Node.make(n - 5) catch default d
         m.next = Node(3, null)
         assert b.next!.v == 3

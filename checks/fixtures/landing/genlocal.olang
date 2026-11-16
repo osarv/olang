@@ -12,7 +12,7 @@ fn each(a Array<I64>&) Iterator<I64> {
 fn viaLocal() I64 {
     t I64 = 0
     g := each(Data)
-    for x in g { t += x }
+    for x in g: t += x
     return t
 }
 
@@ -23,6 +23,6 @@ fn viaCompr() I64 {
 
 fn main() {
     t I64 = 0
-    for _ in range 1000000 { t += viaLocal() + viaCompr() }
+    for _ in range 1000000: t += viaLocal() + viaCompr()
     io.PutLine($t)!
 }

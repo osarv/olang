@@ -12,7 +12,7 @@ import "diag"
 fn Unparse(decls Array<ast.Decl&>&, names source.Names&, text String&, diags diag.Diagnostics&) String {
     w := writer(names, text, diags)
     for d in decls {
-        if hidden(d) { continue }
+        if hidden(d): continue
         w.decl(d)
         w.b.PushChar('\n')
     }
@@ -39,7 +39,7 @@ fn (w mut writer&) attrs(xs Array<ast.Attr&>&) {
 # the branches the build may decide that met a syntax error, which Unparse writes as their text: their spans, in order
 fn HeldBranches(decls Array<ast.Decl&>&, names source.Names&, text String&, diags diag.Diagnostics&) Array<source.Span> {
     w := writer(names, text, diags)
-    for d in decls { w.decl(d) }
+    for d in decls: w.decl(d)
     return w.held.ToArray()
 }
 
@@ -67,7 +67,7 @@ MaxIndent I64 = 64
 
 fn (w mut writer&) nl() {
     w.b.PushChar('\n')
-    for _ in range w.ind.Min(MaxIndent) { w.b.Push("    ") }
+    for _ in range w.ind.Min(MaxIndent): w.b.Push("    ")
 }
 
 # ---- declarations ----
@@ -82,7 +82,7 @@ fn (w mut writer&) decl(d ast.Decl&) {
         case ast.Decl.ExternBlock(_, link, ds) { w.externBlock(link, ds) }
         case ast.Decl.Type(_, t) { w.typeDecl(t) }
         case ast.Decl.Global(_, v) {
-            if not v.Hidden { w.varDecl(v) }
+            if not v.Hidden: w.varDecl(v)
         }
         case ast.Decl.Import(_, alias, path, link) {
             w.put("import ")
@@ -201,7 +201,7 @@ fn (w mut writer&) topBranch(b ast.TopBranch&) {
     w.put("{")
     w.ind++
     for d in b.Decls {
-        if hidden(d) { continue }
+        if hidden(d): continue
         w.nl()
         w.decl(d)
     }
@@ -212,7 +212,7 @@ fn (w mut writer&) topBranch(b ast.TopBranch&) {
 
 fn (w mut writer&) func(f ast.Func&) {
     w.attrs(f.Attrs)
-    if f.Export { w.put("export ") }
+    if f.Export: w.put("export ")
     w.put("fn ")
     if f.Recv != null {
         w.put("(")
@@ -247,17 +247,17 @@ fn (w mut writer&) sig(s ast.Sig&) {
     w.params(s.Params)
     if s.Variadic { w.put(", ..." if s.Params.Len() > 0 else "...") }
     w.put(")")
-    if s.NoReturn { w.put(" noreturn") }
+    if s.NoReturn: w.put(" noreturn")
     was := w.item
     w.item = true
     for i, t in s.Results {
         w.put(", " if i > 0 else " ")
-        if i == s.Results.Len() - 1 and s.HasErrors { w.group = noErrorsOf(t) }
+        if i == s.Results.Len() - 1 and s.HasErrors: w.group = noErrorsOf(t)
         w.ty(t)
         w.group = false
     }
     w.item = was
-    if s.Commutes { w.put(" commutes") }
+    if s.Commutes: w.put(" commutes")
     w.errors(s)
     w.promises(s.Promises)
 }
@@ -282,7 +282,7 @@ fn noErrorsOf(t ast.TypeRef&) Bool {
 }
 
 fn (w mut writer&) errors(s ast.Sig&) {
-    if not s.HasErrors { return }
+    if not s.HasErrors: return
     w.put(" ?")
     for i, e in s.Errors {
         w.put(", " if i > 0 else " ")
@@ -294,7 +294,7 @@ fn (w mut writer&) params(ps Array<ast.Param&>&) {
     was := w.item
     w.item = true
     for i, x in ps {
-        if i > 0 { w.put(", ") }
+        if i > 0: w.put(", ")
         w.param(x)
     }
     w.item = was
@@ -302,9 +302,9 @@ fn (w mut writer&) params(ps Array<ast.Param&>&) {
 
 fn (w mut writer&) param(x ast.Param&) {
     w.attrs(x.Attrs)
-    if x.Name != source.NameId(0) { w.name(x.Name) }
+    if x.Name != source.NameId(0): w.name(x.Name)
     if x.Ty != null {
-        if x.Name != source.NameId(0) { w.put(" ") }
+        if x.Name != source.NameId(0): w.put(" ")
         w.ty(x.Ty!)
     }
     if x.Dflt != null {
@@ -315,7 +315,7 @@ fn (w mut writer&) param(x ast.Param&) {
 
 fn (w mut writer&) path(p ast.Path&) {
     for i, n in p.Parts {
-        if i > 0 { w.put(".") }
+        if i > 0: w.put(".")
         w.name(n)
     }
 }
@@ -333,17 +333,17 @@ fn (w mut writer&) typeDecl(t ast.TypeDecl&) {
     w.put("type ")
     w.name(t.Name)
     w.typeParams(t.Params)
-    if t.Word == ast.DeclWord.Immut { w.put(" immut") }
-    if t.Word == ast.DeclWord.Unique { w.put(" unique") }
-    if t.Packed { w.put(" packed") }
-    if t.Extends { w.put(" extends") }
+    if t.Word == ast.DeclWord.Immut: w.put(" immut")
+    if t.Word == ast.DeclWord.Unique: w.put(" unique")
+    if t.Packed: w.put(" packed")
+    if t.Extends: w.put(" extends")
     w.put(" ")
     w.typeBody(t.Body!)
 }
 
 # "<T, U Shape, N I64>": a type's, a function's or a constructor's type parameters (G1, G3, G10d)
 fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
-    if tps.Len() == 0 { return }
+    if tps.Len() == 0: return
     w.put("<")
     was := w.item
     w.item = true
@@ -354,7 +354,7 @@ fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
             w.name(x.Name)
             continue
         }
-        if i > 0 { w.put(", ") }
+        if i > 0: w.put(", ")
         w.name(x.Name)
         if x.Ty != null {
             w.put(" ")
@@ -437,7 +437,7 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
             w.ind++
             for m in methods {
                 w.nl()
-                if m.Recv != null { w.put("mut ") }
+                if m.Recv != null: w.put("mut ")
                 w.name(m.Name)   # a builder required (T30b): "T.Parse", its joined name
                 w.sig(m.S)
             }
@@ -477,7 +477,7 @@ fn (w mut writer&) types(ts Array<ast.TypeRef&>&) {
             }
             case _ { }
         }
-        if i > 0 { w.put(", ") }
+        if i > 0: w.put(", ")
         w.ty(t)
     }
     w.item = was
@@ -501,7 +501,7 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
     match t {
         case ast.TypeRef.Named(_, path, args) {
             for i, n in path {
-                if i > 0 { w.put(".") }
+                if i > 0: w.put(".")
                 w.name(n)
             }
             if args.Len() > 0 {
@@ -534,7 +534,7 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
         case ast.TypeRef.Errs(_, items) {
             w.put("? ")
             for k, e in items {
-                if k > 0 { w.put(", ") }
+                if k > 0: w.put(", ")
                 w.path(e)
             }
         }
@@ -545,7 +545,7 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
                 w.ty(of.Unweak())
                 return
             }
-            if writable { w.put("mut") }
+            if writable: w.put("mut")
             if of != null {
                 w.put(" ")
                 w.ty(of)
@@ -579,7 +579,7 @@ fn (w mut writer&) block(body Array<ast.Stmt&>&) {
 fn (w mut writer&) body(body Array<ast.Stmt&>&) {
     if body.Len() == 1 {
         k := I64(body[0].Span().Start) - 1
-        for k >= 0 and (w.text[k] == ' ' or w.text[k] == '\t') { k-- }
+        for k >= 0 and (w.text[k] == ' ' or w.text[k] == '\t'): k--
         if k >= 0 and w.text[k] == ':' {
             w.put(": ")
             w.stmt(body[0])
@@ -593,7 +593,7 @@ fn (w mut writer&) body(body Array<ast.Stmt&>&) {
 fn (w mut writer&) varDecl(v ast.VarDecl&) {
     w.attrs(v.Attrs)
     for i, n in v.Names {
-        if i > 0 { w.put(", ") }
+        if i > 0: w.put(", ")
         w.name(n)
     }
     if v.Infer {
@@ -605,7 +605,7 @@ fn (w mut writer&) varDecl(v ast.VarDecl&) {
         w.exprs(v.Values)
         return
     }
-    if v.Ty == null { return }
+    if v.Ty == null: return
     w.put(" ")
     w.ty(v.Ty!)
     if v.Values.Len() > 0 {
@@ -685,7 +685,7 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             }
             w.name(f.Name)
             w.put(" in ")
-            if f.Tried { w.put("try ") }
+            if f.Tried: w.put("try ")
             w.expr(f.Source)
             w.body(f.Body)
             w.clauses(f.Clauses)
@@ -748,7 +748,7 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.expr(call)
         }
         case ast.Stmt.Join(_, j) {
-            if j.Tried { w.put("try ") }
+            if j.Tried: w.put("try ")
             w.put("join ")
             w.block(j.Body)
             w.clauses(j.Clauses)
@@ -790,7 +790,7 @@ fn (w mut writer&) ifStmt(i ast.If&) {
 # a branch after its condition or "else": " " and its block, or ": " and its statement (S1b)
 fn (w mut writer&) branch(b ast.Branch&) {
     if b.Body.Len() == 0 or w.diags.Holds(b.Group) {
-        if w.text[I64(b.Sp.Start)] != ':' { w.put(" ") }
+        if w.text[I64(b.Sp.Start)] != ':': w.put(" ")
         w.span(b.Sp)
         w.held.Push(b.Sp)
         return
@@ -807,11 +807,11 @@ fn (w mut writer&) match(m ast.Match&) {
         w.nl()
         w.put("case ")
         for i, a in c.Alts {
-            if i > 0 { w.put(", ") }
+            if i > 0: w.put(", ")
             w.pattern(a)
         }
         for i, t in c.Types {
-            if i > 0 { w.put(", ") }
+            if i > 0: w.put(", ")
             w.ty(t)
         }
         if c.Guard != null {
@@ -842,7 +842,7 @@ fn (w mut writer&) pattern(p ast.Pattern&) {
             w.expr(path)
             w.put("(")
             for i, s in subs {
-                if i > 0 { w.put(", ") }
+                if i > 0: w.put(", ")
                 w.pattern(s)
             }
             w.put(")")
@@ -871,7 +871,7 @@ fn (w mut writer&) pattern(p ast.Pattern&) {
 
 fn (w mut writer&) exprs(xs Array<ast.Expr&>&) {
     for i, x in xs {
-        if i > 0 { w.put(", ") }
+        if i > 0: w.put(", ")
         w.expr(x)
     }
 }
@@ -969,9 +969,9 @@ fn (w mut writer&) expr(x ast.Expr&) {
         case ast.Expr.Slice(_, y, lo, hi) {
             w.expr(y)
             w.put("[")
-            if lo != null { w.expr(lo) }
+            if lo != null: w.expr(lo)
             w.put(":")
-            if hi != null { w.expr(hi) }
+            if hi != null: w.expr(hi)
             w.put("]")
         }
         case ast.Expr.Axis(_, lo, hi) {
@@ -1048,7 +1048,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
         }
         case ast.Expr.Variadic(_, items) {
             for k, it in items {
-                if k > 0 { w.put(", ") }
+                if k > 0: w.put(", ")
                 w.expr(it)
             }
         }

@@ -8,7 +8,7 @@ fn fannkuch(n I64) I64, I32 {
     perm := Array<I32>(n)
     perm1 := Array<I32>(n)
     count := Array<I32>(n)
-    for i in range n { perm1[i] = I32(i) }
+    for i in range n: perm1[i] = I32(i)
     maxFlips I32 = 0
     checksum I64 = 0
     permCount I64 = 0
@@ -18,23 +18,23 @@ fn fannkuch(n I64) I64, I32 {
             count[r - 1] = I32(r)
             r--
         }
-        for i in range n { perm[i] = perm1[i] }
+        for i in range n: perm[i] = perm1[i]
         flips I32 = 0
         for perm[0] != 0 {
             k := perm[0]
             for i in range (k + 1) >> 1: perm[i], perm[k - i] = perm[k - i], perm[i]
             flips++
         }
-        if flips > maxFlips { maxFlips = flips }
+        if flips > maxFlips: maxFlips = flips
         checksum += flips if permCount % 2 == 0 else -flips
         # the next permutation: rotate the first r + 1 elements, as many times as count says
         for {
-            if r == n { return checksum, maxFlips }
+            if r == n: return checksum, maxFlips
             first := perm1[0]
-            for i in range r { perm1[i] = perm1[i + 1] }
+            for i in range r: perm1[i] = perm1[i + 1]
             perm1[r] = first
             count[r]--
-            if count[r] > 0 { break }
+            if count[r] > 0: break
             r++
         }
         permCount++
@@ -46,8 +46,8 @@ fn main() ? {
     args := os.Args()
     n I64 = 7
     times I64 = 1                # the whole run repeated, so a small size still times long enough
-    if args.Len() > 1 { n = try args[1].ParseInt() }
-    if args.Len() > 2 { times = try args[2].ParseInt() }
+    if args.Len() > 1: n = try args[1].ParseInt()
+    if args.Len() > 2: times = try args[2].ParseInt()
     checksum, maxFlips := fannkuch(n)
     for _ in range times - 1 { checksum, maxFlips = fannkuch(n) }
     try io.Put($checksum + "\nPfannkuchen(" + $n + ") = " + $maxFlips + "\n")

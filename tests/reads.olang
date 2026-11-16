@@ -197,13 +197,13 @@ type Pt struct(x I64, y I64) {
 
 fn slowRead(p Pt&) I64 {
     s := 0
-    for i in range 200000 { s += i % 3 }
+    for i in range 200000: s += i % 3
     return p.x * 1000 + p.y + s - s
 }
 
 test slowRead "gives each spawned task its own argument" {
     pts := Vec<Pt>()
-    for i in range 8 { pts.Push(Pt(i, i * 2)) }
+    for i in range 8: pts.Push(Pt(i, i * 2))
     out := Array<I64>(8, 0)
     made := Array<I64>(8, 0)
     join {

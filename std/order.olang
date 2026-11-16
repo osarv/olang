@@ -25,8 +25,8 @@ fn ByFields<T>(a T, b T) Bool {
 # a struct: the first of its fields in which a and b differ
 fn fieldsLess<T>(a T, b T) Bool {
     for f in T.Fields {
-        if lessThan(f, f.Of(a), f.Of(b)) { return true }
-        if lessThan(f, f.Of(b), f.Of(a)) { return false }
+        if lessThan(f, f.Of(a), f.Of(b)): return true
+        if lessThan(f, f.Of(b), f.Of(a)): return false
     }
     return false
 }
@@ -35,12 +35,12 @@ fn fieldsLess<T>(a T, b T) Bool {
 fn casesLess<T>(a T, b T) Bool {
     ia := caseIndex(a)
     ib := caseIndex(b)
-    if ia != ib { return ia < ib }
+    if ia != ib: return ia < ib
     for c in T.Cases {
         if a == c and b == c {
             for f in c.Fields {
-                if lessThan(f, f.Of(a), f.Of(b)) { return true }
-                if lessThan(f, f.Of(b), f.Of(a)) { return false }
+                if lessThan(f, f.Of(a), f.Of(b)): return true
+                if lessThan(f, f.Of(b), f.Of(a)): return false
             }
         }
     }
@@ -50,7 +50,7 @@ fn casesLess<T>(a T, b T) Bool {
 # the position of v's case among T's cases
 fn caseIndex<T>(v T) I64 {
     for i, c in T.Cases {
-        if v == c { return i }
+        if v == c: return i
     }
     unreachable
 }
@@ -82,7 +82,7 @@ fn lessRef<F, R>(f F, x R&, y R&) Bool {
 # a field of a struct or an enum with no Less of its own, ordered by its fields in turn; any other field has no order,
 # a compile-time error naming it (S18c)
 fn nested<F, V>(f F, x V, y V) Bool {
-    if V.Kind == TypeKind.Struct or V.Kind == TypeKind.Enum { return ByFields<V>(x, y) }
+    if V.Kind == TypeKind.Struct or V.Kind == TypeKind.Enum: return ByFields<V>(x, y)
     assert false, "field " + $f.Name + " (" + $V.Name + ") has no order - ByFields compares numbers, Bool, Char, a type with Less, and structs and enums by their fields"
     return false
 }

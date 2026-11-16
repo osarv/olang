@@ -17,7 +17,7 @@ fn walk.over(v Vec<String&>&) walk { return walk(v) }
 
 fn mkv(k I64, t String&) Vec<String&> {
     v := Vec<String&>()
-    for _ in range k { v.Push(t) }
+    for _ in range k: v.Push(t)
     return v
 }
 
@@ -34,6 +34,6 @@ fn main() {
         junk.RefMut(i).Push(i)
     }
     s := 0
-    for w in ws { s += w.v.Len() }
+    for w in ws: s += w.v.Len()
     io.PutLine("sum " + $s + " (15)")!
 }

@@ -14,7 +14,7 @@ fn main() {
     v := Vec<blk>()
     v.Push(blk(10))
     g := v[0].Counter()
-    for i in range 1000 { v.Push(blk(i)) }
+    for i in range 1000: v.Push(blk(i))
     s := 0
     for x in g: s += x
     io.PutLine("sum " + $s)!

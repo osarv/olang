@@ -3,7 +3,7 @@
 # grow through their cycle): a signature is signed once, and what an attempt said was forgotten with it - so the
 # program compiled (found by the rework's round 3d)
 fn a(n I64) ? {
-    if n > 0 { try b(n - 1) }
+    if n > 0: try b(n - 1)
 }
 fn b(n I64) ? {
     if n > 0 { try a(n - 1) } else { error Low }

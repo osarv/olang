@@ -11,7 +11,7 @@ type N struct(v I64) {
 fn link(a mut N&, b N&) { a.next = b }
 fn churn() I64 {
     t := 0
-    for i in range 200 { t += ($i + "-" + $(i * 3)).Len() }
+    for i in range 200: t += ($i + "-" + $(i * 3)).Len()
     return t
 }
 fn main() ? {

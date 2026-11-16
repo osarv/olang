@@ -31,9 +31,9 @@ fn Run(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir String
     full := Vec<String&>()
     if env.Len() > 0 {
         full.Push("env")
-        for e in env { full.Push(e) }
+        for e in env: full.Push(e)
     }
-    for a in args { full.Push(a) }
+    for a in args: full.Push(a)
     o := try os.Output.Exec(...full.ToArray(), dir = dir) catch os.Error {
         Die("cannot run " + $args[0])
         unreachable
@@ -44,7 +44,7 @@ fn Run(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir String
 # the same, with what the program wrote to standard error passed on to ours
 fn RunShowing(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir String& = "") os.Output {
     o := Run(args, env, dir)
-    if o.Stderr.Len() > 0 { Warn(o.Stderr) }
+    if o.Stderr.Len() > 0: Warn(o.Stderr)
     return o
 }
 
@@ -52,15 +52,15 @@ fn RunShowing(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir
 fn RunTool(tool String&, mode String&, files Vec<String&>&) String {
     args := Vec<String&>()
     args.Push(tool)
-    if mode != "" { args.Push(mode) }
-    for f in files { args.Push(f) }
+    if mode != "": args.Push(mode)
+    for f in files: args.Push(f)
     return $RunShowing(args.ToArray()).Stdout
 }
 
 # the value of an environment variable, else fallback
 fn Env(name String&, fallback String&) String {
     v := try os.Env(name) catch os.Error { return $fallback }
-    if v.Len() > 0 { return $v }
+    if v.Len() > 0: return $v
     return $fallback
 }
 
@@ -91,7 +91,7 @@ fn Text(rows Vec<String&>&) String {
 # the rows sorted by bytes (LC_ALL=C sort)
 fn Sorted(rows Vec<String&>&) Vec<String&> {
     l := Vec<String&>()
-    for r in rows { l.Push(r) }
+    for r in rows: l.Push(r)
     l.Sort(fn(a String&, b String&) Bool { return a < b })
     return l
 }
@@ -104,9 +104,9 @@ fn AfterSpace(t String&) String& {
 
 # whether t is a nonempty run of digits
 fn IsNumber(t String&) Bool {
-    if t.Len() == 0 { return false }
+    if t.Len() == 0: return false
     for c in t {
-        if not c.IsDigit() { return false }
+        if not c.IsDigit(): return false
     }
     return true
 }
@@ -116,10 +116,10 @@ fn Fields(t String&) Vec<String&> {
     f := Vec<String&>()
     i I64 = 0
     for i < t.Len() {
-        for i < t.Len() and (t[i] == ' ' or t[i] == '\t') { i++ }
+        for i < t.Len() and (t[i] == ' ' or t[i] == '\t'): i++
         s := i
-        for i < t.Len() and t[i] != ' ' and t[i] != '\t' { i++ }
-        if i > s { f.Push(t[s:i]) }
+        for i < t.Len() and t[i] != ' ' and t[i] != '\t': i++
+        if i > s: f.Push(t[s:i])
     }
     return f
 }
@@ -163,7 +163,7 @@ fn Matching(dir String&, suffix String&) Vec<String&> {
     l := Vec<String&>()
     names := try os.ReadDir(dir) catch os.Error { return l }
     for n in names {
-        if n.EndsWith(suffix) { l.Push($dir + "/" + $n) }
+        if n.EndsWith(suffix): l.Push($dir + "/" + $n)
     }
     return l
 }
@@ -172,10 +172,10 @@ fn Matching(dir String&, suffix String&) Vec<String&> {
 fn FilesOr(args Array<String&>&, fallback Vec<String&>&) Vec<String&> {
     l := Vec<String&>()
     if args.Len() > 1 {
-        for i in range 1, args.Len() { l.Push(args[i]) }
+        for i in range 1, args.Len(): l.Push(args[i])
         return l
     }
-    for f in fallback { l.Push(f) }
+    for f in fallback: l.Push(f)
     return l
 }
 
@@ -205,7 +205,7 @@ fn Head(t String&, n I64) String {
     out := StringBuilder()
     k I64 = 0
     for r in Rows(t) {
-        if k >= n { break }
+        if k >= n: break
         out.Push(r)
         out.PushChar('\n')
         k++
@@ -229,7 +229,7 @@ fn Changes(report String&) String {
 fn Sections(t String&) I64 {
     n I64 = 0
     for r in Rows(t) {
-        if r.StartsWith("== ") { n++ }
+        if r.StartsWith("== "): n++
     }
     return n
 }
@@ -256,7 +256,7 @@ fn GoldenSection(key String&, body String&) String {
         b.Push(r)
         b.PushChar('\n')
     }
-    if body.Len() > 0 and body[body.Len() - 1] != '\n' { b.Push("\\ no newline at end\n") }
+    if body.Len() > 0 and body[body.Len() - 1] != '\n': b.Push("\\ no newline at end\n")
     return b.ToString()
 }
 
@@ -268,7 +268,7 @@ fn Golden.Parse(t String&, what String&) Golden {
     open := false
     for r in Rows(t) {
         if r.StartsWith("=== ") {
-            if open { g.Bodies.Put($key, body.ToString()) }
+            if open: g.Bodies.Put($key, body.ToString())
             key = $r[4:]
             g.Keys.Push($key)
             body.Clear()
@@ -286,7 +286,7 @@ fn Golden.Parse(t String&, what String&) Golden {
             Die($what + ": not a golden row: " + $r)
         }
     }
-    if open { g.Bodies.Put($key, body.ToString()) }
+    if open: g.Bodies.Put($key, body.ToString())
     return g
 }
 
@@ -359,7 +359,7 @@ test "a hash is FNV-1a's" {
 
 # the key a file is stored under: a checks case by its name, a file of tests by its path
 fn RunKey(f String&) String {
-    if f.StartsWith("checks/cases/") { return $"run " + $f[13:] }
+    if f.StartsWith("checks/cases/"): return $"run " + $f[13:]
     return $"test " + $f
 }
 
@@ -454,7 +454,7 @@ fn Golden.DumpSections(t String&) Golden {
     open := false
     for r in Rows(t) {
         if r.StartsWith("== ") {
-            if open { g.Bodies.Put($key, body.ToString()) }
+            if open: g.Bodies.Put($key, body.ToString())
             key = $r[3:]
             g.Keys.Push($key)
             body.Clear()
@@ -464,7 +464,7 @@ fn Golden.DumpSections(t String&) Golden {
             body.PushChar('\n')
         }
     }
-    if open { g.Bodies.Put($key, body.ToString()) }
+    if open: g.Bodies.Put($key, body.ToString())
     return g
 }
 
@@ -483,9 +483,9 @@ fn HashGolden.Read(base String&, target String&) HashGolden {
         unreachable
     }
     for r in Rows(table) {
-        if r.StartsWith("#") or r == "" { continue }
+        if r.StartsWith("#") or r == "": continue
         f := Fields(r)
-        if f.Len() != 3 { Die($base + ".txt: not a golden row: " + $r) }
+        if f.Len() != 3: Die($base + ".txt: not a golden row: " + $r)
         h.Paths.Push($f[2])
         h.Source.Put($f[2], $f[0])
         h.Dump.Put($f[2], $f[1])
@@ -507,7 +507,7 @@ fn HashGoldenWrite(base String&, what String&, files Vec<String&>&, sections Gol
     for f in files {
         body := try sections.Bodies.Get(f) catch { Die($base + ": no section for " + $f) }
         table.Push($Hash(Read(f)) + " " + $Hash(body) + " " + $f + "\n")
-        if full(body) { whole.Push(GoldenSection(f, body)) }
+        if full(body): whole.Push(GoldenSection(f, body))
     }
     GoldenWrite($base + ".txt", table.ToString())
     GoldenWrite($base + ".full.txt", whole.ToString())
@@ -518,7 +518,7 @@ fn HashGoldenStale(h HashGolden&, files Vec<String&>&) Vec<String&> {
     l := Vec<String&>()
     for f in files {
         src := try h.Source.Get(f) catch default ""
-        if src != Hash(Read(f)) { l.Push(f) }
+        if src != Hash(Read(f)): l.Push(f)
     }
     return l
 }
@@ -527,7 +527,7 @@ fn HashGoldenStale(h HashGolden&, files Vec<String&>&) Vec<String&> {
 # the section kept whole where there is one, else the section's first rows
 fn HashGoldenCheck(h HashGolden&, dir String&, f String&, body String&) String {
     want := try h.Dump.Get(f) catch default ""
-    if Hash(body) == want { return "" }
+    if Hash(body) == want: return ""
     whole := try h.Full.Bodies.Get(f) catch {
         return $"-- " + $f + ": its section is not the golden's (hash " + $Hash(body) + ", golden " + $want + "); it begins\n" + $Head(body, 20)
     }

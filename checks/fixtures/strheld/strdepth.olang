@@ -8,7 +8,7 @@ type L struct(v I64, next L?&) {
     next
 }
 fn (l L&) Str() String {
-    if l.next == null { return $l.v }
+    if l.next == null: return $l.v
     return $l.v + "," + $l.next
 }
 fn depthOf() I64 {
@@ -18,7 +18,7 @@ fn depthOf() I64 {
 fn main() ? {
     d := depthOf()
     l L& = L(0, null)
-    for i in range d { l = L(i, l) }
+    for i in range d: l = L(i, l)
     s := $l
     try io.PutLine($s.Len())
 }

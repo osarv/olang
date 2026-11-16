@@ -92,20 +92,20 @@ fn digits(xs Array<Seen>&) I64 {
 # removed nodes' slots reused by new nodes: the weak places to the removed read null, never the nodes now in their slots
 fn reused() I64 {
     l := DList()
-    for i in range 1, 6 { l.PushBack(i) }
+    for i in range 1, 6: l.PushBack(i)
     seen := Array<Seen>[Seen(l.head), Seen(l.head!.next), Seen(l.tail)]
     scratch := DList()
     l.PopFront()
     l.PopFront()
     scratch.churn(50)
-    for i in range 6, 9 { l.PushBack(i) }
+    for i in range 6, 9: l.PushBack(i)
     return digits(seen) * 100000000 + l.Forward() * 100 + l.n
 }
 
 # an orphan: a node taken out and kept by a local, read after nodes reuse slots - reclaimed only after its last use
 fn orphan() I64 {
     l := DList()
-    for i in range 1, 4 { l.PushBack(i) }
+    for i in range 1, 4: l.PushBack(i)
     scratch := DList()
     h := l.PopFront()
     w := Seen(h)
@@ -122,7 +122,7 @@ fn (l mut DList&) dropAndChurn(scratch mut DList&) {
 
 fn acrossCall() I64 {
     l := DList()
-    for i in range 1, 4 { l.PushBack(i) }
+    for i in range 1, 4: l.PushBack(i)
     scratch := DList()
     h := l.head!
     l.dropAndChurn(scratch)

@@ -7,11 +7,11 @@ type LE error {
 }
 N mut I64 = 0
 fn pop(n I64) I64 ? LE.Empty {
-    if n == 0 { error LE.Empty }
+    if n == 0: error LE.Empty
     return n
 }
 fn two(n I64) I64 ? LE.Empty, LE.Gone {
-    if n == 1 { error LE.Gone }
+    if n == 1: error LE.Gone
     return try pop(n)
 }
 fn inf(n I64) I64 ? { return try two(n) catch LE.Gone default 7 }

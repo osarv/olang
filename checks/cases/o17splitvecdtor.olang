@@ -25,7 +25,7 @@ fn churn() I64 {
 
 fn sum(t Tally&) I64 {
     s := 0
-    for x in t.seen { s += x }
+    for x in t.seen: s += x
     return s
 }
 type Pair unique struct(a Logged, b Logged) {
@@ -34,7 +34,7 @@ type Pair unique struct(a Logged, b Logged) {
 
 fn mkv(i I64, t mut Tally&) Vec<Logged> {
     v := Vec<Logged>()
-    for k in range 5 { v.Push(Logged(i * 5 + k, t)) }
+    for k in range 5: v.Push(Logged(i * 5 + k, t))
     return v
 }
 
@@ -42,11 +42,9 @@ fn main() ? {
     t := Tally()
     {
         vv := Vec<Vec<Logged>>()
-        for i in range 6 {
-            vv.Push(mkv(i, t))
-        }
+        for i in range 6: vv.Push(mkv(i, t))
         m := Map<I64, Pair>()
-        for i in range 5 { m.Put(i, Pair(Logged(100 + i, t), Logged(200 + i, t))) }
+        for i in range 5: m.Put(i, Pair(Logged(100 + i, t), Logged(200 + i, t)))
         m.Remove(2)
         try vv.RemoveAt(1)
         vv.Truncate(2)

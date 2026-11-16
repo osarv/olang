@@ -3,7 +3,7 @@
 # M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
 import "std/io"
 fn grow(v mut Vec<I64>&, d Array<I64>&) I64 {
-    for i in range 100 { v.Push(i) }
+    for i in range 100: v.Push(i)
     return d[0]
 }
 fn main() ? {

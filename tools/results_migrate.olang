@@ -43,7 +43,7 @@ fn vtokens(src String&) Vec<VT> {
     ts := scan.Tokens.Scan(src)
     out Vec<VT>
     for tk in ts.Toks {
-        if tk.Kind == token.Tok.StmtEnd { continue }
+        if tk.Kind == token.Tok.StmtEnd: continue
         s := I64(tk.Start)
         e := I64(tk.End)
         lb := tk.Has(token.LineBreak)
@@ -81,7 +81,7 @@ fn (g mut migration&) edit(start I64, end I64, text String&) {
 # a "<" opens a type bracket where it is written against a name or another type bracket, "List<" - comparisons are
 # spaced (the layout, B13)
 fn (g migration&) typeAngle(i I64) Bool {
-    if i == 0 { return false }
+    if i == 0: return false
     p := g.v[i - 1]
     return p.end == g.v[i].start and (p.k == token.Tok.Iden or p.k == token.Tok.Lt)
 }
@@ -116,23 +116,23 @@ fn (g mut migration&) brackets() {
 # whether the "(" at i opens a list (arguments, parameters, a payload, old results) rather than a parenthesized
 # expression or a group
 fn (g migration&) parenIsList(i I64) Bool {
-    if i == 0 { return false }
+    if i == 0: return false
     p := g.v[i - 1]
     adjacent := p.end == g.v[i].start
-    if p.k == token.Tok.Iden or p.k == token.Tok.RParen or p.k == token.Tok.RBrack { return true }
-    if p.k == token.Tok.Fn or p.k == token.Tok.Struct { return true }
-    if p.k == token.Tok.Gt or p.k == token.Tok.RBrace { return adjacent }
+    if p.k == token.Tok.Iden or p.k == token.Tok.RParen or p.k == token.Tok.RBrack: return true
+    if p.k == token.Tok.Fn or p.k == token.Tok.Struct: return true
+    if p.k == token.Tok.Gt or p.k == token.Tok.RBrace: return adjacent
     return false
 }
 
 # whether the token at i stands as an item of a list: inside a list's brackets, or the bare result of a signature
 fn (g migration&) isItem(i I64) Bool {
-    if i > 0 and g.v[i - 1].k == token.Tok.RParen and g.paramsClose.Has(i - 1) { return true }
+    if i > 0 and g.v[i - 1].k == token.Tok.RParen and g.paramsClose.Has(i - 1): return true
     o := g.enc[i]
-    if o < 0 { return false }
+    if o < 0: return false
     k := g.v[o].k
-    if k == token.Tok.LBrace { return false }
-    if k == token.Tok.LBrack or k == token.Tok.Lt { return true }
+    if k == token.Tok.LBrace: return false
+    if k == token.Tok.LBrack or k == token.Tok.Lt: return true
     return g.parenIsList(o)
 }
 
@@ -140,14 +140,14 @@ fn (g migration&) isItem(i I64) Bool {
 # else -1
 fn (g migration&) declParams(i I64) I64 {
     n := g.v.Len()
-    if i + 2 >= n { return -1 }
+    if i + 2 >= n: return -1
     nx := g.v[i + 1]
     j := -1
     if nx.k == token.Tok.LParen {
         close := g.m[i + 1]
-        if close < 0 or close + 2 >= n or g.v[close + 1].lb or g.v[close + 1].k == token.Tok.LBrace { return -1 }
+        if close < 0 or close + 2 >= n or g.v[close + 1].lb or g.v[close + 1].k == token.Tok.LBrace: return -1
         nm := g.v[close + 1]
-        if nm.end <= nm.start or not srcmask.IsIdStart(g.src[nm.start]) { return -1 }
+        if nm.end <= nm.start or not srcmask.IsIdStart(g.src[nm.start]): return -1
         j = close + 2
     } else if nx.end > nx.start and srcmask.IsIdStart(g.src[nx.start]) {
         j = i + 2
@@ -155,10 +155,10 @@ fn (g migration&) declParams(i I64) I64 {
         return -1
     }
     if j < n and g.v[j].k == token.Tok.Lt {
-        if g.m[j] < 0 { return -1 }
+        if g.m[j] < 0: return -1
         j = g.m[j] + 1
     }
-    if j < n and g.v[j].k == token.Tok.LParen { return j }
+    if j < n and g.v[j].k == token.Tok.LParen: return j
     return -1
 }
 
@@ -194,12 +194,12 @@ fn (g migration&) errEnd(q I64, several Bool) I64 {
     n := g.v.Len()
     j := q + 1
     if j < n and g.v[j].k == token.Tok.LParen and not g.v[j].lb {
-        if g.m[j] < 0 { return j }
+        if g.m[j] < 0: return j
         return g.m[j] + 1
     }
     for j < n and g.v[j].k == token.Tok.Iden and not g.v[j].lb {
         j++
-        for j + 1 < n and g.v[j].k == token.Tok.Dot and g.v[j + 1].k == token.Tok.Iden { j += 2 }
+        for j + 1 < n and g.v[j].k == token.Tok.Dot and g.v[j + 1].k == token.Tok.Iden: j += 2
         if several and j + 1 < n and g.v[j].k == token.Tok.Comma and g.v[j + 1].k == token.Tok.Iden { j++ } else { break }
     }
     return j
@@ -209,22 +209,22 @@ fn (g migration&) errEnd(q I64, several Bool) I64 {
 fn (g migration&) typeEnd(at I64) I64 {
     n := g.v.Len()
     i := at
-    for i < n and g.v[i].k == token.Tok.Mut { i++ }
-    if i >= n { return -1 }
+    for i < n and g.v[i].k == token.Tok.Mut: i++
+    if i >= n: return -1
     k := g.v[i].k
     if k == token.Tok.Fn and i + 1 < n and g.v[i + 1].k == token.Tok.LParen {
         e, _, _ := g.sigEnd(i + 1)
         return e
     }
     if k == token.Tok.LParen {
-        if g.m[i] < 0 { return -1 }
+        if g.m[i] < 0: return -1
         return g.m[i] + 1
     }
-    if k != token.Tok.Iden { return -1 }
+    if k != token.Tok.Iden: return -1
     i++
-    for i + 1 < n and g.v[i].k == token.Tok.Dot and g.v[i + 1].k == token.Tok.Iden { i += 2 }
+    for i + 1 < n and g.v[i].k == token.Tok.Dot and g.v[i + 1].k == token.Tok.Iden: i += 2
     if i < n and g.v[i].k == token.Tok.Lt and g.v[i].start == g.v[i - 1].end {
-        if g.m[i] < 0 { return -1 }
+        if g.m[i] < 0: return -1
         i = g.m[i] + 1
     }
     for i < n and g.v[i].k == token.Tok.Amp {
@@ -238,9 +238,9 @@ fn (g migration&) typeEnd(at I64) I64 {
 # function type - "(fn ...)" is the new grouping, unless that function type is itself written in the old spelling
 fn (g migration&) oldResults(j I64) Bool {
     n := g.v.Len()
-    if j + 1 >= n or g.m[j] < 0 { return false }
-    if g.v[j + 1].k != token.Tok.Fn { return true }
-    if j + 2 >= n or g.v[j + 2].k != token.Tok.LParen { return true }
+    if j + 1 >= n or g.m[j] < 0: return false
+    if g.v[j + 1].k != token.Tok.Fn: return true
+    if j + 2 >= n or g.v[j + 2].k != token.Tok.LParen: return true
     _, oldRes, oldErr := g.sigEnd(j + 2)
     return oldRes >= 0 or oldErr >= 0
 }
@@ -250,7 +250,7 @@ fn (g migration&) oldResults(j I64) Bool {
 fn (g migration&) sigEnd(p I64) I64, I64, I64 {
     n := g.v.Len()
     close := g.m[p]
-    if close < 0 { return p + 1, -1, -1 }
+    if close < 0: return p + 1, -1, -1
     j := close + 1
     oldRes := -1
     if j < n and not g.v[j].lb and g.v[j].k == token.Tok.LParen and g.oldResults(j) {
@@ -258,11 +258,11 @@ fn (g migration&) sigEnd(p I64) I64, I64, I64 {
         j = g.m[j] + 1 if g.m[j] > 0 else j + 1
     } else if j < n and not g.v[j].lb and g.v[j].k != token.Tok.Question and g.v[j].k != token.Tok.LBrace {
         e := g.typeEnd(j)
-        if e > 0 { j = e }
+        if e > 0: j = e
     }
     oldErr := -1
     if j < n and g.v[j].k == token.Tok.Question and not g.v[j].lb {
-        if j + 1 < n and g.v[j + 1].k == token.Tok.LParen { oldErr = j + 1 }
+        if j + 1 < n and g.v[j + 1].k == token.Tok.LParen: oldErr = j + 1
         j = g.errEnd(j, false)
     }
     return j, oldRes, oldErr
@@ -272,11 +272,11 @@ fn (g mut migration&) run() {
     n := g.v.Len()
     sigs := g.sigs()
     for p in sigs {
-        if g.m[p] >= 0 { g.paramsClose.Put(g.m[p], true) }
+        if g.m[p] >= 0: g.paramsClose.Put(g.m[p], true)
     }
     for p in sigs {
         close := g.m[p]
-        if close < 0 { continue }
+        if close < 0: continue
         value := p > 0 and g.v[p - 1].k == token.Tok.Fn
         j := close + 1
         if not value {
@@ -290,7 +290,7 @@ fn (g mut migration&) run() {
         }
         fnAt := p - 1
         end, oldRes, oldErr := g.sigEnd(p)
-        if oldRes < 0 and oldErr < 0 { continue }
+        if oldRes < 0 and oldErr < 0: continue
         if oldRes >= 0 {
             g.edit(g.v[oldRes].start, g.v[oldRes].end, "")
             g.edit(g.v[g.m[oldRes]].start, g.v[g.m[oldRes]].end, "")
@@ -303,11 +303,11 @@ fn (g mut migration&) run() {
             g.errors++
             several = true
         }
-        if not several or not g.isItem(fnAt) { continue }
+        if not several or not g.isItem(fnAt): continue
         # an item of a list, now holding a comma of its own: parenthesized whole - a lambda with its body
         last := end - 1
         resultType := fnAt > 0 and g.paramsClose.Has(fnAt - 1)
-        if not resultType and end < n and g.v[end].k == token.Tok.LBrace and g.m[end] > 0 { last = g.m[end] }
+        if not resultType and end < n and g.v[end].k == token.Tok.LBrace and g.m[end] > 0: last = g.m[end]
         g.edit(g.v[fnAt].start, g.v[fnAt].start, "(")
         g.edit(g.v[last].end, g.v[last].end, ")")
         g.wrapped++
@@ -318,16 +318,16 @@ fn (g migration&) applied() String {
     reps Vec<String&>& = g.reps
     sorted := g.edits.ToArray()
     sorted.Sort(fn(a Edit, b Edit) Bool {
-        if a.start != b.start { return a.start < b.start }
+        if a.start != b.start: return a.start < b.start
         ai := a.end == a.start
         bi := b.end == b.start
-        if ai != bi { return ai }
+        if ai != bi: return ai
         return a.seq < b.seq
     })
     out := StringBuilder()
     last I64 = 0
     for e in sorted {
-        if e.start < last { continue }
+        if e.start < last: continue
         out.Push(g.src[last:e.start])
         out.Push(reps[e.rep])
         last = e.end
@@ -360,7 +360,7 @@ fn migrate(src String&, total mut Counts&) String {
     g.brackets()
     g.run()
     total.Add(g)
-    if g.edits.Len() == 0 { return $src }
+    if g.edits.Len() == 0: return $src
     return g.applied()
 }
 
@@ -385,9 +385,9 @@ fn migrateMarkdown(src String&, total mut Counts&) String {
             inBlock = true
         }
         out.Push(line)
-        if not last { out.PushChar('\n') }
+        if not last: out.PushChar('\n')
     }
-    if inBlock { out.Push(block.ToString()) }
+    if inBlock: out.Push(block.ToString())
     return out.ToString()
 }
 
@@ -423,9 +423,9 @@ fn main() ? {
         total.results += mine.results
         total.errors += mine.errors
         total.wrapped += mine.wrapped
-        if out == src { continue }
+        if out == src: continue
         changed++
-        if verbose { srcmask.Say($path + ": " + $mine.Describe()) }
+        if verbose: srcmask.Say($path + ": " + $mine.Describe())
         if not check {
             try os.WriteFile(path, out) catch {
                 srcmask.SayErr("results_migrate: cannot write " + $path)
@@ -435,7 +435,7 @@ fn main() ? {
     }
     verb := "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.Describe())
-    if check and changed > 0 { os.Exit(1) }
+    if check and changed > 0: os.Exit(1)
 }
 
 fn run(src String&) String {

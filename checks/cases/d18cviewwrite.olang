@@ -10,5 +10,5 @@ fn nodes(n I64) Iterator<Node&> {
 }
 
 fn main() {
-    for x in nodes(3) { x.v = 4 }
+    for x in nodes(3): x.v = 4
 }

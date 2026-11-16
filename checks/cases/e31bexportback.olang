@@ -9,7 +9,7 @@ type Item struct(key I32) { key }
 G mut Vec<blk>
 extern fn qsort(base mut Array<Item>&, n I64, size I64, cmp fn&(a Item&, b Item&) I32)
 export fn olang_grow(a Item&, b Item&) I32 {
-    for i in range 4 { G.Push(blk(i)) }
+    for i in range 4: G.Push(blk(i))
     return a.key - b.key
 }
 fn (b mut blk&) Bump() {

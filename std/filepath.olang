@@ -16,12 +16,12 @@ fn IsAbs(path String&) Bool { return path.Len() > 0 and path[0] == '/' }
 # the last element of the path, its trailing slashes aside: "c" for "a/b/c" and for "a/b/c/"; "/" for a path of only
 # slashes, and "." for the empty path
 fn Base(path String&) String& {
-    if path.Len() == 0 { return "." }
+    if path.Len() == 0: return "."
     end I64 = path.Len()
-    for end > 0 and path[end - 1] == '/' { end-- }
-    if end == 0 { return path[:1] }
+    for end > 0 and path[end - 1] == '/': end--
+    if end == 0: return path[:1]
     start I64 = end
-    for start > 0 and path[start - 1] != '/' { start-- }
+    for start > 0 and path[start - 1] != '/': start--
     return path[start:end]
 }
 
@@ -30,7 +30,7 @@ fn Base(path String&) String& {
 fn Ext(path String&) String& {
     i I64 = path.Len() - 1
     for i >= 0 and path[i] != '/' {
-        if path[i] == '.' { return path[i:] }
+        if path[i] == '.': return path[i:]
         i--
     }
     return ""
@@ -40,7 +40,7 @@ fn Ext(path String&) String& {
 # is the empty one after its slash; "." for a path with no slash in it, "/" for one in the root
 fn Dir(path String&) String& {
     i I64 = path.Len() - 1
-    for i >= 0 and path[i] != '/' { i-- }
+    for i >= 0 and path[i] != '/': i--
     return Clean(path[:i + 1])
 }
 
@@ -52,7 +52,7 @@ fn Dir(path String&) String& {
 # (os.RealPath asks the file system)
 fn Clean(path String&) String& {
     n := path.Len()
-    if n == 0 { return "." }
+    if n == 0: return "."
     out := Array<Char>(n)              # never longer than the path: elements are only removed
     w I64 = 0
     rooted := path[0] == '/'
@@ -73,7 +73,7 @@ fn Clean(path String&) String& {
             r += 2                                                  # "..": the element before it goes, where it can
             if w > dotdot {
                 w--
-                for w > dotdot and out[w] != '/' { w-- }
+                for w > dotdot and out[w] != '/': w--
             } else if not rooted {
                 if w > 0 {
                     out[w] = '/'
@@ -96,7 +96,7 @@ fn Clean(path String&) String& {
             }
         }
     }
-    if w == 0 { return "." }
+    if w == 0: return "."
     same := true                                                    # the path's own beginning: borrowed
     for i in range w {
         if out[i] != path[i] {
@@ -104,9 +104,9 @@ fn Clean(path String&) String& {
             break
         }
     }
-    if same { return path[:w] }
+    if same: return path[:w]
     text := Array<Char>(w)
-    for i in range w { text[i] = out[i] }
+    for i in range w: text[i] = out[i]
     return String(text)
 }
 
@@ -117,15 +117,15 @@ fn Join(parts ...String&) String {
     n I64 = 0
     for p in parts {
         if p.Len() > 0 {
-            if n > 0 { n++ }
+            if n > 0: n++
             n += p.Len()
         }
     }
-    if n == 0 { return "" }
+    if n == 0: return ""
     joined := Array<Char>(n)
     w I64 = 0
     for p in parts {
-        if p.Len() == 0 { continue }
+        if p.Len() == 0: continue
         if w > 0 {
             joined[w] = '/'
             w++
@@ -150,9 +150,9 @@ type Error error {
 fn Rel(base String&, target String&) String ? Error {
     b := Clean(base)
     t := Clean(target)
-    if t == b { return "." }
-    if b == "." { b = b[:0] }
-    if IsAbs(b) != IsAbs(t) { error Error.Unrelated }
+    if t == b: return "."
+    if b == ".": b = b[:0]
+    if IsAbs(b) != IsAbs(t): error Error.Unrelated
     bl := b.Len()
     tl := t.Len()
     b0 I64 = 0
@@ -160,19 +160,19 @@ fn Rel(base String&, target String&) String ? Error {
     t0 I64 = 0
     ti I64 = 0
     for {                                        # past the elements the two share
-        for bi < bl and b[bi] != '/' { bi++ }
-        for ti < tl and t[ti] != '/' { ti++ }
-        if t[t0:ti] != b[b0:bi] { break }
-        if bi < bl { bi++ }
-        if ti < tl { ti++ }
+        for bi < bl and b[bi] != '/': bi++
+        for ti < tl and t[ti] != '/': ti++
+        if t[t0:ti] != b[b0:bi]: break
+        if bi < bl: bi++
+        if ti < tl: ti++
         b0 = bi
         t0 = ti
     }
-    if b[b0:bi] == ".." { error Error.Unrelated }
-    if b0 == bl { return t[t0:] }
+    if b[b0:bi] == "..": error Error.Unrelated
+    if b0 == bl: return t[t0:]
     ups I64 = 1                                  # one ".." for each element of base left
     for i in range b0, bl {
-        if b[i] == '/' { ups++ }
+        if b[i] == '/': ups++
     }
     rest := t[t0:]
     out := Array<Char>(ups * 3 - 1 + (rest.Len() + 1 if rest.Len() > 0 else 0))

@@ -2,7 +2,7 @@
 # T13b: a landing in a loop the parameter is declared outside of runs again - the next turn hands on what the first did
 type File unique struct(fd I32) { fd }
 fn fill(v mut Vec<File>&, f File) {
-    for _ in range 2 { v.Push(f) }
+    for _ in range 2: v.Push(f)
 }
 fn main() {
     v := Vec<File>()

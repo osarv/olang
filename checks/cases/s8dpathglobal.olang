@@ -3,7 +3,7 @@
 type N struct(v I64, next N?&) { v, next }
 g mut N = N(1, N(2, null))
 fn second() I64 {
-    if g.next == null { return 0 }
+    if g.next == null: return 0
     return g.next.v
 }
 fn main() { assert second() == 2 }

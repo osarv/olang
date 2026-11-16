@@ -11,7 +11,7 @@ type cell struct() {
     n I64 = 0
 }
 fn grow(v mut Vec<cell>&) I64 {
-    for _ in range 20 { v.Push(cell()) }
+    for _ in range 20: v.Push(cell())
     return 7
 }
 fn main() ? {

@@ -58,7 +58,7 @@ type Chan<T> struct(cap I64) {
 
 # v into the ring, the lock held and a slot free; returns its ticket - how many values were placed before it
 fn place<T>(c mut Chan<T>&, v T) I64 {
-    if c.data.Len() == 0 { c.data = Array<T>(c.size, v) }
+    if c.data.Len() == 0: c.data = Array<T>(c.size, v)
     c.data[c.tail] = v
     c.tail = (c.tail + 1) % c.size
     c.count = c.count + 1
@@ -422,7 +422,7 @@ fn sendThenClose(c mut Chan<I32>&, n I32) {
 }
 
 fn walkSum(c mut Chan<I32>&, total mut sumBox&) {
-    for v in c { total.v = total.v + v }
+    for v in c: total.v = total.v + v
 }
 
 test "for v in c receives until the channel is closed and drained" {
@@ -439,7 +439,7 @@ test "for v in c receives until the channel is closed and drained" {
 
 # several receivers blocked on an empty channel are all woken by the close, each ending its loop
 fn walkCount(c mut Chan<I32>&, seen mut sumBox&) {
-    for _ in c { seen.v.AtomicAdd(1) }
+    for _ in c: seen.v.AtomicAdd(1)
 }
 
 test "Close wakes every task waiting to receive, and RecvUntil sees it before its deadline" {
@@ -449,9 +449,9 @@ test "Close wakes every task waiting to receive, and RecvUntil sees it before it
     tok := cancel.Token.After(60000)
     start := cancel.NowNs()
     join {
-        for _ in range 3 { spawn walkCount(c, seen) }
+        for _ in range 3: spawn walkCount(c, seen)
         spawn waitClosed(c, tok, seen, got)
-        for i in range I32(10) { try Send(c, i) }
+        for i in range I32(10): try Send(c, i)
         Close(c)
     }
     assert seen.v.AtomicLoad() == 10 and got.v == 1
@@ -470,7 +470,7 @@ fn waitClosed(c mut Chan<I32>&, tok cancel.Token&, seen mut sumBox&, got mut sum
 test "a channel's capacity is an I64" {
     items := Array<I64>[4, 5, 6]
     c mut Chan<I64>& = Chan<I64>(items.Len())
-    for x in items { try Send(c, x) }
+    for x in items: try Send(c, x)
     total I64 = 0
     for _ in range items.Len() { total += try Recv(c) catch Error { unreachable } }
     assert total == 15
@@ -517,7 +517,7 @@ fn (c mut Chan<T>&) TryNow() T ? Error, Exhausted {
     if c.count == 0 {
         closed := c.closed
         pthread.pthread_mutex_unlock(c.lock)
-        if closed { error Error.Closed }
+        if closed: error Error.Closed
         error Exhausted.End
     }
     v := oldest(c)

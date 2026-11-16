@@ -9,7 +9,7 @@ type Grid struct(at I64, w F64 = 1.5) { at, w }
 Run I64 = Count(1)                                      # a run-time 1: computations given it are not folded
 fn Count(k I64) I64 {
     c := 0
-    for _ in range k { c++ }
+    for _ in range k: c++
     return c
 }
 
@@ -31,7 +31,7 @@ fn step(c mut Columns<P>&, dt F32) {
 
 fn work(k I64) I64 {
     v := ColumnVec<P>(2)
-    for i in range 40 { v.Push(P(F32(i * k), F32(40 - i), 1.0, 0.0)) }
+    for i in range 40: v.Push(P(F32(i * k), F32(40 - i), 1.0, 0.0))
     v.Sort(byY)
     try v.SwapRemove(0) catch { unreachable }
     try v.Insert(3, P(-1.0, -1.0, 0.0, 0.0)) catch { unreachable }
@@ -52,7 +52,7 @@ test "Columns: rows are read and written through the columns" {
     assert c.Y[1] == 6.0 and c.Vx[1] == 7.0
     assert (try c.Get(4) catch default P(0.0, 0.0, 0.0, 0.0)) == P(0.0, 0.0, 0.0, 0.0)
     n := 0
-    for p in c { n += I64(p.Vy) }
+    for p in c: n += I64(p.Vy)
     assert n == 20
 }
 
@@ -75,7 +75,7 @@ test "Columns.Sort: moves every column together, stably" {
 
 test "ColumnVec.Push: grows every column together" {
     v := ColumnVec<Tag>()
-    for i in range 100 { v.Push(Tag($i, i)) }
+    for i in range 100: v.Push(Tag($i, i))
     churn()
     assert v.Len() == 100 and v.name[57] == "57" and v.n[99] == 99 and v[12] == Tag("12", 12)
     v.Truncate(10)

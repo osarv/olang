@@ -3,7 +3,7 @@
 type N struct(v I64, next N?&) { v, next }
 fn ready(h N&) Bool { return h.v > 0 }
 fn second(h N&) I64 {
-    if h.next != null and ready(h) { return h.next.v }
+    if h.next != null and ready(h): return h.next.v
     return 0
 }
 fn main() { assert second(N(1, N(2, null))) == 2 }

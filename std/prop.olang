@@ -59,7 +59,7 @@ fn (s mut source&) byte() U8 {
         s.at++
         return s.bytes[s.at - 1]
     }
-    if not s.random or s.bytes.Len() >= MaxBytes { return 0 }
+    if not s.random or s.bytes.Len() >= MaxBytes: return 0
     b := U8(s.rng.Next() & 255)
     s.bytes.Push(b)
     s.at++
@@ -68,7 +68,7 @@ fn (s mut source&) byte() U8 {
 
 # a whole number below n, from 0 - from as many bytes as n needs
 fn (s mut source&) below(n I64) I64 {
-    if n <= 1 { return 0 }
+    if n <= 1: return 0
     v U64 = 0
     m U64 = 1
     for m < U64(n) {
@@ -89,7 +89,7 @@ fn (s mut source&) integer() I64 {
     c := w >> 1
     n := 1 if c < 64 else (2 if c < 96 else (4 if c < 120 else 8))
     u U64 = 0
-    for _ in range n { u = (u << 8) | U64(s.byte()) }
+    for _ in range n: u = (u << 8) | U64(s.byte())
     return -I64(u) if (w & 1) == 1 else I64(u)
 }
 
@@ -116,7 +116,7 @@ fn (s mut source&) float() F64 {
 fn (s mut source&) char() Char {
     plain := "abcdefghijklmnopqrstuvwxyz0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ.,;:!?-_+*/=<>()[]{}'\"#$%&@\\|~^`\t\n"
     b := s.byte()
-    if b >= 240 { return Char(s.byte()) }
+    if b >= 240: return Char(s.byte())
     return plain[I64(b) % plain.Len()]
 }
 
@@ -127,12 +127,12 @@ fn gen<T>(s mut source&) T ? skip {
         case Char { return s.char() }
         case String {
             b := StringBuilder()
-            for s.more() { b.PushChar(s.char()) }
+            for s.more(): b.PushChar(s.char())
             return b.ToString()
         }
         case Vec<E> {
             v := Vec<E>()
-            for s.more() { v.Push(try gen<E>(s)) }
+            for s.more(): v.Push(try gen<E>(s))
             return v
         }
         case _ {
@@ -145,14 +145,14 @@ fn gen<T>(s mut source&) T ? skip {
                 return x
             } else if T.Kind == TypeKind.Array {
                 v := Vec<T.Element>()
-                for v.Len() < 64 and s.more() { v.Push(try gen<T.Element>(s)) }
+                for v.Len() < 64 and s.more(): v.Push(try gen<T.Element>(s))
                 return v.ToArray()
             } else if T.Kind == TypeKind.Struct {
                 return try T(field(p, s) for p in T.Params) catch { error skip.Refused }
             } else if T.Kind == TypeKind.Enum {
                 k := s.below(T.Cases.Len())
                 for i, c in T.Cases {
-                    if i == k { return c(try field(f, s) for f in c.Fields) }
+                    if i == k: return c(try field(f, s) for f in c.Fields)
                 }
                 unreachable
             } else {
@@ -202,7 +202,7 @@ type outcome enum {
 fn outcome.inChild<F>(f F, bytes Array<U8>&) outcome {
     cstdio.fflush(null)
     pid := unistd.fork()
-    if pid < 0 { return outcome.Passed }
+    if pid < 0: return outcome.Passed
     if pid == 0 {
         __olang_test_detach()
         quiet := cfcntl.open("/dev/null".ToC(), 1)
@@ -219,9 +219,9 @@ fn outcome.inChild<F>(f F, bytes Array<U8>&) outcome {
 
 fn outcome.waited(pid I32) outcome {
     st := Array<I32>(1)
-    if syswait.waitpid(pid, st, 0) < 0 { return outcome.Passed }
+    if syswait.waitpid(pid, st, 0) < 0: return outcome.Passed
     raw := st[0]
-    if (raw & 127) != 0 { return outcome.Failed }
+    if (raw & 127) != 0: return outcome.Failed
     code := (raw >> 8) & 255
     return outcome.Passed if code == 0 else (outcome.Dropped if code == 3 else outcome.Failed)
 }
@@ -230,10 +230,10 @@ fn outcome.waited(pid I32) outcome {
 # the case that failed, 0 where none did
 fn search<F>(f F, base U64, cases I64) U64 {
     fds := Array<I32>(2)
-    if unistd.pipe(fds) != 0 { return 0 }
+    if unistd.pipe(fds) != 0: return 0
     cstdio.fflush(null)
     pid := unistd.fork()
-    if pid < 0 { return 0 }
+    if pid < 0: return 0
     if pid == 0 {
         unistd.close(fds[0])
         __olang_test_detach()
@@ -245,7 +245,7 @@ fn search<F>(f F, base U64, cases I64) U64 {
         for k in range cases {
             seed := base + U64(k) + 1
             note := Array<U8>(8)
-            for j in range 8 { note[j] = U8((seed >> U64(8 * j)) & 255) }
+            for j in range 8: note[j] = U8((seed >> U64(8 * j)) & 255)
             unistd.write(fds[1], note, 8)
             s := source.newSource(Array<U8>(0), seed)
             try run(f, s) catch skip { } catch { unistd._exit(1) }
@@ -257,7 +257,7 @@ fn search<F>(f F, base U64, cases I64) U64 {
     note := Array<U8>(8)
     for unistd.read(fds[0], note, 8) == 8 {
         last = 0
-        for j in range 8 { last = last | (U64(note[j]) << U64(8 * j)) }
+        for j in range 8: last = last | (U64(note[j]) << U64(8 * j))
     }
     unistd.close(fds[0])
     return last if outcome.waited(pid) == outcome.Failed else 0
@@ -278,9 +278,9 @@ fn record<F>(f F, seed U64) Array<U8> {
 
 # whether a is a smaller input than b: shorter, or as long and below it byte by byte
 fn smaller(a Array<U8>&, b Array<U8>&) Bool {
-    if a.Len() != b.Len() { return a.Len() < b.Len() }
+    if a.Len() != b.Len(): return a.Len() < b.Len()
     for i in range a.Len() {
-        if a[i] != b[i] { return a[i] < b[i] }
+        if a[i] != b[i]: return a[i] < b[i]
     }
     return false
 }
@@ -299,8 +299,8 @@ fn shrink<F>(f F, start Array<U8>&, budget I64) Array<U8> {
             i := 0
             for i + size <= best.Len() and tries < budget {
                 cand := Array<U8>(best.Len() - size)
-                for j in range i { cand[j] = best[j] }
-                for j in range i + size, best.Len() { cand[j - size] = best[j] }
+                for j in range i: cand[j] = best[j]
+                for j in range i + size, best.Len(): cand[j - size] = best[j]
                 tries++
                 if outcome.inChild(f, cand) == outcome.Failed {
                     best.Clear()
@@ -333,9 +333,9 @@ fn shrink<F>(f F, start Array<U8>&, budget I64) Array<U8> {
         # a byte lowered by one and the next raised to 255: a number of several bytes made smaller, which lowering
         # one byte alone cannot do (256 is 1, 0; 255 is 0, 255)
         for i in range best.Len() {
-            if tries >= budget or best[i] == 0 or (i + 1 < best.Len() and best[i + 1] == 255) { continue }
+            if tries >= budget or best[i] == 0 or (i + 1 < best.Len() and best[i + 1] == 255): continue
             cand := Array<U8>(best.Len() if i + 1 < best.Len() else best.Len() + 1)
-            for j in range best.Len() { cand[j] = best[j] }
+            for j in range best.Len(): cand[j] = best[j]
             cand[i] = cand[i] - 1
             cand[i + 1] = 255
             tries++
@@ -363,7 +363,7 @@ fn Check<F>(f F, cases I64 = 100) ? F.Errors {
         }
         base := U64(fuzz.Slug(fuzz.Running()).Hash()) | 1
         failed := search(f, base, cases)
-        if failed == 0 { return }
+        if failed == 0: return
         found := shrink(f, record(f, failed), 2000)
         shown2 := source.newSource(found, 0)
         where := fuzz.Save(found)
@@ -395,7 +395,7 @@ test Check "passes a property that holds, of every kind of value it makes" {
     Check(fn(p Percent, v Vec<U8>, x F64, s Shape) {
         assert p.v >= 0 and p.v <= 100
         assert v.Len() >= 0
-        if s == Shape.Box { assert s.w == s.w }
+        if s == Shape.Box: assert s.w == s.w
     }, cases = 300)
 }
 

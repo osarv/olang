@@ -9,7 +9,7 @@ type Res unique struct(k I64) {
     gone Bool = false
     Made++
 } destruct {
-    if gone { Twice++ }
+    if gone: Twice++
     gone = true
     Gone++
 }
@@ -17,10 +17,10 @@ type E error { X }
 type FRes unique struct(k I64) ? E {
     k
     gone Bool = false
-    if k < 0 { error E.X }
+    if k < 0: error E.X
     Made++
 } destruct {
-    if gone { Twice++ }
+    if gone: Twice++
     gone = true
     Gone++
 }
@@ -32,11 +32,11 @@ type Box<T> struct(x T) {
 }
 fn takeR(r Res&) I64 { return r.k }
 fn Res.mkR(k I64) Res& ? E {
-    if k < 0 { error E.X }
+    if k < 0: error E.X
     return Res(k)
 }
 fn Res.mkV(k I64) Res& ? E {
-    if k < 0 { error E.X }
+    if k < 0: error E.X
     return Res(k)
 }
 fn Res.retCond(c Bool) Res& { return Res(1) if c else Res(2) }

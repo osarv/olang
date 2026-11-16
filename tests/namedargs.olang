@@ -17,7 +17,7 @@ fn (c Conn&) Url(path String& = "/", query String& = "") String { return $c.host
 fn pad<T>(xs Array<T>&, fill T, width I64 = 4, before Bool = false) Vec<T> {
     out := Vec<T>()
     if not before { for x in xs { out.Push(x) } }
-    for _ in range xs.Len(), width { out.Push(fill) }
+    for _ in range xs.Len(), width: out.Push(fill)
     if before { for x in xs { out.Push(x) } }
     return out
 }
@@ -40,7 +40,7 @@ fn pair(a Node?& = null, b Node?& = null) I64 { return total(a) * 10 + total(b) 
 
 fn pairs(n I64) I64 {
     s := 0
-    for i in range n { s += pair(b = Node(i, next = Node(1)), a = Node(2)) }
+    for i in range n: s += pair(b = Node(i, next = Node(1)), a = Node(2))
     return s
 }
 

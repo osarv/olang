@@ -24,7 +24,7 @@ type DiShape enum {
 type DiErr error { Bad }
 
 fn DiNode.diFind(k I64) DiNode& ? DiErr {
-    if k < 0 { error DiErr.Bad }
+    if k < 0: error DiErr.Bad
     return DiNode(k)
 }
 
@@ -105,7 +105,7 @@ fn diAfterDo(k I64) I64 {
 }
 
 fn diStep(i I64) I64 ? DiErr {
-    if i >= 3 { error DiErr.Bad }
+    if i >= 3: error DiErr.Bad
     return i
 }
 
@@ -133,7 +133,7 @@ fn diMoved(n I64) I64 {
         a[i] = 1
     }
     s I64 = 0
-    for x in a { s += x }
+    for x in a: s += x
     return s
 }
 
@@ -255,7 +255,7 @@ test "definitely assigned references read back after the arena churns (D13d, O2)
         assert junk[0] == i
     }
     total I64 = 0
-    for x in kept { total += x.v }
+    for x in kept: total += x.v
     assert total == -100
     assert kept[198].v == 198 and kept[199].v == -199
 }

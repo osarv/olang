@@ -8,7 +8,5 @@ type Shape enum { Box(c Circle), Sq(s F64) }
 
 fn main() {
     e := Shape.Box(Circle(1.0))
-    if e == Shape.Box {
-        e.c.Grow()
-    }
+    if e == Shape.Box: e.c.Grow()
 }

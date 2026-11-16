@@ -3,7 +3,7 @@
 type E error { Bad }
 type Risky struct(g fn&(n I32) I32 ? E) { g }
 fn chk(n I32) I32 ? E {
-  if n < 0 { error E.Bad }
+  if n < 0: error E.Bad
   return n
 }
 fn main() ? {

@@ -3,12 +3,12 @@
 type P error { A, B }
 type Q error { C }
 fn f(n I64) ? P, Q {
-    if n == 0 { error P.B }
+    if n == 0: error P.B
     error Q.C
 }
 fn g(n I64) I64 ? P {
     try f(n) catch e {
-        if e != P { return 1 }
+        if e != P: return 1
         error e
     }
     return 0

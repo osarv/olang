@@ -2,7 +2,7 @@
 Live mut I32 = 1
 fn total(a Array<I32>&) I32 {
     t I32 = 0
-    for x in a { t = t + x }
+    for x in a: t = t + x
     return t
 }
 fn lenOf(s String&) I64 { return s.Len() }

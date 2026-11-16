@@ -9,7 +9,7 @@ type Stopper trait {
 type Q struct() { }
 fn (q Q&) Stop() noreturn { os.Exit(9) }
 fn halt<T Stopper>(q T&, n I64) I64 {
-    if n > 100 { q.Stop() }
+    if n > 100: q.Stop()
     return n
 }
 fn pick<T>(a T, b T) T { return a }
@@ -20,5 +20,5 @@ fn main() {
     a := pick(3, os.Exit(1) if Big > 9 else 4)
     b := pick(os.Exit(1), 5) if Big > 9 else 6
     assert c(2) == 2 and d(1) == 7 and a == 3 and b == 6 and halt(Q(), 4) == 4
-    if Big > 9 { assert e(Big) == 0 }
+    if Big > 9: assert e(Big) == 0
 }

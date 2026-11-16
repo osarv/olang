@@ -15,8 +15,8 @@ type Bag struct(arr Array<mut Node&>&, k I64) {
 fn churn(d I64) I64 {
     a := Array<I64>[d, d, d, d, d, d, d, d]
     l := Vec<I64>()
-    for i in range 30 { l.Push(i) }
-    if d == 0 { return 0 }
+    for i in range 30: l.Push(i)
+    if d == 0: return 0
     return churn(d - 1) + a[3] - d
 }
 fn Node.g(v I64) mut Node& { return Node(v) }

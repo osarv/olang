@@ -73,7 +73,7 @@ export fn add(i I32, ctx mut Ctx&) {
     ctx.calls++
     # olang's own storage, made on whatever thread calls (X12)
     t := $"item " + $i
-    if t.Len() == 0 { ctx.calls = 0 }
+    if t.Len() == 0: ctx.calls = 0
 }
 
 export fn half(x F64) F64 { return x / 2 }

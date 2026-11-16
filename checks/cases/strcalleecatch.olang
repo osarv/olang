@@ -26,7 +26,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn find(n Node&, k I64) Node& ? {
-    if k > 0 { error Stop.Here }
+    if k > 0: error Stop.Here
     return n
 }
 fn pick(n Node&) I64 {

@@ -90,7 +90,7 @@ fn (a String&) EndsWith(suffix String&) Bool {
 # position: "try t.FindByte(c) catch default -1" gives a fallback, "c in t" only asks
 fn (a String&) FindByte(c U8) I64 ? TextError.NotFound {
     for i in range a.Len() {
-        if a[i] == c { return i }
+        if a[i] == c: return i
     }
     error TextError.NotFound
 }
@@ -105,13 +105,13 @@ fn (a String&) Find(sub String&) I64 ? TextError.NotFound {
 # the index of the first occurrence of sub at or after from
 fn (a String&) findFrom(sub String&, from I64) I64 ? TextError.NotFound {
     n I64 = sub.Len()
-    if n == 0 { return from }
+    if n == 0: return from
     first := sub[0]
     for i in range from, a.Len() - n + 1 {
         if a[i] == first {
             j I64 = 1
-            for j < n and a[i + j] == sub[j] { j++ }
-            if j == n { return i }
+            for j < n and a[i + j] == sub[j]: j++
+            if j == n: return i
         }
     }
     error TextError.NotFound
@@ -135,7 +135,7 @@ fn (t String&) Split(sep String&) mut Array<String&>& {
         c := sep[0]
         n I64 = 1
         for x in t {
-            if x == c { n++ }
+            if x == c: n++
         }
         pieces mut Array<String&>& = Array<String&>(n, t)     # every piece written before it is read
         k I64 = 0
@@ -200,14 +200,14 @@ fn (t String&) TrimEnd() String& {
 # for a character beyond ASCII included - is left as it is
 fn (t String&) ToUpper() String {
     out := Array<Char>(t.Len())
-    for i, c in t { out[i] = c.ToUpper() }
+    for i, c in t: out[i] = c.ToUpper()
     return String(out)
 }
 
 # the text with every ASCII upper-case letter made lower-case, as new text, every other byte left as it is
 fn (t String&) ToLower() String {
     out := Array<Char>(t.Len())
-    for i, c in t { out[i] = c.ToLower() }
+    for i, c in t: out[i] = c.ToLower()
     return String(out)
 }
 
@@ -229,7 +229,7 @@ fn (t String&) Bytes() Array<U8>& { return t }
 # "Array<U8>" parameter (X3). A NUL inside the text ends the string C sees there
 fn (t String&) ToC() Array<U8> {
     out := Array<U8>(t.Len() + 1)
-    for i, c in t { out[i] = U8(c) }
+    for i, c in t: out[i] = U8(c)
     return out
 }
 
@@ -249,8 +249,8 @@ fn (a String&) FindLast(sub String&) I64 ? TextError.NotFound {
     i I64 = a.Len() - n
     for i >= 0 {
         j I64 = 0
-        for j < n and a[i + j] == sub[j] { j++ }
-        if j == n { return i }
+        for j < n and a[i + j] == sub[j]: j++
+        if j == n: return i
         i--
     }
     error TextError.NotFound
@@ -274,12 +274,12 @@ type LineIter struct(of String&) {
 }
 
 fn (it mut LineIter&) Next() String& ? Exhausted {
-    if it.at >= it.text.Len() { error Exhausted.End }
+    if it.at >= it.text.Len(): error Exhausted.End
     start := it.at
     end I64 = start
-    for end < it.text.Len() and it.text[end] != '\n' { end++ }
+    for end < it.text.Len() and it.text[end] != '\n': end++
     it.at = end + 1 if end < it.text.Len() else end
-    if end > start and it.text[end - 1] == '\r' { end-- }
+    if end > start and it.text[end - 1] == '\r': end--
     return it.text[start:end]
 }
 
@@ -292,8 +292,8 @@ fn (parts Array<String>&) Join(sep String&) String { return joinTexts(parts, sep
 
 fn joinTexts<T>(parts Array<T>&, sep String&) String {
     n I64 = 0
-    for p in parts { n += p.Len() }
-    if parts.Len() > 1 { n += sep.Len() * (parts.Len() - 1) }
+    for p in parts: n += p.Len()
+    if parts.Len() > 1: n += sep.Len() * (parts.Len() - 1)
     out := Array<Char>(n)
     w I64 = 0
     for i, p in parts {
@@ -317,19 +317,19 @@ fn joinTexts<T>(parts Array<T>&, sep String&) String {
 # right of a column: "7".PadStart(3) is "  7". Text already that wide is given whole, never cut. New text, built where
 # it is put. A character here is a Char, one byte, as everywhere in a String: text beyond ASCII counts its UTF-8 bytes
 fn (t String&) PadStart(width I64, fill Char = ' ') String {
-    if t.Len() >= width { return t }
+    if t.Len() >= width: return t
     out := Array<Char>(width, fill)
     at := width - t.Len()
-    for i, c in t { out[at + i] = c }
+    for i, c in t: out[at + i] = c
     return String(out)
 }
 
 # the text made "width" characters wide by "fill" after it, so it stands at the left of a column: "ab".PadEnd(4, '.')
 # is "ab..". Given whole when already that wide, as PadStart's is
 fn (t String&) PadEnd(width I64, fill Char = ' ') String {
-    if t.Len() >= width { return t }
+    if t.Len() >= width: return t
     out := Array<Char>(width, fill)
-    for i, c in t { out[i] = c }
+    for i, c in t: out[i] = c
     return String(out)
 }
 
@@ -361,7 +361,7 @@ fn (n T) PadEnd<T Integer>(width I64, fill Char = ' ') String { return ($n).PadE
 
 # a number's text padded before: zeros after its sign
 fn padNumber(digits String&, width I64, fill Char) String {
-    if fill != '0' or digits[0] != '-' { return digits.PadStart(width, fill) }
+    if fill != '0' or digits[0] != '-': return digits.PadStart(width, fill)
     return "-" + $digits[1:].PadStart(width - 1, '0')
 }
 
@@ -372,7 +372,7 @@ fn padNumber(digits String&, width I64, fill Char) String {
 # ("n.Format(16)", "t.ParseInt(16)", and 40 is a compile-time error, T29d); a base computed while the program runs is
 # made one with Radix(b), which fails with TextError.BadBase for another number - the one way a base is refused
 type Radix I64(v I64) ? TextError.BadBase {
-    if v != 0 and (v < 2 or v > 36) { error TextError.BadBase }
+    if v != 0 and (v < 2 or v > 36): error TextError.BadBase
 }
 
 # the integer written in "base", the digits past 9 being the letters, lowercase: I64(255).Format(16) is "ff" - with a
@@ -393,7 +393,7 @@ fn (n U64) Format(base Radix = 10) String { return String.formatDigits(n, false,
 # digit in its own type
 fn (n T) Format<T Integer>(base Radix = 10) String {
     if T.Size <= 8 {
-        if T.Min < 0 { return String.formatSigned(I64(n), base) }
+        if T.Min < 0: return String.formatSigned(I64(n), base)
         return String.formatDigits(U64(n), false, base)
     }
     letters String& = "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -406,20 +406,20 @@ fn (n T) Format<T Integer>(base Radix = 10) String {
         d := I64(v % b)
         room[at] = letters[d if d >= 0 else -d]
         v = v / b
-        if v == 0 { break }
+        if v == 0: break
     }
     if n < 0 {
         at -= 1
         room[at] = '-'
     }
     out := Array<Char>(130 - at)
-    for i in range out.Len() { out[i] = room[at + i] }
+    for i in range out.Len(): out[i] = room[at + i]
     return String(out)
 }
 
 # a signed integer's digits: its magnitude, which for I64's most negative is one more than I64 holds - U64 holds it
 fn String.formatSigned(n I64, base Radix) String {
-    if n < 0 { return String.formatDigits(U64(0) - U64(n), true, base) }
+    if n < 0: return String.formatDigits(U64(0) - U64(n), true, base)
     return String.formatDigits(U64(n), false, base)
 }
 
@@ -433,14 +433,14 @@ fn String.formatDigits(v U64, neg Bool, base Radix) String {
         at -= 1
         room[at] = letters[I64(v % b)]
         v = v / b
-        if v == 0 { break }
+        if v == 0: break
     }
     if neg {
         at -= 1
         room[at] = '-'
     }
     out := Array<Char>(65 - at)
-    for i in range out.Len() { out[i] = room[at + i] }
+    for i in range out.Len(): out[i] = room[at + i]
     return String(out)
 }
 
@@ -455,7 +455,7 @@ fn String.formatDigits(v U64, neg Bool, base Radix) String {
 # E6c). Fails with Empty for no text, Invalid for anything else that is not such a number - a sign with no digits after
 # it included - and Overflow for a number beyond I64's range; a base is a Radix, refused where it is made
 fn (t String&) ParseInt(base Radix = 10) I64 ? ParseError {
-    if t.Len() == 0 { error ParseError.Empty }
+    if t.Len() == 0: error ParseError.Empty
     neg := t[0] == '-'
     digits := t[1:] if neg or t[0] == '+' else t[:]
     if base == 0 and isPrefixed(digits) {
@@ -472,7 +472,7 @@ fn (t String&) ParseInt(base Radix = 10) I64 ? ParseError {
 # value it is in a program: "18446744073709551615".ParseUint(0) and "0xFFFF_FFFF_FFFF_FFFF".ParseUint(0) are both U64's
 # largest, and a literal needing more than 64 bits fails with Overflow, as it is an error in a program
 fn (t String&) ParseUint(base Radix = 10) U64 ? ParseError {
-    if t.Len() == 0 { error ParseError.Empty }
+    if t.Len() == 0: error ParseError.Empty
     digits := t[1:] if t[0] == '+' else t[:]
     return try readDigits(digits, base, ~U64(0))
 }
@@ -485,7 +485,7 @@ fn (t String&) ParseUint(base Radix = 10) U64 ? ParseError {
 # fitting T; a wider one's value read unsigned, up to 128 bits, fitting T where that value does
 # (U128.Parse("0x1FFFFFFFFFFFFFFFF", 0) is 2^65 - 1)
 fn T.Parse<T Integer>(t String&, base Radix = 10) T ? ParseError {
-    if t.Len() == 0 { error ParseError.Empty }
+    if t.Len() == 0: error ParseError.Empty
     neg := t[0] == '-'
     digits := t[1:] if neg or t[0] == '+' else t[:]
     if T.Size > 8 and base == 0 and isPrefixed(digits) {
@@ -494,28 +494,28 @@ fn T.Parse<T Integer>(t String&, base Radix = 10) T ? ParseError {
         u := try readWide(digits)
         if u > U128(U64.Max) {
             if neg {
-                if T.Min == 0 { error ParseError.Invalid }
-                if u > U128(T.Max) + 1 { error ParseError.Overflow }
+                if T.Min == 0: error ParseError.Invalid
+                if u > U128(T.Max) + 1: error ParseError.Overflow
                 return T(-I128(u))
             }
-            if u > U128(T.Max) { error ParseError.Overflow }
+            if u > U128(T.Max): error ParseError.Overflow
             return T(u)
         }
     }
     if T.Size <= 8 or base == 0 and isPrefixed(digits) {
         if T.Min < 0 {
             v := try t.ParseInt(base)
-            if T.Size <= 8 and (v < I64(T.Min) or v > I64(T.Max)) { error ParseError.Overflow }
+            if T.Size <= 8 and (v < I64(T.Min) or v > I64(T.Max)): error ParseError.Overflow
             return T(v)
         }
-        if neg { error ParseError.Invalid }
+        if neg: error ParseError.Invalid
         u := try t.ParseUint(base)
-        if T.Size <= 8 and u > U64(T.Max) { error ParseError.Overflow }
+        if T.Size <= 8 and u > U64(T.Max): error ParseError.Overflow
         return T(u)
     }
     # wider than 64 bits: each digit added in T itself - toward T's least for a negative number, so it fits
-    if neg and T.Min == 0 { error ParseError.Invalid }
-    if digits.Len() == 0 { error ParseError.Invalid }
+    if neg and T.Min == 0: error ParseError.Invalid
+    if digits.Len() == 0: error ParseError.Invalid
     b I64 = 10 if base == 0 else base
     tb := T(b)
     lim := T.Min if neg else T.Max
@@ -524,17 +524,17 @@ fn T.Parse<T Integer>(t String&, base Radix = 10) T ? ParseError {
     v T = 0
     for i, c in digits {
         if c == '_' and base == 0 {
-            if i == 0 or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.Invalid }
+            if i == 0 or digits[i - 1] == '_' or i + 1 == digits.Len(): error ParseError.Invalid
             continue
         }
         d := digitWorth(c)
-        if d >= b { error ParseError.Invalid }
+        if d >= b: error ParseError.Invalid
         td := T(d)
         if neg {
-            if v < cutoff or (v == cutoff and -td < cutlim) { error ParseError.Overflow }
+            if v < cutoff or (v == cutoff and -td < cutlim): error ParseError.Overflow
             v = v * tb - td
         } else {
-            if v > cutoff or (v == cutoff and td > cutlim) { error ParseError.Overflow }
+            if v > cutoff or (v == cutoff and td > cutlim): error ParseError.Overflow
             v = v * tb + td
         }
     }
@@ -545,20 +545,20 @@ fn T.Parse<T Integer>(t String&, base Radix = 10) T ? ParseError {
 # to 128 bits - Overflow past them
 fn readWide(digits String&) U128 ? ParseError {
     b U128 = 16 if digits[1] == 'x' or digits[1] == 'X' else 2
-    if digits.Len() == 2 { error ParseError.Invalid }
+    if digits.Len() == 2: error ParseError.Invalid
     cutoff := U128.Max / b
     cutlim := U128.Max % b
     v U128 = 0
     for i in range 2, digits.Len() {
         c := digits[i]
         if c == '_' {
-            if i == 2 or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.Invalid }
+            if i == 2 or digits[i - 1] == '_' or i + 1 == digits.Len(): error ParseError.Invalid
             continue
         }
         d := digitWorth(c)
-        if U128(d) >= b { error ParseError.Invalid }
+        if U128(d) >= b: error ParseError.Invalid
         ud := U128(d)
-        if v > cutoff or (v == cutoff and ud > cutlim) { error ParseError.Overflow }
+        if v > cutoff or (v == cutoff and ud > cutlim): error ParseError.Overflow
         v = v * b + ud
     }
     return v
@@ -566,16 +566,16 @@ fn readWide(digits String&) U128 ? ParseError {
 
 # whether "digits" begins with a "0x" or "0b" prefix, in either case
 fn isPrefixed(digits String&) Bool {
-    if digits.Len() < 2 or digits[0] != '0' { return false }
+    if digits.Len() < 2 or digits[0] != '0': return false
     p := digits[1]
     return p == 'x' or p == 'X' or p == 'b' or p == 'B'
 }
 
 # what one character is worth as a digit: 0 to 9, then the letters from 10 in either case - 36 for anything else
 fn digitWorth(c Char) I64 {
-    if c >= '0' and c <= '9' { return I64(c - '0') }
-    if c >= 'a' and c <= 'z' { return I64(c - 'a') + 10 }
-    if c >= 'A' and c <= 'Z' { return I64(c - 'A') + 10 }
+    if c >= '0' and c <= '9': return I64(c - '0')
+    if c >= 'a' and c <= 'z': return I64(c - 'a') + 10
+    if c >= 'A' and c <= 'Z': return I64(c - 'A') + 10
     return 36
 }
 
@@ -592,7 +592,7 @@ fn readDigits(digits String&, base Radix, most U64) U64 ? ParseError {
             from = 2
         }
     }
-    if from == digits.Len() { error ParseError.Invalid }
+    if from == digits.Len(): error ParseError.Invalid
     ub := U64(b)
     cutoff U64 = most / ub                      # past this, one more digit is too many
     cutlim U64 = most % ub                      # ...and at it, so is a digit worth more than this
@@ -601,13 +601,13 @@ fn readDigits(digits String&, base Radix, most U64) U64 ? ParseError {
         c := digits[i]
         if c == '_' and base == 0 {
             # between two digits: one before it, and the next one is checked as a digit when its turn comes
-            if i == from or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.Invalid }
+            if i == from or digits[i - 1] == '_' or i + 1 == digits.Len(): error ParseError.Invalid
             continue
         }
         d := digitWorth(c)
-        if d >= b { error ParseError.Invalid }
+        if d >= b: error ParseError.Invalid
         ud := U64(d)
-        if v > cutoff or (v == cutoff and ud > cutlim) { error ParseError.Overflow }
+        if v > cutoff or (v == cutoff and ud > cutlim): error ParseError.Overflow
         v = v * ub + ud
     }
     return v
@@ -626,7 +626,7 @@ fn readDigits(digits String&, base Radix, most U64) U64 ? ParseError {
 # narrower float is the F64 converted, "F32(t.ParseFloat())", which can round twice: rarely, a text lying within half
 # an F64 unit of an F32 halfway point rounds the wrong way
 fn (t String&) ParseFloat() F64 ? ParseError {
-    if t.Len() == 0 { error ParseError.Empty }
+    if t.Len() == 0: error ParseError.Empty
     neg Bool = false
     start I64 = 0
     if t[0] == '-' or t[0] == '+' {
@@ -636,8 +636,8 @@ fn (t String&) ParseFloat() F64 ? ParseError {
     body := t[start:]
     sign U64 = U64(1) << 63 if neg else 0
     if body.Len() > 0 and body[0] != '.' and not body[0].IsDigit() {
-        if sameLetters(body, "inf") or sameLetters(body, "infinity") { return F64.FromBits(sign | (U64(0x7FF) << 52)) }
-        if sameLetters(body, "nan") { return F64.FromBits(sign | (U64(0xFFF) << 51)) }
+        if sameLetters(body, "inf") or sameLetters(body, "infinity"): return F64.FromBits(sign | (U64(0x7FF) << 52))
+        if sameLetters(body, "nan"): return F64.FromBits(sign | (U64(0xFFF) << 51))
         error ParseError.Invalid
     }
     man U64 = 0                 # the first 19 significant digits
@@ -680,23 +680,23 @@ fn (t String&) ParseFloat() F64 ? ParseError {
             i++
         }
     }
-    if digits == 0 { error ParseError.Invalid }
+    if digits == 0: error ParseError.Invalid
     if i < body.Len() and (body[i] == 'e' or body[i] == 'E') {
         i++
         esign I64 = 1
         if i < body.Len() and (body[i] == '+' or body[i] == '-') {
-            if body[i] == '-' { esign = -1 }
+            if body[i] == '-': esign = -1
             i++
         }
-        if i == body.Len() or not body[i].IsDigit() { error ParseError.Invalid }
+        if i == body.Len() or not body[i].IsDigit(): error ParseError.Invalid
         e I64 = 0
         for i < body.Len() and body[i].IsDigit() {
-            if e < 100000 { e = e * 10 + I64(body[i] - '0') }
+            if e < 100000: e = e * 10 + I64(body[i] - '0')
             i++
         }
         dp += e * esign
     }
-    if i < body.Len() { error ParseError.Invalid }
+    if i < body.Len(): error ParseError.Invalid
     return try toF64(man, dp - taken, trunc, neg, body)
 }
 
@@ -706,23 +706,23 @@ fn (t String&) ParseFloat() F64 ? ParseError {
 fn T.Parse<T Float>(t String&) T ? ParseError {
     d := try t.ParseFloat()
     r := T(d)
-    if d == d and d - d == 0 and r - r != 0 { error ParseError.Overflow }
+    if d == d and d - d == 0 and r - r != 0: error ParseError.Overflow
     return r
 }
 
 # the Bool text t writes: "true" or "false", exactly - Empty for no text, Invalid for anything else
 fn Bool.Parse(t String&) Bool ? ParseError {
-    if t.Len() == 0 { error ParseError.Empty }
-    if t == "true" { return true }
-    if t == "false" { return false }
+    if t.Len() == 0: error ParseError.Empty
+    if t == "true": return true
+    if t == "false": return false
     error ParseError.Invalid
 }
 
 # whether t is the lower-case letters "lower", in any case
 fn sameLetters(t String&, lower String&) Bool {
-    if t.Len() != lower.Len() { return false }
+    if t.Len() != lower.Len(): return false
     for i, c in t {
-        if c.ToLower() != lower[i] { return false }
+        if c.ToLower() != lower[i]: return false
     }
     return true
 }
@@ -742,15 +742,15 @@ fn toF64(man U64, exp10 I64, trunc Bool, neg Bool, text String&) F64 ? ParseErro
     if man == 0 { return -0.0 if neg else 0.0 }
     if not trunc and man >> 52 == 0 {
         f := F64(man)
-        if neg { f = -f }
-        if exp10 == 0 { return f }
+        if neg: f = -f
+        if exp10 == 0: return f
         if exp10 > 0 and exp10 <= 37 {
             e I64 = exp10
             if e > 22 {                             # moving some of the zeros into man may still leave it exact
                 f = f * exactPow10[e - 22]
                 e = 22
             }
-            if f <= 1e15 and f >= -1e15 { return f * exactPow10[e] }
+            if f <= 1e15 and f >= -1e15: return f * exactPow10[e]
         } else if exp10 < 0 and exp10 >= -22 {
             return f / exactPow10[-exp10]
         }
@@ -758,9 +758,9 @@ fn toF64(man U64, exp10 I64, trunc Bool, neg Bool, text String&) F64 ? ParseErro
     b := try eiselLemire(man, exp10) catch { return try slowF64(text, neg) }
     if trunc {                                      # the digits man lacks matter only if man + 1 rounds elsewhere
         up := try eiselLemire(man + 1, exp10) catch { return try slowF64(text, neg) }
-        if up != b { return try slowF64(text, neg) }
+        if up != b: return try slowF64(text, neg)
     }
-    if neg { b = b | (U64(1) << 63) }
+    if neg: b = b | (U64(1) << 63)
     return F64.FromBits(b)
 }
 
@@ -779,7 +779,7 @@ fn mul128(a U64, b U64) U64, U64 {
 
 # how many of x's top bits are zero
 fn leadingZeros(x U64) I64 {
-    if x == 0 { return 64 }
+    if x == 0: return 64
     n I64 = 0
     if x >> 32 == 0 {
         n += 32
@@ -801,14 +801,14 @@ fn leadingZeros(x U64) I64 {
         n += 2
         x <<= 2
     }
-    if x >> 63 == 0 { n += 1 }
+    if x >> 63 == 0: n += 1
     return n
 }
 
 # the bits of the F64 nearest man * 10^exp10 (man not 0), by Eisel and Lemire's algorithm as Go's strconv has it -
 # failing where the bits it keeps cannot settle the rounding, or the value is subnormal or too large
 fn eiselLemire(man U64, exp10 I64) U64 ? undecided {
-    if exp10 < -348 or exp10 > 347 { error undecided.No }
+    if exp10 < -348 or exp10 > 347: error undecided.No
     clz := leadingZeros(man)
     man <<= U64(clz)
     exp2 I64 = ((217706 * exp10) >> 16) + 64 + 1023 - clz
@@ -818,8 +818,8 @@ fn eiselLemire(man U64, exp10 I64) U64 ? undecided {
         yHi, yLo := mul128(man, U64(pow10Mant[row + 1]))
         mHi U64 = xHi
         mLo U64 = xLo + yHi
-        if mLo < xLo { mHi++ }
-        if (mHi & 0x1FF) == 0x1FF and mLo + 1 == 0 and yLo + man < man { error undecided.No }
+        if mLo < xLo: mHi++
+        if (mHi & 0x1FF) == 0x1FF and mLo + 1 == 0 and yLo + man < man: error undecided.No
         xHi = mHi
         xLo = mLo
     }
@@ -833,7 +833,7 @@ fn eiselLemire(man U64, exp10 I64) U64 ? undecided {
         mant >>= 1
         exp2++
     }
-    if exp2 <= 0 or exp2 >= 0x7FF { error undecided.No }
+    if exp2 <= 0 or exp2 >= 0x7FF: error undecided.No
     return (U64(exp2) << 52) | (mant & 0xFFFFFFFFFFFFF)
 }
 
@@ -842,7 +842,7 @@ fn slowF64(text String&, neg Bool) F64 ? ParseError {
     a := decimal()
     a.set(text)
     b := try a.bits()
-    if neg { b = b | (U64(1) << 63) }
+    if neg: b = b | (U64(1) << 63)
     return F64.FromBits(b)
 }
 
@@ -876,7 +876,7 @@ fn (a mut decimal&) set(s String&) {
         }
         i++
     }
-    if not sawDot { a.dp = a.nd }
+    if not sawDot: a.dp = a.nd
     if i < s.Len() {
         i++
         sign I64 = 1
@@ -888,7 +888,7 @@ fn (a mut decimal&) set(s String&) {
         }
         e I64 = 0
         for i < s.Len() {
-            if e < 10000 { e = e * 10 + I64(s[i] - '0') }
+            if e < 10000: e = e * 10 + I64(s[i] - '0')
             i++
         }
         a.dp += e * sign
@@ -896,8 +896,8 @@ fn (a mut decimal&) set(s String&) {
 }
 
 fn (a mut decimal&) trim() {
-    for a.nd > 0 and a.d[a.nd - 1] == 0 { a.nd-- }
-    if a.nd == 0 { a.dp = 0 }
+    for a.nd > 0 and a.d[a.nd - 1] == 0: a.nd--
+    if a.nd == 0: a.dp = 0
 }
 
 # divides by 2^k, k at most 60
@@ -966,16 +966,16 @@ fn (a mut decimal&) leftShift(k U64) {
     got I64 = a.tmp.Len() - w
     a.dp += got - a.nd
     keep I64 = got if got < 800 else 800
-    for i in range keep { a.d[i] = a.tmp[w + i] }
+    for i in range keep: a.d[i] = a.tmp[w + i]
     for i in range keep, got {
-        if a.tmp[w + i] != 0 { a.trunc = true }
+        if a.tmp[w + i] != 0: a.trunc = true
     }
     a.nd = keep
     a.trim()
 }
 
 fn (a mut decimal&) shift(k I64) {
-    if a.nd == 0 { return }
+    if a.nd == 0: return
     for k > 60 {
         a.leftShift(60)
         k -= 60
@@ -984,22 +984,22 @@ fn (a mut decimal&) shift(k I64) {
         a.rightShift(60)
         k += 60
     }
-    if k > 0 { a.leftShift(U64(k)) }
-    if k < 0 { a.rightShift(U64(-k)) }
+    if k > 0: a.leftShift(U64(k))
+    if k < 0: a.rightShift(U64(-k))
 }
 
 # whether the integer part, the digits before d[nd], rounds up: a half to the even
 fn (a decimal&) roundsUp(nd I64) Bool {
-    if nd < 0 or nd >= a.nd { return false }
+    if nd < 0 or nd >= a.nd: return false
     if a.d[nd] == 5 and nd + 1 == a.nd {
-        if a.trunc { return true }
+        if a.trunc: return true
         return nd > 0 and a.d[nd - 1] % 2 == 1
     }
     return a.d[nd] >= 5
 }
 
 fn (a decimal&) roundedInteger() U64 {
-    if a.dp > 20 { return ~U64(0) }
+    if a.dp > 20: return ~U64(0)
     n U64 = 0
     i I64 = 0
     for i < a.dp and i < a.nd {
@@ -1010,7 +1010,7 @@ fn (a decimal&) roundedInteger() U64 {
         n = n * 10
         i++
     }
-    if a.roundsUp(a.dp) { n++ }
+    if a.roundsUp(a.dp): n++
     return n
 }
 
@@ -1018,8 +1018,8 @@ decimalShifts := Array<I64>[1, 3, 6, 9, 13, 16, 19, 23, 26]       # 2^decimalShi
 
 # the bits of the nearest F64, its sign aside - failing with Overflow when it is too large for one
 fn (a mut decimal&) bits() U64 ? ParseError {
-    if a.nd == 0 or a.dp < -330 { return 0 }
-    if a.dp > 310 { error ParseError.Overflow }
+    if a.nd == 0 or a.dp < -330: return 0
+    if a.dp > 310: error ParseError.Overflow
     exp I64 = 0
     for a.dp > 0 {
         n I64 = 27 if a.dp >= 9 else decimalShifts[a.dp]
@@ -1037,16 +1037,16 @@ fn (a mut decimal&) bits() U64 ? ParseError {
         a.shift(-n)
         exp += n
     }
-    if exp + 1023 >= 0x7FF { error ParseError.Overflow }
+    if exp + 1023 >= 0x7FF: error ParseError.Overflow
     a.shift(53)
     mant := a.roundedInteger()
     if mant == U64(1) << 53 {
         mant >>= 1
         exp++
-        if exp + 1023 >= 0x7FF { error ParseError.Overflow }
+        if exp + 1023 >= 0x7FF: error ParseError.Overflow
     }
     biased I64 = exp + 1023
-    if (mant & (U64(1) << 52)) == 0 { biased = 0 }
+    if (mant & (U64(1) << 52)) == 0: biased = 0
     return (mant & 0xFFFFFFFFFFFFF) | (U64(biased) << 52)
 }
 
@@ -1067,12 +1067,12 @@ fn shortest(v F64) U64, I64 {
         c U64 = (U64(1) << 52) | t
         if mq > 0 and mq < 53 {
             f U64 = c >> U64(mq)
-            if f << U64(mq) == c { return f, 0 }
+            if f << U64(mq) == c: return f, 0
         }
         return schubfach(-mq, c, 0)
     }
     if t == 1 { return 5, -324 }                    # the two smallest: 5e-324 and 1e-323
-    if t == 2 { return 1, -323 }
+    if t == 2: return 1, -323
     return schubfach(-1074, t, 0)
 }
 
@@ -1102,7 +1102,7 @@ fn schubfach(q I64, c U64, dk I64) U64, I64 {
     lo U64 = U64(pow10Mant[row + 1])
     gh U64 = hi >> 2
     gl U64 = ((lo >> 2) | (hi << 62)) + 1
-    if gl == 0 { gh++ }
+    if gl == 0: gh++
     g1 U64 = (gh << 1) | (gl >> 63)
     g0 U64 = gl & mask63
     vb U64 = rop(g1, g0, cb << U64(h))
@@ -1115,7 +1115,7 @@ fn schubfach(q I64, c U64, dk I64) U64, I64 {
         upin Bool = vbl + out <= sp10 << 2
         wpin Bool = (tp10 << 2) + out <= vbr
         if upin != wpin {
-            if upin { return sp10, k }
+            if upin: return sp10, k
             return tp10, k
         }
     }
@@ -1123,11 +1123,11 @@ fn schubfach(q I64, c U64, dk I64) U64, I64 {
     uin Bool = vbl + out <= s << 2
     win Bool = (t << 2) + out <= vbr
     if uin != win {
-        if uin { return s, k + dk }
+        if uin: return s, k + dk
         return t, k + dk
     }
     cmp I64 = I64(vb) - I64((s + t) << 1)
-    if cmp < 0 or (cmp == 0 and (s & 1) == 0) { return s, k + dk }
+    if cmp < 0 or (cmp == 0 and (s & 1) == 0): return s, k + dk
     return t, k + dk
 }
 
@@ -1138,8 +1138,8 @@ fn schubfach(q I64, c U64, dk I64) U64, I64 {
 # same algorithm, in IR and in C) - worked out exactly (Schubfach), so this runs while compiling (K1) as at run time
 fn (x F64) ShortestDecimal() U64, I64 ? TextError.NotFinite {
     b := x.Bits()
-    if ((b >> 52) & 0x7FF) == 0x7FF { error TextError.NotFinite }
-    if b << 1 == 0 { return 0, 0 }
+    if ((b >> 52) & 0x7FF) == 0x7FF: error TextError.NotFinite
+    if b << 1 == 0: return 0, 0
     f, e := shortest(x)
     for f % 10 == 0 {
         f = f / 10
@@ -1170,7 +1170,7 @@ fn (b StringBuilder&) Len() I64 { return b.chars.Len() }
 fn (b StringBuilder&) ToString() String {
     n := b.chars.Len()
     out := Array<Char>(n)
-    for i in range n { out[i] = b.chars[i] }
+    for i in range n: out[i] = b.chars[i]
     return String(out)         # (the characters copied once: the String takes the array's storage, T13a, D9i)
 }
 

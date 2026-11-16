@@ -6,9 +6,9 @@ import "std/io"
 fn words(t String&) Iterator<String&> {
     i I64 = 0
     for i < t.Len() {
-        for i < t.Len() and t[i] == 0x20 { i++ }
+        for i < t.Len() and t[i] == 0x20: i++
         j := i
-        for j < t.Len() and t[j] != 0x20 { j++ }
+        for j < t.Len() and t[j] != 0x20: j++
         if j > i { yield t[i:j] }
         i = j
     }
@@ -28,7 +28,7 @@ fn main() {
     kept := Vec<String&>()
     {
         t := $"a b"
-        for w in words(t) { kept.Push(w) }
+        for w in words(t): kept.Push(w)
     }
     churn()
     io.PutLine($kept)!

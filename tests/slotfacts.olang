@@ -28,7 +28,7 @@ fn viaArg(n I64) I64 { return count(Sh.Make(n)) }
 
 fn viaLoop(n I64) I64 {
     t := 0
-    for i in range n { t += Sh(i).Count() }
+    for i in range n: t += Sh(i).Count()
     return t
 }
 

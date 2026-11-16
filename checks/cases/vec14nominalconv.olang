@@ -13,7 +13,7 @@ type Ix Array<I64>
 fn Ix.f(v Vec<I64>&) Ix& { return Ix(v.View()) }
 fn grow(w mut Vec<I64>&) ? io.Error {
     d := Ix.f(w)
-    for i in range 1000 { w.Push(i + 100) }
+    for i in range 1000: w.Push(i + 100)
     churn()
     try io.PutLine($d[0] + " " + $d[1])
 }

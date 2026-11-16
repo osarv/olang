@@ -2,7 +2,7 @@
 # S8d, S8e: an assignment to a path a narrowed field path starts with ends its narrowing
 type N struct(v I64, next N?&) { v, next }
 fn third(h mut N&, o N&) I64 {
-    if h.next == null or h.next.next == null { return 0 }
+    if h.next == null or h.next.next == null: return 0
     h.next = o
     return h.next.next.v
 }

@@ -29,15 +29,15 @@ Taken mut I64 = 0
 fn Row.Parse(row String&) Row ? {
     n := row.Len()
     for k in range n {
-        if row[k] != ':' { continue }
+        if row[k] != ':': continue
         a := k + 1
         b := a
-        for b < n and row[b].IsDigit() { b++ }
-        if b == a or b >= n or row[b] != ':' { continue }
+        for b < n and row[b].IsDigit(): b++
+        if b == a or b >= n or row[b] != ':': continue
         c := b + 1
         d := c
-        for d < n and row[d].IsDigit() { d++ }
-        if d == c or not row[d:].StartsWith(": ") { continue }
+        for d < n and row[d].IsDigit(): d++
+        if d == c or not row[d:].StartsWith(": "): continue
         w := d + 2
         isError := false
         rule := ""
@@ -47,7 +47,7 @@ fn Row.Parse(row String&) Row ? {
             after = w + 5
             if after < n and row[after] == '[' {
                 close := after + 1
-                for close < n and row[close] != ']' { close++ }
+                for close < n and row[close] != ']': close++
                 if close < n {
                     rule = $row[after + 1:close]
                     after = close + 1
@@ -58,7 +58,7 @@ fn Row.Parse(row String&) Row ? {
         } else {
             continue
         }
-        if not row[after:].StartsWith(": ") { continue }
+        if not row[after:].StartsWith(": "): continue
         return Row($row[:k], try row[a:b].ParseInt(), try row[c:d].ParseInt(), isError, rule, $row[after + 2:])
     }
     error NotARow
@@ -80,13 +80,13 @@ fn ExpectedTexts(src String&, out mut Vec<String&>&) {
     lines := src.Split("\n")
     for k in range (12 if lines.Len() > 12 else lines.Len()) {
         line := lines[k]
-        if not line.StartsWith("#") { continue }
+        if not line.StartsWith("#"): continue
         i := 1
-        for i < line.Len() and srcmask.IsPySpace(line[i]) { i++ }
+        for i < line.Len() and srcmask.IsPySpace(line[i]): i++
         if line[i:].StartsWith("check:") {
             i += 6
-            for i < line.Len() and srcmask.IsPySpace(line[i]) { i++ }
-            if not line[i:].StartsWith("fail") { continue }
+            for i < line.Len() and srcmask.IsPySpace(line[i]): i++
+            if not line[i:].StartsWith("fail"): continue
             i += 4
         } else if line[i:].StartsWith("also:") {
             i += 5
@@ -94,14 +94,14 @@ fn ExpectedTexts(src String&, out mut Vec<String&>&) {
             continue
         }
         text := srcmask.Strip(line[i:])
-        if text.Len() > 0 { out.Push($text) }
+        if text.Len() > 0: out.Push($text)
     }
 }
 
 # whether any of the texts occurs in what
 fn ContainsAny(what String&, texts Vec<String&>&) Bool {
     for t in texts {
-        if what.Contains(t) { return true }
+        if what.Contains(t): return true
     }
     return false
 }
@@ -110,7 +110,7 @@ fn ContainsAny(what String&, texts Vec<String&>&) Bool {
 fn Sub(text String&, a I64, b I64) String& {
     lo := a if a < text.Len() else text.Len()
     hi := b if b < text.Len() else text.Len()
-    if hi < lo { hi = lo }
+    if hi < lo: hi = lo
     return text[lo:hi]
 }
 
@@ -120,17 +120,17 @@ fn Realign(lines mut Array<String&>&, k I64, delta I64, at I64) {
     mask := srcmask.Mask(text, true)
     hashAt I64 = -1
     for i in range at, text.Len() {
-        if hashAt < 0 and text[i] == '#' and mask[i] != 'c' { hashAt = i }
+        if hashAt < 0 and text[i] == '#' and mask[i] != 'c': hashAt = i
     }
-    if hashAt <= at { return }
+    if hashAt <= at: return
     gap := hashAt
-    for gap > at and text[gap - 1] == ' ' { gap-- }
+    for gap > at and text[gap - 1] == ' ': gap--
     spaces := hashAt - gap
-    if spaces < 2 or delta == 0 { return }
+    if spaces < 2 or delta == 0: return
     want := spaces - delta
-    if want < 1 { want = 1 }
+    if want < 1: want = 1
     pad := StringBuilder()
-    for _ in range want { pad.PushChar(' ') }
+    for _ in range want: pad.PushChar(' ')
     lines[k] = $text[:gap] + $pad.ToString() + $text[hashAt:]
 }
 
@@ -140,25 +140,25 @@ fn Realign(lines mut Array<String&>&, k I64, delta I64, at I64) {
 fn ShiftExpected(lines mut Array<String&>&, shLine Vec<I64>&, shAt Vec<I64>&, shDelta Vec<I64>&) {
     for k in range (12 if lines.Len() > 12 else lines.Len()) {
         line := lines[k]
-        if not line.StartsWith("#") { continue }
+        if not line.StartsWith("#"): continue
         i := 1
-        for i < line.Len() and srcmask.IsPySpace(line[i]) { i++ }
-        if not (line[i:].StartsWith("also:") or (line[i:].StartsWith("check:") and checkFail(line[i + 6:]))) { continue }
+        for i < line.Len() and srcmask.IsPySpace(line[i]): i++
+        if not (line[i:].StartsWith("also:") or (line[i:].StartsWith("check:") and checkFail(line[i + 6:]))): continue
         out := StringBuilder()
         p I64 = 0
         for p < line.Len() {
             # \b(\d+):(\d+):
             if line[p].IsDigit() and (p == 0 or not srcmask.IsWord(line[p - 1])) {
                 a := p
-                for a < line.Len() and line[a].IsDigit() { a++ }
+                for a < line.Len() and line[a].IsDigit(): a++
                 if a < line.Len() and line[a] == ':' {
                     b := a + 1
-                    for b < line.Len() and line[b].IsDigit() { b++ }
+                    for b < line.Len() and line[b].IsDigit(): b++
                     if b > a + 1 and b < line.Len() and line[b] == ':' {
                         ln := try line[p:a].ParseInt() catch default 0
                         col := try line[a + 1:b].ParseInt() catch default 0
                         for s in range shLine.Len() {
-                            if shLine[s] == ln and col - 1 > shAt[s] { col += shDelta[s] }
+                            if shLine[s] == ln and col - 1 > shAt[s]: col += shDelta[s]
                         }
                         out.Push($ln + ":" + $col + ":")
                         p = b + 1
@@ -186,7 +186,7 @@ fn RealPathOf(path String&) String {
 # whether path is one of the allowed paths or below one
 fn Allowed(path String&, allowed Vec<String&>&) Bool {
     for a in allowed {
-        if path == a or path.StartsWith($a + "/") { return true }
+        if path == a or path.StartsWith($a + "/"): return true
     }
     return false
 }
@@ -200,9 +200,9 @@ fn OlangFiles(paths Vec<String&>&, out mut Vec<String&>&) {
         else if p.EndsWith(".olang"): found.Push($p)
     }
     real Vec<String&>
-    for f in found { real.Push(RealPathOf(f)) }
+    for f in found: real.Push(RealPathOf(f))
     real.Sort(fn(a, b) { return a < b })
-    for f in real { out.Push($f) }
+    for f in real: out.Push($f)
 }
 
 # whether some line of src starts, after whitespace, with test and a quote: regex ^\s*test\s+"
@@ -211,12 +211,12 @@ fn hasTestLine(src String&) Bool {
     at I64 = 0
     for at < n {
         j := at
-        for j < n and src[j] != '\n' and srcmask.IsPySpace(src[j]) { j++ }
+        for j < n and src[j] != '\n' and srcmask.IsPySpace(src[j]): j++
         if src[j:].StartsWith("test") {
             k := j + 4
             ws := k
-            for k < n and srcmask.IsPySpace(src[k]) { k++ }
-            if k > ws and k < n and src[k] == '"' { return true }
+            for k < n and srcmask.IsPySpace(src[k]): k++
+            if k > ws and k < n and src[k] == '"': return true
         }
         at = at + (try src[at:].FindByte('\n') catch default (n - at)) + 1
     }
@@ -228,7 +228,7 @@ fn hasTestLine(src String&) Bool {
 fn compileOne(olang String&, file String&, dir String&, testLines Bool) String {
     src := try srcmask.ReadText(file) catch { return "" }
     mode := "compile"
-    if src.Contains("TestBuild") or (testLines and hasTestLine(src)) { mode = "test" }
+    if src.Contains("TestBuild") or (testLines and hasTestLine(src)): mode = "test"
     out := try srcmask.Capture(Array<String&>[olang, mode, file], dir, 900000) catch os.Error {
         srcmask.SayErr("could not run " + $olang)
         os.Exit(1)
@@ -271,7 +271,7 @@ fn JoinHelp(out String&) String {
 fn worker(olang String&, files Array<String&>&, dir String&, testLines Bool, outputs mut Array<String&>&) {
     for {
         k := Taken.AtomicAdd(1)
-        if k >= files.Len() { break }
+        if k >= files.Len(): break
         outputs[k] = compileOne(olang, files[k], dir, testLines)
     }
 }
@@ -279,10 +279,10 @@ fn worker(olang String&, files Array<String&>&, dir String&, testLines Bool, out
 # what compiling each of the files prints, in the order of the files, "jobs" at a time, each worker in a directory of its own
 fn CompileAll(olang String&, files Array<String&>&, workDirs Array<String&>&, testLines Bool) Array<String&>& {
     outputs mut Array<String&>& = Array<String&>(files.Len())
-    for i in range files.Len() { outputs[i] = "" }
+    for i in range files.Len(): outputs[i] = ""
     Taken = 0
     join {
-        for w in range workDirs.Len() { spawn worker(olang, files, workDirs[w], testLines, outputs) }
+        for w in range workDirs.Len(): spawn worker(olang, files, workDirs[w], testLines, outputs)
     }
     return outputs
 }

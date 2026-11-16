@@ -14,10 +14,10 @@ fn main() ? {
     n := try args[1].ParseInt()
     passes := try args[2].ParseInt()
     l := list.List<I64>()
-    for i in range n { l.Push(i * 7) }
+    for i in range n: l.Push(i * 7)
     total I64 = 0
     for p in range passes {
-        for x in l { total += x ^ p }
+        for x in l: total += x ^ p
     }
     try io.Put($total + "\n")
 }

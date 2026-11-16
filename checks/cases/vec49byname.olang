@@ -15,7 +15,7 @@ type CB struct() {
 }
 fn (c CB&) Text() String& { return c.text }
 fn (c CB&) Pick(trim Bool) String& {
-    if trim { return c.Text() }
+    if trim: return c.Text()
     t := c.Text()
     return t
 }

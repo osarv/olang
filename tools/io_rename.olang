@@ -33,7 +33,7 @@ fn replaceWord(src String&, from String&, to String&, bare Bool, c mut Count&) S
         }
         i++
     }
-    if at == 0 { return $src }
+    if at == 0: return $src
     out.Push(src[at:])
     return out.ToString()
 }
@@ -47,7 +47,7 @@ fn rename(src String&, path String&, c mut Count&) String {
     own := path.EndsWith("std/io.olang")
     for k in range Olds.Len() {
         out = replaceWord(out, "io." + $Olds[k], "io." + $News[k], false, c)
-        if own { out = replaceWord(out, Olds[k], News[k], true, c) }
+        if own: out = replaceWord(out, Olds[k], News[k], true, c)
     }
     return out
 }
@@ -56,7 +56,7 @@ fn rename(src String&, path String&, c mut Count&) String {
 fn walk(dir String&, out mut Vec<String&>&) {
     names := try os.ReadDir(dir) catch default Array<String&>(0)
     for n in names {
-        if n.StartsWith(".") or n == "build" { continue }
+        if n.StartsWith(".") or n == "build": continue
         p := srcmask.PathJoin(dir, n)
         if os.IsDir(p): walk(p, out)
         else if wanted(p): out.Push($p)
@@ -89,16 +89,16 @@ fn main() ? {
     total := Count()
     changed I64 = 0
     for path in files {
-        if not wanted(path) { continue }
+        if not wanted(path): continue
         src := try srcmask.ReadText(path) catch {
             srcmask.SayErr("io_rename: cannot read " + $path)
             os.Exit(1)
             unreachable
         }
         out := rename(src, path, total)
-        if out == src { continue }
+        if out == src: continue
         changed++
-        if verbose { srcmask.Say(path) }
+        if verbose: srcmask.Say(path)
         if not check {
             try os.WriteFile(path, out) catch {
                 srcmask.SayErr("io_rename: cannot write " + $path)
@@ -108,7 +108,7 @@ fn main() ? {
     }
     verb := "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.n + " names")
-    if check and changed > 0 { os.Exit(1) }
+    if check and changed > 0: os.Exit(1)
 }
 
 test "io.Put and its kin become io.Put and its kin; a longer word and a bare name elsewhere are left" {

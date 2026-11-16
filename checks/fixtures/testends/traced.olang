@@ -4,13 +4,13 @@ type FxErr error {
 }
 Depth mut I64 = 3
 fn inner(n I64) I64 ? {
-    if n > 0 { error FxErr.Gone }
+    if n > 0: error FxErr.Gone
     return n
 }
 fn middle(n I64) I64 ? {
     return try inner(n)
 }
 fn main() ? {
-    if Depth > 100 { middle(Depth)! }
+    if Depth > 100: middle(Depth)!
     try middle(Depth)
 }

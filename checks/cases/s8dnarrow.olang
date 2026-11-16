@@ -14,14 +14,14 @@ type Expr enum {
     Add(a Expr&, b Expr&)
 }
 fn area(s Shape) I64 {
-    if s == Shape.Round { return s.Twice() + s.r }
-    if s == Shape.Ring { return s.c.r * s.n + s.c.Twice() }
-    if s != Shape.Box { return 0 }
+    if s == Shape.Round: return s.Twice() + s.r
+    if s == Shape.Ring: return s.c.r * s.n + s.c.Twice()
+    if s != Shape.Box: return 0
     return s.w * s.h
 }
 fn sum(e Expr&) I64 {
     if e != Expr.Add {
-        if e == Expr.Lit { return e.v }
+        if e == Expr.Lit: return e.v
         return 0
     } else {
         return sum(e.a) + sum(e.b)

@@ -34,11 +34,11 @@ fn main() ? io.Error {
 
 # the library a top-level link line names, its quotes kept - "" for any other line
 fn linkOf(line String&) String {
-    if not line.StartsWith("link \"") { return "" }
+    if not line.StartsWith("link \""): return ""
     t := line.Trim()
     close := try t[6:].FindByte('"') catch { return "" }
     rest := t[7 + close:].Trim()
-    if rest != "" and not rest.StartsWith("#") { return "" }
+    if rest != "" and not rest.StartsWith("#"): return ""
     return $t[5:7 + close]
 }
 
@@ -49,15 +49,15 @@ fn migrate(text String&) String {
     links Vec<String&>
     for l in lines {
         n := linkOf(l)
-        if n != "" { links.Push($n) }
+        if n != "": links.Push($n)
     }
-    if links.Len() == 0 { return $text }
+    if links.Len() == 0: return $text
     # the first run of extern lines: from its first to its last, comments and blank lines between them in it
     first I64 = -1
     last I64 = -1
     for i, l in lines {
         if isExtern(l) {
-            if first < 0 { first = i }
+            if first < 0: first = i
             last = i
         } else if first >= 0 and l.Trim() != "" and not l.StartsWith("#") {
             break
@@ -69,9 +69,9 @@ fn migrate(text String&) String {
         n := linkOf(l)
         if n != "" {
             if n == links[0] and first >= 0 and not placed { continue }    # the block holds it
-            if n == links[0] and placed { continue }
+            if n == links[0] and placed: continue
             b.Push($"extern link " + $n + " { }")
-            if n == links[0] { placed = true }
+            if n == links[0]: placed = true
         } else if i == first {
             b.Push($"extern link " + $links[0] + " {\n    " + $l[7:])
             if first == last { b.Push("\n}") }
@@ -82,7 +82,7 @@ fn migrate(text String&) String {
         } else {
             b.Push(l)
         }
-        if i < lines.Len() - 1 { b.PushChar('\n') }
+        if i < lines.Len() - 1: b.PushChar('\n')
     }
     return b.ToString()
 }

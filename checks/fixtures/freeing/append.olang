@@ -6,7 +6,7 @@ N I64 = 20000
 
 fn built(n I64) I64 {
     s := ""
-    for i in range n { s += $i }
+    for i in range n: s += $i
     return s.Len()
 }
 
@@ -14,7 +14,7 @@ fn mk(i I64) String { return "value " + $i + " padded out to some length .......
 
 fn main() {
     s := ""
-    for i in range N { s = s + $i }
+    for i in range N: s = s + $i
     x := mk(0)
     t := 0
     for i in range N * 10 {

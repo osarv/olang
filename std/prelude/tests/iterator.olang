@@ -3,7 +3,7 @@
 
 fn upTo(n I64) Vec<I64>& {
     l mut Vec<I64>& = Vec<I64>()
-    for i in range n { l.Push(i) }
+    for i in range n: l.Push(i)
     return l
 }
 
@@ -15,7 +15,7 @@ test "Take and Skip walk part of an iterator" {
     assert l.Iter().Skip(20).ToVec().Len() == 0 and l.Iter().Take(0).ToVec().Len() == 0
     a := Array<I64>[5, 6, 7]
     total := 0
-    for x in a.Iter().Take(2) { total += x }
+    for x in a.Iter().Take(2): total += x
     assert total == 11
 }
 
@@ -29,7 +29,7 @@ test "Enumerate, Zip and Chain" {
     assert n == 3
     names := Array<String&>["a", "b"]
     s := StringBuilder()
-    for p in names.Iter().Zip(a.Iter()) { s.Push($p.First + $p.Second) }
+    for p in names.Iter().Zip(a.Iter()): s.Push($p.First + $p.Second)
     assert s.ToString() == "a10b20"
     assert a.Iter().Chain(upTo(2).Iter()).ToVec().ToArray() == Array<I64>[10, 20, 30, 0, 1]
     assert upTo(0).Iter().Chain(a.Iter()).Count(fn(x I64) Bool { return x > 15 }) == 2
@@ -60,14 +60,14 @@ type Bad error {
 }
 
 fn odd(x I64) Bool ? Bad {
-    if x == 4 { error Bad.No }
+    if x == 4: error Bad.No
     return x % 2 == 1
 }
 
 # 0 .. n-1, failing with Bad when it reaches 7
 fn upToSeven(n I64) Iterator<I64 ? Bad> {
     for i in range n {
-        if i == 7 { error Bad.No }
+        if i == 7: error Bad.No
         yield i
     }
 }
@@ -75,7 +75,7 @@ fn upToSeven(n I64) Iterator<I64 ? Bad> {
 test "Reversed walks arrays, text and Vecs backward" {
     a := Array<I64>[1, 2, 3, 4]
     digits := 0
-    for x in a.Reversed() { digits = digits * 10 + x }
+    for x in a.Reversed(): digits = digits * 10 + x
     assert digits == 4321
     assert a.Reversed().ToVec().ToArray() == Array<I64>[4, 3, 2, 1]
     assert "olang".Reversed().ToVec().ToArray() == Array<Char>['g', 'n', 'a', 'l', 'o']
@@ -86,7 +86,7 @@ test "Reversed walks arrays, text and Vecs backward" {
 test "Windows gives every run of n, overlapping, as views" {
     a := Array<F64>[1.0, 2.0, 3.0, 4.0]
     smooth := Vec<F64>()
-    for w in a.Windows(2) { smooth.Push(w.Sum() / 2.0) }
+    for w in a.Windows(2): smooth.Push(w.Sum() / 2.0)
     assert smooth.ToArray() == Array<F64>[1.5, 2.5, 3.5]
     assert a.Windows(4).Len() == 1 and a.Windows(5).Len() == 0 and Array<F64>[].Windows(1).Len() == 0
     assert "abcd".Windows(3)[1] == "bcd"

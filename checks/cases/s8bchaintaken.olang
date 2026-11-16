@@ -3,20 +3,13 @@
 # well, and the else after it, which is never compiled (it names nothing that exists); and a running if whose else-if
 # the build drops for its own condition still runs both ways
 fn pick() I64 {
-    if TargetVectorBits >= 0 {
-        return 1
-    } else if TargetVectorBits >= 0 {
-        return 2
-    } else {
-        return nothingByThisName()
-    }
+    if TargetVectorBits >= 0: return 1
+    else if TargetVectorBits >= 0: return 2
+    else: return nothingByThisName()
 }
 fn running(x I64) I64 {
-    if x > 3 {
-        return 1
-    } else if TargetVectorBits < 0 {
-        return nothingByThisName()
-    }
+    if x > 3: return 1
+    else if TargetVectorBits < 0: return nothingByThisName()
     return 2
 }
 fn main() {

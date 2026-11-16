@@ -32,16 +32,16 @@ fn paramsAt(src String&, mask String&, a I64, b I64) I64 {
     i := b - t.Len()
     if t.StartsWith("fn ") {
         j := i + 3
-        for j < b and src[j] == ' ' { j++ }
+        for j < b and src[j] == ' ': j++
         if j < b and src[j] == '(' {
             k := srcmask.CloseOf(src, mask, j)
-            if k < 0 { return -1 }
+            if k < 0: return -1
             j = k
         }
         for j < b and src[j] != '(' {
             if src[j] == '<' {
                 k := closeAngle(src, j, b)
-                if k < 0 { return -1 }
+                if k < 0: return -1
                 j = k
                 continue
             }
@@ -55,9 +55,9 @@ fn paramsAt(src String&, mask String&, a I64, b I64) I64 {
     }
     # a trait's method: "mut Name(" or "Name(" at the line's start
     j := i
-    if t.StartsWith("mut ") { j += 4 }
-    if j >= b or not src[j].IsUpper() { return -1 }
-    for j < b and srcmask.IsWord(src[j]) { j++ }
+    if t.StartsWith("mut "): j += 4
+    if j >= b or not src[j].IsUpper(): return -1
+    for j < b and srcmask.IsWord(src[j]): j++
     return j if j < b and src[j] == '(' else -1
 }
 
@@ -65,10 +65,10 @@ fn paramsAt(src String&, mask String&, a I64, b I64) I64 {
 fn closeAngle(src String&, i I64, b I64) I64 {
     depth I64 = 0
     for k in range i, b {
-        if src[k] == '<' { depth++ }
+        if src[k] == '<': depth++
         if src[k] == '>' {
             depth--
-            if depth == 0 { return k + 1 }
+            if depth == 0: return k + 1
         }
     }
     return -1
@@ -81,7 +81,7 @@ fn splitTop(src String&, mask String&, a I64, b I64, angles Bool) Vec<String&> {
     depth I64 = 0
     at := a
     for k in range a, b {
-        if mask[k] != 'c' { continue }
+        if mask[k] != 'c': continue
         x := src[k]
         if x == '(' or x == '[' or x == '{' or (angles and x == '<') {
             depth++
@@ -93,7 +93,7 @@ fn splitTop(src String&, mask String&, a I64, b I64, angles Bool) Vec<String&> {
         }
     }
     last := srcmask.Strip(src[at:b])
-    if last.Len() > 0 { out.Push(last) }
+    if last.Len() > 0: out.Push(last)
     return out
 }
 
@@ -102,11 +102,11 @@ fn hasWord(text String&, name String&) Bool {
     i I64 = 0
     for i + name.Len() <= text.Len() {
         k := try text[i:].Find(name) catch default -1
-        if k < 0 { return false }
+        if k < 0: return false
         j := i + k
         before := j == 0 or not srcmask.IsWord(text[j - 1])
         after := j + name.Len() == text.Len() or not srcmask.IsWord(text[j + name.Len()])
-        if before and after { return true }
+        if before and after: return true
         i = j + 1
     }
     return false
@@ -114,12 +114,12 @@ fn hasWord(text String&, name String&) Bool {
 
 # a result item written "name Type": the type alone, and the name in names; as it was where it has no name
 fn unname(item String&, names mut Vec<String&>&) String {
-    if item.Len() == 0 or not (item[0].IsLower() or item[0] == '_') { return $item }
+    if item.Len() == 0 or not (item[0].IsLower() or item[0] == '_'): return $item
     j I64 = 0
-    for j < item.Len() and srcmask.IsWord(item[j]) { j++ }
-    if j >= item.Len() or item[j] != ' ' { return $item }
+    for j < item.Len() and srcmask.IsWord(item[j]): j++
+    if j >= item.Len() or item[j] != ' ': return $item
     rest := srcmask.StripStart(item[j:])
-    if rest.Len() == 0 or rest.StartsWith("?") { return $item }
+    if rest.Len() == 0 or rest.StartsWith("?"): return $item
     names.Push($item[:j])
     return $rest
 }
@@ -127,9 +127,9 @@ fn unname(item String&, names mut Vec<String&>&) String {
 # one declaration's line from a to b rewritten, or "" where it has no contract to move
 fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c mut Result&) String {
     p := paramsAt(src, mask, a, b)
-    if p < 0 { return "" }
+    if p < 0: return ""
     pe := srcmask.CloseOf(src, mask, p)
-    if pe < 0 or pe > b { return "" }
+    if pe < 0 or pe > b: return ""
     # the contract: a "[" outside every bracket, its "]" followed by nothing but the body's "{" or the line's end
     k I64 = -1
     q := pe
@@ -141,7 +141,7 @@ fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c m
         x := src[q]
         if x == '[' {
             e := srcmask.CloseOf(src, mask, q)
-            if e < 0 or e > b { return "" }
+            if e < 0 or e > b: return ""
             after := srcmask.Strip(src[e:b])
             if after.Len() == 0 or after.StartsWith("{") {
                 k = q
@@ -152,49 +152,49 @@ fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c m
         }
         if x == '(' or x == '<' {
             e := srcmask.CloseOf(src, mask, q) if x == '(' else closeAngle(src, q, b)
-            if e < 0 { return "" }
+            if e < 0: return ""
             q = e
             continue
         }
         if x == '{' { return "" }
         q++
     }
-    if k < 0 { return "" }
+    if k < 0: return ""
     moved := srcmask.Strip(src[pe:k]).Len() == 0    # already right after the parameters
     ke := srcmask.CloseOf(src, mask, k)
     # the results, their names dropped; the error set as it is
     qm := -1
     depth I64 = 0
     for m in range pe, k {
-        if mask[m] != 'c' { continue }
-        if src[m] == '(' or src[m] == '<' { depth++ }
-        if src[m] == ')' or src[m] == '>' { depth-- }
-        if src[m] == '?' and depth == 0 and qm < 0 { qm = m }
+        if mask[m] != 'c': continue
+        if src[m] == '(' or src[m] == '<': depth++
+        if src[m] == ')' or src[m] == '>': depth--
+        if src[m] == '?' and depth == 0 and qm < 0: qm = m
     }
     resEnd := qm if qm >= 0 else k
     names Vec<String&>
     results Vec<String&>
-    for it in splitTop(src, mask, pe, resEnd, true) { results.Push(unname(it, names)) }
+    for it in splitTop(src, mask, pe, resEnd, true): results.Push(unname(it, names))
     errs := srcmask.Strip(src[qm:k]) if qm >= 0 else ""
     kept Vec<String&>
     items := splitTop(src, mask, k + 1, ke - 1, false)
     for it in items {
         why := ""
-        if hasWord(it, "return") and not hasWord(it, "outlives") { why = "a guarantee" }
+        if hasWord(it, "return") and not hasWord(it, "outlives"): why = "a guarantee"
         for n in names {
-            if hasWord(it, n) { why = "a guarantee" }
+            if hasWord(it, n): why = "a guarantee"
         }
         if it.StartsWith("for ") or it.StartsWith("if ") or hasWord(it, "fits") { why = "an item a contract no longer writes" }
         if why.Len() > 0: c.left.Push($path + ":" + $line + ": " + $why + " dropped: [" + $it + "]")
         else: kept.Push($it)
     }
-    if moved and kept.Len() == items.Len() { return "" }
+    if moved and kept.Len() == items.Len(): return ""
     out := StringBuilder()
     out.Push(src[a:pe])
     if kept.Len() > 0 {
         out.Push(" [")
         for i in range kept.Len() {
-            if i > 0 { out.Push(", ") }
+            if i > 0: out.Push(", ")
             out.Push(kept[i])
         }
         out.Push("]")
@@ -202,7 +202,7 @@ fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c m
     if results.Len() > 0 {
         out.Push(" ")
         for i in range results.Len() {
-            if i > 0 { out.Push(", ") }
+            if i > 0: out.Push(", ")
             out.Push(results[i])
         }
     }
@@ -224,7 +224,7 @@ fn migrate(path String&, src String&, c mut Result&) String {
         b := lineEnd(src, a)
         r := moveLine(path, src, mask, a, b, line, c)
         if r.Len() > 0 { out.Push(r) } else { out.Push(src[a:b]) }
-        if b < src.Len() { out.PushChar('\n') }
+        if b < src.Len(): out.PushChar('\n')
         a = b + 1
         line++
     }
@@ -259,9 +259,9 @@ fn main() ? {
             unreachable
         }
         out := migrate(path, src, total)
-        if out == src { continue }
+        if out == src: continue
         changed++
-        if verbose { srcmask.Say(path) }
+        if verbose: srcmask.Say(path)
         if not check {
             try os.WriteFile(path, out) catch {
                 srcmask.SayErr("contracts_migrate: cannot write " + $path)
@@ -271,8 +271,8 @@ fn main() ? {
     }
     verb := "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.changes + " contracts")
-    for l in total.left { srcmask.Say("by hand: " + $l) }
-    if check and changed > 0 { os.Exit(1) }
+    for l in total.left: srcmask.Say("by hand: " + $l)
+    if check and changed > 0: os.Exit(1)
 }
 
 test "a contract moved after the parameters, its results' names and guarantees dropped" {

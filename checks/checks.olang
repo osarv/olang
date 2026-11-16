@@ -87,7 +87,7 @@ Cases Array<String&>& = only(try os.ReadDir("checks/cases") catch default Array<
 fn wanted(name String&) Bool { return Only.Split(",").Some(fn(w String&) Bool { return name.Contains(w) }) }
 
 fn only(names Array<String&>&) Array<String&>& {
-    if Only == "" { return names }
+    if Only == "": return names
     n := 0
     for x in names { if wanted(x): n++ }
     out mut Array<String&>& = Array<String&>(n)
@@ -129,15 +129,15 @@ fn runAll() Array<String&>& {
     outcomes mut Array<String&>& = Array<String&>(n)
     took mut Array<I64>& = Array<I64>(n)
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
-    for k in range Checks.Len() { chan.Send(queue, k)! }
+    for k in range Checks.Len(): chan.Send(queue, k)!
     kept := try os.ReadDir(Store) catch default Array<String&>(0)
-    if kept.Len() > StoreMost { os.Run("rm -rf " + $os.Quote(Store)) }
+    if kept.Len() > StoreMost: os.Run("rm -rf " + $os.Quote(Store))
     join {
-        for _ in range Workers { spawn worker(queue, outcomes, took) }
+        for _ in range Workers: spawn worker(queue, outcomes, took)
         seed := fresh(Seed)
         try os.WriteFile($seed + "/seed.olang", "fn main() ? { }\n") catch { }
         sh(seed, $store() + " \"$OLANG\" build seed.olang > out.txt 2>&1")
-        for k in range Checks.Len(), n { chan.Send(queue, k)! }
+        for k in range Checks.Len(), n: chan.Send(queue, k)!
         chan.Close(queue)
     }
     writeTimes(took)
@@ -155,9 +155,9 @@ fn worker(queue mut chan.Chan<I64>&, outcomes mut Array<String&>&, took mut Arra
 # CHECKS_TIMES set to a path: how long each check took, a line each - milliseconds, then its name - longest first
 fn writeTimes(took Array<I64>&) {
     path := try os.Env("CHECKS_TIMES") catch default ""
-    if path == "" { return }
+    if path == "": return
     order := Array<I64>(took.Len())
-    for i in range took.Len() { order[i] = i }
+    for i in range took.Len(): order[i] = i
     order.Sort(fn(a I64, b I64) Bool { return took[a] > took[b] })
     b := StringBuilder()
     for k in order {
@@ -169,7 +169,7 @@ fn writeTimes(took Array<I64>&) {
 
 # check number k: a scenario, or a case after them
 fn runCheck(k I64) String& {
-    if k >= Checks.Len() { return runCase(Cases[k - Checks.Len()]) }
+    if k >= Checks.Len(): return runCase(Cases[k - Checks.Len()])
     r := report()
     try scenario(r, Checks[k]) catch Failed { }
     return $r.text
@@ -184,16 +184,16 @@ fn passed(name String&) Bool {
     for i, s in Checks {
         if s == name or s.StartsWith($name + "/") {
             found = true
-            if not reported(Outcomes[i]) { ok = false }
+            if not reported(Outcomes[i]): ok = false
         }
     }
-    if not found { return reported("check FAIL: no scenario is named " + $name + "\n") }
+    if not found: return reported("check FAIL: no scenario is named " + $name + "\n")
     return ok
 }
 
 # whether an outcome is a pass, printing it when it is not
 fn reported(outcome String&) Bool {
-    if outcome.Len() == 0 { return true }
+    if outcome.Len() == 0: return true
     try io.PutErr(outcome) catch io.Error { }
     return false
 }
@@ -215,7 +215,7 @@ fn (r mut report&) failed(what String&, dir String&) ? Failed {
 
 # ends the scenario as failed - as failed() does - unless ok
 fn (r mut report&) expect(ok Bool, what String&, dir String&) ? Failed {
-    if not ok { try r.failed(what, dir) }
+    if not ok: try r.failed(what, dir)
 }
 
 # the text after "<prefix>" on the line that starts with it, or "" when no line does
@@ -248,7 +248,7 @@ fn fresh(tag String&) String& {
 # section 4; the makefile's OLANG
 fn olang() String& {
     o := try os.Env("OLANG") catch default "build/olang"
-    if o.StartsWith("/") { return $o }
+    if o.StartsWith("/"): return $o
     return $root() + "/" + $o
 }
 
@@ -275,7 +275,7 @@ fn alsoNever(src String&, name String&, dir String&) String& {
         line := rest[at + 8:]
         end := try line.FindByte('\n') catch default line.Len()
         also := line[:end]
-        if not outOf(dir).Contains(also) { return failure($name + ": expected '" + $also + "'", dir) }
+        if not outOf(dir).Contains(also): return failure($name + ": expected '" + $also + "'", dir)
         rest = line[end:]
     }
     rest = src[:]
@@ -284,7 +284,7 @@ fn alsoNever(src String&, name String&, dir String&) String& {
         line := rest[at + 9:]
         end := try line.FindByte('\n') catch default line.Len()
         never := line[:end]
-        if outOf(dir).Contains(never) { return failure($name + ": did not expect '" + $never + "'", dir) }
+        if outOf(dir).Contains(never): return failure($name + ": did not expect '" + $never + "'", dir)
         rest = line[end:]
     }
     return ""
@@ -292,14 +292,14 @@ fn alsoNever(src String&, name String&, dir String&) String& {
 
 # builds one case file, in a directory of its own, and judges it against its own header
 fn runCase(name String&) String& {
-    if not name.EndsWith(".olang") { return "" }
+    if not name.EndsWith(".olang"): return ""
     src := try os.ReadFile("checks/cases/" + $name) catch default ""
     check := lineAfter(src, "# check: ")
     written := lineAfter(src, "# flags: ")
     # for another architecture, every case but those naming their own target, and the documentation's (which no
     # target changes) - and those needing what a cross C library holds alone (CrossSkip)
     cross := Target != "" and not written.Contains("-target") and not check.StartsWith("doc")
-    if Target != "" and CrossSkip.Has(name) { return "" }
+    if Target != "" and CrossSkip.Has(name): return ""
     flags := $written + " -target " + $Target if cross else written
     base := name[:name.Len() - 6]
     dir := fresh("cases/" + $base)
@@ -321,20 +321,20 @@ fn runCase(name String&) String& {
     }
     status := sh(dir, $store() + " \"$OLANG\" build " + $flags + " " + $name + " > out.txt 2>&1")
     if check.StartsWith("fail ") {
-        if status == 0 { return failure($name + " compiled but should not have", dir) }
+        if status == 0: return failure($name + " compiled but should not have", dir)
         want := check[5:]
-        if not outOf(dir).Contains(want) { return failure($name + ": expected '" + $want + "'", dir) }
+        if not outOf(dir).Contains(want): return failure($name + ": expected '" + $want + "'", dir)
         return alsoNever(src, name, dir)
     }
-    if status != 0 { return failure($name + " did not build", dir) }
+    if status != 0: return failure($name + " did not build", dir)
     bin := base
     san := false
     for f in flags.Split(" ") {                 # -debug, -race and -sanitize name their binary for what it was built as
-        if f == "-debug" { bin = $base + ".debug" }
-        if f == "-race" { bin = $base + ".race" }
-        if f == "-sanitize" { san = true }
+        if f == "-debug": bin = $base + ".debug"
+        if f == "-race": bin = $base + ".race"
+        if f == "-sanitize": san = true
     }
-    if san { bin = $bin + ".san" }
+    if san: bin = $bin + ".san"
     if check.Eq("run") {
         # another architecture's program is run by olang, through its emulator (B3g, B12a)
         run := "./build/" + $bin if not cross else $store() + " \"$OLANG\" " + $flags + " " + $name
@@ -370,9 +370,9 @@ fn stored.storedOutput(name String&) stored {
             first = false
             continue
         }
-        if row.StartsWith("=== ") or row == "" { break }
+        if row.StartsWith("=== ") or row == "": break
         if not r.Stored {
-            if not row.StartsWith("| status ") or row.EndsWith(" unstable") { return r }
+            if not row.StartsWith("| status ") or row.EndsWith(" unstable"): return r
             r.Stored = true
             continue
         }
@@ -395,7 +395,7 @@ test "every case in checks/cases does what its header says" {
     for i, name in Cases {
         if name.EndsWith(".olang") {
             count++
-            if not reported(Outcomes[Checks.Len() + i]) { bad++ }
+            if not reported(Outcomes[Checks.Len() + i]): bad++
         }
     }
     assert count > 0 or OneScenario != ""
@@ -949,7 +949,7 @@ fn manymods(r mut report&) ? Failed {
         app.Push("import m" + $i + " \"" + $name + "\"\n")
     }
     app.Push("fn main() ? io.Error {\n    s := 0\n")
-    for i in range 40 { app.Push("    s = s + m" + $i + ".F()\n") }
+    for i in range 40: app.Push("    s = s + m" + $i + ".F()\n")
     app.Push("    try io.Put($s + \"\\n\")\n}\n")
     try os.WriteFile($dir + "/app.olang", app.ToString()) catch { try r.failed("writing app.olang", dir) }
     try r.expect(sh(dir, "\"$OLANG\" build app.olang > out.txt 2>&1 && ./build/app > out.txt") == 0, "many modules", dir)
@@ -1193,7 +1193,7 @@ fn incremental(r mut report&) ? Failed {
            " && cp checks/fixtures/incremental/* " + $os.Quote($dir + "/orig"))
     try r.expect(incBuild(dir, "inc", "", "base", "main.olang", "main") == 0, "the first build", dir)
     try r.expect(sh(dir, "grep -qx '48 12 1 true 14 data one 8 note 2' base") == 0, "the first build's run: expected '48 12 1 true 14 data one 8 note 2'", dir)
-    for e in Edits { try incEdit(r, dir, e) }
+    for e in Edits: try incEdit(r, dir, e)
 }
 
 # builds the program in dir/sub with flags into dir/to: what the build said (OLANG_FACTSTATS's lines with it), what it
@@ -2183,9 +2183,9 @@ fn preludestale(r mut report&) ? Failed {
 fn nested(head String&, open String&, middle String&, close String&, tail String&, n I64) String& {
     b := StringBuilder()
     b.Push(head)
-    for _ in range n { b.Push(open) }
+    for _ in range n: b.Push(open)
     b.Push(middle)
-    for _ in range n { b.Push(close) }
+    for _ in range n: b.Push(close)
     b.Push(tail)
     return b.ToString()
 }
@@ -2479,13 +2479,9 @@ fn agree(r mut report&) ? Failed {
 fn cLiteralEnd(t String&, open I64) I64 {
     i I64 = open + 1
     for i < t.Len() {
-        if t[i] == '\\' {
-            i = i + 2
-        } else if t[i] == t[open] {
-            return i
-        } else {
-            i++
-        }
+        if t[i] == '\\': i = i + 2
+        else if t[i] == t[open]: return i
+        else: i++
     }
     return t.Len()
 }
@@ -2648,7 +2644,7 @@ fn cinterop(r mut report&) ? Failed {
         try r.expect(sh(dir, "sed 's/link \"z\"/link \"nosuchlib\"/' zinterp.olang > zbad.olang && env OLANG_EVALUATE=1 \"$OLANG\" zbad.olang > out.txt 2>&1") != 0 and
                      outOf(dir).Contains("error[B3e]: the library 'nosuchlib' a link names cannot be loaded"), "interpret's missing library", dir)
     }
-    if sh(dir, "command -v python3 > /dev/null 2>&1") != 0 { return }
+    if sh(dir, "command -v python3 > /dev/null 2>&1") != 0: return
     try os.WriteFile($dir + "/use_ctypes.py", CtypesScript) catch os.Error { try r.failed("use_ctypes.py", dir) }
     try r.expect(sh(dir, "python3 -I use_ctypes.py build/libmylib.so > py.txt 2>&1") == 0, "ctypes", dir)
     py := try os.ReadFile($dir + "/py.txt") catch default ""
@@ -2690,7 +2686,7 @@ fn target(r mut report&) ? Failed {
         try r.expect(sh(dir, "objdump -d build/loop | grep -q vfmadd") == 0, "no FMA instruction in " + $first, dir)
         try r.expect(sh(dir, "objdump -d build/loop | grep -qE 'call.*<fmaf?@plt>'") != 0, "an fma call in " + $first, dir)
     }
-    if TargetArch != "x86_64" { return }
+    if TargetArch != "x86_64": return
     # baseline x86-64: SSE2's vectors only, fma the C library's function - and the same results
     try r.expect(sh(dir, "\"$OLANG\" build -target x86-64 loop.olang > out.txt 2>&1 && ./build/loop > base.txt") == 0, "x86-64", dir)
     try r.expect((try os.ReadFile($dir + "/base.txt") catch default "") == "x86-64 128 false\n" + $results, "x86-64 printed", dir)
@@ -2717,7 +2713,7 @@ fn target(r mut report&) ? Failed {
         return
     }
     try r.expect(sh(dir, "file build/loop | grep -q 'ARM aarch64'") == 0, "-target aarch64 built no aarch64 program", dir)
-    if not hasEmulator("aarch64") { return }
+    if not hasEmulator("aarch64"): return
     try r.expect(sh(dir, "\"$OLANG\" -target aarch64-linux-gnu loop.olang > arm.txt 2>&1") == 0, "aarch64 run", dir)
     arm := try os.ReadFile($dir + "/arm.txt") catch default ""
     try r.expect(arm.StartsWith("generic ") and arm.EndsWith($"\n" + $results), "aarch64 printed " + $arm, dir)
@@ -2777,7 +2773,7 @@ test "every message of compiler/msgs.olang names rules the specification states,
     cases := Map<String&, Bool>()
     for line in body[:to].Split("\n") {
         name := line.Trim()
-        if name.Len() == 0 { continue }
+        if name.Len() == 0: continue
         if name in cases {
             try io.PutErr("check FAIL: msgs.olang's Diag names " + $name + " twice\n") catch io.Error { }
             bad++
@@ -2794,7 +2790,7 @@ test "every message of compiler/msgs.olang names rules the specification states,
         name := rest[:open]
         call := try rest.Find(") r.Msg { return r.Msg(Diag.") catch default -1
         eol := try rest.FindByte('\n') catch default rest.Len()
-        if call < 0 or call > eol { continue }
+        if call < 0 or call > eol: continue
         functions++
         kindAt I64 = call + 28
         kindEnd I64 = kindAt + (try rest[kindAt:].FindByte(',') catch default 0)
@@ -3014,7 +3010,7 @@ fn strheldProgram(r mut report&, n String&) ? Failed {
                     $n + ".want")) == 0, $n + " -s", dir)
     try r.expect(sh(dir, ($store() + " \"$OLANG\" build -debug " + $n + ".olang > out.txt 2>&1 && ./build/" + $n + ".debug > d.txt 2>&1 && cmp -s d.txt " +
                     $n + ".want")) == 0, $n + " -d", dir)
-    if n in StrheldNotInterpreted { return }
+    if n in StrheldNotInterpreted: return
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" " + $n + ".olang > i.txt 2>&1 && cmp -s i.txt " + $n + ".want") == 0, $n + " -i", dir)
 }
 

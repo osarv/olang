@@ -5,14 +5,14 @@ type Bad error { Neg }
 type R struct(n I64) { n }
 
 fn (r mut R&) Next() I64 ? Bad, Exhausted {
-    if r.n == 0 { error Exhausted.End }
+    if r.n == 0: error Exhausted.End
     r.n--
     return r.n
 }
 
 fn total<I Iterator<I64>>(it mut I&) I64 {
     s I64 = 0
-    for x in it { s += x }
+    for x in it: s += x
     return s
 }
 

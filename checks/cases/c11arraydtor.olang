@@ -21,7 +21,7 @@ fn churn() {
 }
 fn mk(n I64) I64 {
     b := Array<R>(n)
-    for i in range n { b[i] = R(i + 1) }
+    for i in range n: b[i] = R(i + 1)
     churn()
     return b[0].id + b[2].id
 }

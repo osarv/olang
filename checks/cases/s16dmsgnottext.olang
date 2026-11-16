@@ -2,5 +2,5 @@
 # S16d: an unreachable's message is text, as an assert's is
 Seed mut I64 = 0
 fn main() ? {
-    if Seed > 0 { unreachable Seed }
+    if Seed > 0: unreachable Seed
 }

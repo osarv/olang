@@ -5,7 +5,7 @@ type E error {
 }
 fn f(n I32) I32 ? E {
     defer {
-        if n > 1 { error E.Bad }
+        if n > 1: error E.Bad
     }
     return n
 }

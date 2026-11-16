@@ -57,7 +57,7 @@ fn Tail<R>(t ColumnVec<R>&, n I64 = 5) ColumnVec<R> {
 # k rows of t from row "from", copied into a table of their own
 fn rowsFrom<R>(t ColumnVec<R>&, from I64, k I64) ColumnVec<R> {
     out := ColumnVec<R>(k)
-    for i in range from, from + k { out.Push(t[i]) }
+    for i in range from, from + k: out.Push(t[i])
     return out
 }
 
@@ -88,7 +88,7 @@ fn SortByDescending<R, K ? E>(t mut ColumnVec<R>&, key fn&(r R&) K ? E) ? E {
 # t's rows laid out in the order given: row i the one that was at order[i]
 fn reorder<R>(t mut ColumnVec<R>&, order Array<I64>&) {
     was := t.ToColumns()
-    for i, k in order { t[i] = was[k] }
+    for i, k in order: t[i] = was[k]
 }
 
 # ---- groups ----
@@ -113,7 +113,7 @@ fn GroupBy<R, K, V ? E>(t ColumnVec<R>&, key fn&(r R&) K ? E, value fn&(r R&) V 
         }
         out[g] = added(out[g], v)
     }
-    for i in range out.Len() { out[i] = meanOf(out[i]) }
+    for i in range out.Len(): out[i] = meanOf(out[i])
     return out
 }
 
@@ -176,7 +176,7 @@ fn Describe<R>(t ColumnVec<R>&) ColumnVec<Summary> {
 fn numbers<R>(cols Columns<R>&, name String&) Array<F64> {
     for c in Columns<R>.Fields {
         if c.Type.Element.Kind == TypeKind.Integer or c.Type.Element.Kind == TypeKind.Float {
-            if c.Name == name { return Array<F64>[F64(x) for x in c.Of(cols)] }
+            if c.Name == name: return Array<F64>[F64(x) for x in c.Of(cols)]
         }
     }
     unreachable
@@ -210,15 +210,15 @@ fn Table<R>(t ColumnVec<R>&, rows I64 = 20) String {
     widths := Array<I64>[widest(heads[c], cells[c]) for c in range heads.Len()]
     b := StringBuilder()
     b.Push(line(Array<String>[heads[c] for c in range heads.Len()], widths, right))
-    for i in range shown { b.Push(line(Array<String>[cells[c][i] for c in range heads.Len()], widths, right)) }
-    if shown < t.Len() { b.Push($"... " + $(t.Len() - shown) + " more rows\n") }
+    for i in range shown: b.Push(line(Array<String>[cells[c][i] for c in range heads.Len()], widths, right))
+    if shown < t.Len(): b.Push($"... " + $(t.Len() - shown) + " more rows\n")
     return b.ToString()
 }
 
 # the width of a column: its widest cell, header included
 fn widest(head String&, cells Array<String>&) I64 {
     w := head.Len()
-    for c in cells { w = w.Max(c.Len()) }
+    for c in cells: w = w.Max(c.Len())
     return w
 }
 
@@ -302,7 +302,7 @@ test Filter "keeps the rows a function holds for, and fails with what it fails w
     cheap := Filter(t, fn(r): return r.Price < 2.0)
     assert cheap.Sym == Array<String>["B", "C"] and Head(t, 0).Len() == 0 and Tail(t, 2).Sym == Array<String>["C", "A"]
     failing := try Filter(t, fn(r) Bool ? tooBig {
-        if r.Qty > 3 { error tooBig }
+        if r.Qty > 3: error tooBig
         return true
     }) catch tooBig { return }
     assert false, "a failing filter gave " + $failing

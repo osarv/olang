@@ -8,6 +8,6 @@ fn main() ? {
     v.Push(1)
     w mut Vec<I64>& = v
     d := v.View()
-    for i in range 100 { w.Push(i) }
+    for i in range 100: w.Push(i)
     try io.PutLine($d[0])
 }

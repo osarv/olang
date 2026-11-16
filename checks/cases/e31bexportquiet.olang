@@ -7,7 +7,7 @@ import unistd "unistd.h"
 type blk struct(n I64) { n }
 G mut Vec<blk>
 export fn olang_grow(n I64) {
-    for i in range n { G.Push(blk(i)) }
+    for i in range n: G.Push(blk(i))
 }
 fn (b mut blk&) Bump() {
     unistd.usleep(0)

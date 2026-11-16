@@ -17,9 +17,7 @@ fn work() I64 {
 }
 fn work2() I64 {
     t I64 = 0
-    for i in range 1000000 {
-        t += takeR(idr(Node(i)))
-    }
+    for i in range 1000000: t += takeR(idr(Node(i)))
     return t
 }
 fn main() ? {

@@ -15,15 +15,15 @@ type Box struct() {
 }
 type W struct(b Box) { b }
 fn ys(b mut Box&, n I64) {
-    if n > 100 { xs(b, n - 1) }
-    if n > 200 { zs(b, n - 1) }
+    if n > 100: xs(b, n - 1)
+    if n > 200: zs(b, n - 1)
     if n == 0 {
         b.head.next = Node()
         b.head.next!.v = 42
     }
 }
 fn xs(b mut Box&, n I64) {
-    if n > 0 { ys(b, n - 1) }
+    if n > 0: ys(b, n - 1)
 }
 fn zs(b mut Box&, n I64) {
     xs(b, n)

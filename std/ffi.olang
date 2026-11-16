@@ -87,21 +87,21 @@ fn Has(name String&) Bool {
 fn Call(name String&, kinds Array<U8>&, words mut Array<U64>&, result U8 = 0, fixed I64 = -1) U64 ? Error {
     need I64 = 0
     for k in kinds {
-        if k == 0 { error Error.BadArguments }
+        if k == 0: error Error.BadArguments
         if k < 0x80 {
             need += 1
             continue
         }
-        if need >= words.Len() { error Error.BadArguments }
+        if need >= words.Len(): error Error.BadArguments
         n := I64(words[need])
-        if n < 0 or n > (words.Len() - need - 1) * 8 { error Error.BadArguments }
+        if n < 0 or n > (words.Len() - need - 1) * 8: error Error.BadArguments
         need += 1 + (n * width(k & 0x7F) + 7) / 8
     }
-    if need > words.Len() { error Error.BadArguments }
+    if need > words.Len(): error Error.BadArguments
     ended := Array<U8>(kinds.Len() + 1)
-    for i, k in kinds { ended[i] = k }
+    for i, k in kinds: ended[i] = k
     named := $name + "\0"
-    if fixed > kinds.Len() { error Error.BadArguments }
+    if fixed > kinds.Len(): error Error.BadArguments
     match __olang_dyncall_var_check(named, ended, result, fixed) {
         case 1 { error Error.NotFound }
         case 2 { error Error.Unsupported }

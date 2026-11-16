@@ -25,20 +25,20 @@ fn Item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
     dot := try name.Find(".") catch default -1
     if dot > 0 {
         f := fnNamed(c, mi, name)
-        if f < 0 { error Missing.Name }
+        if f < 0: error Missing.Name
         return fnItem(c, sc, f)
     }
     id := nm.Intern(name)
     for e in c.P.R.Tables[mi].Entries {
-        if e.Name != id { continue }
+        if e.Name != id: continue
         if e.Kind == names.What.Func {
             f := c.P.FnNamed(mi, id)
-            if f >= 0 { return fnItem(c, sc, f) }
+            if f >= 0: return fnItem(c, sc, f)
         }
-        if e.Kind == names.What.Global { return globalItem(c, x, mi, e) }
+        if e.Kind == names.What.Global: return globalItem(c, x, mi, e)
     }
     d := typeNamed(c, mi, name)
-    if d >= types.DeclId(0) { return typeItem(c, d) }
+    if d >= types.DeclId(0): return typeItem(c, d)
     error Missing.Name
 }
 
@@ -58,7 +58,7 @@ type Code struct(Label String&, File String&, Line I64, Symbol String&) {
 fn Codes(c mut typecheck.Checker&, mi I64, name String&) Vec<Code> ? Missing {
     c.SpellFrom(mi)
     f := fnNamed(c, mi, name)
-    if f < 0 { error Missing.Name }
+    if f < 0: error Missing.Name
     decl := c.P.FnDecl(f)
     dg := c.P.L.Diags
     file := c.P.L.Mods[c.P.FnModule(f)].File
@@ -88,14 +88,14 @@ fn fnNamed(c mut typecheck.Checker&, mi I64, name String&) I64 {
     if dot > 0 {
         d := typeNamed(c, mi, name[:dot])
         m := nm.Intern(name[dot + 1:])
-        if d < types.DeclId(0) { return writtenMethod(c, mi, name[:dot], m) }
+        if d < types.DeclId(0): return writtenMethod(c, mi, name[:dot], m)
         f := c.P.MethodOf(c.P.SelfType(d), m)
         if f < 0: f = c.P.BuilderOf(c.P.SelfType(d), m, true)   # D19: Type.Builder
         return f if f >= 0 else writtenMethod(c, mi, name[:dot], m)   # a trait's default (Iterator.TakeWhile)
     }
     id := nm.Intern(name)
     for e in c.P.R.Tables[mi].Entries {
-        if e.Name == id and e.Kind == names.What.Func { return c.P.FnNamed(mi, id) }
+        if e.Name == id and e.Kind == names.What.Func: return c.P.FnNamed(mi, id)
     }
     return -1
 }
@@ -144,9 +144,9 @@ fn fnItem(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String {
     noValue(b, c, sc, f, -1, "    ")
     decl := c.P.FnDecl(f)
     for i in range c.P.InstanceCount() {
-        if c.P.InstanceFn(i) != f { continue }
+        if c.P.InstanceFn(i) != f: continue
         body := c.BodyOfInstance(i)
-        if body < 0 { continue }
+        if body < 0: continue
         sig := named(c, c.P.InstanceSig(i), decl.Recv, decl.S.Params)
         b.Push($"    instance " + $c.P.L.Names.Text(decl.Name) + $typeArgs(c, c.P.InstanceArgs(i)) + ": " + $sigOf(c, sig, body) + "\n")
         obligations(b, c, sc, body, "        ")
@@ -185,7 +185,7 @@ fn fnLine(c mut typecheck.Checker&, f I64, sig types.TypeId, body I64) String {
             at := args.Len() - 1
             for i in range 1, args.Len() {
                 ch := args[i]
-                if ch == '<' or ch == '(' { depth++ }
+                if ch == '<' or ch == '(': depth++
                 if (ch == '>' or ch == ')') and depth > 0 {
                     depth--
                     continue
@@ -212,11 +212,11 @@ fn fnLine(c mut typecheck.Checker&, f I64, sig types.TypeId, body I64) String {
 # a function type carrying the names its declaration gives its parameters, the receiver's first
 fn named(c mut typecheck.Checker&, sig types.TypeId, recv ast.Param?&, params Array<ast.Param&>&) types.TypeId {
     ids Vec<I64>
-    if recv != null { ids.Push(I64(recv.Name)) }
+    if recv != null: ids.Push(I64(recv.Name))
     if params.Len() > 0 {
-        for p in params { ids.Push(I64(p.Name)) }
+        for p in params: ids.Push(I64(p.Name))
     }
-    if ids.Len() != c.P.T.Items(c.P.T.Params(sig)).Len() { return sig }
+    if ids.Len() != c.P.T.Items(c.P.T.Params(sig)).Len(): return sig
     return c.P.T.WithNames(sig, c.P.T.ParamNames(ids.ToArray()))
 }
 
@@ -231,7 +231,7 @@ fn typeArgs(c mut typecheck.Checker&, args types.ListId) String {
             if c.P.T.ErrSetItems(a) != types.ListId(0) { b.Push($(" ? " if k > 0 else "? ") + $c.Ty(a)) }
             continue
         }
-        if k > 0 { b.Push(", ") }
+        if k > 0: b.Push(", ")
         b.Push(c.Ty(a))
         k++
     }
@@ -242,7 +242,7 @@ fn typeArgs(c mut typecheck.Checker&, args types.ListId) String {
 # a function type as the checker spells it, its error set replaced by the inferred one where it is "?" alone - as a
 # declaration's signature, "fn(...)", with no marker (T21: a place's type has one, a declaration none)
 fn sigOf(c mut typecheck.Checker&, sig types.TypeId, body I64) String {
-    if body < 0 or not c.InfersErrors(sig) { return declSig(c, sig) }
+    if body < 0 or not c.InfersErrors(sig): return declSig(c, sig)
     errs := c.ErrorsOf(body)
     full := c.P.T.Func(c.P.T.Params(sig), c.P.T.Result(sig), errs, c.P.T.ScopesOf(sig), c.P.T.NamesIdOf(sig))
     return $declSig(c, full) + "   # its error set inferred"
@@ -257,7 +257,7 @@ fn declSig(c mut typecheck.Checker&, sig types.TypeId) String {
 # a parameter list as the checker spells it (its parentheses left off), each defaulted parameter followed by " = " and
 # its default as module mi's source writes it (D8a); skip items come first that are no declared parameter (a receiver)
 fn withDefaults(c mut typecheck.Checker&, list String&, params Array<ast.Param&>&, mi I64, skip I64) String {
-    if params.Len() == 0 or mi < 0 { return $list }
+    if params.Len() == 0 or mi < 0: return $list
     src := c.P.L.Mods[mi].Src!.Text
     b := StringBuilder()
     rest := list
@@ -271,7 +271,7 @@ fn withDefaults(c mut typecheck.Checker&, list String&, params Array<ast.Param&>
             b.Push($" = " + $src[I64(dsp.Start):I64(dsp.End)])
         }
         k++
-        if end >= rest.Len() { break }
+        if end >= rest.Len(): break
         b.Push(rest[end:end + 1])
         rest = rest[end + 1:]
     }
@@ -283,12 +283,12 @@ fn firstItemEnd(s String&) I64 {
     depth I64 = 0
     for i in range s.Len() {
         ch := s[i]
-        if ch == '(' or ch == '<' or ch == '[' { depth++ }
+        if ch == '(' or ch == '<' or ch == '[': depth++
         if (ch == ')' or ch == '>' or ch == ']') and depth > 0 {
             depth--
             continue
         }
-        if depth == 0 and (ch == ',' or ch == ')') { return i }
+        if depth == 0 and (ch == ',' or ch == ')'): return i
     }
     return s.Len()
 }
@@ -297,7 +297,7 @@ fn firstItemEnd(s String&) I64 {
 fn listed(src String&, ts Array<ast.TypeRef&>&) String {
     b := StringBuilder()
     for t in ts {
-        if b.Len() > 0 { b.Push(", ") }
+        if b.Len() > 0: b.Push(", ")
         b.Push(src[I64(t.Span().Start):I64(t.Span().End)])
     }
     return b.ToString()
@@ -306,7 +306,7 @@ fn listed(src String&, ts Array<ast.TypeRef&>&) String {
 # an owner's type variables as its declaration introduces them, "<T Shape, U>", nothing for none
 fn typeVars(c mut typecheck.Checker&, owner I64, skip I64) String {
     n := c.P.VarCount(owner)
-    if n <= skip { return "" }
+    if n <= skip: return ""
     b := StringBuilder()
     b.PushChar('<')
     for i in range skip, n {
@@ -316,9 +316,9 @@ fn typeVars(c mut typecheck.Checker&, owner I64, skip I64) String {
             b.Push($(" ? " if i > skip else "? ") + $c.P.L.Names.Text(v.Name))
             continue
         }
-        if i > skip { b.Push(", ") }
+        if i > skip: b.Push(", ")
         b.Push(c.P.L.Names.Text(v.Name))
-        if v.Const != types.UnknownT { b.Push($" " + $c.Ty(v.Const)) }
+        if v.Const != types.UnknownT: b.Push($" " + $c.Ty(v.Const))
         if v.Bound != types.UnknownT {
             for t in c.P.BoundTraits(v.Bound) { b.Push($" " + $c.Ty(t)) }    # an intersection side by side (G19)
         }
@@ -329,10 +329,10 @@ fn typeVars(c mut typecheck.Checker&, owner I64, skip I64) String {
 
 # how many of a method's variables its receiver's type arguments introduce (QW: Go's rule), written by the receiver
 fn receiverVars(c mut typecheck.Checker&, f I64) I64 {
-    if c.P.FnDecl(f).Recv == null { return 0 }
+    if c.P.FnDecl(f).Recv == null: return 0
     recv := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))[0]
-    if c.P.T.KindOf(recv) == types.Kind.Ref { recv = c.P.T.Referent(recv) }
-    if c.P.T.KindOf(recv) != types.Kind.Named { return 0 }
+    if c.P.T.KindOf(recv) == types.Kind.Ref: recv = c.P.T.Referent(recv)
+    if c.P.T.KindOf(recv) != types.Kind.Named: return 0
     return c.P.T.Items(c.P.T.Args(recv)).Len()
 }
 
@@ -352,17 +352,17 @@ fn reqLines(b mut StringBuilder&, c mut typecheck.Checker&, body Array<ast.Stmt&
 # its scope obligations, inferred from the body (O10b, QCB: none is written) - what every call is held to - one a line:
 # "# scopes: b outlives a", "return" the result scope
 fn obligations(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, body I64, indent String&) {
-    if body < 0 { return }
+    if body < 0: return
     for o in sc.Obligations(body, c.P.L.Names) { b.Push($indent + "# scopes: " + $o + "\n") }
 }
 
 # A2.3: what a call may do beyond computing its result, read off the body and everything it may call (effects.olang)
 fn effectLine(b mut StringBuilder&, c mut typecheck.Checker&, f I64, body I64, indent String&) {
-    if body < 0 or c.P.FnIsExtern(f) { return }
+    if body < 0 or c.P.FnIsExtern(f): return
     decl := c.P.FnDecl(f)
     ps Vec<String&>
-    if decl.Recv != null { ps.Push($c.P.L.Names.Text(decl.Recv!.Name)) }
-    for p in decl.S.Params { ps.Push($c.P.L.Names.Text(p.Name)) }
+    if decl.Recv != null: ps.Push($c.P.L.Names.Text(decl.Recv!.Name))
+    for p in decl.S.Params: ps.Push($c.P.L.Names.Text(p.Name))
     fx := c.Effects()
     b.Push($indent + "# effects: " + $effects.Describe(fx.Of(body), ps.ToArray()) + "\n")
 }
@@ -375,7 +375,7 @@ fn noValue(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, f I
         b.Push($indent + "# not a value: " + $why + "\n")
         return
     }
-    if body < 0 { return }
+    if body < 0: return
     decl := c.P.FnDecl(f)
     inst := c.P.FnInstance(f, types.ListId(0))
     fitsLine(b, c, sc, named(c, c.P.InstanceSig(inst), decl.Recv, decl.S.Params), body, indent)
@@ -385,7 +385,7 @@ fn noValue(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, f I
 # it breaks none of (effects.olang's Breaks), then the relations its scope obligations say (T21c). A function held in
 # locals and results only (T22a) says so after it
 fn fitsLine(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, sig types.TypeId, body I64, indent String&) {
-    if body < 0 { return }
+    if body < 0: return
     full := sig
     if c.InfersErrors(sig) { full = c.P.T.Func(c.P.T.Params(sig), c.P.T.Result(sig), c.ErrorsOf(body), c.P.T.ScopesOf(sig), c.P.T.NamesIdOf(sig)) }
     fx := c.Effects().Of(body)
@@ -404,7 +404,7 @@ fn fitsLine(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, si
 
 # T22c: the twins of the body - the function values its calls were judged with, and the call each was first asked for at
 fn twinLines(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, body I64, indent String&) {
-    if body < 0 { return }
+    if body < 0: return
     dg := c.P.L.Diags
     for t in range sc.TwinCount() {
         if sc.TwinBody(t) != body: continue
@@ -417,13 +417,13 @@ fn twinLines(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, b
 # T22a (docs/sec8.md 5.5): where a function whose scope obligations are more than a written function type says of every
 # call may go as a value - "" for one any value of its type may be
 fn AsValueWhere(c mut typecheck.Checker&, sc scope.Scoper&, body I64) String {
-    if body < 0 { return "" }
+    if body < 0: return ""
     obs := sc.Obligations(body, c.P.L.Names)
     if obs.Len() > 0 and not sc.ValueCovered(body) {
         return $"held in locals and results only - its scopes (" + $obs.Join(", ") + ") are more than a written function type says of every call (T22a)"
     }
     g := sc.GivesHeld(body)
-    if g == "" { return "" }
+    if g == "": return ""
     return $"held in locals and results only - the function it gives, " + $g + ", ties scopes more than a written function type says of every call (T22a)"
 }
 
@@ -434,8 +434,8 @@ fn AsValueWhere(c mut typecheck.Checker&, sc scope.Scoper&, body I64) String {
 fn NoValueWhy(c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64) String {
     decl := c.P.FnDecl(f)
     name := c.P.L.Names.Text(decl.Name)
-    if decl.Recv != null { return "a method is called as one (M19) - a lambda calling it is a value" }
-    if c.P.FnIsExtern(f) { return "an extern fn is called by its name (X1) - a lambda calling it is a value" }
+    if decl.Recv != null: return "a method is called as one (M19) - a lambda calling it is a value"
+    if c.P.FnIsExtern(f): return "an extern fn is called by its name (X1) - a lambda calling it is a value"
     owner := generic.FnOwner(f)
     written := decl.TypeParams.Len() + (c.P.OwnerVarCount(f) if decl.IsBuilder() else 0)
     if c.P.VarCount(owner) > written {
@@ -462,7 +462,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
     self := c.P.SelfType(d)
     c.P.Body(self)
     td0 := c.P.TypeDecl(d)
-    if td0 != null { attrLines(b, c, c.P.DeclModule(d), td0.Attrs, "") }
+    if td0 != null: attrLines(b, c, c.P.DeclModule(d), td0.Attrs, "")
     nm := c.P.L.Names
     name := $nm.Text(c.P.T.DeclName(d)) + $typeVars(c, generic.DeclOwner(d), 0)
     match c.P.T.DeclKindOf(d) {
@@ -478,7 +478,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
                 b.Push("    ")
                 b.Push(attrsBefore(c, c.P.Descriptor(generic.DescCase, self, k, 0)))
                 b.Push(nm.Text(ns[k]))
-                if k < cases.Len() and cases[k] != types.TypeId(0) { pushPayload(b, c, d, self, k) }
+                if k < cases.Len() and cases[k] != types.TypeId(0): pushPayload(b, c, d, self, k)
                 b.PushChar('\n')
             }
         }
@@ -537,15 +537,15 @@ fn traitItem(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId, nam
     match td!.Body {
         case ast.TypeBody.Trait(_, exts, members) {
             # what it extends (T30a) and the types it lists (T31a), as written
-            if exts.Len() > 0 { b.Push($" extends " + $listed(src, exts)) }
-            if members.Len() > 0 { b.Push($" for " + $listed(src, members)) }
+            if exts.Len() > 0: b.Push($" extends " + $listed(src, exts))
+            if members.Len() > 0: b.Push($" for " + $listed(src, members))
         }
         case _ { }
     }
     b.Push("\n")
     match td!.Body {
         case ast.TypeBody.Trait(ms, _, _) {
-            for m in ms { b.Push($"    " + $src[I64(m.Sp.Start):I64(m.Sp.End)].Trim() + "\n") }
+            for m in ms: b.Push($"    " + $src[I64(m.Sp.Start):I64(m.Sp.End)].Trim() + "\n")
         }
         case _ { }
     }
@@ -624,9 +624,9 @@ fn firstItemEndAll(s String&) I64 {
     depth I64 = 0
     for i in range s.Len() {
         ch := s[i]
-        if ch == '(' or ch == '<' or ch == '[' { depth++ }
+        if ch == '(' or ch == '<' or ch == '[': depth++
         if ch == ')' or ch == '>' or ch == ']' {
-            if depth == 0 { return i }
+            if depth == 0: return i
             depth--
         }
     }
@@ -635,18 +635,18 @@ fn firstItemEndAll(s String&) I64 {
 
 # G39: a declaration's attributes as written, a line each
 fn attrLines(b mut StringBuilder&, c mut typecheck.Checker&, mi I64, attrs Array<ast.Attr&>&, indent String&) {
-    if attrs.Len() == 0 { return }
+    if attrs.Len() == 0: return
     src := c.P.L.Mods[mi].Src!.Text
-    for a in attrs { b.Push($indent + $src[I64(a.Sp.Start):I64(a.Sp.End)] + "\n") }
+    for a in attrs: b.Push($indent + $src[I64(a.Sp.Start):I64(a.Sp.End)] + "\n")
 }
 
 # G39: the attributes of what a descriptor names as written, each followed by a space - a field's, a case's
 fn attrsBefore(c mut typecheck.Checker&, desc types.TypeId) String {
     mi, attrs := c.P.AttrsOf(desc)
-    if mi < 0 or attrs.Len() == 0 { return "" }
+    if mi < 0 or attrs.Len() == 0: return ""
     src := c.P.L.Mods[mi].Src!.Text
     b := StringBuilder()
-    for a in attrs { b.Push($src[I64(a.Sp.Start):I64(a.Sp.End)] + " ") }
+    for a in attrs: b.Push($src[I64(a.Sp.Start):I64(a.Sp.End)] + " ")
     return b.ToString()
 }
 
@@ -656,9 +656,9 @@ fn errorsAfter(rest String&) String {
     depth I64 = 0
     for i in range rest.Len() {
         ch := rest[i]
-        if ch == '(' or ch == '<' or ch == '[' { depth++ }
-        if (ch == ')' or ch == '>' or ch == ']') and depth > 0 { depth-- }
-        if depth == 0 and ch == '?' and i > 0 and rest[i - 1] == ' ' { return rest[i - 1:] }
+        if ch == '(' or ch == '<' or ch == '[': depth++
+        if (ch == ')' or ch == '>' or ch == ']') and depth > 0: depth--
+        if depth == 0 and ch == '?' and i > 0 and rest[i - 1] == ' ': return rest[i - 1:]
     }
     return ""
 }
@@ -697,11 +697,11 @@ fn methods(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) {
     c.P.AllFns()
     for f in range c.P.FnCount() {
         decl := c.P.FnDecl(f)
-        if decl.Recv == null or c.P.MethodOf(self, decl.Name) != f { continue }
+        if decl.Recv == null or c.P.MethodOf(self, decl.Name) != f: continue
         # its own, not one it inherits (T29f)
         recv := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))[0]
-        if c.P.T.KindOf(recv) == types.Kind.Ref { recv = c.P.T.Referent(recv) }
-        if c.P.T.KindOf(recv) != types.Kind.Named or c.P.T.DeclOf(recv) != c.P.T.DeclOf(self) { continue }
+        if c.P.T.KindOf(recv) == types.Kind.Ref: recv = c.P.T.Referent(recv)
+        if c.P.T.KindOf(recv) != types.Kind.Named or c.P.T.DeclOf(recv) != c.P.T.DeclOf(self): continue
         if c.P.VarCount(generic.FnOwner(f)) == 0 {
             inst := c.P.FnInstance(f, types.ListId(0))
             b.Push($"    " + $fnLine(c, f, c.P.InstanceSig(inst), c.BodyOfInstance(inst)) + "\n")
@@ -721,9 +721,9 @@ fn Builders(c mut typecheck.Checker&, d types.DeclId, all Bool) Vec<I64> {
     c.P.AllFns()
     for f in range c.P.FnCount() {
         decl := c.P.FnDecl(f)
-        if not decl.IsBuilder() or BuilderOf(c, f) != d { continue }
+        if not decl.IsBuilder() or BuilderOf(c, f) != d: continue
         text := $c.P.L.Names.Text(decl.Member)
-        if not all and not (text.Len() > 0 and text[0].IsUpper()) { continue }
+        if not all and not (text.Len() > 0 and text[0].IsUpper()): continue
         out.Push(f)
     }
     return out
@@ -733,13 +733,13 @@ fn Builders(c mut typecheck.Checker&, d types.DeclId, all Bool) Vec<I64> {
 # type variable or a built-in type
 fn BuilderOf(c mut typecheck.Checker&, f I64) types.DeclId {
     o := c.P.OwnerOf(f)
-    if o == types.UnknownT or c.P.T.KindOf(o) != types.Kind.Named { return types.DeclId(-1) }
+    if o == types.UnknownT or c.P.T.KindOf(o) != types.Kind.Named: return types.DeclId(-1)
     return c.P.T.DeclOf(o)
 }
 
 # one line per builder, as methods are listed
 fn builders(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId) {
-    for f in Builders(c, d, false) { b.Push($"    " + $FnLine(c, f) + "\n") }
+    for f in Builders(c, d, false): b.Push($"    " + $FnLine(c, f) + "\n")
 }
 
 # a function's first line as explain prints it, its instances left out
@@ -757,14 +757,14 @@ fn traitsMet(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) 
     for mi in range c.P.R.Tables.Len() {
         tab := c.P.R.Tables[mi]
         for ei in range tab.Entries.Len() {
-            if tab.Entries[ei].Kind != names.What.Type or tab.Entries[ei].Decl == null { continue }
+            if tab.Entries[ei].Kind != names.What.Type or tab.Entries[ei].Decl == null: continue
             d := c.P.DeclFor(mi, ei)
-            if c.P.T.DeclKindOf(d) != types.DeclKind.Trait or c.P.VarCount(generic.DeclOwner(d)) > 0 { continue }
+            if c.P.T.DeclKindOf(d) != types.DeclKind.Trait or c.P.VarCount(generic.DeclOwner(d)) > 0: continue
             tr := c.P.SelfType(d)
-            if c.P.Satisfies(self, tr) { met.Push(c.Ty(tr)) }
+            if c.P.Satisfies(self, tr): met.Push(c.Ty(tr))
         }
     }
-    if met.Len() > 0 { b.Push($"    meets " + $met.Join(", ") + "\n") }
+    if met.Len() > 0: b.Push($"    meets " + $met.Join(", ") + "\n")
 }
 
 # ---- globals ----
@@ -817,18 +817,18 @@ fn Caps(c mut typecheck.Checker&) String {
     reach := Array<effects.Facts>(mods.Len(), effects.Facts())
     for b in range c.Bodies.Len() {
         mi := fx.ModuleOf(b)
-        if mi >= 0 { effects.Merge(reach[mi], fx.Of(b)) }
+        if mi >= 0: effects.Merge(reach[mi], fx.Of(b))
     }
     ids Vec<String&>
-    for m in mods { ids.Push(m.Identity) }
+    for m in mods: ids.Push(m.Identity)
     order Vec<I64>
     order.Push(c.P.L.Root)
     for mi in range mods.Len() {
-        if mi != c.P.L.Root and capsShown(mods[mi].Identity, mods[mi].Prelude) { order.Push(mi) }
+        if mi != c.P.L.Root and capsShown(mods[mi].Identity, mods[mi].Prelude): order.Push(mi)
     }
     width I64 = 0
     for mi in order {
-        if ids[mi].Len() > width { width = ids[mi].Len() }
+        if ids[mi].Len() > width: width = ids[mi].Len()
     }
     b := StringBuilder()
     for mi in order {

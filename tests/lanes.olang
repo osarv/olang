@@ -7,13 +7,13 @@ type Vec3 extends Array<F64>
 
 fn count(n I64) Array<I32> {
     a := Array<I32>(n)
-    for i in range n { a[i] = I32(i) }
+    for i in range n: a[i] = I32(i)
     return a
 }
 
 fn floats(n I64, step F64) Array<F64> {
     a := Array<F64>(n)
-    for i in range n { a[i] = F64(i) * step }
+    for i in range n: a[i] = F64(i) * step
     return a
 }
 
@@ -55,7 +55,7 @@ fn all(n I64) Bool {
     y += y
     inplace Bool = $y == "Array<F32>[4, 4, 4, 4]"
     t := 0.0
-    for e in a * 2.0 { t += e }
+    for e in a * 2.0: t += e
     walked Bool = t == 12.0 and (a + 1.0).Len() == 4 and (a * b)[3] == 4.5
     return sums and ints and neg and meet and totals and masks and sel and fixed and wrap and kept and complex and inplace and
         walked

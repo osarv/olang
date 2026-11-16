@@ -28,8 +28,8 @@ type W struct(b Box) {
 }
 fn (b Box&) sum() I64 {
     t I64 = 0
-    for x in b.items { t += x.v }
-    for i in range b.items.Len() { t += b.items[i].v * 10 }
+    for x in b.items: t += x.v
+    for i in range b.items.Len(): t += b.items[i].v * 10
     r := try b.items.RunFrom(0) catch Exhausted { return t }
     return t + r.Len() * 100 + b.hd.view().Len() * 1000
 }

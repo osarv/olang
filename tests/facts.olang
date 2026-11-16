@@ -33,7 +33,7 @@ fn Settle(x I64) I64 {
 fn Gather(n I64) I64 {
     total I64 = 0
     join {
-        for i in range n { spawn Fact(i) }
+        for i in range n: spawn Fact(i)
     }
     return total
 }
@@ -98,7 +98,7 @@ assert not Scale.Exported and not Scale.Extern
 fn terminating() I64 {
     n I64 = 0
     for f in me.Functions {
-        if f.Terminates { n++ }
+        if f.Terminates: n++
     }
     return n
 }
@@ -106,7 +106,7 @@ fn terminating() I64 {
 fn commuting() I64 {
     n I64 = 0
     for m in Vec2.Methods {
-        if m.Commutes { n++ }
+        if m.Commutes: n++
     }
     return n
 }

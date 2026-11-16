@@ -22,13 +22,13 @@ type H struct() {
 fn mkText(k I64) String& { return "t" + $k }
 fn setName(r mut Rec&, s String&) { r.name = s }
 fn each(a mut Array<Rec>&, g fn&(x mut Rec&)) {
-    for i in range a.Len() { g(a[i]) }
+    for i in range a.Len(): g(a[i])
 }
 fn run(h mut H&, s String&) String {
     recs := h.arr
     each(recs, fn(x mut Rec&) { x.name = s })
     junk := Vec<String&>()
-    for i in range 50 { junk.Push(mkText(i)) }
+    for i in range 50: junk.Push(mkText(i))
     assert junk.Len() == 50
     return $recs[2].name
 }

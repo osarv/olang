@@ -45,7 +45,7 @@ fn main() {
         cdir := $work + "/cases/" + $name[0:name.Len() - 6]
         gold.Push("=== " + $name + "\n")
         gold.Push(read($cdir + "/out.txt").Replace(root, "$ROOT"))
-        if read($cdir + "/err.txt").Len() > 0 { toolkit.Warn("diaggold_capture: " + $name + " wrote to stderr\n") }
+        if read($cdir + "/err.txt").Len() > 0: toolkit.Warn("diaggold_capture: " + $name + " wrote to stderr\n")
     }
     out := "compiler/goldens/diag.txt"
     toolkit.Write($out + ".tmp", gold.ToString())
@@ -68,7 +68,7 @@ fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
         args := Vec<String&>()
         args.Push(olang)
         args.Push("build")
-        for f in toolkit.Fields(flagsOf(text)) { args.Push($f) }
+        for f in toolkit.Fields(flagsOf(text)): args.Push($f)
         args.Push(name)
         o := try os.Output.Exec(...args.ToArray(), dir = dir) catch os.Error { continue }
         try os.WriteFile($dir + "/out.txt", o.Stdout) catch os.Error { }
@@ -79,7 +79,7 @@ fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
 # the rest of a case's first "# flags: " line, "" for none
 fn flagsOf(text String&) String {
     for line in toolkit.Rows(text) {
-        if line.StartsWith("# flags: ") { return $line[9:] }
+        if line.StartsWith("# flags: "): return $line[9:]
     }
     return ""
 }

@@ -17,7 +17,7 @@ fn main() ? {
     s mut Server& = Server()
     for i in range N {
         try s.open(i)
-        if i >= 16 { s.done(i - 16) }
+        if i >= 16: s.done(i - 16)
     }
     io.PutLine($s.socks.Len())!
 }

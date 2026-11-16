@@ -17,7 +17,7 @@ fn evensVec(a Array<I64>&) Vec<I64>& {
 }
 fn sum(a Array<I64>&) I64 {
     s I64 = 0
-    for x in a { s += x }
+    for x in a: s += x
     return s
 }
 

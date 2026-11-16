@@ -11,7 +11,7 @@ fn smallest(seen mut Vec<N&>&) I64 {
         seen.Push(a)
         return a.v < b.v
     })
-    for i in range 5 { h.Push(N(9 - i)) }
+    for i in range 5: h.Push(N(9 - i))
     m := try h.Pop() catch default N(-1)
     return m.v
 }
@@ -20,7 +20,7 @@ fn churn(n I64) I64 {
     t := 0
     for i in range n {
         v := Vec<N>()
-        for j in range 16 { v.Push(N(i * j)) }
+        for j in range 16: v.Push(N(i * j))
         t += v[15].v
     }
     return t

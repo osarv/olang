@@ -21,9 +21,9 @@ type Count struct() { n I64 = 0 }
 # whether a word is written in upper case: a capital, then capitals, digits and underscores, with some letter or
 # underscore after the first - "A" and "X1" are already what they would become
 fn upperWord(w String&) Bool {
-    if w.Len() < 2 or not (w[0] >= 'A' and w[0] <= 'Z') { return false }
+    if w.Len() < 2 or not (w[0] >= 'A' and w[0] <= 'Z'): return false
     for c in w {
-        if c >= 'a' and c <= 'z' { return false }
+        if c >= 'a' and c <= 'z': return false
     }
     return Camel(w) != w
 }
@@ -52,35 +52,35 @@ type Words struct() {
 }
 
 fn (ws mut Words&) add(name String&, word String&) {
-    if not ws.byType.Has(name) { ws.byType.Put($name, Map<String&, String&>()) }
+    if not ws.byType.Has(name): ws.byType.Put($name, Map<String&, String&>())
     m := ws.byType.RefMut(name)!
     m.Put($word, Camel(word))
 }
 
 # the identifier starting at i, "" where none does
 fn identAt(t String&, i I64) String& {
-    if i >= t.Len() or not srcmask.IsIdStart(t[i]) or (i > 0 and srcmask.IsWord(t[i - 1])) { return "" }
+    if i >= t.Len() or not srcmask.IsIdStart(t[i]) or (i > 0 and srcmask.IsWord(t[i - 1])): return ""
     j := i
-    for j < t.Len() and srcmask.IsWord(t[j]) { j++ }
+    for j < t.Len() and srcmask.IsWord(t[j]): j++
     return t[i:j]
 }
 
 # the position after the spaces from i
 fn skipSpaces(t String&, i I64) I64 {
     j := i
-    for j < t.Len() and (t[j] == ' ' or t[j] == '\t') { j++ }
+    for j < t.Len() and (t[j] == ' ' or t[j] == '\t'): j++
     return j
 }
 
 # a declaration "type NAME error ... {" at i: the position of its "{" and NAME, or -1 where none starts there - the
 # braces on the declaration's line
 fn declAt(t String&, i I64) I64, String& {
-    if identAt(t, i) != "type" { return -1, "" }
+    if identAt(t, i) != "type": return -1, ""
     j := skipSpaces(t, i + 4)
     name := identAt(t, j)
-    if name.Len() == 0 { return -1, "" }
+    if name.Len() == 0: return -1, ""
     j = skipSpaces(t, j + name.Len())
-    if identAt(t, j) != "error" { return -1, "" }
+    if identAt(t, j) != "error": return -1, ""
     j += 5
     for j < t.Len() and t[j] != '\n' and t[j] != '{' and t[j] != '}' and t[j] != '"' { j++ }
     if j >= t.Len() or t[j] != '{' { return -1, "" }
@@ -140,7 +140,7 @@ fn rename(t String&, ws Words&, c mut Count&) String {
     inDecl := "" # the type whose braces i is in, "" outside
     declEnd I64 = -1
     for i < t.Len() {
-        if inDecl.Len() > 0 and i >= declEnd { inDecl = "" }
+        if inDecl.Len() > 0 and i >= declEnd: inDecl = ""
         if inDecl.Len() == 0 {
             open, name := declAt(t, i)
             close := closeAt(t, open) if open >= 0 else -1
@@ -177,7 +177,7 @@ fn rename(t String&, ws Words&, c mut Count&) String {
         }
         i += w.Len()
     }
-    if at == 0 { return $t }
+    if at == 0: return $t
     out.Push(t[at:])
     return out.ToString()
 }
@@ -191,30 +191,30 @@ fn oneOwnWord(t String&, open I64, close I64, name String&) Bool {
 # whether the word w at i is a one-word type's own word written after "NAME."
 fn loneUse(t String&, i I64, w String&, ws Words&) Bool {
     name := nameBefore(t, i)
-    if name.Len() == 0 or not ws.lone.Has(name) { return false }
+    if name.Len() == 0 or not ws.lone.Has(name): return false
     return w == ws.lone.Get(name)! or w == name
 }
 
 # the identifier written directly before ".", the "." directly before i; "" for none
 fn nameBefore(t String&, i I64) String& {
-    if i < 2 or t[i - 1] != '.' { return "" }
+    if i < 2 or t[i - 1] != '.': return ""
     j := i - 1
-    for j > 0 and srcmask.IsWord(t[j - 1]) { j-- }
+    for j > 0 and srcmask.IsWord(t[j - 1]): j--
     return t[j:i - 1]
 }
 
 # what the word w at i becomes, "" for nothing: a word of the declaration it stands in (owner, "" for none), or one
 # written after "NAME." where NAME's type declares it
 fn newWord(t String&, i I64, w String&, owner String&, ws Words&) String {
-    if not upperWord(w) { return "" }
+    if not upperWord(w): return ""
     if owner.Len() > 0 and ws.byType.Has(owner) {
         m := ws.byType.Get(owner)!
-        if m.Has(w) and inBraces(t, i) { return $m.Get(w)! }
+        if m.Has(w) and inBraces(t, i): return $m.Get(w)!
     }
     name := nameBefore(t, i)
-    if name.Len() == 0 or not ws.byType.Has(name) { return "" }
+    if name.Len() == 0 or not ws.byType.Has(name): return ""
     m := ws.byType.Get(name)!
-    if not m.Has(w) { return "" }
+    if not m.Has(w): return ""
     return $m.Get(w)!
 }
 
@@ -237,7 +237,7 @@ fn wanted(path String&) Bool {
 fn walk(dir String&, out mut Vec<String&>&, all Bool) {
     names := try os.ReadDir(dir) catch default Array<String&>(0)
     for n in names {
-        if n.StartsWith(".") or n == "build" { continue }
+        if n.StartsWith(".") or n == "build": continue
         p := srcmask.PathJoin(dir, n)
         if os.IsDir(p): walk(p, out, all)
         else if wanted(p) and (all or p.EndsWith(".olang")): out.Push($p)
@@ -284,7 +284,7 @@ fn main() ? {
     if std.Len() > 0 {
         decls Vec<String&>
         walk(std, decls, false)
-        for p in decls { collect(read(p), ws) }
+        for p in decls: collect(read(p), ws)
     }
     for p in files {
         if wanted(p): collect(read(p), ws)
@@ -292,13 +292,13 @@ fn main() ? {
     total := Count()
     changed I64 = 0
     for path in files {
-        if not wanted(path) { continue }
+        if not wanted(path): continue
         src := read(path)
         out := rename(src, ws, total)
-        if out == src { continue }
+        if out == src: continue
         changed++
-        if verbose { srcmask.Say(path) }
-        if check { continue }
+        if verbose: srcmask.Say(path)
+        if check: continue
         try os.WriteFile(path, out) catch {
             srcmask.SayErr("errorcase_rename: cannot write " + $path)
             os.Exit(1)
@@ -306,7 +306,7 @@ fn main() ? {
     }
     verb := "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.n + " words")
-    if check and changed > 0 { os.Exit(1) }
+    if check and changed > 0: os.Exit(1)
 }
 
 # the old spellings are written in pieces, so the tool run over itself changes nothing

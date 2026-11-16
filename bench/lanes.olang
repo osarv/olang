@@ -27,19 +27,19 @@ fn values(n I64, seed I64) Array<F64> {
 
 fn narrow(a Array<F64>&) Array<F32> {
     out := Array<F32>(a.Len())
-    for i in range a.Len() { out[i] = F32(a[i]) }
+    for i in range a.Len(): out[i] = F32(a[i])
     return out
 }
 
 fn ints(a Array<F64>&) Array<I32> {
     out := Array<I32>(a.Len())
-    for i in range a.Len() { out[i] = I32(a[i] * 1000.0) }
+    for i in range a.Len(): out[i] = I32(a[i] * 1000.0)
     return out
 }
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 5 { error Usage.Args }
+    if args.Len() < 5: error Usage.Args
     mode := args[1]
     lanes := args[2] == "lanes"
     n := try args[3].ParseInt()
@@ -53,7 +53,7 @@ fn main() ? {
                 t += (a * b).Sum()
             } else {
                 s := 0.0
-                for i in range n { s += a[i] * b[i] }
+                for i in range n: s += a[i] * b[i]
                 t += s
             }
         }
@@ -67,7 +67,7 @@ fn main() ? {
                 t += (x * y).Sum()
             } else {
                 s I32 = 0
-                for i in range n { s += x[i] * y[i] }
+                for i in range n: s += x[i] * y[i]
                 t += s
             }
         }
@@ -80,11 +80,11 @@ fn main() ? {
             if lanes {
                 y += x * k
             } else {
-                for i in range n { y[i] += x[i] * k }
+                for i in range n: y[i] += x[i] * k
             }
         }
         s := 0.0
-        for v in y { s += v }
+        for v in y: s += v
         try io.PutLine($s)
     } else if mode == "saxpy" {
         x := narrow(a)
@@ -97,7 +97,7 @@ fn main() ? {
                 t += z[p % n]
             } else {
                 z := Array<F32>(n)
-                for i in range n { z[i] = x[i] * k + y[i] }
+                for i in range n: z[i] = x[i] * k + y[i]
                 t += z[p % n]
             }
         }

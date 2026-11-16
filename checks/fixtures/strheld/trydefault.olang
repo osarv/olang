@@ -4,7 +4,7 @@ type E error { X }
 type FRes unique struct(k I64) ? E {
     k
     gone Bool = false
-    if k < 0 { error E.X }
+    if k < 0: error E.X
 } destruct {
     try io.PutLine("destruct " + $k + " (this instance destructed before: " + $gone + ")") catch io.Error { }
     gone = true

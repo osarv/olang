@@ -8,6 +8,6 @@ fn main() {
     d := v.View()
     join {
         spawn look(d)
-        for i in range 100 { v.Push(i) }
+        for i in range 100: v.Push(i)
     }
 }

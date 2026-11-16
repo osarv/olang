@@ -7,7 +7,7 @@ type FoldBad error { No }
 
 fn foldsAll(a Array<I64>&) String {
     v Vec<I64>
-    for x in a { v.Push(x) }
+    for x in a: v.Push(x)
     out := StringBuilder()
     out.Push($a.Iter().Take(4).Sum() + " " + $a.Iter().Skip(2).Sum() + " " + $a.Iter().Skip(1).Take(3).Sum() + " ")
     out.Push($(try a.Iter().Take(4).Min() catch Exhausted default -1) + " " + $(try a.Iter().Skip(2).Max() catch Exhausted default -1) + " ")

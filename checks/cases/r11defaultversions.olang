@@ -11,11 +11,11 @@ type Node struct(v I64) {
     v
 }
 fn Node.make(v I64) mut Node& ? E {
-    if v < 0 { error E.Empty }
+    if v < 0: error E.Empty
     return Node(v)
 }
 fn real(t String&) String ? E {
-    if t.Len() > 3 { error E.Empty }
+    if t.Len() > 3: error E.Empty
     return "real " + $t
 }
 fn churn() {
@@ -26,7 +26,7 @@ fn churn() {
 }
 fn top(path String&, n I64) String {
     dir := path
-    for i in range n { dir = $dir + "/" + $i }
+    for i in range n: dir = $dir + "/" + $i
     return $(try real(dir) catch default dir)
 }
 fn main() ? {
@@ -35,7 +35,7 @@ fn main() ? {
     {
         b mut Node& = Node(2)
         d := a
-        if n > 0 { d = b }
+        if n > 0: d = b
         m := try Node.make(n - 5) catch default d
         m.v = 3
         churn()

@@ -78,7 +78,7 @@ test "a collection's elements are copied by their own Copy" {
 
 test "a Map's values are copied by their own Copy, its empty slots as they are" {
     m := Map<I64, tree>()
-    for k in range 5 { m.Put(k, tree.mk(k)) }
+    for k in range 5: m.Put(k, tree.mk(k))
     m.Remove(2)
     n := m
     try n.RefMut(3).root.v = 30

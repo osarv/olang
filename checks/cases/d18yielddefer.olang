@@ -13,7 +13,7 @@ fn f() Iterator<I64> {
 }
 
 fn main() ? {
-    for x in f() { assert x > 1 }
+    for x in f(): assert x > 1
     assert Tidied == 1
     for x in f() {
         assert x == 2

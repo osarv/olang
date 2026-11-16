@@ -41,9 +41,9 @@ Bare mut Bool = false
 
 # the line with the name at column index at made "_"; "" where no name starts there
 fn bareAt(text String&, at I64) String {
-    if at >= text.Len() or not srcmask.IsIdStart(text[at]) { return "" }
+    if at >= text.Len() or not srcmask.IsIdStart(text[at]): return ""
     e := at
-    for e < text.Len() and srcmask.IsWord(text[e]) { e++ }
+    for e < text.Len() and srcmask.IsWord(text[e]): e++
     return $text[:at] + "_" + $text[e:]
 }
 
@@ -52,12 +52,12 @@ fn balanced(text String&) Bool {
     mask := srcmask.Mask(text, true)
     depth I64 = 0
     for i in range text.Len() {
-        if mask[i] != 'c' { continue }
+        if mask[i] != 'c': continue
         c := text[i]
         if c == '(' or c == '[' or c == '{' { depth++ }
         if c == ')' or c == ']' or c == '}' {
             depth--
-            if depth < 0 { return false }
+            if depth < 0: return false
         }
     }
     return depth == 0
@@ -68,7 +68,7 @@ fn codeOf(text String&) String {
     mask := srcmask.Mask(text, true)
     e := 0
     for i in range text.Len() {
-        if mask[i] == 'm' { break }
+        if mask[i] == 'm': break
         e = i + 1
     }
     return $srcmask.Strip(text[:e])
@@ -80,12 +80,12 @@ fn valueAt(text String&, at I64) I64 {
     mask := srcmask.Mask(text, true)
     depth I64 = 0
     for i in range at, text.Len() {
-        if mask[i] != 'c' { continue }
+        if mask[i] != 'c': continue
         c := text[i]
-        if c == '(' or c == '[' or c == '<' { depth++ }
-        if c == ')' or c == ']' or c == '>' { depth-- }
-        if depth != 0 { continue }
-        if c == ':' and i + 1 < text.Len() and text[i + 1] == '=' { return i + 2 }
+        if c == '(' or c == '[' or c == '<': depth++
+        if c == ')' or c == ']' or c == '>': depth--
+        if depth != 0: continue
+        if c == ':' and i + 1 < text.Len() and text[i + 1] == '=': return i + 2
         if c == '=' and (i + 1 >= text.Len() or text[i + 1] != '=') and (i == 0 or (text[i - 1] != '!' and text[i - 1] != '<' and text[i - 1] != '>')) { return i + 1 }
     }
     return -1
@@ -95,21 +95,21 @@ fn valueAt(text String&, at I64) I64 {
 # allowed - with nothing after it
 fn oneCall(v String&) Bool {
     t := $srcmask.Strip(v)
-    if t.StartsWith("try ") { t = $srcmask.Strip(t[4:]) }
-    if t.EndsWith("!") { t = $t[:t.Len() - 1] }
-    if t.Len() == 0 or not srcmask.IsIdStart(t[0]) or not t.EndsWith(")") { return false }
+    if t.StartsWith("try "): t = $srcmask.Strip(t[4:])
+    if t.EndsWith("!"): t = $t[:t.Len() - 1]
+    if t.Len() == 0 or not srcmask.IsIdStart(t[0]) or not t.EndsWith(")"): return false
     mask := srcmask.Mask(t, true)
     i := 0
     for i < t.Len() {
         c := t[i]
-        if mask[i] != 'c' { return false }
+        if mask[i] != 'c': return false
         if srcmask.IsWord(c) or c == '.' {
             i++
             continue
         }
         if c == '(' or c == '[' or c == '<' {
             close := closeOf(t, mask, i)
-            if close < 0 { return false }
+            if close < 0: return false
             i = close + 1
             continue
         }
@@ -124,11 +124,11 @@ fn closeOf(t String&, mask String&, start I64) I64 {
     shut := ')' if open == '(' else (']' if open == '[' else '>')
     depth I64 = 0
     for k in range start, t.Len() {
-        if mask[k] != 'c' { continue }
-        if t[k] == open { depth++ }
+        if mask[k] != 'c': continue
+        if t[k] == open: depth++
         if t[k] == shut {
             depth--
-            if depth == 0 { return k }
+            if depth == 0: return k
         }
     }
     return -1
@@ -147,16 +147,16 @@ fn DeclEdit.declEdit(text String&, at I64) DeclEdit {
     v := valueAt(text, at)
     if v >= 0 {
         k := v
-        for k < text.Len() and text[k] == ' ' { k++ }
+        for k < text.Len() and text[k] == ' ': k++
         # a try statement takes no default (R11): a declaration whose value has one is left for a person
         if text[k:].StartsWith("try ") {
-            if codeOf(text[k:]).Contains(" default ") { return DeclEdit.Leave }
+            if codeOf(text[k:]).Contains(" default "): return DeclEdit.Leave
             return DeclEdit.Keep($text[:at] + $text[k:])
         }
     }
     code := codeOf(text)
     if not balanced(text) or not code.StartsWith(text[at:at + 1]) or text[:at].Contains("{") { return DeclEdit.Leave }
-    if v < 0 { return DeclEdit.Drop }
+    if v < 0: return DeclEdit.Drop
     value := $srcmask.Strip(text[v:])
     mask := srcmask.Mask(text, true)
     for i in range v, text.Len() {
@@ -166,7 +166,7 @@ fn DeclEdit.declEdit(text String&, at I64) DeclEdit {
         }
     }
     if not value.Contains("(") and not value.Contains("!") and not value.Contains("{") { return DeclEdit.Drop }
-    if oneCall(value) { return DeclEdit.Keep($text[:at] + $value) }
+    if oneCall(value): return DeclEdit.Keep($text[:at] + $value)
     return DeclEdit.Leave
 }
 
@@ -196,12 +196,12 @@ fn main() ? {
         srcmask.SayErr("usage: build/tools_unused_migrate [--bare] [--olang PATH] [-j N] FILE|DIR...")
         os.Exit(2)
     }
-    if jobs < 1 { jobs = 1 }
+    if jobs < 1: jobs = 1
     olang = $diagedit.RealPathOf(olang)
     files Vec<String&>
     diagedit.OlangFiles(paths, files)
     allowed Vec<String&>
-    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+    for p in paths: allowed.Push(diagedit.RealPathOf(p))
     tmp := try os.MkTemp("", "unused_migrate") catch {
         srcmask.SayErr("unused_migrate: cannot make a temporary directory")
         os.Exit(1)
@@ -227,21 +227,21 @@ fn main() ? {
                 parsed := try diagedit.Row.Parse(row) catch { continue }
                 path, line, col, isError, msg := parsed.Path, parsed.Line, parsed.Col, parsed.IsError, parsed.Msg
                 full := diagedit.RealPathOf(path)
-                if not isError or not diagedit.Allowed(full, allowed) { continue }
+                if not isError or not diagedit.Allowed(full, allowed): continue
                 kind := ""
-                if msg.Contains(BareMessage) { kind = KindBare }
-                if msg.Contains(DeclMessage) { kind = KindDecl }
-                if msg.StartsWith(ImportMessage) or msg.Contains(IdleMessage) { kind = KindDrop }
-                if kind != "" { requests.Push(diagedit.Request($full, line, col, $kind, "", $row)) }
+                if msg.Contains(BareMessage): kind = KindBare
+                if msg.Contains(DeclMessage): kind = KindDecl
+                if msg.StartsWith(ImportMessage) or msg.Contains(IdleMessage): kind = KindDrop
+                if kind != "": requests.Push(diagedit.Request($full, line, col, $kind, "", $row))
             }
         }
         made := apply(requests, left)
         srcmask.Say("round " + $round + ": " + $made + " edits")
         total += made
-        if made == 0 { break }
+        if made == 0: break
     }
     srcmask.Say("total: " + $total + " edits")
-    for l in left { srcmask.Say("by hand: " + $l) }
+    for l in left: srcmask.Say("by hand: " + $l)
 }
 
 # whether the block a declaration on line idx (its name at column index at) stands in names it again after it - an
@@ -250,18 +250,18 @@ fn main() ? {
 fn namedAfter(lines Array<String&>&, idx I64, at I64) Bool {
     text := lines[idx]
     e := at
-    for e < text.Len() and srcmask.IsWord(text[e]) { e++ }
+    for e < text.Len() and srcmask.IsWord(text[e]): e++
     name := text[at:e]
     indent := 0
-    for indent < text.Len() and text[indent] == ' ' { indent++ }
-    if wordIn(text[e:], name) { return true }
+    for indent < text.Len() and text[indent] == ' ': indent++
+    if wordIn(text[e:], name): return true
     for k in range idx + 1, lines.Len() {
         t := lines[k]
-        if srcmask.Strip(t).Len() == 0 { continue }
+        if srcmask.Strip(t).Len() == 0: continue
         ind := 0
-        for ind < t.Len() and t[ind] == ' ' { ind++ }
-        if ind < indent { return false }
-        if wordIn(t, name) { return true }
+        for ind < t.Len() and t[ind] == ' ': ind++
+        if ind < indent: return false
+        if wordIn(t, name): return true
     }
     return false
 }
@@ -270,9 +270,9 @@ fn namedAfter(lines Array<String&>&, idx I64, at I64) Bool {
 fn wordIn(t String&, name String&) Bool {
     mask := srcmask.Mask(t, true)
     for i := 0, i + name.Len() <= t.Len(), i++ {
-        if mask[i] != 'c' or t[i:i + name.Len()] != name { continue }
-        if i > 0 and srcmask.IsWord(t[i - 1]) { continue }
-        if i + name.Len() < t.Len() and srcmask.IsWord(t[i + name.Len()]) { continue }
+        if mask[i] != 'c' or t[i:i + name.Len()] != name: continue
+        if i > 0 and srcmask.IsWord(t[i - 1]): continue
+        if i + name.Len() < t.Len() and srcmask.IsWord(t[i + name.Len()]): continue
         return true
     }
     return false
@@ -282,7 +282,7 @@ fn wordIn(t String&, name String&) Bool {
 fn namesLines(expect Vec<String&>&) Bool {
     for t in expect {
         for k in range t.Len() {
-            if t[k] == ':' and k > 0 and t[k - 1].IsDigit() and k + 1 < t.Len() and t[k + 1].IsDigit() { return true }
+            if t[k] == ':' and k > 0 and t[k - 1].IsDigit() and k + 1 < t.Len() and t[k + 1].IsDigit(): return true
         }
     }
     return false
@@ -293,7 +293,7 @@ fn namesLines(expect Vec<String&>&) Bool {
 fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
     paths Vec<String&>
     for r in requests {
-        if not (r.Path in paths) { paths.Push($r.Path) }
+        if not (r.Path in paths): paths.Push($r.Path)
     }
     made I64 = 0
     for path in paths {
@@ -304,10 +304,10 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
         lines := src.Split("\n")
         mine Vec<diagedit.Request>
         for r in requests {
-            if r.Path == path { mine.Push(r) }
+            if r.Path == path: mine.Push(r)
         }
         mine.Sort(fn(a, b) {
-            if a.Line != b.Line { return a.Line > b.Line }
+            if a.Line != b.Line: return a.Line > b.Line
             return a.Col > b.Col
         })
         dropped mut Array<Bool>& = Array<Bool>(lines.Len(), false)
@@ -316,26 +316,26 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
         for r in mine {
             # a module imported by several files compiled is reported once by each
             key := $r.Line + ":" + $r.Col
-            if key in seen or diagedit.ContainsAny(r.Why, expect) or r.Line - 1 >= lines.Len() { continue }
+            if key in seen or diagedit.ContainsAny(r.Why, expect) or r.Line - 1 >= lines.Len(): continue
             seen.Push($key)
             idx := r.Line - 1
-            if dropped[idx] { continue }
+            if dropped[idx]: continue
             text := $lines[idx]
             at := r.Col - 1
             # a program that must fail keeps its declarations, its imports and its calls: what fails may be among them
-            if expect.Len() > 0 and r.Kind != KindBare { continue }
+            if expect.Len() > 0 and r.Kind != KindBare: continue
             if Bare and r.Kind != KindBare and not r.Why.Contains(ImportMessage) {
-                if not (r.Why in left) { left.Push($r.Why) }
+                if not (r.Why in left): left.Push($r.Why)
                 continue
             }
             if r.Kind == KindBare and namedAfter(lines, idx, at) {
-                if not (r.Why in left) { left.Push($r.Why) }
+                if not (r.Why in left): left.Push($r.Why)
                 continue
             }
             if r.Kind == KindBare {
                 out := bareAt(text, at)
                 if out.Len() == 0 {
-                    if not (r.Why in left) { left.Push($r.Why) }
+                    if not (r.Why in left): left.Push($r.Why)
                     continue
                 }
                 lines[idx] = $out
@@ -344,7 +344,7 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
                 drop := r.Kind == KindDrop
                 out := ""
                 if r.Kind == KindDecl and namedAfter(lines, idx, at) {
-                    if not (r.Why in left) { left.Push($r.Why) }
+                    if not (r.Why in left): left.Push($r.Why)
                     continue
                 }
                 if r.Kind == KindDecl {
@@ -361,19 +361,19 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
                 } else if out.Len() > 0 {
                     lines[idx] = $out
                 } else {
-                    if not (r.Why in left) { left.Push($r.Why) }
+                    if not (r.Why in left): left.Push($r.Why)
                     continue
                 }
             }
             made++
             changed = true
         }
-        if not changed { continue }
+        if not changed: continue
         b := StringBuilder()
         first := true
         for k in range lines.Len() {
-            if dropped[k] { continue }
-            if not first { b.PushChar('\n') }
+            if dropped[k]: continue
+            if not first: b.PushChar('\n')
             b.Push(lines[k])
             first = false
         }

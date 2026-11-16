@@ -32,7 +32,7 @@ type Error error {
 
 # the arithmetic mean
 fn Mean<T Number>(a Array<T>&) F64 ? Error {
-    if a.Len() == 0 { error Error.TooFew }
+    if a.Len() == 0: error Error.TooFew
     return pairSum(a, 0, a.Len()) / F64(a.Len())
 }
 
@@ -40,14 +40,14 @@ fn Mean<T Number>(a Array<T>&) F64 ? Error {
 # correction): what estimates the variance of the population the values were drawn from. numpy's var(a, ddof=1),
 # Python's statistics.variance. Needs two values
 fn Variance<T Number>(a Array<T>&) F64 ? Error {
-    if a.Len() < 2 { error Error.TooFew }
+    if a.Len() < 2: error Error.TooFew
     return squaredDeviations(a) / F64(a.Len() - 1)
 }
 
 # the population variance - the squared distances from the mean divided by the count: the variance of exactly these
 # values. numpy's var(a), Python's statistics.pvariance
 fn PopulationVariance<T Number>(a Array<T>&) F64 ? Error {
-    if a.Len() == 0 { error Error.TooFew }
+    if a.Len() == 0: error Error.TooFew
     return squaredDeviations(a) / F64(a.Len())
 }
 
@@ -66,9 +66,9 @@ fn Median<T Number>(a Array<T>&) F64 ? Error { return try Percentile(a, 50.0) }
 # not changed: the values are copied and only the two needed are put in place (a selection, O(n) on average, not a
 # sort). For several percentiles of one array, Percentiles sorts once
 fn Percentile<T Number>(a Array<T>&, p F64) F64 ? Error {
-    if not (p >= 0.0 and p <= 100.0) { error Error.OutOfRange }
+    if not (p >= 0.0 and p <= 100.0): error Error.OutOfRange
     n I64 = a.Len()
-    if n == 0 { error Error.TooFew }
+    if n == 0: error Error.TooFew
     v := Array<F64>(n)
     for i, x in a {
         v[i] = F64(x)
@@ -77,10 +77,10 @@ fn Percentile<T Number>(a Array<T>&, p F64) F64 ? Error {
     pos F64 = p / 100.0 * F64(n - 1)
     k I64 = I64(pos)
     selectRank(v, k)
-    if k == n - 1 { return v[k] }
+    if k == n - 1: return v[k]
     above F64 = v[k + 1]                     # every value after k is at least v[k]: the least of them is rank k + 1
     for i in range k + 2, n {
-        if v[i] < above { above = v[i] }
+        if v[i] < above: above = v[i]
     }
     return lerp(v[k], above, pos - F64(k))
 }
@@ -88,17 +88,17 @@ fn Percentile<T Number>(a Array<T>&, p F64) F64 ? Error {
 # Percentile for each of ps, in their order, with the values sorted once
 fn Percentiles<T Number>(a Array<T>&, ps Array<F64>&) Array<F64> ? Error {
     n I64 = a.Len()
-    if n == 0 { error Error.TooFew }
+    if n == 0: error Error.TooFew
     v := Array<F64>(n)
     nan Bool = false
     for i, x in a {
         v[i] = F64(x)
-        if v[i] != v[i] { nan = true }
+        if v[i] != v[i]: nan = true
     }
     out := Array<F64>(ps.Len())
     if not nan { v.Sort(fn(x, y) { return x < y }) }
     for j, p in ps {
-        if not (p >= 0.0 and p <= 100.0) { error Error.OutOfRange }
+        if not (p >= 0.0 and p <= 100.0): error Error.OutOfRange
         if nan {
             out[j] = NaN
             continue
@@ -115,9 +115,9 @@ fn Percentiles<T Number>(a Array<T>&, ps Array<F64>&) Array<F64> ? Error {
 # well. A value below the first edge or above the last, or a NaN, is in no bin. Edges that are not two or more and
 # increasing fail with BadEdges
 fn Histogram<T Number>(a Array<T>&, edges Array<F64>&) Array<I64> ? Error {
-    if edges.Len() < 2 { error Error.BadEdges }
+    if edges.Len() < 2: error Error.BadEdges
     for i in range 1, edges.Len() {
-        if not (edges[i - 1] < edges[i]) { error Error.BadEdges }
+        if not (edges[i - 1] < edges[i]): error Error.BadEdges
     }
     counts := Array<I64>(edges.Len() - 1)
     last I64 = edges.Len() - 1
@@ -138,10 +138,10 @@ fn Histogram<T Number>(a Array<T>&, edges Array<F64>&) Array<I64> ? Error {
 # bins + 1 edges spaced evenly from lo to hi, the last exactly hi (numpy's linspace) - for Histogram:
 # stats.Histogram(a, stats.Edges(0.0, 1.0, 10)) counts the values in ten bins of a tenth each
 fn Edges(lo F64, hi F64, bins I64) Array<F64> ? Error {
-    if bins < 1 or not (lo < hi) { error Error.BadEdges }
+    if bins < 1 or not (lo < hi): error Error.BadEdges
     out := Array<F64>(bins + 1)
     step F64 = (hi - lo) / F64(bins)
-    for i in range bins { out[i] = lo + F64(i) * step }
+    for i in range bins: out[i] = lo + F64(i) * step
     out[bins] = hi
     return out
 }
@@ -150,13 +150,13 @@ fn Edges(lo F64, hi F64, bins I64) Array<F64> ? Error {
 # bins)): the counts and the bins + 1 edges, as Histogram and Edges give them. Values all equal span them +- 0.5, as
 # numpy's do; a NaN is in no bin. Fails with TooFew where no value is a number and BadEdges for no bin
 fn Bins<T Number>(a Array<T>&, bins I64) Array<I64>, Array<F64> ? Error {
-    if bins < 1 { error Error.BadEdges }
+    if bins < 1: error Error.BadEdges
     lo F64 = Inf
     hi F64 = -Inf
     for x in a {
         v := F64(x)
-        if v < lo { lo = v }
-        if v > hi { hi = v }
+        if v < lo: lo = v
+        if v > hi: hi = v
     }
     if lo > hi { error Error.TooFew }                     # nothing, or only NaNs
     if lo == hi {
@@ -173,7 +173,7 @@ fn pairSum<T>(a Array<T>&, lo I64, hi I64) F64 {
     n I64 = hi - lo
     if n < 8 {
         s F64 = 0.0
-        for i in range lo, hi { s += F64(a[i]) }
+        for i in range lo, hi: s += F64(a[i])
         return s
     }
     if n <= 128 {
@@ -257,7 +257,7 @@ fn pairDev<T>(a Array<T>&, lo I64, hi I64, m F64, square Bool) F64 {
 # a + (b - a) * t, as numpy computes it: from b's end when t is past the middle, so t = 1 gives b exactly, and a when
 # the two are equal
 fn lerp(a F64, b F64, t F64) F64 {
-    if a == b { return a }
+    if a == b: return a
     d F64 = b - a
     return b - d * (1.0 - t) if t >= 0.5 else a + d * t
 }
@@ -269,15 +269,15 @@ fn selectRank(v mut Array<F64>&, k I64) {
     hi I64 = v.Len() - 1
     for hi > lo {
         mid I64 = lo + (hi - lo) / 2
-        if v[mid] < v[lo] { v[mid], v[lo] = v[lo], v[mid] }
-        if v[hi] < v[lo] { v[hi], v[lo] = v[lo], v[hi] }
-        if v[hi] < v[mid] { v[hi], v[mid] = v[mid], v[hi] }
+        if v[mid] < v[lo]: v[mid], v[lo] = v[lo], v[mid]
+        if v[hi] < v[lo]: v[hi], v[lo] = v[lo], v[hi]
+        if v[hi] < v[mid]: v[hi], v[mid] = v[mid], v[hi]
         pivot F64 = v[mid]
         i I64 = lo
         j I64 = hi
         for i <= j {                         # Hoare's partition around the pivot's value
-            for v[i] < pivot { i++ }
-            for pivot < v[j] { j-- }
+            for v[i] < pivot: i++
+            for pivot < v[j]: j--
             if i <= j {
                 v[i], v[j] = v[j], v[i]
                 i++
@@ -336,7 +336,7 @@ test "Median and Percentile interpolate between the closest ranks, as numpy does
     assert ps == Array<F64>[15.0, 23.0, 29.0, 35.0, 50.0]
     # the selection agrees with sorting, on values with repeats, in any order
     v := Array<F64>(1001)
-    for i in range 1001 { v[i] = F64((i * 7919) % 97) }
+    for i in range 1001: v[i] = F64((i * 7919) % 97)
     sorted := try Percentiles(v, Array<F64>[1.0, 25.0, 50.0, 62.5, 99.9])
     for j, p in Array<F64>[1.0, 25.0, 50.0, 62.5, 99.9] {
         assert (try Percentile(v, p) catch default -1.0) == sorted[j]
@@ -375,7 +375,7 @@ test Bins "counts the values in bins of equal width from the least to the greate
 # while compiling as at run time (K2)
 fn statsBaked() F64 {
     a := Array<F64>(301)
-    for i in range 301 { a[i] = F64((i * 37) % 101) / 4.0 }
+    for i in range 301: a[i] = F64((i * 37) % 101) / 4.0
     counts, _ := try Bins(a, 7) catch { return -1.0 }
     return (try Mean(a) catch default 0.0) + (try Variance(a) catch default 0.0) + (try Percentile(a, 37.5) catch default 0.0) + F64(counts[3])
 }

@@ -3,14 +3,14 @@
 import "raisedlex"
 
 fn half(n I64) I64 ? {
-    if n < 0 { error Negative }
-    if n % 2 == 1 { error Odd }
+    if n < 0: error Negative
+    if n % 2 == 1: error Odd
     return n / 2
 }
 
 # the same name raised in another function is the same error
 fn quarter(n I64) I64 ? Negative, Odd {
-    if n < 0 { error Negative }
+    if n < 0: error Negative
     return try half(try half(n))
 }
 

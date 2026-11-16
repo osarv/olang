@@ -120,7 +120,7 @@ fn (d mut Diagnostics&) AddFile(path String&, text String&, library Bool = false
 
 # B22: file's lines named as their cells say - line l (from 1) as paths[l - 1], line lines[l - 1]
 fn (d mut Diagnostics&) NameLines(file I64, paths Array<String&>&, lines Array<I64>&) {
-    if file < 0 or file >= d.paths.Len() { return }
+    if file < 0 or file >= d.paths.Len(): return
     d.shownFrom[file] = d.shownPaths.Len()
     for i in range paths.Len() {
         d.shownPaths.Push(paths[i])
@@ -142,7 +142,7 @@ fn (d mut Diagnostics&) lineOf(file I64, at I64) I64, I64 {
     if d.startsFrom[file] < 0 {
         d.startsFrom[file] = d.starts.Len()
         made := source.LineStarts(d.texts[file])
-        for s in made { d.starts.Push(I64(s)) }
+        for s in made: d.starts.Push(I64(s))
         d.startsLen[file] = made.Len()
     }
     from := d.startsFrom[file]
@@ -160,21 +160,21 @@ fn (d Diagnostics&) PathOf(file I64) String { return $d.paths[file] if file >= 0
 
 # the line an offset of a file is on (B2e: where a debugger shows the code)
 fn (d mut Diagnostics&) LineAt(file I64, at I64) I64 {
-    if file < 0 or file >= d.paths.Len() { return 0 }
+    if file < 0 or file >= d.paths.Len(): return 0
     line, _ := d.lineOf(file, at)
     return line
 }
 
 # the column an offset of a file is at, from 1 (E40: Place.Here)
 fn (d mut Diagnostics&) ColumnAt(file I64, at I64) I64 {
-    if file < 0 or file >= d.paths.Len() { return 0 }
+    if file < 0 or file >= d.paths.Len(): return 0
     _, start := d.lineOf(file, at)
     return at - start + 1
 }
 
 # where an offset of a file is, as a row writes it: "PATH:LINE:COL"
 fn (d mut Diagnostics&) Locate(file I64, at I64) String {
-    if file < 0 or file >= d.paths.Len() { return "?" }
+    if file < 0 or file >= d.paths.Len(): return "?"
     line, start := d.lineOf(file, at)
     p, l := d.shown(file, line)
     return $p + ":" + $l + ":" + $(at - start + 1)
@@ -190,7 +190,7 @@ fn (d mut Diagnostics&) Error(at Where, m diagmsg.Msg) I64 { return d.report(at,
 fn (d mut Diagnostics&) ErrorOncePerLine(at Where, m diagmsg.Msg) I64 { return d.report(at, m, true) }
 
 fn (d mut Diagnostics&) report(at Where, m diagmsg.Msg, oncePerLine Bool) I64 {
-    if d.Quiet { return -1 }
+    if d.Quiet: return -1
     if d.Lenient and Untidy(m.Rule) {
         for w in d.warns {
             if w.text == m.Text and w.at == at: return -1
@@ -199,7 +199,7 @@ fn (d mut Diagnostics&) report(at Where, m diagmsg.Msg, oncePerLine Bool) I64 {
         return -1
     }
     if d.scopeOn and isScopeRule(m.Rule) {
-        if d.scopeSeen { return -1 }
+        if d.scopeSeen: return -1
         d.scopeSeen = true
     }
     # an error met in the library is reported at the program's use of it - the innermost context in the program's own
@@ -219,8 +219,8 @@ fn (d mut Diagnostics&) report(at Where, m diagmsg.Msg, oncePerLine Bool) I64 {
     outer I64 = -1
     valid I64 = 0
     for i in range d.ctxFrom, top {
-        if d.contexts[i].text.Len() == 0 { continue }
-        if outer < 0 { outer = i }
+        if d.contexts[i].text.Len() == 0: continue
+        if outer < 0: outer = i
         valid++
     }
     inner I64 = 2 if valid > 3 else 3
@@ -228,13 +228,13 @@ fn (d mut Diagnostics&) report(at Where, m diagmsg.Msg, oncePerLine Bool) I64 {
     i := top - 1
     for i >= d.ctxFrom and shown < inner {
         if d.contexts[i].text.Len() > 0 {
-            if i == outer and valid > 3 { break }
+            if i == outer and valid > 3: break
             d.notes.Push(note(rec, d.contexts[i].at, $d.contexts[i].text))
             shown++
         }
         i--
     }
-    if valid > 3 { d.notes.Push(note(rec, d.contexts[outer].at, $d.contexts[outer].text)) }
+    if valid > 3: d.notes.Push(note(rec, d.contexts[outer].at, $d.contexts[outer].text))
     return rec
 }
 
@@ -249,7 +249,7 @@ fn (d mut Diagnostics&) ErrorAlone(at Where, m diagmsg.Msg) I64 {
 }
 
 fn (d mut Diagnostics&) ErrorBare(at Where, m diagmsg.Msg) I64 {
-    if d.Quiet { return -1 }
+    if d.Quiet: return -1
     group I64 = -1 if d.held.Len() == 0 else d.held[d.held.Len() - 1]
     d.records.Push(record(at, m.Rule, m.Text, m.Kind, group, false))
     d.pushOwn(d.records.Len() - 1, at, m)
@@ -258,20 +258,20 @@ fn (d mut Diagnostics&) ErrorBare(at Where, m diagmsg.Msg) I64 {
 
 # the message's own reason and fix, as rows after the error numbered rec
 fn (d mut Diagnostics&) pushOwn(rec I64, at Where, m diagmsg.Msg) {
-    if m.Note.Len() > 0 { d.notes.Push(note(rec, at, m.Note, false, true)) }
-    if m.Help.Len() > 0 { d.notes.Push(note(rec, at, m.Help, true, true)) }
+    if m.Note.Len() > 0: d.notes.Push(note(rec, at, m.Note, false, true))
+    if m.Help.Len() > 0: d.notes.Push(note(rec, at, m.Help, true, true))
 }
 
 # a note on the error numbered rec - nothing when that error was not reported
 fn (d mut Diagnostics&) Note(rec I64, at Where, m diagmsg.Msg) {
-    if rec < 0 { return }
+    if rec < 0: return
     d.notes.Push(note(rec, at, m.Text))
 }
 
 # G16b: the error numbered rec yields to a later one of the same text at the same place - one an instance of a generic
 # reported where what its note would say needs bindings two variables share, so another instance's says it
 fn (d mut Diagnostics&) Yield(rec I64) {
-    if rec >= 0 { d.yielding.Push(rec) }
+    if rec >= 0: d.yielding.Push(rec)
 }
 
 # an error that ends the compilation: Render writes it after every other, as a row with no line and no excerpt
@@ -287,7 +287,7 @@ fn (d mut Diagnostics&) Fatal(at Where, m diagmsg.Msg) {
 # the rules about where something lives: a statement reports the first error of these (B11) - a scope found wrong is
 # wrong for every check that reads it after, and the first one says what to change
 fn isScopeRule(rule String&) Bool {
-    if rule.Len() >= 2 and rule[0] == 'O' and rule[1].IsDigit() { return true }
+    if rule.Len() >= 2 and rule[0] == 'O' and rule[1].IsDigit(): return true
     return rule.StartsWith("C2d") or rule.StartsWith("T17c")
 }
 
@@ -328,9 +328,9 @@ fn (d Diagnostics&) RecordCount() I64 { return d.records.Len() }
 # checker reads as recovered
 fn (d Diagnostics&) ErrorWithin(file I64, from I64, to I64, upto I64) Bool {
     for i in range upto {
-        if i >= d.records.Len() { break }
+        if i >= d.records.Len(): break
         r := d.records[i]
-        if not d.mayReport(r.group) { continue }
+        if not d.mayReport(r.group): continue
         match r.at {
             case Where.Span(f, s, _) { if f == file and s >= from and s < to { return true } }
             case _ { }
@@ -343,8 +343,8 @@ fn (d Diagnostics&) ErrorWithin(file I64, from I64, to I64, upto I64) Bool {
 # after it (B4: a missing main is said only where none was)
 fn (d Diagnostics&) ErrorBefore(upto I64) Bool {
     for i in range upto {
-        if i >= d.records.Len() { break }
-        if d.mayReport(d.records[i].group) { return true }
+        if i >= d.records.Len(): break
+        if d.mayReport(d.records[i].group): return true
     }
     return false
 }
@@ -354,7 +354,7 @@ fn (d Diagnostics&) ErrorBefore(upto I64) Bool {
 fn (d Diagnostics&) mayReport(group I64) Bool {
     g := group
     for g >= 0 {
-        if d.groupState[g] == Dropped or d.groupState[g] == Cut { return false }
+        if d.groupState[g] == Dropped or d.groupState[g] == Cut: return false
         g = d.groupParent[g]
     }
     return true
@@ -363,10 +363,10 @@ fn (d Diagnostics&) mayReport(group I64) Bool {
 # the innermost open context in the program's own files, when at is in the library: the use of the library's code at
 # was met for. -1 when there is none
 fn (d Diagnostics&) programUse(at Where) I64 {
-    if not d.isLibrary(at) { return -1 }
+    if not d.isLibrary(at): return -1
     i := d.contexts.Len() - 1
     for i >= d.ctxFrom {
-        if d.contexts[i].text.Len() > 0 and not d.isLibrary(d.contexts[i].at) { return i }
+        if d.contexts[i].text.Len() > 0 and not d.isLibrary(d.contexts[i].at): return i
         i--
     }
     return -1
@@ -382,7 +382,7 @@ fn (d Diagnostics&) UseOf(at Where) Where {
 fn (d Diagnostics&) TopContext() Where, String {
     i := d.contexts.Len() - 1
     for i >= d.ctxFrom {
-        if d.contexts[i].text.Len() > 0 { return d.contexts[i].at, $d.contexts[i].text }
+        if d.contexts[i].text.Len() > 0: return d.contexts[i].at, $d.contexts[i].text
         i--
     }
     return Where.Nowhere, ""
@@ -428,7 +428,7 @@ fn (d Diagnostics&) Firm() I64 { return d.records.Len() - d.alone.Len() }
 # forgets every diagnostic reported since Count gave mark, and the notes on them - a step done again from the start
 # (the checker's attempts, R1a)
 fn (d mut Diagnostics&) Forget(mark I64) {
-    if mark >= d.records.Len() { return }
+    if mark >= d.records.Len(): return
     d.records.Truncate(mark)
     k I64 = 0
     for i in range d.notes.Len() {
@@ -468,35 +468,35 @@ type Taken struct() {
 
 fn (d Diagnostics&) Since(mark I64) Taken {
     t := Taken()
-    for i in range mark, d.records.Len() { t.records.Push(d.records[i]) }
+    for i in range mark, d.records.Len(): t.records.Push(d.records[i])
     for n in d.notes {
-        if n.rec >= mark { t.notes.Push(note(n.rec - mark, n.at, n.text, n.help, n.plain)) }
+        if n.rec >= mark: t.notes.Push(note(n.rec - mark, n.at, n.text, n.help, n.plain))
     }
     for y in d.yielding {
-        if y >= mark { t.yielding.Push(y - mark) }
+        if y >= mark: t.yielding.Push(y - mark)
     }
     for a in d.alone {
-        if a >= mark { t.alone.Push(a - mark) }
+        if a >= mark: t.alone.Push(a - mark)
     }
     return t
 }
 
 fn (d mut Diagnostics&) Replay(t Taken&) {
     base := d.records.Len()
-    for r in t.records { d.records.Push(r) }
-    for n in t.notes { d.notes.Push(note(n.rec + base, n.at, n.text, n.help, n.plain)) }
-    for y in t.yielding { d.yielding.Push(y + base) }
-    for a in t.alone { d.alone.Push(a + base) }
+    for r in t.records: d.records.Push(r)
+    for n in t.notes: d.notes.Push(note(n.rec + base, n.at, n.text, n.help, n.plain))
+    for y in t.yielding: d.yielding.Push(y + base)
+    for a in t.alone: d.alone.Push(a + base)
 }
 
 fn (t Taken&) Count() I64 { return t.records.Len() }
 
 # whether two takings say the same: their records' rules, texts and places, in order
 fn (t Taken&) Same(o Taken&) Bool {
-    if t.records.Len() != o.records.Len() or t.notes.Len() != o.notes.Len() { return false }
+    if t.records.Len() != o.records.Len() or t.notes.Len() != o.notes.Len(): return false
     for i in range t.records.Len() {
         a, b := t.records[i], o.records[i]
-        if a.rule != b.rule or a.text != b.text or a.at != b.at { return false }
+        if a.rule != b.rule or a.text != b.text or a.at != b.at: return false
     }
     return true
 }
@@ -511,7 +511,7 @@ fn (d mut Diagnostics&) ErrorUnheld(at Where, m diagmsg.Msg) I64 {
     saved := d.held.ToArray()
     d.held.Clear()
     rec := d.report(at, m, false)
-    for g in saved { d.held.Push(g) }
+    for g in saved: d.held.Push(g)
     return rec
 }
 
@@ -523,7 +523,7 @@ fn (d mut Diagnostics&) Drop(g I64) { d.groupState[g] = Dropped }
 
 # every group chosen, as when every branch is compiled - for tools comparing the parse of all branches
 fn (d mut Diagnostics&) ChooseAll() {
-    for g in range d.groupState.Len() { d.groupState[g] = Chosen }
+    for g in range d.groupState.Len(): d.groupState[g] = Chosen
 }
 
 # the branch group g holds was not taken because a branch before it in its chain was: dropped, and said so
@@ -545,8 +545,8 @@ fn (d Diagnostics&) IsPending(g I64) Bool { return g >= 0 and g < d.groupState.L
 fn (d Diagnostics&) Holds(g I64) Bool {
     for r in d.records {
         h := r.group
-        for h >= 0 and h != g { h = d.groupParent[h] }
-        if h == g { return true }
+        for h >= 0 and h != g: h = d.groupParent[h]
+        if h == g: return true
     }
     return false
 }
@@ -555,7 +555,7 @@ fn (d Diagnostics&) Holds(g I64) Bool {
 fn (d Diagnostics&) chosen(group I64) Bool {
     g := group
     for g >= 0 {
-        if d.groupState[g] != Chosen { return false }
+        if d.groupState[g] != Chosen: return false
         g = d.groupParent[g]
     }
     return true
@@ -565,7 +565,7 @@ fn (d Diagnostics&) chosen(group I64) Bool {
 
 # whether diagnostics are written in colour: on a terminal, unless it asks for none (NO_COLOR set, TERM unset or dumb)
 fn ColorWanted() Bool {
-    if not os.IsTerminal(1) { return false }
+    if not os.IsTerminal(1): return false
     try os.Env("NO_COLOR") catch { return termAllowsColor() }
     return false
 }
@@ -577,7 +577,7 @@ fn termAllowsColor() Bool {
 
 # the terminal's codes, and none where colour is off
 fn (d Diagnostics&) sgr(code String&) String {
-    if not d.Color { return "" }
+    if not d.Color: return ""
     b := StringBuilder()
     b.PushChar(Char(27))
     b.Push("[")
@@ -613,7 +613,7 @@ fn (d mut Diagnostics&) written() Array<I64> {
             case Where.File(f) { file[r] = f }
             case _ { }
         }
-        if not d.chosen(rec.group) { continue }
+        if not d.chosen(rec.group): continue
         # one cause several checks meet is one error: the same text at the same place again, or a second of a kind
         # reported once per line
         repeated := false
@@ -623,18 +623,18 @@ fn (d mut Diagnostics&) written() Array<I64> {
             if file[k] == file[r] and line[k] == line[r] and col[k] == col[r] and other.text == rec.text {
                 repeated = true
                 # one that yields is replaced by a later one that does not (G16b)
-                if k in d.yielding and r not in d.yielding { keep[j] = r }
+                if k in d.yielding and r not in d.yielding: keep[j] = r
             }
             if rec.oncePerLine and other.oncePerLine and other.kind == rec.kind and file[k] == file[r] and line[k] == line[r] {
                 repeated = true
             }
         }
-        if not repeated { keep.Push(r) }
+        if not repeated: keep.Push(r)
     }
     # (one said only alone goes where another error is kept)
     if d.alone.Len() > 0 {
         others := false
-        for k in keep { others = others or k not in d.alone }
+        for k in keep: others = others or k not in d.alone
         if others {
             rest Vec<I64>
             for k in keep { if k not in d.alone: rest.Push(k) }
@@ -651,8 +651,8 @@ fn (d mut Diagnostics&) written() Array<I64> {
     }
     order := keep.ToArray()
     order.Sort(fn(a I64, b I64) Bool {
-        if rank[file[a] + 1] != rank[file[b] + 1] { return rank[file[a] + 1] < rank[file[b] + 1] }
-        if line[a] != line[b] { return line[a] < line[b] }
+        if rank[file[a] + 1] != rank[file[b] + 1]: return rank[file[a] + 1] < rank[file[b] + 1]
+        if line[a] != line[b]: return line[a] < line[b]
         return a < b
     })
     return order
@@ -711,16 +711,16 @@ fn (d mut Diagnostics&) Items() Vec<Item> {
         rec := d.records[r]
         l.Push(Item.item(true, rec.rule, rec.at, rec.text))
         for nt in d.notes {
-            if nt.rec == r and not nt.help { l.Push(Item.item(false, "", nt.at, nt.text)) }
+            if nt.rec == r and not nt.help: l.Push(Item.item(false, "", nt.at, nt.text))
         }
         for nt in d.notes {
-            if nt.rec == r and nt.help { l.Push(Item.item(false, "", nt.at, nt.text, true)) }
+            if nt.rec == r and nt.help: l.Push(Item.item(false, "", nt.at, nt.text, true))
         }
     }
     if d.fatal {
         l.Push(Item.item(true, d.fatalRule, d.fatalAt, d.fatalText))
-        if d.fatalNote.Len() > 0 { l.Push(Item.item(false, "", d.fatalAt, d.fatalNote)) }
-        if d.fatalHelp.Len() > 0 { l.Push(Item.item(false, "", d.fatalAt, d.fatalHelp, true)) }
+        if d.fatalNote.Len() > 0: l.Push(Item.item(false, "", d.fatalAt, d.fatalNote))
+        if d.fatalHelp.Len() > 0: l.Push(Item.item(false, "", d.fatalAt, d.fatalHelp, true))
     }
     return l
 }
@@ -748,10 +748,10 @@ fn (d mut Diagnostics&) Render() String {
         rec := d.records[r]
         d.putRow(b, rec.at, "error", rec.rule, rec.text)
         for nt in d.notes {
-            if nt.rec == r and not nt.help { d.putNote(b, nt) }
+            if nt.rec == r and not nt.help: d.putNote(b, nt)
         }
         for nt in d.notes {
-            if nt.rec == r and nt.help { d.putNote(b, nt) }
+            if nt.rec == r and nt.help: d.putNote(b, nt)
         }
     }
     if d.fatal {
@@ -759,8 +759,8 @@ fn (d mut Diagnostics&) Render() String {
         b.Push(d.errorWord(d.fatalRule))
         b.Push(d.fatalText)
         b.PushChar('\n')
-        if d.fatalNote.Len() > 0 { d.putPlain(b, d.fatalAt, "note", d.fatalNote) }
-        if d.fatalHelp.Len() > 0 { d.putPlain(b, d.fatalAt, "help", d.fatalHelp) }
+        if d.fatalNote.Len() > 0: d.putPlain(b, d.fatalAt, "note", d.fatalNote)
+        if d.fatalHelp.Len() > 0: d.putPlain(b, d.fatalAt, "help", d.fatalHelp)
     }
     return b.ToString()
 }
@@ -768,7 +768,7 @@ fn (d mut Diagnostics&) Render() String {
 # the line ending a compilation: how many errors it found, or that it succeeded
 fn (d mut Diagnostics&) Summary() String {
     n := d.Errors()
-    if n == 0 { return $d.sgr("1") + "compilation successful" + $d.sgr("0") + "\n" }
+    if n == 0: return $d.sgr("1") + "compilation successful" + $d.sgr("0") + "\n"
     return $d.sgr("1;31") + "compilation failed with " + $n + " error" + $("" if n == 1 else "s") + $d.sgr("0") + "\n"
 }
 
@@ -779,8 +779,8 @@ fn (d mut Diagnostics&) Usage(m diagmsg.Msg) String {
     b.Push(d.errorWord(m.Rule))
     b.Push(m.Text)
     b.PushChar('\n')
-    if m.Note.Len() > 0 { d.putPlain(b, Where.Nowhere, "note", m.Note) }
-    if m.Help.Len() > 0 { d.putPlain(b, Where.Nowhere, "help", m.Help) }
+    if m.Note.Len() > 0: d.putPlain(b, Where.Nowhere, "note", m.Note)
+    if m.Help.Len() > 0: d.putPlain(b, Where.Nowhere, "help", m.Help)
     return b.ToString()
 }
 
@@ -837,8 +837,8 @@ fn (d mut Diagnostics&) putLocation(b mut StringBuilder&, at Where) {
 # a source byte in an excerpt: a tab stays a tab, so the caret line below lines up; any other control byte, which a
 # terminal would act on, is shown as '?'
 fn printable(c Char) Char {
-    if c == '\t' { return c }
-    if U8(c) < 32 or U8(c) == 127 { return '?' }
+    if c == '\t': return c
+    if U8(c) < 32 or U8(c) == 127: return '?'
     return c
 }
 
@@ -863,26 +863,26 @@ fn (d mut Diagnostics&) putExcerpt(b mut StringBuilder&, at Where) {
     text := d.texts[f]
     line, lineStart := d.lineOf(f, start)
     lineEnd := start
-    for lineEnd < text.Len() and text[lineEnd] != '\n' { lineEnd++ }
+    for lineEnd < text.Len() and text[lineEnd] != '\n': lineEnd++
     blank := true
     for i in range lineStart, lineEnd {
-        if text[i] != ' ' and text[i] != '\t' and text[i] != '\r' { blank = false }
+        if text[i] != ' ' and text[i] != '\t' and text[i] != '\r': blank = false
     }
-    if blank { return }
+    if blank: return
     spanEnd := end if end > start else start + 1
     from, to := lineStart, lineEnd
     if lineEnd - lineStart > ExcerptMax {
-        if start - ExcerptAround > from { from = start - ExcerptAround }
+        if start - ExcerptAround > from: from = start - ExcerptAround
         last := (spanEnd if spanEnd < start + ExcerptAround else start + ExcerptAround) + ExcerptAround
-        if last < to { to = last }
+        if last < to: to = last
     }
     _, shownLine := d.shown(f, line)
     b.Push($shownLine.PadStart(5) + " | ")
-    if from > lineStart { b.Push("...") }
-    for i in range from, to { b.PushChar(printable(text[i])) }
-    if to < lineEnd { b.Push("...") }
+    if from > lineStart: b.Push("...")
+    for i in range from, to: b.PushChar(printable(text[i]))
+    if to < lineEnd: b.Push("...")
     b.Push("\n      | ")
-    if from > lineStart { b.Push("   ") }
+    if from > lineStart: b.Push("   ")
     i := from
     for i < start and i < to {
         if not continues(text[i]) { b.PushChar('\t' if text[i] == '\t' else ' ') }
@@ -892,7 +892,7 @@ fn (d mut Diagnostics&) putExcerpt(b mut StringBuilder&, at Where) {
     b.PushChar('^')
     i = start + 1
     for i < spanEnd and i < to {
-        if not continues(text[i]) { b.PushChar('~') }
+        if not continues(text[i]): b.PushChar('~')
         i++
     }
     b.Push(d.sgr("0"))
@@ -919,11 +919,11 @@ fn section() String {
 # the rule a line defines - "**B1.**", "- **O25a.**", "**T6b (a title).**" - or "" when it defines none
 fn ruleIdAt(line String&) String& {
     l := line[2:] if line.StartsWith("- ") else line[:]
-    if l.Len() < 4 or not l.StartsWith("**") or not l[2].IsUpper() or not l[3].IsDigit() { return line[0:0] }
+    if l.Len() < 4 or not l.StartsWith("**") or not l[2].IsUpper() or not l[3].IsDigit(): return line[0:0]
     p I64 = 3
-    for p < l.Len() and l[p].IsDigit() { p++ }
-    for p < l.Len() and l[p].IsLower() { p++ }
-    if not l[p:].StartsWith(".**") and not l[p:].StartsWith(" (") { return line[0:0] }
+    for p < l.Len() and l[p].IsDigit(): p++
+    for p < l.Len() and l[p].IsLower(): p++
+    if not l[p:].StartsWith(".**") and not l[p:].StartsWith(" ("): return line[0:0]
     return l[2:p]
 }
 
@@ -950,7 +950,7 @@ fn Explain(spec String&, rule String&) String ? {
         rest = rest[nl + 1:]
         id := ruleIdAt(line)
         head := line[0] == '#'
-        if inside and (id.Len() > 0 or head) { break }
+        if inside and (id.Len() > 0 or head): break
         if head {
             heading = line
             continue
@@ -960,14 +960,14 @@ fn Explain(spec String&, rule String&) String ? {
             found = true
             # "### 10.1 Compilation modes" is "§10.1 Compilation modes"
             h I64 = 0
-            for h < heading.Len() and (heading[h] == '#' or heading[h] == ' ') { h++ }
+            for h < heading.Len() and (heading[h] == '#' or heading[h] == ' '): h++
             if heading.Len() > 0 {
-                if h < heading.Len() and heading[h].IsDigit() { out.Push(section()) }
+                if h < heading.Len() and heading[h].IsDigit(): out.Push(section())
                 out.Push(heading[h:])
                 out.PushChar('\n')
             }
         }
-        if not inside { continue }
+        if not inside: continue
         if line == "\n" {
             blanks++                # written only if more of the rule follows
             continue
@@ -978,7 +978,7 @@ fn Explain(spec String&, rule String&) String ? {
         }
         out.Push(line)
     }
-    if not found { error RuleError.NotFound }
+    if not found: error RuleError.NotFound
     return out.ToString()
 }
 
@@ -1114,7 +1114,7 @@ test "an error inside an instantiation says where it was asked for; one in the l
 test "only the innermost contexts and the outermost are named" {
     d := Diagnostics(false)
     f := d.AddFile("h.olang", "a b c d e\n")
-    for i in range 5 { d.PushContext(Where.Span(f, i * 2, i * 2 + 1), "at " + $i) }
+    for i in range 5: d.PushContext(Where.Span(f, i * 2, i * 2 + 1), "at " + $i)
     d.Error(Where.Span(f, 8, 9), msgs.NoMain())
     out := d.Render()
     assert out.Contains("note: at 4") and out.Contains("note: at 3") and out.Contains("note: at 0")
@@ -1124,7 +1124,7 @@ test "only the innermost contexts and the outermost are named" {
 test "a long line is shown as a window around the span; tabs line up and control bytes do not reach the terminal" {
     d := Diagnostics(false)
     long := StringBuilder()
-    for _ in range 200 { long.PushChar('a') }
+    for _ in range 200: long.PushChar('a')
     f := d.AddFile("i.olang", long.ToString())
     d.Error(Where.Span(f, 100, 102), msgs.NoMain())
     out := d.Render()

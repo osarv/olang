@@ -299,7 +299,7 @@ fn (f Func&) IsBuilder() Bool { return f.Owner != null }
 
 # D19: a builder's owner's name as written, "Color" for "fn Color.FromHex" and "List" for "fn List<T>.Of"; 0 for none
 fn (f Func&) OwnerName() source.NameId {
-    if f.Owner == null { return source.NameId(0) }
+    if f.Owner == null: return source.NameId(0)
     match f.Owner! {
         case TypeRef.Named(_, path, _) { return path[path.Len() - 1] }
         case _ { return source.NameId(0) }
@@ -526,16 +526,16 @@ fn (s Stmt&) Span() source.Span {
 NoYield source.Span = source.Span(-1, -1)
 
 fn FirstYield(body Array<Stmt&>&) source.Span {
-    if body.Len() == 0 { return NoYield }
+    if body.Len() == 0: return NoYield
     for st in body {
         y := yieldIn(st)
-        if y.Start >= I32(0) { return y }
+        if y.Start >= I32(0): return y
     }
     return NoYield
 }
 
 fn yieldIn(st Stmt?&) source.Span {
-    if st == null { return NoYield }
+    if st == null: return NoYield
     return match st {
         case Stmt.Yield(sp, _): sp
         case Stmt.ExprS(_, x): yieldInExpr(x)
@@ -564,39 +564,39 @@ fn yieldOr(a source.Span, b source.Span) source.Span { return a if a.Start >= I3
 
 fn yieldInIf(i If&) source.Span {
     y := yieldInExpr(i.Cond)
-    if y.Start < I32(0) and i.Then != null { y = FirstYield(i.Then!.Body) }
+    if y.Start < I32(0) and i.Then != null: y = FirstYield(i.Then!.Body)
     return yieldOr(y, yieldIn(i.Else))
 }
 
 fn yieldInMatch(m Match&) source.Span {
     y := yieldInExpr(m.Subject)
-    for cs in m.Cases { y = yieldOr(y, yieldInCase(cs)) }
+    for cs in m.Cases: y = yieldOr(y, yieldInCase(cs))
     return y
 }
 
 fn yieldInCase(cs Case&) source.Span { return yieldOr(yieldOr(yieldInExpr(cs.Guard), FirstYield(cs.Body)), yieldInExpr(cs.Value)) }
 
 fn yieldInCatches(cs Array<Catch&>&) source.Span {
-    if cs.Len() == 0 { return NoYield }
+    if cs.Len() == 0: return NoYield
     for k in cs {
         y := yieldOr(FirstYield(k.Body), yieldInExprs(k.Defaults))
-        if y.Start >= I32(0) { return y }
+        if y.Start >= I32(0): return y
     }
     return NoYield
 }
 
 fn yieldInExprs(xs Array<Expr&>&) source.Span {
-    if xs.Len() == 0 { return NoYield }
+    if xs.Len() == 0: return NoYield
     for x in xs {
         y := yieldInExpr(x)
-        if y.Start >= I32(0) { return y }
+        if y.Start >= I32(0): return y
     }
     return NoYield
 }
 
 # an expression's statements: a try's clauses, a match value's cases
 fn yieldInExpr(x Expr?&) source.Span {
-    if x == null { return NoYield }
+    if x == null: return NoYield
     return match x {
         case Expr.Paren(_, y), Expr.Named(_, _, y), Expr.Spread(_, y), Expr.Unary(_, _, y), Expr.Postfix(_, _, y), Expr.Member(_, y, _): yieldInExpr(y)
         case Expr.As(_, y, _), Expr.Generic(_, y, _): yieldInExpr(y)
@@ -629,11 +629,11 @@ fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?& {
     for d in ds {
         match d {
             case Decl.Test(dsp, _, _, _) {
-                if dsp == sp { return d }
+                if dsp == sp: return d
             }
             case Decl.If(_, ti) {
                 found := Decl.findTestIf(ti, sp)
-                if found != null { return found }
+                if found != null: return found
             }
             case _ { }
         }
@@ -642,14 +642,14 @@ fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?& {
 }
 
 fn Decl.findTestIf(ti TopIf?&, sp source.Span) Decl?& {
-    if ti == null { return null }
+    if ti == null: return null
     if ti.Then != null {
         f := FindTest(ti.Then!.Decls, sp)
-        if f != null { return f }
+        if f != null: return f
     }
     if ti.Else != null {
         f := FindTest(ti.Else!.Decls, sp)
-        if f != null { return f }
+        if f != null: return f
     }
     return Decl.findTestIf(ti.ElseIf, sp)
 }
@@ -658,10 +658,10 @@ fn Decl.findTestIf(ti TopIf?&, sp source.Span) Decl?& {
 fn TestTarget(d Decl&, names source.Names&) String {
     match d {
         case Decl.Test(_, _, _, target) {
-            if target == null { return "" }
+            if target == null: return ""
             b := StringBuilder()
             for i, n in target.Parts {
-                if i > 0 { b.PushChar('.') }
+                if i > 0: b.PushChar('.')
                 b.Push(names.Text(n))
             }
             return b.ToString()
@@ -674,7 +674,7 @@ fn TestTarget(d Decl&, names source.Names&) String {
 # and a type variable's constraint for a default over one: "Iterator" for "fn (it mut I&) TakeWhile<I Iterator<T>, T>";
 # "" for no receiver or one written otherwise
 fn RecvTarget(f Func&, names source.Names&) String {
-    if f.Recv == null { return "" }
+    if f.Recv == null: return ""
     t := f.Recv!.Ty
     for t != null {
         match t {
@@ -692,7 +692,7 @@ fn RecvTarget(f Func&, names source.Names&) String {
 # for "fn T.Parse<T Integer>"); "" for no builder
 fn OwnerTarget(f Func&, names source.Names&) String {
     n := f.OwnerName()
-    if n == source.NameId(0) { return "" }
+    if n == source.NameId(0): return ""
     return nameOrConstraint(f, n, names)
 }
 
@@ -700,7 +700,7 @@ fn OwnerTarget(f Func&, names source.Names&) String {
 # constrained type variables, "" where its constraint is written otherwise, else n itself
 fn nameOrConstraint(f Func&, n source.NameId, names source.Names&) String {
     for tp in f.TypeParams {
-        if tp.Name != n or tp.Ty == null { continue }
+        if tp.Name != n or tp.Ty == null: continue
         return match tp.Ty! {
             case TypeRef.Named(_, cpath, _): $names.Text(cpath[cpath.Len() - 1])
             case _: ""
@@ -714,7 +714,7 @@ fn TestDesc(d Decl&, text String&) String {
     match d {
         case Decl.Test(_, name, _, _) {
             s := text[name.Start:name.End]
-            if s.Len() >= 2 and s[0] == '"' { return $s[1:s.Len() - 1] }
+            if s.Len() >= 2 and s[0] == '"': return $s[1:s.Len() - 1]
             return s
         }
         case _ { return "test" }
@@ -724,7 +724,7 @@ fn TestDesc(d Decl&, text String&) String {
 # a test as its run reports it: "Target: description", or the description alone
 fn TestLabel(d Decl&, text String&, names source.Names&) String {
     t := TestTarget(d, names)
-    if t.Len() == 0 { return TestDesc(d, text) }
+    if t.Len() == 0: return TestDesc(d, text)
     return $t + ": " + $TestDesc(d, text)
 }
 
@@ -743,8 +743,8 @@ type Req struct(Sp source.Span, Cond Expr&, Negated Bool) {
 # member, a constant) says nothing of a call, and S18c decides it where it is written
 fn Requirements(body Array<Stmt&>&, names source.Names&, text String&, params Array<Param&>&, recv Param?&) Array<Req&>& {
     ps Vec<String&>
-    for p in params { ps.Push(names.Text(p.Name)) }
-    if recv != null { ps.Push(names.Text(recv.Name)) }
+    for p in params: ps.Push(names.Text(p.Name))
+    if recv != null: ps.Push(names.Text(recv.Name))
     out mut Vec<Req&>& = Vec<Req&>()
     for st in body {
         r := Req.leading(st, names)

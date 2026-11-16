@@ -139,7 +139,7 @@ fn (w mut walker&) walk() {
             w.pendingValue = not w.stmtStart(i)
             continue
         }
-        if w.inMatch() { w.inBody(i) }
+        if w.inMatch(): w.inBody(i)
         if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
             m := k == token.Tok.LBrace and w.pending == w.stack.Len()
             w.stack.Push(open(k, m, w.pendingValue and m))
@@ -189,7 +189,7 @@ fn (w walker&) clauseHeader(i I64) Bool {
 fn migrate(src String&, hand mut Vec<String&>&, path String&) String {
     w := walker(src, scan.Tokens.Scan(src).Toks)
     w.walk()
-    for h in w.r.hand { hand.Push($path + ":" + $h) }
+    for h in w.r.hand: hand.Push($path + ":" + $h)
     if w.r.edits.Len() == 0: return src
     es mut Vec<edit>& = w.r.edits
     es.Sort(fn(a edit, b edit): return a.Start < b.Start)
@@ -269,7 +269,7 @@ fn main() ? {
             os.Exit(1)
         }
     }
-    for h in hand { srcmask.Say("by hand: " + $h) }
+    for h in hand: srcmask.Say("by hand: " + $h)
     verb := "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files")
     if check and changed > 0: os.Exit(1)

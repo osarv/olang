@@ -11,7 +11,7 @@ fn spin(n I64) I64 {
 fn grow(n I64) I64 {
     l := Vec<I64>()
     l.Push(n)
-    for x in l { l.Push(x + 1) }
+    for x in l: l.Push(x + 1)
     return l.Len()
 }
 fn big(n I64) I64 {
@@ -22,5 +22,5 @@ Spun I64 = spin(1)
 Big I64 = big(100000000)
 Grown I64 = grow(1)
 fn main() ? {
-    if Spun + Grown + Big == 100000003 { return }
+    if Spun + Grown + Big == 100000003: return
 }

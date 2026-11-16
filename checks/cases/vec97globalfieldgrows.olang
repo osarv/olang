@@ -9,7 +9,7 @@ type Lexer struct(n I64) {
 GL mut Lexer = Lexer(1)
 fn bump() { GL.toks.Push(5) }
 fn main() ? {
-    for i in range 3 { GL.toks.Push(i) }
+    for i in range 3: GL.toks.Push(i)
     d := GL.toks.View()
     bump()
     try io.PutLine($d[0])

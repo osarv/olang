@@ -40,7 +40,7 @@ fn declared(line String&) String, String {
     t := line.TrimStart()
     ind := line[:line.Len() - t.Len()]
     i := 0
-    for i < t.Len() and srcmask.IsWord(t[i]) { i++ }
+    for i < t.Len() and srcmask.IsWord(t[i]): i++
     if i == 0: return "", $line
     name := t[:i]
     rest := t[i:]
@@ -69,7 +69,7 @@ fn returned(line String&, names Vec<String&>&) String {
 # whether the "mut" at i is a global's binding (S6: "Name mut String& = ..." at a line's start), which stays
 fn globalAt(text String&, i I64) Bool {
     ls := i
-    for ls > 0 and text[ls - 1] != '\n' { ls-- }
+    for ls > 0 and text[ls - 1] != '\n': ls--
     pre := text[ls:i]
     if pre.Len() < 2 or not pre.EndsWith(" ") or not srcmask.IsIdStart(pre[0]): return false
     for c in pre[:pre.Len() - 1] {

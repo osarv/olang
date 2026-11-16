@@ -29,25 +29,25 @@ fn churn() I64 {
 
 fn fill(h mut holder&, n I64, k I64) {
     v := Vec<I64>()
-    for i in range n { v.Push(i * k) }
+    for i in range n: v.Push(i * k)
     h.d = v
 }
 
 fn global(n I64, k I64) {
     v := Vec<I64>()
-    for i in range n { v.Push(i + k) }
+    for i in range n: v.Push(i + k)
     cache = v
 }
 
 fn label(h mut holder&, k I64) {
     w := Vec<String>()
-    for i in range 5 { w.Push("n" + $(i + k)) }
+    for i in range 5: w.Push("n" + $(i + k))
     h.names = w
 }
 
 fn across(h mut holder&, k I64) I64 {
     v := Vec<I64>()
-    for i in range 9 { v.Push(i + k) }
+    for i in range 9: v.Push(i + k)
     r := v.View()
     h.a = v
     h.a = Vec<I64>[k, k]
@@ -57,15 +57,15 @@ fn across(h mut holder&, k I64) I64 {
 
 fn kept(h mut holder&, k I64) {
     v := Vec<I64>()
-    for i in range 9 { v.Push(i + k) }
+    for i in range 9: v.Push(i + k)
     h.view = v.View()
     h.e = v
 }
 
 fn sometimes(h mut holder&, k I64) {
     v := Vec<I64>()
-    for i in range 7 { v.Push(i - k) }
-    if k % 2 == 0 { h.f = v }
+    for i in range 7: v.Push(i - k)
+    if k % 2 == 0: h.f = v
 }
 
 fn main() {

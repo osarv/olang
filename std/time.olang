@@ -81,17 +81,17 @@ fn Duration.Elapsed(t I64) Duration { return Duration(Now() - t) }
 # before a negative one
 fn (d Duration) Str() String {
     n := I64(d)
-    if n == 0 { return "0s" }
+    if n == 0: return "0s"
     sign := "-" if n < 0 else ""
     u U64 = U64(-n) if n < 0 else U64(n)            # the most negative I64 too
-    if u < 1000 { return $sign + $u + "ns" }
-    if u < 1000000 { return $sign + $fraction(u, 1000) + "us" }
-    if u < 1000000000 { return $sign + $fraction(u, 1000000) + "ms" }
+    if u < 1000: return $sign + $u + "ns"
+    if u < 1000000: return $sign + $fraction(u, 1000) + "us"
+    if u < 1000000000: return $sign + $fraction(u, 1000000) + "ms"
     h := u / 3600000000000
     m := u / 60000000000 % 60
     s := fraction(u % 60000000000, 1000000000)
-    if h > 0 { return $sign + $h + "h" + $m + "m" + $s + "s" }
-    if m > 0 { return $sign + $m + "m" + $s + "s" }
+    if h > 0: return $sign + $h + "h" + $m + "m" + $s + "s"
+    if m > 0: return $sign + $m + "m" + $s + "s"
     return $sign + $s + "s"
 }
 
@@ -99,7 +99,7 @@ fn (d Duration) Str() String {
 fn fraction(u U64, unit U64) String {
     whole := u / unit
     rest := u % unit
-    if rest == 0 { return $whole }
+    if rest == 0: return $whole
     digits := StringBuilder()
     for f := unit / 10, f > 0 and rest > 0, f = f / 10 {
         digits.PushChar(Char('0' + rest / f))
@@ -113,7 +113,7 @@ fn fraction(u U64, unit U64) String {
 # that interrupts the sleep does not shorten it - the rest is slept. Under the evaluator, and while compiling
 # where a call is reached, it sleeps as at run time (an effect: a global set from one is set at startup)
 fn Sleep(d Duration) {
-    if d <= 0 { return }
+    if d <= 0: return
     if TestBuild {
         if virtualDepth.AtomicLoad() > 0 {
             virtualNs.AtomicAdd(I64(d))
@@ -326,7 +326,7 @@ fn (d Date&) Str() String {
         b.PushChar('.')
         digits := d.Nano.PadStart(9, '0')
         n := digits.Len()
-        for n > 0 and digits[n - 1] == '0' { n-- }
+        for n > 0 and digits[n - 1] == '0': n--
         b.Push(digits[:n])
     }
     if d.Offset == 0 {
@@ -344,18 +344,18 @@ fn Format(wall I64, offset I64 = 0) String { return Date.Of(wall, offset).Str() 
 
 # n digits of t from at, as a number - failing with SYNTAX when they are not all there
 fn digitsAt(t String&, at I64, n I64) I64 ? Error.Syntax {
-    if at + n > t.Len() { error Error.Syntax(t.Len()) }
+    if at + n > t.Len(): error Error.Syntax(t.Len())
     v I64 = 0
     for i in range n {
         c := t[at + i]
-        if not c.IsDigit() { error Error.Syntax(at + i) }
+        if not c.IsDigit(): error Error.Syntax(at + i)
         v = v * 10 + I64(c - '0')
     }
     return v
 }
 
 fn expect(t String&, at I64, c Char) ? Error.Syntax {
-    if at >= t.Len() or t[at] != c { error Error.Syntax(at) }
+    if at >= t.Len() or t[at] != c: error Error.Syntax(at)
 }
 
 # an RFC 3339 date and time read into a Date: "YYYY-MM-DDTHH:MM:SS", a fraction of up to nine digits after a '.', and
@@ -367,7 +367,7 @@ fn Date.Parse(t String&) Date ? Error {
     mo := try digitsAt(t, 5, 2)
     try expect(t, 7, '-')
     d := try digitsAt(t, 8, 2)
-    if t.Len() <= 10 or (t[10] != 'T' and t[10] != 't' and t[10] != ' ') { error Error.Syntax(10) }
+    if t.Len() <= 10 or (t[10] != 'T' and t[10] != 't' and t[10] != ' '): error Error.Syntax(10)
     h := try digitsAt(t, 11, 2)
     try expect(t, 13, ':')
     mi := try digitsAt(t, 14, 2)
@@ -380,14 +380,14 @@ fn Date.Parse(t String&) Date ? Error {
         start := at
         scale I64 = 100000000
         for at < t.Len() and t[at].IsDigit() {
-            if at - start >= 9 { error Error.Syntax(at) }
+            if at - start >= 9: error Error.Syntax(at)
             nano += I64(t[at] - '0') * scale
             scale = scale / 10
             at++
         }
-        if at == start { error Error.Syntax(at) }
+        if at == start: error Error.Syntax(at)
     }
-    if at >= t.Len() { error Error.Syntax(at) }
+    if at >= t.Len(): error Error.Syntax(at)
     off I64 = 0
     if t[at] == 'Z' or t[at] == 'z' {
         at++
@@ -395,15 +395,15 @@ fn Date.Parse(t String&) Date ? Error {
         oh := try digitsAt(t, at + 1, 2)
         try expect(t, at + 3, ':')
         om := try digitsAt(t, at + 4, 2)
-        if oh > 23 or om > 59 { error Error.Range }
+        if oh > 23 or om > 59: error Error.Range
         off = oh * 60 + om
-        if t[at] == '-' { off = -off }
+        if t[at] == '-': off = -off
         at += 6
     } else {
         error Error.Syntax(at)
     }
-    if at != t.Len() { error Error.Syntax(at) }
-    if mo < 1 or mo > 12 or d < 1 or d > daysIn(y, mo) or h > 23 or mi > 59 or s > 59 { error Error.Range }
+    if at != t.Len(): error Error.Syntax(at)
+    if mo < 1 or mo > 12 or d < 1 or d > daysIn(y, mo) or h > 23 or mi > 59 or s > 59: error Error.Range
     return Date(y, mo, d, h, mi, s, nano, off)
 }
 

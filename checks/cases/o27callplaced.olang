@@ -37,17 +37,17 @@ fn plain(n I64) I64 {
         churn()
     }
     s := 0
-    for v in views { s += v[0] }
+    for v in views: s += v[0]
     return s
 }
 
 fn outlived(n I64) I64 {
     h H = H(7)
     views := Vec<Array<I64>&>()
-    for _ in range n { views.Push(first2(h)) }
+    for _ in range n: views.Push(first2(h))
     churn()
     s := 0
-    for v in views { s += v[1] }
+    for v in views: s += v[1]
     return s
 }
 

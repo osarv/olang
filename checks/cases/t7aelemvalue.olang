@@ -17,7 +17,7 @@ fn churn() I64 {
 fn main() ? {
     b := B()
     b.data = Array<P>(3)
-    for i in range 3 { b.data[i] = P("p" + $i, i) }
+    for i in range 3: b.data[i] = P("p" + $i, i)
     e := b.data[1]
     b.data = Array<P>(5)
     churn()

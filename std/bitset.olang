@@ -46,7 +46,7 @@ fn plain<T>() Bool {
 fn index<T>(x T) I64 {
     check<T>()
     for k, c in T.Cases {
-        if x == c { return k }
+        if x == c: return k
     }
     unreachable
 }
@@ -54,7 +54,7 @@ fn index<T>(x T) I64 {
 # the case at position k, k below the number of cases
 fn caseAt<T>(k I64) T {
     for i, c in T.Cases {
-        if i == k { return c() }
+        if i == k: return c()
     }
     unreachable
 }
@@ -63,7 +63,7 @@ fn caseAt<T>(k I64) T {
 fn mask<T>() U64 {
     check<T>()
     n := T.Cases.Len()
-    if n == 64 { return U64.Max }
+    if n == 64: return U64.Max
     return (U64(1) << n) - 1
 }
 
@@ -76,7 +76,7 @@ fn BitSet<T>.Full() BitSet<T> { return BitSet<T>.of(mask<T>()) }
 # the set of the cases in a
 fn BitSet<T>.Of(a Array<T>&) BitSet<T> {
     s := BitSet<T>.of(0)
-    for x in a { s.bits |= U64(1) << index(x) }
+    for x in a: s.bits |= U64(1) << index(x)
     return s
 }
 
@@ -84,13 +84,13 @@ fn BitSet<T>.Of(a Array<T>&) BitSet<T> {
 # "bitset.BitSet<Color>[Color.Red, Color.Blue]". Fails with what the iterator fails with
 fn BitSet<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) BitSet<T> ? E {
     s := BitSet<T>.of(0)
-    for x in try it { s.bits |= U64(1) << index(x) }
+    for x in try it: s.bits |= U64(1) << index(x)
     return s
 }
 
 # the set whose case-index bits are b; bits past the last case fail
 fn BitSet<T>.FromBits(b U64) BitSet<T> ? Error.OutOfRange {
-    if b & ~mask<T>() != 0 { error Error.OutOfRange }
+    if b & ~mask<T>() != 0: error Error.OutOfRange
     return BitSet<T>.of(b)
 }
 
@@ -100,7 +100,7 @@ fn BitSet<T>.FromFlags(w U64) BitSet<T> {
     s := BitSet<T>.of(0)
     for k, c in T.Cases {
         r := U64(c().Value())
-        if r != 0 and r & w == r { s.bits |= U64(1) << k }
+        if r != 0 and r & w == r: s.bits |= U64(1) << k
     }
     return s
 }
@@ -135,7 +135,7 @@ fn (s BitSet<T>&) Flags() U64 {
     check<T>()
     w U64 = 0
     for k, c in T.Cases {
-        if s.bits >> k & 1 == 1 { w |= U64(c().Value()) }
+        if s.bits >> k & 1 == 1: w |= U64(c().Value())
     }
     return w
 }
@@ -166,7 +166,7 @@ type Iter<T> struct(bits U64) {
 fn (s BitSet<T>&) Iter() Iter<T> { return Iter<T>(s.bits) }
 
 fn (it mut Iter<T>&) Next() T ? Exhausted {
-    if it.rest == 0 { error Exhausted.End }
+    if it.rest == 0: error Exhausted.End
     k := it.rest.TrailingZeros()
     it.rest &= it.rest - 1
     return caseAt<T>(k)
@@ -219,7 +219,7 @@ test BitSet "set algebra by operators" {
 test BitSet "a walk gives the cases in declaration order" {
     s := BitSet.Of(Array<Color>[Color.Blue, Color.Red])
     seen := ""
-    for c in s { seen = $seen + $c + " " }
+    for c in s: seen = $seen + $c + " "
     assert seen == "Color.Red Color.Blue "
     assert $s == "BitSet<Color>[Color.Red, Color.Blue]" and $BitSet<Color>.Empty() == "BitSet<Color>[]"
 }

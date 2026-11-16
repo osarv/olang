@@ -8,12 +8,12 @@ import "std/io"
 import "std/list"
 fn main() ? {
     users := list.List<list.List<I64>>()
-    for _ in range 4 { users.Push(list.List<I64>()) }
+    for _ in range 4: users.Push(list.List<I64>())
     join {
-        for i in range 4 { spawn users[i].Push(i) }
+        for i in range 4: spawn users[i].Push(i)
     }
     churn := Vec<String&>()
-    for i in range 1000 { churn.Push("x" + $i) }
+    for i in range 1000: churn.Push("x" + $i)
     t I64 = 0
     for k in range 4 { t += users[k].Len() * 10 + (try users[k].Get(0) catch default -1) }
     try io.PutLine($t + " " + $churn.Len())

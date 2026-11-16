@@ -101,5 +101,5 @@ fn step(h mut Holder&, i I64) {
 fn main() {
     h := Holder()
     h.set(-1)
-    for i in range 5 { step(h, i) }
+    for i in range 5: step(h, i)
 }

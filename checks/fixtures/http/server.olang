@@ -74,7 +74,7 @@ type Request struct(Method String&, Path String&, Names Vec<String&>, Values Vec
 fn (r Request&) Header(name String&, fallback String&) String {
     lower := name.ToLower()
     for k, n in r.Names {
-        if n.ToLower() == lower { return $r.Values[k] }
+        if n.ToLower() == lower: return $r.Values[k]
     }
     return $fallback
 }
@@ -97,11 +97,11 @@ fn receive(fd I32) String {
     got := StringBuilder()
     for {
         chunk := try io.Read(fd, buf) catch { break }
-        if chunk.Len() == 0 { break }
+        if chunk.Len() == 0: break
         got.Push(String(chunk))
         text := got.ToString()
         end := try text.Find("\r\n\r\n") catch { continue }
-        if text.Len() >= end + 4 + bodyLength(text[:end]) { return text }
+        if text.Len() >= end + 4 + bodyLength(text[:end]): return text
     }
     return got.ToString()
 }
@@ -116,7 +116,7 @@ fn Request.parse(text String&) Request ? {
     end := try text.Find("\r\n\r\n")
     lines := text[:end].Split("\r\n")
     parts := lines[0].Split(" ")
-    if parts.Len() < 2 { error badRequest.Line }
+    if parts.Len() < 2: error badRequest.Line
     names Vec<String&>
     values Vec<String&>
     for k in range 1, lines.Len() {
@@ -131,9 +131,9 @@ fn Request.parse(text String&) Request ? {
 fn response(code I64, headers Vec<String&>, body String&, withBody Bool) String {
     out := StringBuilder()
     out.Push("HTTP/1.1 " + $code + " " + $reason(code) + "\r\n")
-    for h in headers { out.Push($h + "\r\n") }
+    for h in headers: out.Push($h + "\r\n")
     out.Push("Content-Length: " + $body.Len() + "\r\nConnection: close\r\n\r\n")
-    if withBody { out.Push(body) }
+    if withBody: out.Push(body)
     return out.ToString()
 }
 
@@ -224,7 +224,7 @@ fn main() ? {
             peerSize mut Array<U32>& = Array<U32>(1)
             peerSize[0] = 16
             conn := accept(fd, peer, peerSize)
-            if conn >= 0 { spawn serve(conn) }
+            if conn >= 0: spawn serve(conn)
         }
     }
 }

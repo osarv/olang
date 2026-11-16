@@ -44,7 +44,7 @@ fn firsts(n I64) String {
     }
     churn()
     out := StringBuilder()
-    for w in keep { out.Push(w) }
+    for w in keep: out.Push(w)
     return out.ToString()
 }
 
@@ -77,10 +77,10 @@ fn pieces(t String&) Iterator<String&> {
 
 fn kept(t String&) String {
     out := Vec<String&>()
-    for w in pieces(t) { out.Push(w) }
+    for w in pieces(t): out.Push(w)
     churn()
     b := StringBuilder()
-    for w in out { b.Push(w) }
+    for w in out: b.Push(w)
     return b.ToString()
 }
 
@@ -92,7 +92,7 @@ fn stash(h mut Holder&, k I64) {
 
 fn closureAfter(k I64) I64 {
     h mut Holder& = Holder()
-    for i in range k { stash(h, i) }
+    for i in range k: stash(h, i)
     churn()
     return h.f!(1)
 }

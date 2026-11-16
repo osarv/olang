@@ -9,7 +9,7 @@ fn main() {
     v := Vec<blk>()
     v.Push(blk(1))
     r := v.RefMut(0)
-    for i in range 100000 { v.Push(blk(i)) }
+    for i in range 100000: v.Push(blk(i))
     r.n = 77
     x := v[0].n
     io.PutLine("v[0].n = " + $x + " r.n = " + $r.n)!

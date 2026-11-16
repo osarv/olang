@@ -7,12 +7,12 @@ import "std/os"
 import "std/io"
 
 fn produce(c mut chan.Chan<I32>&, n I32) {
-    for i in range n { chan.Send(c, i)! }
+    for i in range n: chan.Send(c, i)!
     chan.Close(c)
 }
 
 fn consume(c mut chan.Chan<I32>&, total mut Array<I64>&) {
-    for v in c { total[0] += v }
+    for v in c: total[0] += v
 }
 
 fn square(n I64) I64 { return n * n }
@@ -21,7 +21,7 @@ fn main() ? {
     defer try io.PutLine("cleanup ran") catch io.Error { }
     out := Array<I64>(4)
     join {
-        for i in range 4 { spawn out[i] = square(i + 1) }
+        for i in range 4: spawn out[i] = square(i + 1)
     }
     try io.PutLine("squares " + $out)
     small mut chan.Chan<I32>& = chan.Chan<I32>(8)

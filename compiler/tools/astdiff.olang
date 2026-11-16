@@ -41,9 +41,9 @@ fn main() {
         work = toolkit.Scratch("astdiff")
     }
     defer {
-        if keep == "" { toolkit.Clean(work) }
+        if keep == "": toolkit.Clean(work)
     }
-    if not toolkit.Built(dump) { toolkit.Die("astdiff: " + $dump + " is not built (make " + $dump + ")") }
+    if not toolkit.Built(dump): toolkit.Die("astdiff: " + $dump + " is not built (make " + $dump + ")")
     g := toolkit.HashGolden.Read(Golden, "astgold")
     oraw := toolkit.RunTool(dump, "ast", files)
     toolkit.Write($work + "/olang.raw", oraw)
@@ -53,17 +53,17 @@ fn main() {
     o := toolkit.Golden.DumpSections(olang)
     stale := toolkit.HashGoldenStale(g, files)
     isStale := Map<String&, Bool>()
-    for f in stale { isStale.Put(f, true) }
+    for f in stale: isStale.Put(f, true)
     bad I64 = 0
     for f in files {
-        if f in isStale { continue }
+        if f in isStale: continue
         rep := toolkit.HashGoldenCheck(g, work, f, try o.Bodies.Get(f) catch default "")
         if rep != "" {
             bad++
-            if bad <= 5 { toolkit.Say(rep) }
+            if bad <= 5: toolkit.Say(rep)
         }
     }
-    for f in stale { toolkit.Say("astdiff: " + $f + " changed since the golden was captured (make astgold)\n") }
+    for f in stale: toolkit.Say("astdiff: " + $f + " changed since the golden was captured (make astgold)\n")
     bad += stale.Len()
     if bad > 0 {
         toolkit.Say("astdiff: the trees of " + $bad + " of " + $files.Len() + " files differ\n")
@@ -81,7 +81,7 @@ fn main() {
             header = $line
             continue
         }
-        if line == "ok" or line.StartsWith("skipped") { continue }
+        if line == "ok" or line.StartsWith("skipped"): continue
         toolkit.Say($header + "\n" + $line + "\n")
         broken = true
     }
@@ -95,7 +95,7 @@ fn main() {
 # every tracked file's tree, normalized, from the self-hosted parser, written as the golden
 fn capture(dump String&) {
     files := toolkit.Tracked("*.olang")
-    if not toolkit.Built(dump) { toolkit.Die("astdiff: " + $dump + " is not built (make " + $dump + ")") }
+    if not toolkit.Built(dump): toolkit.Die("astdiff: " + $dump + " is not built (make " + $dump + ")")
     raw := toolkit.RunTool(dump, "ast", files)
     sections(raw, files.Len(), dump)
     s := toolkit.Golden.DumpSections(normalize(raw))
@@ -108,7 +108,7 @@ fn capture(dump String&) {
 # a tool that stops early prints fewer sections than files: that is a failure, never an empty match
 fn sections(text String&, files I64, who String&) {
     n := toolkit.Sections(text)
-    if n != files { toolkit.Die("astdiff: " + $who + " printed " + $n + " of " + $files + " files") }
+    if n != files: toolkit.Die("astdiff: " + $who + " printed " + $n + " of " + $files + " files")
 }
 
 # a position "LINE:COL" as one number
@@ -122,10 +122,10 @@ fn pos(at String&) I64 {
 # whether text is a span "L:C-L:C"
 fn isSpan(t String&) Bool {
     dash := try t.FindByte('-') catch default -1
-    if dash < 0 { return false }
+    if dash < 0: return false
     for half in Array<String&>[t[0:dash], t[dash + 1:]] {
         colon := try half.FindByte(':') catch default -1
-        if colon < 0 or not toolkit.IsNumber(half[0:colon]) or not toolkit.IsNumber(half[colon + 1:]) { return false }
+        if colon < 0 or not toolkit.IsNumber(half[0:colon]) or not toolkit.IsNumber(half[colon + 1:]): return false
     }
     return true
 }
@@ -141,8 +141,8 @@ type norm struct() {
 
 # the section read so far written out - its header, then its rows sorted by bytes - and a new one begun
 fn (n mut norm&) flush(next String&) {
-    if n.header != "" { n.out.Push(n.header) }
-    for r in toolkit.Sorted(n.rows) { n.out.Push($r) }
+    if n.header != "": n.out.Push(n.header)
+    for r in toolkit.Sorted(n.rows): n.out.Push($r)
     n.rows.Clear()
     n.header = $next
 }
@@ -150,7 +150,7 @@ fn (n mut norm&) flush(next String&) {
 # whether an item the file keeps whole holds the position
 fn (n norm&) kept(at I64) Bool {
     for i in range n.lo.Len() {
-        if n.lo[i] <= at and at <= n.hi[i] { return true }
+        if n.lo[i] <= at and at <= n.hi[i]: return true
     }
     return false
 }
@@ -159,7 +159,7 @@ fn (n norm&) kept(at I64) Bool {
 # without its position (stage 0 says it where the first form it tried reached the limit)
 fn (n mut norm&) emit(rule String&, at String&) {
     if rule == "L21" {
-        if not n.kept(pos(at)) { n.rows.Push("error L21") }
+        if not n.kept(pos(at)): n.rows.Push("error L21")
         return
     }
     n.rows.Push("error " + $rule + " " + $at)
@@ -172,7 +172,7 @@ fn (n mut norm&) olangDiag(line String&) {
     r := $line[6:]
     # drop the last word and the blanks before it
     cut := r.Len() - last.Len()
-    for cut > 0 and r[cut - 1] == ' ' { cut-- }
+    for cut > 0 and r[cut - 1] == ' ': cut--
     n.emit(r[0:cut], last)
 }
 
@@ -180,18 +180,18 @@ fn (n mut norm&) olangDiag(line String&) {
 # "path: error[RULE]:" names no position
 fn (n mut norm&) cDiag(line String&) {
     e := try line.Find(": error") catch default -1
-    if e < 0 { return }
+    if e < 0: return
     head := line[0:e]
-    if (try head.FindByte(' ') catch default -1) >= 0 { return }
+    if (try head.FindByte(' ') catch default -1) >= 0: return
     after := line[e + 7:]
     rule String = ""
     if after.StartsWith("[") {
         close := try after.FindByte(']') catch default -1
-        if close < 0 { return }
+        if close < 0: return
         rule = $after[1:close]
         after = after[close + 1:]
     }
-    if not after.StartsWith(":") { return }
+    if not after.StartsWith(":"): return
     c2 := try head.FindLast(":") catch default -1
     if c2 >= 0 {
         c1 := try head[0:c2].FindLast(":") catch default -1

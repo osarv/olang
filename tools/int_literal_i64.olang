@@ -50,18 +50,18 @@ fn localType(msg String&) String ? {
         from = at + 1
         # 'NAME before the marker
         start := at
-        for start > 0 and srcmask.IsWord(msg[start - 1]) { start-- }
-        if start == 0 or msg[start - 1] != '\'' or start == at or not srcmask.IsIdStart(msg[start]) { continue }
+        for start > 0 and srcmask.IsWord(msg[start - 1]): start--
+        if start == 0 or msg[start - 1] != '\'' or start == at or not srcmask.IsIdStart(msg[start]): continue
         # NAME TYPE = ...' after it
         p := at + marker.Len()
-        if p >= msg.Len() or not srcmask.IsIdStart(msg[p]) { continue }
-        for p < msg.Len() and srcmask.IsWord(msg[p]) { p++ }
-        if p >= msg.Len() or msg[p] != ' ' { continue }
+        if p >= msg.Len() or not srcmask.IsIdStart(msg[p]): continue
+        for p < msg.Len() and srcmask.IsWord(msg[p]): p++
+        if p >= msg.Len() or msg[p] != ' ': continue
         p++
         t := p
-        if t >= msg.Len() or not msg[t].IsUpper() { continue }
-        for p < msg.Len() and (msg[p].IsLetter() or msg[p].IsDigit()) { p++ }
-        if not msg[p:].StartsWith(" = ...'") { continue }
+        if t >= msg.Len() or not msg[t].IsUpper(): continue
+        for p < msg.Len() and (msg[p].IsLetter() or msg[p].IsDigit()): p++
+        if not msg[p:].StartsWith(" = ...'"): continue
         return $msg[t:p]
     }
     error noFix.Here
@@ -76,19 +76,19 @@ fn rangeType(msg String&) String ? {
         at := from + (try msg[from:].Find(marker) catch { error noFix.Here })
         from = at + 1
         p := at + marker.Len()
-        if p >= msg.Len() or not srcmask.IsIdStart(msg[p]) { continue }
-        for p < msg.Len() and srcmask.IsWord(msg[p]) { p++ }
-        if not msg[p:].StartsWith("' I64 - ") { continue }
+        if p >= msg.Len() or not srcmask.IsIdStart(msg[p]): continue
+        for p < msg.Len() and srcmask.IsWord(msg[p]): p++
+        if not msg[p:].StartsWith("' I64 - "): continue
         p += 8
         if msg[p:].StartsWith("write "): p += 6
         else if msg[p:].StartsWith("convert its end, "): p += 17
         else: continue
-        if p >= msg.Len() or msg[p] != '\'' { continue }
+        if p >= msg.Len() or msg[p] != '\'': continue
         p++
         t := p
-        if t >= msg.Len() or not msg[t].IsUpper() { continue }
-        for p < msg.Len() and srcmask.IsWord(msg[p]) and msg[p] != '_' { p++ }
-        if p < msg.Len() and msg[p] == '(' { return $msg[t:p] }
+        if t >= msg.Len() or not msg[t].IsUpper(): continue
+        for p < msg.Len() and srcmask.IsWord(msg[p]) and msg[p] != '_': p++
+        if p < msg.Len() and msg[p] == '(': return $msg[t:p]
     }
     error noFix.Here
 }
@@ -135,7 +135,7 @@ fn rangeEnd(text String&, at I64, mask String&) I64, I64 ? {
     n := text.Len()
     k := (at + 1 if at + 1 < n else n) - 5
     for k >= 0 and not (text[k:].StartsWith("range") and mask[k] == 'c' and (k == 0 or not srcmask.IsWord(text[k - 1]))) { k-- }
-    if k < 0 { error noFix.Here }
+    if k < 0: error noFix.Here
     i := k + 5
     starts Vec<I64>
     ends Vec<I64>
@@ -150,7 +150,7 @@ fn rangeEnd(text String&, at I64, mask String&) I64, I64 ? {
         if c == '(' or c == '[' {
             depth++
         } else if c == ')' or c == ']' {
-            if depth == 0 { break }
+            if depth == 0: break
             depth--
         } else if c == ',' and depth == 0 {
             starts.Push(start)
@@ -170,9 +170,9 @@ fn rangeEnd(text String&, at I64, mask String&) I64, I64 ? {
     pick := 1 if starts.Len() >= 2 else 0
     s := starts[pick]
     e := ends[pick]
-    for s < e and (text[s] == ' ' or text[s] == '\t') { s++ }
-    for e > s and (text[e - 1] == ' ' or text[e - 1] == '\t') { e-- }
-    if s >= e { error noFix.Here }
+    for s < e and (text[s] == ' ' or text[s] == '\t'): s++
+    for e > s and (text[e - 1] == ' ' or text[e - 1] == '\t'): e--
+    if s >= e: error noFix.Here
     return s, e
 }
 
@@ -183,9 +183,9 @@ fn wordAt(text String&, i I64) Bool {
 
 # whether the text starts with a type's name and a "(": [A-Z][A-Za-z0-9]*\(
 fn startsWithConversion(text String&) Bool {
-    if text.Len() == 0 or not text[0].IsUpper() { return false }
+    if text.Len() == 0 or not text[0].IsUpper(): return false
     i := 1
-    for i < text.Len() and (text[i].IsLetter() or text[i].IsDigit()) { i++ }
+    for i < text.Len() and (text[i].IsLetter() or text[i].IsDigit()): i++
     return i < text.Len() and text[i] == '('
 }
 
@@ -193,7 +193,7 @@ fn startsWithConversion(text String&) Bool {
 fn apply(requests Vec<diagedit.Request>&) I64, I64 {
     paths Vec<String&>
     for r in requests {
-        if not (r.Path in paths) { paths.Push($r.Path) }
+        if not (r.Path in paths): paths.Push($r.Path)
     }
     locals I64 = 0
     ranges I64 = 0
@@ -208,11 +208,11 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
         lines := src.Split("\n")
         mine Vec<diagedit.Request>
         for r in requests {
-            if r.Path == path { mine.Push(r) }
+            if r.Path == path: mine.Push(r)
         }
         # by line, and right to left within a line, so earlier columns stay put
         mine.Sort(fn(a, b) {
-            if a.Line != b.Line { return a.Line < b.Line }
+            if a.Line != b.Line: return a.Line < b.Line
             return a.Col > b.Col
         })
         seen Vec<String&>
@@ -221,7 +221,7 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
         shDelta Vec<I64>
         for r in mine {
             key := $r.Line + ":" + $r.Col
-            if diagedit.ContainsAny(r.Why, expect) or key in seen or r.Line - 1 >= lines.Len() { continue }
+            if diagedit.ContainsAny(r.Why, expect) or key in seen or r.Line - 1 >= lines.Len(): continue
             seen.Push($key)
             idx := r.Line - 1
             text := $lines[idx]
@@ -231,12 +231,12 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
             replaced := ""
             if r.Kind == "local" {
                 # NAME[ \t]*:= at the column
-                if at < 0 or at >= text.Len() or not srcmask.IsIdStart(text[at]) { continue }
+                if at < 0 or at >= text.Len() or not srcmask.IsIdStart(text[at]): continue
                 e := at
-                for e < text.Len() and srcmask.IsWord(text[e]) { e++ }
+                for e < text.Len() and srcmask.IsWord(text[e]): e++
                 p := e
-                for p < text.Len() and (text[p] == ' ' or text[p] == '\t') { p++ }
-                if not text[p:].StartsWith(":=") or mask[at] != 'c' { continue }
+                for p < text.Len() and (text[p] == ' ' or text[p] == '\t'): p++
+                if not text[p:].StartsWith(":=") or mask[at] != 'c': continue
                 replaced = $text[:at] + $text[at:e] + " " + $typ + " =" + $text[p + 2:]
             } else {
                 s, e := try rangeEnd(text, at, mask) catch { continue }
@@ -299,7 +299,7 @@ fn main() ? {
     files Vec<String&>
     diagedit.OlangFiles(paths, files)
     allowed Vec<String&>
-    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+    for p in paths: allowed.Push(diagedit.RealPathOf(p))
 
     tmp := try os.MkTemp("", "int_literal_i64") catch {
         srcmask.SayErr("int_literal_i64: cannot make a temporary directory")
@@ -323,12 +323,12 @@ fn main() ? {
         outputs := diagedit.CompileAll(olang, fileArray, work, true)
         requests Vec<diagedit.Request>
         unanswered = Vec<diagedit.Request>()
-        for o in outputs { diagsFrom(o, allowed, requests, unanswered) }
+        for o in outputs: diagsFrom(o, allowed, requests, unanswered)
         locals, ranges := apply(requests)
         srcmask.Say("round " + $round + ": " + $locals + " locals typed, " + $ranges + " ranges typed")
         totalLocals += locals
         totalRanges += ranges
-        if locals == 0 and ranges == 0 { break }
+        if locals == 0 and ranges == 0: break
     }
     srcmask.Say("total: " + $totalLocals + " locals typed, " + $totalRanges + " ranges typed")
     seen Vec<String&>

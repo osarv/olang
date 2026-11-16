@@ -53,7 +53,7 @@ test "Update, evaluated while compiling as at run time" {
 
 test "a map grows, and keeps every key through it" {
     m := Map<I32, I32>()
-    for i in range I32(1000) { m.Put(i, i * i) }
+    for i in range I32(1000): m.Put(i, i * i)
     assert m.Len() == 1000
     for i in range I32(1000) {
         assert (try m.Get(i) catch default -1) == i * i
@@ -70,7 +70,7 @@ test "text keys compare by what they say" {
 
 test "for ... in visits every entry once" {
     m := Map<I32, I32>()
-    for i in range 50 { m.Put(I32(i), I32(i) * 2) }
+    for i in range 50: m.Put(I32(i), I32(i) * 2)
     keys I64 = 0
     values I64 = 0
     for e in m {
@@ -82,7 +82,7 @@ test "for ... in visits every entry once" {
 
 test "a pair is a key when both its parts are" {
     m := Map<pair.Pair<I32, I32>, I32>()
-    for i in range 20 { m.Put(pair.Pair(I32(i), I32(i) + 1), I32(i)) }
+    for i in range 20: m.Put(pair.Pair(I32(i), I32(i) + 1), I32(i))
     assert (try m.Get(pair.Pair(7, 8)) catch default -1) == 7
     assert not m.Has(pair.Pair(8, 7))
 }
@@ -117,7 +117,7 @@ fn walkedKeys() I64 {
     m.Put("three", 3)
     for i in range 200 { m.Put($i, i) }        # renderings, built where the map lives
     total I64 = 0
-    for e in m { total += e.Value * e.Key.Len() }
+    for e in m: total += e.Value * e.Key.Len()
     return total
 }
 
@@ -126,7 +126,7 @@ walkedBaked := walkedKeys()
 test "walking a Map of text keys, evaluated while compiling as at run time" {
     assert walkedKeys() == walkedBaked
     n I64 = 0
-    for i in range 200 { n += i * ($i).Len() }
+    for i in range 200: n += i * ($i).Len()
     assert walkedBaked == 1 * 3 + 2 * 3 + 3 * 5 + n
 }
 
@@ -157,7 +157,7 @@ test "O18b/O23a: text keys put in a loop survive it, and one map's entries go in
     for i in range mapRuntime { total += try m.Get($i) catch default 1000 }
     assert total == 1225
     m2 := Map<String&, I64>()
-    for e in m { m2.Put(e.Key, e.Value) }
+    for e in m: m2.Put(e.Key, e.Value)
     mapChurn()
     assert m2.Len() == 50 and (try m2.Get("49") catch default -1) == 49
 }
@@ -165,16 +165,16 @@ test "O18b/O23a: text keys put in a loop survive it, and one map's entries go in
 # O18c: an entry walked out of a Map that arrived as a parameter keeps its key where that map keeps it, so the key may
 # go into another map or be returned as the map's own - keys rendered in a loop, read back after churning the arena
 fn mapCopyInto(from Map<String&, I64>&, into mut Map<String&, I64>&) {
-    for e in from { into.Put(e.Key, e.Value) }
+    for e in from: into.Put(e.Key, e.Value)
 }
 fn mapAnyKey(from Map<String&, I64>&) String& {
-    for e in from { return e.Key }
+    for e in from: return e.Key
     return ""
 }
 
 test "O18c: a Map's entries, walked through a parameter, go into another map and out as its own keys" {
     m := Map<String&, I64>()
-    for i in range mapRuntime { m.Put($i, i) }
+    for i in range mapRuntime: m.Put($i, i)
     m2 := Map<String&, I64>()
     mapCopyInto(m, m2)
     k := mapAnyKey(m)
@@ -197,7 +197,7 @@ MapGlobal Map<I32, I32>& = mapGlobalMade()
 test "T25d/O1b: constant text keys put from a for-in, and a global map read through read-only receivers" {
     m := Map<String&, I64>()
     if mapRuntime > 0 {
-        for nm in Array<String&>["ann", "bobby"] { m.Put(nm, nm.Len()) }
+        for nm in Array<String&>["ann", "bobby"]: m.Put(nm, nm.Len())
     }
     mapChurn()
     assert (try m.Get("bobby") catch default -1) == 5 and m.Len() == 2
@@ -209,7 +209,7 @@ test "T25d/O1b: constant text keys put from a for-in, and a global map read thro
 fn groupInto(groups mut Map<I64, mut Vec<I64>&>&, n I64) ? {
     for i in range n {
         k I64 = i % 3
-        if k not in groups { groups.Put(k, Vec<I64>()) }
+        if k not in groups: groups.Put(k, Vec<I64>())
         g := try groups.Get(k)
         g.Push(i)
     }
@@ -219,7 +219,7 @@ fn groupBy(n I64) I64 {
     groups := Map<I64, mut Vec<I64>&>()
     try groupInto(groups, n) catch { }                 # every key is put before it is got
     total I64 = 0
-    for e in groups { total += e.Key * 1000 + e.Value.Len() }
+    for e in groups: total += e.Key * 1000 + e.Value.Len()
     return total
 }
 
@@ -256,13 +256,13 @@ test "keys come and go, and each keeps its own value" {
     m := Map<I64, I64>()
     for i in range 10000 {
         m.Put(i, i * 3)
-        if i >= 50 { assert m.Remove(i - 50) }
+        if i >= 50: assert m.Remove(i - 50)
     }
     assert m.Len() == 50
     for i in range 9950, 10000 { assert (try m.Get(i) catch default -1) == i * 3 }
     assert 9949 not in m and 0 not in m
     n I64 = 0
-    for e in m { n += e.Key - e.Value / 3 + 1 }
+    for e in m: n += e.Key - e.Value / 3 + 1
     assert n == 50
 }
 
@@ -270,26 +270,26 @@ test "keys come and go, and each keeps its own value" {
 # map in place is one loop
 test "removing the entry just given, during a walk" {
     m := Map<I32, I32>()
-    for i in range 100 { m.Put(I32(i), I32(i)) }
+    for i in range 100: m.Put(I32(i), I32(i))
     seen I32 = 0
     for e in m {
         seen++
-        if e.Key % 2 == 0 { assert m.Remove(e.Key) }
+        if e.Key % 2 == 0: assert m.Remove(e.Key)
     }
     assert seen == 100 and m.Len() == 50
-    for e in m { assert e.Key % 2 == 1 and e.Value == e.Key }
+    for e in m: assert e.Key % 2 == 1 and e.Value == e.Key
 }
 
 # Keys and Values walk the map as Iter does, giving one part of each entry; ToVec gathers either into a Vec
 test "Keys and Values, one part of every entry" {
     m := Map<String&, I64>()
     assert m.Keys().ToVec().Len() == 0
-    for w in Array<String&>["pear", "fig", "apple", "kiwi"] { m.Put(w, w.Len()) }
+    for w in Array<String&>["pear", "fig", "apple", "kiwi"]: m.Put(w, w.Len())
     ks := m.Keys().ToVec()
     ks.Sort(fn(a, b) { return a < b })
     assert ks.Join(",") == "apple,fig,kiwi,pear"
     total I64 = 0
-    for v in m.Values() { total += v }
+    for v in m.Values(): total += v
     assert total == 5 + 3 + 4 + 4
     assert m.Keys().Count(fn(k) { return k.Len() == 4 }) == 2 and m.Values().Every(fn(v) { return v >= 3 })
     vs := m.Values().ToVec()
@@ -303,12 +303,12 @@ test "Keys and Values, one part of every entry" {
 # Clear empties the map and keeps its slots and buckets, so filling it again allocates nothing
 test "Clear empties a map, which fills again from its own slots" {
     m := Map<I32, I32>()
-    for i in range 100 { m.Put(I32(i), I32(i) * 2) }
+    for i in range 100: m.Put(I32(i), I32(i) * 2)
     m.Clear()
     assert m.Len() == 0 and 5 not in m and (try m.Get(5) catch default -1) == -1
-    for _ in m { unreachable }
-    for _ in m.Keys() { unreachable }
-    for i in range 150 { m.Put(I32(i), I32(i) + 1) }
+    for _ in m: unreachable
+    for _ in m.Keys(): unreachable
+    for i in range 150: m.Put(I32(i), I32(i) + 1)
     assert m.Len() == 150 and (try m.Get(149) catch default -1) == 150 and (try m.Get(0) catch default -1) == 1
     assert m.Remove(10) and not m.Remove(10) and m.Len() == 149
     m.Clear()
@@ -319,11 +319,11 @@ test "Clear empties a map, which fills again from its own slots" {
 # the same while compiling (K2): Keys, Values and Clear as the run time does them
 fn mapParts() I64 {
     m := Map<I64, I64>()
-    for i in range 20 { m.Put(i, i * i) }
+    for i in range 20: m.Put(i, i * i)
     k I64 = 0
-    for x in m.Keys() { k += x }
+    for x in m.Keys(): k += x
     v I64 = 0
-    for x in m.Values() { v += x }
+    for x in m.Values(): v += x
     m.Clear()
     m.Put(7, 1)
     return k * 100000 + v * 10 + m.Len()
@@ -339,7 +339,7 @@ test "Keys, Values and Clear, evaluated while compiling as at run time" {
 # the copy is walked in the order the map is - and sharing one is written "&"
 fn mapCopies() I64 {
     m := Map<String&, I64>()
-    for k in Array<String&>["a", "b", "c", "d", "e", "f", "g"] { m.Put(k, 1) }
+    for k in Array<String&>["a", "b", "c", "d", "e", "f", "g"]: m.Put(k, 1)
     n := m
     assert n.Remove("a")
     assert m.Len() == 7 and m.Has("a") and n.Len() == 6 and not n.Has("a")
@@ -350,7 +350,7 @@ fn mapCopies() I64 {
     order := m.Keys().ToVec()                    # the copy walks in the order the map does
     same I64 = 0
     for i, k in c.Keys().ToVec() {
-        if i < order.Len() and k == order[i] { same++ }
+        if i < order.Len() and k == order[i]: same++
     }
     c.Put("z", 26)
     m.Put("b", 2)
@@ -370,11 +370,11 @@ test "a copy of a Map is a map of its own" {
 test "a value changed where a Map holds it" {
     g := Map<String&, Vec<I64>>()
     g.Put("a", Vec<I64>())
-    for i in range 20 { (try g.RefMut("a")).Push(i) }
+    for i in range 20: (try g.RefMut("a")).Push(i)
     v := try g.Get("a")
     v.Push(99)                                  # a copy: the map's is not changed
     t I64 = 0
-    for i in range 300 { t += Array<I64>(64, I64(i))[0] }
+    for i in range 300: t += Array<I64>(64, I64(i))[0]
     assert t > 0 and (try g.Get("a")).Len() == 20 and v.Len() == 21 and (try g.RefMut("a"))[19] == 19
     assert (try g.RefMut("b") catch MapError default Vec<I64>()).Len() == 0
 }
@@ -383,7 +383,7 @@ test "a copy of a Map outlives the map it copies" {
     kept := Map<I64, I64>()
     if kept.Len() == 0 {
         src := Map<I64, I64>()
-        for i in range 100 { src.Put(i, i * 3) }
+        for i in range 100: src.Put(i, i * 3)
         kept = src
         src.Put(1000, 1)
         assert src.Remove(5)
@@ -395,7 +395,7 @@ test "a copy of a Map outlives the map it copies" {
     }
     assert t > 0 and kept.Len() == 100 and (try kept.Get(5) catch default -1) == 15 and 1000 not in kept
     s I64 = 0
-    for e in kept { s += e.Value }
+    for e in kept: s += e.Value
     assert s == 3 * 4950
 }
 
@@ -405,7 +405,7 @@ test "a Map walked in order of its keys: its entries listed, then sorted" {
     es := m.Iter().ToVec()
     es.Sort(fn(a, b) { return a.Key < b.Key })
     b := StringBuilder()
-    for e in es { b.Push($e.Key + "=" + $e.Value + " ") }
+    for e in es: b.Push($e.Key + "=" + $e.Value + " ")
     assert b.ToString() == "apple=2 fig=3 kiwi=1 pear=1 "
 }
 
@@ -435,11 +435,11 @@ test "$ renders a Map's entries, not its buckets" {
         "Map<I64, Map<I64, Bool>>[7: Map<I64, Bool>[]]")
     assert mapRenderedBaked == r                        # the evaluator renders as the run time does
     m := Map<I64, String&>()
-    for i in range 20 { m.Put(i * 7, $i) }
+    for i in range 20: m.Put(i * 7, $i)
     expect := StringBuilder()
     expect.Push("Map<I64, String&>[")
     for e in m {                                        # in the order a walk gives
-        if expect.Len() > 18 { expect.Push(", ") }
+        if expect.Len() > 18: expect.Push(", ")
         expect.Push($e.Key + ": \"" + $e.Value + "\"")
     }
     expect.Push("]")
@@ -451,7 +451,7 @@ test "$ renders a Map's entries, not its buckets" {
 # values given by it are the very values put, read after the slot was reused
 fn mapTakes() I64 {
     m := Map<I64, String&>()
-    for i in range 50 { m.Put(i, $i + "!") }
+    for i in range 50: m.Put(i, $i + "!")
     t I64 = 0
     for i in range 50 {
         if i % 2 == 0 {

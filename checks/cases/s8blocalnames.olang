@@ -7,9 +7,7 @@ if TargetOs == "plan9" {
 }
 fn f() I32 {
     TargetOs.Trim()
-    if TargetOs == "plan9" {
-        return only9()
-    }
+    if TargetOs == "plan9": return only9()
     return 1
 }
 fn main() ? { assert f() == 1 }

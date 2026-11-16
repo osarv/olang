@@ -7,12 +7,12 @@ type Item struct(N I64) {
 
 fn Make(n I64) Vec<Item> {
     l := Vec<Item>()
-    for i in range n { l.Push(Item(leaf.Scale(i))) }
+    for i in range n: l.Push(Item(leaf.Scale(i)))
     return l
 }
 
 fn Total(l Vec<Item>&) I64 {
     t I64 = 0
-    for x in l { t += x.N }
+    for x in l: t += x.N
     return t
 }

@@ -54,14 +54,14 @@ fn (t Token&) Cancelled() Bool {
 
 # 0 while the token has not fired; otherwise 1 when it was cancelled, 2 when its deadline passed
 fn (t Token&) Why() I32 {
-    if t.flag.AtomicLoad() != 0 { return 1 }
-    if t.deadline != 0 and NowNs() >= t.deadline { return 2 }
+    if t.flag.AtomicLoad() != 0: return 1
+    if t.deadline != 0 and NowNs() >= t.deadline: return 2
     return 0
 }
 
 # the error a wait gives up with, for a token that has fired
 fn (t Token&) Reason() ? Stopped {
-    if t.Why() == 1 { error Stopped.Cancelled }
+    if t.Why() == 1: error Stopped.Cancelled
     error Stopped.TimedOut
 }
 
@@ -81,8 +81,8 @@ fn (t Token&) WakeAt(ts mut Array<I64>&) {
     wait I64 = PollNs
     if t.deadline != 0 {
         left I64 = t.deadline - NowNs()
-        if left < wait { wait = left }
-        if wait < 0 { wait = 0 }
+        if left < wait: wait = left
+        if wait < 0: wait = 0
     }
     at I64 = wallNs() + wait
     ts[0] = at / 1000000000
@@ -127,7 +127,7 @@ test Token.After "a deadline fires on the virtual clock" {
 # a task doing work checks the token itself, at points where stopping is safe. It counts atomically, so the spawner
 # may watch the count while it runs (P9a)
 fn spin(t Token&, n mut spinCount&) {
-    for not t.Cancelled() { n.v.AtomicAdd(1) }
+    for not t.Cancelled(): n.v.AtomicAdd(1)
 }
 
 type spinCount struct() {
@@ -159,7 +159,7 @@ type stopCount struct() {
     why I32 = 0
 }
 fn spinRecord(t Token&, n mut stopCount&) {
-    for not t.Cancelled() { n.v++ }
+    for not t.Cancelled(): n.v++
     n.why = t.Why()
 }
 fn cancelOnExit(fails Bool, n mut stopCount&) ? stepFailed {
@@ -167,7 +167,7 @@ fn cancelOnExit(fails Bool, n mut stopCount&) ? stepFailed {
     join {
         defer t.Cancel()
         spawn spinRecord(t, n)
-        if fails { error stepFailed.Bad }
+        if fails: error stepFailed.Bad
     }
 }
 

@@ -12,7 +12,7 @@ type Node struct(v I64) {
 }
 fn work(n I64) ? E {
     usleep(20000)
-    if n < 0 { error E.Bad }
+    if n < 0: error E.Bad
 }
 fn note(n Node&, seen mut Array<I64>&) { seen[n.v] = n.v * 10 }
 fn main() ? {

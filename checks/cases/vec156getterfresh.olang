@@ -10,7 +10,7 @@ type Parser struct() {
 }
 fn Lexer.fresh(n I64) mut Lexer& {
     l mut Lexer& = Lexer()
-    for i in range n { l.toks.Push($i + "-fresh") }
+    for i in range n: l.toks.Push($i + "-fresh")
     return l
 }
 fn churn() I64 {

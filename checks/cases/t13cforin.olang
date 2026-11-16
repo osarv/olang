@@ -7,6 +7,6 @@ type H packed struct(k U8) {
 fn main() {
     h := H(1)
     n := 0
-    for x in h.lanes { n += I64(x) }
+    for x in h.lanes: n += I64(x)
     assert n == 0
 }

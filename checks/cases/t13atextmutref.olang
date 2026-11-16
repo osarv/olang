@@ -1,6 +1,6 @@
 # check: fail error[T13a, T29c]: 'mut'
 # T13a, T29c: no writable reference to a String - a parameter that would write text takes an Array<Char>
 fn upper(t mut String&) {
-    for i in range t.Len() { t[i] = t[i].ToUpper() }
+    for i in range t.Len(): t[i] = t[i].ToUpper()
 }
 fn main() { }

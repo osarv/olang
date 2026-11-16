@@ -30,12 +30,12 @@ fn main() ? {
     args := os.Args()
     n I64 = 1000
     tasks I64 = 4
-    if args.Len() > 1 { n = try args[1].ParseInt() }
-    if args.Len() > 2 { tasks = try args[2].ParseInt() }
+    if args.Len() > 1: n = try args[1].ParseInt()
+    if args.Len() > 2: tasks = try args[2].ParseInt()
     best := Array<I64>(tasks)
     lens := Array<I64>(tasks)
     join {
-        for t in range tasks { spawn best[t], lens[t] = longest(t + 1, tasks, n) }
+        for t in range tasks: spawn best[t], lens[t] = longest(t + 1, tasks, n)
     }
     answer, answerLen I64
     for t in range tasks {

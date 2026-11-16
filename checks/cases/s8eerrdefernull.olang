@@ -6,7 +6,7 @@ type Node struct(V I64) { V }
 type E error { Bad }
 
 fn work(p Node?&) ? E {
-    if p == null { return }
+    if p == null: return
     errdefer io.PutLine("errdefer reads " + $p.V)!
     p = null
     error E.Bad

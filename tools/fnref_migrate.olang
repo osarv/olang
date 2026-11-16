@@ -45,7 +45,7 @@ fn migrate(path String&, src String&, marked mut Count&) String {
     from I64 = 0
     for k in at {
         e := I64(k) + 2
-        if e <= from or src[I64(k):e] != "fn" { continue }
+        if e <= from or src[I64(k):e] != "fn": continue
         out.Push(src[from:e])
         out.PushChar('&')
         from = e

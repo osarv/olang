@@ -50,13 +50,13 @@ fn Mask(text String&, newlinesCode Bool) String {
                 if text[j] == '\\' { j += 2 } else { j++ }
             }
             j = j + 1
-            if j > n { j = n }
+            if j > n: j = n
         } else {
             i++
             continue
         }
         for k in range i, j {
-            if text[k] != '\n' or not newlinesCode { out[k] = kind }
+            if text[k] != '\n' or not newlinesCode: out[k] = kind
         }
         i = j
     }
@@ -67,13 +67,13 @@ fn Mask(text String&, newlinesCode Bool) String {
 fn CloseOf(text String&, mask String&, start I64) I64 {
     depth I64 = 0
     for i in range start, text.Len() {
-        if mask[i] != 'c' { continue }
+        if mask[i] != 'c': continue
         c := text[i]
         if c == '(' or c == '[' or c == '{' {
             depth++
         } else if c == ')' or c == ']' or c == '}' {
             depth--
-            if depth == 0 { return i + 1 }
+            if depth == 0: return i + 1
         }
     }
     return -1
@@ -84,14 +84,14 @@ fn CloseOf(text String&, mask String&, start I64) I64 {
 # t without the whitespace at its start
 fn StripStart(t String&) String& {
     i I64 = 0
-    for i < t.Len() and IsPySpace(t[i]) { i++ }
+    for i < t.Len() and IsPySpace(t[i]): i++
     return t[i:]
 }
 
 # t without the whitespace at its end
 fn StripEnd(t String&) String& {
     e := t.Len()
-    for e > 0 and IsPySpace(t[e - 1]) { e-- }
+    for e > 0 and IsPySpace(t[e - 1]): e--
     return t[:e]
 }
 
@@ -103,7 +103,7 @@ fn Prefix(t String&, n I64) String& {
     count I64 = 0
     for i in range t.Len() {
         if U8(t[i]) < 128 or U8(t[i]) >= 192 {
-            if count == n { return t[:i] }
+            if count == n: return t[:i]
             count++
         }
     }
@@ -127,20 +127,20 @@ fn ValidUtf8(t String&) Bool {
             need = 1
         } else if c >= 0xE0 and c <= 0xEF {
             need = 2
-            if c == 0xE0 { lo = 0xA0 }
-            if c == 0xED { hi = 0x9F }
+            if c == 0xE0: lo = 0xA0
+            if c == 0xED: hi = 0x9F
         } else if c >= 0xF0 and c <= 0xF4 {
             need = 3
-            if c == 0xF0 { lo = 0x90 }
-            if c == 0xF4 { hi = 0x8F }
+            if c == 0xF0: lo = 0x90
+            if c == 0xF4: hi = 0x8F
         } else {
             return false
         }
-        if i + need >= n { return false }
+        if i + need >= n: return false
         for k in range 1, need + 1 {
             d := U32(U8(t[i + k]))
             if k == 1 {
-                if d < lo or d > hi { return false }
+                if d < lo or d > hi: return false
             } else if d < 0x80 or d > 0xBF {
                 return false
             }
@@ -154,13 +154,13 @@ fn ValidUtf8(t String&) Bool {
 
 # raw, newlines translated as Python's text mode does: "\r\n" and "\r" become "\n"
 fn Translate(raw String&) String {
-    if not ("\r" in raw) { return $raw }
+    if not ("\r" in raw): return $raw
     b := StringBuilder()
     i I64 = 0
     for i < raw.Len() {
         if raw[i] == '\r' {
             b.PushChar('\n')
-            if i + 1 < raw.Len() and raw[i + 1] == '\n' { i++ }
+            if i + 1 < raw.Len() and raw[i + 1] == '\n': i++
         } else {
             b.PushChar(raw[i])
         }
@@ -176,14 +176,14 @@ fn ReadText(path String&) String ? os.Error {
 
 # a and b made one path: b below a, with one "/" between - and nothing else changed, "./x" staying "./x"
 fn PathJoin(a String&, b String&) String {
-    if a.Len() == 0 { return $b }
-    if a.EndsWith("/") { return $a + $b }
+    if a.Len() == 0: return $b
+    if a.EndsWith("/"): return $a + $b
     return $a + "/" + $b
 }
 
 # "path" made absolute and cleaned, as Python's os.path.abspath does
 fn AbsPath(path String&) String {
-    if filepath.IsAbs(path) { return $filepath.Clean(path) }
+    if filepath.IsAbs(path): return $filepath.Clean(path)
     cwd := try os.Cwd() catch default ""
     return $filepath.Clean(filepath.Join(cwd, path))
 }
@@ -198,12 +198,12 @@ fn Walk(dir String&, out mut Vec<String&>&) {
         if os.IsDir(path) {
             linked := true
             try os.ReadLink(path) catch { linked = false }
-            if name != "build" and name != ".git" and not linked { subs.Push($path) }
+            if name != "build" and name != ".git" and not linked: subs.Push($path)
         } else if name.EndsWith(".olang") {
             out.Push($path)
         }
     }
-    for sub in subs { Walk(sub, out) }
+    for sub in subs: Walk(sub, out)
 }
 
 # the repository this program is in: the directory above the one it sits in (build/ once built, tools/ when run with -i),
@@ -213,7 +213,7 @@ fn RepoRoot() String {
     exe := $arg0
     if not ("/" in arg0) {
         real := try os.RealPath("/proc/self/exe") catch default ""
-        if real.Len() > 0 { exe = $real }
+        if real.Len() > 0: exe = $real
     }
     return $filepath.Dir(filepath.Dir(AbsPath(exe)))
 }
@@ -221,7 +221,7 @@ fn RepoRoot() String {
 # the compiler a tool runs when none is named: $OLANG, else the repository's build/olang (make bootstrap)
 fn Compiler() String {
     given := try os.Env("OLANG") catch default ""
-    if given.Len() > 0 { return AbsPath(given) }
+    if given.Len() > 0: return AbsPath(given)
     return $RepoRoot() + "/build/olang"
 }
 
@@ -262,7 +262,7 @@ fn OpAt(t String&) String {
         }
     }
     for w in Words {
-        if t.StartsWith(w) and (t.Len() == w.Len() or not IsWord(t[w.Len()])) { return $w }
+        if t.StartsWith(w) and (t.Len() == w.Len() or not IsWord(t[w.Len()])): return $w
     }
     return ""
 }
@@ -317,13 +317,13 @@ fn SkipGap(text String&, mask String&, br String&, i I64) I64 {
 # tokens that start an expression, or nothing does
 fn StartsExpr(src String&, i I64) Bool {
     a := i
-    for a > 0 and src[a - 1] == ' ' { a-- }
-    if a == 0 or src[a - 1] == '\n' { return true }
+    for a > 0 and src[a - 1] == ' ': a--
+    if a == 0 or src[a - 1] == '\n': return true
     c := src[a - 1]
     if c == '(' or c == '[' or c == ',' or c == '{' or c == ':' { return true }
     if c == '=' { return not (a >= 2 and (src[a - 2] == '=' or src[a - 2] == '!' or src[a - 2] == '<' or src[a - 2] == '>')) }
     b := a
-    for b > 0 and IsWord(src[b - 1]) { b-- }
+    for b > 0 and IsWord(src[b - 1]): b--
     word := src[b:a]
     return word == "return" or word == "if" or word == "assert" or word == "for" or word == "in" or word == "else" or word == "spawn"
 }
@@ -332,9 +332,9 @@ fn StartsExpr(src String&, i I64) Bool {
 # ("-", "~", "$", "not") binds its operand alone; -1 where none ends there
 fn OpBefore(src String&, i I64) String, I64 {
     a := i
-    for a > 0 and src[a - 1] == ' ' { a-- }
+    for a > 0 and src[a - 1] == ' ': a--
     b := a
-    for b > 0 and IsWord(src[b - 1]) { b-- }
+    for b > 0 and IsWord(src[b - 1]): b--
     word := src[b:a]
     if word.Len() > 0 {
         for w in Words {
@@ -345,13 +345,13 @@ fn OpBefore(src String&, i I64) String, I64 {
     for o in Ops {
         if a >= o.Len() and src[a - o.Len():a] == o {
             k := a - o.Len()
-            for k > 0 and src[k - 1] == ' ' { k-- }
+            for k > 0 and src[k - 1] == ' ': k--
             prefix := k == 0 or not (IsWord(src[k - 1]) or src[k - 1] == ')' or src[k - 1] == ']' or src[k - 1] == '"' or src[k - 1] == '\'' or src[k - 1] == '!')
-            if prefix and (o == "-" or o == "~") { return $o, 100 }
+            if prefix and (o == "-" or o == "~"): return $o, 100
             return $o, Prec(o)
         }
     }
-    if a > 0 and src[a - 1] == '$' { return "$", 100 }
+    if a > 0 and src[a - 1] == '$': return "$", 100
     return "", -1
 }
 
@@ -377,23 +377,23 @@ fn IoAlias(text String&, path String&) String ? {
     at I64 = 0
     for at < n {
         j := at
-        for j < n and text[j] != '\n' and IsPySpace(text[j]) { j++ }
+        for j < n and text[j] != '\n' and IsPySpace(text[j]): j++
         next := lineAfter(text, at)
         if text[j:].StartsWith("import") and j + 6 < n and IsPySpace(text[j + 6]) {
             k := j + 6
-            for k < n and IsPySpace(text[k]) { k++ }
+            for k < n and IsPySpace(text[k]): k++
             alias := ""
             w := k
-            for w < n and IsWord(text[w]) { w++ }
+            for w < n and IsWord(text[w]): w++
             v := w
-            for v < n and IsPySpace(text[v]) { v++ }
+            for v < n and IsPySpace(text[v]): v++
             if w > k and v > w and v < n and text[v] == '"' {
                 alias = $text[k:w]
                 k = v
             }
             if k < n and text[k] == '"' {
                 close := k + 1
-                for close < n and text[close] != '"' { close++ }
+                for close < n and text[close] != '"': close++
                 if close < n and close > k + 1 {
                     target := text[k + 1:close]
                     resolved := $filepath.Clean(target) if filepath.IsAbs(target) else $filepath.Clean(filepath.Join(dir, target))

@@ -13,7 +13,7 @@ type Tally struct() {
 
 fn (t Tally&) Text() String {
     b := StringBuilder()
-    for x in t.seen { b.Push($x) }
+    for x in t.seen: b.Push($x)
     return b.ToString()
 }
 
@@ -147,7 +147,7 @@ test "a constructor failing part way ends the fields it built, the last first" {
 # F2)
 fn seenBy(r Res&) I64 {
     s := 0
-    for i in range 200000 { s += i % 7 }
+    for i in range 200000: s += i % 7
     return r.id + s - s + r.log.seen.Len() * 1000
 }
 
@@ -331,7 +331,7 @@ fn ended() String {
     {
         y Res = Res(5, t)
         y = Res(6, t)
-        for i in range 2 { y = Res(7 + i, t) }
+        for i in range 2: y = Res(7 + i, t)
         assert y.id == 8
     }
     return $n + "/" + $t.Text()
@@ -440,7 +440,7 @@ fn logged() String {
     }
     churn()
     s := 0
-    for x in t.seen { s += x }
+    for x in t.seen: s += x
     return $t.seen.Len() + "/" + $s
 }
 
@@ -503,7 +503,7 @@ fn vecEnds() String {
     t := Tally()
     {
         v Vec<Res> = Vec<Res>()
-        for i in range 6 { v.Push(Res(i, t)) }
+        for i in range 6: v.Push(Res(i, t))
         p Res = v.Pop()!
         v.RemoveAt(1)!
         q Res = v.TakeAt(0)!
@@ -518,7 +518,7 @@ fn vecEnds() String {
     }
     {
         w Vec<Res> = Vec<Res>()
-        for i in range 10, 13 { w.Push(Res(i, t)) }
+        for i in range 10, 13: w.Push(Res(i, t))
         w.Clear()
         w.Push(Res(13, t))
     }
@@ -548,7 +548,7 @@ fn mapEnds() String {
     }
     {
         n Map<I64, Res> = Map<I64, Res>()
-        for k in range 3 { n.Put(k, Res(7 + k, t)) }
+        for k in range 3: n.Put(k, Res(7 + k, t))
         n.Remove(1)
         n.Clear()
         n.Put(5, Res(10, t))
@@ -567,12 +567,12 @@ fn dequeEnds() String {
     t := Tally()
     {
         d deque.Deque<Res> = deque.Deque<Res>()
-        for i in range 20, 23 { d.PushBack(Res(i, t)) }
+        for i in range 20, 23: d.PushBack(Res(i, t))
         d.PushFront(Res(19, t))
         f Res = d.PopFront()!
         b Res = d.PopBack()!
         d[0] = Res(23, t)
-        for i in range 24, 34 { d.PushBack(Res(i, t)) }
+        for i in range 24, 34: d.PushBack(Res(i, t))
         assert f.id == 19 and b.id == 22 and d.Len() == 12
     }
     {
@@ -639,7 +639,7 @@ fn destroyedVec(t mut Tally&) {
 
 fn madeVec(n I64, from I64, t mut Tally&) Vec<Res> {
     v Vec<Res> = Vec<Res>()
-    for i in range n { v.Push(Res(from + i, t)) }
+    for i in range n: v.Push(Res(from + i, t))
     return v
 }
 
@@ -675,7 +675,7 @@ fn namedKept() String {
     b := StringBuilder()
     {
         v Vec<Named> = Vec<Named>()
-        for i in range 5 { v.Push(Named($i + "-" + $(i * 11), t)) }
+        for i in range 5: v.Push(Named($i + "-" + $(i * 11), t))
         churn()
         for x in v {
             b.Push(x.name)
@@ -959,7 +959,7 @@ fn viewsKept() String {
             keep.Push(nameOf(s))
         }
         t.seen.Push(0)
-        for k in keep { seen = $seen + $k }
+        for k in keep: seen = $seen + $k
     }
     return $seen + "/" + $t.Text()
 }

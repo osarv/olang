@@ -24,12 +24,12 @@ fn build(b Box) { b.head.next = Node(42) }
 fn grow(b mut Box&) { b.head.next = Node(43) }
 fn second(e E) I64 {
     b := (e as E.A)!
-    if b.head.next == null { return 0 }
+    if b.head.next == null: return 0
     return b.head.next!.v
 }
 type Countdown struct(n I64) {
     left Vec<I64>
-    for i in range n { left.Push(n - i) }
+    for i in range n: left.Push(n - i)
 }
 fn main() ? {
     e1 := E.A(Box())
@@ -54,6 +54,6 @@ fn main() ? {
     c := Countdown(20)
     churn()
     s I64 = 0
-    for v in c.left { s += v }
+    for v in c.left: s += v
     assert not (second(e1) != 42 or second(e2) != 43 or second(e3) != 44 or s != 210)
 }

@@ -39,7 +39,7 @@ test "a macro taking arguments is a function of its arguments' types" {
 
 test "a static inline function is reached through the C the build compiles" {
     assert d.cdemo_twice(21) == 42
-    for i in range 10 { assert d.cdemo_twice(I32(i)) == I32(2 * i) }
+    for i in range 10: assert d.cdemo_twice(I32(i)) == I32(2 * i)
 }
 
 test "the C library: functions, a C string back, pointer arguments of any array" {

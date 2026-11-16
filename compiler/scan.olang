@@ -126,7 +126,7 @@ fn (ts Tokens&) Match(open I32) I32 {
     for lo <= hi {
         mid := (lo + hi) / 2
         o := ts.Opens[mid]
-        if o == open { return ts.Closes[mid] }
+        if o == open: return ts.Closes[mid]
         if o < open { lo = mid + 1 } else { hi = mid - 1 }
     }
     return -1
@@ -139,7 +139,7 @@ fn Tokens.Scan(text String&) Tokens {
     toks Array<token.Token>& = s.toks.ToArray()
     count I64 = 0
     for tk in toks {
-        if tk.Kind == token.Tok.LBrace { count++ }
+        if tk.Kind == token.Tok.LBrace: count++
     }
     opens mut Array<I32>& = Array<I32>(count)
     closes mut Array<I32>& = Array<I32>(count, -1)
@@ -180,16 +180,16 @@ fn (s mut scanner&) run() {
                 i++
             } else if c == '#' and (i + 1 >= n or t[i + 1] != '#') {
                 i = lineEnd(t, i)
-                if i == n { nl = true }
+                if i == n: nl = true
             } else if c == '#' {
                 end := s.blockEnd(i)
-                if hasLineEnd(t, i + 2, end) { nl = true }
+                if hasLineEnd(t, i + 2, end): nl = true
                 i = end
             } else {
                 break
             }
         }
-        if i >= n { break }
+        if i >= n: break
 
         start := i
         c := t[i]
@@ -217,7 +217,7 @@ fn (s mut scanner&) run() {
             if k == token.Tok.Eof {
                 s.diag(LexError.Semicolon, i, i + 1)
                 i++
-                if not last.EndsStatement() { continue }
+                if not last.EndsStatement(): continue
                 at := lastEnd if nl else start
                 s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(at), I32(at)))
                 last = token.Tok.StmtEnd
@@ -226,13 +226,13 @@ fn (s mut scanner&) run() {
         }
 
         flags U8 = 0
-        if nl { flags = flags | token.LineBreak }
-        if start > lastEnd { flags = flags | token.Space }
+        if nl: flags = flags | token.LineBreak
+        if start > lastEnd: flags = flags | token.Space
         lineStart := start == 0 or t[start - 1] == '\n'
-        if lineStart { flags = flags | token.LineStart }
-        if lineStart and start > 0 { s.closeBeforeDecl(k, end) }
+        if lineStart: flags = flags | token.LineStart
+        if lineStart and start > 0: s.closeBeforeDecl(k, end)
         # L18a: a comma never ends a line - reported, and read as the line break it stands before
-        if nl and last == token.Tok.Comma { s.diag(LexError.CommaEndsLine, lastEnd - 1, lastEnd) }
+        if nl and last == token.Tok.Comma: s.diag(LexError.CommaEndsLine, lastEnd - 1, lastEnd)
         # L18 - and no statement starts with catch, so a clause may begin a line (R9b)
         if nl and last.EndsStatement() and k != token.Tok.Catch {
             s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(lastEnd), I32(lastEnd)))
@@ -245,8 +245,8 @@ fn (s mut scanner&) run() {
         i = end
     }
     # the end of the file ends a statement as a line's end does
-    if last == token.Tok.Comma { s.diag(LexError.CommaEndsLine, lastEnd - 1, lastEnd) }
-    if last.EndsStatement() { s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(lastEnd), I32(lastEnd))) }
+    if last == token.Tok.Comma: s.diag(LexError.CommaEndsLine, lastEnd - 1, lastEnd)
+    if last.EndsStatement(): s.toks.Push(token.Token(token.Tok.StmtEnd, 0, I32(lastEnd), I32(lastEnd)))
     s.toks.Push(token.Token(token.Tok.Eof, token.LineBreak, I32(n), I32(n)))
 }
 
@@ -263,7 +263,7 @@ fn (s mut scanner&) track(k token.Tok) {
         case token.Tok.RParen, token.Tok.RBrack {
             n := s.brackets.Len()
             want := '(' if k == token.Tok.RParen else '['
-            if n > 0 and s.brackets[n - 1] == want { s.brackets.Truncate(n - 1) }
+            if n > 0 and s.brackets[n - 1] == want: s.brackets.Truncate(n - 1)
         }
         case token.Tok.RBrace {
             for s.brackets.Len() > 0 {
@@ -281,15 +281,15 @@ fn (s mut scanner&) track(k token.Tok) {
 # L18a: a declaration beginning a line, with no block open, ends the brackets left open before it - "fn" counts when a
 # name follows it (a lambda or a method's receiver is "fn (")
 fn (s mut scanner&) closeBeforeDecl(k token.Tok, end I64) {
-    if s.brackets.Len() == 0 or s.curlies > 0 { return }
+    if s.brackets.Len() == 0 or s.curlies > 0: return
     decl := k == token.Tok.Type or k == token.Tok.Test or k == token.Tok.Import or k == token.Tok.Extern
     if k == token.Tok.Fn {
         t := s.text
         i I64 = end
-        for i < t.Len() and (t[i] == ' ' or t[i] == '\t') { i++ }
+        for i < t.Len() and (t[i] == ' ' or t[i] == '\t'): i++
         decl = i < t.Len() and (isLetter(t[i]) or t[i] == '_')
     }
-    if decl { s.brackets.Clear() }
+    if decl: s.brackets.Clear()
 }
 
 fn isLetter(c Char) Bool { return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') }
@@ -301,7 +301,7 @@ fn isHexDigit(c Char) Bool { return isDigit(c) or (c >= 'a' and c <= 'f') or (c 
 fn wordEnd(t String&, from I64) I64 {
     i I64 = from
     n := t.Len()
-    for i < n and isWordChar(t[i]) { i++ }
+    for i < n and isWordChar(t[i]): i++
     return i
 }
 
@@ -309,7 +309,7 @@ fn wordEnd(t String&, from I64) I64 {
 fn lineEnd(t String&, from I64) I64 {
     i I64 = from
     n := t.Len()
-    for i < n and t[i] != '\n' { i++ }
+    for i < n and t[i] != '\n': i++
     return i
 }
 
@@ -318,7 +318,7 @@ fn blockComment(t String&, from I64) I64 {
     i I64 = from
     n := t.Len()
     for i + 1 < n {
-        if t[i] == '#' and t[i + 1] == '#' { return i + 2 }
+        if t[i] == '#' and t[i + 1] == '#': return i + 2
         i++
     }
     return -1
@@ -329,7 +329,7 @@ fn blockComment(t String&, from I64) I64 {
 # passed over; where the token after them starts
 fn (s mut scanner&) junk(c Char, i I64) I64 {
     if c == '\r' {
-        if not s.reportedCR { s.diag(LexError.CarriageReturn, i, i + 1) }
+        if not s.reportedCR: s.diag(LexError.CarriageReturn, i, i + 1)
         s.reportedCR = true
         return i + 1
     }
@@ -342,14 +342,14 @@ fn (s mut scanner&) junk(c Char, i I64) I64 {
 # the end of the block comment starting at i (L4a): past its closing "##", or the text's end where it has none (said)
 fn (s mut scanner&) blockEnd(i I64) I64 {
     end := blockComment(s.text, i + 2)
-    if end >= 0 { return end }
+    if end >= 0: return end
     s.diag(LexError.UnclosedComment, i, i + 2)
     return s.text.Len()
 }
 
 fn hasLineEnd(t String&, from I64, to I64) Bool {
     for i in range from, to {
-        if t[i] == '\n' { return true }
+        if t[i] == '\n': return true
     }
     return false
 }
@@ -357,8 +357,8 @@ fn hasLineEnd(t String&, from I64, to I64) Bool {
 # whether a token can start at t[i] - or whitespace, or a comment: what ends a run of bytes that begin none (L1)
 fn canStart(t String&, i I64) Bool {
     c := t[i]
-    if isWordChar(c) or c == ' ' or c == '\t' or c == '\n' or c == '#' or c == '"' or c == '\'' { return true }
-    if c == '!' { return i + 1 < t.Len() and t[i + 1] == '=' }
+    if isWordChar(c) or c == ' ' or c == '\t' or c == '\n' or c == '#' or c == '"' or c == '\'': return true
+    if c == '!': return i + 1 < t.Len() and t[i + 1] == '='
     k, _ := operator(t, i)
     return k != token.Tok.Eof
 }
@@ -367,7 +367,7 @@ fn canStart(t String&, i I64) Bool {
 fn junkEnd(t String&, from I64) I64 {
     i I64 = from
     n := t.Len()
-    for i < n and t[i] != '\r' and not canStart(t, i) { i++ }
+    for i < n and t[i] != '\r' and not canStart(t, i): i++
     return i
 }
 
@@ -378,68 +378,68 @@ fn operator(t String&, i I64) token.Tok, I64 {
     d := t[i + 1] if i + 1 < n else '\0'
     match c {
         case '+' {
-            if d == '+' { return token.Tok.Inc, i + 2 }
-            if d == '=' { return token.Tok.PlusEq, i + 2 }
+            if d == '+': return token.Tok.Inc, i + 2
+            if d == '=': return token.Tok.PlusEq, i + 2
             return token.Tok.Plus, i + 1
         }
         case '-' {
-            if d == '-' { return token.Tok.Dec, i + 2 }
-            if d == '=' { return token.Tok.MinusEq, i + 2 }
+            if d == '-': return token.Tok.Dec, i + 2
+            if d == '=': return token.Tok.MinusEq, i + 2
             return token.Tok.Minus, i + 1
         }
         case '*' {
-            if d == '=' { return token.Tok.StarEq, i + 2 }
-            if d != '*' { return token.Tok.Star, i + 1 }
+            if d == '=': return token.Tok.StarEq, i + 2
+            if d != '*': return token.Tok.Star, i + 1
             # E5a: "**" the power operator, "**=" its compound assignment
-            if i + 2 < n and t[i + 2] == '=' { return token.Tok.StarStarEq, i + 3 }
+            if i + 2 < n and t[i + 2] == '=': return token.Tok.StarStarEq, i + 3
             return token.Tok.StarStar, i + 2
         }
         case '/' {
-            if d == '=' { return token.Tok.SlashEq, i + 2 }
+            if d == '=': return token.Tok.SlashEq, i + 2
             return token.Tok.Slash, i + 1
         }
         case '%' {
-            if d == '=' { return token.Tok.PercentEq, i + 2 }
+            if d == '=': return token.Tok.PercentEq, i + 2
             return token.Tok.Percent, i + 1
         }
         case '&' {
-            if d == '=' { return token.Tok.AmpEq, i + 2 }
+            if d == '=': return token.Tok.AmpEq, i + 2
             return token.Tok.Amp, i + 1
         }
         case '|' {
-            if d == '=' { return token.Tok.PipeEq, i + 2 }
+            if d == '=': return token.Tok.PipeEq, i + 2
             return token.Tok.Pipe, i + 1
         }
         case '^' {
-            if d == '=' { return token.Tok.CaretEq, i + 2 }
+            if d == '=': return token.Tok.CaretEq, i + 2
             return token.Tok.Caret, i + 1
         }
         case ':' {
-            if d == '=' { return token.Tok.Define, i + 2 }
+            if d == '=': return token.Tok.Define, i + 2
             return token.Tok.Colon, i + 1
         }
         case '=' {
-            if d == '=' { return token.Tok.EqEq, i + 2 }
+            if d == '=': return token.Tok.EqEq, i + 2
             return token.Tok.Assign, i + 1
         }
         case '!' {
-            if d == '=' { return token.Tok.NotEq, i + 2 }
+            if d == '=': return token.Tok.NotEq, i + 2
             return token.Tok.Bang, i + 1
         }
         case '<' {
             if d == '<' {
-                if i + 2 < n and t[i + 2] == '=' { return token.Tok.ShlEq, i + 3 }
+                if i + 2 < n and t[i + 2] == '=': return token.Tok.ShlEq, i + 3
                 return token.Tok.Shl, i + 2
             }
-            if d == '=' { return token.Tok.Le, i + 2 }
+            if d == '=': return token.Tok.Le, i + 2
             return token.Tok.Lt, i + 1
         }
         case '>' {
             if d == '>' {
-                if i + 2 < n and t[i + 2] == '=' { return token.Tok.ShrEq, i + 3 }
+                if i + 2 < n and t[i + 2] == '=': return token.Tok.ShrEq, i + 3
                 return token.Tok.Shr, i + 2
             }
-            if d == '=' { return token.Tok.Ge, i + 2 }
+            if d == '=': return token.Tok.Ge, i + 2
             return token.Tok.Gt, i + 1
         }
         case '@' { return token.Tok.At, i + 1 }
@@ -460,8 +460,8 @@ fn operator(t String&, i I64) token.Tok, I64 {
 
 # whether c is a digit of a radix: 10, 16 or 2
 fn digitOf(c Char, radix I64) Bool {
-    if radix == 16 { return isHexDigit(c) }
-    if radix == 2 { return c == '0' or c == '1' }
+    if radix == 16: return isHexDigit(c)
+    if radix == 2: return c == '0' or c == '1'
     return isDigit(c)
 }
 
@@ -480,7 +480,7 @@ fn (s mut scanner&) digits(from I64, radix I64) I64, I64 {
             count++
         } else if c == '_' {
             between := digitOf(prev, radix) and i + 1 < n and digitOf(t[i + 1], radix)
-            if not between and prev != '_' { s.diag(LexError.DigitSeparator, i, i + 1) }
+            if not between and prev != '_': s.diag(LexError.DigitSeparator, i, i + 1)
         } else {
             break
         }
@@ -495,7 +495,7 @@ fn exponentDigits(t String&, from I64) Bool {
     i I64 = from
     n := t.Len()
     for i < n and (isDigit(t[i]) or t[i] == '_') {
-        if isDigit(t[i]) { return true }
+        if isDigit(t[i]): return true
         i++
     }
     return false
@@ -503,7 +503,7 @@ fn exponentDigits(t String&, from I64) Bool {
 
 # whether a '.' at i begins a number's fraction: it does unless a letter or '_' follows it (L12: "7.Hash()")
 fn fractionAt(t String&, i I64) Bool {
-    if i >= t.Len() or t[i] != '.' { return false }
+    if i >= t.Len() or t[i] != '.': return false
     return not (i + 1 < t.Len() and (isLetter(t[i + 1]) or t[i + 1] == '_'))
 }
 
@@ -528,15 +528,15 @@ fn (s mut scanner&) number(i I64) token.Tok, I64 {
     k token.Tok = token.Tok.IntLit
     if fractionAt(t, end) {
         fe, count := s.digits(end + 1, 10)
-        if count == 0 { s.diag(LexError.PointNoDigit, end, end + 1) }
+        if count == 0: s.diag(LexError.PointNoDigit, end, end + 1)
         end = fe
         k = token.Tok.FloatLit
-        if fractionAt(t, end) { s.diag(LexError.TwoPoints, end, end + 1) }
+        if fractionAt(t, end): s.diag(LexError.TwoPoints, end, end + 1)
     }
     # an exponent is one only when the whole of it is there: "1e" is a number and a name (L12a)
     if end < n and (t[end] == 'e' or t[end] == 'E') {
         j I64 = end + 1
-        if j < n and (t[j] == '+' or t[j] == '-') { j++ }
+        if j < n and (t[j] == '+' or t[j] == '-'): j++
         if exponentDigits(t, j) {
             ee, _ := s.digits(j, 10)
             return token.Tok.FloatLit, ee
@@ -551,9 +551,9 @@ fn escapeOk(e Char, q Char) Bool {
 }
 
 fn hexDigit(c Char) I64 {
-    if c >= '0' and c <= '9' { return I64(c - '0') }
-    if c >= 'a' and c <= 'f' { return I64(c - 'a') + 10 }
-    if c >= 'A' and c <= 'F' { return I64(c - 'A') + 10 }
+    if c >= '0' and c <= '9': return I64(c - '0')
+    if c >= 'a' and c <= 'f': return I64(c - 'a') + 10
+    if c >= 'A' and c <= 'F': return I64(c - 'A') + 10
     return -1
 }
 
@@ -564,7 +564,7 @@ fn (s mut scanner&) escape(j I64, q Char) I64 {
     n := t.Len()
     e := t[j + 1]
     if e == 'x' {
-        if j + 3 < n and hexDigit(t[j + 2]) >= 0 and hexDigit(t[j + 3]) >= 0 { return j + 4 }
+        if j + 3 < n and hexDigit(t[j + 2]) >= 0 and hexDigit(t[j + 3]) >= 0: return j + 4
         s.diag(LexError.BadHexEscape, j, j + 2)
         return j + 2
     }
@@ -573,11 +573,11 @@ fn (s mut scanner&) escape(j I64, q Char) I64 {
             s.diag(LexError.BadUnicodeEscape, j, j + 2)
             return j + 2
         }
-        if v > 0x10FFFF or (v >= 0xD800 and v <= 0xDFFF) { s.diag(LexError.BadCodePoint, j, end) }
-        if q == '\'' and v >= 0x80 { s.diag(LexError.WideCharEscape, j, end) }
+        if v > 0x10FFFF or (v >= 0xD800 and v <= 0xDFFF): s.diag(LexError.BadCodePoint, j, end)
+        if q == '\'' and v >= 0x80: s.diag(LexError.WideCharEscape, j, end)
         return end
     }
-    if not escapeOk(e, q) { s.diag(LexError.BadEscape, j, j + 2, e) }
+    if not escapeOk(e, q): s.diag(LexError.BadEscape, j, j + 2, e)
     return j + 2
 }
 
@@ -586,7 +586,7 @@ fn (s mut scanner&) escape(j I64, q Char) I64 {
 fn (s mut scanner&) str(i I64) I64 {
     t := s.text
     n := t.Len()
-    if i + 2 < n and t[i + 1] == '"' and t[i + 2] == '"' { return s.raw(i) }
+    if i + 2 < n and t[i + 1] == '"' and t[i + 2] == '"': return s.raw(i)
     j I64 = i + 1
     for {
         if j >= n {
@@ -594,7 +594,7 @@ fn (s mut scanner&) str(i I64) I64 {
             return n
         }
         c := t[j]
-        if c == '"' { return j + 1 }
+        if c == '"': return j + 1
         if c == '\n' {
             s.diag(LexError.StringNewline, i, j)
             return j
@@ -652,14 +652,14 @@ fn (s mut scanner&) char(i I64) I64 {
         s.diag(LexError.UnclosedChar, i, n)
         return n
     }
-    if t[j] == '\'' { return j + 1 }
+    if t[j] == '\'': return j + 1
     if t[j] == '\n' {
         s.diag(LexError.CharNewline, i, j)
         return j
     }
     # more than one character: the literal runs to its closing quote, or to its line's end
     k I64 = j
-    for k < n and t[k] != '\'' and t[k] != '\n' { k++ }
+    for k < n and t[k] != '\'' and t[k] != '\n': k++
     end := k + 1 if k < n and t[k] == '\'' else k
     s.diag(LexError.LongChar, i, end)
     return end
@@ -670,7 +670,7 @@ fn (s mut scanner&) raw(i I64) I64 {
     t := s.text
     n := t.Len()
     j I64 = i + 3
-    for j + 2 < n and not (t[j] == '"' and t[j + 1] == '"' and t[j + 2] == '"') { j++ }
+    for j + 2 < n and not (t[j] == '"' and t[j + 1] == '"' and t[j + 2] == '"'): j++
     if j + 2 >= n {
         s.diag(LexError.RawUnclosed, i, i + 3)
         return n
@@ -678,9 +678,9 @@ fn (s mut scanner&) raw(i I64) I64 {
     end := j + 3
     first := i + 3
     for k in range first, j {
-        if t[k] != '\n' { continue }
+        if t[k] != '\n': continue
         # across lines: nothing after the opening on its line, the closing alone on its own, every line indented
-        if not blankLine(t, first, k) { s.diag(LexError.RawAfterOpen, first, k) }
+        if not blankLine(t, first, k): s.diag(LexError.RawAfterOpen, first, k)
         ls := lastLineStart(t, j)
         for x in range ls, j {
             if t[x] != ' ' and t[x] != '\t' {
@@ -691,8 +691,8 @@ fn (s mut scanner&) raw(i I64) I64 {
         line := k + 1
         for line < ls {
             e := line
-            for t[e] != '\n' { e++ }
-            if not blankLine(t, line, e) and not hasPrefix(t, line, e, ls, j) { s.diag(LexError.RawIndent, line, e) }
+            for t[e] != '\n': e++
+            if not blankLine(t, line, e) and not hasPrefix(t, line, e, ls, j): s.diag(LexError.RawIndent, line, e)
             line = e + 1
         }
         return end
@@ -703,23 +703,23 @@ fn (s mut scanner&) raw(i I64) I64 {
 # where the line holding position j starts
 fn lastLineStart(t String&, j I64) I64 {
     k := j
-    for k > 0 and t[k - 1] != '\n' { k-- }
+    for k > 0 and t[k - 1] != '\n': k--
     return k
 }
 
 # whether t[a:b] is only spaces and tabs
 fn blankLine(t String&, a I64, b I64) Bool {
     for x in range a, b {
-        if t[x] != ' ' and t[x] != '\t' { return false }
+        if t[x] != ' ' and t[x] != '\t': return false
     }
     return true
 }
 
 # whether the line t[a:b] begins with the indentation t[p:q]
 fn hasPrefix(t String&, a I64, b I64, p I64, q I64) Bool {
-    if b - a < q - p { return false }
+    if b - a < q - p: return false
     for x in range q - p {
-        if t[a + x] != t[p + x] { return false }
+        if t[a + x] != t[p + x]: return false
     }
     return true
 }
@@ -747,7 +747,7 @@ fn LiteralBytes(t String&) Array<U8> {
         body := t[3:t.Len() - 3]
         nl := try body.FindByte('\n') catch default -1
         if nl < 0 {
-            for ch in body { b.Push(U8(ch)) }
+            for ch in body: b.Push(U8(ch))
             return b.ToArray()
         }
         # across lines: the closing line's indentation, then every line between, without it
@@ -757,11 +757,11 @@ fn LiteralBytes(t String&) Array<U8> {
         firstLine := true
         for line < ls {
             e := line
-            for body[e] != '\n' { e++ }
-            if not firstLine { b.Push(10) }
+            for body[e] != '\n': e++
+            if not firstLine: b.Push(10)
             firstLine = false
             if not blankLine(body, line, e) {
-                for x in range line + ind, e { b.Push(U8(body[x])) }
+                for x in range line + ind, e: b.Push(U8(body[x]))
             }
             line = e + 1
         }
@@ -781,7 +781,7 @@ fn LiteralBytes(t String&) Array<U8> {
             i += 4
         } else if e == 'u' {
             v, end := try unicodeEscape(t, i) catch default -1, (i + 2)
-            if v >= 0 { pushUtf8(b, v) }
+            if v >= 0: pushUtf8(b, v)
             i = end
         } else {
             b.Push(10 if e == 'n' else 9 if e == 't' else 13 if e == 'r' else 0 if e == '0' else U8(e))
@@ -833,8 +833,8 @@ fn matchBraces(toks Array<token.Token>&, opens mut Array<I32>&, closes mut Array
 fn spelled(text String&, ts Tokens&) String {
     b := StringBuilder()
     for tk in ts.Toks {
-        if tk.Kind == token.Tok.Eof { break }
-        if b.Len() > 0 { b.PushChar(' ') }
+        if tk.Kind == token.Tok.Eof: break
+        if b.Len() > 0: b.PushChar(' ')
         b.Push(";" if tk.Kind == token.Tok.StmtEnd else text[tk.Start:tk.End])
     }
     return b.ToString()

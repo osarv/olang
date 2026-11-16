@@ -53,7 +53,7 @@ test pick "copies a view kept beside new text, whatever it gives" {
     a Array<Char> = $"one"
     b Array<Char> = $"two"
     xs := Vec<Array<Char>&>()
-    for k in range 3 { xs.Push(pick(a, b, k)) }
+    for k in range 3: xs.Push(pick(a, b, k))
     a[0] = 'O'
     b[1] = 'W'
     assert xs[0] == "one" and xs[1] == "wo" and xs[2] == "onetwo"

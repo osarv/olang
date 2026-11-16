@@ -150,9 +150,9 @@ Builds Array<String&> = Array<String&>[
 fn main() {
     args := os.Args()
     capture := args.Len() == 3 and args[1] == "-capture"
-    if args.Len() > 1 and not capture { toolkit.Die("usage: drvdiff [-capture COMPILER]") }
+    if args.Len() > 1 and not capture: toolkit.Die("usage: drvdiff [-capture COMPILER]")
     exe := $args[2] if capture else toolkit.Env("DRVDIFF_DRIVER", "build/compiler_olang")
-    if not toolkit.Built(exe) { toolkit.Die("drvdiff: " + $exe + " is not built (make " + $exe + ")") }
+    if not toolkit.Built(exe): toolkit.Die("drvdiff: " + $exe + " is not built (make " + $exe + ")")
     gpath := "compiler/goldens/drv.txt"
     g := toolkit.Golden() if capture else toolkit.Golden.Read(gpath, "drvgold")
     here := try os.Cwd() catch os.Error { toolkit.Die("drvdiff: no working directory") }
@@ -168,7 +168,7 @@ fn main() {
     std := $"OLANG_STD=" + $here + "/std"
     dir := $work + "/programs"
     try os.MkDir(dir) catch os.Error { toolkit.Die("drvdiff: cannot make " + $dir) }
-    for i in range ProgramNames.Len() { toolkit.Write($dir + "/" + $ProgramNames[i], ProgramTexts[i]) }
+    for i in range ProgramNames.Len(): toolkit.Write($dir + "/" + $ProgramNames[i], ProgramTexts[i])
     full := $exe if exe.StartsWith("/") else $here + "/" + $exe
     # stage 0 builds its formatter into its cache the first time, and says so: done once beforehand
     outcome(full, "format -check hello.olang", dir, std, dir)
@@ -178,7 +178,7 @@ fn main() {
     }
     if capture {
         b := StringBuilder()
-        for i in range keys.Len() { b.Push(toolkit.GoldenSection(keys[i], got[i])) }
+        for i in range keys.Len(): b.Push(toolkit.GoldenSection(keys[i], got[i]))
         toolkit.GoldenWrite(gpath, b.ToString())
         toolkit.Say("drvdiff: " + $keys.Len() + " command lines captured from " + $exe + " into " + $gpath + "\n")
         return
@@ -222,11 +222,11 @@ fn outcome(exe String&, line String&, work String&, std String& = "", dir String
     args := Vec<String&>()
     args.Push(exe)
     for w in line.Split(" ") {
-        if w == "" { continue }
+        if w == "": continue
         args.Push(w.Replace("W/", $work + "/") if w.StartsWith("W/") else $w)
     }
     env := Vec<String&>()
-    if std != "" { env.Push($std) }
+    if std != "": env.Push($std)
     o := toolkit.Run(args.ToArray(), env.ToArray(), dir)
     return $"stdout:\n" + $o.Stdout + "stderr:\n" + $o.Stderr + "status " + $o.Status + "\n"
 }

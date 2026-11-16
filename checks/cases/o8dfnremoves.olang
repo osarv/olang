@@ -13,7 +13,7 @@ type Interp struct() {
 }
 fn sum(xs Array<I64>&, f fn&(x I64) I64) I64 {
     t I64 = 0
-    for x in xs { t += f(x) }
+    for x in xs: t += f(x)
     return t
 }
 fn twice(xs Array<I64>&, f fn&(x I64) I64) I64 { return sum(xs, f) + sum(xs, f) }
@@ -33,6 +33,6 @@ fn main() {
     it := Interp()
     xs := Array<I64>[1, 2, 3]
     s I64 = 0
-    for i in range 1000 { s += it.step(i, xs) }
+    for i in range 1000: s += it.step(i, xs)
     assert s > 0
 }

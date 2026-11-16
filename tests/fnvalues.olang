@@ -64,6 +64,6 @@ test "a value of a type whose result is built is unchanged" {
 # allocates and drops arenas, so a use of freed storage reads something else (under -sanitize: a fault)
 fn churn(d I64) I64 {
     a := Array<I64>[d, d, d, d]
-    if d == 0 { return 0 }
+    if d == 0: return 0
     return churn(d - 1) + a[2] - d
 }
