@@ -38640,3 +38640,38 @@ checker now notes the names a condition body could not find (`CondMissing`) and 
 `CondInBranch`: the name, a note where it is declared, help to declare it outside the conditional or decide on something
 that exists either way. Any other condition that does not check is `CondOwnError` ("has an error of its own"), followed
 by the condition's own errors replayed. Cases: checks/cases/unseen.olang (reworded), b9cown.olang (new).
+
+### os.File with a destructor; PutLine becomes PutLn (2026-11-16, the user's calls)
+
+Principle 1 says a resource has a destructor, and files were the one resource left without: `os.Open` and `os.Create`
+gave a bare `I32` and the program wrote `defer os.Close(fd)`. The user agreed ("this makes sense") to a `unique`
+`os.File` whose destructor closes its descriptor, the way std/net's Conn, Listener and UDP already did. `os.Close` is
+gone. D19a turned the plan's `os.Open(p)` into the builders `os.File.Open(p)` and `os.File.Create(p)` - a function of a
+module giving that module's type is the type's builder, as `net.Conn.Dial` is - and the File has `Read`, `Write` and
+`Fd()`. `os.ReadFile` and `os.WriteFile` use it inside. What is lost: a write the system defers and refuses only at the
+close (NFS) was reported by WriteFile's `try Close(fd)`; a destructor has no caller, so it is not. `io.Writer`'s `Flush`
+is where a buffered write fails, and stays explicit for that reason.
+
+The harder part was letting `io.Reader`, `io.Writer` and `io.Lines` take a File by reference while io.Stdin, Stdout and
+Stderr stay plain descriptors. olang has no overloads, and io cannot name `os.File` (os imports io). Three mechanisms
+were weighed: a non-owning File (io.Stdin would become a File, breaking `io.Write(io.Stdout, ...)`,
+`os.IsTerminal(io.Stderr)` and every pipe's end, which are `I32`s); making the three types generic over a trait (every
+`mut io.Writer&` in a signature would need a type argument); and a small trait taken as an `any`. The last was chosen:
+`io.Descriptor` is `trait { Fd() I32 }`, the constructors take `any Descriptor&`, `os.File` meets it with its own `Fd`,
+and `I32` with the prelude's `fn (fd I32) Fd() I32` (only the prelude declares an I32 method, M19d). The number is read
+once at construction - the run-time trait value costs one indirect call per reader or writer made, nothing per read -
+so the reader holds the number, as before; the File has to outlive it, as it outlives any use of `Fd()`. One rough edge
+surfaced: an integer literal turned into an `any` is an I64 (no target type reaches it), and I64 has no `Fd`, so the
+compiler's `io.Writer(1)` and `io.Lines(3)` became `io.Writer(io.Stdout)` and `io.Lines(I32(3))`. bench's lock
+(`TakeLock`) had leaked its descriptor on purpose to hold the lock for the run; it now returns the File, held to the end
+of main.
+
+At the same time the user renamed the output verbs ("PutLine should probably be called PutLn and so should most if not
+all other methods that have Line in them"): `io.PutLine` -> `io.PutLn`, `io.PutErrLine` -> `io.PutErrLn`,
+`Writer.PutLine` -> `Writer.PutLn`, matching Println and Scanln; the nouns stay (`Reader.Line`, `io.Lines`). Two text
+tools migrate, placed last in olang fix's table: tools/file_migrate (builders, the closing lines dropped, `io.Write(f,
+x)` made `f.Write(x)`, literal descriptors named, other uses listed by hand) and tools/putln_rename (a name after a `.`
+in code; every whole word in comments, text and other files). This HISTORY and the archived memory keep the old names
+as they were. Tests: std/os.olang's "a File closes its descriptor where its holder lets go of it" (read through
+/proc/self/fd, the number taken again by the next open), "io.Reader reads a File, taken by reference", the File's
+Read/Write; checks/cases/o27destructorfiles.olang now holds an os.File in a unique struct with no destructor of its own.

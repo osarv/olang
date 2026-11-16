@@ -198,6 +198,7 @@ The busy indicator's frames are `Frames` in `compiler/spin.olang`; `makefile`'s 
 | `compiler/doc.olang` | `olang doc -html` writes all of std; nothing to add per module |
 | `tools/stutter_rename.olang` | the naming rule (no module name repeated in a type: `io.Error`, never `io.IoError`) |
 | `tools/io_rename.olang` | a std/io function renamed: no `io` function shares a name with a prelude one (D3a), `Put`, `PutLn`, `PutErr`, `PutErrLn` |
+| `tools/putln_rename.olang`, `tools/file_migrate.olang` | std/io's output verbs end in `Ln` (`PutLn`, `PutErrLn`, `Writer.PutLn`); an open file is `os.File` (M19h) and io's Reader, Writer and Lines take an `io.Descriptor` (an `os.File`, a bare `I32` through the prelude's `I32.Fd`) - a change to either is a migration in `olang fix`'s table (`compiler/fix.olang`) |
 | `std/runtime/*.ll` and `compiler/runtime.olang` | a new runtime function or C-library fact; `emit.olang` declares runtime functions from the runtime's text |
 | `compiler/eval.olang` `runtimeFn` (and `callExtern`'s compile-time list) | a runtime function std calls (`__olang_*`): what the evaluator answers for it, under `-evaluate` and while compiling (B19b's `__olang_bench_*`) |
 | `compiler/*.olang` that import it | `grep -l 'std/NAME'` - the compiler uses `std/os`, `std/io`, `std/json`, `std/filepath` and others |

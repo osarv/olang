@@ -3463,9 +3463,9 @@ program where a write fails - with no words of the compiler's own:
 
 ```
 fn Put<T>(x T) ? io.Error             # x as $ renders it, to the standard output
-fn PutLn<T>(x T = "") ? io.Error     # x as $ renders it and a line end, to the standard output
+fn PutLn<T>(x T = "") ? io.Error      # x as $ renders it and a line end, to the standard output
 fn PutErr<T>(x T) ? io.Error          # x as $ renders it, to the standard error
-fn PutErrLn<T>(x T = "") ? io.Error  # x as $ renders it and a line end, to the standard error
+fn PutErrLn<T>(x T = "") ? io.Error   # x as $ renders it and a line end, to the standard error
 ```
 
 Each takes one value of any type and writes it as `$` renders it (E11a) - text as it is, `try io.PutLn(n)`, `try
@@ -3480,7 +3480,25 @@ and the value rendered (E11a) - and its line end to the standard error, then giv
 where it stands: `y := io.Show(f(x)) + 1`. A failed write is ignored, the one call of std that does not report one:
 a look that could fail would need a `try` at every use, and a lost look changes nothing the program computes.
 
-The read counterpart of `Writer` is `io.Reader(fd)`, a buffered input (4 KiB at first, doubling while a read fills it up to 64 KiB, and for a longer line; a reader's size changes nothing a program can see, so it is not a parameter) also behind `io.Lines(fd)`: `Line()` (the next
+The output verbs end in `Ln`, as `Println` and `Scanln` do (the user's call, 2026-11-16): `io.PutLn`, `io.PutErrLn`,
+`Writer.PutLn`; the nouns keep `Line` (`Reader.Line`, `io.Lines`).
+
+**M19h (files and descriptors).** An open file is a `std/os` `File`: `type File unique struct(fd I32)` whose destructor
+closes its descriptor (C9, O15) - where its holder lets go of it, as `net.Conn` closes its socket - so no program writes
+a close (the user's call, 2026-11-16; principle 1: a resource has a destructor). `os.File.Open(path)` (to read) and
+`os.File.Create(path)` (to write, created or emptied) are its builders (D19), failing with `os.Error`; `f.Read(buf)` and
+`f.Write(data)` read and write it as `io.Read`/`io.Write` do, and `f.Fd()` gives the descriptor's number for a C function
+(the `File` still closes it). A failure the system reports only at the close is not reported - a destructor has no
+caller; a buffered `Writer`'s `Flush` is where a write's failure is seen, and stays explicit. `io.Reader`, `io.Writer`
+and `io.Lines` take what they read or write as an `any io.Descriptor&` (T32): `type Descriptor trait { Fd() I32 }`, met
+by `os.File` and by `I32` itself (the prelude's `fn (fd I32) Fd() I32`), so they take a `File` by reference and a bare
+descriptor alike - `io.Stdin`, `io.Stdout` and `io.Stderr` stay the `I32`s 0, 1 and 2, closed by nothing, and a pipe's
+end is an `I32`. The descriptor's number is read once, when the reader or writer is made; the `File` must outlive it, as
+it must outlive any use of its `Fd()`. An integer literal given there is an `I64` (an `any` gives a literal no target
+type), which has no `Fd`: a literal descriptor is written `io.Stdout` or `I32(3)`. `io.Write(fd, data)` and
+`io.Read(fd, buf)` stay on the bare `I32`.
+
+The read counterpart of `Writer` is `io.Reader(from)`, a buffered input (4 KiB at first, doubling while a read fills it up to 64 KiB, and for a longer line; a reader's size changes nothing a program can see, so it is not a parameter) also behind `io.Lines(from)`: `Line()` (the next
 line, as `Lines.Next` gives it), `Word()` (the next run of non-whitespace, line ends skipped), `Next<T>()` (the next word as
 a `T`: an integer by `T.Parse`, a float by `ParseFloat`, a `Bool` from `true`/`false`; failing with `io.Error`, `Exhausted`
 or the prelude's `ParseError`), `Bytes(n)` (exactly `n` bytes; `Exhausted` if the input ends first, the bytes read
@@ -6345,7 +6363,7 @@ runs both before the wait, in order. The error is no value inside (T20), as in a
 (D18a) are no error leaving: its `defer`s run there, its errdefers do not; an error its body raises runs them.
 
 ```
-f := try os.Create(path)
+f := try os.File.Create(path)
 errdefer os.Remove(path)!
 try write(f, data)            # if this fails, the half-written file is removed
 ```
