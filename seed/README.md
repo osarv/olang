@@ -20,10 +20,9 @@ make seed       # writes the seed again from the current source (compiler/tools/
 they are built on, as every olang build is (B12). The standard library is named relatively while the seed is written,
 so no path of the checkout that wrote it is in it.
 
-**This seed** was written on 2026-11-16 from wt-seed's sources (278969b6 plus the bare-defer refusal and std/ and
-compiler/ migrated to `defer: stmt` and one-line bodies), so it reads S1b's one-line bodies everywhere, `defer: stmt`
-and `catch E: stmt`; `make clean; make boot; make fixedpoint` from it passes. The seed before it (51e49bf) read none of
-those three, which held std/ and compiler/ in the older forms.
+**This seed** was written on 2026-11-16 from wt-sumnarrow's sources (8b7d7659), so it reads default type parameters
+(`<A = T.Accumulator>`, as std/prelude uses), beside S1b's one-line bodies, `defer: stmt` and `catch E: stmt`; `make clean;
+make boot; make fixedpoint` from it passes. The seed before it (278969b6's) read no default type parameter.
 
 **When it is written again.** The seed need not be current: an older seed builds the current source as long as that
 source uses nothing the seed's compiler cannot build - `make bootstrap` shows it does. That is why the comparison (`make fixedpoint`) is
