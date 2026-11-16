@@ -5157,6 +5157,7 @@ included: `if a > b: a, b = b, a`), expression statement (S3, an increment inclu
 `error`, `unreachable`, `assert` or `spawn` statement, beginning on the line of its `:`. An `if`'s and an `else`'s
 body and a `for` loop's body (but not the forever form's, nor a `do` loop's) may be one, and so may a lambda's (D16):
 `if x < 0: return 0`, `for x in xs: total += x`, `else: count++`, `fn(x): return x > 3`; so may a match statement's clause, `case 0: n++` (S12), and a
+catch clause's, `catch ParseError e: bad++` (R11), and a
 match used as a value takes the same `:` for its clauses' values (S12b). It is
 exactly the block holding that one statement - a scope of its own (S1), so a declaration in one would name nothing
 after it and is a compile-time error, as are an `if`, a loop, a `match`, a `join`, a `defer` and a block (write the
@@ -6625,8 +6626,9 @@ terms too, run on the task's thread.
 
 ### 7.5 `catch`
 
-**R11.** `catch-clause ::= "catch" [ catch-list ] [ IDEN ] [ block ] [ "default" expr { "," expr } ]`, with at
-least one of the block and the default written, where `catch-list ::= catch-item { "," catch-item }` (on one line) and
+**R11.** `catch-clause ::= "catch" [ catch-list ] [ IDEN ] ( ":" line-stmnt | [ block ] [ "default" expr { "," expr }
+] )`, with at least one of the block and the default written, or a one-line body (S1b: `catch NotBuilt e: why = $e`,
+exactly the block holding its statement, with no default after it), where `catch-list ::= catch-item { "," catch-item }` (on one line) and
 `catch-item ::= IDEN { "." IDEN }` — a type name, optionally preceded by one or more alias hops and/or
 followed by `.WORD` to match only that one word; without a trailing word, the item matches every word of
 that error type; an item naming a named set (T19a) matches everything the set stands for (`catch LoadError`), and one
@@ -8724,10 +8726,10 @@ use.
 **B12a (another machine).** A target whose architecture or operating system is not this machine's is **another
 machine**. `compile` gives each module's object for it; `build` links them with the target's C library, which clang
 finds where the system keeps a cross C library (`/usr/aarch64-linux-gnu`, say) or under the directory
-`OLANG_SYSROOT` names; `test` and running a file (B3g) build the same way and run what they built through an
+`OLANG_SYSROOT` names; `test` and `run` (B3e) build the same way and run what they built through an
 **emulator** - `OLANG_EMULATOR`, a command whose words are split at spaces, else `qemu-ARCH` or `qemu-ARCH-static` found
 on `PATH`, told where the target's C library is (`OLANG_SYSROOT`, else `/usr/ARCH-linux-gnu` where that exists) - and
-where there is none, that is an error naming what to install. running a file, which runs the program on this machine, and
+where there is none, that is an error naming what to install. Running a file (B3g), which runs the program on this machine, and
 the tools that analyze for an editor are for this machine only: another machine's target is a command-line error for
 them. An object holds the target's intermediate form (B2d), compiled to the machine's code at the link, so another
 machine is built for only where the clang found can compile all the code the runtime holds for it: LLVM 18's AArch64

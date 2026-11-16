@@ -1,0 +1,7 @@
+# check: fail error[S1b]: a one-line body is one simple statement, not a declaration - write a block, '{ ... }'
+# S1b, R11: a catch clause's one-line body is the block holding its statement, so a declaration there would name nothing
+type E error { Bad }
+fn f() I64 ? E { error E.Bad }
+fn main() {
+    try f() catch E: y := 1
+}

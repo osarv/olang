@@ -43,7 +43,7 @@ fn Order() Array<I64> {
     out Vec<I64>
     for want in Array<String&>["text", "driven"] {
         for t in range ToolNames.Len() {
-            if driven(ToolKinds[t]) == (want == "driven") { out.Push(t) }
+            if driven(ToolKinds[t]) == (want == "driven"): out.Push(t)
         }
     }
     return out.ToArray()
@@ -62,7 +62,7 @@ fn arguments(program String&, kind I64, exe String&, std String&, files Array<St
     } else if kind == DrivenArg {
         out.Push(exe)
     }
-    for f in files { out.Push(f) }
+    for f in files: out.Push(f)
     return out.ToArray()
 }
 
@@ -70,7 +70,7 @@ fn arguments(program String&, kind I64, exe String&, std String&, files Array<St
 fn walk(dir String&, out mut Vec<String&>&) {
     names := try os.ReadDir(dir) catch default Array<String&>(0)
     for n in names {
-        if n.StartsWith(".") or n == "build" { continue }
+        if n.StartsWith(".") or n == "build": continue
         p := filepath.Join(dir, n)
         if os.IsDir(p): walk(p, out)
         else if n.EndsWith(".olang"): out.Push(p)
@@ -334,7 +334,7 @@ fn run(files Array<String&>&, before Vec<String&>&, exe String&, std String&, sa
         if given.Len() == 0 or not triggered(ToolTriggers[t], textsOf(given)): continue
         name := ToolNames[t]
         if failed[t] != "" or not os.Exists(programs[t]) {
-            if failed[t] == "": try buildTool(exe, tools, bin, name, programs[t]) catch NotBuilt e { failed[t] = $e.why }
+            if failed[t] == "": try buildTool(exe, tools, bin, name, programs[t]) catch NotBuilt e: failed[t] = $e.why
             if failed[t] != "" {
                 said.Write("olang: fix: " + $failed[t] + "\n")
                 return 2
@@ -410,7 +410,7 @@ test "the text tools run before the driven ones, each group in the order the cha
     last I64 = -1
     for t in o {
         if driven(ToolKinds[t]) {
-            if not seenDriven { last = -1 }
+            if not seenDriven: last = -1
             seenDriven = true
         } else {
             assert not seenDriven
