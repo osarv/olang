@@ -1,13 +1,13 @@
 import "std/io"
 
-# B18a: -memory -check fails on a let-go early freeing does not follow - a Vec of text copied (O8f, docs/freeing.md
-# 2.3: a copy's text is built in no slot, so the text place keeps; building it in slots costs each copy ~5 ns a string)
+# B18a: -memory -check fails on a let-go early freeing does not follow - a Map of Vecs of text copied (O8f,
+# docs/freeing.md 2.3: a copy of a Map whose values are Vecs of text is made with no store into its places: they keep)
 fn main() {
-    rows := Array<Vec<String>>(10)
+    rows := Array<Map<String, Vec<String>>>(10)
     for i in range 1000 {
-        rows[i % 10] = Vec<String>[$i, $i + " more"]
+        rows[i % 10] = Map<String, Vec<String>>[$i: Vec<String>[$i]]
         c := rows[(i + 3) % 10]
-        c.Push("x")
+        c.Put("x", Vec<String>["y"])
         io.PutLine($c.Len())!
     }
 }
