@@ -869,7 +869,7 @@ SessionSrc String& = ("import \"std/io\"\n\n# a point on a plane\ntype Point str
 
 test "olang lsp answers a scripted session: diagnostics, hover, definition, symbols, completion, formatting (B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/p.olang"
     try os.WriteFile(path, SessionSrc) catch os.Error { unreachable "no file" }
     uri := UriOf(path)
@@ -929,7 +929,7 @@ EditSrc String& = ("import \"std/io\"\n\ntype Point struct(X I64, Y I64) {\n    
 
 test "olang lsp completes after '.' while the line is unfinished: an import, a value, a word begun, a chain (B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/e.olang"
     try os.WriteFile(path, EditSrc) catch os.Error { unreachable "no file" }
     uri := UriOf(path)
@@ -979,7 +979,7 @@ FixSrc String& = "import \"std/io\"\n\nfn main() {\n    io.PutLn(json.Encode(1))
 
 test "olang lsp completes import paths and offers M10's missing import as a quick fix (B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     try os.MkDirAll($dir + "/sub") catch os.Error { unreachable "no folder" }
     path := $dir + "/c.olang"
     fix := $dir + "/f.olang"
@@ -1046,7 +1046,7 @@ StepLibs := Array<String&>[
 
 test "olang lsp checks an edited program as a build does, taking the records the checks before it left (B3i, T8)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     main := $dir + "/main.olang"
     try os.WriteFile(main, StepMain) catch os.Error { unreachable "no file" }
     for k, text in StepLibs {
@@ -1140,7 +1140,7 @@ ExamplesSrc String& = """
 
 test "a hover on a function shows the first test naming it and how many more there are (B7a, B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/e.olang"
     try os.WriteFile(path, ExamplesSrc) catch os.Error { unreachable "no file" }
     uri := UriOf(path)
@@ -1173,7 +1173,7 @@ DeprecatedSrc String& = """
 
 test "a deprecated item: hover shows the note, completion tags it, its uses get a Hint tagged Deprecated (L4b, B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/d.olang"
     try os.WriteFile(path, DeprecatedSrc) catch os.Error { unreachable "no file" }
     uri := UriOf(path)
@@ -1211,7 +1211,7 @@ test "unused names are warnings, other rules errors (B15, D3b, M5a)" {
     assert severityOf("D3b") == 2 and severityOf("M5a") == 2
     assert severityOf("T6") == 1 and severityOf("") == 1
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/u.olang"
     src := "fn main() {\n    x := 1\n}\n"
     try os.WriteFile(path, src) catch os.Error { unreachable "no file" }
@@ -1241,7 +1241,7 @@ FitsSrc String& = """
 
 test "a hover on a function shows its # fits: line; a promise word is followed by the line's parameters (T21c, B11b, B15)" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/f.olang"
     try os.WriteFile(path, FitsSrc) catch os.Error { unreachable "no file" }
     uri := UriOf(path)
@@ -1274,8 +1274,8 @@ test "lsp and explain write nothing in the directory they run in: their records 
     cache := try os.MkTemp(prefix = "olang-lspcache-") catch os.Error { unreachable "no temporary directory" }
     src := "fn main() {\n    x := 1\n    assert x == 1\n}\n"
     try os.WriteFile($dir + "/m.olang", src) catch os.Error { unreachable "cannot write m.olang" }
-    defer try os.RemoveAll(dir) catch os.Error { }
-    defer try os.RemoveAll(cache) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(cache) catch os.Error { }
     uri := UriOf($dir + "/m.olang")
     t := StringBuilder()
     session.JsonStr(t, src)

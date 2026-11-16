@@ -155,7 +155,7 @@ fn Lines.sized(fd I32, size I64) Lines {
 }
 
 fn (l mut Lines&) Next() String& ? Error, Exhausted {
-    if l.fd == 0: return try StdinLine() catch InputError { error Error.Failed }
+    if l.fd == 0: return try StdinLine() catch InputError: error Error.Failed
     return try l.src.Line() catch InputError { error Error.Failed }
 }
 
@@ -189,13 +189,13 @@ fn Reader.sized(fd I32, size I64) Reader {
 
 # the next line without its line end, a carriage return before it dropped, as Lines.Next gives it
 fn (r mut Reader&) Line() String& ? Error, Exhausted {
-    if r.fd == 0: return try StdinLine() catch InputError { error Error.Failed }
+    if r.fd == 0: return try StdinLine() catch InputError: error Error.Failed
     return try r.src.Line() catch InputError { error Error.Failed }
 }
 
 # the next run of non-whitespace (space, tab, line ends), whitespace before it skipped, line ends included
 fn (r mut Reader&) Word() String& ? Error, Exhausted {
-    if r.fd == 0: return try StdinWord() catch InputError { error Error.Failed }
+    if r.fd == 0: return try StdinWord() catch InputError: error Error.Failed
     return try r.src.Word() catch InputError { error Error.Failed }
 }
 
@@ -211,7 +211,7 @@ fn (r mut Reader&) Next<T>() T ? Error, Exhausted, ParseError {
 # exactly n bytes. If the input ends first, Exhausted - and the bytes read before it are gone, taken from the input and
 # dropped, so a caller wanting them back reads in pieces; n of zero or less is an empty array without reading
 fn (r mut Reader&) Bytes(n I64) Array<U8>& ? Error, Exhausted {
-    if r.fd == 0: return try StdinBytes(n) catch InputError { error Error.Failed }
+    if r.fd == 0: return try StdinBytes(n) catch InputError: error Error.Failed
     return try r.src.Bytes(n) catch InputError { error Error.Failed }
 }
 
@@ -222,13 +222,13 @@ fn (r mut Reader&) Bytes(n I64) Array<U8>& ? Error, Exhausted {
 # for the next call, so no character is split (a read that gives nothing else reads again). Exhausted at the end of the
 # input. It takes from the buffer Line, Word, Next, Bytes and All take from, so mixing them loses nothing.
 fn (r mut Reader&) Available() String& ? Error, Exhausted {
-    if r.fd == 0: return try StdinAvailable() catch InputError { error Error.Failed }
+    if r.fd == 0: return try StdinAvailable() catch InputError: error Error.Failed
     return try r.src.Available() catch InputError { error Error.Failed }
 }
 
 # everything left, to the end of the input
 fn (r mut Reader&) All() String& ? Error {
-    if r.fd == 0: return try StdinAll() catch InputError { error Error.Failed }
+    if r.fd == 0: return try StdinAll() catch InputError: error Error.Failed
     return try r.src.All() catch InputError { error Error.Failed }
 }
 
@@ -591,7 +591,7 @@ test "a Writer's failed write is Flush's, and every Flush's after it" {
 # writes "n" lines and fails partway through - what the deferred Flush still writes
 fn reportTo(fd I32, n I64) ? Error {
     w := Writer(fd)
-    defer w.Flush()!
+    defer: w.Flush()!
     for i in range n {
         if i == 3: error Error.Partial(i)
         w.Write("line " + $i + "\n")

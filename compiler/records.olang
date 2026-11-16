@@ -336,7 +336,7 @@ fn TrimRecordDir(dir String&, keep Map<String&, Bool>&, since I64, most I64, cap
 
 test "B3i: a module's records are kept for its keys used last, never this build's, and within the cap" {
     dir := try os.MkTemp("", "olang-rec-")
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     for n in Array<String&>["a.k1.v1", "a.k1.v1.p0.ll", "a.k2.f1", "a.k3.f1", "a.k4.s1", "b.k1.f1", "a.k5.v1.p0.ll.77.tmp"] {
         try os.WriteFile($dir + "/" + $n, "0123456789")
     }

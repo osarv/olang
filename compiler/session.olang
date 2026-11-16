@@ -1638,7 +1638,7 @@ CompFolder I64 = 19
 # the edited file's folder dir after "./" or "../", the roots at the opening quote; a remote path nothing
 fn ImportPaths(it mut Items&, sofar String&, dir String&) {
     if sofar == "" {
-        for r in ["std/", "./", "../"] { it.Add(r, CompFolder, "") }
+        for r in ["std/", "./", "../"]: it.Add(r, CompFolder, "")
         return
     }
     cut := sofar.Len()
@@ -1646,21 +1646,14 @@ fn ImportPaths(it mut Items&, sofar String&, dir String&) {
     if cut == 0: return
     head := sofar[:cut]
     from := ""
-    if head.StartsWith("std/") {
-        from = $load.StdDir() + "/" + $head[4:]
-    } else if head.StartsWith("./") or head.StartsWith("../") {
-        from = $dir + "/" + $head
-    } else {
-        return
-    }
+    if head.StartsWith("std/"): from = $load.StdDir() + "/" + $head[4:]
+    else if head.StartsWith("./") or head.StartsWith("../"): from = $dir + "/" + $head
+    else: return
     entries := try os.ReadDir(from) catch os.Error { return }
     for n in entries {
         if n.StartsWith(".") or (head == "std/" and n == "prelude"): continue
-        if os.IsDir($from + "/" + $n) {
-            it.Add(n, CompFolder, "")
-        } else if n.EndsWith(".olang") {
-            it.Add(n[:n.Len() - 6], CompFile, "")
-        }
+        if os.IsDir($from + "/" + $n): it.Add(n, CompFolder, "")
+        else if n.EndsWith(".olang"): it.Add(n[:n.Len() - 6], CompFile, "")
     }
 }
 

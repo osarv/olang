@@ -4823,7 +4823,7 @@ fn (ln mut lowering&) windowQuiet(c typed.Call&, k typed.Call?&, p typed.Lvalue?
         if q != null and q.Site == c.Site: return true
     }
     ln.qSelf = I64(c.Site)
-    defer ln.qSelf = -1
+    defer: ln.qSelf = -1
     for j in range c.Args.Len().Min(typed.ViewBits) {
         if (v & (I64(1) << j)) == 0: continue
         a := c.Args[j].Type()
@@ -4860,7 +4860,7 @@ fn (ln mut lowering&) stableViews(c typed.Call&) Bool {
     v := ln.L.ViewsOf(id)
     if (v & typed.ViewOther) != 0: return false
     ln.winOk = try ln.readWin.Get(I64(c.Site)) catch default false
-    defer ln.winOk = false
+    defer: ln.winOk = false
     for k in range c.Args.Len().Min(typed.ViewBits) {
         if (v & (I64(1) << k)) != 0 and not ln.stableRef(c.Args[k]): return false
     }

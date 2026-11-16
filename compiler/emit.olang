@@ -1182,7 +1182,7 @@ fn (e mut Emitter&) cloneFn(i I64) {
     passed := e.passedOf(k, f.Ty)
     hdr := e.header(k, f.Ty, symbol, passed, env, linkFor(HomeInst))
     e.cloning = i
-    defer e.cloning = -1
+    defer: e.cloning = -1
     if e.Lw.Gapped {
         e.runtime("__olang_check_failed")
         e.fnItem(k, f.Ty, symbol, passed, env, $hdr + $e.stub("not lowered", symbol))

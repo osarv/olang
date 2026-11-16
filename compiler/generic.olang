@@ -4161,7 +4161,7 @@ fn (p mut Program&) Unify(pat types.TypeId, actual types.TypeId, b mut Binding&,
 # Unify's pattern and type of one kind
 fn (p mut Program&) unifyKind(pk types.Kind, pat types.TypeId, actual types.TypeId, b mut Binding&, receiver Bool) ? Mismatch {
     p.unifyDepth++
-    defer p.unifyDepth--
+    defer: p.unifyDepth--
     match pk {
         case types.Kind.Named {
             if p.T.DeclOf(pat) != p.T.DeclOf(actual): error Mismatch

@@ -1404,7 +1404,7 @@ fn Trim(dir String&, held mut Vec<Held>&, keep Map<String&, Bool>&, since I64, c
 # h's files gone from dir: whether every one went
 fn Drop(dir String&, h Held&) Bool {
     ok := true
-    for n in h.Names.Split("\n"): try os.RemoveAll($dir + "/" + $n) catch os.Error { ok = false }
+    for n in h.Names.Split("\n"): try os.RemoveAll($dir + "/" + $n) catch os.Error: ok = false
     return ok
 }
 
@@ -1787,7 +1787,7 @@ test "a build compiles and links only what changed: modules, -define, the target
     clang := target.FindClang()
     if clang == "" { return } # nothing to build with: passed, as the http tests are
     dir := try os.MkTemp("", "olang-build-")
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     d := diag.Diagnostics(false)
     c := Config()
     c.Dir = dir
@@ -1836,7 +1836,7 @@ test "B3j: an object another directory's build left in the store is taken from i
     clang := target.FindClang()
     if clang == "": return
     dir := try os.MkTemp("", "olang-store-")
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     d := diag.Diagnostics(false)
     fe := stubFrontend()
     one := Config()
@@ -1868,7 +1868,7 @@ test "B3j: an object another directory's build left in the store is taken from i
 
 test "B3k: an object one build claims another waits for, unless the build that claimed it is gone" {
     dir := try os.MkTemp("", "olang-claim-")
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     obj := $dir + "/m.0123.o"
     a := compiles()
     assert a.claim(obj) and a.locks.Len() == 1
@@ -1890,7 +1890,7 @@ test "B3k: an object one build claims another waits for, unless the build that c
 
 test "listed test files run one after another in processes of their own, a signal said" {
     dir := try os.MkTemp("", "olang-tfiles-")
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     # a stand-in compiler: writes its arguments to a log, and ends as the file it is given says
     exe := $dir + "/fake"
     log := $dir + "/log"
@@ -1914,7 +1914,7 @@ test "listed test files run one after another in processes of their own, a signa
 
 test "B3e: the run cache is kept within its cap, the oldest files going first and the program just built staying" {
     dir := try os.MkTemp("", "olang-prune-")
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     for n in Array<String&>["old", "mid", "new", "app", "app.link"]: try os.WriteFile($dir + "/" + $n, "0123456789")
     try os.MkDir($dir + "/rec")
     try os.WriteFile($dir + "/rec/x", "0123456789")
@@ -1930,7 +1930,7 @@ test "B3e: the run cache is kept within its cap, the oldest files going first an
 
 test "the caches' caps: a cache's files held by stem, a directory whole, what was used last staying" {
     dir := try os.MkTemp("", "olang-trim-")
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     for n in Array<String&>["a1.c", "a1.olang", "b2.c", "c3.c"]: try os.WriteFile($dir + "/" + $n, "0123456789")
     try os.MkDir($dir + "/d4")
     try os.WriteFile($dir + "/d4/x", "01234567890123456789")

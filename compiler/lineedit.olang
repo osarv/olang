@@ -883,7 +883,7 @@ fn (e mut Editor&) Read(open fn&(t String&) Bool) String& ? Ended {
     raw.c_cc[termios.VMIN] = 1
     raw.c_cc[termios.VTIME] = 0
     termios.tcsetattr(0, termios.TCSANOW, raw)
-    defer termios.tcsetattr(0, termios.TCSANOW, saved)
+    defer: termios.tcsetattr(0, termios.TCSANOW, saved)
     e.Out.Push("\x1b[?2004h")
     defer {
         e.Out.Push("\x1b[?2004l")

@@ -994,7 +994,7 @@ fn (c mut Checker&) plainScalar(t types.TypeId) Bool {
 fn (c mut Checker&) onlyFixed(x ast.Expr?&) Map<source.NameId, I64> ? NotFixed {
     saved := c.fixedOut
     c.fixedOut = Map<source.NameId, I64>()
-    defer c.fixedOut = saved
+    defer: c.fixedOut = saved
     if not c.readsFixed(x): error NotFixed
     return c.fixedOut
 }
@@ -1397,7 +1397,7 @@ fn (c mut Checker&) builderRules(f I64) {
         return
     }
     c.push(-1, mi, types.VoidT, types.ListId(0))
-    defer c.pop()
+    defer: c.pop()
     nsp := c.nameSpan(fd)
     if not c.builderOwnerOk(f, o, fd.Owner!.Span()): return
     sig := c.P.Sig(f)
@@ -1466,7 +1466,7 @@ fn (c mut Checker&) bareOwner(f I64, mi I64) {
             if e < 0: return
             d := c.P.DeclFor(mi, e)
             c.push(-1, mi, types.VoidT, types.ListId(0))
-            defer c.pop()
+            defer: c.pop()
             c.ownerWritten(f, c.P.SelfType(d), fd.Owner!.Span())
         }
         case _ { }
@@ -1797,7 +1797,7 @@ fn (c mut Checker&) operatorMethod(f I64) {
 fn (c mut Checker&) commutesRule(f I64, fd ast.Func&, cap String&) {
     mi := c.P.FnModule(f)
     c.push(-1, mi, types.VoidT, types.ListId(0))
-    defer c.pop()
+    defer: c.pop()
     at := c.nameSpan(fd)
     sig := c.P.Sig(f)
     ps := c.P.T.Items(c.P.T.Params(sig))
@@ -15798,7 +15798,7 @@ fn (c mut Checker&) reflInt(x ast.Expr&) reflVal {
 fn (c mut Checker&) reflText(x ast.Expr&) String ? Unrendered {
     was := c.reflTouched
     c.reflTouched = false
-    defer c.reflTouched = was
+    defer: c.reflTouched = was
     out := try c.reflTextOf(x) catch Unrendered {
         c.reflSaid = c.reflTouched
         error Unrendered
@@ -19312,7 +19312,7 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
 # innermost join; what its clauses do not take reaches the join (P4b)
 fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call ast.Expr&) {
     c.spawning++
-    defer c.spawning--
+    defer: c.spawning--
     fr := c.fr()
     if fr.DeferLoops >= 0 and fr.joins.Len() <= fr.DeferJoins {
         c.err(sp, msgs.SpawnInDefer())

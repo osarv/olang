@@ -44,7 +44,7 @@ fn Order() Array<I64> {
     out Vec<I64>
     for want in Array<String&>["text", "driven"] {
         for t in range ToolNames.Len() {
-            if driven(ToolKinds[t]) == (want == "driven") { out.Push(t) }
+            if driven(ToolKinds[t]) == (want == "driven"): out.Push(t)
         }
     }
     return out.ToArray()
@@ -63,7 +63,7 @@ fn arguments(program String&, kind I64, exe String&, std String&, files Array<St
     } else if kind == DrivenArg {
         out.Push(exe)
     }
-    for f in files { out.Push(f) }
+    for f in files: out.Push(f)
     return out.ToArray()
 }
 
@@ -220,7 +220,7 @@ fn buildTool(exe String&, tools String&, bin String&, name String&, program Stri
     tmp := try os.MkTemp(dir = bin, prefix = "tools_" + $name + ".") catch os.Error e {
         error NotBuilt(why = "cannot build tools/" + $name + ".olang: " + $e)
     }
-    defer try os.RemoveAll(tmp) catch os.Error { }
+    defer: try os.RemoveAll(tmp) catch os.Error { }
     made := filepath.Join(tmp, "tools_" + $name)
     out := try os.Output.Exec(exe, "build", "-output", made, filepath.Join(tools, $name + ".olang"), dir = tmp) catch os.Error e {
         error NotBuilt(why = "cannot run " + $exe + ": " + $e)
@@ -258,7 +258,7 @@ fn builder(exe String&, tools String&, bin String&, todo Vec<I64>&, programs Arr
         k := next[0].AtomicAdd(1)
         if k >= todo.Len(): return
         t := todo[k]
-        try buildTool(exe, tools, bin, ToolNames[t], programs[t]) catch NotBuilt e { said[t] = $e.why }
+        try buildTool(exe, tools, bin, ToolNames[t], programs[t]) catch NotBuilt e: said[t] = $e.why
     }
 }
 
@@ -292,7 +292,7 @@ fn checker(exe String&, files Array<String&>&, next mut Array<I64>&, bad mut Arr
 # whether the compiler builds a file's module (its tests included) with no error, -quick, into a directory of its own
 fn compiles(exe String&, file String&) Bool {
     tmp := try os.MkTemp(prefix = "olang-fix.") catch os.Error { return false }
-    defer try os.RemoveAll(tmp) catch os.Error { }
+    defer: try os.RemoveAll(tmp) catch os.Error { }
     real := try os.RealPath(file) catch default $file
     out := try os.Output.Exec(exe, "compile", "-quick", "-output", filepath.Join(tmp, "m.o"), real, dir = tmp) catch os.Error { return false }
     return out.Status == 0
@@ -370,7 +370,7 @@ fn run(files Array<String&>&, before Vec<String&>&, exe String&, std String&, sa
         if given.Len() == 0 or not triggered(ToolTriggers[t], textsOf(given)): continue
         name := ToolNames[t]
         if failed[t] != "" or not os.Exists(programs[t]) {
-            if failed[t] == "": try buildTool(exe, tools, bin, name, programs[t]) catch NotBuilt e { failed[t] = $e.why }
+            if failed[t] == "": try buildTool(exe, tools, bin, name, programs[t]) catch NotBuilt e: failed[t] = $e.why
             if failed[t] != "" {
                 said.Write("olang: fix: " + $failed[t] + "\n")
                 return 2
@@ -446,7 +446,7 @@ test "the text tools run before the driven ones, each group in the order the cha
     last I64 = -1
     for t in o {
         if driven(ToolKinds[t]) {
-            if not seenDriven { last = -1 }
+            if not seenDriven: last = -1
             seenDriven = true
         } else {
             assert not seenDriven
@@ -487,7 +487,7 @@ test "a tool runs only where one of its texts stands, one with none always" {
 
 test "a tool's program is keyed by the texts it is built from: a change to its source, the compiler or std names another" {
     dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.Error { }
+    defer: try os.RemoveAll(dir) catch os.Error { }
     try os.WriteFile(dir + "/shared.olang", "fn S() I64 { return 1 }\n") catch os.Error { unreachable "no file" }
     try os.WriteFile(dir + "/t.olang", "import \"shared\"\nimport \"std/os\"\nfn main() { }\n") catch os.Error { unreachable "no file" }
     a := ProgramOf("/bin", "t", dir, "olang 1 2", "std")

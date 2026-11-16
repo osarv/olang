@@ -192,7 +192,7 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
     try os.MkDirAll(parent) catch os.Error { error FetchError.Failed }
     tmp := try os.MkTemp(parent, ".fetch-") catch os.Error { error FetchError.Failed }
     spin.Retitle($"fetching " + $key)
-    defer spin.Retitle("compiling")
+    defer: spin.Retitle("compiling")
     if hasLine {
         f.say("olang: fetching " + $key + " into " + $cache + " at " + $locked[:12] + ", as olang.lock says")
         dir := $parent + "/" + $locked
