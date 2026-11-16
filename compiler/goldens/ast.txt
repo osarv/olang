@@ -2592,6 +2592,7 @@ b177c6f5742efe8b 0ec48d39c319ee62 tests/inplace.olang
 8462a4d37509c4bd 7f381d66e8003dbe tests/intsweep.olang
 b0130331a3b9cadb c801c5f5ef623397 tests/intwidths.olang
 bd01bb86f2a34a7e 6f7265525d55ade9 tests/kept.olang
+0fc169151560aa47 5d8a0299c21439fc tests/keptfacts.olang
 57db244dae63be6f a93c568226370c1b tests/keptparams.olang
 ef7f5868a9702366 eb2d9ebc8793f06b tests/lanes.olang
 2fa6f0a876be8784 11f9b6253cf4c1d8 tests/literals.olang
