@@ -1,0 +1,6 @@
+# check: fail error: expected an expression, found '{'
+fn main() {
+    for x in range {
+        Print(x)
+    }
+}

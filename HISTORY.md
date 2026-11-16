@@ -38504,3 +38504,11 @@ always there to report. 0 misses in 40 fixture runs, 10 of 10 scenario runs.
 
 **2026-11-16, ranges stay upward only (S9b).** Asked whether ranges only count upward, the user confirmed: "keep it
 upward only". Counting down stays `a.Reversed()` for an array and `n - 1 - i` over `range n`; no `down to` form.
+### S9b: a range with a fourth argument refused (2026-11-16)
+
+The user found `for _ in range 10, 2, 3, 2 { }` compiling and running no times: the parser takes any expression list
+after `range` and the checker read only the first three, so the fourth was silently dropped. SPEC S9b allows one to
+three. The checker now refuses a fourth argument at its span (RangeArgs: "a range takes at most three arguments", help
+"write 'range END', 'range START, END' or 'range START, END, STEP'"); the evaluator and interpret run the checked tree,
+so they need nothing. `range` with no argument was already refused by the parser ("expected an expression"). Cases:
+checks/cases/rangefourargs.olang, rangenoargs.olang.
