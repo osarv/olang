@@ -1467,6 +1467,12 @@ fn interp(r mut report&) ? Failed {
                  "-i untidy.olang's warnings", dir)
     try r.expect(sh(dir, "\"$OLANG\" build untidy.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("error[M5a]")
                  "untidy.olang built", dir)
+    # B3g: S8a too is a warning in scripting mode, and the program runs; a build refuses it
+    try r.expect(sh(dir, "\"$OLANG\" dead.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "ran\n", "dead.olang did not run", dir)
+    dead := try os.ReadFile($dir + "/err.txt") catch default ""
+    try r.expect(dead.Contains("dead.olang:3:8: warning[S8a]: "), "dead.olang's warning", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build dead.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("error[S8a]")
+                 "dead.olang built", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" refused.olang > out.txt 2>&1") == 1, "-i refused.olang ran", dir)
     try r.expect(outOf(dir).Contains("error[R11, O25]") and not outOf(dir).Contains("assertion"), "-i refused.olang output", dir)
     # ... and a construct the checker does not check yet stops it, as it stops a build (F11)
@@ -3327,7 +3333,7 @@ fn output(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" test -output out/t prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("-output applies to build, compile, run, bindgen, profile and notebook, not to test"), "test -output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -output out/q prog.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("not to running a file"), "running a file with -output", dir)
+                 outOf(dir).Contains("not to scripting mode"), "scripting mode with -output", dir)
 }
 
 # B13: format rewrites a file in the layout and -check lists the files not in it; a file that does not parse is left as
@@ -3405,7 +3411,7 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -b prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("unknown option '-b'"), "an old flag", dir)
     try r.expect(sh(dir, "\"$OLANG\" -output o prog.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("-output applies to build, compile, run, bindgen, profile and notebook, not to running a file")
+                 outOf(dir).Contains("-output applies to build, compile, run, bindgen, profile and notebook, not to scripting mode")
                  "an option for another mode", dir)
     try r.expect(sh(dir, "\"$OLANG\" -debug prog > out.txt 2>&1") == 1 and outOf(dir).Contains("'prog' is no olang file")
                  "running a file without .olang", dir)
@@ -3418,7 +3424,7 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" help format > out.txt 2>&1") == 0 and outOf(dir).Contains("-check"), "help format", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain b.olang Color > out.txt 2>&1") == 0 and outOf(dir).Contains("    fn Color.FromHex(t String&) Color ? ColorError\n    fn Color.Gray(level U8) Color&\n    fn (c Color&) Hex()")
                  "explain lists a type's builders before its methods (B11b)", dir)
-    try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("running a file"), "explain", dir)
+    try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("scripting mode"), "explain", dir)
     # B11b: a method of a type its file does not declare - an array's, a trait's default - named as a test names it
     array := os.Quote($root() + "/std/prelude/array.olang")
     try r.expect(sh(dir, $"\"$OLANG\" explain " + $array + " Array.Windows > out.txt 2>&1") == 0 and

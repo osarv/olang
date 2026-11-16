@@ -256,7 +256,7 @@ fn optionsOf(help String&) Vec<String&> {
 }
 
 # a mode as SPEC B1's table names it
-fn specMode(mode String&) String { return "running a file" if mode == "file" else $mode }
+fn specMode(mode String&) String { return "scripting mode" if mode == "file" else $mode }
 
 # what the compiler says about itself: the modes, the option words, and for each option the modes it applies to
 type CommandLine struct() {

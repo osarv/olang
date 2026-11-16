@@ -1,0 +1,4 @@
+# B3g, S8a: in scripting mode a condition the same on every build is a warning, and the program runs
+fn main() {
+    if 1 < 2: Println("ran")
+}

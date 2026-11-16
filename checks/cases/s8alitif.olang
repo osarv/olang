@@ -1,0 +1,5 @@
+# check: fail error[S8a]: '1 < 2' compares two literals, so it is true on every build
+# S8a: a comparison of two literals in a function's if
+fn main() {
+    if 1 < 2: Println("x")
+}

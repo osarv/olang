@@ -1,0 +1,5 @@
+# check: fail error[S8a]: '"a" == "a"' compares two literals, so it is true on every build
+# S8a: a comparison of two literals in an assert, text decoded
+fn main() {
+    assert "a" == "a"
+}

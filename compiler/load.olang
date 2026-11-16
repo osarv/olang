@@ -360,25 +360,50 @@ fn (l mut Loader&) topIf(m mut Module&, from I64, end I64, parent I64) I64 {
         brace := l.condEnd(m, i + 1, end)
         if brace < 0: return i + 1
         m.conds.Push(i + 1)
-        close := I64(m.Toks!.Match(I32(brace)))
+        close := l.branchClose(m, brace, end)
         if close < 0: return end
         b := l.branch(m, c, index)
         l.region(m, brace + 1, close, b)
-        i = close + 1
+        i = l.afterBranch(m, close)
         if toks[i].Kind != token.Tok.Else: return i
         index++
         if toks[i + 1].Kind == token.Tok.If {
             i = i + 1
             continue
         }
-        if toks[i + 1].Kind != token.Tok.LBrace: return i + 1
-        close2 := I64(m.Toks!.Match(I32(i + 1)))
+        if toks[i + 1].Kind != token.Tok.LBrace and toks[i + 1].Kind != token.Tok.Colon: return i + 1
+        close2 := l.branchClose(m, i + 1, end)
         if close2 < 0: return end
         m.chainElse[c] = true
         b2 := l.branch(m, c, index)
         l.region(m, i + 2, close2, b2)
-        return close2 + 1
+        return l.afterBranch(m, close2)
     }
+}
+
+# where the branch opened at token open ("{", or S1b's ":" of a one-line body) ends: its "}", or the end of the
+# ":"'s line - the line's end, or an "else" on it - braces on the line skipped
+fn (l Loader&) branchClose(m Module&, open I64, end I64) I64 {
+    toks := m.Toks!.Toks
+    if toks[open].Kind == token.Tok.LBrace: return I64(m.Toks!.Match(I32(open)))
+    i := open + 1
+    for i < end {
+        k := toks[i].Kind
+        if k == token.Tok.StmtEnd or k == token.Tok.Else or k == token.Tok.Eof: return i
+        if k == token.Tok.LBrace {
+            close := I64(m.Toks!.Match(I32(i)))
+            if close < 0: return -1
+            i = close
+        }
+        i++
+    }
+    return end
+}
+
+# the token after a branch closing at close: past its "}" or its line's end, at an "else" on the line
+fn (l Loader&) afterBranch(m Module&, close I64) I64 {
+    k := m.Toks!.Toks[close].Kind
+    return close if k == token.Tok.Else else close + 1
 }
 
 fn (l mut Loader&) branch(m mut Module&, c I64, index I64) I64 {
@@ -399,6 +424,7 @@ fn (l Loader&) condEnd(m Module&, from I64, end I64) I64 {
         if k == token.Tok.LParen or k == token.Tok.LBrack: depth++
         if k == token.Tok.RParen or k == token.Tok.RBrack: depth--
         if k == token.Tok.Match or k == token.Tok.Fn or k == token.Tok.Catch: bodyNext = true
+        if k == token.Tok.Colon and depth == 0 and not bodyNext: return i
         if k == token.Tok.LBrace {
             if depth == 0 and not bodyNext: return i
             close := I64(m.Toks!.Match(I32(i)))
@@ -456,14 +482,22 @@ fn (l mut Loader&) decide(mi I64, c I64) {
     m.chainChosen[c] = to - from if m.chainElse[c] else NoBranch
 }
 
+fn braceOrColon(k token.Tok) Bool { return k == token.Tok.LBrace or k == token.Tok.Colon }
+
 # a top-level condition at token index i, evaluated by B9a: a mistake is reported and Failed
 fn (l mut Loader&) evalCond(mi I64, i I64) cond.Decision {
     m := l.Mods[mi]
     l.CondParser(m)
     x := try m.cparser!.ExprAt(i) catch { return cond.Decision(cond.Outcome.Failed, false) } # the parser reports it
-    if m.Toks!.Toks[m.cparser!.Pos()].Kind != token.Tok.LBrace: return cond.Decision(cond.Outcome.Deferred, false)
+    if not braceOrColon(m.Toks!.Toks[m.cparser!.Pos()].Kind): return cond.Decision(cond.Outcome.Deferred, false)
     e mut cond.Eval& = cond.Eval(m.Src!.Text, l.Names, m.Scope!, l.Consts)
     d := e.Top(x)
+    if d.Of == cond.Outcome.Decided and ast.LitComparison(x) {
+        # S8a: a comparison of two literals, the same on every build (a lone "true" or "false" switches a block)
+        sp := x.Span()
+        v := "true" if d.Holds else "false"
+        l.Diags.Error(l.at(m, sp), msgs.LitCompare(m.Src!.Text[sp.Start:sp.End], v))
+    }
     if d.Of == cond.Outcome.Failed {
         at, msg := e.Error()
         l.Diags.Error(l.at(m, at), msg)

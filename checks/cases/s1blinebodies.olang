@@ -1,0 +1,25 @@
+# check: run
+# S1b: every body that is a block of statements takes ":" and one statement on its line
+type Meters struct(v F64): V F64 = v
+type Port U16(n I64): assert n >= 0
+type Count unique struct(n I64): N I64 = n
+destruct: Println("gone " + $N)
+fn twice(x I64) I64: return 2 * x
+fn hello(): Println("hello")
+fn work(): Println("worked")
+fn main() {
+    hello()
+    n := 0
+    do: n++ for n < 3
+    Println($n)
+    for: break
+    join: spawn work()
+    {
+        defer: Println("deferred")
+        errdefer: Println("never")
+        Println("first")
+    }
+    m := Meters(2.5)
+    Println($m.V + " " + $twice(21))
+    { c := Count(7) }
+}

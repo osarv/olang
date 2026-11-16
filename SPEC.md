@@ -2195,7 +2195,7 @@ local whose type has a destructor (C7) - the close of its scope is what it is he
 check (its error said already), and a local of a body nothing checks (a branch the build leaves out, a generic never
 instantiated). A name in the text of a branch the build leaves out (S8b) counts as read. These errors are said only of a
 program in which no other error is found - by the checker or by a later pass (section 8's, M19g's): a read may be what another mistake left out, or sit in code that mistake
-keeps from being checked. Under running a file (B3g) one is a warning instead, and the program runs.
+keeps from being checked. In scripting mode (B3g) one is a warning instead, and the program runs.
 
 ### 3.3 Type and error declarations
 
@@ -2220,7 +2220,7 @@ set, error types, their words and other sets (T19a).
 
 ### 3.4 Function declarations
 
-**D7.** `func-decl ::= "fn" [ receiver ] IDEN [ fn-type-params ] func-sig block`, with
+**D7.** `func-decl ::= "fn" [ receiver ] IDEN [ fn-type-params ] func-sig body` (`body`, S1b: a block, or `:` and one statement on its line), with
 `receiver ::= "(" param ")"`.
 The declared name enters the module's `vars` set (D2). `block` is specified in §6.1. `fn-type-params` lists the
 function's own type variables (§12.2 G3).
@@ -3051,7 +3051,7 @@ is reached transitively through re-export (§4.5) — see §4.6.
 or error written with it, the text of a top-level or local branch the build leaves out (B9, S8b) included - is a
 compile-time error naming it, saying to remove it. An import re-exported (its alias capitalized, M14) is its importers'
 and never one. The imports of a module with a top-level condition only evaluation decides (B9c) are not judged. Under
-running a file (B3g) one is a warning instead, and the program runs.
+scripting mode (B3g) one is a warning instead, and the program runs.
 
 ### 4.3 Visibility
 
@@ -4242,7 +4242,7 @@ containment above all — is stated as holding for programs that do not index ou
 checked costs nothing or is asked for: a constant index is a compile-time error (E16), a slice is always
 checked (E16b), and `a.Get(i)` (E16d) checks where the program asks it to.
 
-**E16g (checked builds).** A **checked build** - `test` (B3a), a `-debug` build (B2c), the evaluator (B3e), and any build or run given `-checked` (`build` B3, `run` B3e, running a file B3g, the prompt B22, the notebook kernel
+**E16g (checked builds).** A **checked build** - `test` (B3a), a `-debug` build (B2c), the evaluator (B3e), and any build or run given `-checked` (`build` B3, `run` B3e, scripting mode B3g, the prompt B22, the notebook kernel
 B23, B24) - stops where these operations the program wrote are undefined, as a failed
 `assert` stops it (S18a: a test fails, any other run aborts), printing `FILE:LINE:COLUMN: ` (where the operation's
 expression starts) and what failed:
@@ -4256,7 +4256,7 @@ expression starts) and what failed:
 
 Only an operation the program writes is checked: an index the language makes - a `for ... in` walk (S9), a
 comprehension (E27), a lane operation (E39), an array pattern (S13h), a type's `At` (E31) - and a lane operation's `/`,
-`%` and shifts are never checked, in any build. A **release build** - `build`, `run`, running a file (B3g), the prompt and the kernel without `-checked`, `-quick`,
+`%` and shifts are never checked, in any build. A **release build** - `build`, `run`, scripting mode (B3g), the prompt and the kernel without `-checked`, `-quick`,
 `-library`, `compile` without `-debug` - checks none of them and costs nothing for them: the operations are undefined
 there, as E6a, E8a and E16 say. `-checked` beside `-debug`, or given to `test`, is allowed and says nothing more (those builds are checked already). A checked build changes no program's meaning: what it stops is undefined in a release
 build. The compile-time evaluator (K1) refuses the same operations as undefined.
@@ -5162,16 +5162,28 @@ block. It runs once, and it leaves (D10a) when its statements do.
 
 **S1b (a one-line body).** `body ::= block | ":" line-stmnt`, where `line-stmnt` is one assignment (S4, a parallel one
 included: `if a > b: a, b = b, a`), expression statement (S3, an increment included), `return`, `break`, `continue`,
-`error`, `unreachable`, `assert` or `spawn` statement, beginning on the line of its `:`. An `if`'s and an `else`'s
-body and a `for` loop's body (but not the forever form's, nor a `do` loop's) may be one, and so may a lambda's (D16):
-`if x < 0: return 0`, `for x in xs: total += x`, `else: count++`, `fn(x): return x > 3`; so may a match statement's clause, `case 0: n++` (S12), and a
-catch clause's, `catch ParseError e: bad++` (R11), and a
-match used as a value takes the same `:` for its clauses' values (S12b). It is
+`error`, `unreachable`, `assert` or `spawn` statement, beginning on the line of its `:`. **Every body that is a block
+of statements may be one** (the user's rule, 2026-11-16: "any place where we can have {} should take : starting on the
+same line with one statement"): an `if`'s and an `else`'s, a `for` loop's in each form, the forever form's included
+(`for: step()`), a `do` loop's, a function's and a method's (`fn twice(x I64) I64: return 2 * x`), a lambda's (D16), a
+test's (`test "adds": assert add(1, 2) == 3`), a `join`'s (`join: spawn work()`), a `defer`'s and an `errdefer`'s
+(`defer: f.Close()`), a constructor's (C2) and a destructor's (C7), a constructor over a primitive's (T29d), a match
+statement's clause, `case 0: n++` (S12), and a catch clause's, `catch ParseError e: bad++` (R11); a match used as a
+value takes the same `:` for its clauses' values (S12b). A `do` loop's one-line body ends at its `for`, which stands
+on the same line (`do: n++ for n < 3`): on the next line it would begin a loop of its own. A constructor's one
+statement may be the declaration of a field, the type's as at a braced body's top level (`type Meters struct(v F64):
+V F64 = v`); after a one-line constructor body, `destruct` begins the next line. `defer stmt` without the `:` stays
+(S19): a deferred statement is a statement, not a body. It is
 exactly the block holding that one statement - a scope of its own (S1), so a declaration in one would name nothing
 after it and is a compile-time error, as are an `if`, a loop, a `match`, a `join`, a `defer` and a block (write the
 block, with braces and no `:`). Its statement ends at the end of its line, or at an `else` or a `catch` on that line;
 an `else` (`else:`, `else if`) may also begin the next line, as a `catch` clause may (R9b). A lambda's one-line body
-ends where D16 says. A `:` inside square brackets is a slice's (E16a), never a body's.
+ends where D16 says. A `:` inside square brackets is a slice's (E16a), never a body's. A top-level `if`'s branch (B9) may take
+the `:` too, holding one top-level declaration on the line of its `:` (`if Debug: import "std/os"`, `else: Limit I64 =
+2`): a top-level branch is no scope, so its declaration is the module's as in braces; a declaration that does not end
+on that line, or a second one, is a compile-time error (write the braces). What is not a block of statements takes no
+one-line body: an enum's cases, a trait's methods, an `extern` block's declarations and a `match`'s clauses are lists,
+and a `:` before one is a compile-time error saying it takes a block, `{ }`.
 
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
@@ -5302,7 +5314,13 @@ default for one (B10c) included - and no length an instance gives a by-value arr
 through anything it evaluates, is a compile-time error. A local's length is read once its function's storage is settled
 (T7d): a condition a local's first, optimistic length would fix, and its settled run-time length does not, is no
 error. (To check a fixed value, `assert` it; an
-`assert` is not an `if`.)
+`assert` is not an `if`.) A **comparison of two literals** - `==`, `!=`, `<`, `<=`, `>`, `>=` between two `Bool`,
+number (a negated one included), character or text literals (`null == null` is E10c's) - gives one answer on every
+build, so it is a compile-time error wherever it is written: an `if`'s or a loop's condition, an `assert`, a
+top-level condition (B9), any expression; the message names the answer, `true` or `false`, to write instead. A lone
+`true` or `false` as a top-level condition switches a branch on or off and is no error; one reading a named or build
+constant is never this rule's, however it folds (`Debug == false`). (the user's call, 2026-11-16: "true is never
+false".) In scripting mode (B3g), the prompt and the notebook an S8a error is a warning, and the program runs.
 
 **S8c.** A local is **fixed** when it is a plain scalar (a numeric type, `Bool`, `U8`, or an enum without
 payloads) declared with an initializer, and nothing anywhere in its function writes it afterwards — no
@@ -5375,7 +5393,7 @@ except that a function one of whose branches is still being decided is not evalu
 **S9.** A `for` statement has four forms, all using the one keyword:
 
 ```
-for-stmnt ::= "for" block                                   (forever)
+for-stmnt ::= "for" body                                    (forever)
             | "for" expr body                               (while expr holds)
             | "for" for-init "," expr "," simple-stmnt body (three clauses)
             | "for" IDEN [ "," IDEN ] "in" expr body         (S9a)
@@ -5477,7 +5495,7 @@ A step that is a literal zero or negative is a compile-time error. The number of
 the first iteration, so the loop costs what the three-clause form does.
 `range` is a keyword (L9).
 
-**S10.** `do-stmnt ::= "do" block "for" expr STMNT_END`. Runs body once unconditionally, then
+**S10.** `do-stmnt ::= "do" body "for" expr STMNT_END` (a one-line body, S1b, has its `for` on its line). Runs body once unconditionally, then
 repeats: evaluate `expr` (must be `Bool`); if true, run body again and repeat; if false, stop. The
 loop always executes its body at least once. `expr` is evaluated in the turn it decides, as a `for` loop's condition
 is (S9): what it builds is reclaimed with that turn.
@@ -5792,7 +5810,7 @@ reads a view of a Vec that grew (M19g). One the evaluator **cannot decide** - it
 `extern fn` but C's math (X8), fails with an error nothing handles, or passes the evaluator's budgets - is a
 compile-time error too, naming what stops it: a top-level assert holds of every program the build makes, or it is
 not one; an assert to be checked at run time is written in a function or a test. Every module's top-level asserts
-are decided in every build of a program reaching it - `build`, `test`, running a file, a module compiled alone - and a
+are decided in every build of a program reaching it - `build`, `test`, scripting mode, a module compiled alone - and a
 branch a build leaves out is not read (B9). What is wrong with its condition (it does not check, or is no `Bool`) is
 said where it is, and it then asks nothing of the evaluator.
 
@@ -5875,7 +5893,7 @@ actually open (§6.8 P1d), which also lets a `join` among them wait for its task
 ### 6.8 Concurrency
 
 **P1.** `spawn-stmnt ::= "spawn" [ target { "," target } "=" ] [ "try" ] ( call | lambda ) { catch-clause } STMNT_END` and
-`join-stmnt ::= [ "try" ] "join" block { catch-clause }` (the `try` and the clauses: P4-P4d). A `spawn` statement
+`join-stmnt ::= [ "try" ] "join" body { catch-clause }` (the `try` and the clauses: P4-P4d). A `spawn` statement
 starts one **task**: the call runs on its own thread, and the statement itself completes immediately. A
 `join` block is an ordinary block in every other respect, and its end is where every task spawned in it is
 waited for.
@@ -6289,7 +6307,7 @@ follows to tell a synchronised program from a racy one.
 
 ### 6.9 `defer`
 
-**S19.** `defer-stmnt ::= "defer" ( block | statement )`. A `defer` does nothing where it stands: it registers its
+**S19.** `defer-stmnt ::= "defer" ( body | statement )` (`body`, S1b: `defer: f.Close()`). A `defer` does nothing where it stands: it registers its
 block - in the second form a block holding just that one statement, so `defer x = y` is `defer { x = y }` - as
 **deferred code** of the block it is written in. Deferred code runs when that block is left, by **every** way out of
 it: falling off its end; a `return`, once the value returned has been computed; a `break` or `continue` (S11a); and an
@@ -6329,7 +6347,7 @@ deferred code.
 
 **S19d.** A `defer` is not a statement that leaves (D10a), whatever its deferred code holds.
 
-**S19e.** `errdefer-stmnt ::= "errdefer" ( block | statement )`. An `errdefer` registers deferred code as `defer` does
+**S19e.** `errdefer-stmnt ::= "errdefer" ( body | statement )`. An `errdefer` registers deferred code as `defer` does
 (S19), checked as S19a and S19b check it, but its code runs only when its block is left by an **error moving
 outward**: an error leaving the function (an `error` statement, a `try` whose error no clause inside the block takes),
 an error going to a clause of a `try` outside the block - a `for x in try c` ended by its own error (S9e) included -
@@ -7928,8 +7946,11 @@ compiler-recognized blocks a struct type can declare; its methods are ordinary f
 **C1.** A constructor-bearing struct is declared:
 
 ```
-type IDEN [ type-params ] "struct" [ fn-type-params ] "(" param-list ")" [ "?" error-list ] "{" ctor-body "}" [ destruct-block ]
+type IDEN [ type-params ] "struct" [ fn-type-params ] "(" param-list ")" [ "?" error-list ] ( "{" ctor-body "}" | ":" ctor-line ) [ destruct-block ]
 ```
+
+`ctor-line` is a one-line body (S1b): one statement, or one field's declaration, on the line of its `:` (`type Meters
+struct(v F64): V F64 = v`).
 
 `param-list` and `error-list` are as in a function declaration
 (§3 D8), the error set carrying the same leading `?` it does there —
@@ -8089,7 +8110,7 @@ struct type assembled from those bindings' final values. If it instead reaches a
 produces that error instead and no instance at all — so a field declared after the failing point is
 never evaluated.
 
-**C7.** `destruct-block ::= "destruct" block`. A destructor's body has no error union of its own —
+**C7.** `destruct-block ::= "destruct" body`. A destructor's body has no error union of its own —
 every fallible call within it must be fully caught by a `catch` that leaves nothing uncaught
 (§7.5),
 since a destructor is never invoked by ordinary calling code and so has no caller to propagate an
@@ -8177,27 +8198,27 @@ option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sa
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 an error listing the modes. Nothing at all after `olang` opens the prompt (B22). After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `run` (B3e), `format` (B13),
-`explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help file` running a file's), `doc`
+`explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help file` scripting mode's), `doc`
 (B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20), `api` (B21), `jupyter` (B23) and `notebook` (B24). An
-**option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
+**option** is a word beginning with `-`, written after the mode (or, in scripting mode, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
 
 | option | applies to | rule |
 |---|---|---|
 | `-output PATH` | build, compile, run, bindgen, profile, notebook | B3h, §11 X16, B20, B24 |
-| `-debug`, `-race`, `-sanitize` | running a file, build, compile, test, run | B2c, B2b, B2f |
-| `-quick` | running a file, build, compile, test, profile, explain, run, jupyter, notebook | B2g, B20, B11d |
-| `-checked` | running a file, build, compile, test, run, jupyter, notebook | E16g |
-| `-target NAME` | running a file, build, compile, test, run, explain, doc, lsp, mcp | B12 |
-| `-define Name=value`, `-update` | running a file, build, compile, test, run, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
-| `-check` | format, fix, running a file, build, test, run | B13, B17, B18a |
+| `-debug`, `-race`, `-sanitize` | scripting mode, build, compile, test, run | B2c, B2b, B2f |
+| `-quick` | scripting mode, build, compile, test, profile, explain, run, jupyter, notebook | B2g, B20, B11d |
+| `-checked` | scripting mode, build, compile, test, run, jupyter, notebook | E16g |
+| `-target NAME` | scripting mode, build, compile, test, run, explain, doc, lsp, mcp | B12 |
+| `-define Name=value`, `-update` | scripting mode, build, compile, test, run, explain, doc, lsp, mcp, profile, jupyter, notebook | B10, §4 M23c |
+| `-check` | format, fix, scripting mode, build, test, run | B13, B17, B18a |
 | `-html DIR` | doc | B14 |
 | `-library` | build | §11 X14 |
-| `-memory` | running a file, build, test, run | B18 |
+| `-memory` | scripting mode, build, test, run | B18 |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
-| `-bench` | running a file, test, run | B19b |
-| `-runs COUNT` | running a file, run | B19b |
+| `-bench` | scripting mode, test, run | B19b |
+| `-runs COUNT` | scripting mode, run | B19b |
 | `-caps` | explain | B11c |
 | `-asm`, `-ir` | explain | B11d |
 | `-install` | jupyter | B23 |
@@ -8205,7 +8226,7 @@ beginning with `-` that is no option is an error:
 
 `build`, `compile`, `run`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
 file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
-`-html`) any number, `lsp` and `mcp` none; for running a file, for `run` and for `profile`
+`-html`) any number, `lsp` and `mcp` none; for scripting mode, for `run` and for `profile`
 every argument after the file belongs to the program (B3f, B4a), one beginning with `-` included - except one of olang's
 own options by name (`-define`, `-debug`, `-quick`, ...), which is an error: options go before the file. `--` right
 after the file gives the program everything after it unchecked (`olang s.olang -- -debug`). There are no other
@@ -8361,7 +8382,7 @@ number where a signal ends it, as a shell says - is the mode's. A compile-time e
 status 1, and nothing is run. Another architecture's program (B12a) runs in an emulator, given the program's path.
 
 The **evaluator** - the compile-time evaluator (K1) run over a whole program - is not a mode of the command line. A program of
-the compiler's own testing sets the environment variable `OLANG_EVALUATE` (to any value), and then running a file (B3g)
+the compiler's own testing sets the environment variable `OLANG_EVALUATE` (to any value), and then scripting mode (B3g)
 **interprets** the program whose root module is `<file>` instead of building it, and `test` runs each file's tests the same
 way (below); no option is read for how to build, and `-target` sets the build constants it decides (B10a) and names this
 machine only. What follows says what the evaluator does.
@@ -8427,14 +8448,15 @@ saying how to build are not read, and a `-target` naming another machine is an e
 passed on to it as written — one beginning with `-` included, which is never read as a flag of the compiler's. The
 program's command line (B4a) is `<file>`, as written, followed by those arguments.
 
-**B3g (running a file).** `olang [<option> ...] <file> [<argument> ...]` - a file ending in `.olang` where the mode
+**B3g (scripting mode).** Running a file, `olang [<option> ...] <file> [<argument> ...]` - a file ending in `.olang` where the mode
 would stand - builds the program whose root module is `<file>` as `build` does by default (unchecked, `-O3`, link-time
 optimization, B2d; `-quick`, B2g, and `-checked`, E16g, are its options, and `-debug`, `-race`, `-sanitize` and `-memory` apply as
 to `build`) but **into olang's own cache** - the directory `olang/run` of `$XDG_CACHE_HOME`, else of `~/.cache` - rather
 than into `build/`: every module's object is reused there while current (B3i), the binary is named by the file and where
 it is run from, and nothing is written beside the program or in the working directory. The cache is kept within 1 GiB,
 the files written longest ago going first, never the program just built. The program is analyzed as under `build`, `main`
-required (B4), but for an unread local (D3b) and an unused import (M5a), which are only untidy: each is a **warning**, a
+required (B4), but for an unread local (D3b), an unused import (M5a), which are only untidy, and a condition the same on
+every build (S8a), which a script switches code with: each is a **warning**, a
 row `path:line:column: warning[RULE]: message` with its source, written to the standard error before the program runs,
 which runs as it would without it. The build says nothing when it succeeds, and the program is then run in the compiler's
 place: its standard input, output and error are the compiler's, its command line (B4a) is `<file>` as written followed by
@@ -8556,7 +8578,7 @@ without it. It is never drawn where the standard error is a file or a pipe, and 
 
 ### 10.2 Program entry
 
-**B4.** In `build`, `profile` and `run` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
+**B4.** In `build`, `profile` and `run` modes, and scripting mode (B3g), the root module must declare a function named `main` with exactly this shape:
 no parameters and no success type - with no error set (`fn main() { ... }`, which then cannot fail, R1d), or one
 written (`fn main() ? SomeError, ... { ... }`) or inferred (`fn main() ? { ... }`, §7 R1a, which may come out empty). Any other shape (parameters,
 a `ret-type`) is a compile-time error. There is no
@@ -8565,8 +8587,8 @@ other valid `main` signature; in particular, there is no "return an int/bool sta
 **B4a (the command line and the environment).** A program's command line and environment are not passed to `main`.
 The runtime keeps them from the moment the process starts — before any global is initialized (B5a), so a global's
 initializer may read them — and a program reaches them through the runtime's functions (§11 X6). The command line is
-the program's own name first, as the operating system gave it (running a file or `run`, B3f, the file as written), then
-each argument in order. A test binary's command line is its own name alone. Running a file, `run` and `profile` give the
+the program's own name first, as the operating system gave it (scripting mode or `run`, B3f, the file as written), then
+each argument in order. A test binary's command line is its own name alone. Scripting mode, `run` and `profile` give the
 program every word after the file (B1); a word there spelled as one of olang's options is an error saying to put options
 before the file, never the program's argument (the user's call) - the program gets it only after a `--` written right
 after the file, which is not passed on.
@@ -8611,7 +8633,7 @@ real crash - a segmentation fault and the like - ends by its signal as before (`
 
 ### 10.4 Test blocks
 
-**B7.** `test-decl ::= "test" [ IDEN [ "." IDEN ] ] STR_LIT block`, valid as a top-level declaration in any module.
+**B7.** `test-decl ::= "test" [ IDEN [ "." IDEN ] ] STR_LIT body`, valid as a top-level declaration in any module.
 `STR_LIT` is the test's description. A `test` block has no error union of its own and raises nothing with
 `error` (R3); a `try` in it need not catch everything it covers, and an error that leaves its body fails the test
 (S16).
@@ -8634,8 +8656,9 @@ file, or any other listed file, from running.
 
 ### 10.5 Conditional compilation and build constants
 
-**B9.** An `if` statement written at the **top level** of a module — `top-if ::= "if" expr "{" { top-decl
-| top-if | top-set } "}" [ "else" ( top-if | "{" { top-decl | top-if | top-set } "}" ) ]` — is **conditional compilation**:
+**B9.** An `if` statement written at the **top level** of a module — `top-if ::= "if" expr top-branch
+[ "else" ( top-if | top-branch ) ]`, `top-branch ::= "{" { top-decl | top-if | top-set } "}" | ":" top-decl` (a
+one-line branch, S1b: one declaration on the line of its `:`) — is **conditional compilation**:
 exactly one of its branches (the first whose condition is true, or the `else`, or none) is part of the
 module, and the declarations in the others do not exist. Nothing runs at the top level, so a top-level
 `if` has no other meaning. A branch may hold any top-level declaration — types, functions, globals,
@@ -8741,7 +8764,7 @@ own CPU with every instruction set extension it has, as clang's `-march=native` 
 The architectures are `x86_64` and `aarch64`, the operating system Linux with the GNU C library. A CPU and its
 extensions are what clang resolves `-march=CPU` (`-mcpu=CPU` for `aarch64`) to. Any other target, a CPU its
 architecture does not have, or `native` after another architecture's triple is a command-line error. Without clang -
-which the evaluator (B3e) otherwise does not need - running a file takes `native`, on x86-64, to be the x86-64 level this processor has.
+which the evaluator (B3e) otherwise does not need - scripting mode takes `native`, on x86-64, to be the x86-64 level this processor has.
 
 The target decides the build constants `TargetOs`, `TargetArch`, `TargetCpu`, `TargetVectorBits` and `TargetHasFma`
 (B10a), so a program chooses code for its target with an ordinary `if` on them (B9, S8b) - and the compile-time
@@ -8800,7 +8823,7 @@ before it (where something was declared, which instantiation of a generic was be
 the same form with `note` in place of `error[RULE]`, followed by its source. The error's own line is its **headline**,
 what is wrong in about 80 characters; a message with more to say splits it Rust-style into rows of the same form that
 follow it with no source of their own, at the error's place: a `note:` row saying why it is wrong, and a `help:` row,
-after every other note, saying what to write instead. A message that says it all in its headline has neither. A **warning** - what running a file says in place of an error that
+after every other note, saying what to write instead. A message that says it all in its headline has neither. A **warning** - what scripting mode says in place of an error that
 is only untidy (B3e) - is a line in the same form with `warning[RULE]` in its place, followed by its source. The message names what it is about - the
 name, the types, the counts involved - and says what to write instead where that is plain, in a few words; the
 explanation of the rule is the rule itself (B11a). Errors are reported in source order - by file, then line - whatever
@@ -9112,7 +9135,7 @@ spike does not move it), and the counts of allocations, bytes and instructions w
 0.02 (median of 7 paired runs)` - the median and spread of each pair's ratio - and gives the ratio; `Comparison.Of` gives the
 runs. A `Series` renders as a table in a notebook (`Display`, B23).
 
-**What runs, measured (`-bench` of a run).** Given to running a file (B3g) or `run` (B3e), `-bench` builds the program as
+**What runs, measured (`-bench` of a run).** Given to scripting mode (B3g) or `run` (B3e), `-bench` builds the program as
 without it, then runs it once, as it would run, its output its own and its status the command's; the build and the run are
 timed apart, and one line is written to the standard error after it, `bench: built in 0.42 s, ran in 1.24 s (1.20 s user,
 0.03 s sys, 182 MB peak)`: the monotonic clock's wall time of each, and the child's user and system time and peak resident
@@ -9132,7 +9155,7 @@ on every path through it; the debug information holds each function's lines and 
 the runtime's sampler is linked in. No other build holds any of the three - the sampler's code, its symbols, the frame
 pointers or the line tables - so a program costs nothing for being profilable. The program is then run with the
 arguments after FILE as its own (B3f), its standard streams and the status it ends with the mode's own - 128 and the
-signal for one that ends by a signal, as a shell says - and the mode writes its report (B20b). running a file is not
+signal for one that ends by a signal, as a shell says - and the mode writes its report (B20b). Scripting mode is not
 profiled: it runs from olang's cache (B3g), and under the evaluator its time is the evaluator's, not the program's.
 
 The sampler takes the CPU time of each thread the runtime runs - the program's, each task's worker (§6 P1e), each
@@ -9209,7 +9232,7 @@ and assign it by name as a mutable global of the session, of the type the cell g
 front of it (an exception to D3a). A cell whose last statement is an expression giving a value - not an assignment, a
 step or a call giving nothing - shows the value as `$` renders it (E11a).
 
-Every cell is checked with the session as one program - its diagnostics as running a file gives them (B11), its lines named
+Every cell is checked with the session as one program - its diagnostics as scripting mode gives them (B11), its lines named
 `cellN:LINE:COLUMN` (N counting the entries), a loaded file's by its path; unused locals and unread imports of the cell
 itself are warnings, an import nothing reaches yet none. A cell with errors changes nothing. A cell that checks is run:
 what stops it in order - an error leaving it, a failed assert, `unreachable`, a `!` - is said and the session goes on,

@@ -38684,3 +38684,63 @@ the named import after the last import line, or at the file's start. The import 
 message, so the fix and the diagnostic cannot disagree. Helpers in compiler/session.olang (ImportTyped, ImportPaths,
 ImportFix); the scripted LSP test in compiler/lsp.olang covers both. Neovim maps `<localleader>a` to `:OlangFix`
 (`vim.lsp.buf.code_action()`).
+## 2026-11-16: literal comparisons, top-level one-line branches, scripting mode (wt-litcmp)
+
+### S8a: a comparison of two literals (the user's call: "true is never false")
+`true == false`, `1 < 2`, `"a" == "a"` give one answer on every build. S8a already refused them as a function's `if`
+condition ("this condition is the same on every build"), but not in an `assert`, as a value, or as a top-level
+condition (`if true == false { }` built). The coordinator's first brief proposed a new rule (E10d); it was folded into
+S8a instead, one rule and one message family: `'1 < 2' compares two literals, so it is true on every build`, help
+`write 'true'`. The checker reports it at the comparison (check.olang litCompare, before E10c's null test needs nothing:
+`null == null` stays E10c's); the answer comes from the decoded literals (text and characters by their bytes, numbers
+by value) or from the fold for Bools and integers. A function `if` whose condition is such a comparison reports it once,
+the generic S8a row skipped. The loader reports a top-level one after B9a decides it (load.olang evalCond). Stays legal:
+a lone `true`/`false` at the top level (a branch switch) and anything reading a named or build constant (`Debug ==
+false`), even where it folds - another build may set it differently. Found: a lone `if false` inside a function is S8a's
+error today; not changed (asked of the user via the coordinator). The evaluator never sees a refused program.
+
+### B3g: S8a a warning in scripting mode (the user: "this is an error, but it should just be a warning in scripting mode")
+diag.Scripting(rule) = Untidy (D3b, M5a) or S8a decides what a lenient Diagnostics (scripting mode, the prompt, the
+notebook) turns into a warning; the LSP's severity still reads Untidy alone, so S8a stays an error there, as in build,
+run and test. checks.olang's interp fixture dead.olang warns and runs, and fails to build.
+
+### B9, S1b: a top-level branch takes a one-line body (the user's call)
+`if true: import "std/io"` failed with "expected '{', found ':'". S1b excludes declarations from a one-line body because
+in a function that body is a scope; a top-level branch is none - its declarations are the module's. So `top-branch ::=
+"{" ... "}" | ":" top-decl`: one declaration on the colon's line (parse.olang topLine; a declaration running past the
+line is refused naming the braces). The loader's pre-scan (load.olang condEnd, branchClose, afterBranch) ends a
+condition at a depth-0 `:` and the branch at its line's end or an `else` on it, so imports and nested conditions in a
+one-line branch are found as in braces. unparse writes the branch as written (astdiff reads its tokens back). And a `:` where a construct
+takes no one-line body now says "this takes a block here, not a one-line body: write { }" (S1b) rather than "expected
+'{', found ':'".
+
+### Scripting mode
+The user named `olang FILE` **scripting mode** on 2026-11-16: B3g's heading, the spec's option table and prose, settled,
+the command line's mode name (its messages: "-race applies to scripting mode, build, ...", "scripting mode needs a
+file") and the B12a refusal.
+
+### S1b: a one-line body for every block of statements (the user's rule: "any place where we can have {} should take : starting on the same line with one statement")
+Before, `:` took the place of a block after `if`/`else`, a `for` loop (not the forever form), a lambda, a match clause
+and a catch clause; a function's, a test's, a `do` loop's, a `join`'s or a type's body said "expected '{', found ':'".
+Now `parse.olang` reads each through `body()` (a block, or `lineBody()`): a function's and a method's (`function`), a
+test's, the forever loop's, a join's (`joinRest`), a constructor over a primitive's (T29d), a destructor's; `defer:` and
+`errdefer:` take a one-line body beside their bare statement (the bare form stays: a deferred statement is a statement,
+and removing it would be a migration of its own). Two needed more than `body()`:
+- **A `do` loop** (`doBody`): its `for` follows the body, so a one-line body ends at a `for` on its line (`doLine`,
+  read by `endStmt`/`atEnd` as `inLine` reads `else`/`catch`) and keeps its line end (`keepEnd`), so the `for` must stand
+  on that line: on the next line it would begin a loop of its own. Mine: that is the one place the line matters; a
+  `for` on the next line is said (S1b: "a do loop's one-line body ends at its 'for', on the same line") and read as the
+  loop's, so nothing more is said. Not an exception: `do: n++ for n < 3` is unambiguous on one line.
+- **A struct's constructor** (`ctorBlock`, `lineBody(field)`): a constructor's top-level declaration is a field, the
+  type's, so its one-line body may be one (`type Meters struct(v F64): V F64 = v`) - the "a declaration reaches
+  nothing" refusal is a function body's. After a one-line constructor body `destruct` begins the next line.
+What stays a block, said with "this takes a block here, not a one-line body: write { }": lists that are no statements -
+an enum's cases (the parser no longer reads `enum:` as a raw type), a trait's methods, an `extern` block, a match
+statement's clause list. Inside a function a declaration as a one-line body is still refused (that body is a scope).
+`unparse.olang` writes each body as it was written (`body`, `colonBefore`, `dtor`); the formatter is token-based and
+needed nothing. The AST is the same as for the braced form, so the checker and the evaluator needed nothing either -
+`tests/shared.olang` "S1b: a one-line body for every block of statements" bakes a global through each (the evaluator)
+beside the run-time test. The compiler's own sources keep the braced forms (the seed reads them).
+The evaldiff row the coordinator reported on "S1b, R11: a catch clause's one-line body ..." (since wt-predverify) was no
+disagreement of the evaluator's: the interpreted run passes it; the test was missing from compiler/goldens/run.txt
+("not in the built run"), as were this round's. `make rungold` captured them again.

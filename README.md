@@ -46,7 +46,7 @@ fn main() {
 ```
 
 ```
-build/olang hello.olang       # builds the program as build does, into ~/.cache/olang/run, and runs it; an unchanged one is not built again
+build/olang hello.olang       # scripting mode: builds the program as build does, into ~/.cache/olang/run, and runs it; an unchanged one is not built again
 build/olang test hello.olang  # runs the file's tests
 build/olang -checked hello.olang  # the same, checked (indexes, divisions, shifts); -quick builds faster, runs slower
 build/olang run hello.olang   # builds into build/ as `build` does and runs it

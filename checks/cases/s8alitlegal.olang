@@ -1,0 +1,9 @@
+# check: run
+# S8a: a lone false switches a top-level branch off; a build constant compared is the build's to decide, however it folds
+Debug Bool = false
+if false {
+    Gone I64 = 1
+}
+if Debug == false: Mode String& = "release"
+else: Mode String& = "debug"
+fn main() { Println(Mode) }

@@ -630,6 +630,10 @@ type Diag enum {
     NullToNonNull
     NoteNullableDecl
     NeverNull
+    LitCompare
+    TopLineOne
+    NoLineBody
+    DoLineFor
     NoZeroNonNull
     ReadMaybeNull
     NullToArray
@@ -1109,6 +1113,9 @@ fn TargetNoClang(text String&) r.Msg { return r.Msg(Diag.TargetNoClang, "B12", "
 fn TargetNoEmulator(text String&) r.Msg { return r.Msg(Diag.TargetNoEmulator, "B12a", "nothing here runs " + $text + " programs", "", "install qemu-user (qemu-" + $text + "), or name an emulator with OLANG_EMULATOR") }
 fn ExplainNeedsRule() r.Msg { return r.Msg(Diag.ExplainNeedsRule, "B11a", "explain takes one rule, as 'olang explain B1'") }
 fn ExplainNeedsName(file String&) r.Msg { return r.Msg(Diag.ExplainNeedsName, "B11b", $"explain " + $file + " takes the name of one of its items, as 'olang explain " + $file + " main'") }
+fn TopLineOne() r.Msg { return r.Msg(Diag.TopLineOne, "S1b", "a top-level branch's one-line body is one declaration on the line of its ':' - write a block, '{ ... }'") }
+fn NoLineBody() r.Msg { return r.Msg(Diag.NoLineBody, "S1b", "this takes a block here, not a one-line body: write { }") }
+fn DoLineFor() r.Msg { return r.Msg(Diag.DoLineFor, "S1b", "a do loop's one-line body ends at its 'for', on the same line", "", "write 'do: n++ for n < 3', or a block") }
 fn LineBodyOnLine() r.Msg { return r.Msg(Diag.LineBodyOnLine, "S1b", "a one-line body stands on the line of its ':' - write a block, '{ ... }'") }
 fn LineBodyNotSimple(what String&) r.Msg { return r.Msg(Diag.LineBodyNotSimple, "S1b", $"a one-line body is one simple statement, not " + $what + " - write a block, '{ ... }'") }
 fn NotebookUsage() r.Msg { return r.Msg(Diag.NotebookUsage, "B24", "notebook takes the word run and one notebook", "write 'olang notebook run FILE.ipynb'") }
@@ -1120,12 +1127,8 @@ fn ExplainNoItem(name String&, file String&) r.Msg { return r.Msg(Diag.ExplainNo
 fn NoSpec(text String&) r.Msg { return r.Msg(Diag.NoSpec, "B11a", "no specification at " + $text) }
 fn NoRule(text String&) r.Msg { return r.Msg(Diag.NoRule, "B11a", "the specification has no rule " + $text) }
 fn DefineMissing() r.Msg { return r.Msg(Diag.DefineMissing, "B10", "-define needs Name=value after it") }
-fn DefineSpaced(text String&, hint String&) r.Msg {
-    return r.Msg(Diag.DefineSpaced, "B10", "-define takes one word Name=value, found '" + $text + "' - write -define " + $hint + ", with no spaces")
-}
-fn OptionAfterFile(line String&) r.Msg {
-    return r.Msg(Diag.OptionAfterFile, "B4a", "options go before the file: " + $line + " (an argument for the program spelled like an option goes after --)")
-}
+fn DefineSpaced(text String&, hint String&) r.Msg { return r.Msg(Diag.DefineSpaced, "B10", "-define takes one word Name=value, found '" + $text + "' - write -define " + $hint + ", with no spaces") }
+fn OptionAfterFile(line String&) r.Msg { return r.Msg(Diag.OptionAfterFile, "B4a", "options go before the file: " + $line + " (an argument for the program spelled like an option goes after --)") }
 fn DefineShape(text String&) r.Msg { return r.Msg(Diag.DefineShape, "B10", "-define takes Name=value, found '" + $text + "'") }
 fn DefineNotName(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.DefineNotName, "B10", "-define " + $text1 + "=" + $text2 + ": the name is not an identifier") }
 fn DefineTwice(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.DefineTwice, "B10", "-define " + $text1 + "=" + $text2 + ": defined twice") }
@@ -1650,6 +1653,7 @@ fn NullTestOfValue(ty String&) r.Msg { return r.Msg(Diag.NullTestOfValue, "E10c"
 fn MayBeNull(text String&, ty1 String&, ty2 String&, bang String&) r.Msg { return r.Msg(Diag.MayBeNull, "T2c", "'" + $text + "' is a " + $ty1 + ", which may be null, and " + $ty2 + " never is", "", "test it first ('if x != null'), or write '" + $bang + "!'") }
 fn NullToNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NullToNonNull, "T2c", $ty1 + " is never null - a reference that may be is written " + $ty2) }
 fn NoteNullableDecl() r.Msg { return r.Msg(Diag.NoteNullableDecl, "", "the type is written here - write '?&' for '&' where it may be null") }
+fn LitCompare(text String&, val String&) r.Msg { return r.Msg(Diag.LitCompare, "S8a", "'" + $text + "' compares two literals, so it is " + $val + " on every build", "", "write '" + $val + "'") }
 fn NeverNull(text String&, ty String&, val String&) r.Msg { return r.Msg(Diag.NeverNull, "T2c", "'" + $text + "' is a " + $ty + ", never null, so this is always " + $val) }
 fn NoZeroNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NoZeroNonNull, "T2c", $ty1 + " is never null, so it has no zero value - give it a value, or write " + $ty2) }
 fn ReadMaybeNull(text String&, ty String&, bang String&, why String& = "") r.Msg { return r.Msg(Diag.ReadMaybeNull, "T2c", "'" + $text + "' is a " + $ty + ", which may be null", why, "read through it where a test says it is not ('if x != null'), or write '" + $bang + "!'") }

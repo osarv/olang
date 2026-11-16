@@ -107,8 +107,7 @@ fn (w mut writer&) decl(d ast.Decl&) {
                 w.put(" ")
             }
             w.span(name)
-            w.put(" ")
-            w.block(body)
+            w.body(body)
         }
         case ast.Decl.If(_, i) { w.topIf(i) }
         case ast.Decl.Set(_, target, value) {
@@ -181,24 +180,38 @@ fn (w mut writer&) errorDecl(name source.NameId, words Array<source.NameId>&, me
 fn (w mut writer&) topIf(i ast.TopIf&) {
     w.put("if ")
     w.expr(i.Cond!)
-    w.put(" ")
     w.topBranch(i.Then!)
+    if i.ElseIf == null and i.Else == null: return
+    # after a one-line branch (S1b) the "else" begins the next line
+    if w.text[I64(i.Then!.Sp.Start)] == ':' {
+        w.nl()
+        w.put("else")
+    } else {
+        w.put(" else")
+    }
     if i.ElseIf != null {
-        w.put(" else ")
+        w.put(" ")
         w.topIf(i.ElseIf!)
-    } else if i.Else != null {
-        w.put(" else ")
+    } else {
         w.topBranch(i.Else!)
     }
 }
 
+# a top-level branch, after its condition or "else": " {" and its declarations, or ": " and its one (S1b)
 fn (w mut writer&) topBranch(b ast.TopBranch&) {
+    line := w.text[I64(b.Sp.Start)] == ':'
     if w.diags.Holds(b.Group) {
+        if not line: w.put(" ")
         w.span(b.Sp)
         w.held.Push(b.Sp)
         return
     }
-    w.put("{")
+    if line and b.Decls.Len() == 1 {
+        w.put(": ")
+        w.decl(b.Decls[0])
+        return
+    }
+    w.put(" {")
     w.ind++
     for d in b.Decls {
         if hidden(d): continue
@@ -229,8 +242,7 @@ fn (w mut writer&) func(f ast.Func&) {
     }
     w.typeParams(f.TypeParams)
     w.sig(f.S)
-    w.put(" ")
-    w.block(f.Body)
+    w.body(f.Body)
 }
 
 # (params) results ? errors - several results bare (D8c); each result an item of the results' list, the last a
@@ -379,12 +391,8 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
             w.params(s.Params)
             w.put(")")
             w.errors(s.Errs!)
-            w.put(" ")
-            w.block(s.Body)
-            if s.DtorSp.End > 0 {
-                w.put(" destruct ")
-                w.block(s.Dtor)
-            }
+            w.body(s.Body)
+            if s.DtorSp.End > 0: w.dtor(s)
         }
         case ast.TypeBody.Enum(cases, raw) {
             w.put("enum ")
@@ -452,8 +460,7 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
                 w.params(ctor.S.Params)
                 w.put(")")
                 w.errors(ctor.S)
-                w.put(" ")
-                w.block(ctor.Body)
+                w.body(ctor.Body)
             }
         }
     }
@@ -577,17 +584,31 @@ fn (w mut writer&) block(body Array<ast.Stmt&>&) {
 
 # a body as it was written (S1b): ": statement" where a ":" stood before its one statement, else " " and its block
 fn (w mut writer&) body(body Array<ast.Stmt&>&) {
-    if body.Len() == 1 {
-        k := I64(body[0].Span().Start) - 1
-        for k >= 0 and (w.text[k] == ' ' or w.text[k] == '\t'): k--
-        if k >= 0 and w.text[k] == ':' {
-            w.put(": ")
-            w.stmt(body[0])
-            return
-        }
+    if body.Len() == 1 and w.colonBefore(body[0]) {
+        w.put(": ")
+        w.stmt(body[0])
+        return
     }
     w.put(" ")
     w.block(body)
+}
+
+# a destructor (C7): after a one-line body (S1b) it begins the next line
+fn (w mut writer&) dtor(s ast.StructBody&) {
+    if s.Body.Len() == 1 and w.colonBefore(s.Body[0]) {
+        w.nl()
+        w.put("destruct")
+    } else {
+        w.put(" destruct")
+    }
+    w.body(s.Dtor)
+}
+
+# whether a ":" stands before statement s, beginning a one-line body (S1b)
+fn (w writer&) colonBefore(s ast.Stmt&) Bool {
+    k := I64(s.Span().Start) - 1
+    for k >= 0 and (w.text[k] == ' ' or w.text[k] == '\t'): k--
+    return k >= 0 and w.text[k] == ':'
 }
 
 fn (w mut writer&) varDecl(v ast.VarDecl&) {
@@ -656,8 +677,8 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
         }
         case ast.Stmt.If(_, i) { w.ifStmt(i) }
         case ast.Stmt.Forever(_, body) {
-            w.put("for ")
-            w.block(body)
+            w.put("for")
+            w.body(body)
         }
         case ast.Stmt.While(_, cond, body) {
             w.put("for ")
@@ -688,8 +709,8 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.clauses(f.Clauses)
         }
         case ast.Stmt.DoFor(_, body, cond) {
-            w.put("do ")
-            w.block(body)
+            w.put("do")
+            w.body(body)
             w.put(" for ")
             w.expr(cond)
         }
@@ -746,12 +767,14 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
         }
         case ast.Stmt.Join(_, j) {
             if j.Tried: w.put("try ")
-            w.put("join ")
-            w.block(j.Body)
+            w.put("join")
+            w.body(j.Body)
             w.clauses(j.Clauses)
         }
         case ast.Stmt.Defer(_, inner, onError) {
-            w.put("errdefer " if onError else "defer ")
+            w.put("errdefer" if onError else "defer")
+            w.put(":" if w.colonBefore(inner) else "")
+            w.put(" ")
             w.stmt(inner)
         }
         case ast.Stmt.Block(_, body) { w.block(body) }

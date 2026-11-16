@@ -1,0 +1,6 @@
+# check: fail error[S1b]: this takes a block here, not a one-line body: write { }
+# S1b: a match statement's clauses are a block, never a one-line body
+fn main() {
+    x := 1
+    match x: case 1: x++
+}

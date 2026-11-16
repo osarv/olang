@@ -52,6 +52,11 @@
 | TEST 9:1-9:35
 | -- diagnostics
 | error  5:51
+=== checks/cases/b9linebodytwo.olang
+| FN 7:1-7:14
+| VAR 3:1-3:18
+| -- diagnostics
+| error S1b 4:11
 === checks/cases/blockcomment.olang
 | FN 3:1-3:16
 | -- diagnostics
@@ -382,6 +387,13 @@
 === checks/cases/s1bdecl.olang
 | -- diagnostics
 | error S1b 4:23
+=== checks/cases/s1bdolinefor.olang
+| -- diagnostics
+| error S1b 5:12
+=== checks/cases/s1benumline.olang
+| FN 4:1-4:14
+| -- diagnostics
+| error S1b 3:16
 === checks/cases/s1blambdaif.olang
 | -- diagnostics
 | error S1b 4:25
@@ -394,6 +406,9 @@
 === checks/cases/s1bnested.olang
 | -- diagnostics
 | error S1b 5:15
+=== checks/cases/s1bnolinebody.olang
+| -- diagnostics
+| error S1b 5:12
 === checks/cases/s1bsameline.olang
 | -- diagnostics
 | error S1b 5:13

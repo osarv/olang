@@ -31,7 +31,8 @@ test "FindLast finds the last occurrence, failing when there is none" {
 test "text orders by its bytes with < and the comparisons derived from it" {
     a String& = "apple"
     assert a < "banana" and "banana" > a and a <= "apple" and a >= "apple" and not (a < "apple")
-    assert "ab" < "abc" and "" < "a" and "B" < "a" and not ("b" < "B")             # bytewise: upper case first
+    ab, empty, upper, lower := "ab", "", "B", "b"
+    assert ab < "abc" and empty < "a" and upper < "a" and not (lower < "B")         # bytewise: upper case first
     assert "a" < "b" < "c" and not ("a" < "c" < "b")                                # chained, as for numbers
     words := "pear fig apple kiwi banana".Split(" ")
     words.Sort(fn(x, y) { return x < y })

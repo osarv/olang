@@ -2,4 +2,7 @@
 # X21: a Bool is no C variable argument - pass I32(b)
 import s "stdio.h"
 
-fn main() { s.printf("%d\n".ToC(), 1 > 0) }
+fn main() {
+    b := true
+    s.printf("%d\n".ToC(), b)
+}
