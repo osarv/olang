@@ -22,6 +22,7 @@ import "spin"
 import "measure"
 import "std/filepath"
 import unistd "unistd.h"
+import sysstat "sys/stat.h"
 
 # ---- what the front end gives ----
 
@@ -155,14 +156,25 @@ RemarkPasses String& = ("^(inline|loop-vectorize|slp-vectorizer|loop-unroll|loop
                         "loop-delete|tailcallelim|loop-distribute|loop-interchange|loop-load-elim|regalloc|prologepilog)$")
 
 # the IR, in bytes, from which an optimized build links by ThinLTO rather than full LTO: the compiler itself (55 MB)
-# links in 91 s against 172, and an edit relinks in 23 s from the cache where full LTO takes the 172 again; a small
-# program keeps full LTO, which measured no slower to build there and is what its benchmarks were tuned on (B2d)
-ThinFrom I64 = 8 << 20
+# links in 91 s against 172, and an edit relinks in 23 s from the cache where full LTO takes the 172 again. Below it,
+# full LTO: a ThinLTO link inlines across objects only what it imports, and a kernel's helpers landing in another
+# object stayed calls - oann's gemm 16 x 16 x 11 took ~1500 ns a call in a 10 MB program against 450-500 under full LTO,
+# which no import limit or vectorizing at the link closed (2026-11-16, HISTORY); its programs reach ~24 MB, linked in
+# 25 s against ThinLTO's 17.5, the link's own memory 240 MB against 214 (B2d)
+ThinFrom I64 = 32 << 20
+
+# the IR, in bytes, from which a program's large objects are compiled in parts (emit's SplitFrom, B3d): the parts compile
+# side by side and an edit recompiles the part holding it, whichever way the program links
+SplitFrom I64 = 8 << 20
 
 # the largest function, in instructions, a ThinLTO link copies into another module to inline there (LLVM's own
 # default 100): the compiler's link 171 -> 133 s of CPU at 70, its front end measured no slower (at 40 the link took
 # 120 s and the front end 5-10% longer), and a program below ThinFrom - every benchmark - does not link by ThinLTO
 ImportLimit I64 = 70
+
+# the most a ThinLTO link's cache keeps (bytes), its oldest files going first (LLVM's own default: three quarters of the
+# disk's free space)
+ThinCacheCap I64 = 512 << 20
 
 # B3m: the memory one compile is given, in MB, when the number run at once is chosen: clang's peak on the compiler's
 # largest modules measured 100-145 MB (2026-11-14, clang 19, -O3 -flto=thin and -O2), and a ThinLTO back end's about
@@ -763,9 +775,10 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     args.Push(c.Clang)
     for f in c.ModeFlags(): args.Push(f)
     # ThinLTO's link keeps each module's code generated, keyed by what it was made from, so a relink after an edit
-    # generates only what the edit changed (the linker's LLVM plugin's cache)
+    # generates only what the edit changed (the linker's LLVM plugin's cache, within ThinCacheCap: B3i's caps)
     if c.Thin {
         args.Push($"-Wl,-plugin-opt,cache-dir=" + $c.Dir + "/thinlto")
+        args.Push($"-Wl,-plugin-opt,cache-policy=cache_size_bytes=" + $(ThinCacheCap >> 20) + "m")
         args.Push($"-Wl,-plugin-opt,-import-instr-limit=" + $ImportLimit)
     }
     if exports != null {
@@ -1280,7 +1293,7 @@ fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Stri
     status := BuildProgram(fe, c, file, d)
     if status != 0: return status
     sayErr(d.Warnings())
-    prune(c.Dir, c.Built, RunCacheCap)
+    Prune(c.Dir, c.Built, RunCacheCap)
     if c.Timed {
         spin.End()
         # B19b: run as ExecInPlace runs it, the file as written its first argument
@@ -1293,36 +1306,111 @@ fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Stri
     unreachable
 }
 
-# a cache file's name, size and time written
-type Aged struct(Name String&, Size I64, Time I64) { Name, Size, Time }
-
 # the most the run cache keeps (bytes): interpret's builds grow it by a root's objects with every edit
 RunCacheCap := 1 << 30
 
 # keeps dir within cap bytes (B3e): what was written longest ago goes first - objects, stamps, the binaries of programs
-# no longer run - and never the binary just built (touched, so that a program run again is the newest). Only a cache:
-# what goes is built again where it is wanted
-fn prune(dir String&, keep String&, cap I64) {
-    os.Run("touch " + $os.Quote(keep) + " 2> /dev/null")
+# no longer run - and never the binary just built (touched, so that a program run again is the newest), nor a
+# directory in it (its records and ThinLTO's cache, each kept within a cap of its own). Only a cache: what goes is built
+# again where it is wanted
+fn Prune(dir String&, keep String&, cap I64) {
+    Touch(keep)
     restamp(keep)
+    kept Map<String&, Bool>
+    kept.Put(filepath.Base(keep), true)
+    held := Holdings(dir, 0, false)
+    Trim(dir, held, kept, Recent(), cap)
+}
+
+# ---- the caches' caps ----
+#
+# Every cache olang keeps for itself is kept within a cap, what was used longest ago going first. The files of a cache
+# that go or stay together - every name with one stem (StemOf) - are held as one, its time the latest of theirs (when
+# written, or marked used by Touch); a directory is held whole. What was used in the last Fresh nanoseconds never goes,
+# so a build never loses what it or a build beside it is using
+
+type Held struct(Stem String&, Names String&, Size I64, Time I64) { Stem, Names, Size, Time }
+
+Fresh I64 = 600 * 1000000000
+
+# the time before which a cache's files may go (Fresh before now)
+fn Recent() I64 { return time.Wall() - Fresh }
+
+# the stem of a cache's file: its name up to its dots-th '.', the whole name where it has fewer (or dots is 0)
+fn StemOf(name String&, dots I64) String& {
+    seen := 0
+    for i in range name.Len() {
+        if name[i] != '.': continue
+        seen += 1
+        if seen == dots: return name[:i]
+    }
+    return name
+}
+
+# what dir holds, by stem (its names one a line); a directory held whole, or passed over where dirs is false
+fn Holdings(dir String&, dots I64, dirs Bool) Vec<Held> {
+    out Vec<Held>
+    at Map<String&, I64>
     names := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
-    infos Vec<Aged>
-    total := 0
     for n in names {
         info := try os.FileInfo.Stat($dir + "/" + $n) catch os.Error { continue }
-        total += info.Size
-        infos.Push(Aged(n, info.Size, info.ModTime))
+        isDir := info.Kind == os.FileKind.DIR
+        if isDir and not dirs: continue
+        size := treeBytes($dir + "/" + $n) if isDir else onDisk(info.Size)
+        stem := StemOf(n, dots)
+        i := try at.Get(stem) catch default -1
+        if i < 0 {
+            at.Put(stem, out.Len())
+            out.Push(Held(stem, n, size, info.ModTime))
+            continue
+        }
+        h := out.RefMut(i)
+        h.Names = $h.Names + "\n" + $n
+        h.Size += size
+        h.Time = h.Time.Max(info.ModTime)
     }
+    return out
+}
+
+# the bytes on the disk of the files under the directory path
+fn treeBytes(path String&) I64 {
+    total := 0
+    names := try os.ReadDir(path) catch os.Error default Array<String&>(0)
+    for n in names {
+        info := try os.FileInfo.Stat($path + "/" + $n) catch os.Error { continue }
+        total += treeBytes($path + "/" + $n) if info.Kind == os.FileKind.DIR else onDisk(info.Size)
+    }
+    return total
+}
+
+# what a file of size bytes takes on the disk: whole blocks of 4 KiB (a cache of many small files, as the C imports'
+# translations are, takes several times its bytes)
+fn onDisk(size I64) I64 { return (size + 4095) / 4096 * 4096 }
+
+# keeps what dir holds (held, Holdings') within cap bytes: what was used longest ago goes first, never one used since
+# since, nor a stem keep names - or that a name keep names begins, followed by '.' (a binary's stamp, beside it)
+fn Trim(dir String&, held mut Vec<Held>&, keep Map<String&, Bool>&, since I64, cap I64) {
+    total := 0
+    for h in held: total += h.Size
     if total <= cap: return
-    infos.Sort(fn(a Aged, b Aged) Bool { return a.Time < b.Time })
-    for p in infos {
+    held.Sort(fn(a Held, b Held) Bool { return a.Time < b.Time })
+    for h in held {
         if total <= cap: return
-        path := $dir + "/" + $p.Name
-        if path == keep or path.StartsWith($keep + "."): continue
-        try os.RemoveAll(path) catch os.Error { continue }
-        total -= p.Size
+        if keep.Has(h.Stem) or keep.Has(StemOf(h.Stem, 1)) or h.Time >= since: continue
+        if Drop(dir, h): total -= h.Size
     }
 }
+
+# h's files gone from dir: whether every one went
+fn Drop(dir String&, h Held&) Bool {
+    ok := true
+    for n in h.Names.Split("\n"): try os.RemoveAll($dir + "/" + $n) catch os.Error { ok = false }
+    return ok
+}
+
+# path marked used now, its time written set to the present (utimensat with no times, from AT_FDCWD), so a cache
+# keeps what was used last
+fn Touch(path String&) { sysstat.utimensat(-100, $path + "\0", null, 0) }
 
 # the link stamp of bin (linkCurrent's) said again with bin's time as touching left it, so touching a binary to mark it
 # used never makes its next run link it again
@@ -1347,13 +1435,23 @@ fn CacheDir(what String&) String {
 
 # where a tool that only analyzes (lsp, mcp, explain, doc, api: B15) keeps its records and objects: olang's cache, one
 # directory per project - the directory of the file it was given, else the working directory - so it writes nothing
-# beside the program and two projects never share records
+# beside the program and two projects never share records. The projects' directories are kept within AnalysisCacheCap,
+# the one used longest ago going first (this one marked used), each one's records within their own cap (B3i)
 fn AnalysisDir(file String&) String {
     at := $filepath.Dir(try os.RealPath(file) catch default $file) if file != "" else $(try os.Cwd() catch default "")
     parts Vec<String&>
     parts.Push(at)
-    return $CacheDir("analysis") + "/" + $Readable(filepath.Base(at)) + "-" + $HashOf(parts)[:16]
+    name := $Readable(filepath.Base(at)) + "-" + $HashOf(parts)[:16]
+    all := CacheDir("analysis")
+    Touch($all + "/" + $name)
+    keep Map<String&, Bool>
+    keep.Put(name, true)
+    held := Holdings(all, 0, true)
+    Trim(all, held, keep, Recent(), AnalysisCacheCap)
+    return $all + "/" + $name
 }
+
+AnalysisCacheCap I64 = 1 << 30
 
 # explain FILE NAME (B11b): the item, as the front end sees it, on the standard output; a program with errors says them
 fn Explain<F Frontend>(fe mut F&, c mut Config&, file String&, name String&, d mut diag.Diagnostics&) I32 {
@@ -1817,11 +1915,35 @@ test "listed test files run one after another in processes of their own, a signa
 test "B3e: the run cache is kept within its cap, the oldest files going first and the program just built staying" {
     dir := try os.MkTemp("", "olang-prune-")
     defer try os.RemoveAll(dir) catch os.Error { }
-    for n in Array<String&>["old", "mid", "new", "app"]: try os.WriteFile($dir + "/" + $n, "0123456789")
-    os.Run("touch -d @1001 " + $os.Quote($dir + "/old") + " && touch -d @1002 " + $os.Quote($dir + "/app") + " && touch -d @1003 " + $os.Quote($dir + "/mid") + " && touch -d @1004 " + $os.Quote($dir + "/new"))
-    prune(dir, $dir + "/app", 25)
+    for n in Array<String&>["old", "mid", "new", "app", "app.link"]: try os.WriteFile($dir + "/" + $n, "0123456789")
+    try os.MkDir($dir + "/rec")
+    try os.WriteFile($dir + "/rec/x", "0123456789")
+    os.Run("cd " + $os.Quote(dir) + " && touch -d @1001 old app.link rec && touch -d @1002 app && touch -d @1003 mid && touch -d @1004 new")
+    Prune(dir, $dir + "/app", 3 * 4096 + 100)
     left := try os.ReadDir(dir)
-    assert left.Len() == 2 and "new" in left and "app" in left     # old and mid went, the 20 bytes left under the 25
-    prune(dir, $dir + "/app", 0)
-    assert try os.ReadDir(dir) == Array<String&>["app"]
+    # old and mid went, the three files left (a block each) under the cap; the program's stamp stays beside it, and a
+    # directory is not the run cache's to count or remove (its records keep within their own cap)
+    assert left == Array<String&>["app", "app.link", "new", "rec"]
+    Prune(dir, $dir + "/app", 0)
+    assert try os.ReadDir(dir) == Array<String&>["app", "app.link", "rec"]
+}
+
+test "the caches' caps: a cache's files held by stem, a directory whole, what was used last staying" {
+    dir := try os.MkTemp("", "olang-trim-")
+    defer try os.RemoveAll(dir) catch os.Error { }
+    for n in Array<String&>["a1.c", "a1.olang", "b2.c", "c3.c"]: try os.WriteFile($dir + "/" + $n, "0123456789")
+    try os.MkDir($dir + "/d4")
+    try os.WriteFile($dir + "/d4/x", "01234567890123456789")
+    os.Run("cd " + $os.Quote(dir) + " && touch -d @1001 a1.c d4 && touch -d @1002 b2.c && touch -d @1003 c3.c && touch -d @1004 a1.olang")
+    held := Holdings(dir, 1, true)
+    assert held.Len() == 4 and held[0].Stem == "a1" and held[0].Size == 8192 and held[0].Time == 1004 * 1000000000
+    assert held[3].Stem == "d4" and held[3].Size == 4096
+    assert StemOf("x.y.z", 2) == "x.y" and StemOf("x", 2) == "x" and StemOf("x.y", 0) == "x.y"
+    keep Map<String&, Bool>
+    keep.Put("c3", true)
+    Trim(dir, held, keep, 2000 * 1000000000, 3 * 4096)
+    # d4 (used first) and b2 went; a1, used last, and c3, kept, stayed
+    assert try os.ReadDir(dir) == Array<String&>["a1.c", "a1.olang", "c3.c"]
+    Touch($dir + "/c3.c")
+    assert (try os.FileInfo.Stat($dir + "/c3.c")).ModTime > Recent()
 }

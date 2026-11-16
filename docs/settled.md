@@ -997,12 +997,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `olang lsp` and `olang mcp` keep and take the same front and scope records as `olang test` in their directory. **At a precompiled module's boundary the defining module decides (B3i)**: its decisions from its own
   code, a store of the program's widening its field refused at that store. Compiling the program as one unit:
   declined.
-- **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 8 MB of IR or more); under full
+- **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 32 MB of IR or more, `ThinFrom`,
+  raised from 8 MB 2026-11-16: ThinLTO inlined a kernel's helpers in other objects only up to its import limit, oann's
+  gemm 3x slower in a 10 MB program, and neither a higher limit nor vectorizing at the link closed it; full LTO did, its
+  link 1.4x ThinLTO's on oann's largest program; objects are still cut into parts from 8 MB, `SplitFrom`); under full
   LTO a module's own compile neither vectorizes nor unrolls a loop by a factor, so the link inlines across modules before
   it vectorizes (2026-11-15);
   `-debug` is `-O0` with DWARF describing olang's values (types by olang's names, payload cases by name, lexical blocks;
   `editors/debug`'s lldb and gdb formatters, Neovim through nvim-dap and lldb-dap: `:OlangDebug`, `:OlangDebugTest`,
   the user's request 2026-11-15); `-race` ThreadSanitizer; `-sanitize` the scope sanitizer (B2f).
+- **Caches capped (B3i's caps, 2026-11-16).** Every cache olang keeps is bounded, least recently used first (a reused
+  file is marked used), never what the running build uses nor anything used in the last ten minutes: `build/rec` keeps
+  each module's records for its four inputs keys used last, 1 GiB in all, and drops half-written temporaries; `run`
+  1 GiB, `cells` 512 MiB, `analysis` 1 GiB, `fix` 128 MiB, `cimport` 256 MiB (counted in 4 KiB blocks), ThinLTO's cache
+  512 MiB; remote checkouts are kept.
 - **Compiles at once and the bootstrap (B3m, the user's approval 2026-11-14, before v1.0.0).** A build runs
   `OLANG_JOBS` compiles at once, else one per core but no more than `MemAvailable` holds at 512 MB each (at least
   one); a ThinLTO link's back ends as many. `OLANG_TIMES` says each phase with its time and the compiler's memory, and

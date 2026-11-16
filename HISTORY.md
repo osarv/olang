@@ -38801,3 +38801,55 @@ Vec, a Map or an array, a store over one and early freeing (O8d's condition 4 ke
 scope's end) follow. tests/heldfields.olang covers the builder, `!`, `catch default` and a declared type, held by a
 variable, a store, a Vec, a Map and an array, with constructors taking references and taking nothing, each destructor
 counted once; the typed holders' run is also baked while compiling (K2).
+
+## 2026-11-16: caches capped, and full LTO up to 32 MB of IR (B3i's caps, B2d; wt-buildopt)
+
+**The caches.** `~/.cache/olang` filled the disk (cells 1.4 GB, run 0.9 GB, cimport 0.7 GB, fix 0.6 GB), and one
+worktree's `build/rec` reached 4.2 GB. Why they grew: a module's record key, a C import's translation key and a fix
+tool's program name all include the compiler, so every compiler built afresh keys everything anew, and nothing removed
+what the old keys named. The run cache did have a cap (B3e's prune, 1 GiB), but it counted a subdirectory as its 4 KiB
+inode and never looked inside: `run/rec` alone was 700 MB. A worktree's `build/rec` held about 20 inputs keys per
+module (one per compiler that had built there), about 129 MB a set for the compiler's own modules, plus temporaries of
+builds that were killed (`NAME.KEY.v....p15.ll.PID.tmp`, never cleaned).
+
+What holds now (decided, mine; the user had asked for least-recently-used caps): one mechanism in build.olang -
+`Holdings` groups a cache's files by stem (a C import's three files, a record's `MODULE.KEY` with all its parts) and
+counts a directory whole, in 4 KiB blocks (the cimport cache's 69k small files took three times their bytes);
+`Trim` removes groups oldest first until under the cap; `Touch` (utimensat, no times given) marks a reused file used,
+so "oldest" is least recently used, not least recently written. Never removed: what the running build names (its
+records' keys, the program just built, the import just translated, the tools of this fix run) and anything used in the
+last ten minutes (`Fresh`), which covers builds side by side in one directory without any locking. Records keep, per
+module, the four keys used last (`RecKeys`: one fixed point run alone uses three - the stages are three compilers),
+1 GiB in all; temporaries go after ten minutes. Caps: run 1 GiB (subdirectories now left to their own caps), cells
+512 MiB, analysis 1 GiB (its projects' directories), fix 128 MiB, cimport 256 MiB, ThinLTO's cache 512 MiB (the
+plugin's `cache-policy=cache_size_bytes`, LLVM's default being three quarters of the disk's free space). Remote
+checkouts are not capped: a build cannot make one again without the network.
+
+Measured: a copy of a worktree's `build/rec` (1.1 GB, 6212 files, up to 19 keys a module) went to 567 MB (2761 files)
+on the next build of a one-line program, which took 84 ms with nothing to remove. A self-build writes one set of
+129 MB, so a directory now holds at most four (about 520 MB) where it held every one.
+
+**ThinLTO's inlining gap.** oann found a 16 x 16 x 11 F64 gemm call taking 614 ns in a small program and ~1400 ns in
+one importing ad/graph, whose IR passes ThinFrom (8 MB) and so links by ThinLTO (repro oann/repro/crossinline.olang;
+built against a copy, ad/ops's `Scan` renamed to build with today's prelude). Measured 2026-11-16, three runs each,
+the machine shared:
+
+| link | gemm ns/call | link | note |
+|---|---|---|---|
+| small program, full LTO | 597-697 | 1.9 s | the reference |
+| ThinLTO, import limit 70 (as was) | 1581-1761 | 4.8 s | |
+| ThinLTO, import limit 200 | 1331-1897 | 4.8 s | |
+| ThinLTO, import limit 1000 | 1376-1405 | 5.6 s | |
+| ThinLTO, import limit 5000 | 1639-2074 | 11.9 s | |
+| ThinLTO, `-vectorize-loops -vectorize-slp` and `O3` at the link | 1419-1713 | 5.8 s | ThinLTO's cache cleared first: those options are not in its key |
+| full LTO | 417-559 | 5.6 s | faster than the small program |
+
+No import limit and no vectorizing at the link closes it; full LTO does, entirely. The repro's IR is between 8 and
+12 MB; oann's largest program (examples/tinystories) between 20 and 24 MB, which links in 25 s under full LTO against
+17.5 s by ThinLTO (cache empty), the linker's own peak 239 MB against 214 - the build's peak is the front end's
+(1.2 GB) either way. The compiler (55 MB) links by ThinLTO in 93 s (ld 369 MB, the build's peak 3.3 GB, the front
+end's); under full LTO in 191 s, the linker alone at 1.2 GB and the build at 7.2 GB with its compiles. So ThinFrom is 32 MB: every oann program links by full LTO, the compiler keeps ThinLTO and
+its link is unchanged. The cost is a relink after an edit for programs of 8-32 MB: full LTO links the whole program
+again (25 s for tinystories) where ThinLTO's cache relinked only what changed - `-quick` is the edit loop's build.
+Cutting large objects into parts (B3d) stays at 8 MB, now its own constant (`SplitFrom`), so compiles of those
+programs stay parallel and the records' cut guess (`cutLikely`, calibrated at 8 MB) holds.

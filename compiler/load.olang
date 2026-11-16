@@ -27,6 +27,7 @@ import "fetch"
 import "bindgen"
 import "target"
 import "std/sha256"
+import "build"
 
 # where a chain of top-level ifs stands: not decided yet, decided by nothing B9a can tell (pending), or none of its
 # branches chosen; a chosen branch is its index, 0 for the first and the else last
@@ -717,6 +718,7 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
     dir := $fetch.CacheDir() + "/cimport"
     base := $dir + "/" + $ck
     text := cachedTranslation(base)
+    if text != "": build.Touch($base + ".olang")
     if text == "" {
         tr := bindgen.Translation.Translate(include, own, l.Clang, l.CFlags.ToArray(), tag, spec)
         if tr.Why != "" {
@@ -736,6 +738,7 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
             return -1
         }
         text = tr.Text
+        trimCImports(dir, ck)
     }
     i := l.load($base + ".olang", identity, false, true)
     if i < 0: return -1
@@ -777,6 +780,18 @@ fn cachedTranslation(base String&) String {
         if info.Size != size or info.ModTime != time: return ""
     }
     return try os.ReadFile($base + ".olang") catch os.Error default ""
+}
+
+# the most the cache of C imports' translations keeps (bytes): its key names the compiler, so every new compiler
+# translates each C import again
+CImportCacheCap I64 = 256 << 20
+
+# the cache of translations kept within its cap once one was added (made, its key): what was used longest ago goes first
+fn trimCImports(dir String&, made String&) {
+    keep Map<String&, Bool>
+    keep.Put(made, true)
+    held := build.Holdings(dir, 1, false)
+    build.Trim(dir, held, keep, build.Recent(), CImportCacheCap)
 }
 
 # text written at path, through a file of this process's own renamed into place: whether it was

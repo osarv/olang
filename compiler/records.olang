@@ -167,6 +167,7 @@ fn frontRecord(path String&, file I64) views.Cand ? Stale {
         else if line.StartsWith("sig ") or line.StartsWith("baked "): cand.Others.Push(line)
         else: error Stale
     }
+    build.Touch(path)
     return cand
 }
 
@@ -292,6 +293,65 @@ fn PutFile(path String&, text String&, pid I32) Bool {
     return true
 }
 
+# ---- the records' cap (B3i) ----
+#
+# DIR/rec keeps, of each module, the records under the RecKeys inputs keys used last (a record taken is marked used,
+# build.Touch), within RecCap bytes - never those under this build's keys, nor any used in the last build.Fresh - and
+# drops what a build that ended part way left half-written (a temporary older than build.Fresh). A record's inputs
+# include the compiler, so every new compiler's builds key every module afresh: without a cap, a directory a compiler
+# is developed in keeps a full set of records for each compiler it was ever built by
+RecKeys I64 = 4
+RecCap I64 = 1 << 30
+
+fn TrimRecords(cfg build.Config&, l load.Loader&, keys Array<String&>&) {
+    keep Map<String&, Bool>
+    for m in range keys.Len() {
+        if keys[m] != "": keep.Put($build.Readable(l.Mods[m].Identity) + "." + $keys[m][:20], true)
+    }
+    TrimRecordDir($cfg.Dir + "/rec", keep, build.Recent(), RecKeys, RecCap)
+}
+
+# the records in dir trimmed: per module the most keys of its records kept, what is over cap after them going as
+# build.Trim says, none of a key keep names ("MODULE.KEY") or used since since
+fn TrimRecordDir(dir String&, keep Map<String&, Bool>&, since I64, most I64, cap I64) {
+    names := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
+    for n in names {
+        if not n.EndsWith(".tmp"): continue
+        info := try os.FileInfo.Stat($dir + "/" + $n) catch os.Error { continue }
+        if info.ModTime < since: try os.Remove($dir + "/" + $n) catch os.Error { }
+    }
+    held := build.Holdings(dir, 2, false)
+    held.Sort(fn(a build.Held, b build.Held) Bool { return a.Time > b.Time })
+    seen Map<String&, I64>
+    left Vec<build.Held>
+    for h in held {
+        module := build.StemOf(h.Stem, 1)
+        n := (try seen.Get(module) catch default 0) + 1
+        seen.Put(module, n)
+        if n <= most or keep.Has(h.Stem) or h.Time >= since: left.Push(h)
+        else: build.Drop(dir, h)
+    }
+    build.Trim(dir, left, keep, since, cap)
+}
+
+test "B3i: a module's records are kept for its keys used last, never this build's, and within the cap" {
+    dir := try os.MkTemp("", "olang-rec-")
+    defer try os.RemoveAll(dir) catch os.Error { }
+    for n in Array<String&>["a.k1.v1", "a.k1.v1.p0.ll", "a.k2.f1", "a.k3.f1", "a.k4.s1", "b.k1.f1", "a.k5.v1.p0.ll.77.tmp"] {
+        try os.WriteFile($dir + "/" + $n, "0123456789")
+    }
+    os.Run("cd " + $os.Quote(dir) + " && touch -d @1001 a.k1.v1 a.k1.v1.p0.ll a.k5.v1.p0.ll.77.tmp && touch -d @1002 a.k2.f1 && " +
+           "touch -d @1003 a.k3.f1 b.k1.f1 && touch -d @1004 a.k4.s1")
+    keep Map<String&, Bool>
+    keep.Put("a.k2", true)
+    TrimRecordDir(dir, keep, 2000 * 1000000000, 2, 1 << 20)
+    # a's two keys used last stay (k4, k3), and k2, this build's; k1 goes whole, and the temporary a build left
+    assert try os.ReadDir(dir) == Array<String&>["a.k2.f1", "a.k3.f1", "a.k4.s1", "b.k1.f1"]
+    TrimRecordDir(dir, keep, 2000 * 1000000000, 2, 2 * 4096 + 100)
+    # over two blocks: the keys used longest ago go first - k3 and b's k1 - and k2 stays
+    assert try os.ReadDir(dir) == Array<String&>["a.k2.f1", "a.k4.s1"]
+}
+
 # ---- the scope pass's records (B3i, the incremental front end, part 2) ----
 #
 # Beside a module's front record, DIR/rec/NAME.KEY.s<HASH>: the judgings of the scope pass (scope.olang's "judgings
@@ -353,6 +413,7 @@ fn scopeRecord(c mut typecheck.Checker&, path String&) String ? Stale {
         if line.StartsWith("read "): reads.Push(line)
     }
     if not c.P.Facts.Holds(reads.ToArray()): error Stale
+    build.Touch(path)
     return body[:body.Len() - 4]
 }
 

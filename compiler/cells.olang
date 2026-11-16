@@ -266,7 +266,11 @@ fn workerExe(c mut build.Config&, d mut diag.Diagnostics&) String ? build.Failed
     names := StringBuilder()
     for o in objs: names.Push($o + " ")
     exe := $c.Dir + "/olang-cellworker." + $build.IrHash(names.ToString())[:16]
-    if os.Exists(exe): return exe
+    for o in objs: build.Touch(o)
+    if os.Exists(exe) {
+        build.Prune(c.Dir, exe, CellsCacheCap)
+        return exe
+    }
     list := $exe + ".list"
     try os.WriteFile(list, "{ __olang_*; __muloti4; olang_cell_*; };\n") catch os.Error { error build.Failed.Reported }
     tmp := $exe + "." + $unistd.getpid()
@@ -281,8 +285,12 @@ fn workerExe(c mut build.Config&, d mut diag.Diagnostics&) String ? build.Failed
     if prog.Dyncall != "": args.Push("-lffi")
     try link(args, exe, d)
     try os.Rename(tmp, exe) catch os.Error { error build.Failed.Reported }
+    build.Prune(c.Dir, exe, CellsCacheCap)
     return exe
 }
+
+# the most the cells' cache keeps (bytes), as the run cache (B3e): the worker's objects and executables
+CellsCacheCap I64 = 512 << 20
 
 # whether the worker is running
 fn (w Worker&) Running() Bool { return w.In >= 0 }

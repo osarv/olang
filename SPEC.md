@@ -8472,7 +8472,7 @@ optimization, B2d; `-quick`, B2g, and `-checked`, E16g, are its options, and `-d
 to `build`) but **into olang's own cache** - the directory `olang/run` of `$XDG_CACHE_HOME`, else of `~/.cache` - rather
 than into `build/`: every module's object is reused there while current (B3i), the binary is named by the file and where
 it is run from, and nothing is written beside the program or in the working directory. The cache is kept within 1 GiB,
-the files written longest ago going first, never the program just built. The program is analyzed as under `build`, `main`
+the files used longest ago going first, never the program just built (B3i's caps). The program is analyzed as under `build`, `main`
 required (B4), but for an unread local (D3b), an unused import (M5a), which are only untidy, and a condition the same on
 every build (S8a), which a script switches code with: each is a **warning**, a
 row `path:line:column: warning[RULE]: message` with its source, written to the standard error before the program runs,
@@ -8547,6 +8547,19 @@ reported is the same either way: a judging is kept only where nothing in it was 
 record that is not whole is never read. `olang lsp` and `olang mcp` check a program as `olang test` does in the
 directory they run in, keeping and taking the same front and scope records, so a check after an edit judges again only
 what the edit reaches.
+
+The records are a cache, kept within a **cap**: of each module, the records under the four inputs it was last built or
+checked with (a record taken counts as used), and of the whole directory 1 GiB, what was used longest ago going first -
+never a record under this build's inputs, nor one used in the last ten minutes, so builds side by side do not take
+each other's away. A record's inputs include the compiler, so without the cap a directory a compiler is developed in
+kept a full set of records for every compiler that ever built there. A file a build that ended part way left
+half-written goes once it is ten minutes old. Every cache olang keeps for itself (`$XDG_CACHE_HOME/olang`, else
+`~/.cache/olang`) is kept the same way, each within a cap of its own, what was used longest ago going first and never
+what the build using it uses or anything used in the last ten minutes: running a file's builds (`run`, 1 GiB, B3g), the
+prompt's (`cells`, 512 MiB, B22), the analyzing tools' projects (`analysis`, 1 GiB, B15a), `olang fix`'s tools (`fix`,
+128 MiB, B17), the translations of C imports (`cimport`, 256 MiB, X17), and a ThinLTO link's cache beside a build's
+objects (`thinlto`, 512 MiB, B2d). A remote repository's checkout (M23a) is kept, never evicted: a build needs it whole
+and cannot make it again without the network. What goes from a cache is only made again where it is wanted next.
 
 A module whose object is made apart from the program that uses it - by `compile`, or kept as a library of objects - is
 a **precompiled module**, and at its boundary **the defining module decides**. Every decision its object carries is made
@@ -9015,7 +9028,8 @@ the file's last `import` line, or at its start where there is none (`codeActionP
 (B14) and `api` - write nothing beside the program or in the working directory: the records and objects their checking
 keeps go to olang's cache of what it builds for itself (`analysis/` in `$XDG_CACHE_HOME/olang`, else `~/.cache/olang`),
 one directory per project - the directory of the file named, else the working directory, named by its hash - so two
-projects never share them. What they write that was asked for (`doc -html DIR`) goes where it was asked.
+projects never share them; the projects' directories are kept within 1 GiB, the one used longest ago going first (B3i's
+caps). What they write that was asked for (`doc -html DIR`) goes where it was asked.
 
 **B16.** `mcp` serves the Model Context Protocol on the standard input and output (JSON-RPC 2.0, one message a line)
 with the tools `check` (a file's diagnostics, each its file, line, column, rule and message), `explain` (B11b),
@@ -9034,7 +9048,8 @@ without `-check`. The status is 2 when a file cannot be read or a tool cannot be
 are built when first needed, side by side, into olang's cache of what it builds for itself (`fix/` in
 `$XDG_CACHE_HOME/olang`, else `~/.cache/olang`), each program named by the hash of what it is built from - the compiler
 (its path, size and time), the standard library's files and the tool's own source with every module it imports beside
-it - so a program is built once and found again by every later run with that compiler over those sources. A tool runs
+it - so a program is built once and found again by every later run with that compiler over those sources; the
+programs are kept within 128 MiB, the one used longest ago going first (B3i's caps). A tool runs
 only where it may have something to do: each names texts its forms cannot be without (`Init(` for removing
 `chan.Init`), and a tool none of whose texts stands in the files is neither built nor run; the tools driven by the
 compiler's diagnostics are given only the files the compiler reports an error in (each compiled alone, `compile
@@ -9651,7 +9666,8 @@ the other. A program reaches a C library's whole interface through one import of
 what its code declares and every header it includes, and the file's own functions are compiled into the program
 (X20). The translation of a file is the same in every module importing it and is made once per compilation; an
 implementation keeps it between compilations (this one under `OLANG_CACHE/cimport`, keyed by the file, clang, the
-compiler and the flags) and makes it again when a file it read has changed. Translating a C module needs clang.
+compiler and the flags; within 256 MiB, the one used longest ago going first, B3i's caps) and makes it again when a
+file it read has changed. Translating a C module needs clang.
 
 **X18 (the translation).** A C module translates the declarations of its translation unit, compiled as the target's
 C compiler compiles them, with `_GNU_SOURCE` defined (glibc's whole interface, as most Linux C programs declare it),
