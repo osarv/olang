@@ -79,7 +79,7 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-13	ease	opus	medium	done	257	121		goldens+OOM		print/println, -quick run, interpret warnings
 2026-11-13	lits	opus	medium	done	340	137		layout golden		target-typed literals E20/E20a; keyed comprehensions; bare array patterns
 2026-11-14	printcap	sonnet	medium	done	212	79		pass(2nd)		Print/Println; io.Put* rename via tool (774 files); len removed
-2026-11-14	oneline	sonnet	low	done				diag golden		320 blocks/82 files converted; catch/lambda skipped
+2026-11-14	oneline2	sonnet	low	done				diag golden		320 blocks/82 files converted; catch/lambda skipped
 2026-11-14	refac1	opus	medium	done				pass		nesting tool; only 6 fns >5; 148 at 5 remain
 2026-11-14	refac2	opus	medium	done				pass		148->31 at depth5; 6 long fns split
 2026-11-14	refac3	opus	medium	done	275	119		pass		all fns depth<=4, none >200 lines; helper-extraction over-rejection O10c (rootPlace Deref)
@@ -163,4 +163,6 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	freeing8	opus	medium	completed	382	224	85	yes		slot fast path within 4%; shipped; found warm-rebuild O10c bug
 2026-11-16	warmrec	opus	medium	completed	234	81	19	yes		warm-rebuild O10c: landedOn not in scope records
 2026-11-16	factsreg	opus	medium	completed	449	268	83	yes		RefsKept.Kept too pessimistic (freeing6); NoneKept
-2026-11-16	facts3	opus	medium	running
+2026-11-16	facts3	opus	medium	completed	254	153	33	yes		array copies counted; quant growth = test self-measure under race
+2026-11-16	oannfix2	sonnet	low	running
+2026-11-16	oneline2	sonnet	low	running
