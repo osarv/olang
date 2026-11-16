@@ -16,3 +16,4 @@
 - Equal defaults compared as compile-time values; a default that cannot be compared (a lambda) counts as different unless it is the same declaration.
 - Full checklist: SPEC (function types, D8a, E14), checker, evaluator, tests, checks/cases (the conflict error naming both values), settled/HISTORY.
 - Order: after wt-sumnarrow merges (both touch the checker's generic/type-argument code); can run beside the attribute removal (std-side).
+- (from oannvnni, same area) Packed INT8 needs a 4-lane group Sum or LaneDot keeping a vector accumulator across its 256-lane blocks: a per-lane sum of four adjacent U8xI8 products lowers to vpmaddwd, never vpdpbusd (repro oann repro/vnnitile.olang). A vector accumulator across blocks would also fix the short-depth slowdown above. oann pads depth to 256 meanwhile (kernels/gemm dots/dotsPay). Also: oann's depth-9 INT8 convolution runs 7x slower than F32 (unprofiled).
