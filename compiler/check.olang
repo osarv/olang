@@ -22323,6 +22323,10 @@ fn (c mut Checker&) uniqueWalk(t types.TypeId) I64 {
 # for i in range [start,] end [, step] (S9b): upward, a count worked out once
 fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&>&, cm ast.Compr?&, ce types.TypeId) typed.Expr?& {
     # the first argument that is no literal gives the range its type; literals alone count in I64 (S9b)
+    if rargs.Len() > 3 {
+        c.err(rargs[3].Span(), msgs.RangeArgs())
+        return null
+    }
     t types.TypeId = types.UnknownT
     vs Vec<typed.Expr?&>          # each argument's value, null for a literal - typed once t is known
     for a in rargs {

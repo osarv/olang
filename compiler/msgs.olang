@@ -707,6 +707,7 @@ type Diag enum {
     ConditionConstant
     RangeNotInt
     RangeStep
+    RangeArgs
     ComprNeedsTry
     ForInNeedsTry
     ForInTryNothing
@@ -1806,6 +1807,7 @@ fn NotAStatement() r.Msg { return r.Msg(Diag.NotAStatement, "S3", "this computes
 fn ConditionConstant() r.Msg { return r.Msg(Diag.ConditionConstant, "S8a", "this condition is the same on every build, so one branch is dead", "", "depend on a build constant, or remove it") }
 fn RangeNotInt(ty String&) r.Msg { return r.Msg(Diag.RangeNotInt, "S9b", "a range's bounds and step are integers, found " + $ty) }
 fn RangeStep() r.Msg { return r.Msg(Diag.RangeStep, "S9b", "a range only counts upward, so its step is positive") }
+fn RangeArgs() r.Msg { return r.Msg(Diag.RangeArgs, "S9b", "a range takes at most three arguments", "", "write 'range END', 'range START, END' or 'range START, END, STEP'") }
 fn ComprNeedsTry() r.Msg { return r.Msg(Diag.ComprNeedsTry, "E27, S9e", "this comprehension's own calls can fail - write 'try Array<T>[e for x in c]'") }
 fn ForInNeedsTry() r.Msg { return r.Msg(Diag.ForInNeedsTry, "S9e", "this loop's own calls can fail - write 'for x in try c', with catch clauses after the body") }
 fn ForInTryNothing() r.Msg { return r.Msg(Diag.ForInTryNothing, "S9e", "nothing this loop calls by itself can fail - drop the 'try'") }
