@@ -216,4 +216,5 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	seed-sumnarrow	sonnet	medium	restarted						seed rewrite + merge
 2026-11-16	merge-sumnarrow2	sonnet	low	running						after restart
 2026-11-16	members2	opus	high	running						after restart, from uncommitted diff
-2026-11-16	oannconv2	sonnet	medium	running						after restart
+2026-11-16	oannconv2	sonnet	medium	done						after restart
+2026-11-16	oannsettle	opus	medium	running						Anderson, Gauss-Seidel, Contraction()
