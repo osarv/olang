@@ -176,9 +176,9 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	lspcomp	opus	medium	completed	169	72	43	yes		nvim never enabled completion; server gaps (chains, supplied, trait defaults, privates)
 2026-11-16	nodump	opus	medium	completed	239	154	65	yes		DONTDUMP reservation, failure_end exit 1/2, OLANG_CORE
 2026-11-16	lspdir	opus	low	completed	152	63	47	yes		analysis in cache, B9c split
-2026-11-16	litcmp	opus	low	running
-2026-11-16	argsdef	opus	low	running
+2026-11-16	litcmp	opus	low	killed						stopped by an interrupt, WIP uncommitted
+2026-11-16	argsdef	opus	low	killed						stopped by an interrupt after its commit; merged by me
 2026-11-16	oannmake	sonnet	low	completed	103	9	1	yes		make help default, README for users
-2026-11-16	lspimport	opus	low	running
-2026-11-16	osfile	opus	medium	running
+2026-11-16	lspimport	opus	low	killed
+2026-11-16	osfile	opus	medium	killed
 2026-11-16	readmes	sonnet	low	completed	123	16	2	yes		README history sweep, 3 repos
