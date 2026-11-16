@@ -284,100 +284,100 @@ fn (k Tok) Describe() String {
 # and the length, then one comparison: no table is built (DESIGN.md 1.1)
 fn Tok.Keyword(t String&, at I64, n I64) Tok {
     c := t[at]
-    if n < 2 or n > 11 or c < 'a' or c > 'y' { return Tok.Iden }
+    if n < 2 or n > 11 or c < 'a' or c > 'y': return Tok.Iden
     match c {
         case 'a' {
-            if n == 3 and spells(t, at, "any") { return Tok.Any }
-            if n == 2 and t[at + 1] == 's' { return Tok.As }
-            if n == 3 and spells(t, at, "and") { return Tok.And }
-            if n == 6 and spells(t, at, "assert") { return Tok.Assert }
+            if n == 3 and spells(t, at, "any"): return Tok.Any
+            if n == 2 and t[at + 1] == 's': return Tok.As
+            if n == 3 and spells(t, at, "and"): return Tok.And
+            if n == 6 and spells(t, at, "assert"): return Tok.Assert
         }
         case 'b' {
-            if n == 7 and spells(t, at, "borrows") { return Tok.Borrows }
-            if n == 5 and spells(t, at, "break") { return Tok.Break }
-            if n == 6 and spells(t, at, "become") { return Tok.Become }
+            if n == 7 and spells(t, at, "borrows"): return Tok.Borrows
+            if n == 5 and spells(t, at, "break"): return Tok.Break
+            if n == 6 and spells(t, at, "become"): return Tok.Become
         }
         case 'c' {
-            if n == 8 and spells(t, at, "commutes") { return Tok.Commutes }
-            if n == 4 and spells(t, at, "case") { return Tok.Case }
-            if n == 5 and spells(t, at, "catch") { return Tok.Catch }
-            if n == 8 and spells(t, at, "continue") { return Tok.Continue }
-            if n == 8 and spells(t, at, "comptime") { return Tok.Comptime }
+            if n == 8 and spells(t, at, "commutes"): return Tok.Commutes
+            if n == 4 and spells(t, at, "case"): return Tok.Case
+            if n == 5 and spells(t, at, "catch"): return Tok.Catch
+            if n == 8 and spells(t, at, "continue"): return Tok.Continue
+            if n == 8 and spells(t, at, "comptime"): return Tok.Comptime
         }
         case 'd' {
-            if n == 2 and t[at + 1] == 'o' { return Tok.Do }
-            if n == 5 and spells(t, at, "defer") { return Tok.Defer }
-            if n == 7 and spells(t, at, "default") { return Tok.Default }
-            if n == 8 and spells(t, at, "destruct") { return Tok.Destruct }
+            if n == 2 and t[at + 1] == 'o': return Tok.Do
+            if n == 5 and spells(t, at, "defer"): return Tok.Defer
+            if n == 7 and spells(t, at, "default"): return Tok.Default
+            if n == 8 and spells(t, at, "destruct"): return Tok.Destruct
         }
         case 'e' {
-            if n == 4 and spells(t, at, "else") { return Tok.Else }
-            if n == 4 and spells(t, at, "enum") { return Tok.Enum }
-            if n == 5 and spells(t, at, "embed") { return Tok.Embed }
-            if n == 5 and spells(t, at, "error") { return Tok.Error }
-            if n == 7 and spells(t, at, "extends") { return Tok.Extends }
-            if n == 8 and spells(t, at, "errdefer") { return Tok.ErrDefer }
-            if n == 6 and spells(t, at, "extern") { return Tok.Extern }
+            if n == 4 and spells(t, at, "else"): return Tok.Else
+            if n == 4 and spells(t, at, "enum"): return Tok.Enum
+            if n == 5 and spells(t, at, "embed"): return Tok.Embed
+            if n == 5 and spells(t, at, "error"): return Tok.Error
+            if n == 7 and spells(t, at, "extends"): return Tok.Extends
+            if n == 8 and spells(t, at, "errdefer"): return Tok.ErrDefer
+            if n == 6 and spells(t, at, "extern"): return Tok.Extern
         }
         case 'f' {
-            if n == 2 and t[at + 1] == 'n' { return Tok.Fn }
-            if n == 3 and spells(t, at, "for") { return Tok.For }
-            if n == 5 and spells(t, at, "false") { return Tok.BoolLit }
+            if n == 2 and t[at + 1] == 'n': return Tok.Fn
+            if n == 3 and spells(t, at, "for"): return Tok.For
+            if n == 5 and spells(t, at, "false"): return Tok.BoolLit
         }
         case 'i' {
-            if n == 5 and spells(t, at, "immut") { return Tok.Immut }
+            if n == 5 and spells(t, at, "immut"): return Tok.Immut
             if n == 2 {
                 d := t[at + 1]
-                if d == 'f' { return Tok.If }
-                if d == 'n' { return Tok.In }
+                if d == 'f': return Tok.If
+                if d == 'n': return Tok.In
             }
-            if n == 6 and spells(t, at, "import") { return Tok.Import }
+            if n == 6 and spells(t, at, "import"): return Tok.Import
         }
         case 'j' { if n == 4 and spells(t, at, "join") { return Tok.Join } }
         case 'm' {
-            if n == 3 and spells(t, at, "mut") { return Tok.Mut }
-            if n == 5 and spells(t, at, "match") { return Tok.Match }
+            if n == 3 and spells(t, at, "mut"): return Tok.Mut
+            if n == 5 and spells(t, at, "match"): return Tok.Match
         }
         case 'n' {
-            if n == 7 and spells(t, at, "noalloc") { return Tok.Noalloc }
-            if n == 7 and spells(t, at, "noblock") { return Tok.Noblock }
-            if n == 7 and spells(t, at, "nospawn") { return Tok.Nospawn }
-            if n == 9 and spells(t, at, "norecurse") { return Tok.Norecurse }
-            if n == 8 and spells(t, at, "noextern") { return Tok.Noextern }
-            if n == 8 and spells(t, at, "noborrow") { return Tok.Noborrow }
-            if n == 3 and spells(t, at, "not") { return Tok.Not }
-            if n == 4 and spells(t, at, "null") { return Tok.NullLit }
-            if n == 8 and spells(t, at, "noreturn") { return Tok.Noreturn }
+            if n == 7 and spells(t, at, "noalloc"): return Tok.Noalloc
+            if n == 7 and spells(t, at, "noblock"): return Tok.Noblock
+            if n == 7 and spells(t, at, "nospawn"): return Tok.Nospawn
+            if n == 9 and spells(t, at, "norecurse"): return Tok.Norecurse
+            if n == 8 and spells(t, at, "noextern"): return Tok.Noextern
+            if n == 8 and spells(t, at, "noborrow"): return Tok.Noborrow
+            if n == 3 and spells(t, at, "not"): return Tok.Not
+            if n == 4 and spells(t, at, "null"): return Tok.NullLit
+            if n == 8 and spells(t, at, "noreturn"): return Tok.Noreturn
         }
         case 'o' {
-            if n == 2 and t[at + 1] == 'r' { return Tok.Or }
+            if n == 2 and t[at + 1] == 'r': return Tok.Or
         }
         case 'r' {
-            if n == 7 and spells(t, at, "returns") { return Tok.Returns }
-            if n == 5 and spells(t, at, "range") { return Tok.Range }
-            if n == 6 and spells(t, at, "return") { return Tok.Return }
+            if n == 7 and spells(t, at, "returns"): return Tok.Returns
+            if n == 5 and spells(t, at, "range"): return Tok.Range
+            if n == 6 and spells(t, at, "return"): return Tok.Return
         }
         case 's' {
-            if n == 5 and spells(t, at, "spawn") { return Tok.Spawn }
-            if n == 6 and spells(t, at, "struct") { return Tok.Struct }
+            if n == 5 and spells(t, at, "spawn"): return Tok.Spawn
+            if n == 6 and spells(t, at, "struct"): return Tok.Struct
         }
         case 't' {
-            if n == 3 and spells(t, at, "try") { return Tok.Try }
+            if n == 3 and spells(t, at, "try"): return Tok.Try
             if n == 4 {
-                if spells(t, at, "type") { return Tok.Type }
-                if spells(t, at, "test") { return Tok.Test }
-                if spells(t, at, "true") { return Tok.BoolLit }
+                if spells(t, at, "type"): return Tok.Type
+                if spells(t, at, "test"): return Tok.Test
+                if spells(t, at, "true"): return Tok.BoolLit
             }
-            if n == 5 and spells(t, at, "trait") { return Tok.Trait }
+            if n == 5 and spells(t, at, "trait"): return Tok.Trait
         }
         case 'k' { if n == 5 and spells(t, at, "keeps") { return Tok.Keeps } }
         case 'p' {
-            if n == 4 and spells(t, at, "pure") { return Tok.Pure }
-            if n == 6 and spells(t, at, "packed") { return Tok.Packed }
+            if n == 4 and spells(t, at, "pure"): return Tok.Pure
+            if n == 6 and spells(t, at, "packed"): return Tok.Packed
         }
         case 'u' {
-            if n == 6 and spells(t, at, "unique") { return Tok.Unique }
-            if n == 11 and spells(t, at, "unreachable") { return Tok.Unreachable }
+            if n == 6 and spells(t, at, "unique"): return Tok.Unique
+            if n == 11 and spells(t, at, "unreachable"): return Tok.Unreachable
         }
         case 'x' { if n == 3 and spells(t, at, "xor") { return Tok.Xor } }
         case 'w' { if n == 4 and spells(t, at, "weak") { return Tok.Weak } }
@@ -390,7 +390,7 @@ fn Tok.Keyword(t String&, at I64, n I64) Tok {
 # whether t holds word at at; its length was checked already
 fn spells(t String&, at I64, word String&) Bool {
     for k in range 1, word.Len() {
-        if t[at + k] != word[k] { return false }
+        if t[at + k] != word[k]: return false
     }
     return true
 }

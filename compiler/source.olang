@@ -25,7 +25,7 @@ type Names struct() {
 
 # the id of a spelling, given one the first time it is seen
 fn (n mut Names&) Intern(t String&) NameId {
-    if n.texts.Len() == 0 { n.add("") }
+    if n.texts.Len() == 0: n.add("")
     return try n.ids.Get(t) catch default n.add(t)
 }
 
@@ -57,7 +57,7 @@ fn Source.Read(path String&) Source ? os.Error {
 fn LineStarts(t String&) Array<I32>& {
     n I64 = 1
     for c in t {
-        if c == '\n' { n++ }
+        if c == '\n': n++
     }
     starts := Array<I32>(n)
     k I64 = 1

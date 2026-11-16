@@ -41,8 +41,8 @@ fn main() {
         name := filepath.Base(f)
         cdir := $work + "/" + $name[0:name.Len() - 6]
         body := read($cdir + "/run.txt")
-        if body == "" { toolkit.Die("rungold: " + $name + " was not run") }
-        if toolkit.StoredRun.RunParse(body).Stable == false { unstable++ }
+        if body == "": toolkit.Die("rungold: " + $name + " was not run")
+        if toolkit.StoredRun.RunParse(body).Stable == false: unstable++
         out.Push(toolkit.GoldenSection(toolkit.RunKey(f), body.Replace(cdir, "$CASE").Replace(root, "$ROOT")))
     }
     toolkit.GoldenWrite(golden, out.ToString())
@@ -55,7 +55,7 @@ fn main() {
 fn TestFiles() Vec<String&> {
     l := Vec<String&>()
     for d in Array<String&>["tests", "std", "std/prelude/tests"] {
-        for f in toolkit.Matching(d, ".olang") { l.Push($f) }
+        for f in toolkit.Matching(d, ".olang"): l.Push($f)
     }
     return l
 }
@@ -64,7 +64,7 @@ fn TestFiles() Vec<String&> {
 fn RunCases() Vec<String&> {
     l := Vec<String&>()
     for f in toolkit.Matching("checks/cases", ".olang") {
-        if headerLine(toolkit.Read(f), "# check: ") == "run" { l.Push($f) }
+        if headerLine(toolkit.Read(f), "# check: ") == "run": l.Push($f)
     }
     return l
 }
@@ -76,7 +76,7 @@ fn read(path String&) String {
 # the rest of a header's first line beginning with prefix, "" for none
 fn headerLine(text String&, prefix String&) String {
     for line in toolkit.Rows(text) {
-        if line.StartsWith(prefix) { return $line[prefix.Len():] }
+        if line.StartsWith(prefix): return $line[prefix.Len():]
     }
     return ""
 }
@@ -85,11 +85,11 @@ fn headerLine(text String&, prefix String&) String {
 fn binaryOf(base String&, flags String&) String {
     bin := $base
     for f in toolkit.Fields(flags) {
-        if f == "-debug" { bin = $bin + ".debug" }
-        if f == "-race" { bin = $bin + ".race" }
+        if f == "-debug": bin = $bin + ".debug"
+        if f == "-race": bin = $bin + ".race"
     }
     for f in toolkit.Fields(flags) {
-        if f == "-sanitize" { return $bin + ".san" }
+        if f == "-sanitize": return $bin + ".san"
     }
     return bin
 }
@@ -107,7 +107,7 @@ fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
         args := Vec<String&>()
         args.Push(olang)
         args.Push("build")
-        for f in toolkit.Fields(flags) { args.Push($f) }
+        for f in toolkit.Fields(flags): args.Push($f)
         args.Push(name)
         b := try os.Output.Exec(...args.ToArray(), dir = dir) catch os.Error { continue }
         body String& = ""

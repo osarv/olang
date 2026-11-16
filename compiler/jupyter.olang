@@ -342,7 +342,7 @@ fn complete(s prompt.Session&, content json.Json&) String {
     at := try content["cursor_pos"].AsInt() catch json.Error default code.Len()
     if at > code.Len() or at < 0: at = code.Len()
     start := at
-    for start > 0 and (code[start - 1].IsLetter() or code[start - 1].IsDigit() or code[start - 1] == '_') { start-- }
+    for start > 0 and (code[start - 1].IsLetter() or code[start - 1].IsDigit() or code[start - 1] == '_'): start--
     word := code[start:at]
     names Vec<String&>
     for d in s.Decls.View() {

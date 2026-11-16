@@ -93,7 +93,7 @@ fn table(dir String&) {
         if w.Len() == 2: last.Put($w[0], try w[1].ParseInt() catch default 0)
     }
     keys Vec<String&>
-    for k in last.Keys() { keys.Push(k) }
+    for k in last.Keys(): keys.Push(k)
     keys.Sort(fn(a String&, b String&) Bool { return a < b })
     for k in keys { try io.PutLine($k + " " + $(try last.Get(k) catch default 0)) catch io.Error { } }
 }

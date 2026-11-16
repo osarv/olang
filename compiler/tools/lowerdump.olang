@@ -92,7 +92,7 @@ fn run(args Array<String&>&) {
         # a checks case's own build constants, from its "# flags:" line
         text := try os.ReadFile(path) catch os.Error default ""
         for line in text.Split("\n") {
-            if not line.StartsWith("# flags:") { continue }
+            if not line.StartsWith("# flags:"): continue
             words := line[8:].Trim().Split(" ")
             for j in range words.Len() {
                 if words[j] == "-define" and j + 1 < words.Len() { try consts.Define(words[j + 1], d) catch { } }
@@ -106,7 +106,7 @@ fn run(args Array<String&>&) {
         p := generic.Program(l, r)
         c := typecheck.Checker(p, testBuild)
         c.CheckProgram()
-        if verbose { out.Write(d.Render()) }
+        if verbose: out.Write(d.Render())
         errs := d.Count()
         lw := lower.Lowerer(p, c.Bodies)
         sc := scope.Scoper(p, c.Bodies)
@@ -116,7 +116,7 @@ fn run(args Array<String&>&) {
         }
         n := totals()
         for b in range c.Bodies.Len() {
-            if not lw.HasCode(b) { continue }
+            if not lw.HasCode(b): continue
             n.bodies++
             body := c.Bodies[b]
             where := d.Locate(body.File, I64(body.Sp.Start))
@@ -131,20 +131,20 @@ fn run(args Array<String&>&) {
                 continue
             }
             n.lowered++
-            if wantDump { out.Write("-- mir B" + $b + " " + $where + "\n" + $dump) }
+            if wantDump: out.Write("-- mir B" + $b + " " + $where + "\n" + $dump)
             if problems.Len() == 0 {
                 n.clean++
                 continue
             }
             n.bad++
             for line in problems.Split("\n") {
-                if line.Len() == 0 { continue }
+                if line.Len() == 0: continue
                 out.Write("bad " + $where + " B" + $b + ": " + $line + "\n")
-                if not verbose { break }
+                if not verbose: break
             }
         }
         # the functions the bodies refer to that lowering makes itself: helpers, adapters, modules' initializations
-        for m in lw.InitModules() { lw.Want(mir.FnKey.Init(m)) }
+        for m in lw.InitModules(): lw.Want(mir.FnKey.Init(m))
         w I64 = 0
         for w < lw.Wanted.Len() {
             key := lw.Wanted[w]
@@ -155,23 +155,23 @@ fn run(args Array<String&>&) {
                 n.madeGapped++
                 continue
             }
-            if dump.Len() > 0 { out.Write("-- mir " + $key + "\n" + $dump) }
+            if dump.Len() > 0: out.Write("-- mir " + $key + "\n" + $dump)
             if problems.Len() == 0 {
                 n.madeClean++
                 continue
             }
             for line in problems.Split("\n") {
-                if line.Len() == 0 { continue }
+                if line.Len() == 0: continue
                 out.Write("bad " + $key + ": " + $line + "\n")
-                if not verbose { break }
+                if not verbose: break
             }
         }
         for g in lw.Gaps {
-            if g.What.StartsWith("an unknown type") { continue }
+            if g.What.StartsWith("an unknown type"): continue
             out.Write("gap " + $d.Locate(g.File, I64(g.Sp.Start)) + " " + $g.What + "\n")
             at := -1
             for j in range all.whats.Len() {
-                if all.whats[j] == g.What { at = j }
+                if all.whats[j] == g.What: at = j
             }
             if at < 0 {
                 all.whats.Push($g.What)
@@ -196,6 +196,6 @@ fn run(args Array<String&>&) {
     out.Write(("== total: bodies " + $all.bodies + " lowered " + $all.lowered + " clean " + $all.clean + " bad " + $all.bad + " gapped " +
                $all.gapped + " unchecked " + $all.unchecked + "; made " + $all.made + " clean " + $all.madeClean + " gapped " + $all.madeGapped +
                "\n"))
-    for j in range all.whats.Len() { out.Write("  " + $all.counts[j] + " " + $all.whats[j] + "\n") }
+    for j in range all.whats.Len(): out.Write("  " + $all.counts[j] + " " + $all.whats[j] + "\n")
     try out.Flush() catch io.Error { os.Exit(1) }
 }

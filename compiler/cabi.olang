@@ -58,18 +58,18 @@ fn Flatten(t mut types.Table&, ty types.TypeId, base I64, out mut Vec<Scalar>&) 
     if t.KindOf(r) == types.Kind.Array {
         el := t.Elem(r)
         n := t.ConstValue(t.Length(r)) if t.KindOf(t.Length(r)) == types.Kind.Const else 0
-        for i in range n { Flatten(t, el, base + i * t.Size(el), out) }
+        for i in range n: Flatten(t, el, base + i * t.Size(el), out)
         return
     }
     if t.Packed(r) {
         # X11a: a packed struct as C passes a struct of its bytes - its fields integer bits, classified INTEGER
-        for i in range t.Size(r) { out.Push(Scalar(base + i, 1, "i8", false)) }
+        for i in range t.Size(r): out.Push(Scalar(base + i, 1, "i8", false))
         return
     }
     if t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct {
         fs := t.Items(t.Fields(r))
         offs := t.Offsets(r)
-        for i in range fs.Len() { Flatten(t, fs[i], base + offs[i], out) }
+        for i in range fs.Len(): Flatten(t, fs[i], base + offs[i], out)
         return
     }
     sz := t.Size(r)
@@ -86,10 +86,10 @@ fn IsStruct(t types.Table&, ty types.TypeId) Bool {
 # the extension a C scalar of this type takes as a parameter or a result: "signext"/"zeroext" for an integer narrower
 # than 32 bits on x86-64 (a Bool zero-extended), "" for anything else
 fn Ext(t types.Table&, arch String&, ty types.TypeId) String {
-    if arch != "x86_64" { return "" }
+    if arch != "x86_64": return ""
     r := t.Repr(ty)
-    if r == types.BoolT { return "zeroext" }
-    if not t.IsInt(r) or t.Bits(r) >= 32 { return "" }
+    if r == types.BoolT: return "zeroext"
+    if not t.IsInt(r) or t.Bits(r) >= 32: return ""
     return "zeroext" if t.IsUnsigned(r) else "signext"
 }
 
@@ -106,7 +106,7 @@ fn Way.Param(t mut types.Table&, arch String&, ty types.TypeId, regs mut Regs&) 
         for p in w.Parts {
             if inSse(p) { ns++ } else { ni++ }
         }
-        if ni > regs.Int or ns > regs.Sse { return Way(Pass.Byval, Vec<String&>(), Vec<I64>(), Vec<I64>(), "") }
+        if ni > regs.Int or ns > regs.Sse: return Way(Pass.Byval, Vec<String&>(), Vec<I64>(), Vec<I64>(), "")
         regs.Int -= ni
         regs.Sse -= ns
     }
@@ -115,7 +115,7 @@ fn Way.Param(t mut types.Table&, arch String&, ty types.TypeId, regs mut Regs&) 
 
 # how a result of this type comes back from C
 fn Way.Result(t mut types.Table&, arch String&, ty types.TypeId) Way {
-    if not IsStruct(t, ty) { return Way(Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), Ext(t, arch, ty)) }
+    if not IsStruct(t, ty): return Way(Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), Ext(t, arch, ty))
     return Way.Classify(t, arch, ty, true)
 }
 
@@ -134,7 +134,7 @@ fn Way.Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) 
         # AAPCS64 B.4: a homogeneous floating-point aggregate
         hfa := sc.Len() >= 1 and sc.Len() <= 4
         for s in sc {
-            if not s.IsFloat or s.Size != sc[0].Size { hfa = false }
+            if not s.IsFloat or s.Size != sc[0].Size: hfa = false
         }
         if hfa {
             ft := sc[0].Llvm
@@ -175,10 +175,10 @@ fn Way.Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) 
         for s in sc {
             if s.Off >= lo and s.Off < hi {
                 found = true
-                if not s.IsFloat { sse = false }
+                if not s.IsFloat: sse = false
             }
         }
-        if not found { continue }
+        if not found: continue
         part, n := sseAt(sc, lo) if sse else intAt(sc, lo, size)
         parts.Push(part)
         offs.Push(lo)
@@ -189,11 +189,11 @@ fn Way.Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) 
 
 # a classification's parts as one LLVM value's type: the part, or a struct of them
 fn PartsType(w Way&) String {
-    if w.Parts.Len() == 1 { return $w.Parts[0] }
+    if w.Parts.Len() == 1: return $w.Parts[0]
     b := StringBuilder()
     b.Push("{ ")
     for i, p in w.Parts {
-        if i > 0 { b.Push(", ") }
+        if i > 0: b.Push(", ")
         b.Push(p)
     }
     b.Push(" }")
@@ -204,7 +204,7 @@ fn PartsType(w Way&) String {
 fn PartsList(w Way&) String {
     b := StringBuilder()
     for i, p in w.Parts {
-        if i > 0 { b.Push(", ") }
+        if i > 0: b.Push(", ")
         b.Push(p)
     }
     return b.ToString()
@@ -213,7 +213,7 @@ fn PartsList(w Way&) String {
 # whether a struct's scalars hold data in [from, to)
 fn data(sc Vec<Scalar>&, from I64, to I64) Bool {
     for s in sc {
-        if s.Off < to and s.Off + s.Size > from { return true }
+        if s.Off < to and s.Off + s.Size > from: return true
     }
     return false
 }
@@ -221,7 +221,7 @@ fn data(sc Vec<Scalar>&, from I64, to I64) Bool {
 # the scalar starting at offset off, -1 for none
 fn at(sc Vec<Scalar>&, off I64) I64 {
     for i, s in sc {
-        if s.Off == off { return i }
+        if s.Off == off: return i
     }
     return -1
 }
@@ -232,8 +232,8 @@ fn intAt(sc Vec<Scalar>&, off I64, size I64) String, I64 {
     i := at(sc, off)
     if i >= 0 and not sc[i].IsFloat {
         s := sc[i]
-        if s.Llvm == "ptr" or s.Size == 8 { return s.Llvm, 8 }
-        if not data(sc, off + s.Size, off + 8) { return $"i" + $(s.Size * 8), s.Size }
+        if s.Llvm == "ptr" or s.Size == 8: return s.Llvm, 8
+        if not data(sc, off + s.Size, off + 8): return $"i" + $(s.Size * 8), s.Size
     }
     n := (size - off).Min(8)
     return $"i" + $(n * 8), n
@@ -245,18 +245,18 @@ fn sseAt(sc Vec<Scalar>&, off I64) String, I64 {
     t0 := sc[i].Llvm if i >= 0 else "double"
     half := ""
     for s in sc {
-        if s.Off >= off and s.Off < off + 8 and s.Size == 2 and half == "" { half = $s.Llvm }
+        if s.Off >= off and s.Off < off + 8 and s.Size == 2 and half == "": half = $s.Llvm
     }
     if not data(sc, off + 4, off + 8) {
         if t0 == "half" or t0 == "bfloat" {
-            if not data(sc, off + 2, off + 4) { return t0, 2 }
+            if not data(sc, off + 2, off + 4): return t0, 2
             return $"<2 x " + $t0 + ">", 4
         }
         return t0, 4
     }
-    if half != "" { return $"<4 x " + $half + ">", 8 }
+    if half != "": return $"<4 x " + $half + ">", 8
     j := at(sc, off + 4)
-    if t0 == "float" and j >= 0 and sc[j].Llvm == "float" { return "<2 x float>", 8 }
+    if t0 == "float" and j >= 0 and sc[j].Llvm == "float": return "<2 x float>", 8
     return t0, 8
 }
 
@@ -264,7 +264,7 @@ fn sseAt(sc Vec<Scalar>&, off I64) String, I64 {
 fn Span(t types.Table&, w Way&, ty types.TypeId) I64 {
     n := t.Size(ty)
     for i in range w.Parts.Len() {
-        if w.Offs[i] + w.Sizes[i] > n { n = w.Offs[i] + w.Sizes[i] }
+        if w.Offs[i] + w.Sizes[i] > n: n = w.Offs[i] + w.Sizes[i]
     }
     return n
 }
@@ -278,7 +278,7 @@ import "source"
 fn testStruct(t mut types.Table&, names mut source.Names&, n String&, fields Array<types.TypeId>&) types.TypeId {
     s := t.Named(t.AddDecl(0, names.Intern(n), types.DeclKind.Struct, 0), types.ListId(0))
     t.SetStructBody(s, t.List(fields), false)
-    for f in fields { assert t.ComputeLayout(f) }
+    for f in fields: assert t.ComputeLayout(f)
     assert t.ComputeLayout(s)
     return s
 }
@@ -314,7 +314,7 @@ test "a struct crosses to C as clang 18 passes it, on x86-64 and on AArch64 (X11
     t.AddModule("t")
     i8, i16, i32, i64 := t.Prim("I8"), t.Prim("I16"), t.Prim("I32"), t.Prim("I64")
     u8, f16, bf16, f32, f64 := t.Prim("U8"), t.Prim("F16"), t.Prim("BF16"), t.Prim("F32"), t.Prim("F64")
-    for p in Array<types.TypeId>[i8, i16, i32, i64, u8, f16, bf16, f32, f64, types.BoolT] { assert t.ComputeLayout(p) }
+    for p in Array<types.TypeId>[i8, i16, i32, i64, u8, f16, bf16, f32, f64, types.BoolT]: assert t.ComputeLayout(p)
     i2 := testStruct(t, names, "I2", Array<types.TypeId>[i32, i32])
     l2 := testStruct(t, names, "L2", Array<types.TypeId>[i64, i64])
     l3 := testStruct(t, names, "L3", Array<types.TypeId>[i64, i64, i64])

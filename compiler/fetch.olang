@@ -39,41 +39,41 @@ type Fetcher struct(LockPath String&, Cache String&, Base String&, Update Bool, 
 # M23a: a host, owner, repository or ref - letters, digits, '.', '_' and '-', not beginning with '.' or '-' (no option,
 # no hidden or parent directory) and holding no ".."
 fn NamePart(s String&) Bool {
-    if s.Len() == 0 or s[0] == '.' or s[0] == '-' or s.Contains("..") { return false }
+    if s.Len() == 0 or s[0] == '.' or s[0] == '-' or s.Contains(".."): return false
     for c in s {
-        if not (c.IsLetter() or c.IsDigit() or c == '.' or c == '_' or c == '-') { return false }
+        if not (c.IsLetter() or c.IsDigit() or c == '.' or c == '_' or c == '-'): return false
     }
     return true
 }
 
 # M23b: a commit as git names one - 40 hexadecimal digits, or 64 in a repository using SHA-256
 fn IsCommit(c String&) Bool {
-    if c.Len() != 40 and c.Len() != 64 { return false }
+    if c.Len() != 40 and c.Len() != 64: return false
     for ch in c {
-        if not (ch.IsDigit() or (ch >= 'a' and ch <= 'f')) { return false }
+        if not (ch.IsDigit() or (ch >= 'a' and ch <= 'f')): return false
     }
     return true
 }
 
 fn (f mut Fetcher&) say(line String&) {
     f.Said.Push(line)
-    if not f.Quiet { spin.Say(io.Stderr, $line + "\n") }
+    if not f.Quiet: spin.Say(io.Stderr, $line + "\n")
 }
 
 fn (f mut Fetcher&) load() {
-    if f.loaded { return }
+    if f.loaded: return
     f.loaded = true
     text := try os.ReadFile(f.LockPath) catch os.Error { return }
     for line in text.Lines() {
-        if line.StartsWith("#") { continue }
+        if line.StartsWith("#"): continue
         parts := line.Trim().Split(" ")
         k := ""
         c := ""
         for part in parts {
-            if part == "" { continue }
+            if part == "": continue
             if k == "" { k = $part } else if c == "" { c = $part }
         }
-        if c == "" { continue }
+        if c == "": continue
         f.keys.Push(k)
         f.commits.Push(c)
     }
@@ -88,7 +88,7 @@ type unlocked error {
 fn (f mut Fetcher&) Locked(key String&) String& ? {
     f.load()
     for i in range f.keys.Len() {
-        if f.keys[i] == key { return f.commits[i] }
+        if f.keys[i] == key: return f.commits[i]
     }
     error unlocked.Key
 }
@@ -99,9 +99,9 @@ fn (f mut Fetcher&) lock(key String&, commit String&) {
     f.load()
     at I64 = -1
     for i in range f.keys.Len() {
-        if f.keys[i] == key { at = i }
+        if f.keys[i] == key: at = i
     }
-    if at >= 0 and f.commits[at] == commit { return }
+    if at >= 0 and f.commits[at] == commit: return
     if at >= 0 {
         f.commits[at] = commit
     } else {
@@ -109,7 +109,7 @@ fn (f mut Fetcher&) lock(key String&, commit String&) {
         f.commits.Push(commit)
     }
     order := Array<I64>(f.keys.Len())
-    for i in range order.Len() { order[i] = i }
+    for i in range order.Len(): order[i] = i
     order.Sort(fn(a I64, b I64) Bool { return f.keys[a] < f.keys[b] })
     b := StringBuilder()
     b.Push("# olang.lock - the commit each remote repository is built from (M23b). Delete a line to update that\n")
@@ -126,9 +126,9 @@ fn (f mut Fetcher&) lock(key String&, commit String&) {
 # M23c: whether -u has updated key already in this compilation, marking it when mark
 fn (f mut Fetcher&) updatedNow(key String&, mark Bool) Bool {
     for k in f.updated {
-        if k == key { return true }
+        if k == key: return true
     }
-    if mark { f.updated.Push(key) }
+    if mark: f.updated.Push(key)
     return false
 }
 
@@ -142,7 +142,7 @@ fn git(args Array<String&>&) Bool {
 fn head(dir String&) String {
     d := $dir
     out := try os.Output.Exec("git", "-C", d, "rev-parse", "HEAD") catch os.Error { return "" }
-    if out.Status != 0 { return "" }
+    if out.Status != 0: return ""
     c := out.Stdout.Trim()
     return $c if IsCommit(c) else ""
 }
@@ -151,7 +151,7 @@ fn head(dir String&) String {
 # a test's local repositories
 fn CacheDir() String {
     c := try os.Env("OLANG_CACHE") catch default ""
-    if c != "" { return $c }
+    if c != "": return $c
     home := try os.Env("HOME") catch default "."
     return $home + "/.cache/olang"
 }
@@ -184,10 +184,10 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
         wasLocked = true
         hasLine = false
     }
-    if hasLine and not IsCommit(locked) { error FetchError.NotACommit }
+    if hasLine and not IsCommit(locked): error FetchError.NotACommit
     if hasLine {
         dir := $parent + "/" + $locked
-        if os.IsDir(dir) { return dir }
+        if os.IsDir(dir): return dir
     }
     try os.MkDirAll(parent) catch os.Error { error FetchError.Failed }
     tmp := try os.MkTemp(parent, ".fetch-") catch os.Error { error FetchError.Failed }
@@ -223,7 +223,7 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
     branch := "--branch=" + $ref if at < repoAt.Len() else "--quiet"
     try os.RemoveAll(tmp) catch os.Error { }
     h := ""
-    if git(Array<String&>["git", "clone", "--quiet", "--depth", "1", branch, "--", url, tmp]) { h = head(tmp) }
+    if git(Array<String&>["git", "clone", "--quiet", "--depth", "1", branch, "--", url, tmp]): h = head(tmp)
     if h == "" {
         try os.RemoveAll(tmp) catch os.Error { }
         error FetchError.Failed

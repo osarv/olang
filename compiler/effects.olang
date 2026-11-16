@@ -404,7 +404,7 @@ fn (e mut Effects&) grow() {
     }
     if e.fileMod.Len() == 0 {
         for mi in range e.P.L.Mods.Len() {
-            if e.P.L.Mods[mi].File >= 0 { e.fileMod.Put(e.P.L.Mods[mi].File, mi) }
+            if e.P.L.Mods[mi].File >= 0: e.fileMod.Put(e.P.L.Mods[mi].File, mi)
         }
     }
 }
@@ -434,7 +434,7 @@ fn (e mut Effects&) Of(b I64) Facts {
         return f
     }
     e.grow()
-    if e.state[b] < 2 { e.visit(b) }
+    if e.state[b] < 2: e.visit(b)
     if e.callsOf[b] == 0: return e.whole[b]
     return e.named(b)
 }
@@ -534,24 +534,24 @@ fn (e mut Effects&) visit(b I64) {
     e.tNext++
     e.tStack.Push(b)
     e.tOn[b] = true
-    for w in e.calls[b] { e.edge(b, w) }
+    for w in e.calls[b]: e.edge(b, w)
     e.expand(b)
-    if e.tLow[b] != e.tIndex[b] { return }
+    if e.tLow[b] != e.tIndex[b]: return
     comp Vec<I64>
     for {
         w := try e.tStack.Pop() catch { break }
         e.tOn[w] = false
         comp.Push(w)
-        if w == b { break }
+        if w == b: break
     }
     e.settle(comp)
 }
 
 fn (e mut Effects&) edge(b I64, w I64) {
-    if w < 0 or w >= e.Bodies.Len() or e.state[w] == 2 { return }
+    if w < 0 or w >= e.Bodies.Len() or e.state[w] == 2: return
     if e.tIndex[w] < 0 {
         e.visit(w)
-        if e.tLow[w] < e.tLow[b] { e.tLow[b] = e.tLow[w] }
+        if e.tLow[w] < e.tLow[b]: e.tLow[b] = e.tLow[w]
     } else if e.tOn[w] and e.tIndex[w] < e.tLow[b] {
         e.tLow[b] = e.tIndex[w]
     }
@@ -616,14 +616,14 @@ fn (e mut Effects&) callEdge(b I64, t I64) {
 fn (e mut Effects&) settle(comp Vec<I64>&) {
     all := Facts()
     inComp Map<I64, Bool>
-    for b in comp { inComp.Put(b, true) }
+    for b in comp: inComp.Put(b, true)
     cyclic := comp.Len() > 1
     e.stamp++
     for b in comp {
         Merge(all, e.own[b])
         for i in range e.calls[b].Len() {
             w := e.calls[b][i]
-            if w == b { cyclic = true }
+            if w == b: cyclic = true
             if w < 0 or w >= e.Bodies.Len() {
                 all.Unchecked = true
                 continue
@@ -639,7 +639,7 @@ fn (e mut Effects&) settle(comp Vec<I64>&) {
             Merge(all, e.whole[w])
         }
     }
-    if cyclic { all.Recursive = true }
+    if cyclic: all.Recursive = true
     for b in comp {
         f := all
         f.Writes = e.own[b].Writes
@@ -650,7 +650,7 @@ fn (e mut Effects&) settle(comp Vec<I64>&) {
     # reaches, to a fixed point
     for {
         added I64 = 0
-        for b in comp { added += e.passWrites(b, comp, inComp) + e.passCalls(b, inComp) }
+        for b in comp: added += e.passWrites(b, comp, inComp) + e.passCalls(b, inComp)
         if added == 0: break
     }
     through := false
@@ -789,7 +789,7 @@ fn Merge(into mut Facts&, from Facts&) {
     if from.Caps == 0: return
     into.Caps = into.Caps | from.Caps
     for k in range CapCount {
-        if into.Via[k] < 0 { into.Via[k] = from.Via[k] }
+        if into.Via[k] < 0: into.Via[k] = from.Via[k]
     }
 }
 
@@ -872,7 +872,7 @@ fn (e mut Effects&) fieldSlots(w I64) Vec<fslot> {
     out Vec<fslot>
     body := e.Bodies[w]
     for k in range body.Params.Len() {
-        for q in e.paths(e.structOf(body.Locals[I64(body.Params[k])].Ty)) { out.Push(fslot(k, q.Path, q.Ty)) }
+        for q in e.paths(e.structOf(body.Locals[I64(body.Params[k])].Ty)): out.Push(fslot(k, q.Path, q.Ty))
     }
     e.fslots.Put(w, out)
     return out
@@ -1305,7 +1305,7 @@ fn (e mut Effects&) walkBody(b I64) {
     if e.slotted.Len() > 0: e.slotted.Clear()
     e.paramAt = Map<I64, I64>()
     e.derived = Map<I64, I64>()
-    for i in range body.Params.Len() { e.paramAt.Put(I64(body.Params[i]), i) }
+    for i in range body.Params.Len(): e.paramAt.Put(I64(body.Params[i]), i)
     # a lambda's captures are slots after its parameters, in the order its locals hold them
     if body.Of == typed.BodyOf.Lambda {
         slot := body.Params.Len()
@@ -1316,7 +1316,7 @@ fn (e mut Effects&) walkBody(b I64) {
         }
     }
     e.bounded = Map<I64, Bool>()
-    for id in body.Bounded { e.bounded.Put(I64(id), true) }
+    for id in body.Bounded: e.bounded.Put(I64(id), true)
     e.dropsRun = typed.DropsRun(body)
     e.curBody = b
     e.curMod = try e.fileMod.Get(body.File) catch default -1
@@ -1350,7 +1350,7 @@ fn (e mut Effects&) keptLocals(body typed.Body&) {
 # the walk's end, every value its locals are given seen: the function values given and called through classified,
 # the stores through locals no slot judged, what its returns give
 fn (e mut Effects&) finish() {
-    for p in e.pends { e.resolve(p) }
+    for p in e.pends: e.resolve(p)
     if e.outs.Len() > 0 or e.outLinks: e.outsJudged()
     if e.retInst: e.retFields(e.curBody)
     if not e.retFn: return
@@ -1374,8 +1374,8 @@ fn (e mut Effects&) resolve(p pend&) {
     was := e.whyNow() if e.whyWord != 0 else true
     for pt in e.parts {
         k := pt.Kind
-        if k == PartLambda or k == PartAdapter { k = GivMade }
-        if k == GivSlot and pt.Val >= 63 { k = GivBound }
+        if k == PartLambda or k == PartAdapter: k = GivMade
+        if k == GivSlot and pt.Val >= 63: k = GivBound
         if p.Site >= 0 or k == GivResField {
             gv := given(p.Site, p.At, k, pt.Val, pt.Ty)
             gv.Path = pt.Path
@@ -1521,7 +1521,7 @@ fn (e Effects&) ctorCall(cl typed.Call&) Bool {
 }
 
 fn (e mut Effects&) block(b typed.Block?&) {
-    if b == null { return }
+    if b == null: return
     # G42: a block every way through which fails - an error raised, the program ended - is walked as cold code
     if e.cold == 0 and typed.Fails(b) {
         e.coldBlock(b)
@@ -1613,7 +1613,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
             e.block(i.Else)
         }
         case typed.Stmt.Loop(_, body, post) {
-            if not e.bounded.Has(I64(body.Id)) { e.cur.Unbounded = true }
+            if not e.bounded.Has(I64(body.Id)): e.cur.Unbounded = true
             e.block(body)
             e.block(post)
         }
@@ -1645,7 +1645,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
         case typed.Stmt.Join(_, j) {
             e.cur.Blocks = true
             e.block(j.Code)
-            for cl in j.Clauses { e.clause(cl) }
+            for cl in j.Clauses: e.clause(cl)
         }
         case typed.Stmt.Spawn(_, s) {
             e.cur.Spawns = true
@@ -1658,7 +1658,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
             e.taskCall = true
             e.expr(s.Task)
             e.taskCall = false
-            for cl in s.Clauses { e.expr(cl.Handler) }
+            for cl in s.Clauses: e.expr(cl.Handler)
         }
     }
 }
@@ -1683,11 +1683,11 @@ fn stmtSpan(st typed.Stmt&) source.Span {
 
 fn (e mut Effects&) clause(cl typed.Clause&) {
     e.block(cl.Code)
-    for d in cl.Defaults { e.expr(d) }
+    for d in cl.Defaults: e.expr(d)
 }
 
 fn (e mut Effects&) expr(x typed.Expr?&) {
-    if x == null { return }
+    if x == null: return
     match x {
         case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
         case typed.Expr.Read(_, ty, p, _) {
@@ -1718,9 +1718,9 @@ fn (e mut Effects&) expr(x typed.Expr?&) {
             e.call(cl)
         }
         case typed.Expr.Make(_, ty, m) {
-            if I64(m.Site) >= 0 and not e.inPlace(ty, m) { e.cur.Allocates = true }
+            if I64(m.Site) >= 0 and not e.inPlace(ty, m): e.cur.Allocates = true
             e.expr(m.Length)
-            for y in m.Items { e.expr(y) }
+            for y in m.Items: e.expr(y)
         }
         case typed.Expr.Prim(_, _, op, _, args) { e.prim(op, args) }
         case typed.Expr.Slice(_, _, sl) {
@@ -1734,18 +1734,18 @@ fn (e mut Effects&) expr(x typed.Expr?&) {
             e.expr(cd.B)
         }
         case typed.Expr.Seq(_, _, q) {
-            for st in q.Stmts { e.stmt(st) }
+            for st in q.Stmts: e.stmt(st)
             e.expr(q.X)
         }
         case typed.Expr.Match(_, _, m) {
-            for st in m.Held { e.stmt(st) }
-            for a in m.Arms { e.arm(a) }
-            if m.NoMatch != null { e.arm(m.NoMatch!) }
+            for st in m.Held: e.stmt(st)
+            for a in m.Arms: e.arm(a)
+            if m.NoMatch != null: e.arm(m.NoMatch!)
         }
         case typed.Expr.Try(_, _, tr) {
             if tr.Ends: e.cur.Ends = true    # "!" (E35)
             e.expr(tr.X)
-            for cl in tr.Clauses { e.clause(cl) }
+            for cl in tr.Clauses: e.clause(cl)
         }
         case typed.Expr.Fn(_, _, f) { e.fnVal(f) }
         case typed.Expr.Away(_, _, y) { e.expr(y) }
@@ -1784,8 +1784,8 @@ fn (e mut Effects&) fnVal(f typed.FnVal&) {
     match f {
         case typed.FnVal.Named(_) { }
         case typed.FnVal.Lambda(body, caps, _) {
-            if caps.Len() > 0 { e.cur.Allocates = true }
-            for cp in caps { e.expr(cp.Outer) }
+            if caps.Len() > 0: e.cur.Allocates = true
+            for cp in caps: e.expr(cp.Outer)
             site := e.curCalls.Len()
             e.curCalls.Push(I64(body))
             e.giving = true
@@ -1913,11 +1913,11 @@ fn (e mut Effects&) prim(op typed.PrimOp, args Array<typed.Expr&>&) {
         case typed.PrimOp.Drop { if args.Len() > 0: e.dropsCalled(e.P.T.Referent(args[0].Type()), 0) }
         case typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap, typed.PrimOp.AtomicCompareSwap {
             # args[0] borrows the integer place written
-            if args.Len() > 0 { e.written(args[0]) }
+            if args.Len() > 0: e.written(args[0])
         }
         case _ { }
     }
-    for y in args { e.expr(y) }
+    for y in args: e.expr(y)
 }
 
 # an argument a store goes through: a borrow of a place, or a reference read
@@ -2026,7 +2026,7 @@ fn (e mut Effects&) dropsCalled(t types.TypeId, depth I64) {
         case types.Kind.Named {
             if e.P.T.Destructs(r): e.dtorCalled(r)
             if e.P.T.DeclKindOf(e.P.T.DeclOf(r)) == types.DeclKind.Struct {
-                for p in e.P.T.Items(e.P.T.Fields(r)) { e.dropsCalled(p, depth + 1) }
+                for p in e.P.T.Items(e.P.T.Fields(r)): e.dropsCalled(p, depth + 1)
                 return
             }
             for c in e.P.T.Items(e.P.T.Cases(r)) {
@@ -2034,7 +2034,7 @@ fn (e mut Effects&) dropsCalled(t types.TypeId, depth I64) {
             }
         }
         case types.Kind.Record, types.Kind.Tuple {
-            for p in e.P.T.Items(e.P.T.Parts(r)) { e.dropsCalled(p, depth + 1) }
+            for p in e.P.T.Items(e.P.T.Parts(r)): e.dropsCalled(p, depth + 1)
         }
         case types.Kind.Array { e.dropsCalled(e.P.T.Elem(r), depth + 1) }
         case _ { }
@@ -2043,7 +2043,7 @@ fn (e mut Effects&) dropsCalled(t types.TypeId, depth I64) {
 
 # a place read (store false) or stored into
 fn (e mut Effects&) place(p typed.Lvalue&, store Bool) {
-    if store { e.store(p) }
+    if store: e.store(p)
     e.placeParts(p)
 }
 
@@ -2052,7 +2052,7 @@ fn (e mut Effects&) placeParts(p typed.Lvalue&) {
     match p {
         case typed.Lvalue.Local(_, _, _), typed.Lvalue.Target(_, _) { }
         case typed.Lvalue.Global(_, _, mi, n) {
-            if e.mutGlobal(mi, n) { e.cur.ReadsGlobals = true }
+            if e.mutGlobal(mi, n): e.cur.ReadsGlobals = true
         }
         case typed.Lvalue.Deref(_, _, r) { e.expr(r) }
         case typed.Lvalue.Field(_, _, base, _) { e.placeParts(base) }
@@ -2161,12 +2161,12 @@ fn (e mut Effects&) exprRoot(x typed.Expr&) I64 {
 fn (e mut Effects&) argParam(x typed.Expr&) I64 {
     match x {
         case typed.Expr.Read(_, ty, p, _) {
-            if not e.P.T.HoldsRefs(ty) { return -1 }
+            if not e.P.T.HoldsRefs(ty): return -1
             return try e.paramAt.Get(e.placeRoot(p).Local) catch default -1
         }
         case typed.Expr.Borrow(_, _, p) {
             r := e.placeRoot(p)
-            if not r.Through { return -1 }
+            if not r.Through: return -1
             return try e.paramAt.Get(r.Local) catch default -1
         }
         case typed.Expr.Away(_, _, y) { return e.argParam(y) }
@@ -2194,7 +2194,7 @@ fn (e mut Effects&) argLink(id I64, j I64, x typed.Expr&) {
 fn (e mut Effects&) argOut(x typed.Expr&) I64 {
     match x {
         case typed.Expr.Read(_, ty, p, _) {
-            if not (e.P.T.HoldsRefs(ty) or e.P.T.IsRef(ty)) { return 0 }
+            if not (e.P.T.HoldsRefs(ty) or e.P.T.IsRef(ty)): return 0
             return e.outOf(p)
         }
         case typed.Expr.Borrow(_, _, p) { return e.outOf(p) if e.placeRoot(p).Through else 0 }
@@ -2218,7 +2218,7 @@ fn (e mut Effects&) mutGlobal(mi I64, n source.NameId) Bool {
     m := false
     if mi >= 0 and mi < e.P.R.Tables.Len() {
         for en in e.P.R.Tables[mi].Entries {
-            if en.Name == n and en.Mut { m = true }
+            if en.Name == n and en.Mut: m = true
         }
     }
     e.mutGlobals.Put(key, m)
@@ -2230,12 +2230,12 @@ fn (e mut Effects&) mutGlobal(mi I64, n source.NameId) Bool {
 fn (e mut Effects&) cap(bit I64) {
     e.cur.Caps = e.cur.Caps | bit
     k := capIndex(bit)
-    if k >= 0 and e.cur.Via[k] < 0 { e.cur.Via[k] = e.curMod }
+    if k >= 0 and e.cur.Via[k] < 0: e.cur.Via[k] = e.curMod
 }
 
 fn capIndex(bit I64) I64 {
     for k in range CapCount {
-        if (1 << k) == bit { return k }
+        if (1 << k) == bit: return k
     }
     return -1
 }
@@ -2247,13 +2247,13 @@ fn capIndex(bit I64) I64 {
 fn (e mut Effects&) extern(f I64) {
     fd := e.P.FnDecl(f)
     name := e.P.L.Names.Text(fd.Name)
-    if typed.MathExtern(name, fd.S.Params.Len()) { return }
-    if not name.StartsWith("__olang_") { e.cur.CallsC = true }
+    if typed.MathExtern(name, fd.S.Params.Len()): return
+    if not name.StartsWith("__olang_"): e.cur.CallsC = true
     if not quickC(name) {
         e.cur.Blocks = true
         e.cur.Opaque = true
     }
-    if name == "exit" or name == "_exit" or name == "abort" { e.cur.Exits = true }
+    if name == "exit" or name == "_exit" or name == "abort": e.cur.Exits = true
     # C may call the program's export fns before it returns (X13), and they may do anything: where C may call one back
     # (cMayCallBack), a C call is not known - but the runtime's own, those known to return at once, and the C library's
     # input and output, text, memory and time functions, which call nothing back (typed.NoCallbackExtern)
@@ -2262,28 +2262,28 @@ fn (e mut Effects&) extern(f I64) {
         e.cur.Back = true
     }
     bit := capOf(name)
-    if bit != 0 { e.cap(bit) }
+    if bit != 0: e.cap(bit)
     # C the program calls itself - from a module outside the standard library - is a class of its own (B1.2); what std
     # calls C for is said by what it gains
     own := e.curMod >= 0 and not e.P.L.Mods[e.curMod].Identity.StartsWith("std/")
-    if own and not name.StartsWith("__olang_") { e.cap(CapC) }
+    if own and not name.StartsWith("__olang_"): e.cap(CapC)
 }
 
 # the capability a C function gains (B1.2), 0 for none
 fn capOf(name String&) I64 {
     for n in fileNames {
-        if name == n { return CapFiles }
+        if name == n: return CapFiles
     }
     for n in netNames {
-        if name == n { return CapNetwork }
+        if name == n: return CapNetwork
     }
     for n in procNames {
-        if name == n { return CapProcesses }
+        if name == n: return CapProcesses
     }
     for n in envNames {
-        if name == n { return CapEnvironment }
+        if name == n: return CapEnvironment
     }
-    if name == "pthread_create" { return CapThreads }
+    if name == "pthread_create": return CapThreads
     return 0
 }
 
@@ -2298,7 +2298,7 @@ envNames := Array<String&>["getenv", "setenv", "unsetenv", "putenv", "__olang_en
 # C functions known to return at once, never waiting: the runtime's queries, memory and text helpers, clocks, unlocking
 fn quickC(name String&) Bool {
     for n in quickNames {
-        if name == n { return true }
+        if name == n: return true
     }
     return false
 }
@@ -2312,9 +2312,9 @@ quickNames := Array<String&>["__olang_err", "__olang_arg_count", "__olang_arg", 
 
 # the line under a signature (A2.3), names the parameters' names (the receiver first): "none", or what it may do
 fn Describe(f Facts&, names Array<String&>&) String {
-    if f.Unchecked { return "not known - it reaches code that did not check" }
-    if f.Unknown and f.Back { return $"anything - it calls C, which may call the program's export fns" + $endsNote(f) }
-    if f.Unknown { return $"anything - it calls through a function value or an 'any'" + $endsNote(f) }
+    if f.Unchecked: return "not known - it reaches code that did not check"
+    if f.Unknown and f.Back: return $"anything - it calls C, which may call the program's export fns" + $endsNote(f)
+    if f.Unknown: return $"anything - it calls through a function value or an 'any'" + $endsNote(f)
     if f.Idle() {
         if f.Evaluable() { return $"none - it may be computed while compiling where its arguments are known" + $endsNote(f) }
         return $"none" + $endsNote(f)
@@ -2322,25 +2322,25 @@ fn Describe(f Facts&, names Array<String&>&) String {
     parts Vec<String&>
     ws Vec<String&>
     for i in range names.Len() {
-        if hasBit(f.Writes, i) { ws.Push($"'" + $names[i] + "'") }
+        if hasBit(f.Writes, i): ws.Push($"'" + $names[i] + "'")
     }
-    if ws.Len() > 0 { parts.Push($"writes through " + $ws.Join(", ")) }
+    if ws.Len() > 0: parts.Push($"writes through " + $ws.Join(", "))
     cs Vec<String&>
     for i in range names.Len() {
-        if hasBit(f.Calls, i) { cs.Push($"'" + $names[i] + "'") }
+        if hasBit(f.Calls, i): cs.Push($"'" + $names[i] + "'")
     }
-    if cs.Len() > 0 { parts.Push($"calls through " + $cs.Join(", ")) }
-    if f.WritesGlobals { parts.Push("writes a global") }
+    if cs.Len() > 0: parts.Push($"calls through " + $cs.Join(", "))
+    if f.WritesGlobals: parts.Push("writes a global")
     parts.Push("allocates" if f.Allocates else "allocates only where it fails" if f.FailAllocates else "allocates nothing")
-    if f.Grows { parts.Push("may grow a Vec") }
-    if f.Spawns { parts.Push("starts tasks") }
+    if f.Grows: parts.Push("may grow a Vec")
+    if f.Spawns: parts.Push("starts tasks")
     reach := capText(f)
     if reach != "" { parts.Push(reach) } else if f.CallsC { parts.Push("calls C") }
-    if f.Exits { parts.Push("may end the program") }
+    if f.Exits: parts.Push("may end the program")
     parts.Push("may block" if f.Blocks else "never blocks")
-    if f.Recursive { parts.Push("recursive") }
-    if f.Terminates() { parts.Push("always ends") }
-    if f.Evaluable() { parts.Push("may be computed while compiling") }
+    if f.Recursive: parts.Push("recursive")
+    if f.Terminates(): parts.Push("always ends")
+    if f.Evaluable(): parts.Push("may be computed while compiling")
     return parts.Join("; ")
 }
 
@@ -2353,7 +2353,7 @@ fn endsNote(f Facts&) String {
 fn CapText(f Facts&, mods Array<String&>&) String {
     parts Vec<String&>
     for k in range CapCount {
-        if f.Caps & (1 << k) == 0 { continue }
+        if f.Caps & (1 << k) == 0: continue
         at := f.Via[k]
         if at >= 0 and at < mods.Len() { parts.Push($CapName(k) + " (" + $mods[at] + ")") } else { parts.Push(CapName(k)) }
     }
@@ -2363,7 +2363,7 @@ fn CapText(f Facts&, mods Array<String&>&) String {
 fn capText(f Facts&) String {
     parts Vec<String&>
     for k in range CapCount {
-        if f.Caps & (1 << k) != 0 { parts.Push(CapName(k)) }
+        if f.Caps & (1 << k) != 0: parts.Push(CapName(k))
     }
     return parts.Join(", ")
 }
@@ -2458,7 +2458,7 @@ fn (e mut Effects&) lambdaFacts(b I64, l I64, x typed.Expr&) Facts {
                 e.parts.Clear()
                 e.classify(cp.Outer, 0)
                 ps := e.parts
-                for pt in ps { Merge(f, e.partFacts(b, pt)) }
+                for pt in ps: Merge(f, e.partFacts(b, pt))
             }
         }
         case _ { Merge(f, Facts.Bound(e.P.T, x.Type())) }

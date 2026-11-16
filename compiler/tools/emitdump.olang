@@ -62,7 +62,7 @@ fn run(args Array<String&>&) {
         runtimeFiles(args[k + 1])
         return
     }
-    if k >= args.Len() { os.Exit(2) }
+    if k >= args.Len(): os.Exit(2)
     path := args[k]
     d := diag.Diagnostics(false)
     consts := cond.Consts()
@@ -97,7 +97,7 @@ fn run(args Array<String&>&) {
         upto := d.RecordCount()
         for b in range c.Bodies.Len() {
             body := c.Bodies[b]
-            if d.ErrorWithin(body.File, I64(body.Sp.Start), I64(body.Sp.End), upto) { sc.Plans[b] = typed.Plan.New(body) }
+            if d.ErrorWithin(body.File, I64(body.Sp.Start), I64(body.Sp.End), upto): sc.Plans[b] = typed.Plan.New(body)
         }
         lw.Plans = sc.Plans
     }
@@ -110,7 +110,7 @@ fn run(args Array<String&>&) {
         base := path
         s := try base.FindLast("/") catch default -1
         base = base[s + 1:]
-        if base.EndsWith(".olang") { base = base[:base.Len() - 6] }
+        if base.EndsWith(".olang"): base = base[:base.Len() - 6]
         outPath = "build/" + $base + ".ll"
     }
     fd := try os.Create(outPath) catch os.Error {

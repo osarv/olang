@@ -178,7 +178,7 @@ fn item.Of(text String&, toks Array<token.Token>&, a I64, b I64) item {
         return it
     }
     names := localNames(text, toks, a, b)
-    for n in names { it.Names.Push(n) }
+    for n in names: it.Names.Push(n)
     it.Shows = names.Len() == 0 and shows(toks, a, b)
     return it
 }
@@ -199,7 +199,7 @@ fn declKey(text String&, toks Array<token.Token>&, a I64, b I64) String {
     # attributes before it (G39): "@T", "@m.T(...)"
     for i <= b and toks[i].Kind == token.Tok.At {
         i++
-        for i <= b and (toks[i].Kind == token.Tok.Iden or toks[i].Kind == token.Tok.Dot) { i++ }
+        for i <= b and (toks[i].Kind == token.Tok.Iden or toks[i].Kind == token.Tok.Dot): i++
         if i <= b and toks[i].Kind == token.Tok.LParen: i = matching(toks, i, b) + 1
     }
     if i > b: return ""
@@ -380,7 +380,7 @@ fn (s Session&) write(ds Vec<Decl>&, vs Vec<Value>&, c cell&, keeping Bool) prog
         if c.Show and i == last: p.put($")\n" + $ShownName + " = $olangShownValue\n" + $RichName + "(olangShownValue)\n}", Synthetic, 0)
     }
     if keeping {
-        for v in c.Keeps { p.put($KeepPrefix + $v.Name + " = " + $v.Name, c.Label, v.Root) }
+        for v in c.Keeps: p.put($KeepPrefix + $v.Name + " = " + $v.Name, c.Label, v.Root)
     }
     if c.Show and not s.Interp: p.put(SayShown, Synthetic, 0)
     p.put("}", Synthetic, 0)
@@ -416,7 +416,7 @@ CellEntry String& = """
 fn (s mut Session&) Cell(text String&, label String& = "") Reply {
     s.Cells++
     c := cell($label if label != "" else $"cell" + $s.Cells, text)
-    for it in pieces(text) { c.Items.Push(it) }
+    for it in pieces(text): c.Items.Push(it)
     r := Reply()
     if c.Items.Len() == 0 {
         r.Checked = true
@@ -430,7 +430,7 @@ fn (s mut Session&) Cell(text String&, label String& = "") Reply {
     taken Map<String&, Bool>
     for it in c.Items {
         if it.IsDecl: taken.Put(it.Key, true)
-        for n in it.Names { taken.Put(n, true) }
+        for n in it.Names: taken.Put(n, true)
     }
     for d in s.Decls {
         if d.Key not in taken: ds.Push(d)
@@ -535,7 +535,7 @@ fn (s mut Session&) attempt(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
         r.Diags = cellRows(d.Render(), c.Label)
         return r
     }
-    for n in s.mismatched(ch, x, vs) { r.gone.Push(n) }
+    for n in s.mismatched(ch, x, vs): r.gone.Push(n)
     if r.gone.Len() > 0: return r
     r.Checked = true
     r.Diags = cellRows(d.Warnings(), c.Label)
@@ -763,7 +763,7 @@ fn places(t String&, p program&, root String&) String {
         b.Push(t[at:at + i])
         j := at + i + lead.Len()
         k := j
-        for k < t.Len() and t[k].IsDigit() { k++ }
+        for k < t.Len() and t[k].IsDigit(): k++
         line := (try t[j:k].ParseInt() catch default 0) - 1
         if line < 0 or line >= p.Paths.Len() {
             b.Push(lead)
@@ -801,7 +801,7 @@ fn (s mut Session&) check(p program&, d mut diag.Diagnostics&) mut typecheck.Che
     nm mut source.Names& = source.Names()
     l mut load.Loader& = load.Loader(load.StdDir(), consts, f, nm, d)
     l.Clang = $s.Cfg.Clang
-    for v in p.Kept { l.Shadowable.Put(v, true) }
+    for v in p.Kept: l.Shadowable.Put(v, true)
     l.Overlay.Put(root, p.B.ToString())
     l.Load(root)
     if l.Root >= 0: d.NameLines(l.Mods[l.Root].File, p.Paths.ToArray(), p.Lines.ToArray())
@@ -851,7 +851,7 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
     interp.DecideAsserts(c, asserts)
     if clean: interp.Bake(c)
     if d.Errors() > 0: return null
-    for g in c.Gaps { gap(r, $d.Locate(g.File, I64(g.Sp.Start)) + ": it does not check " + $g.What + " yet") }
+    for g in c.Gaps: gap(r, $d.Locate(g.File, I64(g.Sp.Start)) + ": it does not check " + $g.What + " yet")
     if r.Failure != "": return null
     for ln in c.P.L.Links() {
         why := interp.LoadLibrary(ln)
@@ -866,7 +866,7 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
     sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
     sc.Run()
-    for g in sc.Gaps { gap(r, $d.Locate(g.File, I64(g.Sp.Start)) + ": it does not judge " + $g.What + " yet") }
+    for g in sc.Gaps: gap(r, $d.Locate(g.File, I64(g.Sp.Start)) + ": it does not judge " + $g.What + " yet")
     if d.Errors() > 0 or r.Failure != "": return null
     fr mut free.Free& = free.Free(c.P, c.Bodies, sc)
     fr.Decide(sc.Plans, c.P.L.Root)
@@ -879,7 +879,7 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
     }
     x.Lw.Free = fr
     x.M.Soles = fr.Sole
-    for bt in fr.GenOkNow() { x.M.GenOk.Put($bt.First + " " + $bt.Second, true) }
+    for bt in fr.GenOkNow(): x.M.GenOk.Put($bt.First + " " + $bt.Second, true)
     x.M.Args.Push("olang")
     if s.Watch != null {
         x.M.Watch = s.Watch
@@ -902,7 +902,7 @@ fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag
     names := c.P.L.Names
     notes := StringBuilder()
     kept := s.restore(c, x, vs)
-    for v in ce.Keeps { x.M.MarkSet(root, names.Intern($KeepPrefix + $v.Name)) }
+    for v in ce.Keeps: x.M.MarkSet(root, names.Intern($KeepPrefix + $v.Name))
     st := x.InitGlobals()
     if st == eval.Stop.None: st = x.M.Eval(k, Array<I64>(0))
     if st != eval.Stop.None {
@@ -1026,7 +1026,7 @@ fn (s mut Session&) End() {
 # :type EXPR - the type of the expression's value, as the session's program writes it (explain's spelling, B11b)
 fn (s mut Session&) TypeOf(expr String&) Reply {
     c := cell("type", $"olangType := (" + $expr + ")")
-    for it in pieces(c.Text) { c.Items.Push(it) }
+    for it in pieces(c.Text): c.Items.Push(it)
     r := Reply()
     d := diag.Diagnostics(false)
     d.Lenient = true

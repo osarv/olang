@@ -50,7 +50,7 @@ IeeeUnsafe := Array<String&>["avx512bf16", "avxneconvert"]
 
 fn archIndex(a String&) I64 {
     for i, n in Archs {
-        if n == a { return i }
+        if n == a: return i
     }
     return -1
 }
@@ -60,7 +60,7 @@ fn archIndex(a String&) I64 {
 # the operating system (lowercase) and the architecture this machine runs, as uname(2) names them: "linux", "x86_64"
 fn Host() String, String {
     u utsname.utsname
-    if utsname.uname(u) != 0 { return "unknown", "unknown" }
+    if utsname.uname(u) != 0: return "unknown", "unknown"
     return cField(u.sysname).ToLower(), cField(u.machine)
 }
 
@@ -68,7 +68,7 @@ fn Host() String, String {
 fn cField(buf Array<U8>&) String {
     b := StringBuilder()
     for i in range buf.Len() {
-        if buf[i] == 0 { break }
+        if buf[i] == 0: break
         b.PushChar(Char(buf[i]))
     }
     return b.ToString()
@@ -84,10 +84,10 @@ fn FindClang() String {
     slash := try exe.FindLast("/") catch default -1
     if slash >= 0 {
         bundled := $exe[:slash] + "/../llvm/bin/clang"
-        if unistd.access($bundled + "\0", unistd.X_OK) == 0 { return bundled }
+        if unistd.access($bundled + "\0", unistd.X_OK) == 0: return bundled
     }
     for name in Clangs {
-        if executable(name) { return $name }
+        if executable(name): return $name
     }
     return ""
 }
@@ -112,7 +112,7 @@ fn whereIs(name String&) String {
     dirs := path if path != "" else "/usr/local/bin:/usr/bin:/bin"
     for dir in dirs.Split(":") {
         cand := $dir + "/" + $name if dir != "" else $name
-        if unistd.access($cand + "\0", unistd.X_OK) == 0 { return cand }
+        if unistd.access($cand + "\0", unistd.X_OK) == 0: return cand
     }
     return ""
 }
@@ -128,22 +128,22 @@ fn Sysroot() String { return try os.Env("OLANG_SYSROOT") catch default "" }
 # architecture's C library is (OLANG_SYSROOT, else /usr/ARCH-linux-gnu where that exists). Fails where there is none
 fn (t Target&) Runner() Array<String&> ? Bad {
     out Vec<String&>
-    if not t.Foreign { return out.ToArray() }
+    if not t.Foreign: return out.ToArray()
     env := try os.Env("OLANG_EMULATOR") catch default ""
     if env != "" {
         for w in env.Split(" ") {
-            if w != "" { out.Push(w) }
+            if w != "": out.Push(w)
         }
-        if out.Len() == 0 or not executable(out[0]) { error Bad.Target }
+        if out.Len() == 0 or not executable(out[0]): error Bad.Target
         out[0] = whereIs(out[0]) # run by its path: the program is put in this process's place by it
         return out.ToArray()
     }
     for name in Array<String&>[$"qemu-" + $t.Arch, $"qemu-" + $t.Arch + "-static"] {
         at := whereIs(name)
-        if at == "" { continue }
+        if at == "": continue
         out.Push(at)
         root := Sysroot()
-        if root == "" and os.IsDir($"/usr/" + $t.Arch + "-linux-gnu") { root = $"/usr/" + $t.Arch + "-linux-gnu" }
+        if root == "" and os.IsDir($"/usr/" + $t.Arch + "-linux-gnu"): root = $"/usr/" + $t.Arch + "-linux-gnu"
         if root != "" {
             out.Push("-L")
             out.Push(root)
@@ -175,23 +175,23 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
     hasCpu := true
     ai I64 = -1
     dash := try spec.FindByte('-') catch default -1
-    if dash >= 0 { ai = archIndex(spec[:dash]) }
+    if dash >= 0: ai = archIndex(spec[:dash])
     if ai >= 0 {
         colon := try spec.FindByte(':') catch default -1
         triple = $spec[:colon] if colon >= 0 else $spec
         hasCpu = colon >= 0
         cpu = $spec[colon + 1:] if colon >= 0 else ""
         # the operating system part: Linux with the GNU C library, the one whose facts the runtime knows
-        if not (triple.Len() > 10 and triple.EndsWith("-linux-gnu")) { try refuse(d, msgs.TargetUnsupported(spec)) }
-        if hasCpu and (cpu == "" or cpu.Contains(":")) { try refuse(d, msgs.TargetUnknown(spec)) }
+        if not (triple.Len() > 10 and triple.EndsWith("-linux-gnu")): try refuse(d, msgs.TargetUnsupported(spec))
+        if hasCpu and (cpu == "" or cpu.Contains(":")): try refuse(d, msgs.TargetUnknown(spec))
     } else {
         # a triple for an architecture olang does not build for, rather than a CPU
         if spec.Contains("-linux") or spec.Contains("-apple") or spec.Contains("-windows") {
             try refuse(d, msgs.TargetUnsupported(spec))
         }
-        if spec.Contains(":") or spec == "" { try refuse(d, msgs.TargetUnknown(spec)) }
+        if spec.Contains(":") or spec == "": try refuse(d, msgs.TargetUnknown(spec))
         ai = archIndex(hostArch)
-        if ai < 0 { try refuse(d, msgs.TargetUnsupported(hostArch)) }
+        if ai < 0: try refuse(d, msgs.TargetUnsupported(hostArch))
     }
     t.Arch = $Archs[ai]
     t.Foreign = Archs[ai] != hostArch or hostOs != "linux"
@@ -204,31 +204,31 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
             hasCpu = true
         }
     }
-    if hasCpu and cpu == "native" and t.Foreign { try refuse(d, msgs.TargetNativeForeign(spec)) }
-    if t.Foreign and interpreting { try refuse(d, msgs.TargetForeignMode("running a file", spec)) }
-    if t.Foreign and here != "" { try refuse(d, msgs.TargetForeignMode(here, spec)) }
+    if hasCpu and cpu == "native" and t.Foreign: try refuse(d, msgs.TargetNativeForeign(spec))
+    if t.Foreign and interpreting: try refuse(d, msgs.TargetForeignMode("running a file", spec))
+    if t.Foreign and here != "": try refuse(d, msgs.TargetForeignMode(here, spec))
     # interpret runs the program without clang and needs one only to know the target: this machine's own CPU, or an
     # x86-64 level, it knows without - the level this processor supports standing for its CPU
     if clang == "" {
-        if not interpreting or not t.withoutClang(cpu, cpuFlags()) { try refuse(d, msgs.TargetNoClang(spec)) }
+        if not interpreting or not t.withoutClang(cpu, cpuFlags()): try refuse(d, msgs.TargetNoClang(spec))
         return t
     }
     # the probe: one empty C function compiled to IR for the target, whose attributes say what clang made of it
     args Vec<String&>
     args.Push(clang)
-    if triple != "" { args.Push($"--target=" + $triple) }
-    if hasCpu { args.Push($ArchCpuFlags[ai] + $cpu) }
-    for a in Array<String&>["-S", "-emit-llvm", "-o", "-", "-x", "c", "-"] { args.Push(a) }
+    if triple != "": args.Push($"--target=" + $triple)
+    if hasCpu: args.Push($ArchCpuFlags[ai] + $cpu)
+    for a in Array<String&>["-S", "-emit-llvm", "-o", "-", "-x", "c", "-"]: args.Push(a)
     out := try ClangSays(args.ToArray(), "void olang_target_probe(void) { }\n", not interpreting) catch os.Error {
         try refuse(d, msgs.TargetUnknown(spec))
         unreachable
     }
-    if out.Status != 0 { try refuse(d, msgs.TargetUnknown(spec)) }
+    if out.Status != 0: try refuse(d, msgs.TargetUnknown(spec))
     try t.FromProbe(out.Stdout) catch Probe.Unknown { try refuse(d, msgs.TargetUnknown(spec)) }
     catch Probe.Unsupported { try refuse(d, msgs.TargetUnsupported(spec)) }
     # another architecture is built for only where this clang can generate all the code the runtime holds - BF16 among
     # it, which LLVM 18's AArch64 back end cannot select: an object it could not compile at the link is not built
-    if t.Foreign and not canCompileBf16(clang, t.Triple) { try refuse(d, msgs.TargetNoBackend(spec)) }
+    if t.Foreign and not canCompileBf16(clang, t.Triple): try refuse(d, msgs.TargetNoBackend(spec))
     t.CpuFlag = $ArchCpuFlags[ai] + $t.Cpu # resolved: native is looked up once
     return t
 }
@@ -253,7 +253,7 @@ fn (t mut Target&) FromProbe(out String&) ? Probe {
     nl := try out[at:].FindByte('\n') catch default (out.Len() - at)
     al := out[at:at + nl]
     # the layouts the compiler gives its types assume a 64-bit, little-endian machine (T4)
-    if dl.Len() == 0 or dl[0] != 'e' or dl.Contains("-p:32") or dl.Contains("-p:16") { error Probe.Unsupported }
+    if dl.Len() == 0 or dl[0] != 'e' or dl.Contains("-p:32") or dl.Contains("-p:16"): error Probe.Unsupported
     t.Triple = tl
     t.Cpu = $(try attrValue(al, "target-cpu") catch { error Probe.Unknown })
     features := StripUnsafe(try attrValue(al, "target-features") catch default "")
@@ -274,7 +274,7 @@ fn (t mut Target&) FromProbe(out String&) ? Probe {
     vs := try al.Find("vscale_range(") catch default -1
     if vs >= 0 {
         close := try al[vs:].FindByte(')') catch default -1
-        if close >= 0 { vsAttr = $" " + $al[vs:vs + close + 1] }
+        if close >= 0: vsAttr = $" " + $al[vs:vs + close + 1]
     }
     width := t.VectorBits if t.VectorBits > 0 else 128
     t.Attrs = ($"\"target-cpu\"=\"" + $t.Cpu + "\" \"target-features\"=\"" + $features + "\"" + $tuneAttr + $vsAttr +
@@ -297,17 +297,17 @@ fn attrValue(line String&, name String&) String& ? {
 # whether a feature list (clang's: "+a,+b,-c") turns feature f on
 fn HasFeature(features String&, f String&) Bool {
     for p in features.Split(",") {
-        if p.Len() == f.Len() + 1 and p[0] == '+' and p[1:] == f { return true }
+        if p.Len() == f.Len() + 1 and p[0] == '+' and p[1:] == f: return true
     }
     return false
 }
 
 # features with every IEEE-unsafe one (IeeeUnsafe) turned off
 fn StripUnsafe(features String&) String {
-    if features == "" { return "" }
+    if features == "": return ""
     b := StringBuilder()
     for i, p in features.Split(",") {
-        if i > 0 { b.PushChar(',') }
+        if i > 0: b.PushChar(',')
         off := p.Len() > 1 and p[0] == '+' and p[1:] in IeeeUnsafe
         if off {
             b.PushChar('-')
@@ -352,7 +352,7 @@ fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.Erro
     path := $probeDir() + "/" + $U64(key.Hash()).Format(16) if key != "" else ""
     if path != "" {
         text := try os.ReadFile(path) catch default ""
-        if text.Len() > key.Len() and text.StartsWith(key) { return os.Output(0, $text[key.Len():], "") }
+        if text.Len() > key.Len() and text.StartsWith(key): return os.Output(0, $text[key.Len():], "")
     }
     out := try os.Output.Exec(...args, input = input)
     if out.Status == 0 and path != "" and keep {
@@ -366,7 +366,7 @@ fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.Erro
 
 fn probeDir() String {
     c := try os.Env("OLANG_CACHE") catch default ""
-    if c != "" { return $c + "/probe" }
+    if c != "": return $c + "/probe"
     home := try os.Env("HOME") catch default "."
     return $home + "/.cache/olang/probe"
 }
@@ -374,14 +374,14 @@ fn probeDir() String {
 # what a question to clang is asked under ("" where clang's own file cannot be found): clang's real path, size and
 # time, the arguments and the input, the processor's model and flags
 fn probeKey(args Array<String&>&, input String&) String {
-    if args.Len() == 0 { return "" }
+    if args.Len() == 0: return ""
     exe := whereIs(args[0])
-    if exe == "" { return "" }
+    if exe == "": return ""
     real := try os.RealPath(exe) catch default ""
     info := try os.FileInfo.Stat(real) catch os.Error { return "" }
     b := StringBuilder()
     b.Push($"olang probe 1\n" + $real + " " + $info.Size + " " + $info.ModTime + "\n")
-    for a in args[1:] { b.Push($a + "\n") }
+    for a in args[1:]: b.Push($a + "\n")
     b.Push($"input " + $input.Len() + "\n" + $input + "\n" + $cpuModel() + "\n" + $cpuFlags() + "\n=====\n")
     return b.ToString()
 }
@@ -390,7 +390,7 @@ fn probeKey(args Array<String&>&, input String&) String {
 fn cpuModel() String {
     info := try os.ReadFile("/proc/cpuinfo") catch os.Error { return "" }
     for line in info.Lines() {
-        if line.StartsWith("model name") { return $line }
+        if line.StartsWith("model name"): return $line
     }
     return ""
 }
@@ -418,7 +418,7 @@ fn X86Level(flags String&) I64 {
     level I64 = 1
     for i, need in LevelFlags {
         for f in need.Split(" ") {
-            if not flags.Contains($" " + $f + " ") { return level }
+            if not flags.Contains($" " + $f + " "): return level
         }
         level = i + 2
     }
@@ -430,7 +430,7 @@ fn X86Level(flags String&) I64 {
 fn (t mut Target&) withoutClang(cpu String&, flags String&) Bool {
     t.Triple = $t.Arch + "-unknown-linux-gnu"
     if t.Arch == "aarch64" {
-        if cpu != "native" and cpu != "generic" { return false }
+        if cpu != "native" and cpu != "generic": return false
         t.Cpu = "generic"
         t.VectorBits = 128
         t.Fma = true
@@ -444,7 +444,7 @@ fn (t mut Target&) withoutClang(cpu String&, flags String&) Bool {
         case "native": X86Level(flags)
         case _: 0
     }
-    if level == 0 { return false }
+    if level == 0: return false
     t.Cpu = "x86-64" if level == 1 else $"x86-64-v" + $level
     t.VectorBits = 512 if level == 4 else (256 if level == 3 else 128)
     t.Fma = level >= 3
@@ -533,9 +533,9 @@ test "what cannot be built for is said as stage 0 says it, before clang is asked
 
 test "with clang, native is this machine's CPU, a triple of this machine its baseline, and a bad CPU is unknown" {
     clang := FindClang()
-    if clang == "" { return }
+    if clang == "": return
     hostOs, hostArch := Host()
-    if hostArch != "x86_64" or hostOs != "linux" { return }
+    if hostArch != "x86_64" or hostOs != "linux": return
     d := quiet()
     t := try Target.Resolve("native", clang, false, d) catch Bad { unreachable }
     assert t.Arch == "x86_64" and not t.Foreign and t.Cpu != "" and t.Cpu != "native"

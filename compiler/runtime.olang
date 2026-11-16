@@ -28,7 +28,7 @@ type Bad error { Unreadable }
 
 fn archRow(arch String&) I64 {
     for i in range Archs.Len() {
-        if Archs[i] == arch { return i }
+        if Archs[i] == arch: return i
     }
     return 0
 }
@@ -49,14 +49,14 @@ fn malformed(path String&, n I64, why String&) ? Bad {
 # what a line is to Fill: "; @if", "; @else", "; @end" (0, 1, 2), or text (-1) - a comment that only begins as one
 # would among them
 fn directive(line String&) I64 {
-    if not line.StartsWith("; @") { return -1 }
+    if not line.StartsWith("; @"): return -1
     rest := line[3:]
     word := rest
     sp := try rest.Find(" ") catch default -1
-    if sp >= 0 { word = rest[:sp] }
-    if word == "if" { return 0 }
-    if word == "else" { return 1 }
-    if word == "end" { return 2 }
+    if sp >= 0: word = rest[:sp]
+    if word == "if": return 0
+    if word == "else": return 1
+    if word == "end": return 2
     return -1
 }
 
@@ -89,9 +89,9 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = fa
             if inIf { try malformed(path, n, "\"; @if\" inside another") }
             c := line[6:].TrimStart()
             neg := c.StartsWith("!")
-            if neg { c = c[1:] }
+            if neg: c = c[1:]
             sp := try c.Find(" ") catch default -1
-            if sp >= 0 { c = c[:sp] }
+            if sp >= 0: c = c[:sp]
             if c != "san" and c not in Archs {
                 try malformed(path, n, "a condition that is neither \"san\" nor an architecture")
             }
@@ -114,7 +114,7 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = fa
             keep = true
             continue
         }
-        if not keep { continue }
+        if not keep: continue
         # a comment is kept as it is written: it may name a placeholder without being one
         if line.TrimStart().StartsWith(";") {
             out.Push(line)
@@ -131,7 +131,7 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = fa
             out.Push(rest[:at])
             after := rest[at + 2:]
             end := try after.Find("@@") catch default -1
-            if end < 0 { try malformed(path, n, "an \"@@\" with no \"@@\" closing it") }
+            if end < 0: try malformed(path, n, "an \"@@\" with no \"@@\" closing it")
             v := try fact(after[:end], row) catch Bad {
                 try malformed(path, n, "an @@NAME@@ the compiler knows no fact for")
                 unreachable
@@ -148,10 +148,10 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = fa
 # the runtime's own part (runtime.ll, san.ll under -sanitize, prof.ll in a profile build - B20) filled in, or the
 # dynamic call's (dyncall.ll)
 fn Text(arch String&, san Bool, dyncall Bool, prof Bool = false, bench Bool = false) String ? Bad {
-    if dyncall { return try Fill("dyncall.ll", arch, san, prof, bench) }
+    if dyncall: return try Fill("dyncall.ll", arch, san, prof, bench)
     text := try Fill("runtime.ll", arch, san, prof, bench)
-    if san { text = $text + "\n" + $(try Fill("san.ll", arch, san, prof, bench)) }
-    if prof { text = $text + "\n" + $(try Fill("prof.ll", arch, san, prof, bench)) }
+    if san: text = $text + "\n" + $(try Fill("san.ll", arch, san, prof, bench))
+    if prof: text = $text + "\n" + $(try Fill("prof.ll", arch, san, prof, bench))
     return text
 }
 
@@ -207,7 +207,7 @@ fn typeEnd(line String&, at I64) I64 {
     c := line[at]
     if c != '[' and c != '{' and c != '<' {
         for k in range at, line.Len() {
-            if line[k] == ' ' or line[k] == ',' { return k }
+            if line[k] == ' ' or line[k] == ',': return k
         }
         return line.Len()
     }
@@ -216,7 +216,7 @@ fn typeEnd(line String&, at I64) I64 {
         ch := line[k]
         if ch == '[' or ch == '{' or ch == '<' { depth++ } else if (ch == ']' or ch == '}' or ch == '>') {
             depth--
-            if depth == 0 { return k + 1 }
+            if depth == 0: return k + 1
         }
     }
     return line.Len()
@@ -249,14 +249,14 @@ fn declare(out mut StringBuilder&, line String&) {
                 # a parameter's type, its name dropped
                 part := line[start:p].Trim()
                 sp := try part.FindLast(" ") catch default -1
-                if sp >= 0 and part[sp + 1] == '%' { part = part[:sp].TrimEnd() }
+                if sp >= 0 and part[sp + 1] == '%': part = part[:sp].TrimEnd()
                 if part.Len() > 0 {
                     if not first: out.Push(", ")
                     out.Push(part)
                 }
                 first = false
                 start = p + 1
-                if ch == ')' { break }
+                if ch == ')': break
             }
             p++
         }
@@ -275,7 +275,7 @@ fn declare(out mut StringBuilder&, line String&) {
             out.Push($r[:close + 1] + " ")
             r = r[close + 2:]
         }
-        if r.StartsWith("unnamed_addr ") { r = r[13:] }
+        if r.StartsWith("unnamed_addr "): r = r[13:]
         sp := try r.Find(" ") catch default r.Len()
         e := typeEnd(r, sp + 1) if sp + 1 < r.Len() else r.Len()
         out.Push($r[:sp + 1] + $r[sp + 1:e] + "\n")
@@ -335,7 +335,7 @@ test "the runtime is filled in for an architecture and a mode, every placeholder
     assert x.EndsWith("attributes #1 = { null_pointer_is_valid \"target-cpu\"=\"x86-64\" nounwind }\n")
     # no placeholder or directive is left outside a comment
     for line in x.Lines() {
-        if line.TrimStart().StartsWith(";") { continue }
+        if line.TrimStart().StartsWith(";"): continue
         assert not line.Contains("@@"), line
     }
     a := try Text("aarch64", false, false)

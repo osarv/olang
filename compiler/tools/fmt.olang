@@ -32,7 +32,7 @@ fn main() ? {
 
 fn run(mode String&, args Array<String&>&) I32 {
     std := try os.Env("OLANG_STD") catch default "std"
-    if mode != "-v" { return layout.Files(mode, args[2:], std) }
+    if mode != "-v": return layout.Files(mode, args[2:], std)
     out := io.Writer(1)
     prelude := layout.PreludeTypes(std)
     status I32 = 0
@@ -86,7 +86,7 @@ fn verify(src source.Source&, text String&, std String&, prelude String&) String
     ts2 := scan.Tokens.Scan(text)
     p2 := parse.Parser(written, ts2, names, o, diags2, file2)
     decls2 := p2.File()
-    if ts2.Diags.Len() > 0 or diags2.AllSaid().Len() > 0 { return "the text written does not parse" }
+    if ts2.Diags.Len() > 0 or diags2.AllSaid().Len() > 0: return "the text written does not parse"
     after := unparse.Unparse(decls2, names, text, diags2)
     if after != before {
         dbg := try os.Env("FMT_DEBUG") catch default ""
@@ -96,19 +96,19 @@ fn verify(src source.Source&, text String&, std String&, prelude String&) String
         }
         return "the tree read back differs: " + $firstDifference(before, after)
     }
-    if comments(src.Text) != comments(text) { return "the comments differ" }
+    if comments(src.Text) != comments(text): return "the comments differ"
     held2 := unparse.HeldBranches(decls2, names, text, diags2)
     again := layout.Format(text, ts2, p2.ArgAngles, p2.CloseAngles, held2, p2.TypeGroups, p2.Subscripts)
-    if again != text { return "formatting it again changes it: " + $firstDifference(text, again) }
+    if again != text: return "formatting it again changes it: " + $firstDifference(text, again)
     return ""
 }
 
 fn firstDifference(a String&, b String&) String {
     i I64 = 0
-    for i < a.Len() and i < b.Len() and a[i] == b[i] { i++ }
+    for i < a.Len() and i < b.Len() and a[i] == b[i]: i++
     line I64 = 1
     for j in range i {
-        if a[j] == '\n' { line++ }
+        if a[j] == '\n': line++
     }
     return "at line " + $line
 }
@@ -124,7 +124,7 @@ fn comments(t String&) String {
         if c == '"' or c == '\'' {
             i++
             for i < n and t[i] != c and t[i] != '\n' {
-                if t[i] == '\\' { i++ }
+                if t[i] == '\\': i++
                 i++
             }
             i++
@@ -132,13 +132,13 @@ fn comments(t String&) String {
             e := i + 1
             if e < n and t[e] == '#' {
                 e++
-                for e + 1 < n and not (t[e] == '#' and t[e + 1] == '#') { e++ }
+                for e + 1 < n and not (t[e] == '#' and t[e + 1] == '#'): e++
                 e = e + 2 if e + 1 < n else n
                 b.Push(t[i:e])
             } else {
-                for e < n and t[e] != '\n' { e++ }
+                for e < n and t[e] != '\n': e++
                 f := e
-                for f > i and (t[f - 1] == ' ' or t[f - 1] == '\t') { f-- }
+                for f > i and (t[f - 1] == ' ' or t[f - 1] == '\t'): f--
                 b.Push(t[i:f])
             }
             b.PushChar('\n')
