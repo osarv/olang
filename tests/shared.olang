@@ -10693,7 +10693,7 @@ fn dfGen<T>(l mut DfLog&, x T) T {
     return x
 }
 fn dfTwice(l mut DfLog&) {
-    defer: defer: l.Note(5)               # the deferred code's own: it runs as that code ends
+    defer { defer: l.Note(5) }            # the deferred code's own: it runs as that code ends
     l.Note(4)
 }
 type DfBox struct(v I64, l mut DfLog&) {

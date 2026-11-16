@@ -37,8 +37,17 @@ fn migrate(text String&) String {
         for k < text.Len() and text[k] == ' ': k++
         if k >= text.Len() or text[k] == '{' or text[k] == ':' or text[k] == '\n': continue
         b.Push(text[from:j])
-        b.Push(":")
         from = j
+        if word(text, mask, k) == 0 {
+            b.Push(":")
+            continue
+        }
+        # a deferral of a deferral: no one-line body holds a defer (S1b), so the inner one goes in a block
+        e := k
+        for e < text.Len() and text[e] != '\n' and mask[e] == 'c': e++
+        for e > k and text[e - 1] == ' ': e--
+        b.Push(" { " + $migrate(text[k:e]) + " }")
+        from = e
     }
     b.Push(text[from:])
     return b.ToString()
@@ -65,6 +74,7 @@ fn statementStart(text String&, i I64) Bool {
 
 test migrate "a bare deferral gains its ':'; a block, a one-line body, comments and text are left" {
     assert migrate("    defer f.Close()\n    errdefer n--\n") == "    defer: f.Close()\n    errdefer: n--\n"
+    assert migrate("    defer defer n = 5    # inner\n") == "    defer { defer: n = 5 }    # inner\n"
     assert migrate("fn f() { defer x = 1 }\n") == "fn f() { defer: x = 1 }\n"
     kept := "    defer { a() }\n    defer: b()\n    # defer c()\n    s := \"defer d()\"\n    deferred := 1\n"
     assert migrate(kept) == kept
