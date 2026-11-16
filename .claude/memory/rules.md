@@ -126,7 +126,7 @@ slimming of 2026-11-08").
   era bootstrap, bench counterparts and C runtime tests; Python and shell never (throwaway scratch scripts excepted,
   never committed); except independent correctness and benchmark references, which may be Python (the user,
   2026-11-15: "its fine to keep correctness and benchmark references in python" - oann's bench/ref). Tools run as `build/out build tools/X.olang && build/tools_X ARGS`.
-- **A README per folder** that is a thing of its own, in the commit that creates it; kept current.
+- **A README per folder** that is a thing of its own, in the commit that creates it; kept current. **A README says how a thing works and how to use it, never its development history (the user, 2026-11-16: "READMEs tell you how something works or how to use it, not developmenet history")**: no rounds, branches, removed modules, "replaced", redesign plans or progress notes - those go to HISTORY.md/PROGRESS.md/docs; a design doc it needs is linked for how it works, not for how it came to be.
 - **Keep old tests**: the suite is additive; touch an old test only when the language change invalidates it.
 - **Nesting depth: three blocks, four at most** (mine and my agents' code only): guard clauses, `:` one-liners, helpers.
 - **One-line bodies (the user, 2026-11-13: "a lot of places where we dont use the new : semantic for one-statement followups on conditions or loops blocks")**: a block of one simple statement after `if`, `else`, `for`, `catch` is written `if c: stmt` (S1b), always, in new code and in every refactor; the refactor pass converts the existing ones with a cheap tool ("just dont spend 10 percent of a week on it").
