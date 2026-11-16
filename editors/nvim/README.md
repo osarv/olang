@@ -9,7 +9,12 @@ A plugin directory: put it on the runtime path and `.olang` files (and scripts b
 - `K` on a rule name in a diagnostic or a comment (`T6b`) shows that rule of the specification (`olang explain`);
 - format on save - through the language server when it runs, else `olang format` on a copy of the buffer;
 - the language server, `olang lsp`: diagnostics as you type, hover (`K`), go to definition (`gd` / `CTRL-]`), document
-  symbols, completion, formatting (`vim.lsp.buf.format()`).
+  symbols, completion, formatting (`vim.lsp.buf.format()`). Completion is Neovim's own (0.11+,
+  `vim.lsp.completion`): the menu opens by itself after `.` (`io.`, `p.`, `a.b.`) with the import's exports or the
+  value's fields and methods, and `CTRL-X CTRL-O` asks anywhere; `setup({ completion = false })` turns it off. With
+  [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) or [blink.cmp](https://github.com/Saghen/blink.cmp) loaded the plugin
+  leaves completion to them: give nvim-cmp the `nvim_lsp` source (`cmp-nvim-lsp`, and its `default_capabilities()`) -
+  blink.cmp's `lsp` source is on by default - and both trigger on the server's `.`.
 - commands on `.olang` buffers (Neovim wants capitals): `:OlangRun [args]` saves and runs `olang FILE args` in a
   terminal split at the bottom, reused by the next run; `:OlangBuild` (`olang build FILE`) and `:OlangTest [words]`
   (`olang test FILE words`) fill the quickfix list through `:make`; `:OlangFormat` formats the buffer, keeping the

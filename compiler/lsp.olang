@@ -882,6 +882,62 @@ test "olang lsp answers a scripted session: diagnostics, hover, definition, symb
     assert (got.Get("8")!).Contains("\"result\":null")
 }
 
+# whether the answer to request id offers an item of this label
+fn offers(got Map<String&, String&>&, id String&, label String&) Bool {
+    return (try got.Get(id) catch default "").Contains($"\"label\":\"" + $label + "\"")
+}
+
+# a file being edited: every line from "io." on is unfinished, so the body does not check (B15's completion)
+EditSrc String& = ("import \"std/io\"\n\ntype Point struct(X I64, Y I64) {\n    X\n    Y\n}\n\nfn (p Point&) Sum() I64 { return p.X + p.Y }\n\n" + $
+                   "type Line struct(A Point, B Point) {\n    A\n    B\n}\n\nfn main() {\n    p := Point(1, 2)\n    l := Line(p, p)\n" + $
+                   "    n I64 = 3\n    v := Vec<I64>()\n    io.\n    p.\n    q := p.X\n    l.A.\n    n.\n    v.\n    io.PutLine(p.\n}\n")
+
+test "olang lsp completes after '.' while the line is unfinished: an import, a value, a word begun, a chain (B15)" {
+    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    defer try os.RemoveAll(dir) catch os.Error { }
+    path := $dir + "/e.olang"
+    try os.WriteFile(path, EditSrc) catch os.Error { unreachable "no file" }
+    uri := UriOf(path)
+    b := StringBuilder()
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}"))
+    t := StringBuilder()
+    session.JsonStr(t, EditSrc)
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" + $uri + $
+                  "\",\"languageId\":\"olang\",\"version\":1,\"text\":" + $t.ToString() + "}}}"))
+    # (line, character) of each cursor: after "io.", "p.", inside "p.X", after "l.A.", "n.", "v.", and "p." in an open call
+    at := [[19, 7], [20, 6], [21, 12], [22, 8], [23, 6], [24, 6], [25, 17]]
+    for i in range at.Len() {
+        b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":" + $(i + 2) + ",\"method\":\"textDocument/completion\",\"params\":{" + $
+                      "\"textDocument\":{\"uri\":\"" + $uri + "\"},\"position\":{\"line\":" + $at[i][0] + ",\"character\":" + $
+                      at[i][1] + "}}}"))
+    }
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"shutdown\"}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    out := try os.Output.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    assert out.Status == 0, "olang lsp ended with " + $out.Status + ": " + $out.Stderr
+    got := Map<String&, String&>()
+    for m in frames(out.Stdout) {
+        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
+        id := idOf(msg)
+        if id != "": got.Put(id, m)
+    }
+    # io.: its exported functions, types and constants
+    assert offers(got, "2", "PutLine") and offers(got, "2", "Reader") and offers(got, "2", "Stdout"), got.Get("2")!
+    # p.: the fields, the method declared for Point, and the supplied ones
+    assert offers(got, "3", "X") and offers(got, "3", "Y") and offers(got, "3", "Sum") and offers(got, "3", "Copy") and not offers(got, "3", "A"), got.Get("3")!
+    # p.X with the cursor after X: the same list, for the editor to narrow
+    assert offers(got, "4", "X") and offers(got, "4", "Y") and offers(got, "4", "Sum"), got.Get("4")!
+    # l.A.: through a chain of fields to a Point
+    assert offers(got, "5", "X") and offers(got, "5", "Sum") and not offers(got, "5", "B"), got.Get("5")!
+    # n.: an integer's methods, the prelude's and the supplied ones (E37)
+    assert offers(got, "6", "Abs") and offers(got, "6", "PopCount") and offers(got, "6", "Narrow"), got.Get("6")!
+    # v.: a Vec's public methods and its traits' defaults (M19e), never its private fields
+    assert offers(got, "7", "Push") and offers(got, "7", "Len") and offers(got, "7", "Iter") and not offers(got, "7", "data"), got.Get("7")!
+    # p. in a call left open
+    assert offers(got, "8", "X") and offers(got, "8", "Sum"), got.Get("8")!
+}
+
 # B3i, docs/wholeprog.md 10.3 (T8): the language server's checks keep and take the records builds keep. A library is
 # edited step by step - a scope error (O10c) brought in and taken out, a type error, a body changed - and after each
 # step a session of the server checks the program from the directory the steps before left their records in: what it
