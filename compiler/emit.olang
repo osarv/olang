@@ -4943,7 +4943,7 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         }
         case mir.Rvalue.Slots(s) {
             # a slot scope building into s (as a copy's arrays are made, slotCopy): its allocations slots of s's lists
-            return fe.let("ptrtoint ptr " + $fe.slotScope(fe.scope(s)) + " to i64")
+            return fe.let("ptrtoint ptr " + $fe.slotScope(fe.scope(s), true) + " to i64")
         }
         case mir.Rvalue.RegionOr(x, s) {
             fe.E.runtime("__olang_region_or")
@@ -4988,15 +4988,26 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
 
 # a slot scope building into the scope whose header is sc (runtime.ll's %olang.slotscope): its scope header cleared but
 # for its head, @__olang_slot_chunk, and its tail, sc, and no allocation recorded - the records past the count are
-# never read, so left as they are (round 8: a copy of text made one per copy, no longer 128 bytes cleared each)
-fn (fe mut fnEm&) slotScope(sc String&) String {
+# never read, so left as they are (round 8: a copy of text made one per copy, no longer 128 bytes cleared each). One
+# made over a scope that may be a slot scope (flat: mir.Rvalue.Slots's) builds into that one's tail - a slot's scope is
+# a scope part's, never a slot scope (a copy's text in a Copy helper given a slot scope to build in: a Map entry's,
+# Map.add)
+fn (fe mut fnEm&) slotScope(sc String&, flat Bool = false) String {
     fe.E.runtime("__olang_slot_chunk")
     ss := fe.alloca("%olang.slotscope")
+    real := fe.flatScope(sc) if flat else sc
     fe.w("store %olang.scope zeroinitializer, ptr " + $ss)
     fe.w("store ptr @__olang_slot_chunk, ptr " + $ss)
-    fe.w("store ptr " + $sc + ", ptr " + $fe.let("getelementptr %olang.scope, ptr " + $ss + ", i32 0, i32 2"))
+    fe.w("store ptr " + $real + ", ptr " + $fe.let("getelementptr %olang.scope, ptr " + $ss + ", i32 0, i32 2"))
     fe.w("store i64 0, ptr " + $fe.let("getelementptr %olang.slotscope, ptr " + $ss + ", i32 0, i32 1"))
     return ss
+}
+
+# the scope sc, or where sc is a slot scope, the scope it builds into (slotScope)
+fn (fe mut fnEm&) flatScope(sc String&) String {
+    slot := fe.let("icmp eq ptr " + $fe.load("ptr", sc) + ", @__olang_slot_chunk")
+    under := fe.load("ptr", fe.let("getelementptr %olang.scope, ptr " + $sc + ", i32 0, i32 2"))
+    return fe.let("select i1 " + $slot + ", ptr " + $under + ", ptr " + $sc)
 }
 
 # n bytes of text storage in scope into - through __olang_held_alloc where a local holds the scope (arrayStorage)
