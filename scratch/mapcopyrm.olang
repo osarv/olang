@@ -1,0 +1,31 @@
+import "std/io"
+
+N I64 = 500
+
+fn mkv(i I64) Map<String, Vec<I64>> {
+    m Map<String, Vec<I64>>
+    for j in range 5 {
+        w Vec<I64>
+        for k in range 20 { w.Push(i + k) }
+        m.Put($i + "-" + $j + " padded", w)
+    }
+    return m
+}
+
+fn use(m Map<String, Vec<I64>>, i I64) I64 {
+    w := m
+    w.Remove($i + "-2 padded")
+    return w.Len()
+}
+
+fn main() {
+    t := 0
+    keep := mkv(1)
+    for i in range N {
+        a := mkv(i)
+        b := a
+        b.Remove($i + "-1 padded")
+        t += use(a, i) + b.Len() + use(keep, 1)
+    }
+    io.PutLine($t)!
+}

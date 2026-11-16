@@ -1,0 +1,18 @@
+place 0 source.1 sole false lets 1 stores 2 why 2 its new value is existing storage: '='; give it new storage - a constructor call, '$...', 'Copy()'
+place 1 Vec<U64>.0 sole true lets 1 stores 2 why 0 
+place 2 Vec<Char>.0 sole true lets 1 stores 2 why 0 
+place 3 Vec<I64>.0 sole true lets 11 stores 4 why 0 
+place 4 Vec<Vec<I64>>.0 sole true lets 7 stores 4 why 0 
+place 5 Vec<Vec<Vec<I64>>>.0 sole true lets 2 stores 2 why 0 
+place 6 Array<String&>.-1 sole false lets 0 stores 5 why 2 its new value is existing storage: 't[i:i + 1]'; give it new storage - a constructor call, '$...', 'Copy()'
+place 7 Array<String>.-1 sole false lets 0 stores 0 why 0 
+place 8 StringBuilder.0 sole false lets 0 stores 1 why 6 its value is changed in place, by a writable reference to it handed to a call: 'b.chars.PushAll(t)'
+place 9 decimal.0 sole false lets 0 stores 1 why 0 
+place 10 decimal.1 sole false lets 0 stores 1 why 0 
+place 11 Place.0 sole false lets 0 stores 0 why 0 
+place 12 LineIter.0 sole false lets 0 stores 0 why 0 
+place 13 Vec<String&>.0 sole false lets 0 stores 0 why 0 
+place 14 Vec<String>.0 sole false lets 0 stores 0 why 0 
+place 15 Lines.1 sole false lets 0 stores 1 why 6 its value is changed in place, by a writable reference to it handed to a call: 'l.src.line()'
+place 16 Reader.1 sole false lets 0 stores 1 why 6 its value is changed in place, by a writable reference to it handed to a call: 'r.src.line()'
+place 17 Writer.1 sole false lets 0 stores 1 why 1 a reference into it is kept here

@@ -1,0 +1,32 @@
+import "std/io"
+
+N I64 = 20000
+
+fn mk(i I64) Map<String, I64> {
+    m Map<String, I64>
+    for j in range 20 { m.Put($i + "-" + $j + " padded out a little", j) }
+    m.Remove($i + "-3 padded out a little")
+    return m
+}
+
+fn mkv(i I64) Map<String, Vec<I64>> {
+    m Map<String, Vec<I64>>
+    for j in range 5 {
+        w Vec<I64>
+        for k in range 20 { w.Push(i + k) }
+        m.Put($i + "-" + $j + " padded", w)
+    }
+    return m
+}
+
+fn main() {
+    rows := Array<Map<String, I64>>(10)
+    v Vec<Map<String, I64>>
+    for _ in range 10: v.Push(Map<String, I64>())
+    rv := Array<Map<String, Vec<I64>>>(10)
+    t := 0
+    for i in range N {
+        rv[i % 10] = mkv(i)
+    }
+    io.PutLine($t + " " + $rows.Len() + " " + $v.Len() + " " + $rv.Len())!
+}

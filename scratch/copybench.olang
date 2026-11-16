@@ -1,0 +1,26 @@
+import "std/io"
+import "std/time"
+
+N I64 = 1000000
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 20 { w.Push($i + "-" + $j + " padded out a little") }
+    return w
+}
+
+# a by-value argument the callee changes: a copy of its own, 20 strings and a buffer
+fn touch(v Vec<String>) I64 {
+    v.Push("x")
+    return v[3].Len()
+}
+
+fn main() {
+    rows := Array<Vec<String>>(10)
+    for i in range 10 { rows[i] = mk(i) }
+    t := 0
+    t0 := time.Now()
+    for i in range N { t += touch(rows[i % 10]) }
+    ms := time.Since(t0) / 1000000
+    io.PutLine($t + " " + $ms + " ms")!
+}

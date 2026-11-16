@@ -1,0 +1,27 @@
+import "std/io"
+
+fn inner(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 30 { w.Push(i + j) }
+    return w
+}
+
+fn bump(v mut Vec<Vec<Vec<I64>>>&) I64 {
+    v[0] = Vec<Vec<I64>>()
+    v.RefMut(1).RefMut(2)[0] = 999
+    return 0
+}
+
+fn main() {
+    v Vec<Vec<Vec<I64>>>
+    for k in range 3 {
+        o Vec<Vec<I64>>
+        for j in range 5 { o.Push(inner(k * 10 + j)) }
+        v.Push(o)
+    }
+    a := v[0][2][bump(v)]
+    b := v[1][2][bump(v)]
+    io.PutLine($a + " " + $b + " " + $v[0].Len())!
+    s := v[2][3][1] + v[2][4][29]
+    io.PutLine($s)!
+}
