@@ -2367,7 +2367,7 @@ b0231f57ee965ec6 86894f1336fb6e15 compiler/lineedit.olang
 83e4bb3814d8952c 7130ef08eb8d3ec9 compiler/listing.olang
 13e154abf5ec47d1 1f8c695f8f2ef327 compiler/load.olang
 b397e51ded4ef5a1 40f33b7be31f0b7d compiler/lower.olang
-2f63e0e3577845b1 3a5a502cc11028c1 compiler/lsp.olang
+ec6514d9f88d6036 548d407e559e26ec compiler/lsp.olang
 4808a3244f55bddf ae10a105fc075221 compiler/mcp.olang
 1d03d8a7a1b103a4 e992ca9a4e59d559 compiler/measure.olang
 0bfb7816823ce84f 396b22ae55a7f122 compiler/mir.olang
@@ -2384,7 +2384,7 @@ b39996c18bbe72bf ac116c53952c20fd compiler/paint.olang
 330aaae2784a2518 04a6e2dfad4e6713 compiler/runtime.olang
 475e688e30b30f35 c05e24344222a90d compiler/scan.olang
 c199d3a6a256ac08 0ce5d3cbe5cad46b compiler/scope.olang
-42bd80289035dd5c e75cf8a25e128644 compiler/session.olang
+fd8d5f85979b32c3 201ed4ead1f595bb compiler/session.olang
 8981299fcf27ba06 13b1ab50b72ab2a0 compiler/source.olang
 9bee4e94ca053127 882c3c1eac35e714 compiler/spin.olang
 ef60fa93b5dd6b1d add776f6c1e1e63f compiler/target.olang

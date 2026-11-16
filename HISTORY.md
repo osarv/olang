@@ -38512,3 +38512,26 @@ three. The checker now refuses a fourth argument at its span (RangeArgs: "a rang
 "write 'range END', 'range START, END' or 'range START, END, STEP'"); the evaluator and interpret run the checked tree,
 so they need nothing. `range` with no argument was already refused by the parser ("expected an expression"). Cases:
 checks/cases/rangefourargs.olang, rangenoargs.olang.
+
+### B15: completion after '.' in Neovim (2026-11-16)
+
+The user saw no suggestions after `io.` or `p.` in Neovim. The server answered both (a scripted session gave io's
+exports and Point's fields and methods even with the line unfinished and the rest of the body unchecked - the cut text
+types `p` from the body's locals), so the main fault was the editor side: editors/nvim's lua started the server but
+never turned completion on, and Neovim's built-in client shows nothing on `.` until `vim.lsp.completion.enable(...,
+{autotrigger = true})` is called (0.11). `attach` now calls it for each buffer (`setup({ completion = false })` turns it
+off; left to nvim-cmp or blink.cmp where either is loaded; buffer `completeopt` `menuone,noselect,popup`, so nothing is
+inserted until an item is chosen). The README says how to wire nvim-cmp and blink.cmp.
+
+The server's member list had gaps, fixed in compiler/session.olang: a chain of fields on an unfinished statement
+(`l.A.` standing alone is S3's error, so the checker leaves no typed node ending there) gave nothing - `typeEndingAt` now
+types `a.b` from `a`'s type and the field's when no checked expression ends at the dot; the methods the compiler supplies
+(Copy, Hash, an array's Len/Get/Set/SliceOf, Narrow, Bits, E37's bit operations, P9's atomics) were never offered; a
+trait's default methods (a Vec's `Iter`, `Reversed`, ...) and the methods of the type a declared one extends were
+missing; private fields of another module's type (a Vec's `data`, `n`, `want`) were offered; and "own module" for a
+private method meant the program's root rather than the file being edited. Completion stays one analysis per request
+(about 0.1 s on a small file), not cached: the cut text differs per keystroke. Test: compiler/lsp.olang's "olang lsp
+completes after '.' while the line is unfinished".
+
+Found on the way, not changed: a declared type extending an integer (`type Meters extends I64`) does not get the
+prelude's trait-bounded generic methods (`m.Abs()` is M19's error), though it gets the ones declared on I64 itself.

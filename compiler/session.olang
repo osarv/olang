@@ -924,7 +924,7 @@ fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
     t := a.typeEndingAt(file, dot)
     Log($"completion after a '.' at " + $dot + ": " + $(c.Ty(t) if t != types.UnknownT else "no type"))
     if t == types.UnknownT: return
-    a.typeMembers(it, t)
+    a.typeMembers(it, t, mi)
 }
 
 # whether the declaration at offset at of module mi carries a "Deprecated:" note in its doc comment (L4b); a member or a
@@ -1038,7 +1038,8 @@ fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
 }
 
 # the type of the widest checked expression whose span ends at offset end of a file, UnknownT for none - else of a
-# local or parameter whose name ends there
+# local or parameter whose name ends there, or of a field read through a chain of them ("a.b"), so the receiver is known
+# while the statement it stands in is unfinished and never checked
 fn (a Analysis&) typeEndingAt(file I64, end I64) types.TypeId {
     tf := typeFinder(end)
     for b in a.C!.Bodies {
@@ -1048,8 +1049,9 @@ fn (a Analysis&) typeEndingAt(file I64, end I64) types.TypeId {
     if tf.found != types.UnknownT: return tf.found
     text := a.L.Diags.TextOf(file)
     w := WordAt(text, end)
-    if w.Start == w.End: return types.UnknownT
+    if w.Start == w.End or I64(w.End) != end: return types.UnknownT
     word := text[I64(w.Start):I64(w.End)]
+    if w.Start > 0 and text[I64(w.Start) - 1] == '.': return a.fieldType(a.typeEndingAt(file, I64(w.Start) - 1), word)
     for b in a.C!.Bodies {
         if b.File != file or I64(b.Sp.Start) > end or end > I64(b.Sp.End): continue
         for l in b.Locals {
@@ -1059,41 +1061,94 @@ fn (a Analysis&) typeEndingAt(file I64, end I64) types.TypeId {
     return types.UnknownT
 }
 
-# the fields and methods of a type - through a reference, of what it refers to
-# the fields of a declared type's instance as completions: its constructor's, a bare one (C2a) named where it is written
-fn (a Analysis&) fieldMembers(it mut Items&, tt types.TypeId) {
+# the type of the field named word of a struct type t - through a reference, of what it refers to; UnknownT for none
+fn (a Analysis&) fieldType(t types.TypeId, word String&) types.TypeId {
+    if t == types.UnknownT: return t
+    c := a.C
+    tt := c!.P.T.Referent(t) if c!.P.T.KindOf(t) == types.Kind.Ref else t
+    fields := c!.P.FieldNames(tt)
+    tys := c!.P.T.Items(c!.P.T.Fields(tt))
+    for i in range fields.Len() {
+        if c!.P.L.Names.Text(fields[i]) == word and i < tys.Len(): return tys[i]
+    }
+    return types.UnknownT
+}
+
+# the fields of a declared type's instance as completions: its constructor's, a bare one (C2a) named where it is written;
+# a private one only in its own module, mi
+fn (a Analysis&) fieldMembers(it mut Items&, tt types.TypeId, mi I64) {
     c := a.C
     d := c!.P.T.DeclOf(tt)
     for body in c!.Bodies {
         bo := body.Of
         if bo != typed.BodyOf.Ctor or c!.P.T.KindOf(bo.t) != types.Kind.Named or c!.P.T.DeclOf(bo.t) != d: continue
+        home := a.moduleOfFile(body.File)
         tys := c!.P.T.Items(c!.P.T.Fields(tt))
         for i in range body.Fields.Len() {
             l := body.Locals[I64(body.Fields[i])]
             name := (a.L.Diags.TextOf(body.File)[I64(l.Sp.Start):I64(l.Sp.End)] if l.Name == source.NameId(0)
                      else c!.P.L.Names.Text(l.Name))
-            it.AddDep(name, CompField, c!.Ty(tys[i] if i < tys.Len() else l.Ty), a.deprecatedAt(a.moduleOfFile(body.File), I64(l.Sp.Start), true))
+            if home != mi and not doc.Exported(name): continue
+            it.AddDep(name, CompField, c!.Ty(tys[i] if i < tys.Len() else l.Ty), a.deprecatedAt(home, I64(l.Sp.Start), true))
         }
         return
     }
 }
 
-fn (a Analysis&) typeMembers(it mut Items&, t types.TypeId) {
+# the fields and methods of a type t as completions in module mi - through a reference, of what it refers to: its
+# fields, the methods declared for it, for the type it extends (T29f) and by its traits (M19e), and the ones the
+# compiler supplies (E23, E26b, E31d, E33, E37, P9)
+fn (a Analysis&) typeMembers(it mut Items&, t types.TypeId, mi I64) {
     c := a.C
     tt := c!.P.T.Referent(t) if c!.P.T.KindOf(t) == types.Kind.Ref else t
-    if c!.P.T.KindOf(tt) == types.Kind.Named: a.fieldMembers(it, tt)
-    # methods: every function with a receiver whose type is t's - of its declaration, or of its kind for a built-in one
+    if c!.P.T.KindOf(tt) == types.Kind.Named: a.fieldMembers(it, tt, mi)
     c!.P.AllFns()
     for f in range c!.P.FnCount() {
         decl := c!.P.FnDecl(f)
         if decl.Recv == null: continue
-        recv := c!.P.T.Items(c!.P.T.Params(c!.P.Sig(f)))[0]
-        if c!.P.T.KindOf(recv) == types.Kind.Ref: recv = c!.P.T.Referent(recv)
-        if not sameShape(c!, recv, tt): continue
         name := c!.P.L.Names.Text(decl.Name)
-        if not doc.Exported(name) and c!.P.FnModule(f) != a.L.Root: continue
+        if not doc.Exported(name) and c!.P.FnModule(f) != mi: continue
+        if not a.methodFor(f, tt): continue
         it.AddDep(name, CompMethod, firstLine(explain.FnText(c!, a.Sc!, f)), a.deprecatedAt(c!.P.FnModule(f), I64(decl.Sp.Start), false))
     }
+    a.suppliedMembers(it, tt)
+}
+
+# whether method f applies to a value of type t: its receiver's type is t's, or that of a type t extends (T29f) - of its
+# declaration, or of its kind for a built-in one - or f is a default of one of t's traits (M19e)
+fn (a Analysis&) methodFor(f I64, t types.TypeId) Bool {
+    c := a.C
+    recv := c!.P.T.Items(c!.P.T.Params(c!.P.Sig(f)))[0]
+    if c!.P.T.KindOf(recv) == types.Kind.Ref: recv = c!.P.T.Referent(recv)
+    u := t
+    for _ in range 32 {
+        if sameShape(c!, recv, u): return true
+        if not c!.P.Extends(u): break
+        u = c!.P.T.Base(u)
+    }
+    if c!.P.T.KindOf(recv) != types.Kind.Var: return false
+    return c!.P.DefaultMethods(t, c!.P.FnDecl(f).Name).Has(f)
+}
+
+# the methods the compiler supplies for a type rather than any declaration: every value's Copy and Hash (E31d, E10b),
+# an array's Len and access (E23), a number's Narrow (E26b), a float's Bits (E33), an integer's bit operations (E37) and
+# atomics (P9) - of the type a declared one is over where it extends it (T29f)
+fn (a Analysis&) suppliedMembers(it mut Items&, t types.TypeId) {
+    c := a.C
+    for n in ["Copy", "Hash"]: it.Add(n, CompMethod, "supplied")
+    u := t
+    for _ in range 32 {
+        if not c!.P.Extends(u): break
+        u = c!.P.T.Base(u)
+    }
+    if c!.P.T.KindOf(u) == types.Kind.Array {
+        for n in ["Len", "Get", "Set", "SliceOf"]: it.Add(n, CompMethod, "supplied")
+    }
+    if c!.P.T.IsNumber(u): it.Add("Narrow", CompMethod, "supplied")
+    if c!.P.T.IsFloat(u): it.Add("Bits", CompMethod, "supplied")
+    if not c!.P.T.IsInt(u): return
+    for n in ["LeadingZeros", "TrailingZeros", "PopCount", "RotateLeft", "RotateRight", "ByteSwap"]: it.Add(n, CompMethod, "supplied")
+    for n in ["AtomicLoad", "AtomicStore", "AtomicAdd", "AtomicSwap", "AtomicCompareSwap"]: it.Add(n, CompMethod, "supplied")
 }
 
 fn firstLine(t String&) String {

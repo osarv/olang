@@ -73,7 +73,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   non-breaking row); the compiler gives it no meaning. Removing between versions stays the main way.
 - **`olang lsp` (B15) and `olang mcp` (B16), 2026-10-24 (the user: "we need this, both for MCP and neovim
   integration").** LSP over stdio (diagnostics, hover, definition, symbols, completion, formatting); MCP over stdio
-  (`check`, `explain`, `doc`, `format`, `test`). Unused names (D3b, M5a) are sent as warnings (severity 2), every other rule as an error (2026-11-15). The Neovim plugin and notes are `editors/`.
+  (`check`, `explain`, `doc`, `format`, `test`). Unused names (D3b, M5a) are sent as warnings (severity 2), every other rule as an error (2026-11-15). Completion after `x.` works on an unfinished line, through field chains, with supplied methods and trait defaults; the Neovim plugin turns on Neovim 0.11's own completion (`vim.lsp.completion`, autotrigger on `.`) unless nvim-cmp or blink.cmp is loaded (2026-11-16). The Neovim plugin and notes are `editors/`.
 - **A file is built and run (B3g; merged with `interpret`, the user 2026-11-15: "merge them. we dont need to reach the
   interpreter from CLI its more an internal compilation thing after all. make olang FILE not create a build directory and
   then olang run FILE builds and runs").** `olang [options] f.olang args...` builds as `build` does by default (unchecked,

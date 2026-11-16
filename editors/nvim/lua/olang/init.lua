@@ -3,6 +3,8 @@
 --   require("olang").setup({
 --     cmd = { "olang", "lsp" },  -- the server (nil to leave the server off)
 --     format_on_save = true,     -- through the server when it runs, else "olang format" on a copy of the buffer
+--     completion = true,         -- Neovim's own completion from the server, shown on "." (0.11+; off where nvim-cmp
+--                                -- or blink.cmp is loaded, which take the server's completion themselves)
 --     debug = { adapter = nil },  -- the debug adapter's command (nil: lldb-dap, or lldb-vscode, found on PATH)
 --   })
 --
@@ -10,7 +12,7 @@
 -- without it.
 local M = {}
 
-M.config = { cmd = { "olang", "lsp" }, format_on_save = true }
+M.config = { cmd = { "olang", "lsp" }, format_on_save = true, completion = true }
 
 function M.setup(opts)
   M.config = vim.tbl_extend("force", M.config, opts or {})
@@ -48,11 +50,22 @@ function M.format(bufnr)
   os.remove(copy)
 end
 
+-- Neovim's built-in completion from the server turned on for a buffer: the menu opens by itself on "." (the server's
+-- trigger character) and CTRL-X CTRL-O asks anywhere; nothing is inserted until an item is chosen. Left to the plugin
+-- where nvim-cmp or blink.cmp is loaded, and to older Neovims (no vim.lsp.completion) the omnifunc the client sets.
+function M.completion(id, bufnr)
+  if not M.config.completion or not (vim.lsp.completion and vim.lsp.completion.enable) then return end
+  if package.loaded["cmp"] or package.loaded["blink.cmp"] then return end
+  vim.lsp.completion.enable(true, id, bufnr, { autotrigger = true })
+  pcall(function() vim.bo[bufnr].completeopt = "menuone,noselect,popup" end)
+end
+
 -- the server started (or reused) for a buffer, and format on save
 function M.attach(bufnr)
   local cfg = M.config
   if cfg.cmd and vim.lsp.start and vim.fn.executable(cfg.cmd[1]) == 1 then
-    vim.lsp.start({ name = "olang", cmd = cfg.cmd, root_dir = root(bufnr) }, { bufnr = bufnr })
+    local id = vim.lsp.start({ name = "olang", cmd = cfg.cmd, root_dir = root(bufnr) }, { bufnr = bufnr })
+    if id then M.completion(id, bufnr) end
   end
   vim.api.nvim_create_autocmd("BufWritePre", {
     buffer = bufnr,
