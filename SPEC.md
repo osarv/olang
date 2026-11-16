@@ -5078,6 +5078,15 @@ equal, as a slice's bounds are.
 Arrays have these **lane methods**, the compiler's as `Len()` is, on any array type a lane operator takes:
 - `a.Sum()` - the elements added in order (`+`, E31) to `T`'s zero value; an empty array's is that zero. `Sum` adds in
   order, so a float sum is the sequential one and vectorizes only where the order does not matter (integers).
+- `a.Sum<A>()` - `Sum` with every lane computed in `A`: each operand's elements are widened to `A` (T6b) before the
+  lane's operation, and the lanes are added in `A`, from its zero - `(x * w).Sum<I32>()` with `x` an `Array<U8>` and
+  `w` an `Array<I8>` multiplies in `I32` and cannot wrap where `x * w`'s own lanes would; `c.Sum<I32>()` totals `I8`s
+  past `I8`'s range; `(a * b).Sum<F32>()` over `BF16` or `F16` lanes multiplies and adds in `F32`. `A` is a number every
+  operand's element type widens to with nothing lost (a mask's `Bool`s take no part); any other `A` is an error. A
+  float `A` adds in order, as `Sum` does; an integer total is exact in any order, so the compiler adds it in any - a
+  product of two byte arrays into a wider integer uses the target's byte dot instructions where it has them
+  (vpdpbusd). A dot instruction that would reorder a float sum (vdpbf16ps) is not used: `Sum<F32>` over `BF16` is the
+  sequential sum of the widened products.
 - `a.Min()`, `a.Max()` - the least and greatest by `<` (E31's `Less` for a type of its own), ties the first; a float
   NaN, once met, is the answer (IEEE's minimum and maximum propagate it). An empty array fails with
   `ArrayError.Empty`, so both are written with `try` (or `!`).
@@ -5107,6 +5116,7 @@ reference points, nothing written back, as `v[i].xs[j] += k` is.
 
 ```
 d := (a * b).Sum()                      # a dot product: one loop, no array
+q := (x * w).Sum<I32>()                 # bytes widened to I32, multiplied and summed there (vpdpbusd)
 y += a * k                              # in place
 m := try (a - b).Max()                  # fails with ArrayError.Empty on empty arrays
 c := a.LanesLess(b).Select(a, b)        # the lesser of each pair
