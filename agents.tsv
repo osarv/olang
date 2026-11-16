@@ -117,7 +117,7 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-15	spinner2	sonnet	high	merged, master 360b9901 (bootstrap from seed passes)						finish 3x2 spinner (fresh after restart)
 2026-11-15	int8b	opus	high	done, merged into wt-merge						INT8 inlining (fresh after restart)
 2026-11-15	strplus	opus	high	merged, master e6232af1						olang: text joins by +, adjacency removed (the user)
-2026-11-15	oannmeasure	sonnet	medium	done, oann master (MNIST 5x slower: rowStep not inlined, same cause as INT8)						oann round 2: baselines vs DESIGN
+2026-11-15	oannmeasure2	sonnet	medium	done, oann master (MNIST 5x slower: rowStep not inlined, same cause as INT8)						oann round 2: baselines vs DESIGN
 2026-11-15	oannplan	opus	high	done, oann master bcd805f (docs/redesign.md)						oann round 2: docs/redesign.md + work packages
 2026-11-15	oanngemm	opus	high	done, oann master (M4 parity, Gemv 2-4x, VNNI)						oann A2 gemm
 2026-11-15	oanntensor	sonnet	high	done, oann master (19 tests)						oann A1 tensor
@@ -196,4 +196,6 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	oannmig2	sonnet	low	completed	112	29	45	partial		fix tools misfired 5 ways
 2026-11-16	fixtools	opus	low	completed	256	182	145	partial		tools fixed, defer_migrate; seed blocks refusal
 2026-11-16	steward3	sonnet	medium	completed	106	26	57	yes		merged extfix, serve
-2026-11-16	seed	opus	medium	running
+2026-11-16	seed	opus	medium	completed	141	59	44	yes		seed rewritten twice, bare defer refused
+2026-11-16	verify	sonnet	medium	running
+2026-11-16	oannmeasure2	sonnet	medium	running
