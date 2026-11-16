@@ -38517,3 +38517,36 @@ checks/cases/rangefourargs.olang, rangenoargs.olang.
 whether `!` should cover only the call it follows; kept as it is (the user: "we gain nothing from it right? all possible
 cases are writable and this simplifies the two failing args case"): `!` covers what a `try` in its place would (R8),
 so `f(a(), b())!` handles both arguments with one `!`, and `f(a()!, b())` still says exactly which may end the program.
+
+## 2026-11-16: no core dump on a failure, and the reserved range left out of cores (wt-nodump)
+
+**The hang.** The user ran a program that ended through `!` (`test.olang:9: ParseError.Invalid`) and the terminal
+hung; Ctrl-C did nothing. A failure outside a test called abort(), so the kernel wrote a core. O29 reserves about 1 TiB
+of address space for its slots (VmSize 1073745480 kB against an RSS under 2 MB), and on WSL core_pattern is a pipe to
+the crash collector: a piped dump ignores RLIMIT_CORE=0 and writes every untouched page of an anonymous mapping as
+zeros - a terabyte. Measured here with core_pattern `core` and `prlimit --core=unlimited`: a trivial failing program
+took 15.4 s and left a 1 TiB (sparse) core before the fix.
+
+**Two fixes.** (1) The runtime marks the reserved range `madvise(MADV_DONTDUMP)` as it is mapped
+(`__olang_slot_reserve`) and each slot `MADV_DODUMP` as it is carved (`__olang_slot_take`, once per slot - a slot given
+back and reused keeps the mark; never per allocation), so a core holds the slots in use; the profiler's 256 MB sample
+buffer is `MADV_DONTDUMP` too. Large chunks (mapped read-write and used) are left as they are. After: the same program
+ends in 7 ms with a 1.7 MB core that still holds the program's strings. MADV_DONTDUMP is 16 and MADV_DODUMP 17 on
+x86-64 and AArch64 Linux alike. (2) The user's call ("there is gonna be a lot of failing with ! whilst developing"):
+a failure no longer aborts at all. Everything ending the program outside a test - a failed check from
+`__olang_check_failed*`, `unreachable`, a null reached, a `!`'s error, the scope sanitizer's report - goes through
+`__olang_check_end_with(status)` and, with no recovery point, `__olang_failure_end`: it writes os.OnCrash's message
+(the write loop moved out of the signal handler into `__olang_crash_say`, uninstrumented as the handler is, so the
+"crashed" line a program set still appears) and `_exit`s - no SIGABRT, no core, no atexit, stdio not flushed (as
+abort() flushed nothing). Then the user refined it: "Exclamation mark doesn't necessarily mean that something broke.
+It might be intended behavior." So an error a `!` took ends with **status 1**, as one escaping `main` does (bad input
+to a script is a normal way to end), and a bug - failed assert, `unreachable`, null reached, a guaranteed check -
+with **status 2** (Go's panic status). A task ending the program follows what ended the task (`spawn f()!` 1, an
+assert 2). `OLANG_CORE=1` in the environment restores abort() for anyone wanting a core for gdb; it is read once, by
+the first thread made known (`__olang_thread_init`, main's or a library's start), never at the failure - the end can
+run inside the sanitizer's signal handler, where getenv is not safe. A global constructor was tried first and
+dropped: the compiler derives each runtime global's declaration for every module, and `@llvm.global_ctors` cannot be
+declared external, so the seed (and master's compiler) could no longer build the next stage. Interpret ends alike:
+RunMain returns 2 or 1 and sets `Failed`, and `interp.FailureEnd` aborts only under OLANG_CORE=1 (a detached test
+child too). Real crashes - a segmentation fault and the like - keep their signals and os.OnCrash's report. SPEC: E35,
+S16d, S18, P6, B6, the os.OnCrash entry; the checks that expected status 134 and the shell's "Aborted" line migrated.

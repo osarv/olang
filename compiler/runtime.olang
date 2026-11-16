@@ -156,7 +156,7 @@ fn Text(arch String&, san Bool, dyncall Bool, prof Bool = false, bench Bool = fa
 }
 
 # ir with the build's attributes, as stage 0 writes every object's: a linkonce_odr global in a comdat of its own, every
-# function definition given group #0 (#1, never instrumented, for the two crash handlers: they can run while
+# function definition given group #0 (#1, never instrumented, for the two crash handlers and the message they write: they can run while
 # ThreadSanitizer's own state is inconsistent), the groups defined at the end - null_pointer_is_valid (T2b), the
 # target's attributes (B12), sanitize_thread on #0 under -race (P7), and nounwind: olang has no unwinding, so no
 # function needs an unwind table
@@ -176,7 +176,7 @@ fn WithAttributes(ir String&, attrs String&, race Bool) String {
             dbg := try line.Find(" !dbg ") catch default -1
             cut := dbg if dbg >= 0 else line.Len() - 1
             head := line[:cut]
-            plain := head.Contains("@__olang_crash_handler(") or head.Contains("@__olang_san_handler(")
+            plain := head.Contains("@__olang_crash_handler(") or head.Contains("@__olang_crash_say(") or head.Contains("@__olang_san_handler(")
             out.Push(head)
             if dbg >= 0 {
                 out.Push(" #1" if plain else " #0")

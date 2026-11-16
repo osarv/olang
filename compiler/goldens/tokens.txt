@@ -2021,7 +2021,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 ac0cb24df228eac5 494276e48e18f7fa checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-ea751d2eb5c87946 adefa4f14dde4023 checks/checks.olang
+c0a3c7323861ffb6 f13b832986772f28 checks/checks.olang
 e441d89352158de4 51f391891d39e1c7 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 efb54136ad6286dc checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb 11ac830c3b4509ca checks/fixtures/agree/math.olang
@@ -2361,7 +2361,7 @@ bc0fb671082b3f3a be35273cbb98d765 compiler/fetch.olang
 b9056cc6dbae8272 00754e9b54af6dfd compiler/fmt.olang
 832f8ffc27f69e96 c6695a6ca41b2dd3 compiler/free.olang
 4460e48f2107cc5f ec757ff68d73b202 compiler/generic.olang
-2b028a400a91c748 b9ad92f5e1419ea3 compiler/interp.olang
+ccdc7eee02fefe1c 6b742ae82d5351fc compiler/interp.olang
 bd01c009434dac50 1520d528cbf334f8 compiler/jupyter.olang
 b0231f57ee965ec6 86894f1336fb6e15 compiler/lineedit.olang
 83e4bb3814d8952c 7130ef08eb8d3ec9 compiler/listing.olang
@@ -2375,13 +2375,13 @@ b397e51ded4ef5a1 40f33b7be31f0b7d compiler/lower.olang
 9a6f5aa11409f53c cc848979f5086107 compiler/names.olang
 3f072b84e716c304 59b46a3ae1383924 compiler/needs.olang
 8c0126f803fe9900 3d8dcaa37df36f12 compiler/notebook.olang
-cbff498da47fd465 97954d0b4100cdbe compiler/olang.olang
+dec0d84ac306ff9e a8a498a1014ffc09 compiler/olang.olang
 b39996c18bbe72bf ac116c53952c20fd compiler/paint.olang
 442346ea59bdc5b5 8f8d1d0fe5715c86 compiler/parse.olang
 4ba4b66a887cb42b c7ddda08529a2b5c compiler/profile.olang
 32b1d8d2bae58121 96d00a265b97ef6b compiler/prompt.olang
 06919133ecba0d2c 6670378fc889c57b compiler/records.olang
-330aaae2784a2518 04a6e2dfad4e6713 compiler/runtime.olang
+d1dd33f4453d3ace 28346f8dde6398ce compiler/runtime.olang
 475e688e30b30f35 c05e24344222a90d compiler/scan.olang
 c199d3a6a256ac08 0ce5d3cbe5cad46b compiler/scope.olang
 42bd80289035dd5c e75cf8a25e128644 compiler/session.olang
@@ -2508,7 +2508,7 @@ b93a943edf2e8c97 24d602653b8c2843 std/hex.olang
 b55e49533472817d ac0b0e500a4d6cc8 std/list.olang
 e2af3c272668511f 5cc8d85171be2a0a std/net.olang
 e9aa94e405345e7a 4927fbcc42dcb6a9 std/order.olang
-5921f6f50b983d03 8a027d22a4eb1b3e std/os.olang
+8f8bdf4299f270f1 d77daf04658e15f6 std/os.olang
 17c08f79ab55afc4 3582f78520a746d0 std/pair.olang
 6d63e48e89ab2815 a6f0f6bf11a5db33 std/plot.olang
 3ea631f369fef41e 9b46acf3eb0d51c6 std/pool.olang

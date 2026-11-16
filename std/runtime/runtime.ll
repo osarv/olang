@@ -44,6 +44,7 @@ declare double @strtod(ptr, ptr)
 declare i64 @strtol(ptr, ptr, i32)
 declare void @abort() noreturn
 declare void @exit(i32) noreturn
+declare void @_exit(i32) noreturn
 declare ptr @malloc(i64)
 declare ptr @aligned_alloc(i64, i64)
 declare void @free(ptr)
@@ -185,7 +186,7 @@ entry:
   %stream = call ptr @__olang_check_stream()
   call i32 @fputs(ptr %msg, ptr %stream)
   call void @__olang_ert_print(ptr %stream)
-  call void @__olang_check_end()
+  call void @__olang_check_end_with(i32 1)
   unreachable
 }
 
@@ -205,7 +206,7 @@ entry:
   %stream = call ptr @__olang_check_stream()
   call i32 @fputs(ptr %msg, ptr %stream)
   call void @__olang_debug_hint(ptr %stream)
-  call void @__olang_check_end()
+  call void @__olang_check_end_with(i32 1)
   unreachable
 }
 
@@ -213,7 +214,7 @@ entry:
 define void @__olang_test_error(ptr %name) cold noreturn {
 entry:
   store ptr %name, ptr @__olang_fail_error
-  call void @__olang_check_end()
+  call void @__olang_check_end_with(i32 1)
   unreachable
 }
 
@@ -235,7 +236,7 @@ plain:
   call void @__olang_debug_hint(ptr %stream)
   br label %done
 done:
-  call void @__olang_check_end()
+  call void @__olang_check_end_with(i32 1)
   unreachable
 }
 
@@ -333,14 +334,22 @@ entry:
   ret ptr %stream
 }
 
+; a failed check, or an error a "!" took, ends here: status 2 for a bug (a failed assert, unreachable, a null reached
+; - a broken promise), 1 for an error ending the program (E35), as one escaping main does (S18, the user's call)
 define void @__olang_check_end() cold noreturn {
+entry:
+  call void @__olang_check_end_with(i32 2)
+  unreachable
+}
+
+define void @__olang_check_end_with(i32 %status) cold noreturn {
 entry:
   %tgt = load ptr, ptr @__olang_jmp_target
   %isnull = icmp eq ptr %tgt, null
   br i1 %isnull, label %hard, label %soft
 hard:
 ; @prof call void @__olang_prof_stop()
-  call void @abort()
+  call void @__olang_failure_end(i32 %status)
   unreachable
 soft:
   ; S18b/P1d: unwind BEFORE the jump, not after. A close emitted at the landing block is provably a
@@ -351,6 +360,45 @@ soft:
   call void @__olang_unwind_to(ptr %mk)
   call void @longjmp(ptr %tgt, i32 1)
   unreachable
+}
+
+; S18, E35: the program ended by a failure, outside a test - after its message and trace were written - with status
+; (2 a bug, 1 an error a "!" took), os.OnCrash's message said first as it is for a crash. Not abort(): no SIGABRT
+; and no core dump (the user's call: "there is gonna be a lot of failing with ! whilst developing" - a core of a
+; process that reserved a terabyte of address space, piped to a crash collector, hung the terminal). With OLANG_CORE=1
+; in the environment (read once, at startup) it aborts as before, the core there for a debugger; and a debugger can
+; break here. stdio is not flushed, as abort() did not flush it: _exit, not exit - no atexit, no destructors
+@__olang_core = global i64 0
+define void @__olang_failure_end(i32 %status) cold noreturn noinline {
+entry:
+  %core = load i64, ptr @__olang_core
+  %dump = icmp ne i64 %core, 0
+  br i1 %dump, label %abort, label %quiet
+abort:
+  call void @abort()
+  unreachable
+quiet:
+  call void @__olang_crash_say()
+  call void @_exit(i32 %status)
+  unreachable
+}
+
+; OLANG_CORE=1 read once, as the program starts - by the first thread made known (__olang_thread_init), main's or a
+; library's start: a failure then aborts, leaving a core (__olang_failure_end)
+@__olang_core_name = unnamed_addr constant [11 x i8] c"OLANG_CORE\00"
+define void @__olang_core_init() cold noinline {
+entry:
+  %v = call ptr @getenv(ptr @__olang_core_name)
+  %none = icmp eq ptr %v, null
+  br i1 %none, label %done, label %read
+read:
+  %c = load i8, ptr %v
+  %one = icmp eq i8 %c, 49
+  %w = zext i1 %one to i64
+  store i64 %w, ptr @__olang_core
+  br label %done
+done:
+  ret void
 }
 
 ; P1c: "spawn" guarantees the call runs, so a thread the OS declines to create is a broken
@@ -1757,7 +1805,8 @@ entry:
 }
 
 ; the range reserved, with the slot lock held: 1TB halved until the system grants it, down to 4GB - MAP_NORESERVE, else
-; PROT_NONE (each slot made writable as it is carved); G more is asked so the range can start G-aligned. None granted
+; PROT_NONE (each slot made writable as it is carved); G more is asked so the range can start G-aligned. The range is
+; left out of a core dump and each slot put back in as it is carved, so a dump holds the slots in use. None granted
 ; leaves base and end 0: every chunk is then mapped or taken from aligned_alloc, and found through the large table
 define void @__olang_slot_reserve() noinline {
 entry:
@@ -1783,6 +1832,10 @@ strict:
 none:
   ret void
 granted:
+  ; left out of a core dump (MADV_DONTDUMP): a dump writes each untouched page of an anonymous mapping as zeros, and
+  ; one piped to a crash collector ignores RLIMIT_CORE - a terabyte of zeros, the terminal hung after the error.
+  ; Each slot is put back in the dump as it is carved (__olang_slot_take)
+  %dd = call i32 @madvise(ptr %m, i64 %ask, i32 16) ; MADV_DONTDUMP
   %mi = ptrtoint ptr %m to i64
   %up = add i64 %mi, 131071
   %base = and i64 %up, -131072
@@ -1825,6 +1878,9 @@ cut:
   %at1 = add i64 %at, 131072
   store i64 %at1, ptr @__olang_slot_next
   %s = inttoptr i64 %at to ptr
+  ; the slot's pages in a core dump again, as storage the program uses (the range was left out, __olang_slot_reserve);
+  ; once per slot carved - a slot given back and reused keeps the mark
+  %du = call i32 @madvise(ptr %s, i64 131072, i32 17) ; MADV_DODUMP
   %rw = load i64, ptr @__olang_slot_rw
   %protect = icmp ne i64 %rw, 0
   br i1 %protect, label %open, label %give
@@ -2908,6 +2964,12 @@ entry:
   %n = atomicrmw add ptr @__olang_thread_next, i64 2 monotonic, align 8
   %id = inttoptr i64 %n to ptr
   store ptr %id, ptr @__olang_self
+  %first = icmp eq i64 %n, 1
+  br i1 %first, label %start, label %done
+start:
+  call void @__olang_core_init()
+  br label %done
+done:
   ret void
 }
 
@@ -4897,6 +4959,14 @@ done:
 ; to the default before this ran (SA_RESETHAND), so the process ends as the signal ends it
 define void @__olang_crash_handler(i32 %sig) {
 entry:
+  call void @__olang_crash_say()
+  %r = call i32 @raise(i32 %sig)
+  ret void
+}
+
+; OnCrash's message written to standard error, with write() alone (a signal handler and a failure's end say it)
+define void @__olang_crash_say() {
+entry:
   %m = load atomic ptr, ptr @__olang_crash_msg acquire, align 8
   %none = icmp eq ptr %m, null
   br i1 %none, label %again, label %say
@@ -4918,7 +4988,6 @@ more:
   %left1 = sub i64 %left, %w
   br label %loop
 again:
-  %r = call i32 @raise(i32 %sig)
   ret void
 }
 

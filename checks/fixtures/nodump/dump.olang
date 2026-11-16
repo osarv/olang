@@ -1,0 +1,38 @@
+# the scenario nodump: the slot range a program reserves (O29) is left out of a core dump (VmFlags "dd" in its smaps
+# entry) and the slots carved from it, in use, are not - read from this process's own /proc/self/smaps. With an
+# argument, it ends by a failed assert after that (status 2, or SIGABRT and a core under OLANG_CORE=1, S18)
+import "std/os"
+
+type area struct(Start String&, End String&, Kb I64, Dd Bool) { Start, End, Kb, Dd }
+
+# the anonymous and file mappings of this process, each with its size and whether it is left out of a core
+fn areas(smaps String&) Vec<area> {
+    out := Vec<area>()
+    start, end := "", ""
+    kb I64 = 0
+    for line in smaps.Lines() {
+        if line.StartsWith("Size:"): kb = try line[5:].Trim().Split(" ")[0].ParseInt() catch default 0
+        if line.StartsWith("VmFlags:"): out.Push(area(start, end, kb, line.Contains(" dd")))
+        dash := try line.Find("-") catch default -1
+        space := try line.Find(" ") catch default -1
+        if dash <= 0 or space <= dash or line[:space].Contains(":"): continue
+        start = $line[:dash]
+        end = $line[dash + 1:space]
+    }
+    return out
+}
+
+fn main() {
+    v := Vec<String>()
+    for i in range 1000: v.Push("item " + $i)
+    all := areas(os.ReadFile("/proc/self/smaps")!)
+    for r in all {
+        if r.Kb < 4194304 or not r.Dd: continue
+        Println("reserved: left out of a core")
+        for u in all {
+            if u.End == r.Start and not u.Dd: Println("slots in use: in a core")
+        }
+    }
+    Println("items " + $v.Len())
+    assert os.Args().Len() == 1, "asked to fail"
+}

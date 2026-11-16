@@ -120,8 +120,9 @@ fn RunOnStack(bytes I64, f fn&()) {
 }
 
 # what the program writes to its standard error if it crashes - a segmentation fault (a null dereference, a stack
-# overflow), a bus error, an arithmetic or illegal-instruction fault, or an abort (a failed check outside a test) - before
-# it ends as the signal ends it, its status and core dump unchanged: "os.OnCrash(\"mytool: internal error - please
+# overflow), a bus error, an arithmetic or illegal-instruction fault, or an abort - before it ends as the signal ends it,
+# its status and core dump unchanged; and as a failed check or a "!" ends the program outside a test (S18, E35, status 2
+# or 1): "os.OnCrash(\"mytool: internal error - please
 # report it\\n\")". Written exactly as given, with nothing added; called again, the newer message replaces it. It is
 # written from a handler running on a stack of its own, so a stack overflow is reported too, on the thread calling
 # OnCrash and on every thread the runtime starts after it - RunOnStack's, and the tasks' (spawn)
