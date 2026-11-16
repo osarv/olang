@@ -1,0 +1,7 @@
+# check: fail 'Sum' works in a number type, and String is none
+# E39: Sum<A> computes in A, which must be a number
+fn main() {
+    a := Array<I32>[1, 2]
+    s := a.Sum<String>()
+    assert s == s
+}

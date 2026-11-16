@@ -188,3 +188,44 @@ test "E39: Max runs the operation once a lane" {
     n := try (a + a).Min() catch default Counted(-1)
     assert n.v == 2 and PlusCalls == 4
 }
+
+# Sum<A> (E39): every lane computed in A - the operands widened before the lane's operation - and added in A. A byte
+# product into I32 goes a block of 256 lanes at a time (vpdpbusd where the target has it), the rest lane by lane
+fn plainDot(a Array<U8>&, b Array<I8>&) I32 {
+    s I32 = 0
+    for p in range a.Len(): s += I32(a[p]) * I32(b[p])
+    return s
+}
+
+fn bytesAgree(n I64) Bool {
+    a := Array<U8>[U8((p * 37) % 256) for p in range n]
+    b := Array<I8>[I8(p % 256 - 128) for p in range n]
+    return (a * b).Sum<I32>() == plainDot(a, b) and (b * a).Sum<I64>() == I64(plainDot(a, b))
+}
+
+fn bytesAll() Bool {
+    for n in [0, 1, 63, 64, 255, 256, 257, 300, 1000] {
+        if not bytesAgree(n): return false
+    }
+    return true
+}
+
+fn wide() Bool {
+    c := Array<I8>(10, 100)
+    u := Array<U8>(3, 200)
+    f := Array<BF16>[1.5, 2.0, 0.25]
+    h := Array<F16>[2.0, 3.0, 4.0]
+    return c.Sum<I32>() == 1000 and c.Sum() == -24 and (c * c).Sum<I32>() == 100000 and (c + c).Sum<I16>() == 2000 and
+        (u * u).Sum<U32>() == 120000 and (f * h).Sum<F32>() == 10.0 and (h * h).Sum<F32>() == 29.0 and
+        (c * 3).Sum<I32>() == 3000 and (-c).Sum<I32>() == -1000
+}
+
+Lanes300 mut I64 = 300 # read at run time
+BytesBaked := bytesAgree(300)
+WideBaked := wide()
+
+test "E39: Sum<A> works every lane in A - byte products into I32, I8 past its range, BF16 and F16 into F32" {
+    assert bytesAll() and bytesAgree(Lanes300) and wide()
+    assert BytesBaked and WideBaked
+    assert bytesAgree(300) and wide() # S18c: decided while compiling
+}

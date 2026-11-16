@@ -5557,6 +5557,7 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
             return fe.let("insertvalue { ptr, ptr } " + $a + ", ptr " + $tw + ", 1")
         }
         case typed.PrimOp.AnyInstance { return fe.let("extractvalue { ptr, ptr } " + $x + ", 0") }
+        case typed.PrimOp.LaneDot { return fe.laneDot(x, t0, args, ty) }
         case typed.PrimOp.AnyIs {
             # T34: the table's first word against the type's identity - a null any's table the empty one
             tab := fe.let("extractvalue { ptr, ptr } " + $x + ", 1")
@@ -5941,6 +5942,33 @@ fn (fe mut fnEm&) bf16Bits(v String&, opaque Bool) String {
 }
 
 # a BF16 widened to wide ("float", "double"): its bits are an F32's top half, exactly
+# E39's Sum<A> over a block of byte products (LaneDot): its n lanes loaded from p and q as vectors, each element widened
+# to A by its own signedness, multiplied and added by LLVM's reduce.add - which, of mul(zext, sext) of bytes into i32,
+# is vpdpbusd on avx512vnni and avxvnni, and ordinary vector code elsewhere
+fn (fe mut fnEm&) laneDot(p String&, pt types.TypeId, args mir.Range, ty types.TypeId) String {
+    q := fe.arg(args, 1)
+    qt := fe.otype(q)
+    n := match fe.arg(args, 2) {
+        case mir.Operand.Const(_, v): v
+        case _: 0
+    }
+    at := fe.ty(fe.E.T.Repr(ty))
+    vt := "<" + $n + " x " + $at + ">"
+    m := fe.let("mul " + $vt + " " + $fe.laneLoad(p, pt, n, at) + ", " + $fe.laneLoad(fe.val(q, qt), qt, n, at))
+    intr := "llvm.vector.reduce.add.v" + $n + $at
+    fe.E.declare(intr, $at + " @" + $intr + "(" + $vt + ")")
+    return fe.let("call " + $at + " @" + $intr + "(" + $vt + " " + $m + ")")
+}
+
+# n elements from p, a reference to an integer element, as a vector widened to the integer type at
+fn (fe mut fnEm&) laneLoad(p String&, pt types.TypeId, n I64, at String&) String {
+    t := fe.E.T
+    et := t.Repr(t.Referent(t.Repr(pt)))
+    el := fe.ty(et)
+    v := fe.let("load <" + $n + " x " + $el + ">, ptr " + $p + ", align 1")
+    return fe.let($("zext <" if t.IsUnsigned(et) else "sext <") + $n + " x " + $el + "> " + $v + " to <" + $n + " x " + $at + ">")
+}
+
 fn (fe mut fnEm&) widenBF16(v String&, wide String&) String {
     bits := fe.bf16Bits(v, fe.E.BF16Opaque)
     z := fe.let("zext i16 " + $bits + " to i32")

@@ -998,6 +998,8 @@ type Diag enum {
     LaneReferences
     LaneCompare
     LaneMaskBool
+    LaneSumNotNumber
+    LaneSumNarrows
     ByteSwapWidth
     AtomicWidth
     GenericNeeds
@@ -1034,6 +1036,8 @@ fn LaneLengths(a I64, b I64) r.Msg { return r.Msg(Diag.LaneLengths, "E39", "thes
 fn LaneReferences() r.Msg { return r.Msg(Diag.LaneReferences, "E39", "lane operators give elements that may not be or hold references - build the array with a loop") }
 fn LaneCompare(op String&, how String&) r.Msg { return r.Msg(Diag.LaneCompare, "E39", $op + " does not compare arrays - lane by lane it is '" + $how + "', an Array<Bool>") }
 fn LaneMaskBool(what String&, ty String&) r.Msg { return r.Msg(Diag.LaneMaskBool, "E39", $what + " takes lanes of Bool, found " + $ty) }
+fn LaneSumNotNumber(ty String&) r.Msg { return r.Msg(Diag.LaneSumNotNumber, "E39", "'Sum' works in a number type, and " + $ty + " is none", "Sum<A> computes every lane and the total in A", "name a number type the elements widen to, as 'Sum<I32>()', or write 'Sum()'") }
+fn LaneSumNarrows(from String&, to String&) r.Msg { return r.Msg(Diag.LaneSumNarrows, "E39", "'Sum<" + $to + ">' would narrow the " + $from + " elements", $from + " does not widen to " + $to + " with nothing lost (T6b)", "name a type " + $from + " widens to, or convert the operands first") }
 
 # integers of any width (T4a)
 fn ByteSwapWidth(ty String&, bits I64) r.Msg { return r.Msg(Diag.ByteSwapWidth, "E37, T4a", $ty + " has no 'ByteSwap': its " + $bits + " bits are no whole number of bytes") }
