@@ -94,6 +94,18 @@ fn readOnly(text String&) String {
     return b.ToString()
 }
 
+# whether a line after line i of its function writes name's elements ("name[k] = c"): an array of characters only
+# made and read ("String(Array<Char>(n, 'a'))") is no text being built, and stays the String it was made as
+fn writtenAfter(lines Array<String&>&, i I64, name String&) Bool {
+    for l in lines[i + 1:] {
+        if l.StartsWith("fn ") or l.StartsWith("}"): return false
+        at := try l.Find($name + "[") catch { continue }
+        if at > 0 and srcmask.IsWord(l[at - 1]): continue
+        if l[at:].Contains("] = "): return true
+    }
+    return false
+}
+
 fn migrate(text0 String&) String {
     text := readOnly(text0)
     lines := text.Split("\n")
@@ -107,7 +119,7 @@ fn migrate(text0 String&) String {
         if l.StartsWith("fn ") or l.StartsWith("}"): names = Vec<String&>()
         n, nl := declared(l)
         out := l
-        if code and n != "" {
+        if code and n != "" and writtenAfter(lines, i, n) {
             names.Push(n)
             out = nl
         } else if code {
@@ -124,4 +136,6 @@ test migrate "a String built by its characters becomes an Array<Char>, its retur
     assert migrate("fn g() String {\n    t mut String& = String(Array<Char>(3))\n    t[0] = 'a'\n    return t\n}\n") == "fn g() String {\n    t := Array<Char>(3)\n    t[0] = 'a'\n    return String(t)\n}\n"
     assert migrate("fn r(x mut String&) mut String?& {\n    s mut String& = x\n    return s\n}\n") == "fn r(x String&) String?& {\n    s String& = x\n    return s\n}\n"
     assert migrate("fn h() String {\n    return out\n}\n") == "fn h() String {\n    return out\n}\n"
+    kept := "fn k() {\n    long := String(Array<Char>(100000, 'a'))\n    use(long)\n}\n"
+    assert migrate(kept) == kept
 }

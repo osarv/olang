@@ -68,7 +68,7 @@ fn renamed(text String&, i I64, j I64) Bool {
     if w == "any" or w == "weak": return not anyPlace(text, j)
     if w in DeclWords: return not declPlace(before)
     if w == "commutes": return not commutesPlace(text, before, j)
-    if fnTypeBefore(before): return false
+    if fnTypeBefore(before) or promisePlace(text, before, j): return false
     return not fieldAt(text, w, before)
 }
 
@@ -141,6 +141,24 @@ fn commutesPlace(text String&, before String&, j I64) Bool {
     return k >= text.Len() or text[k] == '?' or text[k] == '{' or text[k] == '\n' or text[k] == '#'
 }
 
+# a promise closing a signature - a function's, or a trait method's with no `fn` (`mut Relax(d T&) F64 noalloc`): a
+# ")" before it on its line with only a result's type between, no assignment, and after it only other words, then `?`, `{`, a comment or the line's end
+fn promisePlace(text String&, before String&, j I64) Bool {
+    close := try before.FindLast(")") catch { return false }
+    if before.Contains(":=") or before.Contains(" = "): return false
+    for c in before[close + 1:] {
+        if not srcmask.IsWord(c) and c != ' ' and c != '<' and c != '>' and c != '&' and c != '?' and c != '.' and c != ',': return false
+    }
+    k := j
+    for k < text.Len() and text[k] != '\n' {
+        c := text[k]
+        if c == '?' or c == '{' or c == '#': return true
+        if c != ' ' and not srcmask.IsWord(c): return false
+        k++
+    }
+    return true
+}
+
 # whether the line holds a function type before the word: `fn&(`, `fn?&(` or `type X fn(`
 fn fnTypeBefore(before String&) Bool {
     return before.Contains("fn&(") or before.Contains("fn?&(") or (before.Contains("type ") and before.Contains(" fn("))
@@ -176,6 +194,9 @@ test migrate "a name spelled like a keyword gets a _; the words in their places,
 }
 
 test migrate "promise words after a function type stay; a field read after a dot stays" {
+    sig := "type N trait {\n    mut Relax(d I64, dt F64) F64 noalloc\n    Activity() I64 noalloc pure\n}\nfn f(x I64) I64 noalloc { return x }\n"
+    assert migrate(sig) == sig
+    assert migrate("x := f(a) + noalloc\n") == "x := f(a) + noalloc_\n"
     fnt := "onClick fn&(e Event&) noalloc noblock pure\n"
     assert migrate(fnt) == fnt
     assert migrate("type H fn(a mut N&, b N&) keeps b in a\n") == "type H fn(a mut N&, b N&) keeps b in a\n"
