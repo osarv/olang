@@ -24,7 +24,7 @@ A plugin directory: put it on the runtime path and `.olang` files (and scripts b
   which then wins over the default and `setup()`.
   Keymaps under `<localleader>` - `r` run, `b` build, `t` test, `f` format, `F` format on save, `e` explain, `i` repl, `d` debug - are set where
 - `gf` on an import opens the module's file (`std/...` in the standard library, found through `OLANG_STD` or beside the `olang` on the PATH; anything else beside the importing file), and `[i`/`[I` follow imports too.
-- `gd` on a bracket jumps to its partner (as `%`), anywhere else to the definition; signs are drawn in the line-number column (an `E` replaces that line's number), so a diagnostic appearing never adds a column or shifts and rewraps the text.
+- `gd` on a bracket jumps to its partner (as `%`), anywhere else to the definition; diagnostic signs (`E`, `W`) are drawn in a sign column always reserved beside the line number (`signcolumn=yes:1`), so a diagnostic appearing never adds a column or shifts and rewraps the text.
   nothing is mapped already; `vim.g.olang_no_maps = 1` turns them off.
 
 Code blocks fenced as ```` ```olang ```` in Markdown are highlighted as olang (`ftdetect/olang.lua`, through Neovim's classic markdown syntax); `vim.g.olang_markdown = 0` leaves them alone.

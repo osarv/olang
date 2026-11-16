@@ -35,7 +35,7 @@ function M.formatters()
   return nil
 end
 
--- the signs nvim-dap draws, made to fit the line-number column (signcolumn=number): one character each, coloured by
+-- the signs nvim-dap draws, made to fit the one-column sign column (signcolumn=yes:1): one character each, coloured by
 -- highlight links. A definition the user made is kept; nvim-dap's own defaults (B, C, L, R, an arrow) are replaced
 local signs = {
   DapBreakpoint = { "●", "DiagnosticSignError", "B" },
