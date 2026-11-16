@@ -625,10 +625,7 @@ fn (w mut writer&) clauses(cl Array<ast.Catch&>&) {
             w.put(" ")
             w.name(c.Bind)
         }
-        if c.Braced {
-            w.put(" ")
-            w.block(c.Body)
-        }
+        if c.Braced: w.body(c.Body)
         if c.Defaults.Len() > 0 {
             w.put(" default ")
             w.exprs(c.Defaults)

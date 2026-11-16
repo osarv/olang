@@ -2714,7 +2714,10 @@ fn target(r mut report&) ? Failed {
     }
     try r.expect(sh(dir, "file build/loop | grep -q 'ARM aarch64'") == 0, "-target aarch64 built no aarch64 program", dir)
     if not hasEmulator("aarch64"): return
-    try r.expect(sh(dir, "\"$OLANG\" -target aarch64-linux-gnu loop.olang > arm.txt 2>&1") == 0, "aarch64 run", dir)
+    # running a file is for this machine only (B3g); run (B3e) builds and runs it in the emulator
+    refused := sh(dir, "\"$OLANG\" -target aarch64-linux-gnu loop.olang > out.txt 2>&1") != 0
+    try r.expect(refused and outOf(dir).Contains("error[B12a]"), "running a file for aarch64 not refused", dir)
+    try r.expect(sh(dir, "\"$OLANG\" run -target aarch64-linux-gnu loop.olang > arm.txt 2>&1") == 0, "aarch64 run", dir)
     arm := try os.ReadFile($dir + "/arm.txt") catch default ""
     try r.expect(arm.StartsWith("generic ") and arm.EndsWith($"\n" + $results), "aarch64 printed " + $arm, dir)
 }

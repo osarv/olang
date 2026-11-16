@@ -73,6 +73,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     inLine Bool = false                # in a one-line body (S1b): "else" and "catch" end its statement too
     lamItem Bool = false               # ... and the lambda an item of a list: its "," is the list's (L18c)
     inLam Bool = false                 # in a lambda's one-line body (S1b, D16): what closes its bracket ends it, a line end is left
+    keepEnd Bool = false               # in a catch clause's one-line body (S1b, R11): its line end is left to the statement it is in
     ctorBody Bool = false              # the next block is a constructor's body
     brackets I64 = 0                   # open "(" and "[" around here, outside every block (L18b)
     skip Bool = false                  # in a parenthesized expression or a comprehension: a line's end separates
@@ -367,7 +368,8 @@ fn (p mut Parser&) release(m stackMarks) {
 fn (p mut Parser&) endStmt() ? Fail {
     k := p.peek()
     if k == token.Tok.StmtEnd {
-        if not p.inLam { p.advance() }    # a lambda's line ends the statement the lambda stands in too
+        # a lambda's line, or a catch clause's one-line body's, ends the statement it stands in too
+        if not p.inLam and not p.keepEnd: p.advance()
         return
     }
     if k == token.Tok.RBrace or k == token.Tok.Eof: return
@@ -1740,9 +1742,12 @@ fn (p mut Parser&) block() Array<ast.Stmt&>& ? Fail {
     wasItem := p.item
     p.item = false
     defer { p.item = wasItem }
-    wasLine := p.inLine
-    p.inLine = false
-    defer { p.inLine = wasLine }
+    wasLine, wasKeep := p.inLine, p.keepEnd
+    p.inLine, p.keepEnd = false, false
+    defer {
+        p.inLine = wasLine
+        p.keepEnd = wasKeep
+    }
     wasLam, wasLamItem := p.inLam, p.lamItem
     p.inLam, p.lamItem = false, false
     defer {
@@ -2770,7 +2775,7 @@ fn isLiteral(x ast.Expr&) Bool {
     }
 }
 
-# catch clauses: "catch [A, B.w] [{ ... }] [default v, ...]" - several defaults only where listOk (R9a)
+# catch clauses: "catch [A, B.w] [e] [{ ... } | : stmt] [default v, ...]" - several defaults only where listOk (R9a)
 fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>& ? Fail {
     l mut Vec<ast.Catch&>& = Vec<ast.Catch&>()
     for p.sees(token.Tok.Catch) {
@@ -2792,7 +2797,14 @@ fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>& ? Fail {
             bsp = source.Span(bt.Start, bt.End)
         }
         body Array<ast.Stmt&>& = Array<ast.Stmt&>(0)
-        braced := p.sees(token.Tok.LBrace)
+        braced := p.sees(token.Tok.LBrace) or p.sees(token.Tok.Colon)
+        if p.sees(token.Tok.Colon) {
+            # S1b: a one-line body, ending at its line's end (left to the statement the clause is in), at another
+            # "catch" or an "else"
+            body = try p.catchLine()
+            l.Push(ast.Catch(p.from(at), items.ToArray(), body, gather(p.exprs, from), true, bind, bsp))
+            continue
+        }
         if braced: body = try p.block()
         if p.accept(token.Tok.Default) {
             for {
@@ -2810,6 +2822,15 @@ fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>& ? Fail {
         l.Push(ast.Catch(p.from(at), items.ToArray(), body, defaults, braced, bind, bsp))
     }
     return l.ToArray()
+}
+
+# a catch clause's one-line body (S1b): its line's end is not taken, so the try statement, or the statement the try
+# expression stands in, ends there as after a block
+fn (p mut Parser&) catchLine() Array<ast.Stmt&>& ? Fail {
+    was := p.keepEnd
+    p.keepEnd = true
+    defer { p.keepEnd = was }
+    return try p.lineBody()
 }
 
 # ---- expressions ----

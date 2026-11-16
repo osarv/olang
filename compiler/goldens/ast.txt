@@ -2018,7 +2018,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-570475ca48e6b41b bd1da1ffa36ea9a5 checks/checks.olang
+ea751d2eb5c87946 fd630aed79095304 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2227,7 +2227,7 @@ d81a069bb3b59724 9c7e3128f6e1808a checks/fixtures/print/print.olang
 69bc88433d300709 41114f0644ef2dfe checks/fixtures/protopriv/kk.olang
 2581f343a4d5f27f 83f4746729e421c3 checks/fixtures/protopriv/use.olang
 d07e11341e624359 3934139f15866363 checks/fixtures/racetests/clean.olang
-803bfdb5317e89ec 60b92ec2d9d6179f checks/fixtures/racetests/race.olang
+39dda910ff71bad9 302d20c61a597c9b checks/fixtures/racetests/race.olang
 5715d896eb44cb11 f985be0eaa0df2de checks/fixtures/regions/stub.olang
 bfe56a1d437a26d5 915eb8acaf9bdb5e checks/fixtures/remote/mathx/add.olang
 176e74b753db177e 4f600cece110c135 checks/fixtures/remote/mathy/inc.olang
@@ -2374,7 +2374,7 @@ b397e51ded4ef5a1 1ca26bef677bdc12 compiler/lower.olang
 8c0126f803fe9900 830b7fb352ee1367 compiler/notebook.olang
 cbff498da47fd465 3186d895842e2b8d compiler/olang.olang
 b39996c18bbe72bf 450c7b08c181c7db compiler/paint.olang
-588ba4227e5227a7 f8474d6ef07288ed compiler/parse.olang
+442346ea59bdc5b5 823ff387a1d59136 compiler/parse.olang
 4ba4b66a887cb42b 9ad060fee05b1107 compiler/profile.olang
 32b1d8d2bae58121 78a3866dbb7259a6 compiler/prompt.olang
 06919133ecba0d2c ce6621b787b5c35e compiler/records.olang
@@ -2426,7 +2426,7 @@ c9bae0cd941dc3f8 c0ba27ceaa31315c compiler/tools/seed.olang
 b5d5a7ffc3c55aed 778196a5417df71d compiler/tools/toolkit.olang
 b87192f2e60bedc1 1674473e88b1fe2e compiler/typed.olang
 7071fca41dfbd54b 185c680f0fad72ab compiler/types.olang
-5d2f0536c12e9f36 c171d488aae3067f compiler/unparse.olang
+120a9fb8a3629efc 1e8d2bca0788fa53 compiler/unparse.olang
 e2ea203aa101b68f 55a0a86245b469ff compiler/views.olang
 20a4c5f92003eec4 679e6c77fe29b5b2 docs/genrefs/dlist.olang
 e82c46d6a88c22d5 7696760dbc139415 docs/genrefs/lru.olang
@@ -2614,7 +2614,7 @@ c64c65fc4111932d 2186a3e9ec61071a tests/reads.olang
 b5ef26df71c5e9d8 7d463a2ea7512fb5 tests/reflect.olang
 5075b8937e6628c4 d03918c8432a449e tests/reflmod.olang
 835ba0f57f4caddd ecb456b1ad53bae7 tests/runner.olang
-c79d368e93811cb5 526e5f6304da5c7c tests/shared.olang
+850fcf615c7d0bb2 5782d7129eca338e tests/shared.olang
 307585c2d6e47496 63a9fb9b67c9368a tests/slotfacts.olang
 c452c9cb509c23e1 76ad53a3573a5846 tests/structpat.olang
 0d4b3ba0fcda27dc 9f05e76fef4e032b tests/textplus.olang

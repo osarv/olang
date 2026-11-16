@@ -12508,6 +12508,36 @@ test "S1b: one-line bodies run as the blocks they stand for, at run time and whi
     assert out.Len() == 3 and out[2] == 12
 }
 
+# S1b, R11: a catch clause's body may be a one-line body - "catch E e: stmt" - ending at its line's end, at the next
+# "catch" on its line or an "else"; a clause may still begin the next line
+type S1bcError error { Neg, Big }
+fn s1bcPick(x I64) I64 ? S1bcError {
+    if x < 0: error S1bcError.Neg
+    if x > 9: error S1bcError.Big
+    return x
+}
+fn s1bcRun(x I64) I64 {
+    r I64 = 0
+    try r = s1bcPick(x) catch S1bcError.Neg e: r = -100 if e == S1bcError.Neg else -1 catch S1bcError.Big: r = 100
+    t I64 = 0
+    if x >= 0: try t = s1bcPick(x * 2) catch S1bcError e: t = 1000 if e == S1bcError.Big else 2000
+    else: t = 7
+    try s1bcPick(x)
+    catch S1bcError.Neg: t += 1
+    catch: t += 2
+    return r + t
+}
+fn s1bcValue(x I64) I64 {
+    v := try s1bcPick(x) catch: return -5
+    return v
+}
+S1bcBaked I64 = s1bcRun(-1) * 10000 + s1bcRun(3) * 100 + s1bcRun(7) + s1bcValue(-2)
+test "S1b, R11: a catch clause's one-line body runs as its block, at run time and while compiling" {
+    assert s1bcRun(-1) == -100 + 7 + 1 and s1bcRun(3) == 3 + 6 and s1bcRun(7) == 7 + 1000 and s1bcRun(12) == 100 + 1002
+    assert s1bcValue(4) == 4 and s1bcValue(-1) == -5
+    assert S1bcBaked == (-100 + 7 + 1) * 10000 + 9 * 100 + 1007 - 5
+}
+
 # D10a: "for { }" with no break of its own leaves only as its body does - no "unreachable" after it
 fn cbFind(a Array<I32>&, x I32) I64 {
     i I64 = 0

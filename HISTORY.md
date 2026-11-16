@@ -38468,3 +38468,36 @@ run alone under either. Calling `resident()` a few times before `before :=` make
 
 Tests: tests/keptfacts.olang (copiedOut, widenedThenAssigned, storedInto, keptView allocate; handedBack does not;
 their runs).
+
+## 2026-11-16: before the weekly verify - a catch clause's one-line body, the target scenario, the race fixture
+
+**A catch clause takes S1b's one-line body (R11).** The user's one-line-body rule names `catch` beside `if`, `else`
+and `for`, and oneline_migrate turned `catch NotBuilt e { failed[t] = $e.why }` (compiler/fix.olang:337) into
+`catch NotBuilt e: failed[t] = $e.why` - which the parser refused ("expected '{', found ':'"): R11's grammar had only a
+block. Now `catch-clause ::= "catch" [ catch-list ] [ IDEN ] ( ":" line-stmnt | [ block ] [ default ... ] )`: the body
+is exactly the block holding its statement, as every one-line body is. Its statement ends at its line's end, at a
+`catch` on the line (the next clause) or an `else`; a clause may still begin the next line (R9b). The line's end is
+left to the statement the try is in (`keepEnd`, beside the lambda's `inLam`), so a try statement and a declaration
+`v := try f() catch: return -5` end there as after a block. No default follows a one-line body (its statement would
+take it). `:` after a clause's items has no other reading, so it is accepted anywhere. unparse writes the body as it
+was written (astdiff reads it back as itself); the formatter's colon rule already spaced it; the evaluator reads the
+same tree. Tests: tests/shared.olang "S1b, R11: a catch clause's one-line body ...", run and baked;
+checks/cases/s1bcatchdecl.olang (a declaration there is S1b's error). compiler/fix.olang keeps its braces for now:
+the seed cannot parse the new form, and the compiler's sources must bootstrap from it - the conversion goes in with
+the seed written again (seed/README.md).
+
+**The target scenario's aarch64 run (B12a, B3g).** The scenario ran `olang -target aarch64-linux-gnu loop.olang`
+expecting the emulator to run it; since B3g merged interpret into running a file, running a file is for this machine
+only and refuses another architecture with B12a, as B3g's last sentence says - `run` (B3e) builds and runs it in the
+emulator. Not clang and not our target handling (compiler/target.olang's test of the message was fixed in d17b31fe).
+The scenario now checks both: running a file for aarch64 is refused with B12a, and `run -target aarch64-linux-gnu`
+prints what this machine computed. B12a's text, which still said running a file runs through an emulator, now says
+`test` and `run`.
+
+**The race scenario's flake (P1e).** 1 run in 10 (and 1 in 40 of the fixture alone) the racing test of
+checks/fixtures/racetests/race.olang passed: two tasks each adding 100000 to one counter, a loop -O3 folds to one add,
+so the first task could end before the second started, and threads are cached (1:1, P1e) - the second task then ran on
+the first's thread, after it, ordered by the cache's handover, and the detector rightly saw no race. A timing
+assumption in the fixture, not the runtime: the two tasks now meet first (each raises an atomic flag and waits for the
+other's), so they run at once on two threads; the atomics order nothing between the counters' writes, so the race is
+always there to report. 0 misses in 40 fixture runs, 10 of 10 scenario runs.

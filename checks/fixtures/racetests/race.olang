@@ -7,6 +7,17 @@ fn bump(c mut Counter&, times I64) {
     for _ in range times: c.n = c.n + 1
 }
 
+# a flag one task raises and the other waits on: both tasks of the racing test meet before writing, so each runs on a
+# thread of its own while the other does - never one after the other on one cached thread (P1e), where the detector
+# would see no race. The flags are atomics, which order nothing between the two counters' writes
+type Flag struct(v I64) { v }
+
+fn meetThenBump(c mut Counter&, mine mut Flag&, theirs mut Flag&, times I64) {
+    mine.v.AtomicStore(1)
+    for theirs.v.AtomicLoad() == 0 { }
+    bump(c, times)
+}
+
 fn says(what String&) {
     Println($what + ": race build " + $RaceBuild)
 }
@@ -40,9 +51,11 @@ fn tasked() I64 {
 test "two tasks writing one counter" {
     says("racing")
     a mut Counter& = Counter(0)
+    l mut Flag& = Flag(0)
+    r mut Flag& = Flag(0)
     join {
-        spawn bump(a, 100000)
-        spawn bump(a, 100000)
+        spawn meetThenBump(a, l, r, 100000)
+        spawn meetThenBump(a, r, l, 100000)
     }
     assert a.n > 0
 }
