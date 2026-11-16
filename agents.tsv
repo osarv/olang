@@ -206,3 +206,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	merge-vfix2	sonnet	low	done				yes		merged 872fa987
 2026-11-16	oannsum	sonnet	medium	running						INT8 kernels via Sum<I32>
 2026-11-16	sumtotal	opus	medium	running						default type args + expected-type pick + T.Total
+2026-11-16	attrsurvey	sonnet	low	done						read-only: can attributes be dropped
