@@ -41,7 +41,7 @@ fn risky(n I32) I32 ? Oops {
 fn steps() String {
     b := StringBuilder()
     for i in range 4 {
-        defer b.Push("d" + $i + " ")
+        defer: b.Push("d" + $i + " ")
         if i == 1: continue
         if i == 3: break
         b.Push("s" + $i + " ")
@@ -49,7 +49,7 @@ fn steps() String {
     return b.ToString()
 }
 fn main() ? Oops, io.Error, os.Error {
-    defer try io.Put("main's deferred code ran\n") catch io.Error { }
+    defer: try io.Put("main's deferred code ran\n") catch io.Error { }
     Count++
     m := Map<String&, I32>()
     for i, n in Names: m.Put(n, I32(i) + Count)

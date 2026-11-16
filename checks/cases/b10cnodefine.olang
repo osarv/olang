@@ -12,7 +12,7 @@ if Profile == "prod" {
 
 fn main() ? {
     assert Profile == "dev" and Port == 8080 and Banner == "development"
-    if Profile == "prod" { this is not checked }
+    if Profile == "prod": this != checked
     n := 0
     if Port > 1000: n = 1
     assert n == 1

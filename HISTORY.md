@@ -38874,3 +38874,25 @@ its own test, and the six files fix to oann's hand-corrected result:
 Found on the way: the PutLine -> PutLn rename (putln_rename) read only .olang, .md, .txt and .want files, so the C-interop
 `.part` fixtures, the prompt's `.in` sessions, the notebook fixtures, the makefile's inline programs and a test string in
 compiler/lsp.olang kept `PutLine`; they are renamed, and the tool now reads those kinds of file too.
+
+### Fix leaves kept text alone; three more tools kept to their rules; defer_migrate (2026-11-16, wt-fixtools, the coordinator's calls)
+
+- **What fix walks.** A directory walk leaves out a migration tool's own source (one of fix's table, or one its
+  directory's README lists as run by `build/tools_NAME`) - its comments and tests hold the old spellings on purpose -
+  a case that must fail (`# check: fail` first: its refused text is what it checks), and every file under a directory
+  holding `.olangfix` (checks/fixtures: each fixture's text is what its scenario reads, line numbers included). Keyed on
+  what a file is, not on the olang repository's paths.
+- **helper_rename** renamed compiler/ast's enum case `TypeRef.Any` and types.olang's `Table.Any(tr TypeId)`, and
+  std/io's `Reader.All()`: an enum case after a type's name (`TypeRef.Any(sp, _)`, through an imported alias), a call
+  taking nothing, a declaration whose `)` ends the line before, and every file reaching (through its imports) a method
+  Any/All of its own that takes no function are left. **results_migrate** read `(fn&(x) I64, I64)` - one result, a
+  function reference - as an old result list: `fn&(`/`fn?&(` are function types as `fn(` is. **unique_migrate** kept
+  applying T13b where C11 later made two exceptions: a library collection's conditional destructor (a generic type in
+  std; Vec, Map, Deque) and a generational type (one with `weak` back links, T13d). Both are left now - the tool stays
+  in fix's table, a no-op where the later rule holds.
+- **defer_migrate** (one way to write each thing): the bare `defer stmt` / `errdefer stmt` gains S1b's `:`. Run over
+  tests, tools, checks, bench and fuzz; `fix -check` over them changes 0 files. **Held:** the parser's refusal of the
+  bare form (S19's grammar `"defer" body`, a BareDefer message, checks/cases/s19bare) - the seed reads neither
+  `defer: stmt` nor `catch E: stmt`, so std/ and compiler/ (what the seed builds) keep the bare form, and refusing it
+  would break the self-build until the seed is written again. Left for that commit: std/cancel.olang,
+  std/prelude/array.olang, compiler/fix.olang, compiler/generic.olang, compiler/parse.olang (their bare defers).

@@ -6,17 +6,17 @@ import "std/io"
 fn say(t String&) { io.PutLn(t)! }
 
 fn reach(a Array<I64>&, i I64) I64 {
-    defer say("reach's")
+    defer: say("reach's")
     return a[i]
 }
 
 fn walk(a Array<I64>&) I64 {
-    defer say("walk's")
+    defer: say("walk's")
     t I64 = 0
     {
-        defer say("walk's block")
+        defer: say("walk's block")
         for i in range 4 {
-            defer say("turn " + $i)
+            defer: say("turn " + $i)
             t += reach(a, i)
         }
     }
@@ -24,8 +24,8 @@ fn walk(a Array<I64>&) I64 {
 }
 
 fn main() {
-    defer say("main's first")
-    defer say("main's second")
+    defer: say("main's first")
+    defer: say("main's second")
     a := Array<I64>(3, 5)
     io.PutLn("sum " + $walk(a))!
 }

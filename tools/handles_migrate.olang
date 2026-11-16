@@ -360,7 +360,7 @@ fn main() ? {
     allowed Vec<String&>
     for p in paths: allowed.Push(diagedit.RealPathOf(p))
     tmp := try os.MkTemp("", "handles_migrate")
-    defer try os.RemoveAll(tmp) catch { }
+    defer: try os.RemoveAll(tmp) catch { }
     work Vec<String&>
     for k in range jobs.Max(1) {
         work.Push($tmp + "/w" + $k)

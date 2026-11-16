@@ -2,7 +2,7 @@ import "std/io"
 fn lit(k I64) String& { return "true" if k == 0 else "false" }
 fn churn(n I64) String& {
     b := StringBuilder()
-    for i in range n { b.Push("x" + $i) }
+    for i in range n: b.Push("x" + $i)
     return b.ToString()
 }
 fn wrap(k I64) String& {

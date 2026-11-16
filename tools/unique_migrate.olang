@@ -36,6 +36,8 @@ fn migrate(text String&, library Bool = false) String {
     for i in range text.Len() {
         if not destructAt(text, mask, i): continue
         s := structOf(text, mask, i, library)
+        # a type with weak back links is generational (T13d), C11's other way: its values are never copied
+        if s >= 0 and text[s:i].Contains(" weak "): continue
         if s >= 0 and (at.Len() == 0 or at[at.Len() - 1] != s): at.Push(s)
     }
     if at.Len() == 0: return $text
@@ -103,6 +105,8 @@ test migrate "a destructor's type gains unique, once; one saying it, comments an
     assert migrate("type C struct(n I32) { n } destruct { x++ }\n") == "type C unique struct(n I32) { n } destruct { x++ }\n"
     assert migrate("type B<T> struct(v T) { v } destruct { x++ }\n") == "type B<T> unique struct(v T) { v } destruct { x++ }\n"
     assert migrate("    type s struct() {\n    } destruct { d += 1 }\n") == "    type s unique struct() {\n    } destruct { d += 1 }\n"
+    gen := "type Res struct(v I64) {\n    v\n    back weak Res?& = null\n} destruct {\n    n++\n}\n"
+    assert migrate(gen) == gen
     vec := "type Vec<T> struct() {\n    n I64 = 0\n} destruct {\n    n = 0\n}\n"
     assert migrate(vec, true) == vec
     done := "type C unique struct(n I32) { n } destruct { x++ }\n"

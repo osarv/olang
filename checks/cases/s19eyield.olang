@@ -11,13 +11,13 @@ fn tidy() { Tidied++ }
 fn failed() { Failed++ }
 
 fn f() Iterator<I64> {
-    defer tidy()
-    errdefer failed()
+    defer: tidy()
+    errdefer: failed()
     yield 2
 }
 
 fn g(n I64) Iterator<I64 ? Bad> {
-    errdefer failed()
+    errdefer: failed()
     yield n
     if n.Mod(2) == 1: error Bad.Odd
 }

@@ -40,12 +40,12 @@ test "all three handles were destructed" { assert Closed == 3 }
 # S19c: a failing test runs no deferred code, neither a helper's nor its own
 DeferLog mut I64 = 0
 fn endsEarly() {
-    defer DeferLog = 2
+    defer: DeferLog = 2
     unreachable
 }
 test "fails in a helper with code deferred" {
     DeferLog = 0
-    defer DeferLog = 1
+    defer: DeferLog = 1
     endsEarly()
 }
 test "no deferred code ran" { assert DeferLog == 0 }

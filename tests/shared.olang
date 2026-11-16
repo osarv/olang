@@ -4496,7 +4496,7 @@ test "return ends the current test as passed" {
 }
 
 test "a return from a nested block ends the test, running what is deferred" {
-    defer s16Log = 7
+    defer: s16Log = 7
     for i in range 5 {
         if i == 2 {
             s16Log = 1
@@ -10624,7 +10624,7 @@ type DfErr error {
     Bad
 }
 fn dfOrder(l mut DfLog&) I64 {
-    defer l.Note(1)
+    defer: l.Note(1)
     defer {
         l.Note(2)
     }
@@ -10633,26 +10633,26 @@ fn dfOrder(l mut DfLog&) I64 {
 }
 fn dfLoop(l mut DfLog&) {
     for i in range 5 {
-        defer l.Note(1)                 # at the end of every iteration, however it ends
+        defer: l.Note(1)                 # at the end of every iteration, however it ends
         if i == 1: continue
         if i == 3: break
         l.Note(2)
     }
 }
 fn dfFails(l mut DfLog&, n I64) I64 ? DfErr {
-    defer l.Note(5)
+    defer: l.Note(5)
     for i in range 3 {
-        defer l.Note(6)
+        defer: l.Note(6)
         if i == n: error DfErr.Bad
     }
     return 0
 }
 fn dfNested(l mut DfLog&, n I64) I64 {
-    defer l.Note(1)
+    defer: l.Note(1)
     if n > 0 {
-        defer l.Note(2)
+        defer: l.Note(2)
         for i in range 3 {
-            defer l.Note(3)
+            defer: l.Note(3)
             if i == n: return i
         }
     }
@@ -10660,44 +10660,44 @@ fn dfNested(l mut DfLog&, n I64) I64 {
 }
 fn dfLate(l mut DfLog&) I64 {
     x I64 = 1
-    defer l.Note(x)                     # 4: x as it is when the deferred code runs
+    defer: l.Note(x)                     # 4: x as it is when the deferred code runs
     x = 4
     if x > 9 {
-        defer l.Note(9)                 # never reached, so never run
+        defer: l.Note(9)                 # never reached, so never run
     }
     return x
 }
 fn dfArray() Array<I64> {
     a := Array<I64>[1, 2]
-    defer a[0] = 9                      # after the result was computed, so it does not change it
+    defer: a[0] = 9                      # after the result was computed, so it does not change it
     return a
 }
 fn dfCaught(l mut DfLog&) {
     try dfFails(l, 0) catch DfErr {
-        defer l.Note(7)
+        defer: l.Note(7)
         l.Note(8)
     }
 }
 fn dfMatch(l mut DfLog&, n I64) I64 {
     match n {
         case 1 {
-            defer l.Note(1)
+            defer: l.Note(1)
             return 10
         }
-        case _ { defer l.Note(2) }
+        case _ { defer: l.Note(2) }
     }
     return 20
 }
 fn dfGen<T>(l mut DfLog&, x T) T {
-    defer l.Note(6)
+    defer: l.Note(6)
     return x
 }
 fn dfTwice(l mut DfLog&) {
-    defer defer l.Note(5)               # the deferred code's own: it runs as that code ends
+    defer: defer: l.Note(5)               # the deferred code's own: it runs as that code ends
     l.Note(4)
 }
 type DfBox struct(v I64, l mut DfLog&) {
-    defer l.Note(1)                     # once the instance is assembled
+    defer: l.Note(1)                     # once the instance is assembled
     w I64 = v * 2
     v
 }
@@ -10724,7 +10724,7 @@ fn dfAll(k I64) Bool {
     l.n = 0
     lr mut DfLog& = l
     f := fn(n I64) I64 {
-        defer lr.Note(7)
+        defer: lr.Note(7)
         return n + 1
     }
     other Bool = dfGen(l, k) == k and dfGen(l, "x") == "x" and f(k) == k + 1 and l.n == 667
@@ -10747,22 +10747,22 @@ test "S19: deferred code runs on every way out of its block, while compiling and
 # defers, last registered first; never on the block's ordinary ways out or for an error a clause inside it takes.
 # Run while compiling (ErrDeferBaked, K2) exactly as at run time.
 fn edFails(l mut DfLog&, n I64) I64 ? DfErr {
-    defer l.Note(1)
-    errdefer l.Note(2)
-    defer l.Note(3)
+    defer: l.Note(1)
+    errdefer: l.Note(2)
+    defer: l.Note(3)
     if n < 0: error DfErr.Bad
     return n
 }
 fn edLoop(l mut DfLog&, bad I64) ? DfErr {
     for i in range 4 {
-        errdefer l.Note(5)              # only the iteration the error leaves runs it
-        defer l.Note(4)
+        errdefer: l.Note(5)              # only the iteration the error leaves runs it
+        defer: l.Note(4)
         if i == 2: continue
         if i == bad: error DfErr.Bad
     }
 }
 fn edCaught(l mut DfLog&) {
-    errdefer l.Note(9)                  # the error below is taken inside this block: it never leaves it
+    errdefer: l.Note(9)                  # the error below is taken inside this block: it never leaves it
     try edFails(l, -1) catch DfErr { l.Note(6) }
 }
 fn edPassed(l mut DfLog&, n I64) I64 ? DfErr {
@@ -10772,7 +10772,7 @@ fn edPassed(l mut DfLog&, n I64) I64 ? DfErr {
 fn edWalk(l mut DfLog&, failAt I32) I32 ? TxErr {
     t I32 = 0
     if failAt > 0 {
-        errdefer l.Note(8)
+        errdefer: l.Note(8)
         w mut TxLines& = TxLines(4, failAt)
         for x in try w { t += x }       # the walk's own error leaves the block, then the function
     }
@@ -10781,8 +10781,8 @@ fn edWalk(l mut DfLog&, failAt I32) I32 ? TxErr {
 fn edJoin(l mut DfLog&, a I64) I64 {
     out := Array<I64>(2)
     try join {
-        defer l.Note(1)
-        errdefer l.Note(2)              # S19e: a join's failure is known after its wait, after its defers
+        defer: l.Note(1)
+        errdefer: l.Note(2)              # S19e: a join's failure is known after its wait, after its defers
         spawn out[0] = try peSq(a)
         spawn out[1] = try peSq(2)
     } catch peErr { return -1 }
@@ -10825,7 +10825,7 @@ test "S19e: errdefer runs only on an error's way out, in the defers' order, whil
 # S19e: an errdefer in a test body runs when an error ends the test - shown by the test after it
 edTestLog mut I64 = 0
 test "errdefer pending in a test body is not run when the test passes" {
-    errdefer edTestLog = 5
+    errdefer: edTestLog = 5
     edTestLog = 1
 }
 test "...and was not run" {
@@ -10843,7 +10843,7 @@ type DfRes unique struct(id I64) {
 }
 fn dfScoped(n I64) I64 {
     t := Array<I64>(64, n)
-    defer dfClosed = dfClosed * 10 + t[63]
+    defer: dfClosed = dfClosed * 10 + t[63]
     r DfRes& = DfRes(1)
     for i in range 50 {
         u := Array<I64>(64, I64(i))     # each iteration's arena reclaimed and reused while t's is not
@@ -10851,7 +10851,7 @@ fn dfScoped(n I64) I64 {
     }
     if n > 0 {
         q DfRes& = DfRes(2)
-        defer dfClosed = dfClosed * 10 + q.id + 5
+        defer: dfClosed = dfClosed * 10 + q.id + 5
         return n
     }
     return 0
@@ -17193,7 +17193,7 @@ test "P4b: a failed join replaces a return, a break and a continue, but not an e
 test "P4b: a failed join's deferred code runs, then the clause" {
     log mut Array<I64>& = Array<I64>(2)
     try join {
-        defer log[0] = 1
+        defer: log[0] = 1
         spawn try peSq(-sbRun)
     } catch peErr { log[1] = log[0] + 1 }
     assert log[0] == 1 and log[1] == 2
@@ -18435,7 +18435,7 @@ fn letGoGen(h mut LetGoHolder&, n I64) Iterator<I64> {
 }
 
 fn letGoOnError(h mut LetGoHolder&, i I64) I64 ? DestroyFail {
-    errdefer h.cur = $"reset after " + $i
+    errdefer: h.cur = $"reset after " + $i
     h.cur = $"value " + $i + " held for a while"
     churnArena()
     if i < 0: error DestroyFail.Neg

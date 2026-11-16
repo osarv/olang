@@ -4,6 +4,6 @@ fn h() { }
 fn main() ? {
     join {
         spawn h()
-        defer spawn h()
+        defer: spawn h()
     }
 }

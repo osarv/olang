@@ -225,7 +225,7 @@ fn edCheck(n I64) ? Bad {
 fn edWalk(n I64) Iterator<I64 ? Bad> {
     for i in range 3 {
         {
-            errdefer EdLog = EdLog * 10 + 1
+            errdefer: EdLog = EdLog * 10 + 1
             try edCheck(n - i)
         }
         yield i
@@ -648,11 +648,11 @@ type Witness struct(log mut Seen&) {
 
 # a variable holding one across yields, deferred code pending around them, an errdefer no drop runs
 fn heldAcross(w Witness, base I64) Iterator<I64> {
-    defer w.log.ids.Push(base + 9)
+    defer: w.log.ids.Push(base + 9)
     a Held = Held(base + 1, w.log)
     {
         b Held = Held(base + 2, w.log)
-        errdefer w.log.ids.Push(base + 8)
+        errdefer: w.log.ids.Push(base + 8)
         yield a.id + b.id
         yield b.data[0]
     }

@@ -27,7 +27,7 @@ fn main() {
     files := toolkit.FilesOr(args, toolkit.Tracked("*.olang"))
     g := toolkit.HashGolden.Read(Golden, "tokgold")
     work := toolkit.Scratch("tokdiff")
-    defer toolkit.Clean(work)
+    defer: toolkit.Clean(work)
     olang := toolkit.Golden.DumpSections(toolkit.RunTool(Dump, "tokens", files))
     if olang.Keys.Len() != files.Len() { toolkit.Die("tokdiff: " + $Dump + " printed " + $olang.Keys.Len() + " of " + $files.Len() + " files") }
     stale := toolkit.HashGoldenStale(g, files)

@@ -1,0 +1,73 @@
+# defer_migrate - S19, S19e (2026-11-16, one way to write each thing): the bare "defer stmt" and "errdefer stmt" are
+# gone; a one-statement deferral is written with S1b's one-line body, "defer: stmt". Every "defer" or "errdefer" in code
+# starting a statement and followed by neither "{" nor ":" gains the ":". Comments and text are left; idempotent.
+#
+#     olang build tools/defer_migrate.olang && build/tools_defer_migrate FILE...    rewrites the files, naming each one changed
+
+import "std/os"
+import "std/io"
+import "srcmask"
+
+fn main() ? io.Error {
+    args := os.Args()
+    for k in range 1, args.Len() {
+        path := args[k]
+        text := try os.ReadFile(path) catch os.Error {
+            try io.PutErrLn("defer_migrate: " + $path + ": cannot be read")
+            continue
+        }
+        out := migrate(text)
+        if out == text: continue
+        try os.WriteFile(path, out) catch os.Error { try io.PutErrLn("defer_migrate: " + $path + ": cannot be written") }
+        try io.PutLn(path)
+    }
+}
+
+# the text with every bare deferral given its ":"
+fn migrate(text String&) String {
+    mask := srcmask.Mask(text, false)
+    b := StringBuilder()
+    from I64 = 0
+    for i in range text.Len() {
+        w := word(text, mask, i)
+        if w == 0 or not statementStart(text, i): continue
+        j := i + w
+        if j >= text.Len() or text[j] != ' ': continue
+        k := j
+        for k < text.Len() and text[k] == ' ': k++
+        if k >= text.Len() or text[k] == '{' or text[k] == ':' or text[k] == '\n': continue
+        b.Push(text[from:j])
+        b.Push(":")
+        from = j
+    }
+    b.Push(text[from:])
+    return b.ToString()
+}
+
+# the length of "defer" or "errdefer" standing whole in code at i, 0 for neither
+fn word(text String&, mask String&, i I64) I64 {
+    if mask[i] != 'c' or (i > 0 and srcmask.IsWord(text[i - 1])): return 0
+    for w in Array<String&>["errdefer", "defer"] {
+        if not text[i:].StartsWith(w): continue
+        e := i + w.Len()
+        if e < text.Len() and srcmask.IsWord(text[e]): return 0
+        return w.Len()
+    }
+    return 0
+}
+
+# whether a statement starts at i: only spaces before it on its line, or a one-line body's ": " or a block's "{ "
+fn statementStart(text String&, i I64) Bool {
+    k := i
+    for k > 0 and (text[k - 1] == ' ' or text[k - 1] == '\t'): k--
+    return k == 0 or text[k - 1] == '\n' or text[k - 1] == ':' or text[k - 1] == '{'
+}
+
+test migrate "a bare deferral gains its ':'; a block, a one-line body, comments and text are left" {
+    assert migrate("    defer f.Close()\n    errdefer n--\n") == "    defer: f.Close()\n    errdefer: n--\n"
+    assert migrate("fn f() { defer x = 1 }\n") == "fn f() { defer: x = 1 }\n"
+    kept := "    defer { a() }\n    defer: b()\n    # defer c()\n    s := \"defer d()\"\n    deferred := 1\n"
+    assert migrate(kept) == kept
+    once := migrate("    defer try os.RemoveAll(t) catch os.Error { }\n")
+    assert once == "    defer: try os.RemoveAll(t) catch os.Error { }\n" and migrate(once) == once
+}

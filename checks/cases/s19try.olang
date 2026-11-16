@@ -5,8 +5,8 @@ type E error {
 }
 fn g() I32 ? E { return 1 }
 fn f() I32 ? E {
-    defer y := try g() catch default 0
-    defer x := try g()
+    defer: y := try g() catch default 0
+    defer: x := try g()
     return 1
 }
 fn main() ? E { assert try f() == 1 }

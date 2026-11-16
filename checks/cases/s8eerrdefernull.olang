@@ -7,7 +7,7 @@ type E error { Bad }
 
 fn work(p Node?&) ? E {
     if p == null: return
-    errdefer io.PutLn("errdefer reads " + $p.V)!
+    errdefer: io.PutLn("errdefer reads " + $p.V)!
     p = null
     error E.Bad
 }

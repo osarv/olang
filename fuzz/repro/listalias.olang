@@ -12,7 +12,7 @@
 # "a lend through which the callee could keep what it builds in the value's own slots"): the copy's own slot - List.s,
 # its one field, a reference to the shared state record - is in the inner block or the parameter's slot, while the
 # record lives where the original was made, and the check refuses any call that
-# lends such a value to a callee that "can store through it". A read-only receiver (Len, At, TryAt) cannot assign the
+# lends such a value to a callee that "can store through it". A read-only receiver (Len, At, CheckedAt) cannot assign the
 # value's own slots (T25b: a field is assigned only through a writable instance), and List's and Map's mut methods
 # only ever store through their record (s.chunks, s.count, ...), never into s itself, so none of these calls can put
 # anything where the copy's own storage is. The generator now makes second names only in the collection's own block
