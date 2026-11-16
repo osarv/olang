@@ -38853,3 +38853,24 @@ its link is unchanged. The cost is a relink after an edit for programs of 8-32 M
 again (25 s for tinystories) where ThinLTO's cache relinked only what changed - `-quick` is the edit loop's build.
 Cutting large objects into parts (B3d) stays at 8 MB, now its own constant (`SplitFrom`), so compiles of those
 programs stay parallel and the records' cut guess (`cutLikely`, calibrated at 8 MB) holds.
+
+## 2026-11-16: `olang fix`'s tools touched valid code (B17; wt-fixtools)
+
+Running fix over oann (olang 07a0a9dd, from oann f038bfb) broke valid code five ways, each a tool changing a form its
+rule never named; the oann agent reverted them by hand. Each tool now changes only its own construct, with the case in
+its own test, and the six files fix to oann's hand-corrected result:
+- keyword_rename gave a promise word closing a trait method's signature a `_` (`mut Relax(...) F64 noalloc_`): only a
+  `fn` declaration's or a function type's promises were known. A promise after a `)` with only a result type between,
+  no assignment on the line and nothing but words, `?`, `{` or a comment after it stays (promisePlace).
+- builder_migrate took an error type's case `Open(path String)` for a bare call of the builder `Log.Open`: an error
+  set's cases are now skipped as an enum's are.
+- bare_typevars read `g(1, betaOf<A>(x))` as the old parameter form `(a<T>, b<T>)` and wrote `betaOf A(x)`: a
+  parameter's `<T>` is never followed by `(`, so a call with a type argument is left.
+- textbuild_migrate rewrote every `x := String(Array<Char>(...))` as the array, also one made filled and only read
+  (`String(Array<Char>(100000, 'a'))`); it now rewrites only a local its function writes element by element (`x[i] =`).
+- clone_migrate skipped a file only when a module among the files given declared `Clone()`; quantgraph reached
+  Tensor's own Clone through `ad/graph`. It now follows the file's imports from disk, transitively (std's excluded).
+
+Found on the way: the PutLine -> PutLn rename (putln_rename) read only .olang, .md, .txt and .want files, so the C-interop
+`.part` fixtures, the prompt's `.in` sessions, the notebook fixtures, the makefile's inline programs and a test string in
+compiler/lsp.olang kept `PutLine`; they are renamed, and the tool now reads those kinds of file too.
