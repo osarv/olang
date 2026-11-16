@@ -1037,6 +1037,9 @@ fn (c Config&) runTests(run Array<String&>&, bin String&, file String&, filters 
     ended := execTests(c, cmd.ToArray(), built)
     if ended < 0: return 1
     if ended > 128: sayln(c.paint("31", $file + ": the tests ended by a signal (" + $SignalName(ended - 128) + ")"))
+    # the harness ends with 0, 1 or 3: any other status is the binary ended before its tests did (a test that ran
+    # os.Exit, replaced its process or stopped the program), a failure said, never one passed over
+    else if ended != 0 and ended != 1 and ended != 3: sayln(c.paint("31", $file + ": the tests ended with status " + $ended + " before every test had run"))
     if ended == 3 and filters.Len() > 0: return 3
     return 0 if ended == 0 else 1
 }
@@ -1218,8 +1221,9 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
     began := time.Now()
     failed := false
     named := false     # B3a: some listed file has a test the words name (its run did not end with 3)
-    # P7: without the race detector's runtime, said once here, each file's own run then not saying it again
-    unraced := c.racesSpawners() and not target.HasRaceRuntime(c.Clang, c.Target.Arch)
+    # P7: without the race detector's runtime, said once here, each file's own run then not saying it again (with no clang
+    # known there is no build to run, and nothing to say)
+    unraced := c.racesSpawners() and c.Clang != "" and not target.HasRaceRuntime(c.Clang, c.Target.Arch)
     if unraced: sayln(c.noRaceRuntime())
     for f in files {
         args Vec<String&>
@@ -1829,6 +1833,8 @@ test "a build compiles and links only what changed: modules, -define, the target
     assert Compile(fe, c, "app.olang", d) == 0
     assert c.Linked == 7
     assert d.Errors() == 0
+    # (built, scripting mode runs the program in this process's place, B3g: the evaluated path is the one that returns)
+    c.Evaluated = true
     assert Interpret(fe, c, "app.olang", Array<String&>["a", "b"], d) == 2
 }
 

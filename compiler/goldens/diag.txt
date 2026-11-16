@@ -3375,6 +3375,20 @@ lanesomebool.olang:4:25: error[E39]: 'Some()' takes lanes of Bool, found I32
     4 |     if Array<I32>[1, 2].Some() { }
       |                         ^~~~
 compilation failed with 1 error
+=== lanesumnarrows.olang
+lanesumnarrows.olang:5:16: error[E39]: 'Sum<I8>' would narrow the I32 elements
+    5 |     s := a.Sum<I8>()
+      |                ^~
+lanesumnarrows.olang:5:16: note: I32 does not widen to I8 with nothing lost (T6b)
+lanesumnarrows.olang:5:16: help: name a type I32 widens to, or convert the operands first
+compilation failed with 1 error
+=== lanesumnotnumber.olang
+lanesumnotnumber.olang:5:16: error[E39]: 'Sum' works in a number type, and String is none
+    5 |     s := a.Sum<String>()
+      |                ^~~~~~
+lanesumnotnumber.olang:5:16: note: Sum<A> computes every lane and the total in A
+lanesumnotnumber.olang:5:16: help: name a number type the elements widen to, as 'Sum<I32>()', or write 'Sum()'
+compilation failed with 1 error
 === lanethroughatop.olang
 lanethroughatop.olang:16:12: error[E31b]: this store writes a copy of x[i]
    16 |     v[0].m += M(5)

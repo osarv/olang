@@ -344,7 +344,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`a * b + c`, `x * 2.0`, `-a`, `and`/`or`/`not` on Bool lanes); a whole expression is one loop; `Sum`, `Min`/`Max`,
   `LanesEqual`/`LanesLess`, `mask.Select(a, b)`, `Some()`/`Every()` take one with no array made. Lengths checked while
   compiling or once per operation. `x op= v` is in place. Not for text; `a < b` on arrays is an error naming
-  `LanesLess`.
+  `LanesLess`. `Sum<A>` (the user's call, 2026-11-16) computes every lane in `A`, the operands widened first, and adds
+  in `A`: `(x * w).Sum<I32>()` is the byte dot product (vpdpbusd), `(a * b).Sum<F32>()` over BF16/F16; `A` must be a
+  number every element type widens to. An integer total in any order; a float one in order (no vdpbf16ps).
 - **Equality (E10, E10a, E10b, the user's decision 2026-10-24).** `==` compares what is stored, never following a
   reference: values structurally, a reference by identity - unless its type declares `Eq`, which `==` calls at every
   depth. The prelude declares `Eq`/`Hash` by contents on arrays, `String`, `List`, `Map`, `Vec`. A type declaring `Eq`

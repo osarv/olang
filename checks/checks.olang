@@ -1768,29 +1768,33 @@ test "olang explain -asm and -ir show a function's code with its source lines an
 fn listed(r mut report&) ? Failed {
     dir := fresh("listing")
     os.Run("cp checks/fixtures/listing/* " + $os.Quote(dir))
-    try r.expect(sh(dir, "\"$OLANG\" explain -asm prog.olang scale > out.txt 2>&1") == 0, "-asm builds", dir)
+    # B15a: explain keeps what it builds in olang's cache, here the scenario's own
+    xp String& = "XDG_CACHE_HOME=\"$PWD/cache\" \"$OLANG\" "
+    try r.expect(sh(dir, $xp + "explain -asm prog.olang scale > out.txt 2>&1") == 0, "-asm builds", dir)
     asm := outOf(dir)
     try r.expect(asm.StartsWith("# fn scale(a mut Array<F32>&, b Array<F32>&)\n# prog.olang:10 - "), "the function first, as explain prints it", dir)
     try r.expect(asm.Contains("\n# prog.olang:11  for i in range a.Len() { a[i] = twice(b[i]) }\n"), "a line of source among the code", dir)
     try r.expect(asm.Contains("\n# prog.olang:7  fn twice(x F32) F32 { return x * 2.0 + 1.0 }\n"), "an inlined function's own line", dir)
     try r.expect(asm.Contains("passed   loop-vectorize: vectorized loop (vectorization width: "), "a vectorized remark", dir)
     try r.expect(asm.Contains("passed   inline: 'twice' inlined into 'scale' with (cost="), "an inlined remark", dir)
-    try r.expect(sh(dir, "\"$OLANG\" explain -ir prog.olang scale > out.txt 2>&1") == 0, "-ir builds", dir)
+    try r.expect(sh(dir, $xp + "explain -ir prog.olang scale > out.txt 2>&1") == 0, "-ir builds", dir)
     ir := outOf(dir)
     try r.expect(ir.Contains("\n; prog.olang:11  for i in range") and ir.Contains("\ndefine ") and ir.Contains(" x float>") and
                  not ir.Contains("!dbg"), "-ir: the optimized IR, vectorized, its lines as comments", dir)
-    try r.expect(sh(dir, "\"$OLANG\" explain -asm prog.olang unused > out.txt 2>&1") == 0 and
+    try r.expect(sh(dir, $xp + "explain -asm prog.olang unused > out.txt 2>&1") == 0 and
                  outOf(dir).Contains("# no code: nothing in the program calls it, so the link kept none\n"), "no code, never called", dir)
-    try r.expect(sh(dir, "\"$OLANG\" explain -asm prog.olang big > out.txt 2>&1") == 0 and
+    try r.expect(sh(dir, $xp + "explain -asm prog.olang big > out.txt 2>&1") == 0 and
                  outOf(dir).StartsWith("# instance big<I64>: fn(a I64, b I64) I64\n") and
                  outOf(dir).Contains("\n# instance big<F64>: fn(a F64, b F64) F64\n") and outOf(dir).Contains("inlined at every call")
                  "a generic's instances, each inlined", dir)
-    try r.expect(sh(dir, "\"$OLANG\" explain -asm -quick prog.olang scale > out.txt 2>&1") == 0 and
+    try r.expect(sh(dir, $xp + "explain -asm -quick prog.olang scale > out.txt 2>&1") == 0 and
                  outOf(dir).Contains("-O2, each module on its own (-quick)") and outOf(dir).Contains("\nprog_2escale:")
                  "-quick: each module's own code", dir)
-    try r.expect(sh(dir, "\"$OLANG\" explain -asm prog.olang Point > out.txt 2>&1") == 1 and
+    try r.expect(sh(dir, $xp + "explain -asm prog.olang Point > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("error[B11d]: 'Point' is no function of prog.olang"), "a type refused", dir)
-    try r.expect(sh(dir, "ls build/*.listing.o > /dev/null && ls build/*.listing.yaml > /dev/null") == 0, "the listing's objects and remarks", dir)
+    try r.expect(sh(dir, "ls cache/olang/analysis/*/*.listing.o > /dev/null && ls cache/olang/analysis/*/*.listing.yaml > /dev/null") == 0
+                 "the listing's objects and remarks, in the cache", dir)
+    try r.expect(sh(dir, "test ! -e build") == 0, "explain writes nothing beside the program (B15a)", dir)
     try r.expect(sh(dir, "\"$OLANG\" build prog.olang > out.txt 2>&1") == 0 and
                  sh(dir, "for f in build/*.ll; do case $f in *.listing.ll) ;; *) grep -l DILocation $f;; esac; done | grep -q .") != 0
                  "a plain build carries no line tables", dir)
@@ -3231,9 +3235,9 @@ fn checkedbuild(r mut report&) ? Failed {
                  outOf(dir) == "20 0 2 10\n", "the debug build in range", dir)
     try r.expect(irHas(dir, "build/*.debug.ll", stops), "a debug build checks nothing", dir)
     try r.expect(sh(dir, "./build/release.debug a b c > out.txt 2>&1") != 0 and
-                 outOf(dir).StartsWith("release.olang:10:22: index out of range\n"), "the debug build out of range", dir)
+                 outOf(dir).StartsWith("release.olang:10:20: index out of range\n"), "the debug build out of range", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" release.olang a b c > out.txt 2>&1") != 0 and
-                 outOf(dir).StartsWith("release.olang:10:22: index out of range\n"), "interpret out of range", dir)
+                 outOf(dir).StartsWith("release.olang:10:20: index out of range\n"), "interpret out of range", dir)
 }
 
 test "tests that fail on purpose, and where an error went" { assert passed("testends") }
@@ -3302,8 +3306,13 @@ fn runfile(r mut report&) ? Failed {
     dir := fresh("runfile")
     os.Run(("cp checks/fixtures/runfile/* " + $os.Quote(dir) + " && mkdir " + $os.Quote($dir + "/bin") + " && ln -s " + $os.Quote(olang()) +
            " " + $os.Quote($dir + "/bin/olang")))
-    try r.expect(sh(dir, "\"$OLANG\" script.olang a -debug --x > out.txt 2>&1") == 0, "olang script.olang", dir)
-    try r.expect(outOf(dir) == "script.olang\na\n-debug\n--x\n", "the program's arguments", dir)
+    try r.expect(sh(dir, "\"$OLANG\" script.olang a --x > out.txt 2>&1") == 0, "olang script.olang", dir)
+    try r.expect(outOf(dir) == "script.olang\na\n--x\n", "the program's arguments, an option's spelling included", dir)
+    # B4a: one of olang's own options after the file is an error; after '--' it is the program's
+    try r.expect(sh(dir, "\"$OLANG\" script.olang a -debug > out.txt 2>&1") == 1 and
+                 outOf(dir).Contains("error[B4a]: options go before the file"), "an olang option after the file", dir)
+    try r.expect(sh(dir, "\"$OLANG\" script.olang -- a -debug --x > out.txt 2>&1") == 0 and
+                 outOf(dir) == "script.olang\na\n-debug\n--x\n", "the program's arguments after --", dir)
     # B3g: built as build builds it, into the cache - nothing left beside the program
     try r.expect(sh(dir, "test ! -e build") == 0, "olang script.olang left a build beside the program", dir)
     try r.expect(sh(dir, "\"$OLANG\" script.olang seven > out.txt 2>&1") == 7, "the program's status", dir)
@@ -3335,7 +3344,7 @@ fn output(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -output out prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("is a directory"), "a directory", dir)
     try r.expect(sh(dir, "\"$OLANG\" test -output out/t prog.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("-output applies to build, compile, run, bindgen, profile and notebook, not to test"), "test -output", dir)
+                 outOf(dir).Contains("-output applies to build, compile, run, bindgen and profile, not to test"), "test -output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -output out/q prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("not to scripting mode"), "scripting mode with -output", dir)
 }
@@ -3415,7 +3424,7 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -b prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("unknown option '-b'"), "an old flag", dir)
     try r.expect(sh(dir, "\"$OLANG\" -output o prog.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("-output applies to build, compile, run, bindgen, profile and notebook, not to scripting mode")
+                 outOf(dir).Contains("-output applies to build, compile, run, bindgen and profile, not to scripting mode")
                  "an option for another mode", dir)
     try r.expect(sh(dir, "\"$OLANG\" -debug prog > out.txt 2>&1") == 1 and outOf(dir).Contains("'prog' is no olang file")
                  "running a file without .olang", dir)

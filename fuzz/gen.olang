@@ -705,7 +705,12 @@ fn (g mut Gen&) exBool(d I64) String& {
     }
     if k == 4 {
         ops := Array<String&>["and", "or", "xor", "==", "!="]
-        return "(" + $g.ex(TBool, d - 1) + " " + $ops[g.r(5)] + " " + $g.ex(TBool, d - 1) + ")"
+        op := ops[g.r(5)]
+        a := g.ex(TBool, d - 1)
+        b := g.ex(TBool, d - 1)
+        # two Bool literals compared are one answer on every build, an error (S8a)
+        if (op == "==" or op == "!=") and isLit(a) and isLit(b): b = g.nonLit(TBool)
+        return "(" + $a + " " + $op + " " + $b + ")"
     }
     if k == 5: return "(not " + $g.ex(TBool, d - 1) + ")"
     if k == 6 {                                     # composite equality
@@ -1259,7 +1264,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
             g.fallible = false
             e := g.fit(g.vt[l] - 500, 2)
             g.fallible = sfal
-            return $ind + "defer " + $g.use(l) + ".Push(" + $e + ")\n"
+            return $ind + "defer: " + $g.use(l) + ".Push(" + $e + ")\n"
         }
         v := g.pick(0, 7)
         if v >= 0 {
@@ -1268,7 +1273,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
             g.fallible = false
             e := g.fit(t, 2)
             g.fallible = sfal
-            if isFloat(t) or g.chance(50): return $ind + "defer " + $g.target(v) + " = " + $e + "\n"
+            if isFloat(t) or g.chance(50): return $ind + "defer: " + $g.target(v) + " = " + $e + "\n"
             return $ind + "defer { " + $g.use(v) + " " + $IntAssigns[g.r(6)] + " " + $e + " }\n"
         }
     }

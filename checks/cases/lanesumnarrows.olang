@@ -1,0 +1,7 @@
+# check: fail 'Sum<I8>' would narrow the I32 elements
+# E39: Sum<A> works every lane in A, and an I32 does not widen to an I8
+fn main() {
+    a := Array<I32>[1, 2]
+    s := a.Sum<I8>()
+    assert s == s
+}
