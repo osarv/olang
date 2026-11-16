@@ -181,3 +181,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	oannmake	sonnet	low	completed	103	9	1	yes		make help default, README for users
 2026-11-16	lspimport	opus	low	running
 2026-11-16	osfile	opus	medium	running
+2026-11-16	readmes	sonnet	low	completed	123	16	2	yes		README history sweep, 3 repos
