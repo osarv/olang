@@ -1,0 +1,11 @@
+import "std/io"
+
+fn main() {
+    rows := Array<Vec<Vec<String>>>(10)
+    for i in range 1000 {
+        rows[i % 10] = Vec<Vec<String>>[Vec<String>[$i]]
+        c := rows[(i + 3) % 10]
+        c.Push(Vec<String>["x"])
+        io.PutLine($c.Len())!
+    }
+}

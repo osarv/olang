@@ -1,0 +1,1415 @@
+olang scope record
+run compiler/explain 37146-37319 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 3214-3355 fn	f31bc2073e7a5166cb23a1806dc8cfdc
+hits 0
+body 1 3 2 1 | U U U | F F | b0 b00 b000 b00 | 0:,V0,B0 1:,V0,B0 2:,V0,B0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/explain:37146:37319 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0Bool
+out 1a882da99c50495fa4efe14ea2e4cf3d
+run compiler/explain 36018-37052 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Module	2
+marks a48c5725d162675f5139409672696503
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 181159-181343 fn	ea9df5340d413efa2142df582d0bd5fa
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/effects 20757-21021 fn	8713f48cd237b14b912fd723450ed836
+read compiler/effects 21399-21519 fn	8713f48cd237b14b912fd723450ed836
+read compiler/effects 32480-33631 fn	f7be2af4073c3b5d2760f7b2741b6371
+read compiler/effects 90670-91004 fn	6be601fc12c2c2cc8f78f3ca1bf7c89f
+read compiler/explain 37146-37319 fn	e0f63707bab83b80d7d9bd8a2b07d207
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 12522-12711 fn	1053d19742fdc667aa9f62ca990e3186
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 8487-8542 fn <mut compiler/load:Module&;>	33bb69564684d5d1aacc249b77783342
+hits 0
+body 1 31 39 2 | U U U B0 U U U B3 U U U B0 U U U U U U U B0 U U U U U U U B17 B17 U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b11 b000000000000000000000000000000000000000 b0000000000000000000000000000000 b000000000000000000000000000000000000000 | 0:,V0,V0 1:,V0,V0 2:,B0 4:,V0 5:,V0 6:,V0 8:,B0,B3 9:,B0 10:,B0,V0 11:,B0 12:,B0 13:,V0 14:,B0 15:,B0 16:,B0 17:,B0,B13 18:,B0,B14 19:,B0 20:,B0 21:,B0 22:,B0,B0 23:,B17,B0,B17 24:,B0,B0 25:,B0,B17 26:,B17,B17 29:,B0,B17 30:,B0,V1 | | ||
+sum r b11 b11 b1 b1 b1 b b b a,compiler/check:181249:181279,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U	o0mut compiler/check:Checker&	o0mut compiler/effects:Effects&	o1mut compiler/check:Checker&	o0Array<mut compiler/load:Module&>&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0I64	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out d58c0f8bff925771a995f3f1390f39d5
+run compiler/explain 4572-4766 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 1594a799783e188cbdfd362b75b1974d
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 12717-13993 fn	9d16d4fe123414851868461cf8b70834
+read compiler/generic 18965-19404 fn	4c0f8976b01fa883885011876b109913
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/source 1061-1198 fn	058f7df2993e48e5e8d9db58190c213d
+hits 0
+body 1 3 4 2 | U U U | F F F F | b10 b0000 b000 b0000 | 0:,V0,V1 1:,V0 2:,V0 | | ||
+sum r b10 b10 b100 b100 b100 b b b a,compiler/source:1296:1298,compiler/explain:4572:4766 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0I64	o0std/prelude/text:String&
+out 0710c451a2038dc86f627b0bf4b19989
+run compiler/explain 4232-4570 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks a060057142096012097a70e994471fe8
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 30027-30445 fn	1c5b37b6f503b36256d115b5552635a7
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 172300-172343 fn	e0f9685c987cf777dce8d8b8b955a400
+read compiler/generic 172344-172396 fn	16d9e87d11b5f47b45a33c2447ed3e28
+read compiler/generic 172397-172455 fn	cfff7c46ba738fe5a01e37581de756a1
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 7 11 2 | U U U U U B2 U | F F F F F F F F F F F | b10 b00000000000 b0000000 b00000000000 | 0:,V0 1:,V0 2:,V0,V0 3:,V0 4:,V0,V0,B2 6:,B2,V1 | | ||
+sum r b10 b10 b1000 b1000 b1000 b b b a,std/prelude/map:6065:6082,compiler/explain:4232:4570 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0I64	o0std/prelude/text:String&	o0compiler/source:NameId	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64
+out b9a25f6655033b82727066f66dd2a32c
+run compiler/explain 3231-3960 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0,1
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 23505389f616d09d4f78514c24044002
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/explain 4232-4570 fn	91e01ae8dd8fc65ed30f0d505ed34610
+read compiler/explain 4572-4766 fn	d6279e4aa656c5785d9460e1ae142bce
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 134145-135144 fn	de78906a8e26b73280f9a822161a68e6
+read compiler/generic 142180-143515 fn	78142f61282099ffbd02086543bcc17c
+read compiler/generic 149561-149713 fn	78142f61282099ffbd02086543bcc17c
+read compiler/generic 22389-22644 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/source 1061-1198 fn	058f7df2993e48e5e8d9db58190c213d
+read std/prelude/text 3958-4053 fn	249b488abfd8979d5dc24c581a8aa85a
+read std/prelude/vec 5133-5172 fn <compiler/names:Entry;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/names:Entry;>	442c72fb9063f8bdc126d0eee7d856dc
+read std/prelude/vec 6401-6448 fn <mut compiler/names:Table&;>	f0004e4823ff89d9c30e4c6dd0376f7b
+hits 0
+body 1 15 12 2 | U U U U U U U U U U U B4 U U U | F F F F F F F F F F F F | b10 b000000000000 b000000000000000 b000000000000 | 0:,V1,B0 1:,V0,V1 2:,V0,V1 3:,V0,V1 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0,V1 9:,V0,V1 10:,V0,V0 12:,V0 13:,V0,V0 14:,V0 | | ||
+sum r b10 b10 b100 b100 b100 b b b a,compiler/source:1296:1298,compiler/explain:3231:3960 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0I64	o0std/prelude/text:String&	o0mut compiler/names:Table&	o1std/prelude/vec:Vec<mut compiler/names:Table&>&	o1I64	o0compiler/names:Entry	o1std/prelude/vec:Vec<compiler/names:Entry>&	o1I64
+out bbe10720b378395b85fb97cb6809ea1c
+run compiler/explain 0-0 ctor compiler/explain:Code	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/explain 0-0 ctor compiler/explain:Code	0,1,2,3
+marks 64c1afbb1796f93fa8c322aec044ad42
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+hits 0
+body 1 0 8 4 | | F F F F F F F F | b0000 b00000000 b b00000000 | | | ||
+sum r;V0,V3,0,1895,1900,1,0,0;V1,V3,0,1905,1909,1,0,0;V2,V3,0,1923,1929,1,0,0 b0000 b0000 b1101 b0000 b0000 b b b a,compiler/explain:0:0,compiler/explain:0:0,compiler/explain:0:0,compiler/explain:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o0I64	o0std/prelude/text:String&
+out 6fc90a5ec483600751c3220764113668
+run compiler/explain 13041-13849 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 1594a799783e188cbdfd362b75b1974d
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 181670-182065 fn	28904fec471214e1566f504b1409a849
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 168429-168610 fn	798488446d59be94751fba690d1708b7
+read compiler/generic 20234-20413 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/generic 20415-20530 fn	81d633f3c95612faa4c9dcbc96a945aa
+read compiler/generic 34187-34308 fn	94e7c79d6beee2933a68251192c0a998
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 24 16 2 | U B0 U U U U B4 B4 U U U U U B6 B6 U U B8 U B9 B9 U U U | F F F F F F F F F F F F F F F F | b11 b0000000000000000 b000000000000000000000000 b0000000000000000 | 0:,V0 1:,B0 2:,B0 3:,V0 4:,V0 5:,V0,B4 8:,B0,B4 9:,B0,B5 10:,V0,V0 11:,B0,V0 12:,V0,B6 15:,B0,B6 16:,V0,B8 18:,V0,B9 21:,B0,B9 22:,B0 23:,B0,V1 | | ||
+sum r b11 b11 b100 b100 b100 b b b a,std/prelude/map:6065:6082,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0I64	o0I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0compiler/types:TypeId	o0compiler/types:TypeId
+out 0ee89065e4e3d2cee057d2410d842ff4
+run compiler/explain 13967-14305 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 5df3645768ec082295be710a92d71e8f
+read -ctor	I32
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 150272-155727 fn	8713f48cd237b14b912fd723450ed836
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34340-34408 fn	cd362566892e1d69aeebe00c127dcb61
+read compiler/types 34690-34762 fn	c43df76d84aaf0b9649473b59ae55cb1
+read compiler/types 34845-34915 fn	b54a7bc988c4ebbd0d7c2ade15d17e1f
+hits 0
+body 1 13 3 1 | U B0 U U U B0 U B0 U U B0 U U | F F F | b1 b000 b0000000000000 b000 | 0:,V0,V0 2:,V0 3:,V0 4:,V0,B0 6:,V0 8:,V0 9:,V0 11:,V0 12:,V0,B0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId
+out 84edebe6fd6b33ee65d8f74d43ab5b86
+run compiler/explain 11102-11244 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/check 181670-182065 fn	28904fec471214e1566f504b1409a849
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+hits 0
+body 1 4 3 2 | U U V1 V1 | F F F | b11 b000 b0000 b000 | 0:,V0,B0 1:,B0,B0 | | ||
+sum r b11 b11 b10 b10 b10 b b b a,compiler/check:249288:249338,compiler/explain:11196:11210 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/types:TypeId
+out dd5bea9be738322a80006461c6bd5e5e
+run compiler/explain 10644-10987 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 8eec95e68e1b11064bdfda8c6d4a7d36
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 182476-182557 fn	e1e46ffb83f8221f7bc4f6ef60d80ae1
+read compiler/check 182558-182642 fn	fd05da9cb1c580507e47a8b1f548c00e
+read compiler/explain 11102-11244 fn	0eaebcdbef47f1f5e41820a2a695ce03
+read compiler/types 18507-19229 fn	ef45cedfca997423c8bf28ed0e7542ba
+read compiler/types 27332-27425 fn	4831035cdbf080a669f010fae863f60f
+read compiler/types 34845-34915 fn	b54a7bc988c4ebbd0d7c2ade15d17e1f
+read compiler/types 34916-34986 fn	56923687717b623eb0589819f4bd62a9
+read compiler/types 35058-35137 fn	e8d1363c9b27924fd772f9927a654119
+hits 0
+body 1 10 5 2 | U U U U U U U U U V1 | F F F F F | b11 b00000 b0000000000 b00000 | 0:,V0 1:,V0,V1 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0,B0 | | ||
+sum r b11 b11 b100 b100 b100 b b b a,compiler/check:249288:249338,compiler/explain:11196:11210 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/types:TypeId	o0I64
+out d162a4e54fe2b1d91d543537d9e6cfc5
+run compiler/explain 9428-9827 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 8eec95e68e1b11064bdfda8c6d4a7d36
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 26925-27280 fn	9558ce7c8c0075aca4906f77966a2799
+read compiler/types 27759-27947 fn	9d16d4fe123414851868461cf8b70834
+read compiler/types 34845-34915 fn	b54a7bc988c4ebbd0d7c2ade15d17e1f
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <I64;>	44fdd55f051af23429be98afae112cb0
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+hits 0
+body 1 9 9 3 | B0 U U U U U U U U | F F F F F F F F F | b100 b000000000 b000000000 b000000000 | 0:,B0 1:,B0 2:,B0 3:,B0 4:,V0 5:,V0,B0 6:,B0,B0 7:,V0,B0 8:,V0 | | ||
+sum r b100 b100 b1000 b1000 b1000 b b b a,compiler/types:27036:27056,compiler/explain:9428:9827,compiler/explain:9428:9827 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/check:Checker&	o0compiler/types:TypeId	o0compiler/ast:Param?&	o0Array<compiler/ast:Param&>&	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId	o0mut Array<I64>&	o1std/prelude/vec:Vec<I64>&
+out ca8aaadce6708cc2f813be07b01b6f1d
+run compiler/explain 27766-28071 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 9 1 | | F F F F F F F F F | b0 b000000000 b b000000000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/explain:27766:28071 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out cf38684c0a9d3ed2d22a13b610f76bee
+run compiler/explain 27694-27764 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/explain 27766-28071 fn	cb766e0f185cf46b64ce76d1543427ae
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/explain:27694:27764 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out dceebf4c0a928b0b0f6c4b6e05074b63
+run compiler/explain 12288-12652 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 9 1 | | F F F F F F F F F | b0 b000000000 b b000000000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/explain:12288:12652 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out a07491dcf6eca7920466b339b4f9bc95
+run compiler/explain 11484-12175 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Param	3
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Module	6
+mark compiler/source 0-0 ctor compiler/source:Source	1
+marks e452dd38580a00baa7a8a9fbd93ab1d0
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Param	38c6ee192659779d27da07f93c82b41a
+read compiler/ast 19775-20558 fn	39242e89801de5a7849101f7c3221965
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/explain 12288-12652 fn	2c8202bbb872fb8042ee3d8b8955f516
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+hits 0
+body 1 13 14 4 | V3 U B0 B0 B0 U U U B3 B3 U U U | F F F F F F F F F F F F F F | b0001 b00000000000000 b0000000000000 b00000000000000 | 1:,V0,V0 4:,B0 5:,V1 6:,B0,V1 7:,V2 10:,B0,B3 11:,B0,V1 12:,B0,V3 | | ||
+sum r b0001 b0001 b11000 b10000 b00000 b b b a,compiler/explain:11484:12175,compiler/explain:11484:12175,compiler/explain:11484:12175,compiler/explain:11638:11643 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0std/prelude/text:String&	o0Array<compiler/ast:Param&>&	o0I64	o0I64	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64
+out 21cd34a4c5f7818dc797143f12b7e977
+run compiler/explain 6651-9330 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,3,9
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/load 0-0 ctor compiler/load:Module	6
+mark compiler/source 0-0 ctor compiler/source:Source	1
+marks f4b512a9aa4245c5682d7dcc96685dda
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/ast 14681-14737 fn	ca8f6eae37353eafd94ad54adc624b9b
+read compiler/ast 22857-23152 fn	b17f0d073283b2d45a57e0394da9bd7b
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 181670-182065 fn	28904fec471214e1566f504b1409a849
+read compiler/explain 10644-10987 fn	d1d4d2d12015debfe78bb161f95f60a1
+read compiler/explain 11484-12175 fn	87ff4b0bea17bbce5a96f93cfba9ee9f
+read compiler/explain 12288-12652 fn	2c8202bbb872fb8042ee3d8b8955f516
+read compiler/explain 13041-13849 fn	658fd062fabdabe8321d5239b6855538
+read compiler/explain 13967-14305 fn	8713f48cd237b14b912fd723450ed836
+read compiler/explain 27694-27764 fn	4b91937e49789592f195cbc3e71e0f82
+read compiler/explain 9428-9827 fn	5009ca88a0ba72a40a12ebd87ec0f960
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 133243-133451 fn	b0a4e967f69326dbece5983e4aecf5f1
+read compiler/generic 172397-172455 fn	cfff7c46ba738fe5a01e37581de756a1
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/generic 172518-172583 fn	05b96e852a3a7173c52d715eb66b3bc9
+read compiler/generic 23073-23184 fn	8713f48cd237b14b912fd723450ed836
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read compiler/types 34916-34986 fn	56923687717b623eb0589819f4bd62a9
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 3214-3355 fn	f31bc2073e7a5166cb23a1806dc8cfdc
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+hits 0
+body 1 39 27 2 | U U U U U B0 U U U B1 B1 U U U U U B0 U U U U U U U B0 U U B0 U U B0 U U U U B0 V1 U V1 | F F F F F F F F F F F F F F F F F F F F F F F F F F F | b11 b000000000000000000000000000 b000000000000000000000000000000000000000 b000000000000000000000000000 | 0:,V0,V0 1:,V0,B0 2: 3:,V0 4:,V0,B0 6:,V0 7:,V0 8:,V0,V0 11:,V0 12:,V0,B1 13: 14:,V0 15:,V0,B1 17:,V0,V0,V0 18:,V0,B0 19:,V0 20:,V0 21:,V0,B2 22:,B0,B2 23:,B2,B2 25:,B0,B2 26:,B2,B4 28:,B0,B2 29:,B2,B6 31:,V0 32:,B0 33:,V0 34:,V0,B0,V0,B0 37:,B0 | | ||
+sum r b11 b11 b1000 b1000 b1000 b b b a,std/prelude/vec:4512:4530,compiler/explain:9111:9140 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0I64	o0compiler/types:TypeId	o0I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId
+out c0ce6726071beff67b9191564b69efc4
+run compiler/explain 9874-10423 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 8eec95e68e1b11064bdfda8c6d4a7d36
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 181670-182065 fn	28904fec471214e1566f504b1409a849
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 33743-33864 fn	82029b72cbc6f1adbe46a11c38134cdd
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 16 8 2 | B0 U U U B2 U U B4 B4 U U U B2 U U U | F F F F F F F F | b11 b00000000 b0000000000000000 b00000000 | 0:,B0 1:,B0 2:,V0,V0 3:,V0 5:,V0 6:,V0,B4 9:,B0,B4 10:,B0,B5 11:,V0,B2 13:,B0,B2 14:,B0 15:,B0,V1 | | ||
+sum r b11 b11 b10 b10 b10 b b b a,compiler/check:249288:249338,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/types:ListId	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId
+out 5dfefcc0f3b48e472947f919ad4a5b1f
+run compiler/explain 2123-3151 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,3
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3,4
+marks 6ad82d46460ea16680719535532a5335
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 182130-182186 fn	4fc0cbb991818c7049ec7113152b9e14
+read compiler/check 182374-182475 fn	b2c71653b26e72422b75b742328969f0
+read compiler/diag 6659-6775 fn	ef0ab4682c6827aae295601a4fb36111
+read compiler/diag 6853-7013 fn	681a76eea1cc73f47553f891ae828cb1
+read compiler/explain 0-0 ctor compiler/explain:Code	9d2db5bf35d60f0b88858805315f9ec3
+read compiler/explain 10644-10987 fn	d1d4d2d12015debfe78bb161f95f60a1
+read compiler/explain 3231-3960 fn	9231a0965da2ba2e96ebdbfbc2aad09c
+read compiler/explain 6651-9330 fn	3c2383acf2ff09c93bfd870fea605652
+read compiler/explain 9428-9827 fn	5009ca88a0ba72a40a12ebd87ec0f960
+read compiler/explain 9874-10423 fn	28904fec471214e1566f504b1409a849
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 170808-171808 fn	09d3b15a27893dfaaac3b85b324ab4df
+read compiler/generic 171810-171887 fn	2a5529a137ede9e2905c499a499becac
+read compiler/generic 171888-171954 fn	b090e1b17cc1a156db5113053f17be48
+read compiler/generic 171955-172034 fn	d6ba7a8d150093e36ea15af0222ce111
+read compiler/generic 172035-172099 fn	84826a3ce2eef7dde9d8d23d0648f148
+read compiler/generic 172397-172455 fn	cfff7c46ba738fe5a01e37581de756a1
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/generic 181194-181268 fn	3627bb8ebed83223ffbdfc9abb65a7d3
+read compiler/generic 20234-20413 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/explain:Code>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <compiler/explain:Code;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+hits 0
+body 1 32 20 3 | U U U U U B0 U U U U U U U U U V2 U U U U U U U U U U U U V2 U U U | F F F F F F F V2 F V2 F F F F F F F F F V2 | b101 b00000000000000000000 b00000000000000000000000000000000 b00000000010000000000 | 0:,V0 1:,V0,V1 2:,V0,V0 3:,V0 4:,V0,V0 6:,V0,V2 7:,V0 8:,V2 9: 10:,V0 11:,V0 12:,V0 13:,V0 14:,V0,V2 16:,V0,V0 17:,V2,V2,V0,V2 18:,V2,V2 19:,V0 20:,V0 21:,V0 22:,V0 23:,V0,V0,V0 24:,V0,B4 25:,V0 26:,V0,B4 27:,V0,B4 29:,V0,V0 30:,V2,V2,V0,V2 31:,V2,V2 | | ||
+sum r;V0,V2,0,2581,2692,3,0,0 b101 b101 b100 b100 b100 b b b a,compiler/source:1296:1298,compiler/explain:2123:3151,compiler/explain:2393:2408 t,U i t i i c0/i/i f1010
+hid fs1;1280:U;154112:V2;154113:V2;154114:U;154115:V0;154112:V2;154113:V2;154114:U;154115:V0	o0mut compiler/check:Checker&	o0I64	o0std/prelude/text:String&	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0std/prelude/text:String&	o1mut compiler/generic:Program&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0std/prelude/text:String&	o1mut compiler/generic:Program&	o1I64
+out bd4def8a9e337a7c38d40558f74ad7ba
+run compiler/explain 28131-28399 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Module	6
+mark compiler/source 0-0 ctor compiler/source:Source	1
+marks e81bcc2cce5462605f0ce56cf2e7a2fc
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+hits 0
+body 1 6 11 4 | U B0 B0 B3 B3 U | F F F F F F F F F F F | b1000 b00000000000 b000000 b00000000000 | 0:,V1,V1 5:,V0,B3 | | ||
+sum r b1000 b1000 b11000 b01000 b00000 b b b a,std/prelude/vec:4512:4530,compiler/explain:28131:28399,compiler/explain:28131:28399,compiler/explain:28131:28399 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0I64	o0Array<compiler/ast:Attr&>&	o0std/prelude/text:String&	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64
+out 96543ff6b47b1275d15bc43256ec9e30
+run compiler/explain 14724-15062 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/load 0-0 ctor compiler/load:Module	6
+mark compiler/source 0-0 ctor compiler/source:Source	1
+marks 761fff9bb53737341144b68954eabb8a
+read -ctor	I64
+read compiler/ast 32739-33219 fn	d46f04ba2996d68d3a17513e0ba2bb77
+read compiler/ast 34856-35386 fn	b3cfa34ce12d5dea2d549dc60a34a9a3
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+hits 0
+body 1 8 13 6 | U B0 B0 U U B2 B2 U | F F F F F F F F F F F F F | b100000 b0000000000000 b00000000 b0000000000000 | 0:,V1,V1 3:,V2,V1,V1,V3,V4,B1 4:,B1,V1,B2 7:,V0,B2 | | ||
+sum r b100000 b100000 b1100000 b0100000 b0000000 b b b a,std/prelude/vec:4512:4530,compiler/explain:14724:15062,compiler/explain:14724:15062,compiler/explain:14724:15062,compiler/explain:14724:15062,compiler/explain:14724:15062 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0Array<compiler/ast:Stmt&>&	o0Array<compiler/ast:Param&>&	o0compiler/ast:Param?&	o0I64	o0std/prelude/text:String&	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0Array<compiler/ast:Req&>&	o1Array<compiler/ast:Stmt&>&	o1mut compiler/source:Names&	o1std/prelude/text:String&	o1Array<compiler/ast:Param&>&	o1compiler/ast:Param?&
+out 73c3490dc4a14b410c23d64cb1ebbbcd
+run compiler/explain 14435-14722 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,3,4
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+marks 95132e85355b78d6de1c12468212f980
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/explain 14724-15062 fn	c793aa2bce8adb926da674c04e6e11ec
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 4 5 4 | B1 B1 U U | F F F F F | b1000 b00000 b0000 b00000 | 2:,V0,B1 3:,V0,V1,V2,V2,V2,V3 | | ||
+sum r b1000 b1000 b11000 b01000 b00000 b b b a,std/prelude/vec:4512:4530,compiler/explain:14435:14722,compiler/explain:14435:14722,compiler/explain:14435:14722 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/ast:Func&	o0I64	o0std/prelude/text:String&
+out 689a22c77de56dd2a35367272972a222
+run compiler/explain 15238-15469 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 1594a799783e188cbdfd362b75b1974d
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/scope 652362-652686 fn	8d807e15365796127fcd3989312cb706
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 5 9 4 | U B2 B3 B3 U | F F F F F F F F F | b1000 b000000000 b00000 b000000000 | 0:,V2,V1,B2 4:,V0,B3 | | ||
+sum r b1000 b1000 b10100 b00100 b00000 b b b a,std/prelude/vec:4512:4530,compiler/explain:15238:15469,compiler/explain:15238:15469,compiler/explain:15238:15469 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/scope:Scoper&	o0I64	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>	o1compiler/scope:Scoper&	o1I64	o1mut compiler/source:Names&
+out d4777a4c906ec1a3d14b3b6f38a35fb9
+run compiler/explain 19725-20754 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,5
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 71ae9ee2c62ae53ed2bd4bf0d131438a
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 14681-14737 fn	ca8f6eae37353eafd94ad54adc624b9b
+read compiler/ast 30734-30896 fn	9d0e836dcce1cc72a2474d1beb52097c
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 133243-133451 fn	b0a4e967f69326dbece5983e4aecf5f1
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/generic 172518-172583 fn	05b96e852a3a7173c52d715eb66b3bc9
+read compiler/generic 20234-20413 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+hits 0
+body 1 14 8 3 | U U U U U U U U U U U V2 U V2 | F F F F F F F F | b101 b00000000 b00000000000000 b00000000 | 0:,V0,V0 1:,V0,V0 2:,V0 3: 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0,V0,B4 10:,V0,B4 12:,V0 | | ||
+sum r b101 b101 b1000 b1000 b1000 b b b a,std/prelude/map:6065:6082,compiler/explain:19725:20754,compiler/explain:20435:20603 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/scope:Scoper&	o0I64	o0I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId
+out 8b38e1c4b9a8fc12009bd9f89f4475e8
+run compiler/explain 18772-19351 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 1594a799783e188cbdfd362b75b1974d
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/scope 148845-148912 fn	027fe6f9c12c46614590e5183149ead9
+read compiler/scope 652362-652686 fn	8d807e15365796127fcd3989312cb706
+read compiler/scope 71646-71933 fn	6d374df7e2888f4d21da9858aa885538
+read std/prelude/text 11033-11117 fn	797b4f006ae1961de980e1041c6df1c1
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 7 5 3 | U U U V2 U U V2 | F F F F F | b001 b00000 b0000000 b00000 | 0:,V1,V0,B0 1:,V1 2:,B0,B2,B2 4:,V1,B0 5:,B0,B0 | | ||
+sum r b001 b001 b010 b010 b000 b b b a,compiler/explain:18772:19351,compiler/explain:18772:19351,compiler/explain:18994:19131 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/scope:Scoper&	o0I64	o0Array<std/prelude/text:String&>	o1compiler/scope:Scoper&	o1I64	o1mut compiler/source:Names&
+out 07c194046500b5eea71921ab5d3a5cc1
+run compiler/explain 16962-17961 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 1594a799783e188cbdfd362b75b1974d
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I32
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 181159-181343 fn	ea9df5340d413efa2142df582d0bd5fa
+read compiler/check 181670-182065 fn	28904fec471214e1566f504b1409a849
+read compiler/check 182476-182557 fn	e1e46ffb83f8221f7bc4f6ef60d80ae1
+read compiler/check 182558-182642 fn	fd05da9cb1c580507e47a8b1f548c00e
+read compiler/effects 20757-21021 fn	8713f48cd237b14b912fd723450ed836
+read compiler/effects 9603-10347 fn	4600927f627037f021796c3554f25ebf
+read compiler/explain 18772-19351 fn	a2d61813c72b99f94c3fc8ce9f12898d
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/scope 652922-653324 fn	b4f8d965a26cb6f4d8d6bcd93dd526d5
+read compiler/types 18507-19229 fn	ef45cedfca997423c8bf28ed0e7542ba
+read compiler/types 20389-21118 fn	121ddb215467113a260d3bf2dcbcfa07
+read compiler/types 23999-24240 fn	9d16d4fe123414851868461cf8b70834
+read compiler/types 27332-27425 fn	4831035cdbf080a669f010fae863f60f
+read compiler/types 34845-34915 fn	b54a7bc988c4ebbd0d7c2ade15d17e1f
+read compiler/types 34916-34986 fn	56923687717b623eb0589819f4bd62a9
+read compiler/types 35058-35137 fn	e8d1363c9b27924fd772f9927a654119
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 31 26 4 | U U U U U U U U U U U B4 U B0 B0 B0 B0 U U U U U B0 U B0 U B0 U B0 B0 U | F F F F F F F F F F F F F F F F F F F F F F F F F F | b1100 b00000000000000000000000000 b0000000000000000000000000000000 b00000000000000000000000000 | 0:,V1 1:,V1 2:,V1 3:,V1 4:,V1 5:,V1 6:,V1 7:,V1,V1 8:,V1 9:,P,B4 10:,B0,B4 12:,B4,B4 17:,V1,B0,B0 18:,V1 19:,V1,B0 20:,V2,V1,B0 21:,B0,B9 23:,B0,B13 25:,V1,V2,B0 27:,B0,B0 30:,V0,B0 | | ||
+sum r b1100 b1100 b111000 b011000 b010000 b b b a,std/prelude/vec:4512:4530,compiler/check:179832:179852,compiler/explain:16962:17961,compiler/explain:16962:17961 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/scope:Scoper&	o0compiler/types:TypeId	o0I64	o0std/prelude/text:String&	o0mut compiler/effects:Effects&	o1mut compiler/check:Checker&	o0Array<std/prelude/text:String&, 8>	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>	o1compiler/scope:Scoper&	o1I64	o1mut compiler/source:Names&
+out 70b6b6c09eb33ab6c615fd7d68787e43
+run compiler/explain 16226-16671 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,3
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 8593727233563b63d437e6e42b07deee
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/explain 16962-17961 fn	e71f39ed00c2044a4a64dc3a9efeaa27
+read compiler/explain 19725-20754 fn	4e7937590cadc74f77f5638df1086024
+read compiler/explain 9428-9827 fn	5009ca88a0ba72a40a12ebd87ec0f960
+read compiler/generic 170808-171808 fn	09d3b15a27893dfaaac3b85b324ab4df
+read compiler/generic 171810-171887 fn	2a5529a137ede9e2905c499a499becac
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 10 9 4 | U U B1 B1 U U U U U U | F F F F F F F F F | b1100 b000000000 b0000000000 b000000000 | 0:,V1,V2,B0 1:,B0,B0 4:,V0,B1 5:,V1,V1 6:,V1 7:,V1 8:,V1,V1,V1 9:,V0,V1,V2,V3 | | ||
+sum r b1100 b1100 b111000 b011000 b010000 b b b a,std/prelude/vec:4512:4530,std/prelude/map:6065:6082,compiler/explain:16226:16671,compiler/explain:16226:16671 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/scope:Scoper&	o0I64	o0I64	o0std/prelude/text:String&	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64
+out 63220ae06ced292e98123166987e2bf1
+run compiler/explain 15588-16031 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,3
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks c7cb18c8bdb0188906c3d81f12981c37
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 181159-181343 fn	ea9df5340d413efa2142df582d0bd5fa
+read compiler/effects 20757-21021 fn	8713f48cd237b14b912fd723450ed836
+read compiler/effects 88781-90438 fn	5e6bf6fb640338480180c9d33205bc11
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/generic 172518-172583 fn	05b96e852a3a7173c52d715eb66b3bc9
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 20 12 3 | U U U B2 U B0 B0 U U B0 B0 U U U B0 U U B0 B0 U | F F F F F F F F F F F F | b110 b000000000000 b00000000000000000000 b000000000000 | 0:,V1 1:,V1,V1 2:,B0 4:,V1,B2 7:,B0,B0 8:,V1,B4 11:,B0,B0 12:,V1,V1 13:,V1 15:,B0,B0 16:,B0,B0,B0 19:,V0,B0 | | ||
+sum r b110 b110 b11000 b01000 b01000 b b b a,std/prelude/vec:4512:4530,compiler/check:181249:181279,compiler/explain:15588:16031 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0I64	o0I64	o0std/prelude/text:String&	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0mut compiler/effects:Effects&	o1mut compiler/check:Checker&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&
+out fd9bc7c6d930a354d649e504798c5148
+run compiler/explain 18084-18583 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	4
+marks fc140d9fe978b712fa9250bc9cf7cf66
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/diag 6659-6775 fn	ef0ab4682c6827aae295601a4fb36111
+read compiler/diag 6853-7013 fn	681a76eea1cc73f47553f891ae828cb1
+read compiler/diag 7080-7253 fn	681a76eea1cc73f47553f891ae828cb1
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/scope 105245-105305 fn	ffdb3366594687f4e96e1340c1bb7403
+read compiler/scope 105733-105794 fn	0627cf66dbb640d0b265456e32eaff81
+read compiler/scope 107181-108172 fn	a41d9836887bc5576dc048a550305847
+read compiler/scope 108451-108540 fn	44b6f60446c971527383992b89a28ed5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 12 16 4 | U U U U B3 U U U U B3 B3 U | F F F F F F F F F F F F F F F F | b1100 b0000000000000000 b000000000000 b0000000000000000 | 0:,V2 1:,V2 2:,V2 3:,V2,V2 5:,V2,B3 6:,V1,B3 7:,V1 8:,V1 11:,V0,B3 | | ||
+sum r b1100 b1100 b10100 b00100 b00000 b b b a,std/prelude/vec:4512:4530,std/prelude/vec:4512:4530,compiler/explain:18084:18583,compiler/explain:18084:18583 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/scope:Scoper&	o0I64	o0std/prelude/text:String&	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64
+out d364d635d4b4be935698bf53b3f93f14
+run compiler/explain 5007-6481 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,3,8
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 6f13502ce91ffbe9cae1d4f033d768f0
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 182374-182475 fn	b2c71653b26e72422b75b742328969f0
+read compiler/explain 10644-10987 fn	d1d4d2d12015debfe78bb161f95f60a1
+read compiler/explain 14435-14722 fn	c820368b49520246c14ac2b58f97a8c6
+read compiler/explain 15238-15469 fn	809a39d7cf2ad6f4b3112dc40fc571c3
+read compiler/explain 15588-16031 fn	b6d57ca1f2e0d56bde3e327636333921
+read compiler/explain 16226-16671 fn	f8a89012d6ec89bcca457b40987ec0ea
+read compiler/explain 16962-17961 fn	e71f39ed00c2044a4a64dc3a9efeaa27
+read compiler/explain 18084-18583 fn	af23723a8b2b53fd8530afb0f3808794
+read compiler/explain 28131-28399 fn	bde4b5d418b7a11515d0ab959c4ea5a7
+read compiler/explain 6651-9330 fn	3c2383acf2ff09c93bfd870fea605652
+read compiler/explain 9428-9827 fn	5009ca88a0ba72a40a12ebd87ec0f960
+read compiler/explain 9874-10423 fn	28904fec471214e1566f504b1409a849
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 150272-155727 fn	8713f48cd237b14b912fd723450ed836
+read compiler/generic 170808-171808 fn	09d3b15a27893dfaaac3b85b324ab4df
+read compiler/generic 171810-171887 fn	2a5529a137ede9e2905c499a499becac
+read compiler/generic 171888-171954 fn	b090e1b17cc1a156db5113053f17be48
+read compiler/generic 171955-172034 fn	d6ba7a8d150093e36ea15af0222ce111
+read compiler/generic 172035-172099 fn	84826a3ce2eef7dde9d8d23d0648f148
+read compiler/generic 172397-172455 fn	cfff7c46ba738fe5a01e37581de756a1
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/generic 20234-20413 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/needs 1281-1674 fn	09e878ecfbc1eb3bbccc0f46dc474da9
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 54 20 3 | B0 U U B0 U U U U U U U B1 B1 U U U U U U U U U U U B0 B0 U U U U U B2 B3 B3 U U U U U U U U U U U U B6 B6 U U U U U U | F F F F F F F F F F F F F F F F F F F F | b101 b00000000000000000000 b000000000000000000000000000000000000000000000000000000 b00000000000000000000 | 0:,B0 1:,V0 2:,V0,V0 4:,B0,V0,V0,B0 5: 6:,V0 7:,V0 8:,V0 9:,V0 10:,V0,B1 13:,B0,B1 14:,V0,V0 15:,V0 16:,B0,V0,V0,B1 17:,B0,V0,V1,B1 18:,B0,V0,V1,B1 19:,B0,V0,B1 20:,B0,V0,V1,B1 21:,B0,V2 22:,V0 23:,V0,B0 26:,B0,B0 27:,V0,V0 28:,V0 29:,B0,V0,V0,B0 30:,V0,B2 34:,B0,B3 35:,B0,V0,V1,B0 36:,V0,V0 37:,V0 38:,V0 39:,V0 40:,V0 41:,V0,V0,V0 42:,V0,B6 43:,V0 44:,V0,B6 45:,V0,B6 48:,B0,B6 49:,B0,V0,V1,B6 50:,B0,V0,V1,B6 51:,B0,V0,B6 52:,B0,V0,V1,B6 53:,B0,V2 | | ||
+sum r b101 b101 b110 b110 b100 b b b a,std/prelude/map:6065:6082,compiler/explain:5007:6481,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/scope:Scoper&	o0I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0Array<std/prelude/text:String&>	o1mut compiler/check:Checker&	o1I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId
+out c4d6271a1d41543f00576b5998cfdd05
+run compiler/explain 5007-6481 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in c4d6271a1d41543f00576b5998cfdd05
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,3,8
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 6f13502ce91ffbe9cae1d4f033d768f0
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 182374-182475 fn	b2c71653b26e72422b75b742328969f0
+read compiler/explain 10644-10987 fn	d1d4d2d12015debfe78bb161f95f60a1
+read compiler/explain 14435-14722 fn	c820368b49520246c14ac2b58f97a8c6
+read compiler/explain 15238-15469 fn	809a39d7cf2ad6f4b3112dc40fc571c3
+read compiler/explain 15588-16031 fn	b6d57ca1f2e0d56bde3e327636333921
+read compiler/explain 16226-16671 fn	f8a89012d6ec89bcca457b40987ec0ea
+read compiler/explain 16962-17961 fn	e71f39ed00c2044a4a64dc3a9efeaa27
+read compiler/explain 18084-18583 fn	af23723a8b2b53fd8530afb0f3808794
+read compiler/explain 28131-28399 fn	bde4b5d418b7a11515d0ab959c4ea5a7
+read compiler/explain 6651-9330 fn	3c2383acf2ff09c93bfd870fea605652
+read compiler/explain 9428-9827 fn	5009ca88a0ba72a40a12ebd87ec0f960
+read compiler/explain 9874-10423 fn	28904fec471214e1566f504b1409a849
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 150272-155727 fn	8713f48cd237b14b912fd723450ed836
+read compiler/generic 170808-171808 fn	09d3b15a27893dfaaac3b85b324ab4df
+read compiler/generic 171810-171887 fn	2a5529a137ede9e2905c499a499becac
+read compiler/generic 171888-171954 fn	b090e1b17cc1a156db5113053f17be48
+read compiler/generic 171955-172034 fn	d6ba7a8d150093e36ea15af0222ce111
+read compiler/generic 172035-172099 fn	84826a3ce2eef7dde9d8d23d0648f148
+read compiler/generic 172397-172455 fn	cfff7c46ba738fe5a01e37581de756a1
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/generic 20234-20413 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/load 0-0 ctor compiler/load:Loader	c57786966e9e41b2e6cd468b7362b539
+read compiler/needs 1281-1674 fn	6562651837536b1bc18ef8a53be24ec3
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 54 20 3 | B0 U U B0 U U U U U U U B1 B1 U U U U U U U U U U U B0 B0 U U U U U B2 B3 B3 U U U U U U U U U U U U B6 B6 U U U U U U | F F F F F F F F F F F F F F F F F F F F | b101 b00000000000000000000 b000000000000000000000000000000000000000000000000000000 b00000000000000000000 | 0:,B0 1:,V0 2:,V0,V0 4:,B0,V0,V0,B0 5: 6:,V0 7:,V0 8:,V0 9:,V0 10:,V0,B1 13:,B0,B1 14:,V0,V0 15:,V0 16:,B0,V0,V0,B1 17:,B0,V0,V1,B1 18:,B0,V0,V1,B1 19:,B0,V0,B1 20:,B0,V0,V1,B1 21:,B0,V2 22:,V0 23:,V0,B0 26:,B0,B0 27:,V0,V0 28:,V0 29:,B0,V0,V0,B0 30:,V0,B2 34:,B0,B3 35:,B0,V0,V1,B0 36:,V0,V0 37:,V0 38:,V0 39:,V0 40:,V0 41:,V0,V0,V0 42:,V0,B6 43:,V0 44:,V0,B6 45:,V0,B6 48:,B0,B6 49:,B0,V0,V1,B6 50:,B0,V0,V1,B6 51:,B0,V0,B6 52:,B0,V0,V1,B6 53:,B0,V2 | | ||
+sum r b101 b101 b110 b110 b100 b b b a,std/prelude/map:6065:6082,compiler/explain:5007:6481,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/scope:Scoper&	o0I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0Array<std/prelude/text:String&>	o1mut compiler/check:Checker&	o1I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId
+out 8591e4ff28d0686d620d34b70e3a66b6
+run compiler/explain 35237-35642 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 9 6 2 | B0 U U U U U U U U | F F F F F F | b01 b000000 b000000000 b000000 | 0:,B0 1:,B0 2:,B0 3:,B0 4:,B0,B5 5:,B0,B7 6:,B0 7:,B0 8:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/explain:35237:35642,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 81d31c6afc3be5da7940f6120cd0b5d5
+run compiler/explain 34342-35126 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 1594a799783e188cbdfd362b75b1974d
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 152962-154232 fn	205177a5c0905ec73653c67272144be4
+read compiler/check 181670-182065 fn	28904fec471214e1566f504b1409a849
+read compiler/check 182643-182742 fn	e67a270444002601403b8d6983ff7906
+read compiler/check 182743-182810 fn	57bdf077e905f022ca0072b8456aba84
+read compiler/explain 35237-35642 fn	5a33a83cc998a4cd6cb5e933353e3c60
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/interp 38068-38255 fn	eca27adaf4b5af5b8fc1c0ba1f28d4ec
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34690-34762 fn	c43df76d84aaf0b9649473b59ae55cb1
+hits 0
+body 1 17 11 4 | U U U B0 V3 U U V3 U B0 U U U B0 B0 V3 V3 | F F F F F F F F F F F | b1101 b00000000000 b00000000000000000 b00000000000 | 0:,V0 1:,V0,B0 2:,V0,B0 5:,V0 6:,V1,B0 8:,V0 10:,V0 11:,V0 12:,B0,B0 | | ||
+sum r b1101 b1101 b1100 b1100 b1100 b b b a,compiler/load:20215:20238,compiler/interp:42105:42106,compiler/explain:34342:35126,compiler/explain:34583:34614 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0mut compiler/interp:Exec&	o0I64	o0compiler/names:Entry	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0I64	o0I64
+out a1a364f0bf13478a3ed2d7adbad13344
+run compiler/explain 34342-35126 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in a1a364f0bf13478a3ed2d7adbad13344
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/interp 0-0 ctor compiler/interp:Exec	0,1
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 492231dc9c3dd4f77d10f8616e1219ae
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 152962-154232 fn	205177a5c0905ec73653c67272144be4
+read compiler/check 181670-182065 fn	28904fec471214e1566f504b1409a849
+read compiler/check 182643-182742 fn	e67a270444002601403b8d6983ff7906
+read compiler/check 182743-182810 fn	57bdf077e905f022ca0072b8456aba84
+read compiler/explain 35237-35642 fn	5a33a83cc998a4cd6cb5e933353e3c60
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/interp 0-0 ctor compiler/interp:Exec	d3f59c7f685e271a68a2c99d57fd0a96
+read compiler/interp 38068-38255 fn	bae494af132db67b00d17ceb17ece9b1
+read compiler/load 0-0 ctor compiler/load:Loader	c57786966e9e41b2e6cd468b7362b539
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34690-34762 fn	c43df76d84aaf0b9649473b59ae55cb1
+hits 0
+body 1 17 11 4 | U U U B0 V3 U U V3 U B0 U U U B0 B0 V3 V3 | F F F F F F F F F F F | b1101 b00000000000 b00000000000000000 b00000000000 | 0:,V0 1:,V0,B0 2:,V0,B0 5:,V0 6:,V1,B0 8:,V0 10:,V0 11:,V0 12:,B0,B0 | 1,0 1,1 | 6:,0/0/D0/0,0/1/D1/1 || 227:rR34382,34400,29:mut compiler/generic:Program&,-1(F34382,34400,29:mut compiler/generic:Program&,0(D34382,34400,20:compiler/interp:Exec(R34382,34400,25:mut compiler/interp:Exec&,-1(V34382,34400,25:mut compiler/interp:Exec&,1)))) 261:rR34382,34400,46:std/prelude/vec:Vec<mut compiler/typed:Body&>&,-1(F34382,34400,46:std/prelude/vec:Vec<mut compiler/typed:Body&>&,1(D34382,34400,20:compiler/interp:Exec(R34382,34400,25:mut compiler/interp:Exec&,-1(V34382,34400,25:mut compiler/interp:Exec&,1))))
+sum r b1101 b1101 b1100 b1100 b1100 b b b a,compiler/load:20215:20238,compiler/interp:42105:42106,compiler/explain:34342:35126,compiler/explain:34583:34614 t i t i,1,1 i,0,1 c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0mut compiler/interp:Exec&	o0I64	o0compiler/names:Entry	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0I64	o0I64
+out 8b9b10adf755b633cc7a80000dbf147d
+run compiler/explain 27263-27434 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:TypeDecl	3
+marks 862fd0d141c232049b29947732c215e3
+read compiler/ast 0-0 ctor compiler/ast:TypeDecl	3c7b73fb692de03b2a0a98e0425d9b01
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/explain:27263:27434 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:TypeDecl&	o0I64
+out edd09c2a9a3df921f1f90be5b553756f
+run compiler/explain 27057-27261 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:CaseDecl	2
+mark compiler/ast 0-0 ctor compiler/ast:TypeDecl	3
+marks 73d180117987b207ab80c89fd1195010
+read -ctor	Array<compiler/ast:Param&>
+read compiler/ast 0-0 ctor compiler/ast:CaseDecl	f748d7670d95db0288976f55c228df03
+read compiler/ast 0-0 ctor compiler/ast:TypeDecl	3c7b73fb692de03b2a0a98e0425d9b01
+hits 0
+body 1 2 4 2 | V1 V1 | F F F F | b01 b0000 b00 b0000 | | | ||
+sum r;V0,V1,0,27181,27204,0,0,0 b01 b01 b00 b00 b00 b b b a,compiler/explain:27057:27261,compiler/explain:27231:27251 t i t i i c0/i/i f1010
+hid fs1	o0compiler/ast:TypeDecl&	o0I64
+out bb3f2ddd5b745dc412a3da66693d2139
+run compiler/explain 26153-26536 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 8eec95e68e1b11064bdfda8c6d4a7d36
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 181670-182065 fn	28904fec471214e1566f504b1409a849
+read compiler/explain 11102-11244 fn	0eaebcdbef47f1f5e41820a2a695ce03
+read compiler/explain 27057-27261 fn	a789e969cca6b24a7d0890248dfd983e
+read compiler/explain 27263-27434 fn	42672e33fbed03e6fc783dda8e2a9393
+read compiler/explain 27694-27764 fn	4b91937e49789592f195cbc3e71e0f82
+read compiler/explain 9428-9827 fn	5009ca88a0ba72a40a12ebd87ec0f960
+read compiler/generic 172899-172979 fn	e451141202459db313c04952aee5ed4c
+read compiler/generic 178942-179990 fn	9d16d4fe123414851868461cf8b70834
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 34845-34915 fn	b54a7bc988c4ebbd0d7c2ade15d17e1f
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 17 8 2 | U U U U U B1 U B1 B1 U U U U U U U U | F F F F F F F F | b11 b00000000 b00000000000000000 b00000000 | 0:,V1,V1 1:,V1 2:,V1 3:,V1 4:,V1,B1 6:,V1,B1 9:,V0,B1 10:,V1 11:,V1,V1 12:,V1,B0 13:,V1,B0,B0 14:,V1,B0 15:,B0 16:,V0,B0 | | ||
+sum r b11 b11 b11000 b01000 b01000 b b b a,std/prelude/vec:4512:4530,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/types:DeclId	o0compiler/types:TypeId	o0I64	o0compiler/ast:TypeDecl?&	o1mut compiler/generic:Program&	o1compiler/types:DeclId	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId	o0compiler/ast:TypeDecl?&	o1mut compiler/generic:Program&	o1compiler/types:DeclId	o0Array<compiler/ast:Param&>&	o1compiler/ast:TypeDecl&	o1I64
+out b0821f5f0a775a01ef60afde33695faf
+run compiler/explain 26745-27055 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 8eec95e68e1b11064bdfda8c6d4a7d36
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/explain 26153-26536 fn	9c3451afbd1452459f06ac561ce83aa3
+read compiler/generic 36863-37513 fn	f3668d0688253be677ceb902e49cf2ac
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 34269-34339 fn	c963616c9d0b05a0f26e01da8fa14f33
+read compiler/types 72458-72525 fn	e308ad2cb4bdbe43fd294fa4ded8b36d
+hits 0
+body 1 5 6 2 | U U U U U | F F F F F F | b11 b000000 b00000 b000000 | 0:,V1 1:,V1 2:,V1,V1 3:,V1 4:,V0,V1 | | ||
+sum r b11 b11 b1100 b0100 b0100 b b b a,std/prelude/vec:4512:4530,compiler/source:1296:1298 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/types:TypeId	o0I64	o0compiler/types:TypeId	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId
+out 22734e0a245c1b11b246c51121c0387d
+run compiler/explain 25208-26046 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/load 0-0 ctor compiler/load:Module	6
+mark compiler/source 0-0 ctor compiler/source:Source	1
+marks 761fff9bb53737341144b68954eabb8a
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/explain 26745-27055 fn	68b1afdef5cb1555fa61ab7cfb53ea32
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 18836-18910 fn	70cee4b041da4e7d4e6d71f30acd37c1
+read compiler/generic 75099-75369 fn	12a4caf7dd5fdda19788cedf2b7e289a
+read compiler/generic 75476-75647 fn	2b720ff1c0e6d871752aa7319f188e1a
+read compiler/generic 76160-76424 fn	d03af1b0b530c50c240bb2b603f5cc72
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+hits 0
+body 1 27 22 4 | U B1 B1 U U U U U U B0 B0 B0 B0 U U B3 B3 U U U U B6 B6 U U U U | F F F F F F F F F F F F F F F F F F F F F F | b1101 b0000000000000000000000 b000000000000000000000000000 b0000000000000000000000 | 0:,V1 3:,V0,B1 4:,V0,V1 5:,V0,B1 6:,V0,V3 7:,V1 8:,V1,V1 13:,V0,B0 14:,V1,B0 17:,V0,B3 18:,V0,B0 19:,V1,B0 20:,V1,B6 23:,V0,B6 24:,V0,V1 25:,V0 26:,V0,V3 | | ||
+sum r b1101 b1101 b11000 b01000 b01000 b b b a,std/prelude/vec:4512:4530,compiler/source:1296:1298,compiler/explain:25208:26046,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/types:DeclId	o0compiler/types:TypeId	o0std/prelude/text:String&	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0Array<compiler/ast:Path&>&	o1mut compiler/generic:Program&	o1compiler/types:DeclId	o0Array<compiler/source:NameId>&	o1mut compiler/generic:Program&	o1compiler/types:DeclId	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId
+out ad44db6d609f0b460ce6827e3206f3f1
+run compiler/explain 12712-12942 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/ast 22857-23152 fn	b17f0d073283b2d45a57e0394da9bd7b
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45259-45315 fn	869f932e1932e645fe9a26d1c60dfdab
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 9 7 3 | B0 U U U B2 U B2 U U | F F F F F F F | b001 b0000000 b000000000 b0000000 | 0:,B0 1:,B0 2:,B0,B3 3:,V1 5:,V1 7:,B0,V0 8:,B0,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/explain:12712:12942,compiler/explain:12712:12942,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0Array<compiler/ast:TypeRef&>&
+out cd03c07277980ec65c58d0c806f15ab8
+run compiler/explain 24373-25182 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:TypeDecl	3
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Module	6
+mark compiler/source 0-0 ctor compiler/source:Source	1
+marks 4b665129e5cdd8e67a4b9842e8047b47
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:TypeDecl	3c7b73fb692de03b2a0a98e0425d9b01
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/explain 12712-12942 fn	40def18fd5af1082524b359941220562
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 172899-172979 fn	e451141202459db313c04952aee5ed4c
+read compiler/generic 18836-18910 fn	70cee4b041da4e7d4e6d71f30acd37c1
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/text 6638-6813 fn	c32509e8a76db962290b03809b10d6a8
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+hits 0
+body 1 24 17 4 | U U U B0 B0 B0 B0 U B0 U B2 B2 U U B3 B3 U U B0 U B7 B7 U U | F F F F F F F F F F F F F F F F F | b1001 b00000000000000000 b000000000000000000000000 b00000000000000000 | 0:,V1,V1 1:,V1 2:,V1,V1 7:,V0,B0 9:,V1,V1,B2 12:,V0,B2 13:,V1,V1,B3 16:,V0,B3 17:,V0,B0 19:,V1,B7 22:,V0,B7 23:,V0,V3 | | ||
+sum r b1001 b1001 b1100 b0100 b0000 b b b a,std/prelude/vec:4512:4530,compiler/explain:24373:25182,compiler/explain:24373:25182,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/types:DeclId	o0std/prelude/text:String&	o0compiler/ast:TypeDecl?&	o1mut compiler/generic:Program&	o1compiler/types:DeclId	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 0943bc224aa37f06737381f9ef731bd5
+run compiler/explain 20863-21027 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 8eec95e68e1b11064bdfda8c6d4a7d36
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 147923-148195 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/types 55687-55810 fn	668d3597ac328c2fa9c574987d210327
+hits 0
+body 1 2 2 2 | U U | F F | b10 b00 b00 b00 | 0:,V0 1:,V0 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/map:6065:6082,compiler/explain:20863:21027 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/types:TypeId
+out 39241d517eff41249d4785e4d075efbe
+run compiler/explain 29446-29658 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 8eec95e68e1b11064bdfda8c6d4a7d36
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read std/prelude/map 7053-7137 fn <I64;std/prelude/text:String;>	754aeb1d8fba623439d91ba7dc9137d0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 4 4 2 | U B0 B0 U | F F F F | b10 b0000 b0000 b0000 | 0:,V1,B0 3:,V0,B0 | | ||
+sum r b10 b10 b100 b000 b000 b b b a,std/prelude/vec:4512:4530,compiler/explain:29446:29658 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/types:DeclId
+out 5998e9e2aef8efa2d675364cd2afb020
+run compiler/explain 28509-28820 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Module	6
+mark compiler/source 0-0 ctor compiler/source:Source	1
+marks e81bcc2cce5462605f0ce56cf2e7a2fc
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 235916-237799 fn	985ee4337451652c6e3ca9960b56fbfb
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+hits 0
+body 1 9 12 2 | U U B0 B0 B0 B3 B3 U U | F F F F F F F F F F F F | b11 b000000000000 b000000000 b000000000000 | 0:,V0,B0 1:,V0,V0 4:,B0 7:,B0,B3 8:,B0,V1 | | ||
+sum r b11 b11 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/types:TypeId	o0(I64, Array<compiler/ast:Attr&>&)	o1mut compiler/generic:Program&	o1compiler/types:TypeId	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64
+out 2708f7d22a2a5df6d7dab92a0f39d198
+run compiler/explain 28904-29358 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 9 2 | | F F F F F F F F F | b00 b000000000 b b000000000 | | | ||
+sum r b00 b00 b0 b0 b0 b b b a,compiler/explain:28904:29358,compiler/explain:28904:29358 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 07ff512b806bd6bb7fbb41dbd5078d80
+run compiler/explain 23443-23855 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	3
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+mark compiler/ast 0-0 ctor compiler/ast:TypeDecl	3
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 2da4f86ee6332e47c9e7a6eb2a9e68bf
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/ast 0-0 ctor compiler/ast:TypeDecl	3c7b73fb692de03b2a0a98e0425d9b01
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/explain 11102-11244 fn	0eaebcdbef47f1f5e41820a2a695ce03
+read compiler/explain 27694-27764 fn	4b91937e49789592f195cbc3e71e0f82
+read compiler/explain 28904-29358 fn	ba43e354fd1475a65931e1d4ad319a15
+read compiler/explain 9428-9827 fn	5009ca88a0ba72a40a12ebd87ec0f960
+read compiler/generic 172899-172979 fn	e451141202459db313c04952aee5ed4c
+read compiler/generic 176511-176610 fn	8713f48cd237b14b912fd723450ed836
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 10 9 2 | U B0 U U U U U B1 B1 U | F F F F F F F F F | b11 b000000000 b0000000000 b000000000 | 0:,V1,V1 2:,V1 3:,V1,B1,V1 4:,V1,B1 5:,B1 6:,B1,B1 9:,V0,B1 | | ||
+sum r b11 b11 b1100 b0100 b0100 b b b a,std/prelude/vec:4512:4530,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/types:DeclId	o0compiler/types:TypeId	o0compiler/ast:TypeDecl?&	o1mut compiler/generic:Program&	o1compiler/types:DeclId
+out 86d394624963a75f8490866ba0297292
+run compiler/explain 23918-24297 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	3,4
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+mark compiler/ast 0-0 ctor compiler/ast:StructBody	0,2
+mark compiler/ast 0-0 ctor compiler/ast:TypeDecl	3
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 1d61b5b30807b501a33192623fe41c9b
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/ast 0-0 ctor compiler/ast:StructBody	5ae36285030cbc87a8a4e492b3dca1d1
+read compiler/ast 0-0 ctor compiler/ast:TypeDecl	3c7b73fb692de03b2a0a98e0425d9b01
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/explain 14724-15062 fn	c793aa2bce8adb926da674c04e6e11ec
+read compiler/generic 172899-172979 fn	e451141202459db313c04952aee5ed4c
+read compiler/generic 18836-18910 fn	70cee4b041da4e7d4e6d71f30acd37c1
+hits 0
+body 1 6 7 2 | U B0 U U U U | F F F F F F F | b10 b0000000 b000000 b0000000 | 0:,V1,V1 2:,V1 3:,V0,V1,V1,V1,B1,B1 4:,V1 5:,V0,V1,V1,V1,B2,B2 | | ||
+sum r b10 b10 b110 b010 b000 b b b a,std/prelude/vec:4512:4530,compiler/explain:23918:24297 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/types:DeclId	o0compiler/ast:TypeDecl?&	o1mut compiler/generic:Program&	o1compiler/types:DeclId
+out 45d64976ca24d77efc88605b8600a78d
+run compiler/explain 27436-27621 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:StructBody	0
+mark compiler/ast 0-0 ctor compiler/ast:TypeDecl	3
+marks 5bc7dd33a9c5e676bee847a1a9ebd3f2
+read -ctor	Array<compiler/ast:Param&>
+read compiler/ast 0-0 ctor compiler/ast:StructBody	5ae36285030cbc87a8a4e492b3dca1d1
+read compiler/ast 0-0 ctor compiler/ast:TypeDecl	3c7b73fb692de03b2a0a98e0425d9b01
+hits 0
+body 1 2 3 2 | V1 V1 | F F F | b01 b000 b00 b000 | | | ||
+sum r;V0,V1,0,27548,27564,0,0,0 b01 b01 b0 b0 b0 b b b a,compiler/explain:27436:27621,compiler/explain:27591:27611 t i t i i c0/i/i f1010
+hid fs1	o0compiler/ast:TypeDecl&
+out d53dc7f80bd707ecf8580dbc0e75e85e
+run compiler/explain 29721-30964 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/load 0-0 ctor compiler/load:Module	6
+mark compiler/source 0-0 ctor compiler/source:Source	1
+marks 761fff9bb53737341144b68954eabb8a
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 181670-182065 fn	28904fec471214e1566f504b1409a849
+read compiler/explain 28509-28820 fn	e73b5f71e5cd6bb0e83323b3609cbf54
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 147176-147342 fn	06f4a0bb6b4ae980c7da0d947d5d9895
+read compiler/generic 18836-18910 fn	70cee4b041da4e7d4e6d71f30acd37c1
+read compiler/generic 222159-222569 fn	9cdc12f4c9f81b4755eb25c411a791a8
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34269-34339 fn	c963616c9d0b05a0f26e01da8fa14f33
+read compiler/types 72388-72457 fn	d6521026b258c7c738e9558dd0dfe636
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/typed:Local;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:LocalId;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 24 22 2 | U U U B3 U U U U U U U B3 B3 U U U U U U U U B6 B6 U | F F F F F F F F F F F F F F F F F F F F F F | b11 b0000000000000000000000 b000000000000000000000000 b0000000000000000000000 | 0:,V1 1:,V1,V1 2:,V1 4:,V1 5:,V1 6:,V1 7:,V1,V1 8:,V1 9:,V1 10:,V1,V1 13:,V1 14:,V1 15:,V1 16:,V1,B6 17:,V1 18:,V1 19:,V1,B6 20:,V1,B6 23:,V0,B6 | | ||
+sum r b11 b11 b110 b010 b010 b b b a,std/prelude/vec:4512:4530,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/types:TypeId	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0I64
+out e5b637343f7f95af3ca42b101403b0a3
+run compiler/explain 32818-33025 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 8eec95e68e1b11064bdfda8c6d4a7d36
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 133563-133747 fn	8713f48cd237b14b912fd723450ed836
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34269-34339 fn	c963616c9d0b05a0f26e01da8fa14f33
+hits 0
+body 1 4 3 1 | U U B0 U | F F F | b1 b000 b0000 b000 | 0:,V0 1:,V0 3:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0I64	o0compiler/types:TypeId
+out 02c1ced9b91d588421ad6435dd217016
+run compiler/explain 32250-32661 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 1594a799783e188cbdfd362b75b1974d
+read -ctor	I64
+read compiler/ast 14681-14737 fn	ca8f6eae37353eafd94ad54adc624b9b
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/explain 32818-33025 fn	8713f48cd237b14b912fd723450ed836
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 172300-172343 fn	e0f9685c987cf777dce8d8b8b955a400
+read compiler/generic 172344-172396 fn	16d9e87d11b5f47b45a33c2447ed3e28
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/text 1063-1122 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 10 12 2 | U U U U U U U B2 U U | F F F V1 F F F F F F F F | b11 b000000000000 b0000000000 b000100000000 | 0:,V1 1:,V0 2:,V0 3:,V0,V0 4:,V0 5:,V0 6:,V0,B2 8: 9:,V1 | | ||
+sum r b11 b11 b100 b100 b100 b b b a,std/prelude/map:6065:6082,compiler/explain:32329:32332 t,U i t i i c0/i/i f1010
+hid fs1;1280:U	o0mut compiler/check:Checker&	o0compiler/types:DeclId	o0Bool	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId
+out 12757ed8a08da29f91565ed0f561a331
+run compiler/explain 33303-33575 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 8eec95e68e1b11064bdfda8c6d4a7d36
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 182374-182475 fn	b2c71653b26e72422b75b742328969f0
+read compiler/explain 6651-9330 fn	3c2383acf2ff09c93bfd870fea605652
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 150272-155727 fn	8713f48cd237b14b912fd723450ed836
+read compiler/generic 170808-171808 fn	09d3b15a27893dfaaac3b85b324ab4df
+read compiler/generic 171810-171887 fn	2a5529a137ede9e2905c499a499becac
+read compiler/generic 20234-20413 fn	706f290961e11e3ae740e7005df4dce4
+hits 0
+body 1 8 3 2 | U U U U U U U U | F F F | b11 b000 b00000000 b000 | 0: 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0,V1 6:,V0 7:,V0,V1 | | ||
+sum r b11 b11 b10 b10 b10 b b b a,std/prelude/map:6065:6082,compiler/explain:9111:9140 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0I64
+out 89e2277242df6948c720fdda96635084
+run compiler/explain 33073-33230 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/explain 32250-32661 fn	ebc4a8b02a639475cd21a95730bc735b
+read compiler/explain 33303-33575 fn	9e71513af3672e2d99a901fbe5b45e52
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+hits 0
+body 1 8 6 2 | U B1 U U U B2 B2 U | F F F F F F | b11 b000000 b00000000 b000000 | 0:,V1,B1 2:,B1 3:,B1 4:,V1,B2 7:,V0,B2 | | ||
+sum r b11 b11 b110 b010 b010 b b b a,std/prelude/vec:4512:4530,std/prelude/map:6065:6082 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/types:DeclId	o0std/prelude/vec:Vec<I64>	o1mut compiler/check:Checker&	o1compiler/types:DeclId	o1Bool
+out f8e8b9dccc5e6403c0458e9771adb17f
+run compiler/explain 30966-31871 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+marks 5df3645768ec082295be710a92d71e8f
+read -ctor	I32
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 182374-182475 fn	b2c71653b26e72422b75b742328969f0
+read compiler/explain 15588-16031 fn	b6d57ca1f2e0d56bde3e327636333921
+read compiler/explain 6651-9330 fn	3c2383acf2ff09c93bfd870fea605652
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 142180-143515 fn	78142f61282099ffbd02086543bcc17c
+read compiler/generic 150272-155727 fn	8713f48cd237b14b912fd723450ed836
+read compiler/generic 170808-171808 fn	09d3b15a27893dfaaac3b85b324ab4df
+read compiler/generic 171810-171887 fn	2a5529a137ede9e2905c499a499becac
+read compiler/generic 172300-172343 fn	e0f9685c987cf777dce8d8b8b955a400
+read compiler/generic 172344-172396 fn	16d9e87d11b5f47b45a33c2447ed3e28
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/generic 20234-20413 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34269-34339 fn	c963616c9d0b05a0f26e01da8fa14f33
+read compiler/types 34690-34762 fn	c43df76d84aaf0b9649473b59ae55cb1
+read compiler/types 34845-34915 fn	b54a7bc988c4ebbd0d7c2ade15d17e1f
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 31 12 2 | U U U U U U U B2 U B2 U U B2 U U U U U U U U B6 B6 U U U U U B7 B7 U | F F F F F F F F F F F F | b11 b000000000000 b0000000000000000000000000000000 b000000000000 | 0:,V1 1:,V1 2:,V1,V1 3:,V1 4:,V1 5:,V1 6:,V1,B2 8:,V1 10:,V1 11:,V1 13:,V1 14:,V1 15: 16:,V1 17:,V1 18:,V1 19:,V1 20:,V1,B6 23:,V0,B6 24:,V1 25:,V0,V1,B6 26:,V1 27:,V1,B7 30:,V0,B7 | | ||
+sum r b11 b11 b110 b010 b010 b b b a,std/prelude/vec:4512:4530,std/prelude/map:6065:6082 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/types:TypeId	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId
+out 1aa2ed4bccd57d4f5f8089e07929ff9b
+run compiler/explain 33663-34319 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	1
+mark compiler/names 0-0 ctor compiler/names:Entry	4
+marks c2bbdb2e100769875d96f055de4456d0
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 181670-182065 fn	28904fec471214e1566f504b1409a849
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 11837-11891 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 12717-13993 fn	9d16d4fe123414851868461cf8b70834
+read compiler/generic 194622-194725 fn	9d16d4fe123414851868461cf8b70834
+read compiler/generic 20234-20413 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/generic 22389-22644 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/names 0-0 ctor compiler/names:Entry	4f0c7214a3eb0ece8d02a9c14c51621f
+read compiler/types 70865-70937 fn	cb8f17ef06a0997263071d4dc9ed94d2
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <compiler/names:Entry;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/names:Table&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/names:Entry;>	442c72fb9063f8bdc126d0eee7d856dc
+read std/prelude/vec 6401-6448 fn <mut compiler/names:Table&;>	f0004e4823ff89d9c30e4c6dd0376f7b
+hits 0
+body 1 23 19 2 | U U U U U B4 U B4 U U B4 U U U U U B0 U U U B10 B10 U | F F F F F F F F F F F F F F F F F F F | b11 b0000000000000000000 b00000000000000000000000 b0000000000000000000 | 0:,B0 1:,V1 2:,V1,V1 3:,V1 4:,V1,B4 6:,V1,V1 8:,V1 9:,V1 11: 12:,V1 13:,V1 14:,V1 15:,V1,B0 17:,B0,B0 18:,B0 19:,B0,B10,B10 22:,V0,B10 | | ||
+sum r b11 b11 b110 b010 b010 b b b a,std/prelude/vec:4512:4530,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut std/prelude/text:StringBuilder&	o0mut compiler/check:Checker&	o0compiler/types:TypeId	o0mut compiler/names:Table&	o1std/prelude/vec:Vec<mut compiler/names:Table&>&	o1I64	o0compiler/names:Entry	o1std/prelude/vec:Vec<compiler/names:Entry>&	o1I64	o0compiler/names:Entry	o1std/prelude/vec:Vec<compiler/names:Entry>&	o1I64
+out dad24004b7291578c3bc157944f256af
+run compiler/explain 21029-23359 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:TypeDecl	4
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks b338209dd2b1e64edd99f96ae64976c7
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:TypeDecl	3c7b73fb692de03b2a0a98e0425d9b01
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 181670-182065 fn	28904fec471214e1566f504b1409a849
+read compiler/explain 11102-11244 fn	0eaebcdbef47f1f5e41820a2a695ce03
+read compiler/explain 11484-12175 fn	87ff4b0bea17bbce5a96f93cfba9ee9f
+read compiler/explain 13041-13849 fn	658fd062fabdabe8321d5239b6855538
+read compiler/explain 20863-21027 fn	086352cbe139960f9fc755c0fb6305be
+read compiler/explain 23443-23855 fn	91f269ed74eeb18344286aed900ba5ba
+read compiler/explain 23918-24297 fn	f2b53bc62d10da2b6d59b3d8531e9a25
+read compiler/explain 24373-25182 fn	ae1feeccbb0d33af540e5f79401f1580
+read compiler/explain 25208-26046 fn	2b880f7074d5110c9c86966032813299
+read compiler/explain 26153-26536 fn	9c3451afbd1452459f06ac561ce83aa3
+read compiler/explain 27436-27621 fn	3f304ed27a68261d23d3fdd71102076b
+read compiler/explain 27694-27764 fn	4b91937e49789592f195cbc3e71e0f82
+read compiler/explain 28131-28399 fn	bde4b5d418b7a11515d0ab959c4ea5a7
+read compiler/explain 28509-28820 fn	e73b5f71e5cd6bb0e83323b3609cbf54
+read compiler/explain 28904-29358 fn	ba43e354fd1475a65931e1d4ad319a15
+read compiler/explain 29446-29658 fn	054a028eb20a41db9e642bd045987994
+read compiler/explain 29721-30964 fn	1beec28b5ac6210e1057f5b582c7b62d
+read compiler/explain 30966-31871 fn	e778907bd329f31330c445bc9eb4f102
+read compiler/explain 33073-33230 fn	e778907bd329f31330c445bc9eb4f102
+read compiler/explain 33663-34319 fn	1beec28b5ac6210e1057f5b582c7b62d
+read compiler/explain 9428-9827 fn	5009ca88a0ba72a40a12ebd87ec0f960
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 107354-109532 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/generic 11837-11891 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 146617-146825 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/generic 172899-172979 fn	e451141202459db313c04952aee5ed4c
+read compiler/generic 176511-176610 fn	8713f48cd237b14b912fd723450ed836
+read compiler/generic 18836-18910 fn	70cee4b041da4e7d4e6d71f30acd37c1
+read compiler/generic 222159-222569 fn	9cdc12f4c9f81b4755eb25c411a791a8
+read compiler/generic 22389-22644 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 52558-52673 fn	38616f8e617137d7490fcc67eadb5a96
+read compiler/types 70786-70864 fn	a45b75e1e91f0786979c3b01734c4431
+read compiler/types 70865-70937 fn	cb8f17ef06a0997263071d4dc9ed94d2
+read compiler/types 72458-72525 fn	e308ad2cb4bdbe43fd294fa4ded8b36d
+read compiler/types 72526-72591 fn	bb8288f8e1073bf13ff00e611baba519
+read compiler/types 74645-74774 fn	a23f6e8ac64b3d2293416797a640f3e0
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 68 22 2 | B0 U U U U U U U U U B0 U V1 U U U B5 B5 U U U U U U U U B7 U U U U U U U U U B10 U U B10 B10 U U U U U U U U U U U U U U U U U B11 B11 U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F | b11 b0000000000000000000000 b00000000000000000000000000000000000000000000000000000000000000000000 b0000000000000000000000 | 0:,B0 1:,V0 2:,V0 3:,V0,V0 4:,V0 5:,B0,V0,V0,B1 6:,V0 7:,V0,B0 8: 9:,V0,B0 11:,V0 13:,B0,V0,B0,V1 14:,B0,V0,B0,V1 15:,V0,B5 18:,B0,B5 19:,B0,V0 20:,V0 21:,V0,V0 22:,V0,B5 23:,B0,B7 24:,V0 25:,V0,B7 27:,B0,B7 28:,V0,V0 29:,B0,V0 30:,B0,V0 31:,B0 32:,V0 33:,V0,B10 34:,V0 35:,V0 37:,V0,B10 38:,V0,B10 41:,B0,B10 42:,B0,V0 43:,B0 44:,B0,V0 45:,V0 46:,V0,V0 47:,V0,B11 48:,V0,B11,B11 49:,V0,B11 50:,B11 51:,V0,V0 52:,V0,B11 53:,V0 54:,V0,B11,B11,B11 55:,V0,B11 56:,V0 57:,B11,B11 60:,B0,B11 61:,B0,V0 62:,B0,V0 63:,B0,V0 64:,B0,V0 65:,B0,V0 66:,B0,V0 67:,B0,V1 | | ||
+sum r b11 b11 b10 b10 b10 b b b a,std/prelude/map:6065:6082,compiler/explain:21443:21473 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/types:DeclId	o0compiler/ast:TypeDecl?&	o1mut compiler/generic:Program&	o1compiler/types:DeclId	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId	o0Array<compiler/source:NameId>&	o1compiler/types:Table&	o1compiler/types:TypeId	o0I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0compiler/ast:TypeDecl?&	o1mut compiler/generic:Program&	o1compiler/types:DeclId	o0Array<compiler/ast:Param&>&	o1compiler/ast:TypeDecl&	o0compiler/ast:TypeDecl?&	o1mut compiler/generic:Program&	o1compiler/types:DeclId	o0Array<compiler/ast:Param&>&	o1compiler/ast:TypeDecl&
+out 26e731e2178d969a66182ca9727a398c
+run compiler/explain 792-1552 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0,1
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 23505389f616d09d4f78514c24044002
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 182130-182186 fn	4fc0cbb991818c7049ec7113152b9e14
+read compiler/explain 21029-23359 fn	7f1dbfdb59908a1d4e6b045fd244bb9b
+read compiler/explain 3231-3960 fn	9231a0965da2ba2e96ebdbfbc2aad09c
+read compiler/explain 34342-35126 fn	a0e3ebf7bbdb7e63ec9942b7f024e268
+read compiler/explain 4572-4766 fn	d6279e4aa656c5785d9460e1ae142bce
+read compiler/explain 5007-6481 fn	6ee21606d1503f9a6ca4b1f3ec2d5fc1
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 149561-149713 fn	78142f61282099ffbd02086543bcc17c
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/source 1061-1198 fn	058f7df2993e48e5e8d9db58190c213d
+read std/prelude/text 3958-4053 fn	249b488abfd8979d5dc24c581a8aa85a
+read std/prelude/vec 5133-5172 fn <compiler/names:Entry;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/names:Entry;>	442c72fb9063f8bdc126d0eee7d856dc
+read std/prelude/vec 6401-6448 fn <mut compiler/names:Table&;>	f0004e4823ff89d9c30e4c6dd0376f7b
+hits 0
+body 1 14 14 5 | U U U U U U B3 U U U U U U U | F F F F F F F F F F F F F F | b10101 b00000000000000 b00000000000000 b00000000000000 | 0:,V0 1:,V3,B0 2:,V0,V3 3:,V0,V1,V4 4:,V0,V3 5:,V0,V0 7:,V0 8:,V0,V0 9:,V0 10:,V0,V1,V4 11:,V0,V2,V0,V4 12:,V0,V3 13:,V0,V4 | | ||
+sum r b10101 b10101 b11100 b11100 b10100 b b b a,compiler/source:1296:1298,compiler/explain:792:1552,compiler/interp:42105:42106,compiler/explain:792:1552,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/scope:Scoper&	o0mut compiler/interp:Exec&	o0I64	o0std/prelude/text:String&	o0mut compiler/names:Table&	o1std/prelude/vec:Vec<mut compiler/names:Table&>&	o1I64	o0compiler/names:Entry	o1std/prelude/vec:Vec<compiler/names:Entry>&	o1I64
+out 2eee34db4a81962fc8daacb44024f8c3
+run compiler/explain 792-1552 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 2eee34db4a81962fc8daacb44024f8c3
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0,1
+mark compiler/interp 0-0 ctor compiler/interp:Exec	0,1
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks f85f27e50d91ebcefca8c94d667805e9
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/check 182130-182186 fn	4fc0cbb991818c7049ec7113152b9e14
+read compiler/explain 21029-23359 fn	7f1dbfdb59908a1d4e6b045fd244bb9b
+read compiler/explain 3231-3960 fn	9231a0965da2ba2e96ebdbfbc2aad09c
+read compiler/explain 34342-35126 fn	b1de4b29cf7ebc9b55d363029f28b05a
+read compiler/explain 4572-4766 fn	d6279e4aa656c5785d9460e1ae142bce
+read compiler/explain 5007-6481 fn	6ee21606d1503f9a6ca4b1f3ec2d5fc1
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 149561-149713 fn	78142f61282099ffbd02086543bcc17c
+read compiler/interp 0-0 ctor compiler/interp:Exec	d3f59c7f685e271a68a2c99d57fd0a96
+read compiler/load 0-0 ctor compiler/load:Loader	c57786966e9e41b2e6cd468b7362b539
+read compiler/source 1061-1198 fn	058f7df2993e48e5e8d9db58190c213d
+read std/prelude/text 3958-4053 fn	249b488abfd8979d5dc24c581a8aa85a
+read std/prelude/vec 5133-5172 fn <compiler/names:Entry;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/names:Entry;>	442c72fb9063f8bdc126d0eee7d856dc
+read std/prelude/vec 6401-6448 fn <mut compiler/names:Table&;>	f0004e4823ff89d9c30e4c6dd0376f7b
+hits 0
+body 1 14 14 5 | U U U U U U B3 U U U U U U U | F F F F F F F F F F F F F F | b10101 b00000000000000 b00000000000000 b00000000000000 | 0:,V0 1:,V3,B0 2:,V0,V3 3:,V0,V1,V4 4:,V0,V3 5:,V0,V0 7:,V0 8:,V0,V0 9:,V0 10:,V0,V1,V4 11:,V0,V2,V0,V4 12:,V0,V3 13:,V0,V4 | 2,0 2,1 | 11:,1/0/D0/0,1/1/D1/1 || 207:rR844,862,29:mut compiler/generic:Program&,-1(F844,862,29:mut compiler/generic:Program&,0(D844,862,20:compiler/interp:Exec(R844,862,25:mut compiler/interp:Exec&,-1(V844,862,25:mut compiler/interp:Exec&,2)))) 241:rR844,862,46:std/prelude/vec:Vec<mut compiler/typed:Body&>&,-1(F844,862,46:std/prelude/vec:Vec<mut compiler/typed:Body&>&,1(D844,862,20:compiler/interp:Exec(R844,862,25:mut compiler/interp:Exec&,-1(V844,862,25:mut compiler/interp:Exec&,2))))
+sum r b10101 b10101 b11100 b11100 b10100 b b b a,compiler/source:1296:1298,compiler/explain:792:1552,compiler/interp:42105:42106,compiler/explain:792:1552,std/prelude/text:45539:45553 t i t i,2,2 i,0,1 c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/scope:Scoper&	o0mut compiler/interp:Exec&	o0I64	o0std/prelude/text:String&	o0mut compiler/names:Table&	o1std/prelude/vec:Vec<mut compiler/names:Table&>&	o1I64	o0compiler/names:Entry	o1std/prelude/vec:Vec<compiler/names:Entry>&	o1I64
+out 2ce53a9fc8d734fe6de7a7bb3a86e49e
+run compiler/explain 4910-5005 fn	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/explain 5007-6481 fn	6ee21606d1503f9a6ca4b1f3ec2d5fc1
+hits 0
+body 1 1 3 3 | U | F F F | b101 b000 b0 b000 | 0:,V0,V1,V2 | | ||
+sum r b101 b101 b110 b110 b100 b b b a,std/prelude/map:6065:6082,compiler/explain:4910:5005,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/check:Checker&	o0compiler/scope:Scoper&	o0I64
+out 158e1042a0c11dda5fb1717366f9f3a5
+run compiler/explain global LongValue	
+ctx r1 g1 p0
+keys compiler/explain=4a312164f1f6c96850c4ec3bcd0370b79848ff086e48bfdfb4bfa823015d415d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 220fbe1f16a3c63eb703b92c12d75c11
+end
+sum 104282-13230703952899494441

@@ -1,0 +1,28 @@
+olang scope record
+run std/prelude/place 622-700 fn	
+ctx r1 g1 p0
+keys std/prelude/place=24357d909c12c7e172357a0f2ffc31eab316d4d2af46ccbd84dfc2e3b8926437
+in 0
+mark std/prelude/place 0-0 ctor std/prelude/place:Place	0
+marks 97c2e6bf79ff018965f22febe6e8ce7f
+read std/prelude/place 0-0 ctor std/prelude/place:Place	94e75e7eca2eea8ceac865d2b43328d4
+hits 0
+body 1 1 1 2 | V1 | F | b01 b0 b0 b0 | | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/prelude/place:622:700,std/prelude/place:657:698 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/place:Place
+out 49ab0324edb0a3be70ddb64683bf6427
+run std/prelude/place 0-0 ctor std/prelude/place:Place	
+ctx r1 g1 p0
+keys std/prelude/place=24357d909c12c7e172357a0f2ffc31eab316d4d2af46ccbd84dfc2e3b8926437
+in 0
+mark std/prelude/place 0-0 ctor std/prelude/place:Place	0,1,2
+marks 40288fe3989988e6af2a430ba58ed754
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+hits 0
+body 1 0 6 2 | | F F F F F F | b00 b000000 b b000000 | | | ||
+sum r;V0,V1,0,548,552,1,0,0 b00 b00 b100 b000 b000 b b b a,std/prelude/place:0:0,std/prelude/place:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64	o0I64
+out e6923650da0f76e492847119ed0f1b0f
+end
+sum 1185-8060859958841762147

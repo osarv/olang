@@ -1,0 +1,602 @@
+olang scope record
+run compiler/scan 0-0 ctor compiler/scan:scanner	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:scanner	0,1,2,3,4,5
+marks f30782c79d11d3a65fd63f6347d7b7cb
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Bool
+read -ctor	I64
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/scan:Diag>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/token:Token>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:Char>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 3 7 2 | U U U | F F F F F F F | b01 b0000000 b000 b0000000 | 0:,V1 1:,V1 2:,V1 | | ||
+sum r;V0,V1,0,6962,6966,1,0,0 b01 b01 b1 b0 b0 b b b a,compiler/scan:0:0,std/prelude/vec:3184:3188 t i,-1,0,1,2,-1,-1 t,U,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U	o0std/prelude/text:String&
+out be5cdf2904c71ef92dc8db557f84ef5b
+run compiler/scan 13111-13236 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/scan:13111:13236 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out 34a4f41bcb0bf1464daa3bf181627ca8
+run compiler/scan 13353-13543 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/scan:13353:13543 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out 773b4fd55ff31070f7c09fd4fde77e09
+run compiler/scan 0-0 ctor compiler/scan:Diag	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:Diag	0,1,2,3
+marks 79596fd39c9a3f5e09b62449d9aefae0
+read -ctor	I32
+read -ctor	U8
+read -ctor	compiler/scan:LexError
+hits 0
+body 1 0 8 1 | | F F F F F F F F | b0 b00000000 b b00000000 | | | ||
+sum r b0 b0 b0000 b0000 b0000 b b b a,compiler/scan:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/scan:LexError	o0I32	o0I32	o0std/prelude/text:Char
+out 3a74128ade2fab31ea754d5a0e6223ce
+run compiler/scan 7264-7390 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/scan 0-0 ctor compiler/scan:Diag	f9955dd244fb7257914dea8486674025
+read std/prelude/vec 4660-4775 fn <compiler/scan:Diag;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 2 5 1 | U U | F F F F F | b1 b00000 b00 b00000 | 0:,B0 1:,V0 | | ||
+sum r b1 b1 b10000 b00000 b00000 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0compiler/scan:LexError	o0I64	o0I64	o0std/prelude/text:Char
+out 259170d49fbc47cd09915b9ac8451b0e
+run compiler/scan 14246-14430 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:scanner	0
+marks e8ced75214a18931f06988d828d2d073
+read compiler/scan 0-0 ctor compiler/scan:scanner	1c6babd4c8e450dc032468cdd79efcd4
+read compiler/scan 13353-13543 fn	18bd251639422a9277ede79df7ecb366
+read compiler/scan 7264-7390 fn	24059fc4eb60b54149762067ba0bd806
+hits 0
+body 1 2 3 1 | U U | F F F | b1 b000 b00 b000 | 0:,V0 1:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0I64
+out 5d9cf4c860a8878ebc6228e9a3188bd7
+run compiler/scan 14432-14576 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 9 1 | | F F F F F F F F F | b0 b000000000 b b000000000 | | | ||
+sum r b0 b0 b000 b000 b000 b b b a,compiler/scan:14432:14576 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64	o0I64
+out 25041fd59e03cdc747f917678db9c7eb
+run compiler/scan 12534-12620 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char
+out bf76af9187f12b022b0357987728d589
+run compiler/scan 12621-12677 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char
+out f4e5c39f40367a272c012101d44a7087
+run compiler/scan 12678-12753 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/scan 12534-12620 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/scan 12621-12677 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 1 0 | U U | F | b b0 b00 b0 | 0: 1: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char
+out ea029445fc049c2105610481bcd5b8bf
+run compiler/scan 12911-13040 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/scan 12678-12753 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 4 1 | U | F F F F | b0 b0000 b0 b0000 | 0: | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/scan:12911:13040 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out a1a0b67fd27dc20caaf49df57f7c6bd3
+run compiler/scan 12754-12856 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/scan 12621-12677 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char
+out 0df29ede8997519fb6ddde99637880b6
+run compiler/scan 18548-18702 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/scan 12621-12677 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/scan 12754-12856 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 2 0 | U U | F F | b b00 b00 b00 | 0: 1: | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char	o0I64
+out 93816cdf0455357475206c8790707c06
+run compiler/scan 18947-19486 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:scanner	0
+marks e8ced75214a18931f06988d828d2d073
+read -ctor	I64
+read -ctor	U8
+read compiler/scan 0-0 ctor compiler/scan:scanner	1c6babd4c8e450dc032468cdd79efcd4
+read compiler/scan 18548-18702 fn	753360899e792dedf06ee057d76e9c16
+read compiler/scan 7264-7390 fn	24059fc4eb60b54149762067ba0bd806
+hits 0
+body 1 4 10 1 | U U U U | F F F F F F F F F F | b1 b0000000000 b0000 b0000000000 | 0: 1: 2: 3:,V0 | | ||
+sum r b1 b1 b100 b000 b000 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0I64	o0I64
+out 6b34bf52ac23f605798dcb5cfa8fd257
+run compiler/scan 19915-20084 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/scan 12534-12620 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | 0: | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/scan:19915:20084 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out eeedada7d77d268d4b799ff83d4a46f3
+run compiler/scan 19596-19804 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/scan 12621-12677 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 4 1 | U U | F F F F | b0 b0000 b00 b0000 | 0: 1: | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/scan:19596:19804 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out 23bfae7b288a5f5849e6ea8ffe0501eb
+run compiler/scan 20151-21612 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:scanner	0
+marks e8ced75214a18931f06988d828d2d073
+read -ctor	I64
+read -ctor	compiler/token:Tok
+read compiler/scan 0-0 ctor compiler/scan:scanner	1c6babd4c8e450dc032468cdd79efcd4
+read compiler/scan 12534-12620 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/scan 12621-12677 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/scan 18947-19486 fn	681a76eea1cc73f47553f891ae828cb1
+read compiler/scan 19596-19804 fn	5e749622e6ef9fef34af4437ce30b91f
+read compiler/scan 19915-20084 fn	368d465717d29d84addc6e28fbf3c53c
+read compiler/scan 7264-7390 fn	24059fc4eb60b54149762067ba0bd806
+hits 0
+body 1 13 18 1 | U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F | b1 b000000000000000000 b0000000000000 b000000000000000000 | 0:,V0 1:,V0 2: 3: 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0 10:,V0 11:,V0 12:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0I64
+out abef891b11baf8eefea43a452cb4ff86
+run compiler/scan 26496-26647 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 9 1 | | F F F F F F F F F | b0 b000000000 b b000000000 | | | ||
+sum r b0 b0 b000 b000 b000 b b b a,compiler/scan:26496:26647 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64	o0I64
+out 10b40b0c31b1a06e41236d39a8f6b6cf
+run compiler/scan 26344-26453 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 3 1 | | F F F | b0 b000 b b000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/scan:26344:26453 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out 0c16e4fb891d12d831d874147cbe23ac
+run compiler/scan 26710-26906 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 11 1 | | F F F F F F F F F F F | b0 b00000000000 b b00000000000 | | | ||
+sum r b0 b0 b00000 b00000 b00000 b b b a,compiler/scan:26710:26906 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64	o0I64	o0I64	o0I64
+out 5624eaceef2efab26ce2ca84539f15ee
+run compiler/scan 25216-26299 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:scanner	0
+marks e8ced75214a18931f06988d828d2d073
+read -ctor	I64
+read compiler/scan 0-0 ctor compiler/scan:scanner	1c6babd4c8e450dc032468cdd79efcd4
+read compiler/scan 26344-26453 fn	fe0143a53ba92ad2b4372b7f4c2ad351
+read compiler/scan 26496-26647 fn	e05413271278fd2db820ca6e76faa34b
+read compiler/scan 26710-26906 fn	a16705ad57308409c2aa40f146696c19
+read compiler/scan 7264-7390 fn	24059fc4eb60b54149762067ba0bd806
+hits 0
+body 1 8 22 1 | U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F | b1 b0000000000000000000000 b00000000 b0000000000000000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0I64
+out ffbe78ce6de56fc8aba611a791f8521c
+run compiler/scan 21822-22032 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char
+out 9502acf1aa507f0582a39ff2a00a5c5f
+run compiler/scan 27053-27406 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/scan 21822-22032 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 5 1 | U U | F F F F F | b0 b00000 b00 b00000 | 0: 1: | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/scan:27053:27406 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out 4dd125a945df27d41173a416b5f9b79a
+run compiler/scan 21705-21820 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char	o0std/prelude/text:Char
+out 0f2b1043612387c569d27b06c8362053
+run compiler/scan 22189-22925 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:scanner	0
+marks e8ced75214a18931f06988d828d2d073
+read compiler/scan 0-0 ctor compiler/scan:scanner	1c6babd4c8e450dc032468cdd79efcd4
+read compiler/scan 21705-21820 fn	753360899e792dedf06ee057d76e9c16
+read compiler/scan 21822-22032 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/scan 27053-27406 fn	28c57db1f511ee32c2c3bface1575dc8
+read compiler/scan 7264-7390 fn	24059fc4eb60b54149762067ba0bd806
+hits 0
+body 1 9 9 1 | U U U U U U U U U | F F F F F F F F F | b1 b000000000 b000000000 b000000000 | 0: 1: 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7: 8:,V0 | | ||
+sum r b1 b1 b100 b000 b000 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0I64	o0std/prelude/text:Char
+out c6a349d3c31ee83a5e866d7cebbdb097
+run compiler/scan 23062-23876 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:scanner	0
+marks e8ced75214a18931f06988d828d2d073
+read -ctor	I64
+read compiler/scan 0-0 ctor compiler/scan:scanner	1c6babd4c8e450dc032468cdd79efcd4
+read compiler/scan 22189-22925 fn	681a76eea1cc73f47553f891ae828cb1
+read compiler/scan 25216-26299 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/scan 7264-7390 fn	24059fc4eb60b54149762067ba0bd806
+hits 0
+body 1 6 7 1 | U U U U U U | F F F F F F F | b1 b0000000 b000000 b0000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0I64
+out 06c61059a41241a7d8d502614bfa5360
+run compiler/scan 23960-25109 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:scanner	0
+marks e8ced75214a18931f06988d828d2d073
+read -ctor	I64
+read compiler/scan 0-0 ctor compiler/scan:scanner	1c6babd4c8e450dc032468cdd79efcd4
+read compiler/scan 22189-22925 fn	681a76eea1cc73f47553f891ae828cb1
+read compiler/scan 7264-7390 fn	24059fc4eb60b54149762067ba0bd806
+hits 0
+body 1 9 9 1 | U U U U U U U U U | F F F F F F F F F | b1 b000000000 b000000000 b000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0I64
+out b69939fc87098fde060a9e660b6366e0
+run compiler/scan 15355-18499 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 5 1 | | F F F F F | b0 b00000 b b00000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/scan:15355:18499 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out 4fd9b5902355c88588266410fcdd16f8
+run compiler/scan 14691-14975 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/scan 12678-12753 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/scan 15355-18499 fn	659b90af45648b0cfb648e0c6dca0c3d
+hits 0
+body 1 2 5 1 | U U | F F F F F | b0 b00000 b00 b00000 | 0: 1:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/scan:14691:14975 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out 02c1283390e939036a94e91d55ea7ac9
+run compiler/scan 15091-15239 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/scan 14691-14975 fn	64acd1d4f1957d9acfd3f01bd1c41ef1
+hits 0
+body 1 1 4 1 | U | F F F F | b0 b0000 b0 b0000 | 0:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/scan:15091:15239 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out 669cfd52de39a70b311096fb94dcb613
+run compiler/scan 13755-14126 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:scanner	0
+marks e8ced75214a18931f06988d828d2d073
+read compiler/scan 0-0 ctor compiler/scan:scanner	1c6babd4c8e450dc032468cdd79efcd4
+read compiler/scan 15091-15239 fn	61a04e72059a984b2171f6dba7723212
+read compiler/scan 7264-7390 fn	24059fc4eb60b54149762067ba0bd806
+hits 0
+body 1 3 5 1 | U U U | F F F F F | b1 b00000 b000 b00000 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b1 b1 b100 b000 b000 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0std/prelude/text:Char	o0I64
+out f62a8df6c1c93677f1592a66b3a0438e
+run compiler/scan 12072-12532 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:scanner	0
+marks e8ced75214a18931f06988d828d2d073
+read -ctor	Bool
+read -ctor	I64
+read compiler/scan 0-0 ctor compiler/scan:scanner	1c6babd4c8e450dc032468cdd79efcd4
+read compiler/scan 12534-12620 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/vec 5133-5172 fn <std/prelude/text:Char;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 7906-7950 fn <std/prelude/text:Char;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 3 6 1 | U U U | F F F F F F | b0 b000000 b000 b000000 | 0:,V0 1: 2:,V0 | | ||
+sum r b0 b0 b000 b000 b000 b b b a,compiler/scan:12072:12532 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0compiler/token:Tok	o0I64
+out 5818cd018fdfc829fe146845eac11266
+run compiler/scan 11106-11889 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/vec 4660-4775 fn <std/prelude/text:Char;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <std/prelude/text:Char;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:Char;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 7703-7833 fn <std/prelude/text:Char;>	656905b4c4d095280c75cf8b4c816a75
+read std/prelude/vec 8115-8279 fn <std/prelude/text:Char;>	ab84cb35071ba7656290123dfae39eb5
+hits 0
+body 1 8 5 1 | U U U U U U U U | F F F F F | b1 b00000 b00000000 b00000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0compiler/token:Tok
+out 421ca72e7e876aae5016eded70de88fa
+run compiler/scan 7392-10896 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:scanner	0
+marks e8ced75214a18931f06988d828d2d073
+read -ctor	Bool
+read -ctor	I64
+read -ctor	U8
+read -ctor	compiler/token:Tok
+read compiler/scan 0-0 ctor compiler/scan:scanner	1c6babd4c8e450dc032468cdd79efcd4
+read compiler/scan 11106-11889 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/scan 12072-12532 fn	966dbd4c9c72fcd2362bb4bdddff6599
+read compiler/scan 12534-12620 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/scan 12621-12677 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/scan 12911-13040 fn	3ce6211c01de0c2e1b73e0def899c9c2
+read compiler/scan 13111-13236 fn	277447792c404b6888d824f7a4e5c045
+read compiler/scan 13755-14126 fn	681a76eea1cc73f47553f891ae828cb1
+read compiler/scan 14246-14430 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/scan 14432-14576 fn	b8a95563c586be04a0014052d9d86ab6
+read compiler/scan 15355-18499 fn	659b90af45648b0cfb648e0c6dca0c3d
+read compiler/scan 20151-21612 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/scan 23062-23876 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/scan 23960-25109 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/scan 7264-7390 fn	24059fc4eb60b54149762067ba0bd806
+read compiler/token 0-0 ctor compiler/token:Token	a27e8fb68c24ab8a48952f49e1d4f62e
+read compiler/token 2696-3250 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/token 7443-12455 fn	71565db43e362419297360e4d51bc11d
+read std/prelude/vec 4660-4775 fn <compiler/token:Token;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 30 18 1 | U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F | b1 b000000000000000000 b000000000000000000000000000000 b000000000000000000 | 0:,V0 1:,V0 2:,V0 3: 4:,V0 5:,V0 6: 7:,V0 8:,V0 9:,V0 10:,V0 11:,V0 12:,V0 13: 14:,B23 15:,V0 16:,V0 17:,V0 18: 19:,B30 20:,V0 21:,B1 22:,V0 23:,V0 24:,V0 25: 26:,B32 27:,V0 28:,B0 29:,V0 | | ||
+sum r b1 b1 b1 b0 b0 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/scan:scanner&	o0U8	o0U8	o0U8	o0U8
+out bb5a93930ec1d66f495f48d560183016
+run compiler/scan 30019-30490 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 7703-7833 fn <I64;>	656905b4c4d095280c75cf8b4c816a75
+hits 0
+body 1 3 11 3 | B0 U U | F F F F F F F F F F F | b000 b00000000000 b000 b00000000000 | 0:,B0 1:,B0 2:,B0 | | ||
+sum r b000 b000 b000 b000 b000 b b b a,compiler/scan:30019:30490,compiler/scan:30019:30490,compiler/scan:30019:30490 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0Array<compiler/token:Token>&	o0mut Array<I32>&	o0mut Array<I32>&
+out 97d8d67427d4aedee517d0cb393f4f22
+run compiler/scan 0-0 ctor compiler/scan:Tokens	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:Tokens	0,1,2,3
+marks c7833f4887a684f3f051d280ede491b6
+read -ctor	Array<I32>
+read -ctor	Array<compiler/scan:Diag>
+read -ctor	Array<compiler/token:Token>
+hits 0
+body 1 0 8 5 | | F F F F F F F F | b00000 b00000000 b b00000000 | | | ||
+sum r;V0,V4,0,5860,5864,1,0,0;V1,V4,0,5869,5874,1,0,0;V2,V4,0,5879,5885,1,0,0;V3,V4,0,5890,5895,1,0,0 b00000 b00000 b1111 b0000 b0000 b b b a,compiler/scan:0:0,compiler/scan:0:0,compiler/scan:0:0,compiler/scan:0:0,compiler/scan:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0Array<compiler/token:Token>&	o0Array<I32>&	o0Array<I32>&	o0Array<compiler/scan:Diag>&
+out 280a50afcf5196382197138223360980
+run compiler/scan 6396-6837 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/scan 0-0 ctor compiler/scan:Tokens	068781350ca580ec7dbabc5169ec672b
+read compiler/scan 0-0 ctor compiler/scan:scanner	1c6babd4c8e450dc032468cdd79efcd4
+read compiler/scan 30019-30490 fn	47b5508467c6d7385a9d132e1ecc857d
+read compiler/scan 7392-10896 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read std/prelude/vec 12786-12977 fn <compiler/scan:Diag;>	44fdd55f051af23429be98afae112cb0
+read std/prelude/vec 12786-12977 fn <compiler/token:Token;>	44fdd55f051af23429be98afae112cb0
+hits 0
+body 1 10 11 2 | U U U V1 V1 V1 V1 U U U | F F F F F F F F F F F | b01 b00000000000 b0000000000 b00000000000 | 0:,V0,B0 1:,B0 2:,B0,V1 7:,V1,V1,V1 8:,B0,V1 9:,V1,V1,V1,V1,V1 | | ||
+sum r b01 b01 b1 b0 b0 b b b a,compiler/scan:6396:6837,std/prelude/vec:12852:12863 t,V1,V1,V1,V1 i t i i c0/i/i f0010
+hid fs1;23552:V0;23296:V1;23297:V1;23298:V1;23299:V1	o0std/prelude/text:String&	o0mut Array<compiler/token:Token>&	o1std/prelude/vec:Vec<compiler/token:Token>&	o0mut Array<compiler/scan:Diag>&	o1std/prelude/vec:Vec<compiler/scan:Diag>&
+out 084438d7802894bc7f4b473d5ab2ffa8
+run compiler/scan 1780-2782 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/scan:1780:2782 t i t i i c0/i/i f0010
+hid fs1	o0compiler/scan:Diag
+out 116cba4fd89a09aac6d6580c7ea8490d
+run compiler/scan 2812-5533 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 4 3 1 | V0 V0 V0 V0 | F F F | b1 b000 b0000 b000 | | | ||
+sum r b1 b1 b0 b0 b0 b b b a,compiler/scan:2920:2955 t i t i i c0/i/i f0010
+hid fs1	o0compiler/scan:Diag
+out 94153bd2c15756256b7ace80f9d95bf5
+run compiler/scan 6003-6290 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:Tokens	1,2
+marks f3bdd3a2841d2f555cb252f45666367e
+read -ctor	I64
+read compiler/scan 0-0 ctor compiler/scan:Tokens	068781350ca580ec7dbabc5169ec672b
+hits 0
+body 1 0 6 1 | | F F F F F F | b0 b000000 b b000000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/scan:6003:6290 t i t i i c0/i/i f0010
+hid fs1	o0compiler/scan:Tokens&	o0I32
+out 92895c7240ac5cf4fe039d917651a22d
+run compiler/scan 29224-29743 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/vec 4660-4775 fn <U8;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 10 2 1 | U U U U U U U U U U | F F | b1 b00 b0000000000 b00 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/vec:Vec<U8>&	o0I64
+out 8df0eaf416d0815d9051dfd898d8ab08
+run compiler/scan 27620-29193 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Bool
+read -ctor	I64
+read compiler/scan 21822-22032 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/scan 26344-26453 fn	fe0143a53ba92ad2b4372b7f4c2ad351
+read compiler/scan 26496-26647 fn	e05413271278fd2db820ca6e76faa34b
+read compiler/scan 27053-27406 fn	28c57db1f511ee32c2c3bface1575dc8
+read compiler/scan 29224-29743 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 3557-3713 fn	7a1c46ff5d748f26ddacd2a565709921
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<U8>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <U8;>	44fdd55f051af23429be98afae112cb0
+read std/prelude/vec 4660-4775 fn <U8;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 17 25 2 | B0 U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F | b00 b0000000000000000000000000 b00000000000000000 b0000000000000000000000000 | 0:,B0 1:,V0 2:,B0 3:,B0,B2 4:,V0 5:,B0 6:,V0 7:,B0 8:,B0,B1 9:,B0 10: 11: 12:,B0 13:,V0 14:,B0 15:,B0 16:,B0,B0 | | ||
+sum r b00 b00 b1 b0 b0 b b b a,compiler/scan:27620:29193,compiler/scan:27620:29193 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0std/prelude/text:String&	o0mut Array<U8>&	o1std/prelude/vec:Vec<U8>&	o0mut Array<U8>&	o1std/prelude/vec:Vec<U8>&	o0mut Array<U8>&	o1std/prelude/vec:Vec<U8>&
+out 8915b86731545f5620ee527640736952
+run compiler/scan 29833-29900 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/scan 27620-29193 fn	6f4f3820605a1e2963bdba9123634680
+hits 0
+body 1 1 1 2 | U | F | b00 b0 b0 b0 | 0:,V0,V1 | | ||
+sum r b00 b00 b1 b0 b0 b b b a,compiler/scan:29833:29900,compiler/scan:29833:29900 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out b9683bf97c5e683deef8580e4b1cf7e3
+run compiler/scan 30529-30823 fn	
+ctx r1 g1 p0
+keys compiler/scan=2ab5bde33b4f727cf92bad1b0d06f441170705e1bfa0579c54936c1702dd8a62
+in 0
+mark compiler/scan 0-0 ctor compiler/scan:Tokens	0
+marks 16839843ae3be8cab883ceb28c971b98
+read -ctor	I64
+read compiler/scan 0-0 ctor compiler/scan:Tokens	068781350ca580ec7dbabc5169ec672b
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45259-45315 fn	869f932e1932e645fe9a26d1c60dfdab
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 5 7 3 | B0 U U U U | F F F F F F F | b001 b0000000 b00000 b0000000 | 0:,B0 1:,B0 2:,B0 3:,B0,V0 4:,B0,V2 | | ||
+sum r b001 b001 b10 b00 b00 b b b a,compiler/scan:30529:30823,compiler/scan:30529:30823,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0compiler/scan:Tokens&
+out 3dd47da73a0bbca5bd8f5a6ddd1b5617
+end
+sum 29493-13436893280207454863

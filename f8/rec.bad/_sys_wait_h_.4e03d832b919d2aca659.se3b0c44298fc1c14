@@ -1,0 +1,2217 @@
+olang scope record
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:c___sigset_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:c___sigset_t	0
+marks 10cd02f4cf7a14ef63721650bb1b0359
+read -ctor	Array<U64, 16>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8068:8082 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 2126d4acd4a15cc541015d49df171bb4
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:timespec	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:timespec	0,1
+marks 53da399d9c9000487f93d47c62d40192
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<sys/wait.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 714cb261c88fd4c26d014b8f8f954db6
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:sigval	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:sigval	0
+marks 18df33e0fd8ddb9a348e8f704d0a041e
+read -ctor	Array<I64, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8181:8194 t i,-1 t i i c0/i/i f0010
+hid fs1
+out bd880dc5296fc268b122128787957621
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:siginfo_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:siginfo_t	0
+marks 983c11e8d526911403808f1fc2b673c8
+read -ctor	Array<I64, 16>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8237:8251 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 2eb152b1f490cfb82a4733ad8f3b92d4
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_attr_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_attr_t	0
+marks f0748cdcc5ea4d66b9913ccefc92f03d
+read -ctor	Array<I64, 7>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8299:8312 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 67412256ca282630a9408aaaeeb9baef
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:sigevent_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:sigevent_t	0
+marks 864a225c0407b216cbd53c7e478ba908
+read -ctor	Array<I64, 8>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8356:8369 t i,-1 t i i c0/i/i f0010
+hid fs1
+out b92fba3b9892e00e6829527aaa58f9bb
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:sigaction_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:sigaction_t	0
+marks 4a54229ebc73175f2fff6c18d82f4219
+read -ctor	Array<I64, 19>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8414:8428 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 5eceb4e83d57111af842be69afbde3df
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:_fpx_sw_bytes	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:_fpx_sw_bytes	0,1,2,3,4
+marks bb95b0aba05a70f4fda75e2fa9c3896d
+read -ctor	Array<U32, 7>
+read -ctor	U32
+read -ctor	U64
+hits 0
+body 1 1 5 1 | V0 | F F F F F | b1 b00000 b0 b00000 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8560:8573 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out a94146b513762da9ba4dbdc225d7627a
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:_fpreg	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:_fpreg	0,1
+marks 277c35c0ee6f15ec75273e1fde46c717
+read -ctor	Array<U16, 4>
+read -ctor	U16
+hits 0
+body 1 1 2 1 | V0 | F F | b1 b00 b0 b00 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8619:8632 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 5d878bc450d21a0b31c72c633e6e0c59
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:_fpxreg	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:_fpxreg	0,1,2
+marks f40efadf1fc8c4855c81038df05bd49f
+read -ctor	Array<U16, 3>
+read -ctor	Array<U16, 4>
+read -ctor	U16
+hits 0
+body 1 2 3 1 | V0 V0 | F F F | b1 b000 b00 b000 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8696:8709 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 58cea72d1ec2bf5398b06b12a8937d9c
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:_xmmreg	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:_xmmreg	0
+marks e25211929a625218f63910d2456ad2c1
+read -ctor	Array<U32, 4>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8806:8819 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 416f3a83224bc4ea8109b47e34160c5e
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:_fpstate	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:_fpstate	0,1,2,3,4,5,6,7,8,9,10
+marks 3585a95f9d45bbb6e543c796038a25f7
+read -ctor	Array<<sys/wait.h>:_fpxreg, 8>
+read -ctor	Array<<sys/wait.h>:_xmmreg, 16>
+read -ctor	Array<U32, 24>
+read -ctor	U16
+read -ctor	U32
+read -ctor	U64
+read <sys/wait.h> 0-0 ctor <sys/wait.h>:_fpxreg	7c83dd34100f4063b1769d8f0aee76a2
+read <sys/wait.h> 0-0 ctor <sys/wait.h>:_xmmreg	60b179e913a38526432a67145386ccff
+hits 0
+body 1 5 11 1 | U V0 U V0 V0 | F F F F F F F F F F F | b1 b00000000000 b00000 b00000000000 | 0:,V0 2:,V0 | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8962:8979 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 633f0e2f67f90e12a154e678a47b6a0e
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:sigcontext	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:sigcontext	0
+marks f801c457e1c8e77d8cc4149aed3b3e3e
+read -ctor	Array<I64, 32>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:9091:9105 t i,-1 t i i c0/i/i f0010
+hid fs1
+out d822113af712026ce7b00f68e88e68e7
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:_xsave_hdr	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:_xsave_hdr	0,1,2
+marks e11ea21e866c615e940db783a7366c89
+read -ctor	Array<U64, 2>
+read -ctor	Array<U64, 5>
+read -ctor	U64
+hits 0
+body 1 2 3 1 | V0 V0 | F F F | b1 b000 b00 b000 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:9177:9190 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 65886e84f59b2e3c76d5342cf481b164
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:_ymmh_state	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:_ymmh_state	0
+marks 702bc437a11188cd6b8395942b083c52
+read -ctor	Array<U32, 64>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:9277:9291 t i,-1 t i i c0/i/i f0010
+hid fs1
+out cc80a90930157deb999d88f16f72aba2
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:_xstate	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:_xstate	0,1,2
+marks 453edb62d053ed030f264d8f1b389dee
+read <sys/wait.h> 0-0 ctor <sys/wait.h>:_fpstate	bd5a8c32376a04c6131f01c35dfdc7f9
+read <sys/wait.h> 0-0 ctor <sys/wait.h>:_xsave_hdr	74851b001c332c2babffbd77852cad9a
+read <sys/wait.h> 0-0 ctor <sys/wait.h>:_ymmh_state	880bc13badef84b3e27f8830a98cafc9
+hits 0
+body 1 3 3 1 | U U U | F F F | b1 b000 b000 b000 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:8962:8979 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 34b6388f273621a7433a79f64c30bf4a
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:stack_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:stack_t	0,1,2
+marks 9ac1bf880c27744d8228a121bf1d496e
+read -ctor	I32
+read -ctor	U64
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 3 1 | | F F F | b0 b000 b b000 | | | ||
+sum r b0 b0 b b b b b b a,<sys/wait.h>:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 9a29ec6c6023f54611d95d1ad7d9001a
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:_libc_fpxreg	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:_libc_fpxreg	0,1,2
+marks c36a0105defbbb4223995b5b4d571f78
+read -ctor	Array<U16, 3>
+read -ctor	Array<U16, 4>
+read -ctor	U16
+hits 0
+body 1 2 3 1 | V0 V0 | F F F | b1 b000 b00 b000 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:9516:9529 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 8f2b79dde8fb430152254c33c26a9c16
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:_libc_xmmreg	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:_libc_xmmreg	0
+marks 9786b35f2dedc505b74562d4a4ad2a96
+read -ctor	Array<U32, 4>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:9631:9644 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 4500c401330341db9910e34d890880c3
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:_libc_fpstate	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:_libc_fpstate	0,1,2,3,4,5,6,7,8,9,10
+marks 94156fb2c70eac3597fdec2d82e0d579
+read -ctor	Array<<sys/wait.h>:_libc_fpxreg, 8>
+read -ctor	Array<<sys/wait.h>:_libc_xmmreg, 16>
+read -ctor	Array<U32, 24>
+read -ctor	U16
+read -ctor	U32
+read -ctor	U64
+read <sys/wait.h> 0-0 ctor <sys/wait.h>:_libc_fpxreg	644b758aff25eb7352c81656799f458c
+read <sys/wait.h> 0-0 ctor <sys/wait.h>:_libc_xmmreg	4eccd3b0355f641049b1ca41597be54d
+hits 0
+body 1 5 11 1 | U V0 U V0 V0 | F F F F F F F F F F F | b1 b00000000000 b00000 b00000000000 | 0:,V0 2:,V0 | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:9792:9814 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 7c192ff68afb81b2e58bcc2680cdfdf0
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:mcontext_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:mcontext_t	0,1,2
+marks f44797f5b4616ebf6950e4f30fb64c97
+read -ctor	Array<I64, 23>
+read -ctor	Array<U64, 8>
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 2 3 1 | V0 V0 | F F F | b1 b000 b00 b000 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:9931:9945 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out b6474a4bee6871c0d32655c9eef53cfb
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:ucontext_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:ucontext_t	0,1,2,3,4,5,6
+marks 8268742e9f44e525608d16a153cbf398
+read -ctor	Array<U64, 4>
+read -ctor	U64
+read -ctor	std/prelude/text:CVoid
+read <sys/wait.h> 0-0 ctor <sys/wait.h>:_libc_fpstate	7b5d4517df18b0495fbd274488edaa67
+read <sys/wait.h> 0-0 ctor <sys/wait.h>:c___sigset_t	f083c90f79a4da297f1d25a488f52c4e
+read <sys/wait.h> 0-0 ctor <sys/wait.h>:mcontext_t	65f9c7c9dc25a8923df30a770d5c5079
+read <sys/wait.h> 0-0 ctor <sys/wait.h>:stack_t	78967194c291b87acebfcd7b01bb3750
+hits 0
+body 1 5 7 1 | U U U U V0 | F F F F F F F | b1 b0000000 b00000 b0000000 | 0:,V0 1:,V0 2:,V0 3:,V0 | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:9931:9945 t i,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 193bb55604c144bb2aaed8a827932651
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:sigstack_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:sigstack_t	0,1
+marks 5b38703dd085ba7e10652d29733fc278
+read -ctor	I32
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<sys/wait.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out a0ad1eb6f84f33757e6f66a71b9009b2
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:c___atomic_wide_counter	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:c___atomic_wide_counter	0
+marks 488b3e73cb8bc635237cdc4566ddf029
+read -ctor	Array<I64, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:10316:10329 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 7972385e82b8430156b989f1840545c2
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:c___pthread_internal_list	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:c___pthread_internal_list	0,1
+marks 3bf136fd9f703d6e40bcfacd9d13fbd9
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<sys/wait.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 2915f0d9641cc0ba227866b6964f4783
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:c___pthread_internal_slist	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:c___pthread_internal_slist	0
+marks 099f505364a01364135d5e21c9821fbc
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b b b b b b a,<sys/wait.h>:0:0 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 0df961a46fd8dcc24441b96e7799d3af
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_mutexattr_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_mutexattr_t	0
+marks 6c98fc660b9b2f0c8bca3658fffcc94d
+read -ctor	Array<I32, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:10524:10537 t i,-1 t i i c0/i/i f0010
+hid fs1
+out d1fa6cb25704d51020b3d9ec7fba8f20
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_condattr_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_condattr_t	0
+marks 7fc48f4212e3b0d1bac91dc3a565bb5b
+read -ctor	Array<I32, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:10589:10602 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 351d948386c864f74cf5ff798516cee5
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_mutex_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_mutex_t	0
+marks df0d1f671c69b819eae490efd5c8316a
+read -ctor	Array<I64, 5>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:10651:10664 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 7f9b8a74c46bee2bf0424b1ad9880b9e
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_cond_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_cond_t	0
+marks ba9c25565cbdfe0d4168ad2be41657b0
+read -ctor	Array<I64, 6>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:10712:10725 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 65c191d473f9b3a7befdd8a495687f29
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_rwlock_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_rwlock_t	0
+marks eb3b403cb2617711513a2ef13dbec995
+read -ctor	Array<I64, 7>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:10775:10788 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 18181e9d44f6d2fbe4baefe119ad51b7
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_rwlockattr_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_rwlockattr_t	0
+marks ca8d2d12db305bbade3c5136160ea0b8
+read -ctor	Array<I64, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:10842:10855 t i,-1 t i i c0/i/i f0010
+hid fs1
+out e303a1f05f1b89f3d9c441f545b7b0cc
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_barrier_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_barrier_t	0
+marks 703267cad6fcc7307110cf10d83726e1
+read -ctor	Array<I64, 4>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:10906:10919 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 9f7ed8ee5d27e2028dba24eafa5aeb6b
+run <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_barrierattr_t	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+mark <sys/wait.h> 0-0 ctor <sys/wait.h>:pthread_barrierattr_t	0
+marks 2c7947ffd2f1a1947ac41cda6c8d8dd9
+read -ctor	Array<I32, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/wait.h>:10974:10987 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 2ce86302cade3d4b1d66dd3a271107a8
+run <sys/wait.h> global SI_ASYNCNL	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ae00fc196caa2d26f613bdad424a351c
+run <sys/wait.h> global SI_DETHREAD	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d22ce496b1b234a60674b45ea60420b9
+run <sys/wait.h> global SI_TKILL	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 375710ccb2d176a0e279ae7c93c91de3
+run <sys/wait.h> global SI_SIGIO	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 907367f0cfcf911c8cf875ff249bcf61
+run <sys/wait.h> global SI_ASYNCIO	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9eb2726a91d3589e1f20a37c8cc0adf9
+run <sys/wait.h> global SI_MESGQ	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9ff3d0db344eb298e93be4f8cb85c2ec
+run <sys/wait.h> global SI_TIMER	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cb01c7f264c6a22cbb7db22075fdcb85
+run <sys/wait.h> global SI_QUEUE	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fbd79a58c32ad4738d867a480ac85e89
+run <sys/wait.h> global SI_USER	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3a141981c081ca1e677aa82ecc320318
+run <sys/wait.h> global SI_KERNEL	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 02b4d320580a6d72fa7396371d1d5bf8
+run <sys/wait.h> global ILL_ILLOPC	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7139fa7e35c19a3647f738955c9f919e
+run <sys/wait.h> global ILL_ILLOPN	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8da0688cb24f14cf078514d4c30adf88
+run <sys/wait.h> global ILL_ILLADR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d687314d2fff6854580bbd281c223482
+run <sys/wait.h> global ILL_ILLTRP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out da4f868f25a031ccc2b98bfda96829ea
+run <sys/wait.h> global ILL_PRVOPC	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 185d98059dc18d631b0d9d17dcbff569
+run <sys/wait.h> global ILL_PRVREG	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5f1c0494ed3e4cdcba3df01172cfcc7b
+run <sys/wait.h> global ILL_COPROC	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f30d896dcc5b4078b2d39aa4cb5ef1ea
+run <sys/wait.h> global ILL_BADSTK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8b90561da3787278f1550388aedb1b7e
+run <sys/wait.h> global ILL_BADIADDR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 59b341fc5308d367c8e3104b7c363afb
+run <sys/wait.h> global FPE_INTDIV	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bbffc70d63927c1ad4f73d9c0907514c
+run <sys/wait.h> global FPE_INTOVF	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dbdf7d589ca32ef5b5aeb967466f20c6
+run <sys/wait.h> global FPE_FLTDIV	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f860dabc19d424bb2b61329f01a5e783
+run <sys/wait.h> global FPE_FLTOVF	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b7e9617938a50f659aa0e1bd9ac98834
+run <sys/wait.h> global FPE_FLTUND	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 738ce160c18569566a13b53ad96a153b
+run <sys/wait.h> global FPE_FLTRES	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4c5e11caf67a432e5f3758715dd342f1
+run <sys/wait.h> global FPE_FLTINV	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0dd501efb7ba6c792b7fd6276b4edb09
+run <sys/wait.h> global FPE_FLTSUB	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 834030e36d4e909a4dd972415106dd4d
+run <sys/wait.h> global FPE_FLTUNK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fca5e2f47dc4a5226613594a12b0c338
+run <sys/wait.h> global FPE_CONDTRAP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bf26cb796ec8f5bcc6e740aedaa84a9f
+run <sys/wait.h> global SEGV_MAPERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cb2b432bd5321296c89e0c0d772c2207
+run <sys/wait.h> global SEGV_ACCERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f230c58f5b8a08f72dfe416f59b6bacf
+run <sys/wait.h> global SEGV_BNDERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b2fa89027b44e37e1b7c78fee227254f
+run <sys/wait.h> global SEGV_PKUERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 007e930b2bc09e760e9dadd872a7a701
+run <sys/wait.h> global SEGV_ACCADI	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 44720c360598e0e1b0243a5887eaad6a
+run <sys/wait.h> global SEGV_ADIDERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2a1ed92ebc8ef9b8c17e88a12778ffb4
+run <sys/wait.h> global SEGV_ADIPERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out be4859f1ee624c75445b722d880434ec
+run <sys/wait.h> global SEGV_MTEAERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 32c6cb073ecd9f0e2d3897cdb5e6665f
+run <sys/wait.h> global SEGV_MTESERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6e105e199845025d8015adab2c6b6905
+run <sys/wait.h> global SEGV_CPERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 85478cc14e46e9bd504bad4b87be58bd
+run <sys/wait.h> global BUS_ADRALN	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 351dbfd365b32e8081d5eda7710cf6a6
+run <sys/wait.h> global BUS_ADRERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 00b69e605eb3483d9c254d6dd1a13cee
+run <sys/wait.h> global BUS_OBJERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 95c073043495cf9733d9300ce3f51d2f
+run <sys/wait.h> global BUS_MCEERR_AR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 032c378b80a6d49453ab9b646aa8023d
+run <sys/wait.h> global BUS_MCEERR_AO	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6ae8afe54c311734e6cb77c9f16cc866
+run <sys/wait.h> global TRAP_BRKPT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cf2ce61f09a3e6850af1933a83bbe21b
+run <sys/wait.h> global TRAP_TRACE	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 628b8fe45c5f8b952d4faef67af18396
+run <sys/wait.h> global TRAP_BRANCH	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 343afb6fb019e309e783473a60168676
+run <sys/wait.h> global TRAP_HWBKPT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 046e0c51bcfb1f75f3151107c355c024
+run <sys/wait.h> global TRAP_UNK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9e0dc9ed6d47baa4400ca0fb8fb55a51
+run <sys/wait.h> global CLD_EXITED	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e3f0337b33624224f6286bd677f6086c
+run <sys/wait.h> global CLD_KILLED	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 59cd43c63f9153d1a26733c94b534044
+run <sys/wait.h> global CLD_DUMPED	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7b23e1e48a544d57b7ef00f61273e1dc
+run <sys/wait.h> global CLD_TRAPPED	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 01f8f0802352d91025607588fe7e96eb
+run <sys/wait.h> global CLD_STOPPED	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ce27ab0c3e3380aa528cf64ca2e10e9b
+run <sys/wait.h> global CLD_CONTINUED	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 95cd2bedc17ef99d1ac362f4843a2871
+run <sys/wait.h> global POLL_IN	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 059e25d0be30706bce2b06fa06e8e2b5
+run <sys/wait.h> global POLL_OUT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fc3112a9f7694d9149efb0cfd64cb14f
+run <sys/wait.h> global POLL_MSG	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c2ee9e15fc6d188332ad41cba6660214
+run <sys/wait.h> global POLL_ERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 77c7c7894046d7174f383bdfd26aeb29
+run <sys/wait.h> global POLL_PRI	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d4db2ac26c8505c6f7851c366e47f313
+run <sys/wait.h> global POLL_HUP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8e7a30e7de79c7af90aac2b84e700799
+run <sys/wait.h> global SIGEV_SIGNAL	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c322922c5cf00af91246450689fd7271
+run <sys/wait.h> global SIGEV_NONE	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3e42c620fc07016f37397807be1c0b03
+run <sys/wait.h> global SIGEV_THREAD	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 068fde500db4901aa7d009f66432fd09
+run <sys/wait.h> global SIGEV_THREAD_ID	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e3e822976b1c0705b728d977317db0ab
+run <sys/wait.h> global REG_R8	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8feaae773a6ddf6e8c3562eba052b748
+run <sys/wait.h> global REG_R9	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out eae8c5758ddecf80f5087683115cb31c
+run <sys/wait.h> global REG_R10	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out eb78c9fb04cfb36a568a505ea3cd9372
+run <sys/wait.h> global REG_R11	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ff60924ee1a93e53c8202b1035ef62d6
+run <sys/wait.h> global REG_R12	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6eac19fc5b2a3843c09eff36b3484ce0
+run <sys/wait.h> global REG_R13	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 346fb375cfa0abed84182dffbab42c34
+run <sys/wait.h> global REG_R14	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b0aed1a37f743e98429c14e175eab6b0
+run <sys/wait.h> global REG_R15	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cfae24f755928121fa94e6661069727b
+run <sys/wait.h> global REG_RDI	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e7c27c12f61b11ca5d4923fa9ac2102a
+run <sys/wait.h> global REG_RSI	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5936954a933328b88a3ed731d0f1c744
+run <sys/wait.h> global REG_RBP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 926df8ef1550c867174a1251aeee4a39
+run <sys/wait.h> global REG_RBX	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 28ddf9071204ac4672565b4ca42b5178
+run <sys/wait.h> global REG_RDX	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5a2cdf3d469d69693086b6a5b7844db2
+run <sys/wait.h> global REG_RAX	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 82786b611022d9480a3d885b55187412
+run <sys/wait.h> global REG_RCX	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0a7a1446c0889bcc5ab5bd3732458d7a
+run <sys/wait.h> global REG_RSP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 58a6267da158b9e5a04204e6994b5307
+run <sys/wait.h> global REG_RIP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6d0e86b6d9fbe3fdd84c567d705942a9
+run <sys/wait.h> global REG_EFL	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3cc8643513c3144cd0a2dd8599240c43
+run <sys/wait.h> global REG_CSGSFS	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 578341c42af92c6acd3b940cf8885a8a
+run <sys/wait.h> global REG_ERR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 76b5c7d722ac76fcb3b15fc301a62ee7
+run <sys/wait.h> global REG_TRAPNO	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 20697303cd2c0c7282b6caf2accf6a09
+run <sys/wait.h> global REG_OLDMASK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 303ab4a3a37a6903ab9bdba38a58fc9f
+run <sys/wait.h> global REG_CR2	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f17af27c797edb6b0df1045cea4fe784
+run <sys/wait.h> global SS_ONSTACK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1a3d52cd257a7ba532e71be294b56f8a
+run <sys/wait.h> global SS_DISABLE	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 12bcb2937ac13c4129e36d71e488b151
+run <sys/wait.h> global P_ALL	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ff22500d897f7d2dd26d8f7af95c4bbd
+run <sys/wait.h> global P_PID	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dc63d3db049dbd332872df71a5a10d1d
+run <sys/wait.h> global P_PGID	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 77f5c378746f5d22671433269ca48d8c
+run <sys/wait.h> global P_PIDFD	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 403f06f1314311b695e1205b6c9594b2
+run <sys/wait.h> global SIGINT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b6236f13cd4f9049094fdf94334b34d7
+run <sys/wait.h> global SIGILL	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 56ee3398ae8200f87e0d95d4d60e2520
+run <sys/wait.h> global SIGABRT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0707ae927302158c49d5b1503cc2d37e
+run <sys/wait.h> global SIGFPE	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ddbee11e3ea89153d335de6bb91ce36c
+run <sys/wait.h> global SIGSEGV	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0fb28d83c8cf2b175273e199e4548585
+run <sys/wait.h> global SIGTERM	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 187ec53d01349791633c54af8ba35d31
+run <sys/wait.h> global SIGHUP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 02c7a31d8ce2020325f37cb5071ab8a2
+run <sys/wait.h> global SIGQUIT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 970d5c96f5238d0270c2dc89b7c6abb1
+run <sys/wait.h> global SIGTRAP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ffb3cd8c536b688325bce017b7fba3f6
+run <sys/wait.h> global SIGKILL	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 97f3bcad234c168a4c18c51f9e43d9a7
+run <sys/wait.h> global SIGPIPE	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 83bd773d5f492c2f2df375890133ed40
+run <sys/wait.h> global SIGALRM	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5814c59f118d9b43a7ff29d5e40e1f7f
+run <sys/wait.h> global SIGIO	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b26ea2ce19f52b2b2bd08290585daf9f
+run <sys/wait.h> global SIGIOT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e30b97df0b3aad0f0fba1490e49ed9ac
+run <sys/wait.h> global SIGCLD	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d44455c12e6eb2193e02f6e64c8f3045
+run <sys/wait.h> global SIGSTKFLT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3b158cd9559122f06f7a019b5add8e1f
+run <sys/wait.h> global SIGPWR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 030e8f17f364c1f58892f30855320a50
+run <sys/wait.h> global SIGBUS	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ebd45040e6a2cd3efa6ad6cc00a6e273
+run <sys/wait.h> global SIGSYS	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2a5a35367ee7b7b9ae388f9417165047
+run <sys/wait.h> global SIGURG	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 869c03ab4ba71a32d61535835baf3c9a
+run <sys/wait.h> global SIGSTOP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8b3d8e2d2424df45aa1ee469c995401e
+run <sys/wait.h> global SIGTSTP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 89d07a4af67eab753d4f0146538e756a
+run <sys/wait.h> global SIGCONT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 850685ffdcc863af8d130166fa80836d
+run <sys/wait.h> global SIGCHLD	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fe6ced94854d238e4a1804ce52c631a4
+run <sys/wait.h> global SIGTTIN	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d85d21e542d893db9ba29daaf0c9e41c
+run <sys/wait.h> global SIGTTOU	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 521edc836022a6f408ca5cc986b7fd50
+run <sys/wait.h> global SIGPOLL	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0a772c5b415eda83151794d78b7d833b
+run <sys/wait.h> global SIGXFSZ	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 33199d3be45fb1baac7a25972bea96f6
+run <sys/wait.h> global SIGXCPU	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0f16a2e167f585798e36bccd5e1fd062
+run <sys/wait.h> global SIGVTALRM	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out aea5e08357e6a38a9c13e68fb6939bf3
+run <sys/wait.h> global SIGPROF	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5a3b146466d65673fe9f7863771128f1
+run <sys/wait.h> global SIGUSR1	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 37185a7df5ca7c94aa3d74fcd58de493
+run <sys/wait.h> global SIGUSR2	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 89d918fc3f2d211a59b761f4782c9221
+run <sys/wait.h> global SIGWINCH	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 34ccc3b554e948dc56ab6c0e7b10926a
+run <sys/wait.h> global NSIG	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 571c8a04870a930294a64b9d43ae42ac
+run <sys/wait.h> global SA_NOCLDSTOP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2d8ba96e9f438f53528c7e567c39e831
+run <sys/wait.h> global SA_NOCLDWAIT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1a81c4991a7000706f560d989a48c6b9
+run <sys/wait.h> global SA_SIGINFO	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1151d0964e4a4a8473c4bfd88b7ef259
+run <sys/wait.h> global SA_ONSTACK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 258cba8e4599c71173f00bda438bab02
+run <sys/wait.h> global SA_RESTART	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 85190cd4f7d24e73f0aa0c2fb43a25a6
+run <sys/wait.h> global SA_NODEFER	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e312cc164f3e113e9156f86031fc4b72
+run <sys/wait.h> global SA_RESETHAND	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fecf1a711c5a3230af9ebb2eb5c00583
+run <sys/wait.h> global SA_INTERRUPT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 209e902f34984e5d11b37dabdc65a853
+run <sys/wait.h> global SA_NOMASK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7de35e99a72a6863ec464f2dc2f91e04
+run <sys/wait.h> global SA_ONESHOT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 32e3af9c5f36831bbd52bcb4d618ee5e
+run <sys/wait.h> global SA_STACK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2fb1a6621ec32751f57fadaabdab7985
+run <sys/wait.h> global SIG_BLOCK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2f8373c6f7a97604951c71dad02ae0ab
+run <sys/wait.h> global SIG_UNBLOCK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4f77c6350f56762e18071b068bc71835
+run <sys/wait.h> global SIG_SETMASK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ada57201d529425f106e219602dc28c7
+run <sys/wait.h> global FP_XSTATE_MAGIC1	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f8dafd1c596c4ff42989a702362f7944
+run <sys/wait.h> global FP_XSTATE_MAGIC2	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3a50b5c8596626e4f6e8a3074c725f9a
+run <sys/wait.h> global FP_XSTATE_MAGIC2_SIZE	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 37f52e9faf433dd9c7a63b6c156f19bd
+run <sys/wait.h> global NGREG	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5dfcdd74b6139e90a9310e37074fed2f
+run <sys/wait.h> global STDIN_FILENO	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 966f400bebcfc83620b3cceac5d899b3
+run <sys/wait.h> global STDOUT_FILENO	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b9ba4b1bb0eb5e419666aab4940d0799
+run <sys/wait.h> global STDERR_FILENO	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cb309aa1911fedf9ee25306121659ca9
+run <sys/wait.h> global R_OK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c9fbd8800497c32bc0daed22075f0c59
+run <sys/wait.h> global W_OK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e17487ed35234146c23db76747b5a27d
+run <sys/wait.h> global X_OK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2610542555304e19b4800a7c01ff108c
+run <sys/wait.h> global F_OK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3d9872ec6c6bc011d4d7ae2de8f8f90a
+run <sys/wait.h> global SEEK_SET	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5dfc8344ce20ae265ea96d1883452928
+run <sys/wait.h> global SEEK_CUR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b58b84912f8fbba558a9e2d51ab449c9
+run <sys/wait.h> global SEEK_END	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 14974d5578cd6f49a72724efa41c5a8f
+run <sys/wait.h> global SEEK_DATA	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out da5a7ae4a3f57174ddfcb16ef4ada51c
+run <sys/wait.h> global SEEK_HOLE	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 33ab08b828a199cca281372112ca913b
+run <sys/wait.h> global L_SET	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out aede11b12cece067bf61b2f705a6ae27
+run <sys/wait.h> global L_INCR	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6c16eec3dab95683fdb10cd3ca8efda7
+run <sys/wait.h> global L_XTND	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ea1ce84dd32db3563c32876fcb18bbac
+run <sys/wait.h> global F_ULOCK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out abf54c7e9d00bbdc831a805b78b3f773
+run <sys/wait.h> global F_LOCK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6556b40e1d209c40ef964d07614caad0
+run <sys/wait.h> global F_TLOCK	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8c77c01d8b17468f81aafa67368d5104
+run <sys/wait.h> global F_TEST	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 11042e0ab622ac28f3f0b038a2aed2a4
+run <sys/wait.h> global CLOSE_RANGE_UNSHARE	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4248eb9745a89ca2bc371eeff02bafc3
+run <sys/wait.h> global CLOSE_RANGE_CLOEXEC	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dd2b9786f72caf1f9d4d4490474881db
+run <sys/wait.h> global WNOHANG	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9e02f1f0cd647c6c30db2e590491dd75
+run <sys/wait.h> global WUNTRACED	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 32d051738c8e7272b3876b311f0bb2ac
+run <sys/wait.h> global WSTOPPED	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 80951531440326591720639fd3144049
+run <sys/wait.h> global WEXITED	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0efd5d067af932e7906308750b5e91cd
+run <sys/wait.h> global WCONTINUED	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9923d3ec4eb9ee7a30fe8f7a217bfa3f
+run <sys/wait.h> global WNOWAIT	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b58afaa082cc45c3c49943faf7243de3
+run <sys/wait.h> global WCOREFLAG	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ddc7ca8ec95163ef458ad93e569df926
+run <sys/wait.h> global WAIT_ANY	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 11482bbd5ab678a4ce4287711fca5a8c
+run <sys/wait.h> global WAIT_MYPGRP	
+ctx r1 g1 p0
+keys <sys/wait.h>=4e03d832b919d2aca659e4e9ba20f7bb1624bb8de708575cfbc7753578e14aad
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ee0db1edb3dd71bd8c303e31ce094fe2
+end
+sum 72086-533593171161469753

@@ -1,0 +1,223 @@
+olang scope record
+run <stdio.h> 0-0 ctor <stdio.h>:c___mbstate_t	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+mark <stdio.h> 0-0 ctor <stdio.h>:c___mbstate_t	0
+marks db1f43c31a03d2fb217a4ee3582fbd3f
+read -ctor	Array<I32, 2>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdio.h>:5189:5202 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 9a39a2b9f03e575ccbfa76e0f025a968
+run <stdio.h> 0-0 ctor <stdio.h>:c__G_fpos_t	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+mark <stdio.h> 0-0 ctor <stdio.h>:c__G_fpos_t	0,1
+marks 446af6b07704074c6dffe0f6f5f2c3f9
+read -ctor	I64
+read <stdio.h> 0-0 ctor <stdio.h>:c___mbstate_t	047a0116ae1bed9646c3f7f688671c9f
+hits 0
+body 1 1 2 1 | U | F F | b1 b00 b0 b00 | 0:,V0 | | ||
+sum r b1 b1 b b b b b b a,<stdio.h>:5189:5202 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 82d5f8734473d116f432cc8bab79ba2f
+run <stdio.h> 0-0 ctor <stdio.h>:c__G_fpos64_t	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+mark <stdio.h> 0-0 ctor <stdio.h>:c__G_fpos64_t	0,1
+marks bfdc589278c6b525b1f8e949ace4526a
+read -ctor	I64
+read <stdio.h> 0-0 ctor <stdio.h>:c___mbstate_t	047a0116ae1bed9646c3f7f688671c9f
+hits 0
+body 1 1 2 1 | U | F F | b1 b00 b0 b00 | 0:,V0 | | ||
+sum r b1 b1 b b b b b b a,<stdio.h>:5189:5202 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 54239de250fa77a2f2ed26630949d16d
+run <stdio.h> 0-0 ctor <stdio.h>:cookie_io_functions_t	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+mark <stdio.h> 0-0 ctor <stdio.h>:cookie_io_functions_t	0,1,2,3
+marks ad19c10d2252c3dc6a4c86ad128329cb
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b b b b b b a,<stdio.h>:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 65db8c5958a8daa4a66124002b14e21e
+run <stdio.h> global BUFSIZ	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d8ac1bd517287e75a467d576c6db101d
+run <stdio.h> global EOF	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 640bccdd0451284caab163bc54cc1744
+run <stdio.h> global SEEK_SET	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e23e3d0f8846257235f1b8cebd79b1d1
+run <stdio.h> global SEEK_CUR	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2a3629e615349e697999a07e13d808b8
+run <stdio.h> global SEEK_END	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6afb775664c6d6396d1b472afbcdfc7a
+run <stdio.h> global SEEK_DATA	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7596a1d36cd5d0b014d00ffc84ad7e7e
+run <stdio.h> global SEEK_HOLE	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c9c610a468da4b6ecf66e14dcc892b3f
+run <stdio.h> global L_tmpnam	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e82f2453f6beaef118252ad54f16a541
+run <stdio.h> global TMP_MAX	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 864b632308800f711ca7edf27fda7b98
+run <stdio.h> global FILENAME_MAX	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3f3e1af44f8eca81a9b8cc4200970c28
+run <stdio.h> global L_ctermid	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 62124946576fd462218e8233cc46c1ce
+run <stdio.h> global L_cuserid	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ab5a21c704db8e31b0484af3b5d50ef8
+run <stdio.h> global FOPEN_MAX	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 712e949ee9ba79530c9525fd1a7f284d
+run <stdio.h> global RENAME_NOREPLACE	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ec54168616a74493e62c3b9867bda18b
+run <stdio.h> global RENAME_EXCHANGE	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 681911016307d01c5a90372bb2187aef
+run <stdio.h> global RENAME_WHITEOUT	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ebf8e47882a9c90be57898074a5555cc
+run <stdio.h> global P_tmpdir	
+ctx r1 g1 p0
+keys <stdio.h>=574faa451bb13fc854d27c928be832767a76644503be0df8b682ce65cfc30ae5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6295220346a53954dc1c4022c44e7499
+end
+sum 7121-6906861536600056817

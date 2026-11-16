@@ -129,6 +129,13 @@ by `lower.olang`'s partReleases and textWalk; a copy made in a part region is sp
 a Map's other parts and its live entries by partOf and entryCopy, as a Put builds an entry), so a part region holds one
 array - a change to how a Copy helper builds parts, or to how `Map.add` builds an entry, changes it. The stores
 `occupy` makes are listed in `typed.Body.Rooms` (check.suppliedOccupy) and are no let-go in free.olang or lower.olang.
+A copy's text of a place built in slots is built in slots too (round 8: `lower.olang` copySlots in the Copy helper's
+`copyAt`), and `free.olang`'s `untracked` then keeps no slot place for a copy lowering makes - a new copy path in
+lowering that builds text elsewhere changes `untracked`'s `made` callers with it. A slot scope (`mir.Rvalue.Slots`) is
+laid out by the runtime's `%olang.slotscope` and made in `emit.olang`'s `slotScope` (one over a slot scope builds into its
+tail); an allocation in a scope a local holds goes through `__olang_held_alloc` (`arrayStorage`, `textStorage`), whose
+slot path `__olang_slot_alloc` makes what `__olang_gen_buf` makes, to the byte: a change to the slot header, the class
+table or the records changes all three.
 
 A function's hidden scope arguments (`types.ScopeVarsOf`) are read off its type alone; a role that adds one (`RoleTail`,
 S21's tail scope, given in `scope.olang`'s `giveTails` before any body is judged) changes every call's: the scope pass

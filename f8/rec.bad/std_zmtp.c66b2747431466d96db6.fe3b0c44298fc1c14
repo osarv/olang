@@ -1,0 +1,30 @@
+olang front record
+body ctor 0-0	known p
+body fn 1651-1799	known p
+body fn 1870-2015	known p
+body fn 2089-2135	known p
+body fn 2254-2656	known p
+body fn 2733-2932	known p grows|0|-|-|.|0|0|std/zmtp|2798|2802|-1
+body fn 3053-3400	known p grows|0|-|-|.|0|0|std/zmtp|3161|3165|-1
+body fn 3439-3606	known p
+body fn 3700-3895	known p grows|0|-|-|..in|3|0|std/zmtp|3881|3888|-1
+body fn 4074-4651	known p
+body fn 4825-5318	known p
+body fn 5320-5489	known p
+body fn 5586-6101	known p
+body fn 6172-6396	known p grows|0|-|-|..in|3|0|std/zmtp|6316|6320|-1
+sig Fd@2089 fn&(Socket&) I32
+sig Fill@3700 fn&(mut Socket&) ? Error
+sig Next@4074 fn&(mut Socket&) Array<String> ? Exhausted, Error.Protocol
+sig Recv@6172 fn&(mut Socket&) Array<String> ? Error, Error.Protocol
+sig Send@3439 fn&(Socket&, ...String&) ? Error
+sig Socket.Accept@1651 fn&(mut Listener&, String&) Socket ? Error
+sig Socket.Dial@1870 fn&(Addr&, String&) Socket ? Error
+sig frame@3053 fn&(mut Vec<U8>&, Array<U8>&, Bool, Bool)
+sig frames@5586 fn&(Socket&, I64, I64) Array<String>
+sig hello@2254 fn&(Socket&, Bool) ? Error
+sig property@2733 fn&(mut Vec<U8>&, String&, String&)
+sig sizeAt@5320 fn&(Array<U8>&, I64, Bool) I64
+sig whole@4825 fn&(Socket&) I64, I64
+end
+sum 80e7676c87d5370a78ff30e93422596c896ff431de162ed58d47c2aeb7f02c34

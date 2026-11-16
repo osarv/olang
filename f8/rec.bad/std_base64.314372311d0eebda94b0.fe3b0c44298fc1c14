@@ -1,0 +1,21 @@
+olang front record
+body fn 1659-1974	known p
+body fn 1976-2759	known p
+body fn 2810-2887	known p
+body fn 2965-3047	known p
+body fn 3098-3178	known p
+body fn 3274-3358	known p
+body fn 726-1612	known p
+body global standard	known p
+body global urlSafe	known p
+baked standard [8 40000000000000000000000000000000 @8>1+0][64 4142434445464748494a4b4c4d4e4f505152535455565758595a6162636465666768696a6b6c6d6e6f707172737475767778797a303132333435363738392b2f]
+baked urlSafe [8 40000000000000000000000000000000 @8>1+0][64 4142434445464748494a4b4c4d4e4f505152535455565758595a6162636465666768696a6b6c6d6e6f707172737475767778797a303132333435363738392d5f]
+sig Decode@2965 fn&(String&) Array<U8> ? Error.Invalid
+sig DecodeURL@3274 fn&(String&) Array<U8> ? Error.Invalid
+sig Encode@2810 fn&(Array<U8>&) String
+sig EncodeURL@3098 fn&(Array<U8>&) String
+sig decodeWith@1976 fn&(String&, Bool) Array<U8> ? Error.Invalid
+sig encodeWith@726 fn&(Array<U8>&, String&, Bool) String
+sig valueOf@1659 fn&(Char, Bool) I64
+end
+sum bd3312472a8c65d2facd4557bdabada5b0443925c0975027f3e7d902cbcdc424

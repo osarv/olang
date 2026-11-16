@@ -1,0 +1,15 @@
+; olang - emitted by the self-hosted compiler (compiler/emit.olang)
+target triple = "x86_64-pc-linux-gnu"
+
+@olang_loc_1fa7a91fdba5f63e_9e2724382c24a02 = weak_odr constant [53 x i8] c"compiler/cells.olang:150: slice bounds out of range\0A\00"
+@olang_loc_20926c2b81d0e00c_7d8ac19a57247f8 = weak_odr constant [44 x i8] c"compiler/cells.olang:128: MapError.Missing\0A\00"
+@olang_loc_616551f0a3546013_1249d7bcaf39212f = weak_odr constant [53 x i8] c"compiler/cells.olang:143: slice bounds out of range\0A\00"
+@olang_loc_848145de22f96d6_67a3d2054bf098fa = weak_odr constant [53 x i8] c"compiler/cells.olang:268: slice bounds out of range\0A\00"
+@olang_loc_948f6b52a35541f0_f4572f553ac6bc74 = weak_odr constant [43 x i8] c"compiler/cells.olang:128: unhandled error\0A\00"
+@olang_loc_982e698976ed59f7_448003811d791d9b = weak_odr constant [39 x i8] c"compiler/cells.olang:71: null reached\0A\00"
+@olang_loc_9bfba30e0b79067c_c7b40212ef9fcad0 = weak_odr constant [47 x i8] c"compiler/cells.olang:243: unreachable reached\0A\00"
+@olang_loc_bd7f84bf0a6a1790_6aecdefa88c1aedc = weak_odr constant [53 x i8] c"compiler/cells.olang:320: array length out of range\0A\00"
+@olang_loc_c055f97e3313c422_daca2fce6a780a3e = weak_odr constant [53 x i8] c"compiler/cells.olang:332: slice bounds out of range\0A\00"
+@olang_loc_d5164bbf2a35422c_5d9a5374fc012700 = weak_odr constant [53 x i8] c"compiler/cells.olang:381: slice bounds out of range\0A\00"
+@olang_loc_dcdbbf63e25e519f_c5c2eacce8fd1bbb = weak_odr constant [53 x i8] c"compiler/cells.olang:339: slice bounds out of range\0A\00"
+@olang_loc_f955eaf1a3bf6405_1ec27af45d1f4ca9 = weak_odr constant [40 x i8] c"compiler/cells.olang:262: null reached\0A\00"

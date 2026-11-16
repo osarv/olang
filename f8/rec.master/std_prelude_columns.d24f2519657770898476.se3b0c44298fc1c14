@@ -1,0 +1,18 @@
+olang scope record
+run std/prelude/columns 14472-14720 fn	
+ctx r1 g1 p0
+keys std/prelude/columns=d24f2519657770898476a6a094874b2cf9f65c2b392ccd3618f46ebf7c155d04
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 6 6 2 | B0 U U U U U | F F F F F F | b01 b000000 b000000 b000000 | 0:,B0 1:,B0,B3 2:,B0,B5 3:,B0,B7 4:,B0 5:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/prelude/columns:14472:14720,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out ea4409b159de116b3f4fa2c7bbe86660
+end
+sum 853-13617142324015558167

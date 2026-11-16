@@ -1,0 +1,97 @@
+olang scope record
+run compiler/measure 0-0 ctor compiler/measure:Sample	
+ctx r1 g1 p0
+keys compiler/measure=35a3f9cea934b2467d30c1b011f3d76a906f97bad1545eb9e2b1a3c33d31c4b8
+in 0
+mark compiler/measure 0-0 ctor compiler/measure:Sample	0,1,2,3,4
+marks 715584eab19e8fb829685c5fb2159e60
+read -ctor	I64
+hits 0
+body 1 0 10 1 | | F F F F F F F F F F | b0 b0000000000 b b0000000000 | | | ||
+sum r b0 b0 b00000 b00000 b00000 b b b a,compiler/measure:0:0 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0I64	o0I64	o0I64
+out e1e150d051c077fce35ae1ba8d8e310d
+run compiler/measure 1832-2795 fn	
+ctx r1 g1 p0
+keys compiler/measure=35a3f9cea934b2467d30c1b011f3d76a906f97bad1545eb9e2b1a3c33d31c4b8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/measure 0-0 ctor compiler/measure:Sample	73d7b9341391ac7bf778323527c84aa0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 13 25 2 | B0 U U U B0 U B10 B0 B0 U B11 U U | F F F F F F F F F F F F F F F F F F F F F F F F F | b00 b0000000000000000000000000 b0000000000000 b0000000000000000000000000 | 1: 2:,V1,B0 11: 12:,B0 | | ||
+sum r b00 b00 b000 b000 b000 b b b a,compiler/measure:1832:2795,compiler/measure:1832:2795 t i t i i c0/i/i f0010
+hid fs1	o0Array<std/prelude/text:String&>&	o0I32	o0std/prelude/text:String&
+out 125ef125b97cd186e72141bbcc327cb1
+run compiler/measure 2903-3037 fn	
+ctx r1 g1 p0
+keys compiler/measure=35a3f9cea934b2467d30c1b011f3d76a906f97bad1545eb9e2b1a3c33d31c4b8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/bench 10902-11338 fn	2006baa4eb2bffaba6ef8daf8ded9994
+read std/prelude/float 931-2699 fn	8bfb474905285c2fb956460cfaa491d5
+hits 0
+body 1 3 1 1 | U V0 U | F | b1 b0 b000 b0 | 0:,B0 2:,V0 | | ||
+sum r b1 b1 b0 b0 b0 b b b a,compiler/measure:2969:2996 t i t i i c0/i/i f0010
+hid fs1	o0F64
+out 93834f506f247ad43c09bbf84b9c7ff0
+run compiler/measure 3063-3180 fn	
+ctx r1 g1 p0
+keys compiler/measure=35a3f9cea934b2467d30c1b011f3d76a906f97bad1545eb9e2b1a3c33d31c4b8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/measure 2903-3037 fn	4ec96c08decf5ccdcb1eeab270cec6fc
+hits 0
+body 1 4 2 1 | U U U V0 | F F | b1 b00 b0000 b00 | 0:,V0 1:,B0 2:,B0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,compiler/measure:2969:2996 t i t i i c0/i/i f0010
+hid fs1	o0F64	o0F64
+out a421af1a41d086b029ecd537aec8c925
+run compiler/measure 3389-3992 fn	
+ctx r1 g1 p0
+keys compiler/measure=35a3f9cea934b2467d30c1b011f3d76a906f97bad1545eb9e2b1a3c33d31c4b8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/measure 2903-3037 fn	4ec96c08decf5ccdcb1eeab270cec6fc
+read compiler/measure 3063-3180 fn	7d722c2407eec5b9017540c1d0b3aa25
+read std/bench 7564-7799 fn	0431d8d16f6c669decce21a8cfd48c7d
+read std/bench 7980-8090 fn	e12c0952a35f11866f4599972aab6551
+read std/prelude/number 15570-15822 fn <I64;>	753360899e792dedf06ee057d76e9c16
+hits 0
+body 1 17 24 2 | B0 B0 B0 U U U U B0 U U B0 U U U U U V1 | F F F F F F F F F F F F F F F F F F F F F F F F | b01 b000000000000000000000000 b00000000000000000 b000000000000000000000000 | 3: 4:,B0 5:,B0 6:,B0 8:,B0 9:,B0 11:,B0 12:,B0 13:,B0 14:,B0 15:,B0 | | ||
+sum r b01 b01 b01 b00 b00 b b b a,compiler/measure:3389:3992,compiler/measure:3826:3990 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0Array<compiler/measure:Sample>&
+out 0382443eacb9ef9aadfb97fe4f26c602
+run compiler/measure 4423-5069 fn	
+ctx r1 g1 p0
+keys compiler/measure=35a3f9cea934b2467d30c1b011f3d76a906f97bad1545eb9e2b1a3c33d31c4b8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/measure 1832-2795 fn	9c2b4ad91483a4d6ce27828f739b22b3
+read compiler/measure 3389-3992 fn	f4e2bb1e4bfb01578e530e0b00bf9328
+read std/io 3193-3244 fn <std/prelude/text:String;>	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/number 15570-15822 fn <I64;>	753360899e792dedf06ee057d76e9c16
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/measure:Sample>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <compiler/measure:Sample;>	44fdd55f051af23429be98afae112cb0
+read std/prelude/vec 4660-4775 fn <compiler/measure:Sample;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 12 14 2 | U U B0 U U B4 U U U U B0 U | F F F F F F F F F F F F F F | b00 b00000000000000 b000000000000 b00000000000000 | 2:,B0 3: 4:,V0,V1 6: 7:,B0 8:,B0,B0 9:,B0,B0 11: | | ||
+sum r b00 b00 b0000 b0000 b0000 b b b a,compiler/measure:4423:5069,compiler/measure:4423:5069 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0Array<std/prelude/text:String&>&	o0I64	o0I64	o0std/prelude/text:String&	o0mut Array<compiler/measure:Sample>&	o1std/prelude/vec:Vec<compiler/measure:Sample>&
+out d00ff7989d0d9d9ee2e0c306a430efe7
+run compiler/measure 5296-5624 fn	
+ctx r1 g1 p0
+keys compiler/measure=35a3f9cea934b2467d30c1b011f3d76a906f97bad1545eb9e2b1a3c33d31c4b8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/measure 2903-3037 fn	4ec96c08decf5ccdcb1eeab270cec6fc
+hits 0
+body 1 6 3 1 | B0 U U U U V0 | F F F | b1 b000 b000000 b000 | 2:,B0 3:,B0 4:,B0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,compiler/measure:5411:5622 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out fc874cf3bb35280fa10289adc6f2cd33
+end
+sum 5182-1639155650994296956

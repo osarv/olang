@@ -1,0 +1,122 @@
+olang front record
+body dtor 14566-14599	known p
+body dtor 14710-14743	known p
+body dtor 19426-19459	known p
+body fn 10020-10143	known p
+body fn 10312-10721	known p
+body fn 10768-11095	known p
+body fn 11213-11395	known p
+body fn 11397-11630	known p
+body fn 11677-11936	known p
+body fn 12128-12387	known p
+body fn 12624-13730	known p
+body fn 13939-14384	known p
+body fn 15043-15454	known p
+body fn 15524-15565	known p
+body fn 15659-15735	known p
+body fn 15775-16063	known p
+body fn 16182-16432	known p
+body fn 16764-17085	known p,1
+body fn 17294-17598	known p
+body fn 17699-17756	known p
+body fn 17826-17863	known p
+body fn 18266-18603	known p
+body fn 18708-19082	known p
+body fn 19128-19201	known p
+body fn 19202-19275	known p
+body fn 19545-19847	known p
+body fn 19882-20115	known p
+body fn 20262-20605	known p,1
+body fn 20691-21007	known p
+body fn 21009-21081	known p
+body fn 2599-2983	known p
+body fn 3067-3119	known p
+body fn 3349-3499	known p
+body fn 3597-3771	known p
+body fn 3890-3943	known p
+body fn 3944-4022	known p
+body fn 4023-4054	known p
+body fn 4055-4090	known p
+body fn 4151-4294	known p
+body fn 4352-4533	known p
+body fn 4642-4941	known p
+body fn 4943-5301	known p
+body fn 5303-5503	known p
+body fn 5684-7365	known p
+body fn 7527-7843	known p
+body fn 8030-8888	known p
+body fn 9135-9259	known p
+body fn 9261-10018	known p
+body global afInet	known p
+body global afInet6	known p
+body global ipprotoIpv6	known p
+body global ipv6V6only	known p
+body global msgNosignal	known p
+body global shutWr	known p
+body global soRcvtimeo	known p
+body global soReuseaddr	known p
+body global soSndtimeo	known p
+body global sockCloexec	known p
+body global sockDgram	known p
+body global sockStream	known p
+body global solSocket	known p
+baked afInet [8 02000000]
+baked afInet6 [8 0a000000]
+baked ipprotoIpv6 [8 29000000]
+baked ipv6V6only [8 1a000000]
+baked msgNosignal [8 00400000]
+baked shutWr [8 01000000]
+baked soRcvtimeo [8 14000000]
+baked soReuseaddr [8 02000000]
+baked soSndtimeo [8 15000000]
+baked sockCloexec [8 00000800]
+baked sockDgram [8 02000000]
+baked sockStream [8 01000000]
+baked solSocket [8 01000000]
+sig Accept@15775 fn&(mut Listener&) Conn ? Error
+sig Addr.Parse@9135 fn&(String&) Addr ? Error.Address
+sig Addr.Resolve@13939 fn&(String&) Addr ? Error.Unreachable, Error.Address, Error.UnknownHost, Error.Failed
+sig Addr.fromSockaddr@10768 fn&(Array<U8>&) Addr
+sig Addr.hostPort@9261 fn&(String&) Addr ? noAddress
+sig Addr.nameOf@11677 fn&(I32, Bool) Addr ? Error
+sig Addr@15659 fn&(Listener&) Addr ? Error
+sig Bytes@4151 fn&(IP&) Array<U8>
+sig CloseWrite@17699 fn&(Conn&)
+sig Conn.Dial@16182 fn&(Addr&) Conn ? Error
+sig Fd@15524 fn&(Listener&) I32
+sig Fd@17826 fn&(Conn&) I32
+sig IP.Any4@4023 fn&() IP
+sig IP.Any6@4055 fn&() IP
+sig IP.IPv4@3349 fn&(U8, U8, U8, U8) IP
+sig IP.IPv6@3597 fn&(Array<U8>&) IP ? Error.Address
+sig IP.Loopback4@3890 fn&() IP
+sig IP.Loopback6@3944 fn&() IP
+sig IP.Parse@7527 fn&(String&) IP ? Error.Address
+sig IP.parse4@4943 fn&(String&) IP ? noAddress
+sig IP.parse6@5684 fn&(String&) IP ? noAddress
+sig IsLoopback@4352 fn&(IP&) Bool
+sig Listener.Listen@15043 fn&(Addr&, I32) Listener ? Error
+sig Local@19128 fn&(Conn&) Addr ? Error
+sig Local@21009 fn&(UDP&) Addr ? Error
+sig Lookup@12624 fn&(String&) Array<IP> ? Error.Unreachable, Error.UnknownHost, Error.Failed
+sig Read@16764 fn&(Conn&, mut Array<U8>&) Array<U8>& ? Error
+sig Readable@18266 fn&(Array<I32>&, I64) Array<Bool>
+sig RecvFrom@20262 fn&(UDP&, mut Array<U8>&) Array<U8>&, Addr ? Error
+sig Remote@19202 fn&(Conn&) Addr ? Error
+sig SendTo@19882 fn&(UDP&, Array<U8>&, Addr&) ? Error
+sig SetTimeout@18708 fn&(Conn&, Duration)
+sig SetTimeout@20691 fn&(UDP&, Duration)
+sig Str@10020 fn&(Addr&) String
+sig Str@8030 fn&(IP&) String
+sig UDP.Listen@19545 fn&(Addr&) UDP ? Error
+sig Write@17294 fn&(Conn&, Array<U8>&) ? Error
+sig decimalAt@4642 fn&(String&, I64, I64) I64, I64 ? noAddress
+sig hexDigit@5303 fn&(Char) I64
+sig interrupted@3067 fn&() Bool
+sig lookupFailed@12128 fn&(I32, String&) ? Error.Unreachable, Error.UnknownHost, Error.Failed
+sig open@11213 fn&(Addr&, I32) I32 ? Error
+sig raise@2599 fn&(I32, String) ? Error
+sig setInt@11397 fn&(I32, I32, I32, I32)
+sig sockaddr@10312 fn&(Addr&) Array<U8>
+end
+sum 881df4176afb4c2475b380ee302dcc52d23c3cabae31a2ce048af8b977af1fe2

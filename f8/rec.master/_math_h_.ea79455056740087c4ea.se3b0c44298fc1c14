@@ -1,0 +1,703 @@
+olang scope record
+run <math.h> global FP_INT_UPWARD	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 78189bcaaa22596d27be2453d06a4100
+run <math.h> global FP_INT_DOWNWARD	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 55c6360a1adf32540c637007e60b4961
+run <math.h> global FP_INT_TOWARDZERO	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 669b183cc1804de8520fd1ead8e66026
+run <math.h> global FP_INT_TONEARESTFROMZERO	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 28041ecf9e8b7cc5f78ed142bc9a37bf
+run <math.h> global FP_INT_TONEAREST	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fa3c82b5c7611628b977af8c71607aaa
+run <math.h> global FP_NAN	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a868a909bc17c138ad3a3226baa6fe91
+run <math.h> global FP_INFINITE	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0ade824ace799ff49fbf95cd88e454c3
+run <math.h> global FP_ZERO	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 89c91f7f0741526be9c0a1f03419c868
+run <math.h> global FP_SUBNORMAL	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1cce150e0fa60b29a50238fb5549641d
+run <math.h> global FP_NORMAL	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 52a964554856ca8565a89ac159ed3d84
+run <math.h> global FP_ILOGB0	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 38ae77215c64402757bf519178158ddf
+run <math.h> global FP_ILOGBNAN	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out aecb4b4787b199afae7b4c8417c6d3c8
+run <math.h> global FP_LLOGB0	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7db2f9c75c2db04dbb4fd2eb52203c68
+run <math.h> global FP_LLOGBNAN	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bdc45be1b716ca46322d0553b14f9d80
+run <math.h> global MATH_ERRNO	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a7cbe4eaf68e682db5ae08c740951d82
+run <math.h> global MATH_ERREXCEPT	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b284e21928edf7aa379aea518edd75f2
+run <math.h> global math_errhandling	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0d54a96e6bb26d90ba1f0fcea4fc7448
+run <math.h> global MAXFLOAT	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c6fa23c3fd2b0494bf673a16c901e90b
+run <math.h> global M_E	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8d3914abe59aaa47030d57247918d534
+run <math.h> global M_LOG2E	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f1fa2b5744c415df9b7f86f7f726f01b
+run <math.h> global M_LOG10E	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b738e20f3ef57c9a94a0325ac1532fec
+run <math.h> global M_LN2	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8aff2032d2b3dcebe413742affea0be4
+run <math.h> global M_LN10	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 07443c9f0242c920b412c3f7f7290118
+run <math.h> global M_PI	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9944472bc5fcf360a8e7550037ece59b
+run <math.h> global M_PI_2	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b611f8c41316b08131d6d03d07690352
+run <math.h> global M_PI_4	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d14c97b7165ddbc4396114d72b64a411
+run <math.h> global M_1_PI	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bf7d51b6c7569f4a391bd68226ea5c48
+run <math.h> global M_2_PI	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 510607da6db6dc60321830a8c03c1209
+run <math.h> global M_2_SQRTPI	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 823c3eb53794856fac2f781775a5d5c0
+run <math.h> global M_SQRT2	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fd175da3a3643aafba3b48923337fe4f
+run <math.h> global M_SQRT1_2	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out affa44f1caa1a19585dbadd9038e77bc
+run <math.h> global M_Ef	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 484b81cb34311bbf6cba73b6c4bed57d
+run <math.h> global M_LOG2Ef	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2d9725cf690a0a15a21df5951efdbe2c
+run <math.h> global M_LOG10Ef	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out db72f9dba27a5fc519b1f980428a91d5
+run <math.h> global M_LN2f	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 22a598970682128a2424ed96c1dbe53f
+run <math.h> global M_LN10f	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ee57bc5cf9e98f5e6804c7734e54a70e
+run <math.h> global M_PIf	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cc9b92b5bfc4f7c9091aed4fc1cdb8ff
+run <math.h> global M_PI_2f	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0794a0b30a38593abe8c48b6be84f88d
+run <math.h> global M_PI_4f	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d3c957ca3fcea9593908e782bf8ce4e5
+run <math.h> global M_1_PIf	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b419b2aabe834cc54eb26244b6742faf
+run <math.h> global M_2_PIf	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d08b485297aa2238842be58ba78a623f
+run <math.h> global M_2_SQRTPIf	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 459de3392cabcd4fced20b4c513c6eb1
+run <math.h> global M_SQRT2f	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out afa6b8dd95f9ebafda33d0fcc37b1c68
+run <math.h> global M_SQRT1_2f	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f7617664e49843738f11adc0d75f1b9e
+run <math.h> global M_Ef64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a59d1f42e8b4459347da9e6513711c95
+run <math.h> global M_LOG2Ef64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d90bb95ec1d05379b565670588388853
+run <math.h> global M_LOG10Ef64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9380acfd9b3d90d9ce093599d4bef6ba
+run <math.h> global M_LN2f64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f2e31dc9df36a632baa93c472dd7d050
+run <math.h> global M_LN10f64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8edea964e215a119006549effeacad12
+run <math.h> global M_PIf64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8a4a9595272af667f2f00dd8aa6f9f30
+run <math.h> global M_PI_2f64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 72907f48cdd061b48b7f8eb47cd7c87b
+run <math.h> global M_PI_4f64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8199a0b2f722cfa2e7ae9c94b505fef5
+run <math.h> global M_1_PIf64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 74b56151974d8dea505398ae4eeaeb97
+run <math.h> global M_2_PIf64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8e6de9d886a9639d5d242c4d3ae999da
+run <math.h> global M_2_SQRTPIf64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7a5fc50a2ff1eeb597e7a3a2b5f7815e
+run <math.h> global M_SQRT2f64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dd3b9b4b4f3e213fc0c5018d3986b161
+run <math.h> global M_SQRT1_2f64	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 24b68b68476d4e0db238d5f9ca894948
+run <math.h> global M_Ef32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c6e4136368cb7a1ae7597092ff004adb
+run <math.h> global M_LOG2Ef32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1cd8fd51c93a2481a38a6f9908177952
+run <math.h> global M_LOG10Ef32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cc05eecb732e3dc1427b80ec20aa91af
+run <math.h> global M_LN2f32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 125ed8d31745a47be8118fefc9778ddc
+run <math.h> global M_LN10f32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 53bcc804af3039fb9cd65dee42526160
+run <math.h> global M_PIf32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 862d0b726e7c60f4405e0996dc3279a4
+run <math.h> global M_PI_2f32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8c4b3529d71586280bd47f4a4dc8daed
+run <math.h> global M_PI_4f32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2a0fbe65d67b905097a7ec0ea85e7d52
+run <math.h> global M_1_PIf32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a83e5004e8292ad9cb8263ebb6e338bb
+run <math.h> global M_2_PIf32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1b1e20b2bb4fcbe4c489b2ea74279935
+run <math.h> global M_2_SQRTPIf32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8e25733582700a9f632355a804f4927d
+run <math.h> global M_SQRT2f32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 13ee1ffaeb10c52746a3084978ae36c9
+run <math.h> global M_SQRT1_2f32x	
+ctx r1 g1 p0
+keys <math.h>=ea79455056740087c4ea177499e116a2c3727ff9ebb77fcf58453f2ee34c12a3
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d1358a39064957fb43d11f2f90899751
+end
+sum 21187-12300572757115640734

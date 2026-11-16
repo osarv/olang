@@ -1,0 +1,1623 @@
+olang scope record
+run compiler/build 0-0 ctor compiler/build:Config	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37
+marks fadb06e360afe1aed7bac16ab80e0bc6
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Bool
+read -ctor	I64
+read compiler/cond 0-0 ctor compiler/cond:Consts	51cff1c4c1068b40704c32670dfda0ac
+read compiler/target 0-0 ctor compiler/target:Target	3cef9679ec8a2059795bc48c0a14b8cb
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 4 38 1 | U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b1 b00000000000000000000000000000000000000 b0000 b00000000000000000000000000000000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/vec:3184:3188 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,-1,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 t,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U
+out 4deef0780145f948154961a83c1f92c2
+run compiler/build 12352-12692 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	2
+mark compiler/target 0-0 ctor compiler/target:Target	1,6
+marks 318bcf89c287de62fc6d14c508ccad9f
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/target 0-0 ctor compiler/target:Target	3cef9679ec8a2059795bc48c0a14b8cb
+read compiler/target 5431-5506 fn	3496805786618800af6f853bb18137c1
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 12 3 2 | U V1 V1 U U U V1 V1 U U U U | F V1 F | b01 b000 b000000000000 b010 | 0:,V1 3:,V1,V1 4:,B1 5:,B1,B1 8:,V1,V1 9:,V0,B0 10:,V1,V0 11:,V1,V1 | | ||
+sum r;V0,V1,0,12617,12643,0,0,0 b01 b01 b0 b0 b0 b b b a,compiler/build:12352:12692,compiler/build:12395:12398 t,U i t i i c0/i/i f1010
+hid fs1;1280:U	o0compiler/build:Config&
+out 5f00554c1257f906e32945a00ba20ea2
+run compiler/build 0-0 ctor compiler/build:Sha256	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Sha256	0,1,2,3
+marks a1a869039c971c30379871c93abee97a
+read -ctor	Array<U32, 8>
+read -ctor	Array<U8, 64>
+read -ctor	I64
+hits 0
+body 1 2 4 1 | V0 V0 | F F F F | b1 b0000 b00 b0000 | | | ||
+sum r b1 b1 b b b b b b a,compiler/build:18953:19059 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 7c727fba3dc43cfdffcca62e43e1667a
+run compiler/build 19120-19183 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U32	o0U32
+out 57475c183402e6da0eb0b6459ac75329
+run compiler/build 19685-20758 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read -ctor	U32
+read compiler/build 19120-19183 fn	753360899e792dedf06ee057d76e9c16
+hits 0
+body 1 11 38 2 | B0 U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b00 b00000000000000000000000000000000000000 b00000000000 b00000000000000000000000000000000000000 | 1: 2: 3: 4: 5: 6: 7: 8: 9: 10: | | ||
+sum r b00 b00 b000 b000 b000 b b b a,compiler/build:19685:20758,compiler/build:19685:20758 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/build:Sha256&	o0Array<U8>&	o0I64	o0U32
+out f9aef1d78503af73a49946322ef0a92c
+run compiler/build 19185-19649 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/build 19685-20758 fn	29e6c1b7b8cbc6f7d188e0f2d23a2700
+hits 0
+body 1 2 4 2 | U U | F F F F | b00 b0000 b00 b0000 | 0:,V0,V0 1:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/build:19185:19649,compiler/build:19185:19649 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/build:Sha256&	o0Array<U8>&
+out 126e24487e1db26e70c9f8d800812fcb
+run compiler/build 20841-21197 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/build 19185-19649 fn	2a29bcfabdc147be8a9404b668fa6b9c
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 12114-12336 fn	d69b4f8828194d2881e598b51dffe86b
+read std/prelude/text 16865-16953 fn	0ec8864eda84a3cfb62c68f9ef9d83b5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 14 14 2 | U U U U B0 U B0 U U B6 U B6 U U | F F F F F F F F F F F F F F | b01 b00000000000000 b00000000000000 b00000000000000 | 1:,V0,B0 3:,V0,B1 5:,V0,B0 6:,B0 7:,B6 8:,B6 10:,B6,B6 12:,B0,B6 13:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:20841:21197,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/build:Sha256&
+out 434bd4ad23ed018646f521780d73f4b0
+run compiler/build 2127-2212 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 0-0 ctor compiler/build:Sha256	7388d94d7dc8208cb6cde6fa265a1527
+read compiler/build 19185-19649 fn	2a29bcfabdc147be8a9404b668fa6b9c
+read compiler/build 20841-21197 fn	4b4a5fd58728beba46c37f4b236c9982
+hits 0
+body 1 3 2 2 | U U U | F F | b01 b00 b000 b00 | 0:,B0 1:,B0,V0 2:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:2127:2212,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out e1d1209a994d2487f7b49ba2cbb3ab50
+run compiler/build 21295-21449 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Sha256	7388d94d7dc8208cb6cde6fa265a1527
+read compiler/build 19185-19649 fn	2a29bcfabdc147be8a9404b668fa6b9c
+read compiler/build 20841-21197 fn	4b4a5fd58728beba46c37f4b236c9982
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 7 5 2 | U U U U U U U | F F F F F | b01 b00000 b0000000 b00000 | 0:,B0 1:,V0 2:,V0,V0 3:,B0,V0 5:,B0,B2 6:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:21295:21449,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out a286e4e38904b6dc7f709b0b73c5fbb1
+run compiler/build 21691-21890 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 1123-1188 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 5 6 2 | B0 U U U U | F F F F F F | b01 b000000 b00000 b000000 | 0:,B0 1: 2: 3:,B0 4:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:21691:21890,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out c839d0b7a262007d7bdfea06fa5edd2f
+run compiler/build 40623-40662 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | U | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 97f00430f4735938fac838e560991a7f
+run compiler/build 0-0 ctor compiler/build:Program	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Program	0,1,2,3,4,5,6,7,8,9,10
+marks cb230f8d06d54f19c16cf04284748d20
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/build:Code>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/build:Unit>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 6 11 1 | U U U U U U | F F F F F F F F F F F | b1 b00000000000 b000000 b00000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/vec:3184:3188 t i,0,-1,-1,1,2,-1,-1,3,4,-1,5 t,U,U,U,U,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U
+out 4e11434e4a92fb93431dbef19a0c85cc
+run compiler/build 39782-39835 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/spin 5372-5537 fn	a2daa70bdc1f9d3e449368bc207a2fda
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:39782:39835 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I32
+out 09790698cba99454147e2490b5151265
+run compiler/build 10706-10931 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 10176-10230 fn	ecc907d1b80ad51f7de503ad33f4d4b6
+read std/prelude/text 10447-10795 fn	1f5be6d0ca3785e37b467f570786f397
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 5222-6401 fn	ab98a5b2ea25c1706726cb198e1a4156
+read std/prelude/text 6638-6813 fn	c32509e8a76db962290b03809b10d6a8
+hits 0
+body 1 8 4 2 | U U U U U B2 U U | F F F F | b00 b0000 b00000000 b0000 | 0:,V0,V0 1:,V0,V0 2:,V0,V1 3:,V0,B2 4:,B2,B2,B2 6:,B2 7:,B2 | | ||
+sum r b00 b00 b10 b00 b00 b b b a,compiler/build:10706:10931,compiler/build:10706:10931 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:LineIter	o1std/prelude/text:String&	o0std/prelude/text:String&	o1mut std/prelude/text:LineIter&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o1std/prelude/text:String&
+out 3ef0a77b839e96bb24b2c328a98ca8be
+run compiler/build 10395-10629 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 10706-10931 fn	be862f17563c32fe53fe0cd3a1eb7d84
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+hits 0
+body 1 4 1 1 | U U U V0 | F | b1 b0 b0000 b0 | 0:,B0,B0 1:,B0,B0 2:,B0,B0 | | ||
+sum r b1 b1 b b b b b b a,compiler/build:10524:10627 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o1std/prelude/text:String&
+out dac37913f06d5d6eb59aac4fdbcf4d5c
+run compiler/build 9858-10165 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 10395-10629 fn	5fd233ba63ff54598b87c7ee70a63c5e
+read compiler/build 39782-39835 fn	894e74b0e47e70c1ad79dc78416a4dcd
+read std/os 3756-3966 fn	05bb335b993dde79a14807720d8a39ef
+read std/os 4323-4375 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 9 3 1 | U U U B2 B2 U U U U | F F F | b0 b000 b000000000 b000 | 0:,B0,B0 1: 2:,B2 5:,B2 6:,B0,B0 7:,V0,B0 8: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:9858:10165 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0I64	o0I64
+out 1038858803f0ffb05b62c860fca551d8
+run compiler/build 39721-39781 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/spin 5372-5537 fn	a2daa70bdc1f9d3e449368bc207a2fda
+hits 0
+body 1 3 1 1 | B0 B0 U | F | b0 b0 b000 b0 | 2:,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:39721:39781 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I32
+out 79c6eeafc611d815eaf27d13de80f7ca
+run compiler/build 40369-40480 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 39721-39781 fn	e6a8161a98d507bd394f24d5cd45e28f
+hits 0
+body 1 3 1 1 | B0 B0 U | F | b0 b0 b000 b0 | 2:,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:40369:40480 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 5df2ba6774e0986ed9be06abd70f0a67
+run compiler/build 0-0 ctor compiler/build:Code	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Code	0,1,2,3
+marks 3c430a27772851c0de7d2fda7a19f103
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+hits 0
+body 1 0 8 4 | | F F F F F F F F | b0000 b00000000 b b00000000 | | | ||
+sum r;V0,V3,0,3550,3555,1,0,0;V1,V3,0,3560,3564,1,0,0;V2,V3,0,3578,3584,1,0,0 b0000 b0000 b1101 b0000 b0000 b b b a,compiler/build:0:0,compiler/build:0:0,compiler/build:0:0,compiler/build:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o0I64	o0std/prelude/text:String&
+out d1c47e93e0eb3c7c6ad23b2c12142986
+run compiler/build 12001-12118 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	2
+mark compiler/target 0-0 ctor compiler/target:Target	5
+marks 73e7ce56c00da58a45ffd14eebed830d
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/target 0-0 ctor compiler/target:Target	3cef9679ec8a2059795bc48c0a14b8cb
+hits 0
+body 1 1 1 2 | V1 | F | b01 b0 b0 b0 | | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:12001:12118,compiler/build:12046:12116 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&
+out 244d782c4331b2543ca65ce92bf9c252
+run compiler/build 0-0 ctor compiler/build:Unit	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Unit	0,1,2,3
+marks dc1ce9f109be2bdde8885f26288e8781
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	compiler/build:UnitKind
+hits 0
+body 1 0 7 3 | | F F F F F F F | b000 b0000000 b b0000000 | | | ||
+sum r;V0,V2,0,2002,2010,1,0,0;V1,V2,0,2025,2027,1,0,0 b000 b000 b101 b000 b000 b b b a,compiler/build:0:0,compiler/build:0:0,compiler/build:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0compiler/build:UnitKind	o0std/prelude/text:String&
+out 7596d01cae6126cb7bbec9b63f2b6c4d
+run compiler/build 44239-44512 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read std/filepath 1289-1576 fn	d4a2b2db0fffbb2b59db7f030588fc9b
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 1123-1188 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 3214-3355 fn	f31bc2073e7a5166cb23a1806dc8cfdc
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 7 7 2 | U U B0 U U U U | F F F F F F F | b01 b0000000 b0000000 b0000000 | 0:,V0,V0 1:,V0,B0 2:,B0 3: 4: 5:,B0 6:,B0,V1 | | ||
+sum r b01 b01 b1 b0 b0 b b b a,compiler/build:44239:44512,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 5166cfdedabe2ffae8da42f73b79f155
+run compiler/build 32103-32237 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/diag 11636-11832 fn	c9afaf552fbc1dc124f59e9a1b2df5f2
+read compiler/diag 4898-5165 fn	480cb93e4dcd8479fbea58aee740f4b0
+hits 0
+body 1 2 4 3 | U U | F F F F | b001 b0000 b00 b0000 | 0:,V2,V0,V2 1:,V2,V1 | | ||
+sum r;V0,V2,0,32176,32177,0,0,0;V1,V2,0,32205,32235,0,0,0 b001 b001 b101 b001 b001 b b b a,compiler/build:32103:32237,compiler/build:32103:32237,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0compiler/diagmsg:Msg	o0mut compiler/diag:Diagnostics&
+out 1d52521e195596fa526a13d0b52eaf7b
+run compiler/build 40664-40853 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	0
+marks cdb12ea2a08955b13e088d38a66869ca
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 32103-32237 fn	0e9c03c049110990a606845b419b1d57
+read compiler/msgs 39792-39876 fn	cca95d8706cfc202d060d0e304d62ac2
+read std/os 20635-21096 fn	ad919ca41158de6566af13197e4a6f4d
+hits 0
+body 1 3 2 2 | U U U | F F | b01 b00 b000 b00 | 0:,V0 1:,V1 2:,V0,V1,V1 | | ||
+sum r;V0,V1,0,40777,40815,0,0,0 b01 b01 b01 b01 b01 b b b a,compiler/build:40664:40853,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0mut compiler/diag:Diagnostics&	o0compiler/diagmsg:Msg
+out 54afc2c3a2ebcab7932c8d6746672e28
+run compiler/build 40951-41171 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Unit	0
+marks bd04616b3fed3728663b29cafc03fe5c
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Unit	1f881d673d7675390f8a90a5c7634687
+read std/prelude/vec 5133-5172 fn <compiler/build:Unit;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/build:Unit;>	b51ed69aecd7674ca5263126de5a48dc
+hits 0
+body 1 7 4 2 | U U V1 U U B0 V1 | F F F F | b01 b0000 b0000000 b0000 | 0:,V0 1:,V0,V0 3:,V0 4:,V0,V0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:40951:41171,compiler/build:41088:41099 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Program&	o0compiler/build:Unit	o1std/prelude/vec:Vec<compiler/build:Unit>&	o1I64	o0compiler/build:Unit	o1std/prelude/vec:Vec<compiler/build:Unit>&	o1I64
+out e188708c2fc24c1f4dbbdd2e47ca4793
+run compiler/build 11386-11801 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	12
+marks 6cac5458d09416db3c2ffd9e478fd0c1
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 2 1 2 | U V1 | F | b01 b0 b00 b0 | 0:,V0,B0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:11386:11801,compiler/build:11434:11799 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&
+out bc89726412e487c9f4434e94572d6b5f
+run compiler/build 0-0 ctor compiler/build:Listed	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Listed	0,1
+marks e8309ea8d5789713a2589ec62e280849
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 2 2 1 | U U | F F | b1 b00 b00 b00 | 0:,V0 1:,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/vec:3184:3188 t i,0,1 t,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U
+out 68d26d7d73862636c02d02d5bdd91616
+run compiler/build 12953-13969 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	2,12
+mark compiler/target 0-0 ctor compiler/target:Target	1,6
+marks c7991ca40edff74bd46d971ebae49dc3
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/target 0-0 ctor compiler/target:Target	3cef9679ec8a2059795bc48c0a14b8cb
+read compiler/target 5431-5506 fn	3496805786618800af6f853bb18137c1
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 23 3 2 | U V1 V1 U U U V1 V1 U U U U U U U U U U U U U U U | F V1 F | b01 b000 b00000000000000000000000 b010 | 0:,V1 3:,V1,V1 4:,B1 5:,B1,B1 8:,V1,V1 9:,V0,B0 10:,V1,V0 11:,V1,V1 12:,V0,B0 13:,V1,V1 14:,V1,V1 15:,V1,V1 16:,V1,V1 17:,V1,V1 18:,V1,V1 19:,V1,V1 20:,V1,V1 21:,V1,V1 22:,V1,V1 | | ||
+sum r;V0,V1,0,13297,13323,0,0,0 b01 b01 b0 b0 b0 b b b a,compiler/build:12953:13969,compiler/build:12999:13002 t,U i t i i c0/i/i f1010
+hid fs1;1280:U	o0compiler/build:Config&
+out cbf454648ecf2506ac2728102abaea8e
+run compiler/build 16378-16485 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:16378:16485 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&
+out 6a77a969c48dc03acdc36074dbcb4c4a
+run compiler/build 14368-16262 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/build 12953-13969 fn	8d66829d9d5747c65e06f0c37835e897
+read compiler/build 16378-16485 fn	b9f435dab51cd429aa4c6322d86a40da
+read std/prelude/array 1568-1802 fn <std/prelude/text:Char;>	b79aa6ec5c1a91330451c13ebaf035ce
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 14 7 3 | U U B2 B2 U U U U U U U V2 V2 U | F F V2 F F F F | b001 b0000000 b00000000000000 b0010000 | 0:,V0,V2 1:,V0 4:,V2,P 5:,V2,V2 6:,V2,V2 7:,V1,B0 8:,V2,V2 9:,V2,V2 10:,V2,V2 13:,V2,V2 | | ||
+sum r;V0,V2,0,14427,14430,0,0,0 b001 b001 b00 b00 b00 b b b a,compiler/build:14368:16262,compiler/build:14368:16262,compiler/build:14434:14447 t,U i t i i c0/i/i f1010
+hid fs1	o0compiler/build:Config&	o0std/prelude/text:String&	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1compiler/build:Config&	o0std/prelude/text:String&
+out 447ff1917c0fae3fae67f9162f7ca94c
+run compiler/build 17015-17257 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	1,37
+mark std/os 0-0 ctor std/os:Output	1
+marks 4f369f5e062e620868d250cb565d8a38
+read -ctor	Array<std/prelude/text:Char>
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/target 17071-17872 fn	8818dbb927ed2aa7ff0fc9799f5aa526
+read std/os 0-0 ctor std/os:Output	9b4d726e7e22a7e25dc12557d02f3b4f
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 6 2 2 | U B1 B1 B1 B1 U | F F | b10 b00 b000000 b00 | 0:,V0,B0 5:,B1,B1,V0 | | ||
+sum r;V0,V1,0,17239,17255,0,0,0 b10 b10 b1 b1 b1 b b b a,compiler/target:17425:17442,compiler/build:17015:17257 t i t i i c0/i/i f1010
+hid fs1	o0mut compiler/build:Config&	o0std/os:Output	o1Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o1Bool
+out 617c9966e991bc82b293e44ffb21ca9b
+run compiler/build 66177-66303 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 6 2 2 | B0 B0 U B0 B0 U | F F | b00 b00 b000000 b00 | 2:,B0,B0 5:,B0,B0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/build:66177:66303,compiler/build:66177:66303 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out d92bccd00648c487b7612307e2aced6c
+run compiler/build 66995-67087 lambda in compiler/build 66790-67340 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 9621-9684 fn	d6838a1805156f44ce16ca1acf6acece
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b00 b00 b00 a,compiler/build:66995:67087,compiler/build:66995:67087 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&
+out f81654f25161078efd2c254af0e202ed
+run compiler/build 66790-67340 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/build 66995-67087 lambda in compiler/build 66790-67340 fn	1a2a1c2708e68bc9683fe185fe7d7061
+read std/os 25143-25543 fn	b5cc0af3ebc7af99470a38148acf4c0e
+read std/prelude/array 1568-1802 fn <std/prelude/text:Char;>	b79aa6ec5c1a91330451c13ebaf035ce
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3214-3355 fn	f31bc2073e7a5166cb23a1806dc8cfdc
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11088-11181 fn <std/prelude/text:String&;?;>	c22db8e7309beb50afc90ba16571f575
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 20 12 2 | U U B0 B0 U B0 U U U U V1 V1 U U U U U V1 V1 U | F F F F F F F F F F F F | b01 b000000000000 b00000000000000000000 b000000000000 | 0:,B0 1:,V0,B0 4:,B0,B0 5: 6:,B0,B0 7:,B0 8:,B0,B0 9:,B0,B5 12:,V1,V1 13:,B0,B5 14:,B0,B5 15:,B0,B5 16:,B0,B5 19:,V1,V1 | | ||
+sum r b01 b01 b001 b001 b001 b b b a,compiler/build:66790:67340,compiler/build:67160:67175 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0std/prelude/text:String&	o0Bool	o0mut compiler/build:Listed&	o0Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out e27dc2a1c0ad59073818c4b12e009c9e
+run compiler/build 66336-66564 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 32103-32237 fn	0e9c03c049110990a606845b419b1d57
+read compiler/msgs 39792-39876 fn	cca95d8706cfc202d060d0e304d62ac2
+read std/os 20635-21096 fn	ad919ca41158de6566af13197e4a6f4d
+read std/os 21792-22090 fn	4a4480ec2638aa298563f8179d03594c
+hits 0
+body 1 4 2 2 | U U U U | F F | b01 b00 b0000 b00 | 0:,V0 1:,V0 2:,V1 3:,V0,V1,V1 | | ||
+sum r;V0,V1,0,66490,66526,0,0,0 b01 b01 b11 b01 b01 b b b a,compiler/build:66336:66564,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0mut compiler/diag:Diagnostics&	o0compiler/diagmsg:Msg
+out 207420a65913b9fa774f4effddc01be6
+run compiler/build 23565-23621 lambda in compiler/build 23191-24045 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 3 1 | | F F F | b0 b000 b b000 | | | ||
+sum r b0 b0 b00 b00 b00 b000 b000 b000 a,compiler/build:23565:23621 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0Array<I64>&
+out 25af658c1a39d33f014edfd4cddbdd1c
+run compiler/build 10220-10306 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/os 3756-3966 fn	05bb335b993dde79a14807720d8a39ef
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 2 0 0 | U U | | b b b00 b | 0:,B0,B0 1:,B0,B0 | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o1std/prelude/text:String&
+out ac6f9c70f9f3581c0b611ad50b51fcf0
+run compiler/build 24734-24894 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 1 7 2 | U | F F F F F F F | b00 b0000000 b0 b0000000 | 0:,V0,B2 | | ||
+sum r;V0,V1,0,24839,24856,0,0,0 b00 b00 b0 b0 b0 b b b a,compiler/build:24734:24894,compiler/build:24734:24894 t i t i i c0/i/i f1010
+hid fs1	o0Array<std/prelude/text:String&>&
+out 3c5a10bc52d11d0cf55e6a033c9bf725
+run compiler/build 24047-24595 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark std/os 0-0 ctor std/os:Output	1,2
+marks dd8fdc8a390eadeefb297e087c7fa7a4
+read compiler/build 10220-10306 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/build 24734-24894 fn	1c8d209fb2986e1477eadd7375816de5
+read compiler/build 39782-39835 fn	894e74b0e47e70c1ad79dc78416a4dcd
+read std/chan 7379-7482 fn <I64;>	f21618bbd2faec8964187864eacd0d6a
+read std/filepath 1289-1576 fn	d4a2b2db0fffbb2b59db7f030588fc9b
+read std/os 0-0 ctor std/os:Output	9b4d726e7e22a7e25dc12557d02f3b4f
+read std/os 8570-8787 fn	aad366597a709c1a43fc4ae152c19621
+hits 0
+body 1 12 7 4 | U U V3 V3 V3 V3 U U U B4 B4 U | F F F F F F F | b0001 b0000000 b000000000000 b0000000 | 0:,V0 1:,V1,B2,B2,B2 6: 7:,V1,V1 8:,V1,B4 11:,B4 | | ||
+sum r b0001 b0001 b0001 b0001 b0001 b b b a,compiler/build:24047:24595,compiler/build:24047:24595,compiler/build:24047:24595,compiler/build:24300:24335 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I64>&	o0Array<Array<std/prelude/text:String&>&>&	o0mut Array<I32>&	o0mut Array<std/prelude/text:String&>&	o0std/os:Output	o1Array<std/prelude/text:String&>&	o1Array<U8>&	o1Bool	o1std/prelude/text:String&	o0mut I64&	o0std/prelude/text:String&	o1Array<std/prelude/text:String&>&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out caefac16875cababef15e97b324612d8
+run compiler/build 23191-24045 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/build 10220-10306 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/build 23565-23621 lambda in compiler/build 23191-24045 fn	16a5fb372d7a821be43bab90f8f98870
+read compiler/build 24047-24595 fn	566d158d5d1108230f08d3ba70ed10a3
+read compiler/build 39782-39835 fn	894e74b0e47e70c1ad79dc78416a4dcd
+read std/chan 0-0 ctor std/chan:Chan<I64>	78a0a09c558407313290904ffab63167
+read std/chan 4792-5016 fn <I64;>	e18a8fec0478f767a3fd5458b433e0f3
+read std/chan 6211-6669 fn <I64;>	f28fc1cf7a9385bf186861f186df60bf
+read std/prelude/array 10809-11527 fn <I64;?;>	0eb46ce4677d02d073660ff9e1fa660b
+read std/prelude/array 11748-12338 fn <I64;?;>	48cc9c050ebb8b3b742ce1bdfff1ecf0
+read std/prelude/array 12519-13122 fn <I64;?;>	99fcfea399243a9a32e2c0725d20f646
+read std/prelude/array 13691-13849 fn <I64;?;>	75899dd4cade03ab80bdec74dfce6845
+read std/prelude/array 13851-14124 fn <I64;?;>	a65234e7f0c9cc38a1a2f1447691ee45
+read std/prelude/array 8611-8894 fn <I64;?;>	947466db2cecba8f9f2f8e0081cc85e3
+read std/prelude/array 9942-10686 fn <I64;?;>	372a984d54fbb8bdf046a42547a96c0d
+hits 0
+body 1 17 25 3 | B0 B0 V2 V2 B0 F U U B0 U U B10 B10 U U B11 U | F F F F F F F F F F F F F F F F F F F F F F F F F | b101 b0000000000000000000000000 b00000000000000000 b0000000000000000000000000 | 5:,V1 6:,B0,B5 7:,B0 9:,B0 10: 13:,B10 14:,B0,V0,B0,V2 16:,B0 | | ||
+sum r b101 b001 b000 b000 b000 b b b a,compiler/build:23952:23958,compiler/build:23191:24045,compiler/build:23402:23423 t i t i i c0/i/i f1010
+hid fs1;16640:U	o0Array<Array<std/prelude/text:String&>&>&	o0I64	o0Array<I64>&
+out ca35d4a10c62dc3e4c63e2c08f1b2872
+run compiler/build 17447-17977 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 10706-10931 fn	be862f17563c32fe53fe0cd3a1eb7d84
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/os 3756-3966 fn	05bb335b993dde79a14807720d8a39ef
+read std/prelude/number 15161-15491 fn <I64;>	753360899e792dedf06ee057d76e9c16
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+read std/prelude/text 6638-6813 fn	c32509e8a76db962290b03809b10d6a8
+hits 0
+body 1 8 7 1 | U U U U U U U U | F F F F F F F | b0 b0000000 b00000000 b0000000 | 0:,B0,B0 1:,B0,B0 2:,B0 3:,B0 5:,B0,B0 6:,B0,B0 7: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:17447:17977 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0I64
+out 6eaddfb27eb2a8bbef1a31d2e635e5c2
+run compiler/build 70965-72885 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	1
+mark compiler/build 0-0 ctor compiler/build:Program	1,2
+mark compiler/build 0-0 ctor compiler/build:Unit	2
+marks 64d2c6d296bc7a73c87629c0957e6ef1
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 0-0 ctor compiler/build:Program	2285f538dc4073c57c417f46cd5eef4c
+read compiler/build 0-0 ctor compiler/build:Unit	1f881d673d7675390f8a90a5c7634687
+read compiler/build 14368-16262 fn	5c94a3a97ceb63fef325a0a995c7c86c
+read compiler/build 17015-17257 fn	3f7a444e8bd51d68482ea8f9ea2aac1f
+read compiler/build 17447-17977 fn	7caea9d8f2beeb9bdb14506dda3f9140
+read compiler/build 2127-2212 fn	d2c452a227dc1abe5d9a4b2ebe743d4f
+read compiler/build 21295-21449 fn	954f18885a091f530ffbbdb425da5aca
+read compiler/build 23191-24045 fn	19d412ce79c0ac9896aca0ca64708d28
+read compiler/build 32103-32237 fn	0e9c03c049110990a606845b419b1d57
+read compiler/build 39782-39835 fn	894e74b0e47e70c1ad79dc78416a4dcd
+read compiler/build 66177-66303 fn	3ec8fb3ad8062b211468178716368736
+read compiler/build 66336-66564 fn	a49a9115dcf4b9df5d99a5c4a0f7344d
+read compiler/build 66790-67340 fn	f688266e53a54327b25fdc65cdf15929
+read compiler/diag 11636-11832 fn	c9afaf552fbc1dc124f59e9a1b2df5f2
+read compiler/msgs 39792-39876 fn	cca95d8706cfc202d060d0e304d62ac2
+read compiler/msgs 40321-40430 fn	c4525ac005ae63611a7a7fd08e955885
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/os 21169-21252 fn	d23d7cda31a670dc5a450987eab2a288
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<Array<std/prelude/text:String&>&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <Array<std/prelude/text:String&>&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 12786-12977 fn <I64;>	44fdd55f051af23429be98afae112cb0
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <Array<std/prelude/text:String&>&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <Array<std/prelude/text:String&>&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/build:Unit;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/build:Unit;>	b51ed69aecd7674ca5263126de5a48dc
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 77 48 5 | U U U U U U U U U U U U U B0 U U B0 U U U B0 B0 U U U U U U U U B0 U U V4 U U U U B0 U U B0 U U U U U B0 B0 B0 B0 B0 B0 U U U U U U U U U U B27 B27 U U U B31 B31 U B0 B0 B0 B0 U U | F F F F F F F F F F F F F F F F F F F F F F F F V4 F F F F F F F F F F F F F F F F F F F F F F F | b10011 b000000000000000000000000000000000000000000000000 b00000000000000000000000000000000000000000000000000000000000000000000000000000 b000000000000000000000000000000000000000000000000 | 0:,B0 1:,V1 2:,V1,V1 3:,B0,V1 4:,V1,B0 5:,B0,V1 6:,V1,B0 7:,B0,V1 8:,V0,B0 9:,B0 10:,B0 11:,B0,B0 12:,B0,B0 14:,B0,B0 15:,V0,B0,B0 17:,B0 18:,B0,B0 19:,B0,B0 22:,B0,B0 23:,V0,V0 24:,B0,V0 25:,B0,B0 26:,V2,B0 27:,V2,V3 28:,V2,V4 29:,B0 30:,B0 31:,B0 32:,B0,B0 34:,V4,B0 35:,V4 36:,V4,V4,V4 37:,B0 39:,B0,V0 40:,V0,B0,B0 42:,B0 43:,B0,B0 44:,B0,B0 45:,B0,B0 46:,B0,B0 53:,B0,B0 54:,B0,B0 55:,B0,B0 56:,B0 57:,B0,B0 58:,V0 59:,B0,B0 60:,B0,B0,B0 61:,B0 62:,B0 65:,B27,V4 66:,V4,V4 67:,B0 70:,B31 75:,B0,B0 76:,V2,V3 | | ||
+sum r;V2,V4,0,71651,71669,0,0,0 b10011 b10011 b101011 b100011 b100011 b b b a,compiler/target:17425:17442,compiler/build:70965:72885,compiler/build:70965:72885,compiler/build:67160:67175,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U;1280:U;1280:U	o0mut compiler/build:Config&	o0compiler/build:Program&	o0std/prelude/text:String&	o0Bool	o0mut compiler/build:Listed&	o0mut compiler/diag:Diagnostics&	o0compiler/build:Unit	o1std/prelude/vec:Vec<compiler/build:Unit>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/build:Config&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1mut compiler/build:Config&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0compiler/diagmsg:Msg	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/build:Config&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0mut Array<std/prelude/text:String&>&	o1mut std/prelude/vec:Vec<std/prelude/text:String&>&	o0mut Array<Array<std/prelude/text:String&>&>&	o1std/prelude/vec:Vec<Array<std/prelude/text:String&>&>&	o0mut Array<I64>&	o1std/prelude/vec:Vec<I64>&	o0(Array<I32>, Array<std/prelude/text:String&>)	o1mut Array<Array<std/prelude/text:String&>&>&	o1I64	o1mut Array<I64>&	o0compiler/diagmsg:Msg	o1std/prelude/text:String&
+out b5f019f398ab43dcbc3a9001be63603f
+run compiler/build 0-0 ctor compiler/build:compiles	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:compiles	0,1,2,3,4,5,6,7,8
+marks ee3a51beb9efa243f301a71768edb405
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<Array<std/prelude/text:String&>&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 9 9 1 | U U U U U U U U U | F F F F F F F F F | b1 b000000000 b000000000 b000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/vec:3184:3188 t i,0,1,2,3,4,5,6,7,8 t,U,U,U,U,U,U,U,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U
+out dc6d0527bf21447436dd2589edfa64b6
+run compiler/build 16725-16901 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/build 12953-13969 fn	8d66829d9d5747c65e06f0c37835e897
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 8 5 2 | U U V1 U U U U U | F V1 F F F | b01 b00000 b00000000 b01000 | 0:,V1 1:,V0,V1 3:,V1 4:,V1,V1 5:,V1,B2 6:,V1,B2 7:,V1,V1 | | ||
+sum r;V0,V1,0,16792,16884,0,0,0 b01 b01 b0 b0 b0 b b b a,compiler/build:16725:16901,compiler/build:16771:16774 t,U i t i i c0/i/i f1010
+hid fs1;1280:U	o0compiler/build:Config&	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1compiler/build:Config&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 591411e08eda92e4973c8ae6cd39314b
+run compiler/build 21892-22142 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:21892:22142 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:UnitKind
+out d7c545f23e88d9cf165ed4eb95aaf5d7
+run compiler/build 22389-22721 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	0
+marks cdb12ea2a08955b13e088d38a66869ca
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 11386-11801 fn	a26fa6045ad8b2b0704ead3682b7de62
+read compiler/build 17015-17257 fn	3f7a444e8bd51d68482ea8f9ea2aac1f
+read compiler/build 21295-21449 fn	954f18885a091f530ffbbdb425da5aca
+read compiler/build 21892-22142 fn	30ec37c32645a0b358694f973f22108e
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 11 10 5 | U U U U U U U U U U V4 | F F F F F F F F F F | b10001 b0000000000 b00000000000 b0000000000 | 0:,B0 1:,B0,V2 2:,V3 3:,V3,V3 4:,B0,V3 5:,V0,V0 6:,B0,V0 7:,B0,B0 8:,B0 9:,V0,B0 | | ||
+sum r b10001 b10001 b10010 b10000 b10000 b b b a,compiler/target:17425:17442,compiler/build:22389:22721,compiler/build:22389:22721,compiler/build:22389:22721,compiler/build:22641:22719 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/build:Config&	o0std/prelude/text:String&	o0compiler/build:UnitKind	o0std/prelude/text:String&	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1mut compiler/build:Config&
+out 0f47f7e494eff841e502005a631de3cb
+run compiler/build 30511-30585 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 2 | V1 | F | b01 b0 b0 b0 | | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:30511:30585,compiler/build:30553:30583 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 6c8715dfa0258414db5f065af1ff2425
+run compiler/build 31562-32045 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/os 19605-19890 fn	a016d01a4b5cc5859631f649a785a832
+read std/os 19982-20087 fn	341d1a291287e9e310934f1bd2261f0d
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/time 1429-1574 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 9 4 1 | U U B0 B0 U U B0 B0 U | F F F F | b0 b0000 b000000000 b0000 | 0:,V0 1: 4:,B0,B0 5:,B0,B0 8:,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:31562:32045 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 84efd92e93ad54800d6d352a903aed12
+run compiler/build 30794-31295 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Bool
+read -ctor	I64
+read compiler/build 31562-32045 fn	f2f71456ec1f19a211fb1e36f1d649aa
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/os 20381-20471 fn	60dd0515a91aa538be81a0dc19e05640
+read std/os 21792-22090 fn	4a4480ec2638aa298563f8179d03594c
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 11 10 2 | V0 U B5 B5 U B5 B5 U U U U | F F V0 F F F F F F F | b10 b0000000000 b00000000000 b0000000000 | 1:,V0 7:,B5,B5 8:,V0,V0 9:,V0 10:,V0 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,compiler/build:30854:30869,compiler/build:30794:31295 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/build:compiles&	o0std/prelude/text:String&
+out 85faf385bb0ff8dcc9050338beb20c2a
+run compiler/build 29686-30406 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:String&>
+read -ctor	I64
+read std/filepath 1289-1576 fn	d4a2b2db0fffbb2b59db7f030588fc9b
+read std/filepath 2134-2266 fn	c21d410093af7bd7620495b18370c76f
+read std/os 25605-25855 fn	19c70e70f2d2f4ae448f9da5cbedfcb2
+read std/prelude/array 1568-1802 fn <std/prelude/text:Char;>	b79aa6ec5c1a91330451c13ebaf035ce
+read std/prelude/array 5629-6253 fn <std/prelude/text:Char;>	baac3e77cd739d63f3f025904e33cb14
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 27 12 4 | U U U U B0 B0 B0 B0 U U U U B0 B0 U U U B2 B2 U U B0 B0 U U V3 V3 | F F F F F F F F F F F F | b0001 b000000000000 b000000000000000000000000000 b000000000000 | 0:,V0,B0 1:,B0,B0,B0,B0 2:,V0,B0 3:,V0,B0 7:,B0 8:,B0,B0 9:,B0,B0 10:,V2,B0 11:,B0,B0 14:,B0,B0 15:,V1,V2 16:,O0,B2 19:,B0,B2 20:,B0,B0 23:,B0,B0 24:,B0,V3 | | || 4:rN55
+sum r b0001 b0001 b100 b000 b000 b b b a,compiler/build:29686:30406,compiler/build:29686:30406,compiler/build:29686:30406,compiler/build:30357:30404 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out c997ba441d3daae969434a412ae09299
+run compiler/build 25666-29342 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	0,1,36
+marks 8cb1e7929f931cbc414033456615daf7
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 11386-11801 fn	a26fa6045ad8b2b0704ead3682b7de62
+read compiler/build 14368-16262 fn	5c94a3a97ceb63fef325a0a995c7c86c
+read compiler/build 16725-16901 fn	8fd83b51df1b1401ce5c4e0b827612f4
+read compiler/build 2127-2212 fn	d2c452a227dc1abe5d9a4b2ebe743d4f
+read compiler/build 21892-22142 fn	30ec37c32645a0b358694f973f22108e
+read compiler/build 22389-22721 fn	82a8f33424f351b64b75b9240f21550b
+read compiler/build 29686-30406 fn	094b1ce1b13ea6a73cd81d7ea0726052
+read compiler/build 30511-30585 fn	22343aada0ff267bb7f515ce185c5c29
+read compiler/build 30794-31295 fn	0733070c9343d9f145ae9539884623f3
+read compiler/build 32103-32237 fn	0e9c03c049110990a606845b419b1d57
+read compiler/diag 11636-11832 fn	c9afaf552fbc1dc124f59e9a1b2df5f2
+read compiler/msgs 39792-39876 fn	cca95d8706cfc202d060d0e304d62ac2
+read compiler/msgs 40180-40320 fn	16395fca820b8148416935777cfd12f2
+read std/filepath 1289-1576 fn	d4a2b2db0fffbb2b59db7f030588fc9b
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/os 19982-20087 fn	341d1a291287e9e310934f1bd2261f0d
+read std/os 23785-23892 fn	18511e7d2ff91fd2a6b62c7e026c6869
+read std/os 24041-24145 fn	3c1ac6238861c4f2ce29b91291f86e78
+read std/prelude/array 1568-1802 fn <std/prelude/text:Char;>	b79aa6ec5c1a91330451c13ebaf035ce
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11899-12021 fn <std/prelude/text:String&;>	3de578b68bbea269afe98db3cd30bd73
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <Array<std/prelude/text:String&>&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 81 25 7 | U U U U V5 B0 B0 U V5 U U U U B0 U U U B3 B3 B3 U B3 U U B2 U B5 B5 U U U U V4 U U B0 U U U V1 U U B0 U B0 U U U U U U U U V1 U V1 U U U U U U U U V1 V1 U U U V1 U U U U V1 V1 U U U U U | F F F F F F F F F F F V6 F F V4 F F V1 F F V1 F F F F | b1100111 b0000000000000000000000000 b000000000000000000000000000000000000000000000000000000000000000000000000000000000 b0000000000000000000000000 | 0:,V0,V1 1:,V0,V3,V1 2:,V5,B0 3:,V3,V5 7:,B0,V5 9:,V0,V2,V5,V1,V6 10:,V1,B0 11:,V6 12:,V6,B0 14:,B0 15:,V0,B0 16:,V6,B3 20:,V6,B3 22:,B3,B3 23:,V6,B2 25:,B2 28:,B5,V6 29:,V6 30:,V1,V6 31:,V1 33:,B0 34:,V0,B0 36:,V2,B0 37:,V1,B0 40:,V3,B0 41:,V3,B0 43:,V4,B0 45:,V1,B0 46:,V4 47:,V4,V4,V4 48:,V0,B0 49:,V1,V4 50:,V4,V4 51:,V4,V4 54:,V1 56:,V1,V0 57:,V1 58:,V1,V1 59:,V1,V1 60:,V1,V1 61:,V1,V1 62:,V1,V1 63:,V1,V1 66:,V1,V1 67:,V1,V1 68:,V0,V1,V1,V1 70:,V1,V1 71:,V1,V1 72:,V1,V1 73:,V1,V1 76:,V1,V1 77:,V1,V6 78:,V1,V4 79:,V1,V1 80:,V1 | | ||
+sum r;V6,V1,0,29229,29248,0,0,0;V4,V1,0,29253,29271,0,0,0;V0,V1,0,28831,28849,0,0,0 b1100111 b1100111 b11000110 b11000100 b11000100 b b b a,compiler/target:17425:17442,compiler/build:16771:16774,compiler/build:25666:29342,compiler/build:25666:29342,compiler/build:27359:27389,compiler/build:25989:25999,compiler/build:26012:26087 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/build:Config&	o0mut compiler/build:compiles&	o0std/prelude/text:String&	o0compiler/build:UnitKind	o0std/prelude/text:String&	o0mut compiler/diag:Diagnostics&	o0std/prelude/text:String&	o0I64	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/build:Config&	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/build:Config&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0compiler/diagmsg:Msg	o0compiler/diagmsg:Msg	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0mut Array<std/prelude/text:String&>&	o1mut std/prelude/vec:Vec<std/prelude/text:String&>&	o0Array<std/prelude/text:String&>	o1std/prelude/text:String&	o1mut Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o0mut Array<std/prelude/text:String&>&	o1mut std/prelude/vec:Vec<std/prelude/text:String&>&
+out 738cc9d3cc0c693f2d288c28136b87d0
+run compiler/build 35785-36183 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	0,36
+marks 87a3c273953b90489a7967a3e3868661
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read std/os 19982-20087 fn	341d1a291287e9e310934f1bd2261f0d
+read std/os 20635-21096 fn	ad919ca41158de6566af13197e4a6f4d
+read std/os 21169-21252 fn	d23d7cda31a670dc5a450987eab2a288
+read std/os 23785-23892 fn	18511e7d2ff91fd2a6b62c7e026c6869
+read std/os 24041-24145 fn	3c1ac6238861c4f2ce29b91291f86e78
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 9 4 2 | U B0 U U U B0 U U U | F F F F | b00 b0000 b000000000 b0000 | 0:,V0,B0 2:,B0 3:,V0 6:,V1,B0 7:,B0,B0 8:,B0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/build:35785:36183,compiler/build:35785:36183 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0std/prelude/text:String&
+out 2ea0720115f87bb3e7b9d223ebfe1a38
+run compiler/build 34110-35552 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Bool
+read -ctor	I64
+read compiler/build 17447-17977 fn	7caea9d8f2beeb9bdb14506dda3f9140
+read compiler/build 23191-24045 fn	19d412ce79c0ac9896aca0ca64708d28
+read compiler/build 30511-30585 fn	22343aada0ff267bb7f515ce185c5c29
+read compiler/build 32103-32237 fn	0e9c03c049110990a606845b419b1d57
+read compiler/build 35785-36183 fn	b571fbd2e7e1377e124f8980becf7480
+read compiler/build 39782-39835 fn	894e74b0e47e70c1ad79dc78416a4dcd
+read compiler/diag 11636-11832 fn	c9afaf552fbc1dc124f59e9a1b2df5f2
+read compiler/msgs 39792-39876 fn	cca95d8706cfc202d060d0e304d62ac2
+read compiler/msgs 40321-40430 fn	c4525ac005ae63611a7a7fd08e955885
+read std/os 21169-21252 fn	d23d7cda31a670dc5a450987eab2a288
+read std/os 21792-22090 fn	4a4480ec2638aa298563f8179d03594c
+read std/os 23785-23892 fn	18511e7d2ff91fd2a6b62c7e026c6869
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 12786-12977 fn <Array<std/prelude/text:String&>&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 12786-12977 fn <I64;>	44fdd55f051af23429be98afae112cb0
+read std/prelude/vec 5133-5172 fn <Array<std/prelude/text:String&>&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 47 16 3 | U U U U U U U U U U U U U U U U U U U U U U U U U B10 U U U V2 U U U U B10 U U U U U U U U U U U U | F F F F F F F F F F F F F F F F | b011 b0000000000000000 b00000000000000000000000000000000000000000000000 b0000000000000000 | 0:,V1,V1 1:,V0 2:,V1,B0 3:,V1,B0,B0 4:,V1 5:,V1,V1 6:,V1,V1 7:,V1,V1 8:,B0 9:,V1,V1 10:,V1,V2 11:,V2,V2 12:,V1,V1 13:,V1 14:,V1,V1 15:,V1,B4 16:,V1,V1 17:,V1 18:,B0,B2 19:,B0 20:,V1,V1 21:,V1,B2 22:,V1,V1 23:,V1,V1 24:,V1,B10 26:,V1,B10 27:,V1,V1 28:,V1,V2 30:,V2 31:,V2,V2,V2 32:,V1,V1 33:,V1,B10 35:,V0,B10 36:,V1,V1 37:,V1,V1 38:,V1,V1 39:,V1,V1 40:,V2 41:,V1,V2,V2 42:,V1,V1 43:,V0,V1 44:,V1 45:,V1,V1 46:,V1 | | ||
+sum r;V1,V2,0,35309,35353,0,0,0 b011 b011 b001 b001 b001 b b b a,compiler/build:34110:35552,std/prelude/vec:12852:12863,compiler/msgs:40393:40427 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/build:Config&	o0mut compiler/build:compiles&	o0mut compiler/diag:Diagnostics&	o0mut Array<Array<std/prelude/text:String&>&>&	o1std/prelude/vec:Vec<Array<std/prelude/text:String&>&>&	o0mut Array<I64>&	o1std/prelude/vec:Vec<I64>&	o0(Array<I32>, Array<std/prelude/text:String&>)	o1mut Array<Array<std/prelude/text:String&>&>&	o1I64	o1mut Array<I64>&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0compiler/diagmsg:Msg	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0compiler/diagmsg:Msg	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0compiler/diagmsg:Msg	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out e3eb3dc8cd8e0d458280d383a78ad3d9
+run compiler/build 32448-33965 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Program	1,2
+mark compiler/build 0-0 ctor compiler/build:Unit	0,2,3
+marks f3ae743ceb889b86416951283a1f2e1e
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Program	2285f538dc4073c57c417f46cd5eef4c
+read compiler/build 0-0 ctor compiler/build:Unit	1f881d673d7675390f8a90a5c7634687
+read compiler/build 0-0 ctor compiler/build:compiles	ff97cd5d1b7a637289e16fb9557dc8b5
+read compiler/build 21691-21890 fn	cba83b8a06a119bbab08de1bd1b7ec76
+read compiler/build 25666-29342 fn	170a8c96d7be9a643c8d54535e42ca99
+read compiler/build 31562-32045 fn	f2f71456ec1f19a211fb1e36f1d649aa
+read compiler/build 34110-35552 fn	8854a0ec6b477bf4cc26bbdd75dfe542
+read std/os 19982-20087 fn	341d1a291287e9e310934f1bd2261f0d
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/build:Unit;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/build:Unit;>	b51ed69aecd7674ca5263126de5a48dc
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 41 20 4 | U U U U U U U B5 U V3 U U U U V3 U U U V3 U U U U U U U U U U B12 B12 U U U U U B14 U U U U | F F F F F F F V2 V3 F F F F F V2 F F F F F | b1111 b00000000000000000000 b00000000000000000000000000000000000000000 b00000000100000000000 | 0:,V1 1:,V1,V1 2:,V2 3:,V3 4:,V1 5:,V1,V1 6:,V1,B5 8:,V0,V2,B5,V1,V2,V1,V3 10:,V3,V3 11:,V1 12:,V1,B0 13:,V0,V2,B7,V1,V2,V3,V3 15:,V3,V3 16:,V1,B0 17:,V0,V2,B8,V1,V2,V3,V3 19:,V3,V3 20:,V0,V2,V2 21:,V2 22:,V2 23:,V2 24:,V2 25:,V1,B11 26:,V3,B11 27:,V3,B11 28:,B11 31:,B12 33:,B11 34:,V1,V1 35:,V1,B14 37:,V0,V2,B14,V1,V2,V1,V2 38:,V0,V2,B16,V1,V2,V2,V2 39:,V0,V2,B17,V1,V2,V2,V2 40:,V0,V2,V2 | | ||
+sum r;V3,V2,0,32752,32828,0,0,0;V0,V2,0,32752,32828,0,0,0 b1111 b1111 b101 b101 b101 b b b a,compiler/target:17425:17442,compiler/build:25989:25999,compiler/build:32689:32699,compiler/build:32704:32709 t,U i t i i c0/i/i f1010
+hid fs1;1280:U	o0mut compiler/build:Config&	o0compiler/build:Program&	o0mut compiler/diag:Diagnostics&	o0compiler/build:Unit	o1std/prelude/vec:Vec<compiler/build:Unit>&	o1I64	o0I64	o0compiler/build:Unit	o1std/prelude/vec:Vec<compiler/build:Unit>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0compiler/build:Unit	o1std/prelude/vec:Vec<compiler/build:Unit>&	o1I64
+out 1b38450df574721076fe54ae0b5ea0b9
+run compiler/build 69629-70743 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	1,2
+mark compiler/target 0-0 ctor compiler/target:Target	1
+marks 4b4b9789926ba8105680b2497d06013d
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 17447-17977 fn	7caea9d8f2beeb9bdb14506dda3f9140
+read compiler/build 23191-24045 fn	19d412ce79c0ac9896aca0ca64708d28
+read compiler/build 39782-39835 fn	894e74b0e47e70c1ad79dc78416a4dcd
+read compiler/diag 11636-11832 fn	c9afaf552fbc1dc124f59e9a1b2df5f2
+read compiler/msgs 40321-40430 fn	c4525ac005ae63611a7a7fd08e955885
+read compiler/target 0-0 ctor compiler/target:Target	3cef9679ec8a2059795bc48c0a14b8cb
+read std/os 21169-21252 fn	d23d7cda31a670dc5a450987eab2a288
+read std/os 25143-25543 fn	b5cc0af3ebc7af99470a38148acf4c0e
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 3214-3355 fn	f31bc2073e7a5166cb23a1806dc8cfdc
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<Array<std/prelude/text:String&>&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <Array<std/prelude/text:String&>&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <Array<std/prelude/text:String&>&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <Array<std/prelude/text:String&>&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <Array<std/prelude/text:String&>&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 38 27 3 | U U B0 B0 U U U B4 B4 U U B0 U B0 B0 U B0 B0 B0 B0 B0 U U U U U B0 B0 U U U B12 U U U U U U | F F F F F F F F F F B0 F F F F F F F F F F F F F F F F | b001 b000000000000000000000000000 b00000000000000000000000000000000000000 b000000000000000000000000000 | 0:,B0 1:,V1,B0 4:,B0,B2 5:,B0,B2 6:,B0,B2 9:,B4 10:,B0 12:,B0,V0 15:,B0,B0 21:,B0,B0 22:,B0,B0 23:,B0,B0 24:,B0,B0 25:,V0 28:,B0,B0,B0 29:,B0 30:,B0,B0 32:,B0,B12 33:,B0,V2 34:,V2,V2 35:,B0 36:,B0,B0 37:,B0 | | ||
+sum r b001 b001 b001 b001 b001 b b b a,compiler/build:69629:70743,compiler/build:69629:70743,compiler/msgs:40393:40427 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U	o0compiler/build:Config&	o0std/prelude/text:String&	o0mut compiler/diag:Diagnostics&	o0Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o0mut Array<std/prelude/text:String&>&	o1mut std/prelude/vec:Vec<std/prelude/text:String&>&	o0mut Array<Array<std/prelude/text:String&>&>&	o1std/prelude/vec:Vec<Array<std/prelude/text:String&>&>&	o0(Array<I32>, Array<std/prelude/text:String&>)	o1mut Array<Array<std/prelude/text:String&>&>&	o1I64	o1Array<I64>&	o0Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<Array<std/prelude/text:String&>&>&	o1I64	o0Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<Array<std/prelude/text:String&>&>&	o1I64	o0compiler/diagmsg:Msg	o1std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<Array<std/prelude/text:String&>&>&	o1I64
+out 0f06e343910dc23ecd3481bf3b209d36
+run compiler/build 67921-69411 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	1
+mark compiler/build 0-0 ctor compiler/build:Program	2
+mark std/os 0-0 ctor std/os:Output	1,2
+marks 2c7d3e2e93c5fe3f021753a49e0b0110
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 0-0 ctor compiler/build:Program	2285f538dc4073c57c417f46cd5eef4c
+read compiler/build 12953-13969 fn	8d66829d9d5747c65e06f0c37835e897
+read compiler/build 17015-17257 fn	3f7a444e8bd51d68482ea8f9ea2aac1f
+read compiler/build 21295-21449 fn	954f18885a091f530ffbbdb425da5aca
+read compiler/build 39782-39835 fn	894e74b0e47e70c1ad79dc78416a4dcd
+read compiler/build 66177-66303 fn	3ec8fb3ad8062b211468178716368736
+read compiler/build 66336-66564 fn	a49a9115dcf4b9df5d99a5c4a0f7344d
+read compiler/build 66790-67340 fn	f688266e53a54327b25fdc65cdf15929
+read compiler/build 69629-70743 fn	1882e6b83a69edde44c4a58ef402537f
+read compiler/build 9858-10165 fn	0601b817b42236d7bd5e463265a92f96
+read compiler/diag 11636-11832 fn	c9afaf552fbc1dc124f59e9a1b2df5f2
+read compiler/msgs 40431-40534 fn	066d7604de0d7e7325cec8f3492c8531
+read std/os 0-0 ctor std/os:Output	9b4d726e7e22a7e25dc12557d02f3b4f
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/os 8570-8787 fn	aad366597a709c1a43fc4ae152c19621
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 62 27 6 | U U U B0 U U U B0 B0 U B0 U B0 B0 U B0 B0 U U B0 B0 U U U U U U U B11 B11 U U U U U U U U U U U U U U U U U B20 B20 U B20 B20 U U U U B0 B0 B0 B0 U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F | b100011 b000000000000000000000000000 b00000000000000000000000000000000000000000000000000000000000000 b000000000000000000000000000 | 0:,B0 1:,B0,V0 2:,V0,B0 4:,B0 5:,B0,B0 6:,B0,B0 9:,B0,B0 11:,B0,B0 14:,B0,B0 17:,B0,B0 18:,B0,B0 21:,B0,B0 22:,V1 23:,V1,V1 24:,B0,V1 25:,V2 26:,V2,V2 27:,B0,V2 30:,B0,P 31:,V2,B0 32:,B0,B0 33:,V0,B0 34:,B0 35:,B0 36:,B0,B0 37:,B0,B0 38:,V0,V0 39:,B0,V0 40:,B0,B0 41:,V3,B0 42:,V3,V4 43:,V3,V5 44:,B0,B0 45:,B0,B0,B0,B0 46:,B0,B0,B0 49:,B20 52:,B20,V5 53:,V5,V5 54:,B0 55:,V0,V3,V5 60:,B0,B0 61:,V3,V4 | | ||
+sum r;V3,V5,0,68956,68974,0,0,0 b100011 b100011 b1001011 b1000011 b1000011 b b b a,compiler/target:17425:17442,compiler/build:67921:69411,compiler/build:67921:69411,compiler/build:67921:69411,compiler/build:67160:67175,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U;12288:U;12289:B0;12290:B0	o0mut compiler/build:Config&	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0compiler/build:Program&	o0std/prelude/text:String&	o0Bool	o0mut compiler/build:Listed&	o0mut compiler/diag:Diagnostics&	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/build:Config&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0I64	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1mut compiler/build:Config&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/os:Output	o1mut Array<std/prelude/text:String&>&	o1Array<U8>&	o1Bool	o1std/prelude/text:String&	o0compiler/diagmsg:Msg	o1std/prelude/text:String&
+out 28fc05c87779156adaf9641a9530229d
+run compiler/build 39670-39720 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/spin 5372-5537 fn	a2daa70bdc1f9d3e449368bc207a2fda
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:39670:39720 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I32
+out 2a38c46a0b7f0708f781b0163eae45ee
+run compiler/build 39922-40033 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 39670-39720 fn	f935ce6e1a8ac87ff9c18dc45f8cb205
+read compiler/diag 28981-29710 fn	94801549df4c0d56fe094641ac9d7658
+read compiler/diag 29792-30060 fn	f46a4a1d03b6bbe4a66de8cd432b90ca
+read compiler/spin 5042-5154 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 7 1 1 | U U B0 U U B0 U | F | b1 b0 b0000000 b0 | 0: 1:,V0,B0 3:,B0 4:,V0,B0 6:,B0 | | ||
+sum r b1 b1 b1 b0 b0 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/diag:Diagnostics&
+out 2e85d052452f91cbd4419e00fa777af8
+run compiler/build 40077-40136 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 39922-40033 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+hits 0
+body 1 1 1 1 | U | F | b1 b0 b0 b0 | 0:,V0 | | ||
+sum r b1 b1 b1 b0 b0 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/diag:Diagnostics&
+out 9e98dd27eed6aee9bdd588290f8d2b9a
+run compiler/build 40544-40573 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 22f546d506f431510ab2700e5089d2c6
+run compiler/build 63591-63903 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/os 3756-3966 fn	05bb335b993dde79a14807720d8a39ef
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 8 3 2 | U U V1 U U V1 U V1 | F F F | b01 b000 b00000000 b000 | 0:,B0,B0 1:,B0,B0 3:,B0,B0 4:,B0,B0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:63591:63903,compiler/build:63713:63735 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 38c23b308947c472e45da847322d5029
+run compiler/build 72936-73446 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b0 b0 b0 b b b a,compiler/build:73413:73438 t i t i i c0/i/i f0010
+hid fs1	o0I32
+out 309dcea8571745c8c63665c36c9d44ab
+run compiler/build 10994-11254 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 10 4 4 | V3 B0 U B0 B0 U U U U U | F F F F | b0001 b0000 b0000000000 b0000 | 1:,B0 2:,B0 5:,B0,B0 6:,B0,V2 7:,B0 8:,B0,B0 9:,B0,V3 | | ||
+sum r b0001 b0001 b000 b000 b000 b b b a,compiler/build:10994:11254,compiler/build:10994:11254,compiler/build:10994:11254,compiler/build:11080:11085 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out b5d9d4c7d3b4274edf2f187c486b4ed8
+run compiler/build 39143-39412 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/os 19605-19890 fn	a016d01a4b5cc5859631f649a785a832
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 5 5 3 | U U B0 B0 U | F F F F F | b000 b00000 b00000 b00000 | 0:,V1,B0 1:,V0 4:,B0,B0 | | ||
+sum r b000 b000 b000 b000 b000 b b b a,compiler/build:39143:39412,compiler/build:39143:39412,compiler/build:39143:39412 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 1d3e10e34f5716882960368d0d2ebf10
+run compiler/build 36513-39058 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	0,1
+marks bed44e055f471b4617fbd55be0fc99c7
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 12953-13969 fn	8d66829d9d5747c65e06f0c37835e897
+read compiler/build 17015-17257 fn	3f7a444e8bd51d68482ea8f9ea2aac1f
+read compiler/build 17447-17977 fn	7caea9d8f2beeb9bdb14506dda3f9140
+read compiler/build 21295-21449 fn	954f18885a091f530ffbbdb425da5aca
+read compiler/build 39143-39412 fn	d0ca81c6caa913aa44146356ba82cf62
+read compiler/spin 4820-4932 fn	4bb85e424f47848334898668e5407560
+read std/filepath 1289-1576 fn	d4a2b2db0fffbb2b59db7f030588fc9b
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/os 19605-19890 fn	a016d01a4b5cc5859631f649a785a832
+read std/os 21169-21252 fn	d23d7cda31a670dc5a450987eab2a288
+read std/os 8570-8787 fn	aad366597a709c1a43fc4ae152c19621
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 69 29 5 | U U U U B0 U U U B0 B0 U B0 B0 U U B5 B5 U U U B7 B7 U U U B5 U B0 B0 U U B0 B0 U U U U U U U U U U U U U U U U U U U U U U B0 U U U U B0 B0 U U U U B0 B0 U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10000 b00000000000000000000000000000 b000000000000000000000000000000000000000000000000000000000000000000000 b00000000000000000000000000000 | 0:,B0 1:,B0 2:,B0,V0 3:,V0,B0 5:,B0 6:,B0,B0 7:,B0,B0 10:,B0,B0 13:,B0,B0 14:,B0,B0 16:,B5 17:,B5,B5 18:,V4 19:,V4,V4 22:,B5,B7 23:,B5,B5 24:,B5,B5 26:,B5,B5 29:,B0,B0 30:,V2,B5 33:,B0,B0 34:,B0,B0 35:,B0,V2 36:,V1 37:,V1,V1 38:,B0,V1 39:,V3 40:,V3,V3 41:,B0,V3 42:,B0,B0 43:,B0,B0 44:,B0,B0 45:,B0,B0 46:,B0,B0 47:,B0,B0 48:,B0 49:,B0 50:,B0,B0 51:,B0,B0 52:,V0,V0 53:,B0,V0 54:,B0,B0 56:,V2,B0,B0 57:,B0 58:,V0,B0 59:,V0 62:,B0,B0 63:,B0,B0 64:,B0,B0,B0,B0 65:,V2 68:,B0,B0 | | ||
+sum r b10000 b10000 b101000 b100000 b100000 b b b a,compiler/target:17425:17442,compiler/build:36513:39058,compiler/build:36513:39058,compiler/build:36513:39058,compiler/build:36513:39058 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U	o0mut compiler/build:Config&	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/text:String&	o0Bool	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/vec:Vec<std/prelude/text:String&>?&	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/build:Config&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1mut compiler/build:Config&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/os:Output	o1mut Array<std/prelude/text:String&>&	o1Array<U8>&	o1Bool	o1std/prelude/text:String&
+out d1977f6c4e55790a86c8e9b0d2694e5e
+run compiler/build 39504-39581 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+hits 0
+body 1 3 1 2 | U V1 V1 | F | b01 b0 b000 b0 | 0:,V0,B0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:39504:39581,compiler/build:39540:39542 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 9c38a444ea4979eb61f1722753628f6d
+run compiler/build 43350-44128 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	0,30,31
+mark compiler/build 0-0 ctor compiler/build:Program	2,5
+marks 904273fda63e886ca776c27ddabc5161
+read -ctor	Array<std/prelude/text:Char>
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 0-0 ctor compiler/build:Program	2285f538dc4073c57c417f46cd5eef4c
+read compiler/build 10994-11254 fn	6e04e50ca2fe3483104baffecb2a0d1d
+read compiler/build 11386-11801 fn	a26fa6045ad8b2b0704ead3682b7de62
+read compiler/build 32103-32237 fn	0e9c03c049110990a606845b419b1d57
+read compiler/build 36513-39058 fn	64d6b6b0c148e394174bfa1d9615d692
+read compiler/build 39504-39581 fn	e84f968fc0c43610c3f470505a766a2b
+read compiler/build 39721-39781 fn	e6a8161a98d507bd394f24d5cd45e28f
+read compiler/build 39922-40033 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/build 44239-44512 fn	77987b2bd0ff69553538f97e0e3c1617
+read compiler/build 9858-10165 fn	0601b817b42236d7bd5e463265a92f96
+read compiler/diag 11636-11832 fn	c9afaf552fbc1dc124f59e9a1b2df5f2
+read compiler/msgs 34261-34356 fn	a8a8f15a5e09fefed3262fe93aa8f7dd
+read compiler/msgs 40431-40534 fn	066d7604de0d7e7325cec8f3492c8531
+read compiler/spin 5042-5154 fn	6d787cc7b01b150765dce615d1f27491
+read std/filepath 2134-2266 fn	c21d410093af7bd7620495b18370c76f
+read std/filepath 5201-5683 fn	0a9a12211e7629c5af7070d645152c98
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/prelude/array 5629-6253 fn <std/prelude/text:Char;>	baac3e77cd739d63f3f025904e33cb14
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 30 9 5 | U U V0 U B0 U V0 U B0 B0 B0 U U U U U U U U U U U U U U B3 B3 U B3 U | F F F F F F V0 F V4 | b10001 b000000000 b000000000000000000000000000000 b000000000 | 0:,V3,B0 1:,V0,B0 3:,V0,B0 5:,B0,B0,B0,B0 7:,V0,B0 11:,B0,V4 12:,V1,B0 13:,V0,V2,V0,V1,V1 14:,V0,V4 15:,V4,V4 16:,V4 17:,B0 18:,V4,V1 19:,V4 20:,V4,V4,V4 21:,V4 22: 23:,V0,B3 24:,V4,B3 27:,V0,B3,B3,B3 29:,B3 | | ||
+sum r b10001 b10001 b10011 b10001 b10001 b b b a,compiler/build:43494:43596,compiler/build:43350:44128,compiler/build:43350:44128,compiler/build:43350:44128,compiler/build:43608:43654 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/build:Config&	o0compiler/build:Program&	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/text:String&	o0mut compiler/diag:Diagnostics&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0compiler/diagmsg:Msg	o1std/prelude/text:String&	o0compiler/diagmsg:Msg
+out 67a3b4a6b0a4e1ce2a4d576c432af6d6
+run compiler/build 55759-55995 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	2
+mark compiler/target 0-0 ctor compiler/target:Target	2
+marks 53ec45b0edba78a6daceee688eb2c298
+read -ctor	Array<std/prelude/text:String&>
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/diag 11636-11832 fn	c9afaf552fbc1dc124f59e9a1b2df5f2
+read compiler/msgs 36410-36628 fn	141896d47f4aaac88077b33d2b35d16e
+read compiler/target 0-0 ctor compiler/target:Target	3cef9679ec8a2059795bc48c0a14b8cb
+read compiler/target 5865-6800 fn	fb48bafcdd2e2e4406a773d269d12828
+hits 0
+body 1 3 2 3 | U U U | F F | b011 b00 b000 b00 | 0:,V0,V2 1:,V0,V1 2:,V1,V1 | | ||
+sum r b011 b011 b01 b01 b01 b b b a,compiler/build:55759:55995,compiler/msgs:36496:36538,compiler/target:5916:5919 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0mut compiler/diag:Diagnostics&	o0Array<std/prelude/text:String&>	o1compiler/target:Target&	o0compiler/diagmsg:Msg	o1std/prelude/text:String&
+out 8ccf4aa1ce0b79782a3358c3b8d4e09a
+run compiler/build 58813-58924 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 10994-11254 fn	6e04e50ca2fe3483104baffecb2a0d1d
+read compiler/build 39721-39781 fn	e6a8161a98d507bd394f24d5cd45e28f
+hits 0
+body 1 5 2 2 | B1 B1 U B1 U | F F | b00 b00 b00000 b00 | 2:,V0,B1,B1,B1 4:,B1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/build:58813:58924,compiler/build:58813:58924 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0std/prelude/text:String&
+out 23b36afdd23d1ce336ce51be8c99920a
+run compiler/build 63056-63410 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/os 19605-19890 fn	a016d01a4b5cc5859631f649a785a832
+read std/prelude/text 5222-6401 fn	ab98a5b2ea25c1706726cb198e1a4156
+read std/prelude/text 6638-6813 fn	c32509e8a76db962290b03809b10d6a8
+hits 0
+body 1 8 5 1 | B0 U U U U B0 B0 U | F F F F F | b0 b00000 b00000000 b00000 | 1:,B0,B0 2:,V0 3:,B0,B0 4:,B0,B0,B0 7:,B0,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:63056:63410 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o1std/prelude/text:String&
+out b5f8378300c9c8101309e85ceb01cd0e
+run compiler/build 0-0 ctor compiler/build:Aged	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Aged	0,1,2
+marks 8f6158d10b9401dafab668ab9c03b14a
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+hits 0
+body 1 0 6 2 | | F F F F F F | b00 b000000 b b000000 | | | ||
+sum r;V0,V1,0,61696,61700,1,0,0 b00 b00 b100 b000 b000 b b b a,compiler/build:0:0,compiler/build:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64	o0I64
+out 2fe8124224244b9f221a216f5e5fdf8b
+run compiler/build 62590-62640 lambda in compiler/build 62127-62888 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 2 | | F F | b00 b00 b b00 | | | ||
+sum r b00 b00 b00 b00 b00 b00 b00 b00 a,compiler/build:62590:62640,compiler/build:62590:62640 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Aged	o0compiler/build:Aged
+out 89027032e436ab13f35b57c081d8dbc4
+run compiler/build 62127-62888 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Aged	0
+mark std/os 0-0 ctor std/os:FileInfo	1,2
+marks 246e16b39e56c466d65eee4746220d49
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Aged	48d45fa0152f2844da5556a646cf70ad
+read compiler/build 62590-62640 lambda in compiler/build 62127-62888 fn	f8dff6f1f8d569753f6442d24c1c5f6f
+read compiler/build 63056-63410 fn	0233def8e3b61e171a74e615122916e5
+read std/os 0-0 ctor std/os:FileInfo	ef1c94fb3908f8f2b0d08d3a466dbdc7
+read std/os 19605-19890 fn	a016d01a4b5cc5859631f649a785a832
+read std/os 21792-22090 fn	4a4480ec2638aa298563f8179d03594c
+read std/os 25143-25543 fn	b5cc0af3ebc7af99470a38148acf4c0e
+read std/os 25605-25855 fn	19c70e70f2d2f4ae448f9da5cbedfcb2
+read std/os 6602-6809 fn	f5adf2e1af5efaf7a3b0412200d10c05
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/build:Aged>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11088-11181 fn <compiler/build:Aged;?;>	c22db8e7309beb50afc90ba16571f575
+read std/prelude/vec 4660-4775 fn <compiler/build:Aged;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 5133-5172 fn <compiler/build:Aged;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/build:Aged;>	b51ed69aecd7674ca5263126de5a48dc
+hits 0
+body 1 24 15 2 | U B0 B0 U U U B0 B0 U B2 B2 U U U B0 U U U B7 U B7 B7 U U | F F F F F F F F F F F F F F F | b00 b000000000000000 b000000000000000000000000 b000000000000000 | 0:,V1,B0 3:,B0 4:,V1 5:,V0,B0 8:,B0 11:,B2 12:,B0,B0 13:,B0,B0 14: 15:,B0,B0 16:,B0 17:,B0,B0 19:,B7,V1 22:,B7,B7 23:,B7 | | ||
+sum r b00 b00 b000 b000 b000 b b b a,compiler/build:62127:62888,compiler/build:62127:62888 t i t i i c0/i/i f0010
+hid fs1;1280:U;194560:B0;194561:U;194562:U	o0std/prelude/text:String&	o0std/prelude/text:String&	o0I64	o0std/prelude/text:String&	o1std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o0compiler/build:Aged	o1std/prelude/vec:Vec<compiler/build:Aged>&	o1I64
+out 5ce268df198093ef39172f3fbf0100b2
+run compiler/build 56286-56420 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/diag 4898-5165 fn	480cb93e4dcd8479fbea58aee740f4b0
+read compiler/diag 7775-7867 fn	e66b68f7d8499837bf4a313bf481f618
+hits 0
+body 1 2 4 3 | U U | F F F F | b001 b0000 b00 b0000 | 0:,V2,V0,V2 1:,V2,V1 | | ||
+sum r;V0,V2,0,56359,56360,0,0,0;V1,V2,0,56388,56418,0,0,0 b001 b001 b101 b001 b001 b b b a,compiler/build:56286:56420,compiler/build:56286:56420,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0compiler/diagmsg:Msg	o0mut compiler/diag:Diagnostics&
+out 94f2f23fa24e870903a8120f19f62f48
+run compiler/build 56076-56284 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 10994-11254 fn	6e04e50ca2fe3483104baffecb2a0d1d
+read compiler/build 39670-39720 fn	f935ce6e1a8ac87ff9c18dc45f8cb205
+read compiler/build 39721-39781 fn	e6a8161a98d507bd394f24d5cd45e28f
+read compiler/build 56286-56420 fn	f95019d2c033571b19ad5b3bd902a0a5
+read compiler/diag 28981-29710 fn	94801549df4c0d56fe094641ac9d7658
+hits 0
+body 1 9 4 4 | U U B0 U B0 B0 U B0 U | F F F F | b0001 b0000 b000000000 b0000 | 0:,V1,V2,V3 1:,V3,B0 3:,B0 6:,V0,B0,B0,B0 8:,B0 | | ||
+sum r;V1,V3,0,56164,56185,0,0,0;V2,V3,0,56164,56185,0,0,0 b0001 b0001 b0101 b0001 b0001 b b b a,compiler/build:56076:56284,compiler/build:56076:56284,compiler/build:56076:56284,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0std/prelude/text:String&	o0compiler/diagmsg:Msg	o0mut compiler/diag:Diagnostics&
+out 89a1fc0ef55516e220a6eb5458d2dcb3
+run compiler/build 56422-56588 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 10994-11254 fn	6e04e50ca2fe3483104baffecb2a0d1d
+read compiler/build 39670-39720 fn	f935ce6e1a8ac87ff9c18dc45f8cb205
+read compiler/build 39721-39781 fn	e6a8161a98d507bd394f24d5cd45e28f
+read compiler/diag 28981-29710 fn	94801549df4c0d56fe094641ac9d7658
+hits 0
+body 1 8 3 3 | U B0 U B0 B0 U B0 U | F F F | b001 b000 b00000000 b000 | 0:,V2,B0 2:,B0 5:,V0,B0,B0,B0 7:,B0 | | ||
+sum r b001 b001 b001 b000 b000 b b b a,compiler/build:56422:56588,compiler/build:56422:56588,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0std/prelude/text:String&	o0mut compiler/diag:Diagnostics&
+out 1a4170d044a6bc2c8e182bd2523b17b9
+run compiler/build 54448-54750 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/msgs 1579-2219 fn	eac36733092f92cf27cf8e47e49dac40
+hits 0
+body 1 2 10 2 | U U | F F F F F F F F F F | b00 b0000000000 b00 b0000000000 | 0:,V0,V1 1:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/build:54448:54750,compiler/build:54448:54750 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&
+out 3deec81ef11ad085995a6c4565b611a0
+run compiler/build 53704-54252 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/build 54448-54750 fn	03f2dc98c896dbbc4c582226d18696f5
+read compiler/msgs 2386-2475 fn	d1185a10cebbe2945a3c5eef02ca1b38
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 13 19 4 | U B0 B0 U U U U U U B0 B0 U V3 | F F F F F F F F F F F F F F F F F F F | b0001 b0000000000000000000 b0000000000000 b0000000000000000000 | 0:,B0 3:,B0,B0 4:,V2 5:,V2,V2 6:,V1,V2 7:,V1 8:,B0,B0 11:,B0,B0,B0 | | ||
+sum r b0001 b0001 b000 b000 b000 b b b a,compiler/build:53704:54252,compiler/build:53704:54252,compiler/build:53704:54252,compiler/build:54189:54250 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 3e7e3c3e6318344b49285ad8a0f2021d
+run compiler/build 46214-46467 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	12
+marks 6cac5458d09416db3c2ffd9e478fd0c1
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read std/os 3756-3966 fn	05bb335b993dde79a14807720d8a39ef
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 3 1 1 | U U U | F | b0 b0 b000 b0 | 0:,V0,B0 1:,B0,B0 2:,B0,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:46214:46467 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 829e4cce1869904973f70719a0dfa291
+run compiler/build 46562-46855 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	2
+mark compiler/target 0-0 ctor compiler/target:Target	2
+marks 53ec45b0edba78a6daceee688eb2c298
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 10994-11254 fn	6e04e50ca2fe3483104baffecb2a0d1d
+read compiler/target 0-0 ctor compiler/target:Target	3cef9679ec8a2059795bc48c0a14b8cb
+hits 0
+body 1 3 1 2 | B0 B0 U | F | b01 b0 b000 b0 | 2:,V0,B0,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:46562:46855,compiler/build:11080:11085 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&
+out d2a7464aed93a0d38f1c0ee570c5067e
+run compiler/build 46964-47156 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	1,2
+mark compiler/target 0-0 ctor compiler/target:Target	2
+marks a905dfadf4dba53dc0aa47bee6ca08c5
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 39721-39781 fn	e6a8161a98d507bd394f24d5cd45e28f
+read compiler/build 46214-46467 fn	6ea0f6759b8e906d7f6e5c66fb2026d4
+read compiler/build 46562-46855 fn	136a42f928aaa046883a21635d650131
+read compiler/target 0-0 ctor compiler/target:Target	3cef9679ec8a2059795bc48c0a14b8cb
+read compiler/target 15940-16254 fn	3f7e0d7131455f81636b7c6c2b215faf
+hits 0
+body 1 5 1 1 | U U U B0 U | F | b0 b0 b00000 b0 | 0:,V0 1:,V0,V0 2:,V0,B0 4:,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/build:46964:47156 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&
+out 132b936d1b9bf850edf6f8139ae1c736
+run compiler/build 55012-55610 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	12
+mark compiler/build 0-0 ctor compiler/build:Program	6
+marks cfdc0682e880675f7e2abffb9aa52cb6
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 0-0 ctor compiler/build:Program	2285f538dc4073c57c417f46cd5eef4c
+read compiler/build 10994-11254 fn	6e04e50ca2fe3483104baffecb2a0d1d
+read compiler/build 39721-39781 fn	e6a8161a98d507bd394f24d5cd45e28f
+read std/os 8570-8787 fn	aad366597a709c1a43fc4ae152c19621
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 20 4 3 | V1 V1 U B0 B0 U B0 U U U B3 B3 U B3 U B0 B0 U B0 U | F F F F | b010 b0000 b00000000000000000000 b0000 | 2:,V1,V1 5:,V0,B0,B0,B0 7:,B0 8:,V1,V1 9:,V1,B0,B0,B0 12:,V0,B3,B3,B3 14:,B3 17:,V0,B0,B0,B0 19:,B0 | | ||
+sum r b010 b010 b010 b010 b010 b b b a,compiler/build:55012:55610,compiler/build:55112:55145,compiler/build:55012:55610 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0mut std/prelude/vec:Vec<std/prelude/text:String&>&	o0compiler/build:Program&	o0mut Array<std/prelude/text:String&>&	o1mut std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/os:Output	o1mut Array<std/prelude/text:String&>&	o1Array<U8>&	o1Bool	o1std/prelude/text:String&
+out 2a54f2ff1a538da56d93b1d5a14fc05a
+run compiler/build 53388-53585 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 39721-39781 fn	e6a8161a98d507bd394f24d5cd45e28f
+read compiler/build 53704-54252 fn	e8aef0b79058ac2476b849ef59c0e810
+hits 0
+body 1 3 5 4 | U B0 U | F F F F F | b0000 b00000 b000 b00000 | 0:,V1,V2,V3,B0 2:,B0 | | ||
+sum r b0000 b0000 b00000 b00000 b00000 b b b a,compiler/build:53388:53585,compiler/build:53388:53585,compiler/build:53388:53585,compiler/build:53388:53585 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0I32	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o0std/prelude/vec:Vec<std/prelude/text:String&>&
+out bef026dd003d7d94e306375a3d6bb759
+run compiler/build 49660-49883 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/measure 4423-5069 fn	6221630902dc8e02e775c2519491b133
+read std/os 8570-8787 fn	aad366597a709c1a43fc4ae152c19621
+hits 0
+body 1 2 4 2 | U U | F F F F | b00 b0000 b00 b0000 | 0:,V1,B1 1:,V1,B0,B0,B0 | | ||
+sum r b00 b00 b000 b000 b000 b b b a,compiler/build:49660:49883,compiler/build:49660:49883 t i t i i c0/i/i f0010
+hid fs1	o0compiler/build:Config&	o0Array<std/prelude/text:String&>&	o0I64	o0std/os:Output	o1Array<std/prelude/text:String&>&	o1Array<U8>&	o1Bool	o1std/prelude/text:String&
+out 0be46d4475dcf8099427b9fd601d42bb
+run compiler/build 48642-49409 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/build 10994-11254 fn	6e04e50ca2fe3483104baffecb2a0d1d
+read compiler/build 39504-39581 fn	e84f968fc0c43610c3f470505a766a2b
+read compiler/build 39721-39781 fn	e6a8161a98d507bd394f24d5cd45e28f
+read compiler/build 49660-49883 fn	934c43cb189aea2cff03db79f119987d
+read compiler/build 72936-73446 fn	fd6fddbe18865e6553af4b2b0492fc27
+read std/os 21169-21252 fn	d23d7cda31a670dc5a450987eab2a288
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 20 17 6 | U U U U B0 B0 U U U B0 U U U U U B10 B10 U B10 U | F F F F F F F F F F F F F F F F F | b000000 b00000000000000000 b00000000000000000000 b00000000000000000 | 0:,B0 1:,V5,B0 2:,V5 3:,B0,B0 6:,B0,B0 7:,B0,V1 8:,V2,B0 10:,B0,B0 11:,B0,V4 12:,B0,B0 13:,V0,B0 14:,B10 17:,V0,B10,B10,B10 19:,B10 | | ||
+sum r b000000 b000000 b0000000 b0000000 b0000000 b b b a,compiler/build:48642:49409,compiler/build:48642:49409,compiler/build:48642:49409,compiler/build:48642:49409,compiler/build:48642:49409,compiler/build:48642:49409 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0compiler/build:Config&	o0Array<std/prelude/text:String&>&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o0std/prelude/text:String&	o0I64	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&
+out 1072cab4163da1047ed9c3380c4d263b
+run compiler/build 52297-53267 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I32
+read -ctor	I64
+read compiler/build 39721-39781 fn	e6a8161a98d507bd394f24d5cd45e28f
+read compiler/build 48642-49409 fn	92cf40530784e3a5b0091d579c049764
+read compiler/build 53388-53585 fn	d7a1a90ad8473e78aef72aeee832944c
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 5222-6401 fn	ab98a5b2ea25c1706726cb198e1a4156
+read std/prelude/text 6638-6813 fn	c32509e8a76db962290b03809b10d6a8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 26 17 7 | U U B0 B0 U U U B0 B0 U B0 B0 U U U U U U U U U U B7 B7 U U | F F F F F F F F F F F F F F F F F | b0000000 b00000000000000000 b00000000000000000000000000 b00000000000000000 | 0:,B0 1:,V2,B0 4:,B0,B0 5:,B0,B0 6:,V0,V1,V2,V4,V5,B0 9:,V0,V1,V3,V4,V5,B0 12:,B0,B0 13:,B0 14:,B0,B0 15:,B0,B3 16:,B3,B3 17:,B3,B3,B3 18:,B3 19:,B3 20:,B3 21:,B3 24:,B7 25:,V0,V4,V5,V6 | | ||
+sum r b0000000 b0000000 b0000000 b0000000 b0000000 b b b a,compiler/build:52297:53267,compiler/build:52297:53267,compiler/build:52297:53267,compiler/build:52297:53267,compiler/build:52297:53267,compiler/build:52297:53267,compiler/build:52297:53267 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0compiler/build:Config&	o0Array<std/prelude/text:String&>&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o1std/prelude/text:String&
+out 5f7153b0193d98abb36f67baf85f4094
+run compiler/build 56941-58735 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	1,2
+mark compiler/target 0-0 ctor compiler/target:Target	2
+marks a905dfadf4dba53dc0aa47bee6ca08c5
+read -ctor	Bool
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 10994-11254 fn	6e04e50ca2fe3483104baffecb2a0d1d
+read compiler/build 39721-39781 fn	e6a8161a98d507bd394f24d5cd45e28f
+read compiler/build 39782-39835 fn	894e74b0e47e70c1ad79dc78416a4dcd
+read compiler/build 46214-46467 fn	6ea0f6759b8e906d7f6e5c66fb2026d4
+read compiler/build 46562-46855 fn	136a42f928aaa046883a21635d650131
+read compiler/build 72936-73446 fn	fd6fddbe18865e6553af4b2b0492fc27
+read compiler/measure 5296-5624 fn	cd8edd8129a98f3f876f3af9e0325a20
+read compiler/spin 5042-5154 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/target 0-0 ctor compiler/target:Target	3cef9679ec8a2059795bc48c0a14b8cb
+read compiler/target 15940-16254 fn	3f7e0d7131455f81636b7c6c2b215faf
+read std/os 8570-8787 fn	aad366597a709c1a43fc4ae152c19621
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 43 28 5 | U U U U U B1 U U U U U U U U U U U B11 B11 U B11 U U B12 B12 U B12 U U U B16 B16 U U B17 B17 U U B17 B17 U B17 U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b00000 b0000000000000000000000000000 b0000000000000000000000000000000000000000000 b0000000000000000000000000000 | 0: 1: 2:,V0 3:,V0,V0 4:,V0,B1 6:,B1 7:,B3 8:,B3,B3 9:,B3,B3 10:,B3,V1 11:,B3,B3 12:,B3,V2 13:,B3,V3 14:,B3,V4 15:,B3,B3 16:,B3,B3,B3,B3 19:,V0,B11,B11,B11 21:,B11 22:,B12 25:,V0,B12,B12,B12 27:,B12 28: 29:,B16 32:,B16 33:,B17 36:,B17,B17 37:,B17,B17,B17 40:,V0,B17,B17,B17 42:,B17 | | ||
+sum r b00000 b00000 b01000 b00000 b00000 b b b a,compiler/build:56941:58735,compiler/build:56941:58735,compiler/build:56941:58735,compiler/build:56941:58735,compiler/build:56941:58735 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U	o0compiler/build:Config&	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o0Array<std/prelude/text:String&>&	o0Array<std/prelude/text:String&>&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/os:Output	o1mut Array<std/prelude/text:String&>&	o1Array<U8>&	o1Bool	o1std/prelude/text:String&
+out 0698dcd260a63857477382b0e45dd7fd
+run compiler/build 73467-73555 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 0-0 ctor compiler/build:Sha256	7388d94d7dc8208cb6cde6fa265a1527
+read compiler/build 19185-19649 fn	2a29bcfabdc147be8a9404b668fa6b9c
+read compiler/build 20841-21197 fn	4b4a5fd58728beba46c37f4b236c9982
+hits 0
+body 1 3 2 2 | U U U | F F | b01 b00 b000 b00 | 0:,B0 1:,B0,V0 2:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/build:73467:73555,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 79fd52f360cb8e46dd174d7bbf4c8f82
+run compiler/build 77484-78757 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	2
+mark compiler/build 0-0 ctor compiler/build:Program	1
+mark compiler/target 0-0 ctor compiler/target:Target	1,5
+marks 248c6760f25169f5e111ae55893e8ee1
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 0-0 ctor compiler/build:Program	2285f538dc4073c57c417f46cd5eef4c
+read compiler/build 0-0 ctor compiler/build:Unit	1f881d673d7675390f8a90a5c7634687
+read compiler/cond 3225-3314 fn	d52d741e4a73dfb8067004aff9ce177f
+read compiler/cond 7722-7833 fn	46050c63f882bb2cf9a137c8621df4dd
+read compiler/target 0-0 ctor compiler/target:Target	3cef9679ec8a2059795bc48c0a14b8cb
+read std/prelude/vec 4660-4775 fn <compiler/build:Unit;>	037faee32f508921f991db6223f2f61a
+hits 0
+body 1 23 10 5 | U U B0 B0 B0 V3 V3 U U V3 V3 U U V3 V3 U U V3 V3 U U V3 V3 | F F F F F F F F F F | b00010 b0000000000 b00000000000000000000000 b0000000000 | 0:,V2,B0 1:,V2,B0,B0 7:,V3,V3,V3 8:,V3,V3 11:,V3,V3,V3 12:,V3,V3 15:,V3,V3,V3 16:,V3,V3 19:,V3,V3,V3 20:,V3,V3 | | ||
+sum r b00010 b00010 b000010 b000010 b000010 b b b a,compiler/build:77484:78757,compiler/build:77484:78757,compiler/build:77484:78757,compiler/build:77880:77948,compiler/build:77484:78757 t i t i i c0/i/i f0010
+hid fs1;194304:V3;194305:U;194306:V3;194304:V3;194305:U;194306:V3;194304:V3;194305:U;194306:V3;194304:V3;194305:U;194306:V3	o0mut compiler/build:stubFrontend&	o0std/prelude/text:String&	o0compiler/build:Kind	o0mut compiler/build:Config&	o0mut compiler/build:Program&	o0mut compiler/diag:Diagnostics&
+out 306d0997537bf3fbf0cdd6432fb44d11
+run compiler/build 78759-78918 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 5 5 | | F F F F F | b00000 b00000 b b00000 | | | ||
+sum r b00000 b00000 b00000 b00000 b00000 b b b a,compiler/build:78759:78918,compiler/build:78759:78918,compiler/build:78759:78918,compiler/build:78759:78918,compiler/build:78759:78918 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/build:stubFrontend&	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o0mut compiler/build:Config&	o0mut compiler/diag:Diagnostics&
+out 2eb1b23edc694d607e4032a36db6d079
+run compiler/build 78920-79077 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 5 6 | V5 | F F F F F | b000001 b00000 b0 b00000 | | | ||
+sum r b000001 b000001 b00000 b00000 b00000 b b b a,compiler/build:78920:79077,compiler/build:78920:79077,compiler/build:78920:79077,compiler/build:78920:79077,compiler/build:78920:79077,compiler/build:79052:79075 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/build:stubFrontend&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0mut compiler/build:Config&	o0mut compiler/diag:Diagnostics&
+out 3e1ca8d4bf57c80c22ea28e4bbe94bc9
+run compiler/build 79120-79238 fn	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/os 8570-8787 fn	aad366597a709c1a43fc4ae152c19621
+hits 0
+body 1 2 3 1 | B0 U | F F F | b0 b000 b00 b000 | 1:,B0,B0,B0,B0 | | ||
+sum r b0 b0 b1 b0 b0 b b b a,compiler/build:79120:79238 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/os:Output	o1Array<std/prelude/text:String&>&	o1Array<U8>&	o1Bool	o1std/prelude/text:String&
+out 4afbf3210962ce5af48f6480242647a5
+run compiler/build global RemarkPasses	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 2 0 0 | P P | | b b b00 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7a8d916563abe33ae3d7cf1ccf8102de
+run compiler/build global ThinFrom	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b56f3f29ff06b57636c6c6b782186325
+run compiler/build global ImportLimit	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3264c36229384ac8d25522ca0864b859
+run compiler/build global JobMemory	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3ad54de9bd17863c8930d8129a5be8ee
+run compiler/build global PhaseAt	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0ecf6af86698c00477a15fa25fa0b795
+run compiler/build global ShaK	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 05987a5dbe80250952870efd25dfcdbe
+run compiler/build global Ran	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0837991e8cd274b598ff1a8d8e8de8be
+run compiler/build global RunCacheCap	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bd85a5880c9f792c1806cbebd87d3223
+run compiler/build 0-0 ctor compiler/build:stubFrontend	
+ctx r1 g1 p0
+keys compiler/build=48363bb07b74b22f65f1c3aebfbe28271e66e3f97db6abadb50ab04d165c4ec2
+in 0
+mark compiler/build 0-0 ctor compiler/build:stubFrontend	0,1
+marks 9cc6ab37636d9b4c6cf2c7b6af844113
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,compiler/build:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 74d56269c6d7bcf90bbb0a1008fe5e09
+end
+sum 111566-6216815972719917467

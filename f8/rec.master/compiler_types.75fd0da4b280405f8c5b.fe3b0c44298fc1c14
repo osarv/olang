@@ -1,0 +1,563 @@
+olang front record
+body fn 12440-12490	known p
+body fn 12492-13452	known p,0
+body fn 13528-13763	known p
+body fn 13947-14286	known p
+body fn 14288-14349	known p
+body fn 14413-14517	known p
+body fn 14772-14891	known p grows|0|-|-|..types|6|0|compiler/types|14837|14843|-1 grows|0|-|-|..keys|5|0|compiler/types|14837|14843|-1 grows|0|-|-|..depths|7|0|compiler/types|14837|14843|-1 grows|0|-|-|..state|6|0|compiler/types|14837|14843|-1 grows|0|-|-|..sizes|6|0|compiler/types|14837|14843|-1 grows|0|-|-|..aligns|7|0|compiler/types|14837|14843|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|14837|14843|-1 grows|0|-|-|..payloads|9|0|compiler/types|14837|14843|-1 grows|0|-|-|..llvm|5|0|compiler/types|14837|14843|-1 grows|0|-|-|..plains|7|0|compiler/types|14837|14843|-1
+body fn 14993-15099	known p
+body fn 15190-15296	known p
+body fn 15343-15583	known p
+body fn 15946-16368	known p grows|0|-|-|..types|6|0|compiler/types|16137|16141|-1 grows|0|-|-|..keys|5|0|compiler/types|16156|16159|-1 grows|0|-|-|..depths|7|0|compiler/types|16180|16184|-1 grows|0|-|-|..state|6|0|compiler/types|16204|16208|-1 grows|0|-|-|..sizes|6|0|compiler/types|16233|16237|-1 grows|0|-|-|..aligns|7|0|compiler/types|16254|16258|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|16278|16282|-1 grows|0|-|-|..payloads|9|0|compiler/types|16302|16306|-1 grows|0|-|-|..llvm|5|0|compiler/types|16322|16326|-1 grows|0|-|-|..plains|7|0|compiler/types|16344|16348|-1
+body fn 16370-16430	known p
+body fn 16432-16497	known p
+body fn 16499-16651	known p
+body fn 16707-17100	known p grows|0|-|-|..lists|6|0|compiler/types|17045|17049|-1 grows|0|-|-|..listKeys|9|0|compiler/types|17071|17074|-1
+body fn 17102-17178	known p grows|0|-|-|..lists|6|0|compiler/types|17154|17158|-1 grows|0|-|-|..listKeys|9|0|compiler/types|17154|17158|-1
+body fn 17202-17273	known p
+body fn 17382-17541	known p grows|0|-|-|..lists|6|0|compiler/types|17449|17458|-1 grows|0|-|-|..listKeys|9|0|compiler/types|17449|17458|-1 grows|0|-|-|..types|6|0|compiler/types|17478|17484|-1 grows|0|-|-|..keys|5|0|compiler/types|17478|17484|-1 grows|0|-|-|..depths|7|0|compiler/types|17478|17484|-1 grows|0|-|-|..state|6|0|compiler/types|17478|17484|-1 grows|0|-|-|..sizes|6|0|compiler/types|17478|17484|-1 grows|0|-|-|..aligns|7|0|compiler/types|17478|17484|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|17478|17484|-1 grows|0|-|-|..payloads|9|0|compiler/types|17478|17484|-1 grows|0|-|-|..llvm|5|0|compiler/types|17478|17484|-1 grows|0|-|-|..plains|7|0|compiler/types|17478|17484|-1
+body fn 17543-17994	known p grows|0|-|-|..types|6|0|compiler/types|17762|17771|-1 grows|0|-|-|..keys|5|0|compiler/types|17762|17771|-1 grows|0|-|-|..depths|7|0|compiler/types|17762|17771|-1 grows|0|-|-|..state|6|0|compiler/types|17762|17771|-1 grows|0|-|-|..sizes|6|0|compiler/types|17762|17771|-1 grows|0|-|-|..aligns|7|0|compiler/types|17762|17771|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|17762|17771|-1 grows|0|-|-|..payloads|9|0|compiler/types|17762|17771|-1 grows|0|-|-|..llvm|5|0|compiler/types|17762|17771|-1 grows|0|-|-|..plains|7|0|compiler/types|17762|17771|-1
+body fn 17996-18209	known p grows|0|-|-|..types|6|0|compiler/types|18060|18066|-1 grows|0|-|-|..keys|5|0|compiler/types|18060|18066|-1 grows|0|-|-|..depths|7|0|compiler/types|18060|18066|-1 grows|0|-|-|..state|6|0|compiler/types|18060|18066|-1 grows|0|-|-|..sizes|6|0|compiler/types|18060|18066|-1 grows|0|-|-|..aligns|7|0|compiler/types|18060|18066|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|18060|18066|-1 grows|0|-|-|..payloads|9|0|compiler/types|18060|18066|-1 grows|0|-|-|..llvm|5|0|compiler/types|18060|18066|-1 grows|0|-|-|..plains|7|0|compiler/types|18060|18066|-1
+body fn 18507-19229	known p grows|0|-|-|..types|6|0|compiler/types|18867|18873|-1 grows|0|-|-|..keys|5|0|compiler/types|18867|18873|-1 grows|0|-|-|..depths|7|0|compiler/types|18867|18873|-1 grows|0|-|-|..state|6|0|compiler/types|18867|18873|-1 grows|0|-|-|..sizes|6|0|compiler/types|18867|18873|-1 grows|0|-|-|..aligns|7|0|compiler/types|18867|18873|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|18867|18873|-1 grows|0|-|-|..payloads|9|0|compiler/types|18867|18873|-1 grows|0|-|-|..llvm|5|0|compiler/types|18867|18873|-1 grows|0|-|-|..plains|7|0|compiler/types|18867|18873|-1 grows|0|-|-|..lists|6|0|compiler/types|18983|18992|-1 grows|0|-|-|..listKeys|9|0|compiler/types|18983|18992|-1
+body fn 20389-21118	known p grows|0|-|-|..promiseLists|13|0|compiler/types|21062|21066|-1 grows|0|-|-|..promiseKeys|12|0|compiler/types|21090|21093|-1
+body fn 21240-21558	known p
+body fn 21560-21724	known p
+body fn 21774-21868	known p
+body fn 21931-22017	known p
+body fn 22085-22263	known p
+body fn 22421-22636	known p
+body fn 22786-23043	known p
+body fn 23161-23337	known p
+body fn 23518-23911	known p grows|0|-|-|..promiseLists|13|0|compiler/types|23874|23882|-1 grows|0|-|-|..promiseKeys|12|0|compiler/types|23874|23882|-1
+body fn 23999-24240	known p grows|0|-|-|..types|6|0|compiler/types|24121|24125|-1 grows|0|-|-|..keys|5|0|compiler/types|24121|24125|-1 grows|0|-|-|..depths|7|0|compiler/types|24121|24125|-1 grows|0|-|-|..state|6|0|compiler/types|24121|24125|-1 grows|0|-|-|..sizes|6|0|compiler/types|24121|24125|-1 grows|0|-|-|..aligns|7|0|compiler/types|24121|24125|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|24121|24125|-1 grows|0|-|-|..payloads|9|0|compiler/types|24121|24125|-1 grows|0|-|-|..llvm|5|0|compiler/types|24121|24125|-1 grows|0|-|-|..plains|7|0|compiler/types|24121|24125|-1 grows|0|-|-|..lists|6|0|compiler/types|24121|24125|-1 grows|0|-|-|..listKeys|9|0|compiler/types|24121|24125|-1
+body fn 24506-24990	known p
+body fn 25079-25385	known p
+body fn 25487-25658	known p
+body fn 25717-25826	known p
+body fn 25945-26064	known p
+body fn 26207-26474	known p grows|0|-|-|..types|6|0|compiler/types|26379|26383|-1 grows|0|-|-|..keys|5|0|compiler/types|26379|26383|-1 grows|0|-|-|..depths|7|0|compiler/types|26379|26383|-1 grows|0|-|-|..state|6|0|compiler/types|26379|26383|-1 grows|0|-|-|..sizes|6|0|compiler/types|26379|26383|-1 grows|0|-|-|..aligns|7|0|compiler/types|26379|26383|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|26379|26383|-1 grows|0|-|-|..payloads|9|0|compiler/types|26379|26383|-1 grows|0|-|-|..llvm|5|0|compiler/types|26379|26383|-1 grows|0|-|-|..plains|7|0|compiler/types|26379|26383|-1 grows|0|-|-|..lists|6|0|compiler/types|26379|26383|-1 grows|0|-|-|..listKeys|9|0|compiler/types|26379|26383|-1
+body fn 26578-26805	known p grows|0|-|-|..types|6|0|compiler/types|26682|26686|-1 grows|0|-|-|..keys|5|0|compiler/types|26682|26686|-1 grows|0|-|-|..depths|7|0|compiler/types|26682|26686|-1 grows|0|-|-|..state|6|0|compiler/types|26682|26686|-1 grows|0|-|-|..sizes|6|0|compiler/types|26682|26686|-1 grows|0|-|-|..aligns|7|0|compiler/types|26682|26686|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|26682|26686|-1 grows|0|-|-|..payloads|9|0|compiler/types|26682|26686|-1 grows|0|-|-|..llvm|5|0|compiler/types|26682|26686|-1 grows|0|-|-|..plains|7|0|compiler/types|26682|26686|-1 grows|0|-|-|..lists|6|0|compiler/types|26682|26686|-1 grows|0|-|-|..listKeys|9|0|compiler/types|26682|26686|-1
+body fn 26925-27280	known p grows|0|-|-|..nameLists|10|0|compiler/types|27227|27231|-1 grows|0|-|-|..nameKeys|9|0|compiler/types|27252|27255|-1
+body fn 27332-27425	known p
+body fn 27517-27642	known p
+body fn 27759-27947	known p grows|0|-|-|..types|6|0|compiler/types|27875|27881|-1 grows|0|-|-|..keys|5|0|compiler/types|27875|27881|-1 grows|0|-|-|..depths|7|0|compiler/types|27875|27881|-1 grows|0|-|-|..state|6|0|compiler/types|27875|27881|-1 grows|0|-|-|..sizes|6|0|compiler/types|27875|27881|-1 grows|0|-|-|..aligns|7|0|compiler/types|27875|27881|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|27875|27881|-1 grows|0|-|-|..payloads|9|0|compiler/types|27875|27881|-1 grows|0|-|-|..llvm|5|0|compiler/types|27875|27881|-1 grows|0|-|-|..plains|7|0|compiler/types|27875|27881|-1 grows|0|-|-|..lists|6|0|compiler/types|27875|27881|-1 grows|0|-|-|..listKeys|9|0|compiler/types|27875|27881|-1
+body fn 28094-28547	known p grows|0|-|-|..lists|6|0|compiler/types|28216|28227|-1 grows|0|-|-|..listKeys|9|0|compiler/types|28216|28227|-1 grows|0|-|-|..types|6|0|compiler/types|28203|28209|-1 grows|0|-|-|..keys|5|0|compiler/types|28203|28209|-1 grows|0|-|-|..depths|7|0|compiler/types|28203|28209|-1 grows|0|-|-|..state|6|0|compiler/types|28203|28209|-1 grows|0|-|-|..sizes|6|0|compiler/types|28203|28209|-1 grows|0|-|-|..aligns|7|0|compiler/types|28203|28209|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|28203|28209|-1 grows|0|-|-|..payloads|9|0|compiler/types|28203|28209|-1 grows|0|-|-|..llvm|5|0|compiler/types|28203|28209|-1 grows|0|-|-|..plains|7|0|compiler/types|28203|28209|-1
+body fn 28549-28820	known p grows|0|-|-|..lists|6|0|compiler/types|28809|28813|-1 grows|0|-|-|..listKeys|9|0|compiler/types|28809|28813|-1 grows|0|-|-|..types|6|0|compiler/types|28720|28727|-1 grows|0|-|-|..keys|5|0|compiler/types|28720|28727|-1 grows|0|-|-|..depths|7|0|compiler/types|28720|28727|-1 grows|0|-|-|..state|6|0|compiler/types|28720|28727|-1 grows|0|-|-|..sizes|6|0|compiler/types|28720|28727|-1 grows|0|-|-|..aligns|7|0|compiler/types|28720|28727|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|28720|28727|-1 grows|0|-|-|..payloads|9|0|compiler/types|28720|28727|-1 grows|0|-|-|..llvm|5|0|compiler/types|28720|28727|-1 grows|0|-|-|..plains|7|0|compiler/types|28720|28727|-1
+body fn 28887-29110	known p grows|0|-|-|..types|6|0|compiler/types|28946|28952|-1 grows|0|-|-|..keys|5|0|compiler/types|28946|28952|-1 grows|0|-|-|..depths|7|0|compiler/types|28946|28952|-1 grows|0|-|-|..state|6|0|compiler/types|28946|28952|-1 grows|0|-|-|..sizes|6|0|compiler/types|28946|28952|-1 grows|0|-|-|..aligns|7|0|compiler/types|28946|28952|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|28946|28952|-1 grows|0|-|-|..payloads|9|0|compiler/types|28946|28952|-1 grows|0|-|-|..llvm|5|0|compiler/types|28946|28952|-1 grows|0|-|-|..plains|7|0|compiler/types|28946|28952|-1 grows|0|-|-|..lists|6|0|compiler/types|29023|29032|-1 grows|0|-|-|..listKeys|9|0|compiler/types|29023|29032|-1
+body fn 29112-29343	known p grows|0|-|-|..types|6|0|compiler/types|29173|29179|-1 grows|0|-|-|..keys|5|0|compiler/types|29173|29179|-1 grows|0|-|-|..depths|7|0|compiler/types|29173|29179|-1 grows|0|-|-|..state|6|0|compiler/types|29173|29179|-1 grows|0|-|-|..sizes|6|0|compiler/types|29173|29179|-1 grows|0|-|-|..aligns|7|0|compiler/types|29173|29179|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|29173|29179|-1 grows|0|-|-|..payloads|9|0|compiler/types|29173|29179|-1 grows|0|-|-|..llvm|5|0|compiler/types|29173|29179|-1 grows|0|-|-|..plains|7|0|compiler/types|29173|29179|-1 grows|0|-|-|..lists|6|0|compiler/types|29253|29262|-1 grows|0|-|-|..listKeys|9|0|compiler/types|29253|29262|-1
+body fn 29601-30582	known p grows|0|-|-|..lists|6|0|compiler/types|29754|29763|-1 grows|0|-|-|..listKeys|9|0|compiler/types|29754|29763|-1 grows|0|-|-|..shapes|7|0|compiler/types|30145|30149|-1 grows|0|-|-|..shapeCases|11|0|compiler/types|30177|30181|-1 grows|0|-|-|..shapeFields|12|0|compiler/types|30214|30218|-1 grows|0|-|-|..shapeKeys|10|0|compiler/types|30264|30267|-1 grows|0|-|-|..types|6|0|compiler/types|30519|30525|-1 grows|0|-|-|..keys|5|0|compiler/types|30519|30525|-1 grows|0|-|-|..depths|7|0|compiler/types|30519|30525|-1 grows|0|-|-|..state|6|0|compiler/types|30519|30525|-1 grows|0|-|-|..sizes|6|0|compiler/types|30519|30525|-1 grows|0|-|-|..aligns|7|0|compiler/types|30519|30525|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|30519|30525|-1 grows|0|-|-|..payloads|9|0|compiler/types|30519|30525|-1 grows|0|-|-|..llvm|5|0|compiler/types|30519|30525|-1 grows|0|-|-|..plains|7|0|compiler/types|30519|30525|-1
+body fn 30792-30911	known p grows|0|-|-|..types|6|0|compiler/types|30864|30870|-1 grows|0|-|-|..keys|5|0|compiler/types|30864|30870|-1 grows|0|-|-|..depths|7|0|compiler/types|30864|30870|-1 grows|0|-|-|..state|6|0|compiler/types|30864|30870|-1 grows|0|-|-|..sizes|6|0|compiler/types|30864|30870|-1 grows|0|-|-|..aligns|7|0|compiler/types|30864|30870|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|30864|30870|-1 grows|0|-|-|..payloads|9|0|compiler/types|30864|30870|-1 grows|0|-|-|..llvm|5|0|compiler/types|30864|30870|-1 grows|0|-|-|..plains|7|0|compiler/types|30864|30870|-1
+body fn 30961-31073	known p grows|0|-|-|..types|6|0|compiler/types|31025|31031|-1 grows|0|-|-|..keys|5|0|compiler/types|31025|31031|-1 grows|0|-|-|..depths|7|0|compiler/types|31025|31031|-1 grows|0|-|-|..state|6|0|compiler/types|31025|31031|-1 grows|0|-|-|..sizes|6|0|compiler/types|31025|31031|-1 grows|0|-|-|..aligns|7|0|compiler/types|31025|31031|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|31025|31031|-1 grows|0|-|-|..payloads|9|0|compiler/types|31025|31031|-1 grows|0|-|-|..llvm|5|0|compiler/types|31025|31031|-1 grows|0|-|-|..plains|7|0|compiler/types|31025|31031|-1
+body fn 31306-31393	known p grows|0|-|-|..types|6|0|compiler/types|31354|31360|-1 grows|0|-|-|..keys|5|0|compiler/types|31354|31360|-1 grows|0|-|-|..depths|7|0|compiler/types|31354|31360|-1 grows|0|-|-|..state|6|0|compiler/types|31354|31360|-1 grows|0|-|-|..sizes|6|0|compiler/types|31354|31360|-1 grows|0|-|-|..aligns|7|0|compiler/types|31354|31360|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|31354|31360|-1 grows|0|-|-|..payloads|9|0|compiler/types|31354|31360|-1 grows|0|-|-|..llvm|5|0|compiler/types|31354|31360|-1 grows|0|-|-|..plains|7|0|compiler/types|31354|31360|-1
+body fn 31494-31775	known p grows|0|-|-|..patterns|9|0|compiler/types|31660|31664|-1 grows|0|-|-|..patternKeys|12|0|compiler/types|31692|31695|-1 grows|0|-|-|..types|6|0|compiler/types|31733|31739|-1 grows|0|-|-|..keys|5|0|compiler/types|31733|31739|-1 grows|0|-|-|..depths|7|0|compiler/types|31733|31739|-1 grows|0|-|-|..state|6|0|compiler/types|31733|31739|-1 grows|0|-|-|..sizes|6|0|compiler/types|31733|31739|-1 grows|0|-|-|..aligns|7|0|compiler/types|31733|31739|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|31733|31739|-1 grows|0|-|-|..payloads|9|0|compiler/types|31733|31739|-1 grows|0|-|-|..llvm|5|0|compiler/types|31733|31739|-1 grows|0|-|-|..plains|7|0|compiler/types|31733|31739|-1 keeps|1|-|-|.|0|0|compiler/types|31522|31522|0
+body fn 31829-31938	known p grows|0|-|-|..types|6|0|compiler/types|31880|31886|-1 grows|0|-|-|..keys|5|0|compiler/types|31880|31886|-1 grows|0|-|-|..depths|7|0|compiler/types|31880|31886|-1 grows|0|-|-|..state|6|0|compiler/types|31880|31886|-1 grows|0|-|-|..sizes|6|0|compiler/types|31880|31886|-1 grows|0|-|-|..aligns|7|0|compiler/types|31880|31886|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|31880|31886|-1 grows|0|-|-|..payloads|9|0|compiler/types|31880|31886|-1 grows|0|-|-|..llvm|5|0|compiler/types|31880|31886|-1 grows|0|-|-|..plains|7|0|compiler/types|31880|31886|-1
+body fn 32053-32162	known p grows|0|-|-|..types|6|0|compiler/types|32112|32118|-1 grows|0|-|-|..keys|5|0|compiler/types|32112|32118|-1 grows|0|-|-|..depths|7|0|compiler/types|32112|32118|-1 grows|0|-|-|..state|6|0|compiler/types|32112|32118|-1 grows|0|-|-|..sizes|6|0|compiler/types|32112|32118|-1 grows|0|-|-|..aligns|7|0|compiler/types|32112|32118|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|32112|32118|-1 grows|0|-|-|..payloads|9|0|compiler/types|32112|32118|-1 grows|0|-|-|..llvm|5|0|compiler/types|32112|32118|-1 grows|0|-|-|..plains|7|0|compiler/types|32112|32118|-1
+body fn 32271-32380	known p grows|0|-|-|..types|6|0|compiler/types|32330|32336|-1 grows|0|-|-|..keys|5|0|compiler/types|32330|32336|-1 grows|0|-|-|..depths|7|0|compiler/types|32330|32336|-1 grows|0|-|-|..state|6|0|compiler/types|32330|32336|-1 grows|0|-|-|..sizes|6|0|compiler/types|32330|32336|-1 grows|0|-|-|..aligns|7|0|compiler/types|32330|32336|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|32330|32336|-1 grows|0|-|-|..payloads|9|0|compiler/types|32330|32336|-1 grows|0|-|-|..llvm|5|0|compiler/types|32330|32336|-1 grows|0|-|-|..plains|7|0|compiler/types|32330|32336|-1
+body fn 32409-32530	known p
+body fn 32532-32609	known p
+body fn 32729-32833	known p
+body fn 32835-32950	known p grows|0|-|-|..errValNames|12|0|compiler/types|32936|32939|-1
+body fn 33253-33336	known p grows|0|-|-|..errReprs|9|0|compiler/types|33320|33323|-1
+body fn 33441-33537	known p
+body fn 33605-33707	known p
+body fn 33743-33864	known p
+body fn 33893-33951	known p
+body fn 34011-34065	known p
+body fn 34066-34118	known p
+body fn 34119-34171	known p
+body fn 34172-34224	known p
+body fn 34269-34339	known p
+body fn 34340-34408	known p
+body fn 34500-34568	known p
+body fn 34569-34639	known p
+body fn 34690-34762	known p
+body fn 34763-34817	known p
+body fn 34845-34915	known p
+body fn 34916-34986	known p
+body fn 34987-35057	known p
+body fn 35058-35137	known p
+body fn 35169-35238	known p
+body fn 35270-35343	known p
+body fn 35344-35402	known p
+body fn 35431-35502	known p
+body fn 35550-35636	known p
+body fn 35637-35712	known p
+body fn 35713-35805	known p
+body fn 35869-35933	known p
+body fn 35935-36006	known p
+body fn 36126-36238	known p
+body fn 36239-36415	known p
+body fn 36554-36691	known p
+body fn 36692-37049	known p grows|0|-|-|..types|6|0|compiler/types|36832|36836|-1 grows|0|-|-|..keys|5|0|compiler/types|36832|36836|-1 grows|0|-|-|..depths|7|0|compiler/types|36832|36836|-1 grows|0|-|-|..state|6|0|compiler/types|36832|36836|-1 grows|0|-|-|..sizes|6|0|compiler/types|36832|36836|-1 grows|0|-|-|..aligns|7|0|compiler/types|36832|36836|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|36832|36836|-1 grows|0|-|-|..payloads|9|0|compiler/types|36832|36836|-1 grows|0|-|-|..llvm|5|0|compiler/types|36832|36836|-1 grows|0|-|-|..plains|7|0|compiler/types|36832|36836|-1 grows|0|-|-|..lists|6|0|compiler/types|36832|36836|-1 grows|0|-|-|..listKeys|9|0|compiler/types|36832|36836|-1
+body fn 37050-37436	known p grows|0|-|-|..types|6|0|compiler/types|37185|37189|-1 grows|0|-|-|..keys|5|0|compiler/types|37185|37189|-1 grows|0|-|-|..depths|7|0|compiler/types|37185|37189|-1 grows|0|-|-|..state|6|0|compiler/types|37185|37189|-1 grows|0|-|-|..sizes|6|0|compiler/types|37185|37189|-1 grows|0|-|-|..aligns|7|0|compiler/types|37185|37189|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|37185|37189|-1 grows|0|-|-|..payloads|9|0|compiler/types|37185|37189|-1 grows|0|-|-|..llvm|5|0|compiler/types|37185|37189|-1 grows|0|-|-|..plains|7|0|compiler/types|37185|37189|-1 grows|0|-|-|..lists|6|0|compiler/types|37185|37189|-1 grows|0|-|-|..listKeys|9|0|compiler/types|37185|37189|-1
+body fn 37612-37719	known p
+body fn 37720-37865	known p grows|0|-|-|..types|6|0|compiler/types|37820|37823|-1 grows|0|-|-|..keys|5|0|compiler/types|37820|37823|-1 grows|0|-|-|..depths|7|0|compiler/types|37820|37823|-1 grows|0|-|-|..state|6|0|compiler/types|37820|37823|-1 grows|0|-|-|..sizes|6|0|compiler/types|37820|37823|-1 grows|0|-|-|..aligns|7|0|compiler/types|37820|37823|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|37820|37823|-1 grows|0|-|-|..payloads|9|0|compiler/types|37820|37823|-1 grows|0|-|-|..llvm|5|0|compiler/types|37820|37823|-1 grows|0|-|-|..plains|7|0|compiler/types|37820|37823|-1
+body fn 37866-38075	known p
+body fn 38183-38308	known p
+body fn 38309-38423	known p
+body fn 38424-38535	known p
+body fn 38536-38673	known p
+body fn 38674-38760	known p
+body fn 38803-38947	known p
+body fn 39084-39191	known p
+body fn 39298-40064	known p
+body fn 40066-40220	known p
+body fn 40525-41242	known p grows|0|-|-|..scopes|7|0|compiler/types|41188|41192|-1 grows|0|-|-|..scopeKeys|10|0|compiler/types|41214|41217|-1
+body fn 41339-41742	known p grows|0|-|-|..scopes|7|0|compiler/types|41702|41708|-1 grows|0|-|-|..scopeKeys|10|0|compiler/types|41702|41708|-1 grows|0|-|-|..types|6|0|compiler/types|41651|41657|-1 grows|0|-|-|..keys|5|0|compiler/types|41651|41657|-1 grows|0|-|-|..depths|7|0|compiler/types|41651|41657|-1 grows|0|-|-|..state|6|0|compiler/types|41651|41657|-1 grows|0|-|-|..sizes|6|0|compiler/types|41651|41657|-1 grows|0|-|-|..aligns|7|0|compiler/types|41651|41657|-1 grows|0|-|-|..offsetsAt|10|0|compiler/types|41651|41657|-1 grows|0|-|-|..payloads|9|0|compiler/types|41651|41657|-1 grows|0|-|-|..llvm|5|0|compiler/types|41651|41657|-1 grows|0|-|-|..plains|7|0|compiler/types|41651|41657|-1 grows|0|-|-|..lists|6|0|compiler/types|41651|41657|-1 grows|0|-|-|..listKeys|9|0|compiler/types|41651|41657|-1
+body fn 41839-41956	known p
+body fn 42172-42336	known p
+body fn 42338-42519	known p
+body fn 42593-42921	known p
+body fn 42996-43062	known p
+body fn 43064-43341	known p grows|0|-|-|..lists|6|0|compiler/types|43330|43334|-1 grows|0|-|-|..listKeys|9|0|compiler/types|43330|43334|-1
+body fn 43435-43514	known p
+body fn 43972-45380	known p
+body fn 45753-47463	known p grows|0|-|-|..refHolds|9|0|compiler/types|46460|46468|-1
+body fn 47685-47889	known p
+body fn 47891-48006	known p
+body fn 48008-48155	known p grows|0|-|-|..refHolds|9|0|compiler/types|48118|48122|-1
+body fn 48489-48800	known p grows|0|-|-|..refHolds|9|0|compiler/types|48697|48706|-1
+body fn 49458-49585	known p
+body fn 50011-50084	known p
+body fn 50265-50335	known p grows|0|-|-|..copyDecls|10|0|compiler/types|50316|50319|-1
+body fn 50337-50456	known p
+body fn 50653-50750	known p
+body fn 51048-51117	known p
+body fn 51119-51941	known p
+body fn 51943-52133	known p
+body fn 52241-52315	known p grows|0|-|-|..uniqueDecls|12|0|compiler/types|52296|52299|-1
+body fn 52317-52382	known p
+body fn 52482-52556	known p grows|0|-|-|..packedDecls|12|0|compiler/types|52537|52540|-1
+body fn 52558-52673	known p
+body fn 52836-52914	known p grows|0|-|-|..rawTys|7|0|compiler/types|52897|52900|-1
+body fn 52915-53003	known p grows|0|-|-|..rawBits|8|0|compiler/types|52984|52987|-1 keeps|2|-|-|.|0|0|compiler/types|52954|52954|0
+body fn 53093-53260	known p
+body fn 53261-53381	known p
+body fn 53704-54182	known p
+body fn 54184-54855	known p
+body fn 54906-54993	known p
+body fn 55051-55284	known p
+body fn 55440-55548	known p
+body fn 55604-55685	known p
+body fn 55687-55810	known p
+body fn 56199-56555	known p grows|0|-|-|..uniqueKnown|12|0|compiler/types|56499|56502|-1
+body fn 56557-57431	known p
+body fn 57515-57814	known p
+body fn 57816-58613	known p
+body fn 58615-58814	known p
+body fn 58816-59652	known p
+body fn 60218-60448	known p grows|0|-|-|..refHolds|9|0|compiler/types|60307|60318|-1
+body fn 60619-61315	known p grows|3|-|-|.|0|0|compiler/types|61140|61144|-1 grows|0|-|-|..refHolds|9|0|compiler/types|61199|61208|-1
+body fn 61555-61630	known p
+body fn 61632-62579	known p
+body fn 62904-62995	known p
+body fn 63166-63291	known p
+body fn 63503-63609	known p
+body fn 63660-63780	known p
+body fn 63908-64587	known p grows|0|-|-|..walking|8|0|compiler/types|64284|64288|-1
+body fn 64589-64909	known p grows|0|-|-|..walking|8|0|compiler/types|64860|64867|-1
+body fn 64911-65062	known p grows|0|-|-|..walking|8|0|compiler/types|65014|65021|-1
+body fn 65527-65683	known p
+body fn 65802-65914	known p
+body fn 65916-66579	known p grows|2|-|-|.|0|0|compiler/types|66030|66034|-1
+body fn 66581-66723	known p grows|2|-|-|.|0|0|compiler/types|66697|66707|-1
+body fn 66815-67389	known p grows|0|-|-|..walking|8|0|compiler/types|67059|67063|-1
+body fn 67568-67874	known p
+body fn 67876-68195	known p grows|0|-|-|..walking|8|0|compiler/types|68146|68153|-1
+body fn 68197-68347	known p grows|0|-|-|..walking|8|0|compiler/types|68299|68306|-1
+body fn 68431-68700	known p
+body fn 68702-68899	known p
+body fn 69609-70222	known p grows|0|-|-|..refHolds|9|0|compiler/types|69865|69874|-1
+body fn 70295-70408	known p grows|0|-|-|..Modules|8|0|compiler/types|70361|70365|-1 keeps|1|-|-|.|0|0|compiler/types|70323|70323|0
+body fn 70458-70711	known p grows|0|-|-|..decls|6|0|compiler/types|70596|70600|-1 grows|0|-|-|..declKeys|9|0|compiler/types|70645|70648|-1
+body fn 70713-70785	known p
+body fn 70786-70864	known p
+body fn 70865-70937	known p
+body fn 70938-71015	known p
+body fn 71016-71070	known p
+body fn 71174-71269	known p
+body fn 71337-71474	known p
+body fn 71475-71542	known p
+body fn 71544-71694	known p grows|0|-|-|..bodies|7|0|compiler/types|71633|71636|-1
+body fn 71779-72095	known p grows|0|-|-|..caseNames|10|0|compiler/types|72009|72012|-1 grows|0|-|-|..bodies|7|0|compiler/types|72036|72039|-1
+body fn 72097-72218	known p grows|0|-|-|..bodies|7|0|compiler/types|72162|72165|-1
+body fn 72273-72386	known p grows|0|-|-|..bodies|7|0|compiler/types|72326|72329|-1
+body fn 72388-72457	known p
+body fn 72458-72525	known p
+body fn 72526-72591	known p
+body fn 72592-72661	known p
+body fn 72663-72888	known p
+body fn 73056-73131	known p
+body fn 73348-73418	known p grows|0|-|-|..endsDecls|10|0|compiler/types|73399|73402|-1
+body fn 73420-73531	known p
+body fn 73822-74050	known p
+body fn 74280-74609	known p
+body fn 74645-74774	known p
+body fn 74869-75011	known p
+body fn 75068-75136	known p
+body fn 75137-75212	known p
+body fn 75214-75275	known p
+body fn 75276-75339	known p
+body fn 75399-75735	known p
+body fn 75825-75896	known p
+body fn 75898-76178	known p
+body fn 76511-77099	known p grows|0|-|-|..seen|5|0|compiler/types|76670|76673|-1
+body fn 77101-77252	known p grows|0|-|-|..seen|5|0|compiler/types|77203|77208|-1
+body fn 77361-77661	known p
+body fn 77860-78776	known p
+body fn 78854-78980	known p grows|1|-|-|.|0|0|compiler/types|78963|78967|-1
+body fn 79338-82051	known p grows|0|-|-|..offsets|8|0|compiler/types|81077|81086|-1
+body fn 82053-82185	known p
+body fn 82284-82656	known p grows|0|-|-|..offsets|8|0|compiler/types|82562|82566|-1
+body fn 82779-83026	known p grows|0|-|-|..offsets|8|0|compiler/types|82944|82948|-1
+body fn 83166-83485	known p
+body fn 83625-83910	known p
+body fn 84044-84140	known p
+body fn 84264-84423	known p
+body fn 84425-85284	known p
+body fn 85286-85475	known p
+body fn 85477-85634	known p
+body fn 85636-85980	known p
+body fn 86374-86661	known p
+body fn 86728-86990	known p
+body fn 87084-87228	known p
+body fn 87519-87817	known p
+body fn 87962-88230	known p
+body fn 88863-88976	known p
+body fn 89095-89756	known p grows|1|-|-|..chars|6|0|compiler/types|89294|89298|-1
+body fn 89986-90119	known p
+body fn 90175-90291	known p
+body fn 90293-93367	known p grows|1|-|-|..chars|6|0|compiler/types|90416|90420|-1
+body fn 93463-94895	known p grows|1|-|-|..chars|6|0|compiler/types|93550|93554|-1
+body fn 94966-95650	known p grows|1|-|-|..chars|6|0|compiler/types|95059|95063|-1
+body fn 95717-95891	known p grows|1|-|-|..chars|6|0|compiler/types|95828|95832|-1
+body fn 95893-96070	known p grows|1|-|-|..chars|6|0|compiler/types|96024|96028|-1
+body fn 96136-96198	known p
+body fn 96458-96980	known p
+body fn 97090-97187	known p
+body fn 97189-97281	known p
+body fn 97584-98492	known p
+body fn 98494-98560	known p
+body fn 98562-98626	known p
+body fn 98696-98974	known p
+body global AnySlotBase	known p
+body global BigAggregate	known p
+body global BoolT	known p
+body global ClosingVar	known p
+body global DefaultErrT	known p
+body global FromTypeVar	known p
+body global KeepsHome	known p
+body global LaidOut	known p
+body global LayingOut	known p
+body global NoLayout	known p
+body global NoreturnT	known p
+body global NotLaidOut	known p
+body global NullT	known p
+body global Nullable	known p
+body global OwnScope	known p
+body global PromBorrows	known p
+body global PromNoalloc	known p
+body global PromNoblock	known p
+body global PromNoborrow	known p
+body global PromNoextern	known p
+body global PromNorecurse	known p
+body global PromNospawn	known p
+body global PromPure	known p
+body global PromReturns	known p
+body global PromiseNames	known p
+body global ReadOnly	known p
+body global ResultVar	known p
+body global RoleCtor	known p
+body global RoleDtor	known p
+body global RoleFn	known p
+body global RoleTail	known p
+body global Spread	known p
+body global UnknownT	known p
+body global VoidT	known p
+body global Writable	known p
+body global primBits	known p
+body global primLlvm	known p
+body global primNames	known p
+baked AnySlotBase [8 0300000000000000]
+baked BigAggregate [8 8000000000000000]
+baked BoolT [8 02000000]
+baked ClosingVar [8 feffffffffffffff]
+baked DefaultErrT [8 10000000]
+baked FromTypeVar [8 feffffffffffffff]
+baked KeepsHome [8 ffffffffffffffff]
+baked LaidOut [8 0200000000000000]
+baked LayingOut [8 0100000000000000]
+baked NoLayout [8 0300000000000000]
+baked NoreturnT [8 11000000]
+baked NotLaidOut [8 0000000000000000]
+baked NullT [8 0f000000]
+baked Nullable [8 0400000000000000]
+baked OwnScope [8 ffffffffffffffff]
+baked PromBorrows [8 0001000000000000]
+baked PromNoalloc [8 0200000000000000]
+baked PromNoblock [8 0400000000000000]
+baked PromNoborrow [8 8000000000000000]
+baked PromNoextern [8 2000000000000000]
+baked PromNorecurse [8 1000000000000000]
+baked PromNospawn [8 0800000000000000]
+baked PromPure [8 4000000000000000]
+baked PromReturns [8 0100000000000000]
+baked PromiseNames [64 0700000000000000000000000000000007000000000000000000000000000000070000000000000000000000000000000700000000000000000000000000000009000000000000000000000000000000080000000000000000000000000000000400000000000000000000000000000008000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0 @120>8+0][8c 72657475726e73][8c 6e6f616c6c6f63][8c 6e6f626c6f636b][8c 6e6f737061776e][8c 6e6f72656375727365][8c 6e6f65787465726e][8c 70757265][8c 6e6f626f72726f77]
+baked ReadOnly [8 0000000000000000]
+baked ResultVar [8 ffffffffffffffff]
+baked RoleCtor [8 0100000000000000]
+baked RoleDtor [8 0200000000000000]
+baked RoleFn [8 0000000000000000]
+baked RoleTail [8 0300000000000000]
+baked Spread [8 0800000000000000]
+baked UnknownT [8 00000000]
+baked VoidT [8 01000000]
+baked Writable [8 0100000000000000]
+baked primBits [64 000000000000000000000000000000000100000000000000080000000000000010000000000000002000000000000000400000000000000008000000000000001000000000000000200000000000000040000000000000001000000000000000100000000000000020000000000000004000000000000000]
+baked primLlvm [64 000000000000000000000000000000000400000000000000000000000000000002000000000000000000000000000000020000000000000000000000000000000300000000000000000000000000000003000000000000000000000000000000030000000000000000000000000000000200000000000000000000000000000003000000000000000000000000000000030000000000000000000000000000000300000000000000000000000000000004000000000000000000000000000000060000000000000000000000000000000500000000000000000000000000000006000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0 @120>8+0 @136>9+0 @152>10+0 @168>11+0 @184>12+0 @200>13+0 @216>14+0 @232>15+0][8c ][8c 766f6964][8c 6931][8c 6938][8c 693136][8c 693332][8c 693634][8c 6938][8c 693136][8c 693332][8c 693634][8c 68616c66][8c 62666c6f6174][8c 666c6f6174][8c 646f75626c65]
+baked primNames [64 000000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000020000000000000000000000000000000300000000000000000000000000000003000000000000000000000000000000030000000000000000000000000000000200000000000000000000000000000003000000000000000000000000000000030000000000000000000000000000000300000000000000000000000000000003000000000000000000000000000000040000000000000000000000000000000300000000000000000000000000000003000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0 @120>8+0 @136>9+0 @152>10+0 @168>11+0 @184>12+0 @200>13+0 @216>14+0 @232>15+0][8c ][8c ][8c 426f6f6c][8c 4938][8c 493136][8c 493332][8c 493634][8c 5538][8c 553136][8c 553332][8c 553634][8c 463136][8c 42463136][8c 463332][8c 463634]
+sig A@34066 fn&(Table&, TypeId) I64
+sig AddDecl@70458 fn&(mut Table&, I64, NameId, DeclKind, I32) DeclId
+sig AddModule@70295 fn&(mut Table&, String&) I64
+sig Align@75276 fn&(Table&, TypeId) I64
+sig Anchors@60218 fn&(mut Table&, TypeId) Vec<Array<I64>>
+sig AnonEnum@29601 fn&(mut Table&, Array<NameId>&, ListId, Array<NameId>&) TypeId
+sig Any@31829 fn&(mut Table&, TypeId) TypeId
+sig AnyTrait@36239 fn&(Table&, TypeId) TypeId
+sig AnyUnique@52317 fn&(Table&) Bool
+sig Args@34340 fn&(Table&, TypeId) ListId
+sig Array@17543 fn&(mut Table&, TypeId, TypeId) TypeId
+sig ArrayRef@38183 fn&(Table&, TypeId) Bool
+sig B@34119 fn&(Table&, TypeId) I64
+sig Base@72526 fn&(Table&, TypeId) TypeId
+sig BitOffsets@55051 fn&(Table&, TypeId) Array<I64>
+sig Bits@38803 fn&(Table&, TypeId) I64
+sig BorrowsOf@22085 fn&(Table&, TypeId) Array<I64>
+sig ByAddress@83625 fn&(Table&, TypeId) Bool
+sig C@34172 fn&(Table&, TypeId) I64
+sig Canon@88863 fn&(mut Table&, TypeId) String
+sig CanonList@90175 fn&(mut Table&, ListId) String
+sig CanonNamed@89986 fn&(mut Table&, TypeId) String
+sig CaseBits@54906 fn&(I64) I64
+sig CaseNames@74645 fn&(Table&, TypeId) Array<NameId>&
+sig Cases@72458 fn&(Table&, TypeId) ListId
+sig Closed@39298 fn&(Table&, TypeId) Bool
+sig ComputeLayout@79338 fn&(mut Table&, TypeId) Bool
+sig Const@30961 fn&(mut Table&, TypeId, I64) TypeId
+sig ConstExpr@31494 fn&(mut Table&, String&) TypeId
+sig ConstType@35270 fn&(Table&, TypeId) TypeId
+sig ConstValue@35344 fn&(Table&, TypeId) I64
+sig Count@12440 fn&(Table&) I64
+sig DeclCount@71016 fn&(Table&) I64
+sig DeclKindOf@70865 fn&(Table&, DeclId) DeclKind
+sig DeclModule@70713 fn&(Table&, DeclId) I64
+sig DeclName@70786 fn&(Table&, DeclId) NameId
+sig DeclOf@34269 fn&(Table&, TypeId) DeclId
+sig DeclParams@70938 fn&(Table&, DeclId) I64
+sig DeclaredUnique@55687 fn&(Table&, TypeId) Bool
+sig DeclaresCopy@50337 fn&(Table&, TypeId) Bool
+sig Demangle@97584 fn&(String&) String
+sig Depth@35869 fn&(Table&, TypeId) I64
+sig Destructs@72592 fn&(Table&, TypeId) Bool
+sig DtorWritten@73056 fn&(Table&, TypeId) Bool
+sig Elem@34500 fn&(Table&, TypeId) TypeId
+sig Embedded@77860 fn&(Table&, TypeId) Array<TypeId>
+sig Ends@73420 fn&(Table&, TypeId) Bool
+sig ErrCarries@33605 fn&(Table&, TypeId) Bool
+sig ErrMask@15190 fn&(Table&, TypeId) U64
+sig ErrOf@14993 fn&(Table&, TypeId) TypeId
+sig ErrRepr@33441 fn&(Table&, TypeId) TypeId
+sig ErrSet@32053 fn&(mut Table&, ListId) TypeId
+sig ErrSetItems@33743 fn&(Table&, TypeId) ListId
+sig ErrVal@32271 fn&(mut Table&, ListId) TypeId
+sig ErrValItems@32409 fn&(Table&, TypeId) ListId
+sig ErrValName@32729 fn&(Table&, TypeId) DeclId
+sig ErrWords@14772 fn&(mut Table&, TypeId, U64) TypeId
+sig Errors@34987 fn&(Table&, TypeId) ListId
+sig FieldHolds@73822 fn&(Table&, TypeId, TypeId) Bool
+sig Fields@72388 fn&(Table&, TypeId) ListId
+sig FindDecl@71174 fn&(Table&, String&) DeclId ? ? MapError
+sig ForeignRef@47685 fn&(Table&, TypeId) Bool
+sig Func@18507 fn&(mut Table&, ListId, TypeId, ListId, ScopesId, I64, Bool, TypeId, I64) TypeId
+sig FuncNullable@25717 fn&(Table&, TypeId) Bool
+sig FuncTag@25945 fn&(Table&, TypeId) TypeId
+sig HasBody@71475 fn&(Table&, TypeId) Bool
+sig HasPayload@74869 fn&(Table&, ListId) Bool
+sig Holds@76511 fn&(mut DtorWalk&, TypeId) Bool
+sig HoldsRefs@45753 fn&(mut Table&, TypeId) Bool
+sig IntBytes@39084 fn&(I64) I64
+sig IntType@14413 fn&(Table&, I64, Bool) TypeId
+sig IntWidth@13947 fn&(String&) I64
+sig IsAny@36126 fn&(Table&, TypeId) Bool
+sig IsErrVal@32532 fn&(Table&, TypeId) Bool
+sig IsFloat@38674 fn&(Table&, TypeId) Bool
+sig IsInt@38424 fn&(Table&, TypeId) Bool
+sig IsIntName@14288 fn&(String&) Bool
+sig IsNullable@36554 fn&(Table&, TypeId) Bool
+sig IsNumber@38309 fn&(Table&, TypeId) Bool
+sig IsRef@35935 fn&(Table&, TypeId) Bool
+sig IsSpread@37612 fn&(Table&, TypeId) Bool
+sig IsUnsigned@38536 fn&(Table&, TypeId) Bool
+sig Items@17202 fn&(Table&, ListId) Array<TypeId>&
+sig KeepsHome@23161 fn&(Table&, TypeId) Bool
+sig KeepsOf@22421 fn&(Table&, TypeId) Array<I64>
+sig KeepsText@25079 fn&(Table&, TypeId, I64, I64, I64) String
+sig KindOf@33893 fn&(Table&, TypeId) Kind
+sig LayoutState@75068 fn&(Table&, TypeId) I64
+sig Length@34569 fn&(Table&, TypeId) TypeId
+sig List1@17102 fn&(mut Table&, TypeId) ListId
+sig List@16707 fn&(mut Table&, Array<TypeId>&) ListId
+sig Llvm@84264 fn&(mut Table&, TypeId) String&
+sig MarkCopy@50265 fn&(mut Table&, DeclId)
+sig MarkEnds@73348 fn&(mut Table&, DeclId)
+sig MarkPacked@52482 fn&(mut Table&, DeclId)
+sig MarkUnique@52241 fn&(mut Table&, DeclId)
+sig MayBorrow@22786 fn&(Table&, TypeId, I64) Bool
+sig NameErrVal@32835 fn&(mut Table&, TypeId, DeclId)
+sig Named@17382 fn&(mut Table&, DeclId, ListId) TypeId
+sig NamesIdOf@27332 fn&(Table&, TypeId) I64
+sig NamesOf@27517 fn&(Table&, TypeId) Array<I64>&
+sig NeedsDrop@51048 fn&(Table&, TypeId) Bool
+sig NonNull@36692 fn&(mut Table&, TypeId) TypeId
+sig Offsets@75399 fn&(Table&, TypeId) Array<I64>
+sig OrNull@37050 fn&(mut Table&, TypeId) TypeId
+sig OwnedPart@49458 fn&(Table&, TypeId) Bool
+sig OwnsParts@50011 fn&(mut Table&, TypeId) Bool
+sig Packed@52558 fn&(Table&, TypeId) Bool
+sig PackedBits@53704 fn&(Table&, TypeId) I64
+sig ParamName@25487 fn&(Table&, TypeId, I64) String
+sig ParamNames@26925 fn&(mut Table&, Array<I64>&) I64
+sig Params@34845 fn&(Table&, TypeId) ListId
+sig Parts@35169 fn&(Table&, TypeId) ListId
+sig Passing@87962 fn&(mut Table&, TypeId) String
+sig Pattern@35431 fn&(Table&, TypeId) String&
+sig PayloadSize@75825 fn&(Table&, TypeId) I64
+sig PermOf@34763 fn&(Table&, TypeId) I64
+sig Plain@42996 fn&(Table&, TypeId) TypeId
+sig PlainList@43064 fn&(mut Table&, ListId) ListId
+sig Prim@15343 fn&(Table&, String&) TypeId
+sig PromiseText@24506 fn&(Table&, TypeId) String
+sig PromiseWords@21931 fn&(Table&, TypeId) I64
+sig Promises@20389 fn&(mut Table&, I64, Array<I64>&, Array<I64>&) I64
+sig PromisesOf@21774 fn&(Table&, TypeId) I64
+sig PromisesPure@63660 fn&(Table&, TypeId) Bool
+sig RawBits@53261 fn&(Table&, TypeId) Array<I64>&
+sig RawType@53093 fn&(Table&, TypeId) TypeId
+sig ReachesCode@62904 fn&(Table&, TypeId) Bool
+sig ReachesImpure@63503 fn&(Table&, TypeId) Bool
+sig ReachesWrite@63166 fn&(Table&, TypeId, Bool) Bool
+sig ReceiverPromises@23518 fn&(mut Table&, TypeId) I64
+sig Record@29112 fn&(mut Table&, ListId) TypeId
+sig Ref@17996 fn&(mut Table&, TypeId, I64) TypeId
+sig RefInto@65527 fn&(Table&, TypeId, TypeId) Bool
+sig Referent@34690 fn&(Table&, TypeId) TypeId
+sig Refunc@26207 fn&(mut Table&, TypeId, ListId, TypeId, ListId, ScopesId, I64) TypeId
+sig Repr@77361 fn&(Table&, TypeId) TypeId
+sig Result@34916 fn&(Table&, TypeId) TypeId
+sig ResultFrom@42338 fn&(Table&, TypeId, I64) I64
+sig Results@42593 fn&(Table&, TypeId) Array<TypeId>
+sig RetLlvm@87519 fn&(mut Table&, TypeId) String
+sig Role@41839 fn&(Table&, TypeId) I64
+sig RunLength@31306 fn&(mut Table&) TypeId
+sig RunsCopy@50653 fn&(mut Table&, TypeId) Bool
+sig Same@43435 fn&(Table&, TypeId, TypeId) Bool
+sig ScopeVarsOf@69609 fn&(mut Table&, TypeId) Array<I64>
+sig Scopes@40525 fn&(mut Table&, I64, Array<I64>&, Array<I64>&) ScopesId
+sig ScopesFit@43972 fn&(Table&, TypeId, TypeId) Bool
+sig ScopesOf@35058 fn&(Table&, TypeId) ScopesId
+sig SetEmptyBody@72273 fn&(mut Table&, TypeId)
+sig SetEnumBody@71779 fn&(mut Table&, TypeId, Array<NameId>&, ListId)
+sig SetErrRepr@33253 fn&(mut Table&, TypeId, TypeId)
+sig SetLayoutState@75137 fn&(mut Table&, TypeId, I64)
+sig SetOverBody@72097 fn&(mut Table&, TypeId, TypeId)
+sig SetRawBits@52915 fn&(mut Table&, DeclId, Array<I64>&)
+sig SetRawType@52836 fn&(mut Table&, DeclId, TypeId)
+sig SetStructBody@71544 fn&(mut Table&, TypeId, ListId, Bool)
+sig ShapeCases@35637 fn&(Table&, TypeId) ListId
+sig ShapeFields@35713 fn&(Table&, TypeId) Array<NameId>&
+sig ShapeNames@35550 fn&(Table&, TypeId) Array<NameId>&
+sig ShareOf@42172 fn&(Table&, TypeId, I64) I64
+sig SharesRefs@61555 fn&(mut Table&, TypeId) Bool
+sig Size@75214 fn&(Table&, TypeId) I64
+sig SpreadAt@37866 fn&(Table&, TypeId) I64
+sig StructBody@87084 fn&(mut Table&, TypeId) String
+sig Symbol@96458 fn&(String&) String
+sig Table.New@12492 fn&(mut Names&) Table
+sig Tuple@28887 fn&(mut Table&, ListId) TypeId
+sig TypeCount@34011 fn&(Table&) I64
+sig Unique@56199 fn&(mut Table&, TypeId) Bool
+sig UniqueSettled@55604 fn&(Table&, TypeId) Bool
+sig Unnamed@28094 fn&(mut Table&, TypeId) TypeId
+sig UnsignedText@96136 fn&(I64) String
+sig Unspread@37720 fn&(mut Table&, TypeId) TypeId
+sig Untagged@26578 fn&(mut Table&, TypeId) TypeId
+sig ValueParts@65802 fn&(Table&, TypeId) Vec<TypeId>
+sig Var@30792 fn&(mut Table&, I64, I64, I64) TypeId
+sig ViaMemory@84044 fn&(Table&, TypeId) Bool
+sig WithNames@27759 fn&(mut Table&, TypeId, I64) TypeId
+sig WithPromises@23999 fn&(mut Table&, TypeId, I64) TypeId
+sig WithRole@41339 fn&(mut Table&, TypeId, I64) TypeId
+sig aggregate@86728 fn&(mut Table&, ListId) String
+sig anchorsInto@60619 fn&(mut Table&, TypeId, Array<I64>&, mut Vec<Array<I64>>&, I64) ? NoOwner
+sig arrayLlvm@85286 fn&(mut Table&, TypeId) String
+sig at@16370 fn&(Table&, TypeId) data
+sig bodyOf@71337 fn&(Table&, TypeId) body
+sig canon@90293 fn&(mut Table&, mut StringBuilder&, TypeId)
+sig canonErrs@95717 fn&(mut Table&, mut StringBuilder&, Array<TypeId>&)
+sig canonFunc@93463 fn&(mut Table&, mut StringBuilder&, TypeId)
+sig canonNamed@94966 fn&(mut Table&, mut StringBuilder&, TypeId)
+sig canonPromises@89095 fn&(Table&, mut StringBuilder&, TypeId)
+sig closedList@40066 fn&(Table&, ListId) Bool
+sig deepest@16499 fn&(Table&, ListId) I32
+sig depthOf@16432 fn&(Table&, TypeId) I32
+sig destructs@72663 fn&(Table&, TypeId, I64) Bool
+sig enumLlvm@85477 fn&(mut Table&, TypeId) String
+sig fieldBits@55440 fn&(Table&, TypeId) I64
+sig fieldList@75898 fn&(Table&, TypeId) ListId
+sig hash128@98696 fn&(String&) U64, U64
+sig hex16@98562 fn&(U64) String
+sig hex2@98494 fn&(U8) String
+sig holdsDropping@74280 fn&(Table&, TypeId, I64) Bool
+sig holdsState@47891 fn&(Table&, TypeId) U8
+sig intern@15946 fn&(mut Table&, data, I32) TypeId
+sig joined@95893 fn&(mut Table&, mut StringBuilder&, ListId)
+sig lands@67568 fn&(mut refWalk&, TypeId) Bool
+sig layEnum@83166 fn&(mut Table&, TypeId, ListId) I64, I64
+sig layFields@82284 fn&(mut Table&, TypeId, ListId) I64, I64
+sig layPacked@82779 fn&(mut Table&, TypeId) I64, I64
+sig listHolds@48489 fn&(mut Table&, ListId, Bool, Bool) Bool
+sig listShares@68431 fn&(mut Table&, ListId, I64, Bool) Bool
+sig named@64589 fn&(mut codeWalk&, TypeId) Bool
+sig named@67876 fn&(mut refWalk&, TypeId) Bool
+sig namedLlvm@85636 fn&(mut Table&, TypeId) String
+sig namedPackedBits@54184 fn&(Table&, TypeId) I64
+sig needsDrop@51119 fn&(Table&, TypeId, I64) Bool
+sig ownsParts@58816 fn&(mut Table&, TypeId, I64) Bool
+sig partsDrop@51943 fn&(Table&, ListId, I64) Bool
+sig partsOwn@68702 fn&(mut Table&, ListId, I64) Bool
+sig partsRunCopy@58615 fn&(mut Table&, ListId, I64) Bool
+sig partsUnique@57515 fn&(mut Table&, ListId, I64, Bool) Bool
+sig primIndex@13528 fn&(I64, Bool) I64
+sig pushPayloads@78854 fn&(Array<TypeId>&, mut Vec<TypeId>&)
+sig reaches@63908 fn&(mut codeWalk&, TypeId) Bool
+sig reaches@66815 fn&(mut refWalk&, TypeId) Bool
+sig runLess@21560 fn&(Array<I64>&, I64, I64, I64) Bool
+sig runTimeArray@82053 fn&(Table&, TypeId) Bool
+sig runsCopy@57816 fn&(mut Table&, TypeId, I64) Bool
+sig setHolds@48008 fn&(mut Table&, TypeId, U8)
+sig sharesRefs@61632 fn&(mut Table&, TypeId, I64) Bool
+sig some@64911 fn&(mut codeWalk&, ListId) Bool
+sig some@68197 fn&(mut refWalk&, ListId) Bool
+sig some@77101 fn&(mut DtorWalk&, Array<TypeId>&) Bool
+sig sortRuns@21240 fn&(mut Array<I64>&, I64, I64, I64)
+sig spellLlvm@84425 fn&(mut Table&, TypeId) String
+sig structName@86374 fn&(mut Table&, TypeId) String
+sig symbolHexDigit@97090 fn&(Char) Bool
+sig symbolHexValue@97189 fn&(Char) I64
+sig unique@56557 fn&(mut Table&, TypeId, I64) Bool
+sig unnamedList@28549 fn&(mut Table&, ListId) ListId
+sig valueParts@65916 fn&(Table&, TypeId, mut Vec<TypeId>&)
+sig valuePartsOf@66581 fn&(Table&, ListId, mut Vec<TypeId>&)
+end
+sum dfb14905eaf6a85141ed40ed471c735c9cf08a4611ffc15607f9aeac9ebcb20f

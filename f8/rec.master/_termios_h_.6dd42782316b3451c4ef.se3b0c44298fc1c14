@@ -1,0 +1,1687 @@
+olang scope record
+run <termios.h> 0-0 ctor <termios.h>:termios	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+mark <termios.h> 0-0 ctor <termios.h>:termios	0,1,2,3,4,5,6,7
+marks 9983b3eac051c7bb4a4b664d7827727e
+read -ctor	Array<U8, 32>
+read -ctor	U32
+read -ctor	U8
+hits 0
+body 1 1 8 1 | V0 | F F F F F F F F | b1 b00000000 b0 b00000000 | | | ||
+sum r b1 b1 b b b b b b a,<termios.h>:848:861 t i,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out dd21142c96c3bc8c48bc8bf8072c1fa7
+run <termios.h> global NCCS	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 08b0ef2224124eac6f935051cc678e27
+run <termios.h> global VINTR	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 162f1e0cafa9f30f526e50f830f92d85
+run <termios.h> global VQUIT	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c4c53b4e3fad98765cd756e97d2e1e31
+run <termios.h> global VERASE	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a72095766200cc649ece84a6ae8c6920
+run <termios.h> global VKILL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 44da3e0720795a6171ce58e6b84e7535
+run <termios.h> global VEOF	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1887af583d04dc4b5ab584836eaf005f
+run <termios.h> global VTIME	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6e76871628ab68a26820de29f9dfba44
+run <termios.h> global VMIN	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out da5238163989bdeee6b10524c5837802
+run <termios.h> global VSWTC	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 19648f1ecf8372c96961139937a0b4a2
+run <termios.h> global VSTART	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a98786c36e322a2536f60b29c127b5dc
+run <termios.h> global VSTOP	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ea6225d30381c53ce9dc23bf9a5bbf91
+run <termios.h> global VSUSP	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3be7b7a622f7da4fec909ed8ed7b6a88
+run <termios.h> global VEOL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out efbdc68861e10a84c645f377b53554ce
+run <termios.h> global VREPRINT	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dacdd2819246f42a19c540015ff0d439
+run <termios.h> global VDISCARD	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c107fe6a1c5e1703e935584b62bd6084
+run <termios.h> global VWERASE	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b6a65ba001faa796330841641b3b3876
+run <termios.h> global VLNEXT	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d8b177bd44d6dcb3bb2a446c5dabc18d
+run <termios.h> global VEOL2	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f47f85a0a7bf7262a37906612e46b5ce
+run <termios.h> global IGNBRK	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7bee605b7622326f00068d917de7bd0a
+run <termios.h> global BRKINT	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2626dd10dc5e34b6f606c10a8d655a09
+run <termios.h> global IGNPAR	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c0191688eafe6e661b664cb535cd769c
+run <termios.h> global PARMRK	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e069643e446223517763b313d2781511
+run <termios.h> global INPCK	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 07165743df45428386aeb73a734a4dca
+run <termios.h> global ISTRIP	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 274863f9cb126cbf58cf8b3d21ade364
+run <termios.h> global INLCR	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3cbfae6f2b7e950349d3f9c7e8ca2696
+run <termios.h> global IGNCR	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cd1e34a10bdf841a33416f7f78c1caea
+run <termios.h> global ICRNL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d846b4f7dd7e7dd8227023329dc5489a
+run <termios.h> global IUCLC	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f7e38aa2b67d18745b7314a6fea1b54c
+run <termios.h> global IXON	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f285f052e8da79546bd3d688d3e48995
+run <termios.h> global IXANY	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 09f2d7253eafdb8b1bd61b2acfedfd7d
+run <termios.h> global IXOFF	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3866dc3cb5e2d535856cc8d4bcdac9d6
+run <termios.h> global IMAXBEL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b61bf6e2a5e82cdd126d079a711de375
+run <termios.h> global IUTF8	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b3032c8882fce796db5b3d7b4b134208
+run <termios.h> global OPOST	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a2340dbe792bfc54f3ff08713c6793f1
+run <termios.h> global OLCUC	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c5a71c5fea5746de85b996b1956fb1f5
+run <termios.h> global ONLCR	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e3ba18b1f15840052de57a0ee402b5cd
+run <termios.h> global OCRNL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3db04c1904625b6518c5dc5ca157fcbe
+run <termios.h> global ONOCR	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 272680db98e41a505eaf81620db5836a
+run <termios.h> global ONLRET	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ee1fe6823c87a9b2ad75d28f50281074
+run <termios.h> global OFILL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ce8f5eeb19142d85ae3cee16da1d22be
+run <termios.h> global OFDEL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1f5eb0c107b952f4fdb3a719e6a17986
+run <termios.h> global NLDLY	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 82eae0a074eca1b22e419cba8849332e
+run <termios.h> global NL0	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dd3a7376b5a84f1ece89a8df939dc75b
+run <termios.h> global NL1	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 62d0da9fe45c3201e2db50e3417cc4ad
+run <termios.h> global CRDLY	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 28325385a4b1f8cd7d28f7b817b69ea5
+run <termios.h> global CR0	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1a03d9d16f3fed03c38d63df867cadae
+run <termios.h> global CR1	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0393b8d90081e3fc8a7f2f848c5512db
+run <termios.h> global CR2	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e6169cccb0374173e5befb85d3942334
+run <termios.h> global CR3	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 630285eb776afab81efe1fcd89b07497
+run <termios.h> global TABDLY	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e0a13a6a3cbfc5b554edd283d277848f
+run <termios.h> global TAB0	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 232de9692fb45691552fd2cb53f5fb9b
+run <termios.h> global TAB1	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c31b8c560a51bd94c8162330e2887e10
+run <termios.h> global TAB2	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dedeae68bf84656d8332044f394e5027
+run <termios.h> global TAB3	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e5c25158cbd81995866640bec864fb2e
+run <termios.h> global BSDLY	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out adc80f1e74877e0154e242c97e92f2aa
+run <termios.h> global BS0	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 99863dcd74fff71af14c03f357ecd205
+run <termios.h> global BS1	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 812c1546c3f65b86affe86f359e1f9a4
+run <termios.h> global FFDLY	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4c29fc07ecd27b80a5a29d1c68932884
+run <termios.h> global FF0	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9940ed904cfdea953b095feff28a3a86
+run <termios.h> global FF1	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6e6b9f30427762ab2705793a6eeed498
+run <termios.h> global VTDLY	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7a81065228a2f60cfaa6a80ce052db7f
+run <termios.h> global VT0	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c23712abcabc097291036aec27379de3
+run <termios.h> global VT1	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 823b90fec7eff86a1b388223bd658d6c
+run <termios.h> global XTABS	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 95156cb573a0762e02f127239bdfb854
+run <termios.h> global B0	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f4043f9657d234492249c87b0a6a4c57
+run <termios.h> global B50	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 196d9a9cb94ad6d64f90be92b7c1ff27
+run <termios.h> global B75	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 161ff78223ee563e2a295ea22b718a5a
+run <termios.h> global B110	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5f94082d54c31152e917ab7e6fe12065
+run <termios.h> global B134	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cb04006ec4db9772b2e78e6417c29b96
+run <termios.h> global B150	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b4c2f0b1af4e76e8eae6a8b978e55c5b
+run <termios.h> global B200	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 341906273b88d76c93d1b4c8f16250e8
+run <termios.h> global B300	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c29b144c940f01c8d1632817efa246a7
+run <termios.h> global B600	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b7b2698eb074c5c38b90ff9b96dee5cb
+run <termios.h> global B1200	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f81cf8314faa3354762cf74384f58b3b
+run <termios.h> global B1800	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0c4d76acbc906a0a84ba304bf28bcbfd
+run <termios.h> global B2400	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 82dae7b3a07477ce2d9a3801a0feabb1
+run <termios.h> global B4800	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out af9d443b036b8fa5698018ff3965e8f2
+run <termios.h> global B9600	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 27fcaa198a5e23ef8f047a00a113a8b4
+run <termios.h> global B19200	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out de57c5d2376735ed5d7a8470090885f1
+run <termios.h> global B38400	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a323321aad569edad91c367901c6ff1e
+run <termios.h> global EXTA	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8081638891b46286352c57b86ae492ca
+run <termios.h> global EXTB	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dd98bf86fd426f90daff053d067ab404
+run <termios.h> global CBAUD	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 586a34c041efb7cc1a4aca877339c499
+run <termios.h> global CBAUDEX	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4408bdf2cbc0badaf7243f4d26a08570
+run <termios.h> global CIBAUD	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c6fd1f08980a54a5ba8d30130ff92670
+run <termios.h> global CMSPAR	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6c15268b78721502e84bdf5a2fabb294
+run <termios.h> global CRTSCTS	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 51b63130f0ee38ca2c4b81b352036625
+run <termios.h> global B57600	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fef38b2f3af2ffd2ad697a42aedd91c9
+run <termios.h> global B115200	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5bf942c0e86a8aa8f1ee4edd8e16165d
+run <termios.h> global B230400	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 00f9e76ca528b8ed7781e8a8e31c5af6
+run <termios.h> global B460800	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b75ede7155ebfe57930c3b26c81f3222
+run <termios.h> global B500000	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out abb50dbaad1a1d73ad9820151410fc18
+run <termios.h> global B576000	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b5de442d72457150fab5596988d072b9
+run <termios.h> global B921600	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 33c8493eea5f8e53a48eb6e682b5c4a1
+run <termios.h> global B1000000	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 706452a89fb6247494405f9c4a16fcd7
+run <termios.h> global B1152000	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f4f6105bb78f8dd9a6ce6043fbfa84d2
+run <termios.h> global B1500000	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4735dd1e26f86a3832b81fa975cca52b
+run <termios.h> global B2000000	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 52b04207ba85a4779b178eb9e9123bf6
+run <termios.h> global B2500000	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a96e688b2afdb757fa2861f40667695b
+run <termios.h> global B3000000	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 791ae21ec99666bf2f0bb17d8ab2cd7d
+run <termios.h> global B3500000	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f1af9ef395b53338b3e855f79864eadb
+run <termios.h> global B4000000	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 42f52ffd4f791f65de0b1f4d66b39bf0
+run <termios.h> global CSIZE	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 76192223c93dda8cf9982e54704832c9
+run <termios.h> global CS5	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 806cef0149012ca4bc8f461f6e45f70e
+run <termios.h> global CS6	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 88778c82f65bfadd59c7a86b146659c8
+run <termios.h> global CS7	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e46230f9395b8bb94cff711798b7c044
+run <termios.h> global CS8	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6e7de85263149a268371a4b3ad8399a8
+run <termios.h> global CSTOPB	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8d7bb935618c2b8cc1ef133daf617e07
+run <termios.h> global CREAD	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8963c44d411ec3994910305e5d48c918
+run <termios.h> global PARENB	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5c0f443a310a71b98c6170b493954981
+run <termios.h> global PARODD	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 50e59e8564d064f8ef2b2bf7f6b60b91
+run <termios.h> global HUPCL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 621e7ccf5fb992bafeb17f17e9490270
+run <termios.h> global CLOCAL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7f024f83382e0e47fd756c2462579b74
+run <termios.h> global ADDRB	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 17289a0647049618afb34dd86560673d
+run <termios.h> global ISIG	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 78bfeecc11df2a1af65cc89ada77a9d1
+run <termios.h> global ICANON	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5cebae2b0868ee88f9bbb0923f3c5813
+run <termios.h> global XCASE	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out da5029130927be30caffa4066f518ac8
+run <termios.h> global ECHO	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d4b4f633cbdb7f4bbd1a152de3997180
+run <termios.h> global ECHOE	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e19186a0380f1627b6cd37389ede726d
+run <termios.h> global ECHOK	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7c8bbb720c04066c2ce8e7613f3e930f
+run <termios.h> global ECHONL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e19b2e02f81b5f79fcac99a2ab9880a7
+run <termios.h> global NOFLSH	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 27fa1534b7cae72f3680a33e253bbe36
+run <termios.h> global TOSTOP	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cdb5b8ed5c5bb93dcf9523dab228a72c
+run <termios.h> global ECHOCTL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4a971d68ed438a948d52e3683c4d09ea
+run <termios.h> global ECHOPRT	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e56cbe4ccd7678cfde69861999f5c590
+run <termios.h> global ECHOKE	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8652a4b974e869296aba658c4cfa4cab
+run <termios.h> global FLUSHO	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5b7245926c4fad30ff5e32c0709588ca
+run <termios.h> global PENDIN	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out af139a2ad9293856a96f77c0a5e6eaad
+run <termios.h> global IEXTEN	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2a19ceeddc7456a00ddb273ff764c326
+run <termios.h> global EXTPROC	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c947edc9c73ee903647512d66aa94ea3
+run <termios.h> global TIOCSER_TEMT	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1a57b8cec3feb11d21067589cc6ef399
+run <termios.h> global TCOOFF	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 34157790c880e6858725b718bea05b4b
+run <termios.h> global TCOON	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ccbc56b5d1a775dd7364d0a8e61a13b2
+run <termios.h> global TCIOFF	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3e6a8f59a7f1ffe904090a4aa8663534
+run <termios.h> global TCION	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3e2aca0b11dfb12a4cb7aa2e76950138
+run <termios.h> global TCIFLUSH	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 670bb62d61729125d071c1effaeb6beb
+run <termios.h> global TCOFLUSH	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3eff46a4511ae09cc78d82887c3003ac
+run <termios.h> global TCIOFLUSH	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b75eec21c25dc85dd687d3cac0f7b697
+run <termios.h> global TCSANOW	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6b9c0817c83c2090fde88c7263551f8b
+run <termios.h> global TCSADRAIN	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6e8a1c1b08edab96d6b688b6c16bdc3f
+run <termios.h> global TCSAFLUSH	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2a7e1877f9e806a77804aa0fba974085
+run <termios.h> global TTYDEF_IFLAG	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fb76072e2f6c29e95248d60fb798d474
+run <termios.h> global TTYDEF_OFLAG	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2f936cb6ba165ffbdf0186ceffc75a13
+run <termios.h> global TTYDEF_LFLAG	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 16bdcdf8a780985f85166686084f1dd4
+run <termios.h> global TTYDEF_CFLAG	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ce5ae7f6d8e630bb3804ec3736a20b90
+run <termios.h> global TTYDEF_SPEED	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2dcac444870e71b35f994b9105996870
+run <termios.h> global CEOF	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e9e423333c724d5801d7d9c87ce10651
+run <termios.h> global CEOL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 56fe6accc92fcf790276fcb9ba42ac49
+run <termios.h> global CERASE	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5c6687f4227459df2e9e3ecad02ef489
+run <termios.h> global CINTR	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ff5694915b9b01b77bb248609c8b15e4
+run <termios.h> global CSTATUS	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 782759054b6e1586f902480c0bf793bc
+run <termios.h> global CKILL	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f6f8063f7333118cd60262e8e0e5fcc7
+run <termios.h> global CMIN	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ffbf50913d2c5106616513f1231f6c7c
+run <termios.h> global CQUIT	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1bb490545ea6d50f4045ae9df8b7cfa8
+run <termios.h> global CSUSP	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dd9e57912c6e348b00e5be28bcfeed5e
+run <termios.h> global CTIME	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d4bb9f2707cca7682a7f9630e4a8ddcc
+run <termios.h> global CDSUSP	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cde54ccd0bc8297be5d4a1a8e91b5668
+run <termios.h> global CSTART	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 082f52743e4246a063a6c6ac573bf3b3
+run <termios.h> global CSTOP	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9439cb6c3dc1c36563de7fa87c3c18ec
+run <termios.h> global CLNEXT	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fd9467bf020f253faf2e605ae6b3d371
+run <termios.h> global CDISCARD	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3f0ba8d83d740eff2bd46b68d5217d81
+run <termios.h> global CWERASE	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 79661d438b119e940b41fcd3d86fcdd5
+run <termios.h> global CREPRINT	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 983d7921e6bb693810f7488aa693deb9
+run <termios.h> global CEOT	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1f3319a65af3c03a1599afb781321e36
+run <termios.h> global CBRK	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cf5f4e177fa00f80e23f6a069e509a03
+run <termios.h> global CRPRNT	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2289b701abf566b1239e41fb68d2abaa
+run <termios.h> global CFLUSH	
+ctx r1 g1 p0
+keys <termios.h>=6dd42782316b3451c4ef8e06ee65a22227a9f5f9e9a8457bb16516fd60ea7385
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 28113c2229a76e584458930ee9beb3b7
+end
+sum 51410-5508834324516759876

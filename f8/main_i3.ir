@@ -1,0 +1,2355 @@
+; fn main()
+; ctc.olang:18 - optimized LLVM IR as build compiles it: -O3, optimized again as the program is linked, for sapphirerapids
+; no code of its own: inlined at every call, into startup, whose code follows
+; 1648 IR instructions; inlined into it: __olang_scope_close, __olang_scope_alloc, __olang_sb_room, olang_textcopy, __olang_scope_alloc_a, __olang_dtor_head, Vec<String>.ctor, vec.Vec<String>, mir.HelperKind.Copy.Array<String>, __olang_fmt_i64, PutLine<String>, longest, __olang_errpay_top_get, __olang_sb_add, __olang_thread_init, main, __olang_prog_end
+define dso_local noundef i32 @main(i32 %argc, ptr %argv) local_unnamed_addr #6 {
+entry:
+  %t29.i.i.i = alloca %olang.slotscope, align 8
+  %l0.i.i = alloca %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44.8", align 8
+  %s0.i82.i = alloca %olang.scope.9, align 8
+  %t40.i.i = alloca %olang.slotscope, align 8
+  %s0.i.i = alloca %olang.scope.9, align 8
+  %l0.i = alloca [10 x %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44.8"], align 8
+  %s0.i = alloca %olang.scope.9, align 8
+  %s5.i = alloca %olang.scope.9, align 8
+  %s8.i = alloca %olang.builder.10, align 8
+  %s8room.i = alloca [64 x i8], align 8
+  store ptr %argv, ptr @__olang_argv, align 8
+; (no line of the program)
+  %n.i = atomicrmw add ptr @__olang_thread_next, i64 2 monotonic, align 8
+  call void @llvm.lifetime.start.p0(i64 320, ptr nonnull %l0.i)
+  call void @llvm.lifetime.start.p0(i64 56, ptr nonnull %s0.i)
+  call void @llvm.lifetime.start.p0(i64 56, ptr nonnull %s5.i)
+  call void @llvm.lifetime.start.p0(i64 40, ptr nonnull %s8.i)
+  call void @llvm.lifetime.start.p0(i64 64, ptr nonnull %s8room.i)
+  %.fca.1.gep7.i = getelementptr inbounds i8, ptr %s0.i, i64 8
+  %.fca.2.gep8.i = getelementptr inbounds i8, ptr %s0.i, i64 16
+  %.fca.4.gep10.i = getelementptr inbounds i8, ptr %s0.i, i64 32
+  %.fca.6.gep12.i = getelementptr inbounds i8, ptr %s0.i, i64 48
+  call void @llvm.memset.p0.i64(ptr noundef nonnull align 8 dereferenceable(56) %s0.i, i8 0, i64 56, i1 false)
+  %slow.i.i.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i, i64 0, i64 8) #18
+  %head.i.i473.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %headnull.i.i474.i = icmp eq ptr %head.i.i473.i, null
+  br i1 %headnull.i.i474.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i, label %checkspace.i.i475.i
+
+checkspace.i.i475.i:                              ; preds = %entry
+  %csusedptr.i.i476.i = getelementptr i8, ptr %head.i.i473.i, i64 8
+  %csused.i.i477.i = load i64, ptr %csusedptr.i.i476.i, align 4, !tbaa !39
+  %cscapptr.i.i478.i = getelementptr i8, ptr %head.i.i473.i, i64 16
+  %cscap.i.i479.i = load i64, ptr %cscapptr.i.i478.i, align 4, !tbaa !39
+  %remaining.i.i482.i = sub i64 %cscap.i.i479.i, %csused.i.i477.i
+  %fits.not.i.i483.i = icmp ult i64 %remaining.i.i482.i, 8
+  br i1 %fits.not.i.i483.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.thread.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.thread.i: ; preds = %checkspace.i.i475.i
+  %dataptr.i.i485.i = getelementptr i8, ptr %head.i.i473.i, i64 64
+  %result.i.i486.i = getelementptr i8, ptr %dataptr.i.i485.i, i64 %csused.i.i477.i
+  %newused.i.i487.i = add i64 %csused.i.i477.i, 8
+  store i64 %newused.i.i487.i, ptr %csusedptr.i.i476.i, align 4, !tbaa !39
+  br label %checkspace.i.i495.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i: ; preds = %checkspace.i.i475.i, %entry
+  %slow.i.i491.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i, i64 0, i64 8) #18
+  %head.i.i493.pre.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %headnull.i.i494.i = icmp eq ptr %head.i.i493.pre.i, null
+  br i1 %headnull.i.i494.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i.checkspace.i.i495.i_crit_edge
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i.checkspace.i.i495.i_crit_edge: ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i
+  %csusedptr.i.i496.i.phi.trans.insert = getelementptr i8, ptr %head.i.i493.pre.i, i64 8
+  %csused.i.i497.i.pre = load i64, ptr %csusedptr.i.i496.i.phi.trans.insert, align 4, !tbaa !39
+  %cscapptr.i.i498.i.phi.trans.insert = getelementptr i8, ptr %head.i.i493.pre.i, i64 16
+  %cscap.i.i499.i.pre = load i64, ptr %cscapptr.i.i498.i.phi.trans.insert, align 4, !tbaa !39
+  br label %checkspace.i.i495.i
+
+checkspace.i.i495.i:                              ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i.checkspace.i.i495.i_crit_edge, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.thread.i
+  %cscap.i.i499.i = phi i64 [ %cscap.i.i479.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.thread.i ], [ %cscap.i.i499.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i.checkspace.i.i495.i_crit_edge ]
+  %csused.i.i497.i = phi i64 [ %newused.i.i487.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.thread.i ], [ %csused.i.i497.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i.checkspace.i.i495.i_crit_edge ]
+  %common.ret.op.i.i488666.i = phi ptr [ %result.i.i486.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.thread.i ], [ %slow.i.i491.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i.checkspace.i.i495.i_crit_edge ]
+  %head.i.i493664.i = phi ptr [ %head.i.i473.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.thread.i ], [ %head.i.i493.pre.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i.checkspace.i.i495.i_crit_edge ]
+  %remaining.i.i502.i = sub i64 %cscap.i.i499.i, %csused.i.i497.i
+  %fits.not.i.i503.i = icmp ult i64 %remaining.i.i502.i, 8
+  br i1 %fits.not.i.i503.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.thread.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.thread.i: ; preds = %checkspace.i.i495.i
+  %csusedptr.i.i496.i = getelementptr i8, ptr %head.i.i493664.i, i64 8
+  %dataptr.i.i505.i = getelementptr i8, ptr %head.i.i493664.i, i64 64
+  %result.i.i506.i = getelementptr i8, ptr %dataptr.i.i505.i, i64 %csused.i.i497.i
+  %newused.i.i507.i = add i64 %csused.i.i497.i, 8
+  store i64 %newused.i.i507.i, ptr %csusedptr.i.i496.i, align 4, !tbaa !39
+  br label %checkspace.i.i515.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i: ; preds = %checkspace.i.i495.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i
+  %common.ret.op.i.i488667.i = phi ptr [ %common.ret.op.i.i488666.i, %checkspace.i.i495.i ], [ %slow.i.i491.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit492.i ]
+  %slow.i.i511.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i, i64 0, i64 8) #18
+  %head.i.i513.pre.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %headnull.i.i514.i = icmp eq ptr %head.i.i513.pre.i, null
+  br i1 %headnull.i.i514.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i.checkspace.i.i515.i_crit_edge
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i.checkspace.i.i515.i_crit_edge: ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i
+  %csusedptr.i.i516.i.phi.trans.insert = getelementptr i8, ptr %head.i.i513.pre.i, i64 8
+  %csused.i.i517.i.pre = load i64, ptr %csusedptr.i.i516.i.phi.trans.insert, align 4, !tbaa !39
+  %cscapptr.i.i518.i.phi.trans.insert = getelementptr i8, ptr %head.i.i513.pre.i, i64 16
+  %cscap.i.i519.i.pre = load i64, ptr %cscapptr.i.i518.i.phi.trans.insert, align 4, !tbaa !39
+  br label %checkspace.i.i515.i
+
+checkspace.i.i515.i:                              ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i.checkspace.i.i515.i_crit_edge, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.thread.i
+  %cscap.i.i519.i = phi i64 [ %cscap.i.i499.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.thread.i ], [ %cscap.i.i519.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i.checkspace.i.i515.i_crit_edge ]
+  %csused.i.i517.i = phi i64 [ %newused.i.i507.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.thread.i ], [ %csused.i.i517.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i.checkspace.i.i515.i_crit_edge ]
+  %common.ret.op.i.i508677.i = phi ptr [ %result.i.i506.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.thread.i ], [ %slow.i.i511.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i.checkspace.i.i515.i_crit_edge ]
+  %head.i.i513675.i = phi ptr [ %head.i.i493664.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.thread.i ], [ %head.i.i513.pre.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i.checkspace.i.i515.i_crit_edge ]
+  %common.ret.op.i.i488665673.i = phi ptr [ %common.ret.op.i.i488666.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.thread.i ], [ %common.ret.op.i.i488667.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i.checkspace.i.i515.i_crit_edge ]
+  %remaining.i.i522.i = sub i64 %cscap.i.i519.i, %csused.i.i517.i
+  %fits.not.i.i523.i = icmp ult i64 %remaining.i.i522.i, 8
+  br i1 %fits.not.i.i523.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.thread.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.thread.i: ; preds = %checkspace.i.i515.i
+  %csusedptr.i.i516.i = getelementptr i8, ptr %head.i.i513675.i, i64 8
+  %dataptr.i.i525.i = getelementptr i8, ptr %head.i.i513675.i, i64 64
+  %result.i.i526.i = getelementptr i8, ptr %dataptr.i.i525.i, i64 %csused.i.i517.i
+  %newused.i.i527.i = add i64 %csused.i.i517.i, 8
+  store i64 %newused.i.i527.i, ptr %csusedptr.i.i516.i, align 4, !tbaa !39
+  br label %checkspace.i.i535.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i: ; preds = %checkspace.i.i515.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i
+  %common.ret.op.i.i508678.i = phi ptr [ %common.ret.op.i.i508677.i, %checkspace.i.i515.i ], [ %slow.i.i511.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i ]
+  %common.ret.op.i.i488665674.i = phi ptr [ %common.ret.op.i.i488665673.i, %checkspace.i.i515.i ], [ %common.ret.op.i.i488667.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit512.i ]
+  %slow.i.i531.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i, i64 0, i64 8) #18
+  %head.i.i533.pre.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %headnull.i.i534.i = icmp eq ptr %head.i.i533.pre.i, null
+  br i1 %headnull.i.i534.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i.checkspace.i.i535.i_crit_edge
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i.checkspace.i.i535.i_crit_edge: ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i
+  %csusedptr.i.i536.i.phi.trans.insert = getelementptr i8, ptr %head.i.i533.pre.i, i64 8
+  %csused.i.i537.i.pre = load i64, ptr %csusedptr.i.i536.i.phi.trans.insert, align 4, !tbaa !39
+  %cscapptr.i.i538.i.phi.trans.insert = getelementptr i8, ptr %head.i.i533.pre.i, i64 16
+  %cscap.i.i539.i.pre = load i64, ptr %cscapptr.i.i538.i.phi.trans.insert, align 4, !tbaa !39
+  br label %checkspace.i.i535.i
+
+checkspace.i.i535.i:                              ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i.checkspace.i.i535.i_crit_edge, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.thread.i
+  %cscap.i.i539.i = phi i64 [ %cscap.i.i519.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.thread.i ], [ %cscap.i.i539.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i.checkspace.i.i535.i_crit_edge ]
+  %csused.i.i537.i = phi i64 [ %newused.i.i527.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.thread.i ], [ %csused.i.i537.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i.checkspace.i.i535.i_crit_edge ]
+  %common.ret.op.i.i528692.i = phi ptr [ %result.i.i526.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.thread.i ], [ %slow.i.i531.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i.checkspace.i.i535.i_crit_edge ]
+  %head.i.i533690.i = phi ptr [ %head.i.i513675.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.thread.i ], [ %head.i.i533.pre.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i.checkspace.i.i535.i_crit_edge ]
+  %common.ret.op.i.i488665672688.i = phi ptr [ %common.ret.op.i.i488665673.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.thread.i ], [ %common.ret.op.i.i488665674.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i.checkspace.i.i535.i_crit_edge ]
+  %common.ret.op.i.i508676685.i = phi ptr [ %common.ret.op.i.i508677.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.thread.i ], [ %common.ret.op.i.i508678.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i.checkspace.i.i535.i_crit_edge ]
+  %remaining.i.i542.i = sub i64 %cscap.i.i539.i, %csused.i.i537.i
+  %fits.not.i.i543.i = icmp ult i64 %remaining.i.i542.i, 8
+  br i1 %fits.not.i.i543.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.thread.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.thread.i: ; preds = %checkspace.i.i535.i
+  %csusedptr.i.i536.i = getelementptr i8, ptr %head.i.i533690.i, i64 8
+  %dataptr.i.i545.i = getelementptr i8, ptr %head.i.i533690.i, i64 64
+  %result.i.i546.i = getelementptr i8, ptr %dataptr.i.i545.i, i64 %csused.i.i537.i
+  %newused.i.i547.i = add i64 %csused.i.i537.i, 8
+  store i64 %newused.i.i547.i, ptr %csusedptr.i.i536.i, align 4, !tbaa !39
+  br label %checkspace.i.i555.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i: ; preds = %checkspace.i.i535.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i
+  %common.ret.op.i.i528693.i = phi ptr [ %common.ret.op.i.i528692.i, %checkspace.i.i535.i ], [ %slow.i.i531.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i ]
+  %common.ret.op.i.i488665672689.i = phi ptr [ %common.ret.op.i.i488665672688.i, %checkspace.i.i535.i ], [ %common.ret.op.i.i488665674.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i ]
+  %common.ret.op.i.i508676686.i = phi ptr [ %common.ret.op.i.i508676685.i, %checkspace.i.i535.i ], [ %common.ret.op.i.i508678.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit532.i ]
+  %slow.i.i551.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i, i64 0, i64 8) #18
+  %head.i.i553.pre.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %headnull.i.i554.i = icmp eq ptr %head.i.i553.pre.i, null
+  br i1 %headnull.i.i554.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i.checkspace.i.i555.i_crit_edge
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i.checkspace.i.i555.i_crit_edge: ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i
+  %csusedptr.i.i556.i.phi.trans.insert = getelementptr i8, ptr %head.i.i553.pre.i, i64 8
+  %csused.i.i557.i.pre = load i64, ptr %csusedptr.i.i556.i.phi.trans.insert, align 4, !tbaa !39
+  %cscapptr.i.i558.i.phi.trans.insert = getelementptr i8, ptr %head.i.i553.pre.i, i64 16
+  %cscap.i.i559.i.pre = load i64, ptr %cscapptr.i.i558.i.phi.trans.insert, align 4, !tbaa !39
+  br label %checkspace.i.i555.i
+
+checkspace.i.i555.i:                              ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i.checkspace.i.i555.i_crit_edge, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.thread.i
+  %cscap.i.i559.i = phi i64 [ %cscap.i.i539.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.thread.i ], [ %cscap.i.i559.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i.checkspace.i.i555.i_crit_edge ]
+  %csused.i.i557.i = phi i64 [ %newused.i.i547.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.thread.i ], [ %csused.i.i557.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i.checkspace.i.i555.i_crit_edge ]
+  %common.ret.op.i.i548711.i = phi ptr [ %result.i.i546.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.thread.i ], [ %slow.i.i551.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i.checkspace.i.i555.i_crit_edge ]
+  %head.i.i553709.i = phi ptr [ %head.i.i533690.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.thread.i ], [ %head.i.i553.pre.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i.checkspace.i.i555.i_crit_edge ]
+  %common.ret.op.i.i508676684707.i = phi ptr [ %common.ret.op.i.i508676685.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.thread.i ], [ %common.ret.op.i.i508676686.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i.checkspace.i.i555.i_crit_edge ]
+  %common.ret.op.i.i488665672687704.i = phi ptr [ %common.ret.op.i.i488665672688.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.thread.i ], [ %common.ret.op.i.i488665672689.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i.checkspace.i.i555.i_crit_edge ]
+  %common.ret.op.i.i528691701.i = phi ptr [ %common.ret.op.i.i528692.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.thread.i ], [ %common.ret.op.i.i528693.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i.checkspace.i.i555.i_crit_edge ]
+  %remaining.i.i562.i = sub i64 %cscap.i.i559.i, %csused.i.i557.i
+  %fits.not.i.i563.i = icmp ult i64 %remaining.i.i562.i, 8
+  br i1 %fits.not.i.i563.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.thread.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.thread.i: ; preds = %checkspace.i.i555.i
+  %csusedptr.i.i556.i = getelementptr i8, ptr %head.i.i553709.i, i64 8
+  %dataptr.i.i565.i = getelementptr i8, ptr %head.i.i553709.i, i64 64
+  %result.i.i566.i = getelementptr i8, ptr %dataptr.i.i565.i, i64 %csused.i.i557.i
+  %newused.i.i567.i = add i64 %csused.i.i557.i, 8
+  store i64 %newused.i.i567.i, ptr %csusedptr.i.i556.i, align 4, !tbaa !39
+  br label %checkspace.i.i575.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i: ; preds = %checkspace.i.i555.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i
+  %common.ret.op.i.i548712.i = phi ptr [ %common.ret.op.i.i548711.i, %checkspace.i.i555.i ], [ %slow.i.i551.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i ]
+  %common.ret.op.i.i508676684708.i = phi ptr [ %common.ret.op.i.i508676684707.i, %checkspace.i.i555.i ], [ %common.ret.op.i.i508676686.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i ]
+  %common.ret.op.i.i488665672687705.i = phi ptr [ %common.ret.op.i.i488665672687704.i, %checkspace.i.i555.i ], [ %common.ret.op.i.i488665672689.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i ]
+  %common.ret.op.i.i528691702.i = phi ptr [ %common.ret.op.i.i528691701.i, %checkspace.i.i555.i ], [ %common.ret.op.i.i528693.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit552.i ]
+  %slow.i.i571.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i, i64 0, i64 8) #18
+  %head.i.i573.pre.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %headnull.i.i574.i = icmp eq ptr %head.i.i573.pre.i, null
+  br i1 %headnull.i.i574.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i.checkspace.i.i575.i_crit_edge
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i.checkspace.i.i575.i_crit_edge: ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i
+  %csusedptr.i.i576.i.phi.trans.insert = getelementptr i8, ptr %head.i.i573.pre.i, i64 8
+  %csused.i.i577.i.pre = load i64, ptr %csusedptr.i.i576.i.phi.trans.insert, align 4, !tbaa !39
+  %cscapptr.i.i578.i.phi.trans.insert = getelementptr i8, ptr %head.i.i573.pre.i, i64 16
+  %cscap.i.i579.i.pre = load i64, ptr %cscapptr.i.i578.i.phi.trans.insert, align 4, !tbaa !39
+  br label %checkspace.i.i575.i
+
+checkspace.i.i575.i:                              ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i.checkspace.i.i575.i_crit_edge, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.thread.i
+  %cscap.i.i579.i = phi i64 [ %cscap.i.i559.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.thread.i ], [ %cscap.i.i579.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i.checkspace.i.i575.i_crit_edge ]
+  %csused.i.i577.i = phi i64 [ %newused.i.i567.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.thread.i ], [ %csused.i.i577.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i.checkspace.i.i575.i_crit_edge ]
+  %common.ret.op.i.i568734.i = phi ptr [ %result.i.i566.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.thread.i ], [ %slow.i.i571.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i.checkspace.i.i575.i_crit_edge ]
+  %head.i.i573732.i = phi ptr [ %head.i.i553709.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.thread.i ], [ %head.i.i573.pre.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i.checkspace.i.i575.i_crit_edge ]
+  %common.ret.op.i.i528691700730.i = phi ptr [ %common.ret.op.i.i528691701.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.thread.i ], [ %common.ret.op.i.i528691702.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i.checkspace.i.i575.i_crit_edge ]
+  %common.ret.op.i.i488665672687703727.i = phi ptr [ %common.ret.op.i.i488665672687704.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.thread.i ], [ %common.ret.op.i.i488665672687705.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i.checkspace.i.i575.i_crit_edge ]
+  %common.ret.op.i.i508676684706724.i = phi ptr [ %common.ret.op.i.i508676684707.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.thread.i ], [ %common.ret.op.i.i508676684708.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i.checkspace.i.i575.i_crit_edge ]
+  %common.ret.op.i.i548710721.i = phi ptr [ %common.ret.op.i.i548711.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.thread.i ], [ %common.ret.op.i.i548712.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i.checkspace.i.i575.i_crit_edge ]
+  %remaining.i.i582.i = sub i64 %cscap.i.i579.i, %csused.i.i577.i
+  %fits.not.i.i583.i = icmp ult i64 %remaining.i.i582.i, 8
+  br i1 %fits.not.i.i583.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i: ; preds = %checkspace.i.i575.i
+  %csusedptr.i.i576.i = getelementptr i8, ptr %head.i.i573732.i, i64 8
+  %dataptr.i.i585.i = getelementptr i8, ptr %head.i.i573732.i, i64 64
+  %result.i.i586.i = getelementptr i8, ptr %dataptr.i.i585.i, i64 %csused.i.i577.i
+  %newused.i.i587.i = add i64 %csused.i.i577.i, 8
+  store i64 %newused.i.i587.i, ptr %csusedptr.i.i576.i, align 4, !tbaa !39
+  br label %checkspace.i.i595.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i: ; preds = %checkspace.i.i575.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i
+  %common.ret.op.i.i568735.i = phi ptr [ %common.ret.op.i.i568734.i, %checkspace.i.i575.i ], [ %slow.i.i571.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i ]
+  %common.ret.op.i.i528691700731.i = phi ptr [ %common.ret.op.i.i528691700730.i, %checkspace.i.i575.i ], [ %common.ret.op.i.i528691702.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i ]
+  %common.ret.op.i.i488665672687703728.i = phi ptr [ %common.ret.op.i.i488665672687703727.i, %checkspace.i.i575.i ], [ %common.ret.op.i.i488665672687705.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i ]
+  %common.ret.op.i.i508676684706725.i = phi ptr [ %common.ret.op.i.i508676684706724.i, %checkspace.i.i575.i ], [ %common.ret.op.i.i508676684708.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i ]
+  %common.ret.op.i.i548710722.i = phi ptr [ %common.ret.op.i.i548710721.i, %checkspace.i.i575.i ], [ %common.ret.op.i.i548712.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit572.i ]
+  %slow.i.i591.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i, i64 0, i64 8) #18
+  %head.i.i593.pre.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %headnull.i.i594.i = icmp eq ptr %head.i.i593.pre.i, null
+  br i1 %headnull.i.i594.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge: ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i
+  %csusedptr.i.i596.i.phi.trans.insert = getelementptr i8, ptr %head.i.i593.pre.i, i64 8
+  %csused.i.i597.i.pre = load i64, ptr %csusedptr.i.i596.i.phi.trans.insert, align 4, !tbaa !39
+  %cscapptr.i.i598.i.phi.trans.insert = getelementptr i8, ptr %head.i.i593.pre.i, i64 16
+  %cscap.i.i599.i.pre = load i64, ptr %cscapptr.i.i598.i.phi.trans.insert, align 4, !tbaa !39
+  br label %checkspace.i.i595.i
+
+checkspace.i.i595.i:                              ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i
+  %cscap.i.i599.i = phi i64 [ %cscap.i.i579.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i ], [ %cscap.i.i599.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge ]
+  %csused.i.i597.i = phi i64 [ %newused.i.i587.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i ], [ %csused.i.i597.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge ]
+  %common.ret.op.i.i588761.i = phi ptr [ %result.i.i586.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i ], [ %slow.i.i591.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge ]
+  %head.i.i593759.i = phi ptr [ %head.i.i573732.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i ], [ %head.i.i593.pre.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge ]
+  %common.ret.op.i.i548710720757.i = phi ptr [ %common.ret.op.i.i548710721.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i ], [ %common.ret.op.i.i548710722.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge ]
+  %common.ret.op.i.i508676684706723754.i = phi ptr [ %common.ret.op.i.i508676684706724.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i ], [ %common.ret.op.i.i508676684706725.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge ]
+  %common.ret.op.i.i488665672687703726751.i = phi ptr [ %common.ret.op.i.i488665672687703727.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i ], [ %common.ret.op.i.i488665672687703728.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge ]
+  %common.ret.op.i.i528691700729748.i = phi ptr [ %common.ret.op.i.i528691700730.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i ], [ %common.ret.op.i.i528691700731.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge ]
+  %common.ret.op.i.i568733745.i = phi ptr [ %common.ret.op.i.i568734.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.thread.i ], [ %common.ret.op.i.i568735.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i.checkspace.i.i595.i_crit_edge ]
+  %remaining.i.i602.i = sub i64 %cscap.i.i599.i, %csused.i.i597.i
+  %fits.not.i.i603.i = icmp ult i64 %remaining.i.i602.i, 8
+  br i1 %fits.not.i.i603.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i: ; preds = %checkspace.i.i595.i
+  %csusedptr.i.i596.i = getelementptr i8, ptr %head.i.i593759.i, i64 8
+  %dataptr.i.i605.i = getelementptr i8, ptr %head.i.i593759.i, i64 64
+  %result.i.i606.i = getelementptr i8, ptr %dataptr.i.i605.i, i64 %csused.i.i597.i
+  %newused.i.i607.i = add i64 %csused.i.i597.i, 8
+  store i64 %newused.i.i607.i, ptr %csusedptr.i.i596.i, align 4, !tbaa !39
+  br label %checkspace.i.i615.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i: ; preds = %checkspace.i.i595.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i
+  %common.ret.op.i.i588762.i = phi ptr [ %common.ret.op.i.i588761.i, %checkspace.i.i595.i ], [ %slow.i.i591.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i ]
+  %common.ret.op.i.i548710720758.i = phi ptr [ %common.ret.op.i.i548710720757.i, %checkspace.i.i595.i ], [ %common.ret.op.i.i548710722.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i ]
+  %common.ret.op.i.i508676684706723755.i = phi ptr [ %common.ret.op.i.i508676684706723754.i, %checkspace.i.i595.i ], [ %common.ret.op.i.i508676684706725.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i ]
+  %common.ret.op.i.i488665672687703726752.i = phi ptr [ %common.ret.op.i.i488665672687703726751.i, %checkspace.i.i595.i ], [ %common.ret.op.i.i488665672687703728.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i ]
+  %common.ret.op.i.i528691700729749.i = phi ptr [ %common.ret.op.i.i528691700729748.i, %checkspace.i.i595.i ], [ %common.ret.op.i.i528691700731.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i ]
+  %common.ret.op.i.i568733746.i = phi ptr [ %common.ret.op.i.i568733745.i, %checkspace.i.i595.i ], [ %common.ret.op.i.i568735.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit592.i ]
+  %slow.i.i611.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i, i64 0, i64 8) #18
+  %head.i.i613.pre.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %headnull.i.i614.i = icmp eq ptr %head.i.i613.pre.i, null
+  br i1 %headnull.i.i614.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge: ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i
+  %csusedptr.i.i616.i.phi.trans.insert = getelementptr i8, ptr %head.i.i613.pre.i, i64 8
+  %csused.i.i617.i.pre = load i64, ptr %csusedptr.i.i616.i.phi.trans.insert, align 4, !tbaa !39
+  %cscapptr.i.i618.i.phi.trans.insert = getelementptr i8, ptr %head.i.i613.pre.i, i64 16
+  %cscap.i.i619.i.pre = load i64, ptr %cscapptr.i.i618.i.phi.trans.insert, align 4, !tbaa !39
+  br label %checkspace.i.i615.i
+
+checkspace.i.i615.i:                              ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i
+  %cscap.i.i619.i = phi i64 [ %cscap.i.i599.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i ], [ %cscap.i.i619.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge ]
+  %csused.i.i617.i = phi i64 [ %newused.i.i607.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i ], [ %csused.i.i617.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge ]
+  %common.ret.op.i.i608792.i = phi ptr [ %result.i.i606.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i ], [ %slow.i.i611.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge ]
+  %head.i.i613790.i = phi ptr [ %head.i.i593759.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i ], [ %head.i.i613.pre.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge ]
+  %common.ret.op.i.i568733744788.i = phi ptr [ %common.ret.op.i.i568733745.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i ], [ %common.ret.op.i.i568733746.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge ]
+  %common.ret.op.i.i528691700729747785.i = phi ptr [ %common.ret.op.i.i528691700729748.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i ], [ %common.ret.op.i.i528691700729749.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge ]
+  %common.ret.op.i.i488665672687703726750782.i = phi ptr [ %common.ret.op.i.i488665672687703726751.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i ], [ %common.ret.op.i.i488665672687703726752.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge ]
+  %common.ret.op.i.i508676684706723753779.i = phi ptr [ %common.ret.op.i.i508676684706723754.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i ], [ %common.ret.op.i.i508676684706723755.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge ]
+  %common.ret.op.i.i548710720756776.i = phi ptr [ %common.ret.op.i.i548710720757.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i ], [ %common.ret.op.i.i548710720758.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge ]
+  %common.ret.op.i.i588760773.i = phi ptr [ %common.ret.op.i.i588761.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.thread.i ], [ %common.ret.op.i.i588762.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i.checkspace.i.i615.i_crit_edge ]
+  %remaining.i.i622.i = sub i64 %cscap.i.i619.i, %csused.i.i617.i
+  %fits.not.i.i623.i = icmp ult i64 %remaining.i.i622.i, 8
+  br i1 %fits.not.i.i623.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i: ; preds = %checkspace.i.i615.i
+  %csusedptr.i.i616.i = getelementptr i8, ptr %head.i.i613790.i, i64 8
+  %dataptr.i.i625.i = getelementptr i8, ptr %head.i.i613790.i, i64 64
+  %result.i.i626.i = getelementptr i8, ptr %dataptr.i.i625.i, i64 %csused.i.i617.i
+  %newused.i.i627.i = add i64 %csused.i.i617.i, 8
+  store i64 %newused.i.i627.i, ptr %csusedptr.i.i616.i, align 4, !tbaa !39
+  br label %checkspace.i.i635.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i: ; preds = %checkspace.i.i615.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i
+  %common.ret.op.i.i608793.i = phi ptr [ %common.ret.op.i.i608792.i, %checkspace.i.i615.i ], [ %slow.i.i611.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i ]
+  %common.ret.op.i.i568733744789.i = phi ptr [ %common.ret.op.i.i568733744788.i, %checkspace.i.i615.i ], [ %common.ret.op.i.i568733746.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i ]
+  %common.ret.op.i.i528691700729747786.i = phi ptr [ %common.ret.op.i.i528691700729747785.i, %checkspace.i.i615.i ], [ %common.ret.op.i.i528691700729749.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i ]
+  %common.ret.op.i.i488665672687703726750783.i = phi ptr [ %common.ret.op.i.i488665672687703726750782.i, %checkspace.i.i615.i ], [ %common.ret.op.i.i488665672687703726752.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i ]
+  %common.ret.op.i.i508676684706723753780.i = phi ptr [ %common.ret.op.i.i508676684706723753779.i, %checkspace.i.i615.i ], [ %common.ret.op.i.i508676684706723755.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i ]
+  %common.ret.op.i.i548710720756777.i = phi ptr [ %common.ret.op.i.i548710720756776.i, %checkspace.i.i615.i ], [ %common.ret.op.i.i548710720758.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i ]
+  %common.ret.op.i.i588760774.i = phi ptr [ %common.ret.op.i.i588760773.i, %checkspace.i.i615.i ], [ %common.ret.op.i.i588762.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit612.i ]
+  %slow.i.i631.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i, i64 0, i64 8) #18
+  %head.i.i633.pre.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %headnull.i.i634.i = icmp eq ptr %head.i.i633.pre.i, null
+  br i1 %headnull.i.i634.i, label %needchunk.i.i650.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge: ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i
+  %csusedptr.i.i636.i.phi.trans.insert = getelementptr i8, ptr %head.i.i633.pre.i, i64 8
+  %csused.i.i637.i.pre = load i64, ptr %csusedptr.i.i636.i.phi.trans.insert, align 4, !tbaa !39
+  %cscapptr.i.i638.i.phi.trans.insert = getelementptr i8, ptr %head.i.i633.pre.i, i64 16
+  %cscap.i.i639.i.pre = load i64, ptr %cscapptr.i.i638.i.phi.trans.insert, align 4, !tbaa !39
+  br label %checkspace.i.i635.i
+
+checkspace.i.i635.i:                              ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i
+  %cscap.i.i639.i = phi i64 [ %cscap.i.i619.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i ], [ %cscap.i.i639.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge ]
+  %csused.i.i637.i = phi i64 [ %newused.i.i627.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i ], [ %csused.i.i637.i.pre, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge ]
+  %common.ret.op.i.i628827.i = phi ptr [ %result.i.i626.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i ], [ %slow.i.i631.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge ]
+  %head.i.i633825.i = phi ptr [ %head.i.i613790.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i ], [ %head.i.i633.pre.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge ]
+  %common.ret.op.i.i588760772823.i = phi ptr [ %common.ret.op.i.i588760773.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i ], [ %common.ret.op.i.i588760774.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge ]
+  %common.ret.op.i.i548710720756775820.i = phi ptr [ %common.ret.op.i.i548710720756776.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i ], [ %common.ret.op.i.i548710720756777.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge ]
+  %common.ret.op.i.i508676684706723753778817.i = phi ptr [ %common.ret.op.i.i508676684706723753779.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i ], [ %common.ret.op.i.i508676684706723753780.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge ]
+  %common.ret.op.i.i488665672687703726750781814.i = phi ptr [ %common.ret.op.i.i488665672687703726750782.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i ], [ %common.ret.op.i.i488665672687703726750783.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge ]
+  %common.ret.op.i.i528691700729747784811.i = phi ptr [ %common.ret.op.i.i528691700729747785.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i ], [ %common.ret.op.i.i528691700729747786.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge ]
+  %common.ret.op.i.i568733744787808.i = phi ptr [ %common.ret.op.i.i568733744788.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i ], [ %common.ret.op.i.i568733744789.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge ]
+  %common.ret.op.i.i608791805.i = phi ptr [ %common.ret.op.i.i608792.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.thread.i ], [ %common.ret.op.i.i608793.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i.checkspace.i.i635.i_crit_edge ]
+  %remaining.i.i642.i = sub i64 %cscap.i.i639.i, %csused.i.i637.i
+  %fits.not.i.i643.i = icmp ult i64 %remaining.i.i642.i, 8
+  br i1 %fits.not.i.i643.i, label %needchunk.i.i650.i, label %bump.i.i644.i
+
+bump.i.i644.i:                                    ; preds = %checkspace.i.i635.i
+  %csusedptr.i.i636.i = getelementptr i8, ptr %head.i.i633825.i, i64 8
+  %dataptr.i.i645.i = getelementptr i8, ptr %head.i.i633825.i, i64 64
+  %result.i.i646.i = getelementptr i8, ptr %dataptr.i.i645.i, i64 %csused.i.i637.i
+  %newused.i.i647.i = add i64 %csused.i.i637.i, 8
+  store i64 %newused.i.i647.i, ptr %csusedptr.i.i636.i, align 4, !tbaa !39
+  br label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit652.i
+
+needchunk.i.i650.i:                               ; preds = %checkspace.i.i635.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i
+  %common.ret.op.i.i628828.i = phi ptr [ %common.ret.op.i.i628827.i, %checkspace.i.i635.i ], [ %slow.i.i631.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i ]
+  %common.ret.op.i.i588760772824.i = phi ptr [ %common.ret.op.i.i588760772823.i, %checkspace.i.i635.i ], [ %common.ret.op.i.i588760774.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i ]
+  %common.ret.op.i.i548710720756775821.i = phi ptr [ %common.ret.op.i.i548710720756775820.i, %checkspace.i.i635.i ], [ %common.ret.op.i.i548710720756777.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i ]
+  %common.ret.op.i.i508676684706723753778818.i = phi ptr [ %common.ret.op.i.i508676684706723753778817.i, %checkspace.i.i635.i ], [ %common.ret.op.i.i508676684706723753780.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i ]
+  %common.ret.op.i.i488665672687703726750781815.i = phi ptr [ %common.ret.op.i.i488665672687703726750781814.i, %checkspace.i.i635.i ], [ %common.ret.op.i.i488665672687703726750783.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i ]
+  %common.ret.op.i.i528691700729747784812.i = phi ptr [ %common.ret.op.i.i528691700729747784811.i, %checkspace.i.i635.i ], [ %common.ret.op.i.i528691700729747786.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i ]
+  %common.ret.op.i.i568733744787809.i = phi ptr [ %common.ret.op.i.i568733744787808.i, %checkspace.i.i635.i ], [ %common.ret.op.i.i568733744789.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i ]
+  %common.ret.op.i.i608791806.i = phi ptr [ %common.ret.op.i.i608791805.i, %checkspace.i.i635.i ], [ %common.ret.op.i.i608793.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit632.i ]
+  %slow.i.i651.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i, i64 0, i64 8) #18
+  br label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit652.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit652.i: ; preds = %needchunk.i.i650.i, %bump.i.i644.i
+  %common.ret.op.i.i628826.i = phi ptr [ %common.ret.op.i.i628827.i, %bump.i.i644.i ], [ %common.ret.op.i.i628828.i, %needchunk.i.i650.i ]
+  %common.ret.op.i.i588760772822.i = phi ptr [ %common.ret.op.i.i588760772823.i, %bump.i.i644.i ], [ %common.ret.op.i.i588760772824.i, %needchunk.i.i650.i ]
+  %common.ret.op.i.i548710720756775819.i = phi ptr [ %common.ret.op.i.i548710720756775820.i, %bump.i.i644.i ], [ %common.ret.op.i.i548710720756775821.i, %needchunk.i.i650.i ]
+  %common.ret.op.i.i508676684706723753778816.i = phi ptr [ %common.ret.op.i.i508676684706723753778817.i, %bump.i.i644.i ], [ %common.ret.op.i.i508676684706723753778818.i, %needchunk.i.i650.i ]
+  %common.ret.op.i.i488665672687703726750781813.i = phi ptr [ %common.ret.op.i.i488665672687703726750781814.i, %bump.i.i644.i ], [ %common.ret.op.i.i488665672687703726750781815.i, %needchunk.i.i650.i ]
+  %common.ret.op.i.i528691700729747784810.i = phi ptr [ %common.ret.op.i.i528691700729747784811.i, %bump.i.i644.i ], [ %common.ret.op.i.i528691700729747784812.i, %needchunk.i.i650.i ]
+  %common.ret.op.i.i568733744787807.i = phi ptr [ %common.ret.op.i.i568733744787808.i, %bump.i.i644.i ], [ %common.ret.op.i.i568733744787809.i, %needchunk.i.i650.i ]
+  %common.ret.op.i.i608791804.i = phi ptr [ %common.ret.op.i.i608791805.i, %bump.i.i644.i ], [ %common.ret.op.i.i608791806.i, %needchunk.i.i650.i ]
+  %common.ret.op.i.i648.i = phi ptr [ %result.i.i646.i, %bump.i.i644.i ], [ %slow.i.i651.i, %needchunk.i.i650.i ]
+; ctc.olang:19  rows := Array<Vec<String>>(10)
+;    passed   inline: 'Vec<String>.ctor' inlined into 'main' with (cost=-40, threshold=375)
+;    passed   inline: 'vec.Vec<String>' inlined into 'main' with (cost=30, threshold=375) (x10)
+  store i64 0, ptr %l0.i, align 8
+  %l37.sroa.2.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 8
+  store ptr %slow.i.i.i, ptr %l37.sroa.2.0.l0.sroa_idx.i, align 8
+  %l37.sroa.3.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 16
+  %l37.sroa.5.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 32
+  %l37.sroa.6.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 40
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(24) %l37.sroa.3.0.l0.sroa_idx.i, i8 0, i64 24, i1 false)
+  store ptr %common.ret.op.i.i488665672687703726750781813.i, ptr %l37.sroa.6.0.l0.sroa_idx.i, align 8
+  %l37.sroa.7.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 48
+  %l37.sroa.9.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 64
+  %l37.sroa.10.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 72
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(24) %l37.sroa.7.0.l0.sroa_idx.i, i8 0, i64 24, i1 false)
+  store ptr %common.ret.op.i.i508676684706723753778816.i, ptr %l37.sroa.10.0.l0.sroa_idx.i, align 8
+  %l37.sroa.11.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 80
+  %l37.sroa.13.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 96
+  %l37.sroa.14.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 104
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(24) %l37.sroa.11.0.l0.sroa_idx.i, i8 0, i64 24, i1 false)
+  store ptr %common.ret.op.i.i528691700729747784810.i, ptr %l37.sroa.14.0.l0.sroa_idx.i, align 8
+  %l37.sroa.15.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 112
+  %l37.sroa.17.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 128
+  %l37.sroa.18.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 136
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(24) %l37.sroa.15.0.l0.sroa_idx.i, i8 0, i64 24, i1 false)
+  store ptr %common.ret.op.i.i548710720756775819.i, ptr %l37.sroa.18.0.l0.sroa_idx.i, align 8
+  %l37.sroa.19.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 144
+  %l37.sroa.21.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 160
+  %l37.sroa.22.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 168
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(24) %l37.sroa.19.0.l0.sroa_idx.i, i8 0, i64 24, i1 false)
+  store ptr %common.ret.op.i.i568733744787807.i, ptr %l37.sroa.22.0.l0.sroa_idx.i, align 8
+  %l37.sroa.23.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 176
+  %l37.sroa.25.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 192
+  %l37.sroa.26.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 200
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(24) %l37.sroa.23.0.l0.sroa_idx.i, i8 0, i64 24, i1 false)
+  store ptr %common.ret.op.i.i588760772822.i, ptr %l37.sroa.26.0.l0.sroa_idx.i, align 8
+  %l37.sroa.27.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 208
+  %l37.sroa.29.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 224
+  %l37.sroa.30.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 232
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(24) %l37.sroa.27.0.l0.sroa_idx.i, i8 0, i64 24, i1 false)
+  store ptr %common.ret.op.i.i608791804.i, ptr %l37.sroa.30.0.l0.sroa_idx.i, align 8
+  %l37.sroa.31.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 240
+  %l37.sroa.33.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 256
+  %l37.sroa.34.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 264
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(24) %l37.sroa.31.0.l0.sroa_idx.i, i8 0, i64 24, i1 false)
+  store ptr %common.ret.op.i.i628826.i, ptr %l37.sroa.34.0.l0.sroa_idx.i, align 8
+  %l37.sroa.35.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 272
+  %l37.sroa.37.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 288
+  %l37.sroa.38.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 296
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(24) %l37.sroa.35.0.l0.sroa_idx.i, i8 0, i64 24, i1 false)
+  store ptr %common.ret.op.i.i648.i, ptr %l37.sroa.38.0.l0.sroa_idx.i, align 8
+  %l37.sroa.39.0.l0.sroa_idx.i = getelementptr inbounds i8, ptr %l0.i, i64 304
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %l37.sroa.39.0.l0.sroa_idx.i, i8 0, i64 16, i1 false)
+; ctc.olang:20  for i in range 10 { rows[i] = mk(i) }
+;    missed   inline: __olang_slot_release will not be inlined into main because its definition is unavailable (x2)
+;    missed   inline: __olang_region_release_part will not be inlined into main because its definition is unavailable (x2)
+;    missed   inline: 'mk' not inlined into 'main' because too costly to inline (cost=660, threshold=625) (x2)
+;    passed   loop-unroll: completely unrolled loop with 10 iterations
+;    missed   gvn: load of type i64 not eliminated in favor of store because it is clobbered by call (x80)
+;    missed   gvn: load of type ptr not eliminated in favor of store because it is clobbered by call (x40)
+;    missed   loop-vectorize: loop not vectorized (x20)
+;    missed   inline: 'mk' not inlined into 'main' because too costly to inline (cost=655, threshold=625) (x10)
+;    missed   inline: '__olang_slot_release' not inlined into 'main' because it should never be inlined (cost=never): noinline function attribute (x10)
+;    missed   inline: '__olang_region_release_part' not inlined into 'main' because it should never be inlined (cost=never): noinline function attribute (x10)
+;    missed   inline: '__olang_region_release_part' not inlined into 'startup' because it should never be inlined (cost=never): noinline function attribute (x10)
+;    missed   inline: '__olang_slot_release' not inlined into 'startup' because it should never be inlined (cost=never): noinline function attribute (x10)
+;    missed   inline: 'mk' not inlined into 'startup' because too costly to inline (cost=655, threshold=625) (x10)
+;    analysis loop-vectorize: loop not vectorized: call instruction cannot be vectorized (x10)
+;    analysis loop-vectorize: loop not vectorized: instruction cannot be vectorized (x10)
+  %t94.i = call fastcc { { i64, ptr }, i64, i64 } @ctc_2emk(ptr nonnull %s0.i, i64 0)
+  %newret53.i = extractvalue { { i64, ptr }, i64, i64 } %t94.i, 0
+  %newret55.i = extractvalue { { i64, ptr }, i64, i64 } %t94.i, 1
+  %newret57.i = extractvalue { { i64, ptr }, i64, i64 } %t94.i, 2
+  %t94.fca.0.0.extract.i = extractvalue { i64, ptr } %newret53.i, 0
+  %t94.fca.0.1.extract.i = extractvalue { i64, ptr } %newret53.i, 1
+  %t97.fca.0.0.load.i = load i64, ptr %l0.i, align 8
+  %t97.fca.0.1.load.i = load ptr, ptr %l37.sroa.2.0.l0.sroa_idx.i, align 8
+  %t97.fca.1.load.i = load i64, ptr %l37.sroa.3.0.l0.sroa_idx.i, align 8
+  %t97.fca.2.gep.i = getelementptr inbounds i8, ptr %l0.i, i64 24
+  store i64 %t94.fca.0.0.extract.i, ptr %l0.i, align 8
+  store ptr %t94.fca.0.1.extract.i, ptr %l37.sroa.2.0.l0.sroa_idx.i, align 8
+  store i64 %newret55.i, ptr %l37.sroa.3.0.l0.sroa_idx.i, align 8
+  store i64 %newret57.i, ptr %t97.fca.2.gep.i, align 8
+  %t104445.i = icmp sgt i64 %t97.fca.1.load.i, 0
+  br i1 %t104445.i, label %bb26.i, label %bb27.i
+
+bb26.i:                                           ; preds = %bb26.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit652.i
+  %l66.0446.i = phi i64 [ %t114.i, %bb26.i ], [ 0, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit652.i ]
+  %t110.i = getelementptr { i64, ptr }, ptr %t97.fca.0.1.load.i, i64 %l66.0446.i
+  %t111.elt43.i = getelementptr inbounds i8, ptr %t110.i, i64 8
+  %t111.unpack44.i = load ptr, ptr %t111.elt43.i, align 8
+  call fastcc void @__olang_slot_release(ptr %t111.unpack44.i) #18
+  %t114.i = add nuw nsw i64 %l66.0446.i, 1
+  %exitcond.not.i = icmp eq i64 %t114.i, %t97.fca.1.load.i
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %t110.i, i8 0, i64 16, i1 false)
+  br i1 %exitcond.not.i, label %bb27.i, label %bb26.i
+
+bb27.i:                                           ; preds = %bb26.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit652.i
+  call fastcc void @__olang_region_release_part(ptr %t97.fca.0.1.load.i, i64 %t97.fca.0.0.load.i) #18
+  %t94.1.i = call fastcc { { i64, ptr }, i64, i64 } @ctc_2emk(ptr nonnull %s0.i, i64 1)
+  %newret47.i = extractvalue { { i64, ptr }, i64, i64 } %t94.1.i, 0
+  %newret49.i = extractvalue { { i64, ptr }, i64, i64 } %t94.1.i, 1
+  %newret51.i = extractvalue { { i64, ptr }, i64, i64 } %t94.1.i, 2
+  %t94.fca.0.0.extract.1.i = extractvalue { i64, ptr } %newret47.i, 0
+  %t94.fca.0.1.extract.1.i = extractvalue { i64, ptr } %newret47.i, 1
+  %t97.fca.0.0.load.1.i = load i64, ptr %l37.sroa.5.0.l0.sroa_idx.i, align 8
+  %t97.fca.0.1.load.1.i = load ptr, ptr %l37.sroa.6.0.l0.sroa_idx.i, align 8
+  %t97.fca.1.load.1.i = load i64, ptr %l37.sroa.7.0.l0.sroa_idx.i, align 8
+  %t97.fca.2.gep.1.i = getelementptr inbounds i8, ptr %l0.i, i64 56
+  store i64 %t94.fca.0.0.extract.1.i, ptr %l37.sroa.5.0.l0.sroa_idx.i, align 8
+  store ptr %t94.fca.0.1.extract.1.i, ptr %l37.sroa.6.0.l0.sroa_idx.i, align 8
+  store i64 %newret49.i, ptr %l37.sroa.7.0.l0.sroa_idx.i, align 8
+  store i64 %newret51.i, ptr %t97.fca.2.gep.1.i, align 8
+  %t104445.1.i = icmp sgt i64 %t97.fca.1.load.1.i, 0
+  br i1 %t104445.1.i, label %bb26.1.i, label %bb27.1.i
+
+bb26.1.i:                                         ; preds = %bb26.1.i, %bb27.i
+  %l66.0446.1.i = phi i64 [ %t114.1.i, %bb26.1.i ], [ 0, %bb27.i ]
+  %t110.1.i = getelementptr { i64, ptr }, ptr %t97.fca.0.1.load.1.i, i64 %l66.0446.1.i
+  %t111.elt43.1.i = getelementptr inbounds i8, ptr %t110.1.i, i64 8
+  %t111.unpack44.1.i = load ptr, ptr %t111.elt43.1.i, align 8
+  call fastcc void @__olang_slot_release(ptr %t111.unpack44.1.i) #18
+  %t114.1.i = add nuw nsw i64 %l66.0446.1.i, 1
+  %exitcond.not.1.i = icmp eq i64 %t114.1.i, %t97.fca.1.load.1.i
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %t110.1.i, i8 0, i64 16, i1 false)
+  br i1 %exitcond.not.1.i, label %bb27.1.i, label %bb26.1.i
+
+bb27.1.i:                                         ; preds = %bb26.1.i, %bb27.i
+  call fastcc void @__olang_region_release_part(ptr %t97.fca.0.1.load.1.i, i64 %t97.fca.0.0.load.1.i) #18
+  %t94.2.i = call fastcc { { i64, ptr }, i64, i64 } @ctc_2emk(ptr nonnull %s0.i, i64 2)
+  %newret41.i = extractvalue { { i64, ptr }, i64, i64 } %t94.2.i, 0
+  %newret43.i = extractvalue { { i64, ptr }, i64, i64 } %t94.2.i, 1
+  %newret45.i = extractvalue { { i64, ptr }, i64, i64 } %t94.2.i, 2
+  %t94.fca.0.0.extract.2.i = extractvalue { i64, ptr } %newret41.i, 0
+  %t94.fca.0.1.extract.2.i = extractvalue { i64, ptr } %newret41.i, 1
+  %t97.fca.0.0.load.2.i = load i64, ptr %l37.sroa.9.0.l0.sroa_idx.i, align 8
+  %t97.fca.0.1.load.2.i = load ptr, ptr %l37.sroa.10.0.l0.sroa_idx.i, align 8
+  %t97.fca.1.load.2.i = load i64, ptr %l37.sroa.11.0.l0.sroa_idx.i, align 8
+  %t97.fca.2.gep.2.i = getelementptr inbounds i8, ptr %l0.i, i64 88
+  store i64 %t94.fca.0.0.extract.2.i, ptr %l37.sroa.9.0.l0.sroa_idx.i, align 8
+  store ptr %t94.fca.0.1.extract.2.i, ptr %l37.sroa.10.0.l0.sroa_idx.i, align 8
+  store i64 %newret43.i, ptr %l37.sroa.11.0.l0.sroa_idx.i, align 8
+  store i64 %newret45.i, ptr %t97.fca.2.gep.2.i, align 8
+  %t104445.2.i = icmp sgt i64 %t97.fca.1.load.2.i, 0
+  br i1 %t104445.2.i, label %bb26.2.i, label %bb27.2.i
+
+bb26.2.i:                                         ; preds = %bb26.2.i, %bb27.1.i
+  %l66.0446.2.i = phi i64 [ %t114.2.i, %bb26.2.i ], [ 0, %bb27.1.i ]
+  %t110.2.i = getelementptr { i64, ptr }, ptr %t97.fca.0.1.load.2.i, i64 %l66.0446.2.i
+  %t111.elt43.2.i = getelementptr inbounds i8, ptr %t110.2.i, i64 8
+  %t111.unpack44.2.i = load ptr, ptr %t111.elt43.2.i, align 8
+  call fastcc void @__olang_slot_release(ptr %t111.unpack44.2.i) #18
+  %t114.2.i = add nuw nsw i64 %l66.0446.2.i, 1
+  %exitcond.not.2.i = icmp eq i64 %t114.2.i, %t97.fca.1.load.2.i
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %t110.2.i, i8 0, i64 16, i1 false)
+  br i1 %exitcond.not.2.i, label %bb27.2.i, label %bb26.2.i
+
+bb27.2.i:                                         ; preds = %bb26.2.i, %bb27.1.i
+  call fastcc void @__olang_region_release_part(ptr %t97.fca.0.1.load.2.i, i64 %t97.fca.0.0.load.2.i) #18
+  %t94.3.i = call fastcc { { i64, ptr }, i64, i64 } @ctc_2emk(ptr nonnull %s0.i, i64 3)
+  %newret35.i = extractvalue { { i64, ptr }, i64, i64 } %t94.3.i, 0
+  %newret37.i = extractvalue { { i64, ptr }, i64, i64 } %t94.3.i, 1
+  %newret39.i = extractvalue { { i64, ptr }, i64, i64 } %t94.3.i, 2
+  %t94.fca.0.0.extract.3.i = extractvalue { i64, ptr } %newret35.i, 0
+  %t94.fca.0.1.extract.3.i = extractvalue { i64, ptr } %newret35.i, 1
+  %t97.fca.0.0.load.3.i = load i64, ptr %l37.sroa.13.0.l0.sroa_idx.i, align 8
+  %t97.fca.0.1.load.3.i = load ptr, ptr %l37.sroa.14.0.l0.sroa_idx.i, align 8
+  %t97.fca.1.load.3.i = load i64, ptr %l37.sroa.15.0.l0.sroa_idx.i, align 8
+  %t97.fca.2.gep.3.i = getelementptr inbounds i8, ptr %l0.i, i64 120
+  store i64 %t94.fca.0.0.extract.3.i, ptr %l37.sroa.13.0.l0.sroa_idx.i, align 8
+  store ptr %t94.fca.0.1.extract.3.i, ptr %l37.sroa.14.0.l0.sroa_idx.i, align 8
+  store i64 %newret37.i, ptr %l37.sroa.15.0.l0.sroa_idx.i, align 8
+  store i64 %newret39.i, ptr %t97.fca.2.gep.3.i, align 8
+  %t104445.3.i = icmp sgt i64 %t97.fca.1.load.3.i, 0
+  br i1 %t104445.3.i, label %bb26.3.i, label %bb27.3.i
+
+bb26.3.i:                                         ; preds = %bb26.3.i, %bb27.2.i
+  %l66.0446.3.i = phi i64 [ %t114.3.i, %bb26.3.i ], [ 0, %bb27.2.i ]
+  %t110.3.i = getelementptr { i64, ptr }, ptr %t97.fca.0.1.load.3.i, i64 %l66.0446.3.i
+  %t111.elt43.3.i = getelementptr inbounds i8, ptr %t110.3.i, i64 8
+  %t111.unpack44.3.i = load ptr, ptr %t111.elt43.3.i, align 8
+  call fastcc void @__olang_slot_release(ptr %t111.unpack44.3.i) #18
+  %t114.3.i = add nuw nsw i64 %l66.0446.3.i, 1
+  %exitcond.not.3.i = icmp eq i64 %t114.3.i, %t97.fca.1.load.3.i
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %t110.3.i, i8 0, i64 16, i1 false)
+  br i1 %exitcond.not.3.i, label %bb27.3.i, label %bb26.3.i
+
+bb27.3.i:                                         ; preds = %bb26.3.i, %bb27.2.i
+  call fastcc void @__olang_region_release_part(ptr %t97.fca.0.1.load.3.i, i64 %t97.fca.0.0.load.3.i) #18
+  %t94.4.i = call fastcc { { i64, ptr }, i64, i64 } @ctc_2emk(ptr nonnull %s0.i, i64 4)
+  %newret29.i = extractvalue { { i64, ptr }, i64, i64 } %t94.4.i, 0
+  %newret31.i = extractvalue { { i64, ptr }, i64, i64 } %t94.4.i, 1
+  %newret33.i = extractvalue { { i64, ptr }, i64, i64 } %t94.4.i, 2
+  %t94.fca.0.0.extract.4.i = extractvalue { i64, ptr } %newret29.i, 0
+  %t94.fca.0.1.extract.4.i = extractvalue { i64, ptr } %newret29.i, 1
+  %t97.fca.0.0.load.4.i = load i64, ptr %l37.sroa.17.0.l0.sroa_idx.i, align 8
+  %t97.fca.0.1.load.4.i = load ptr, ptr %l37.sroa.18.0.l0.sroa_idx.i, align 8
+  %t97.fca.1.load.4.i = load i64, ptr %l37.sroa.19.0.l0.sroa_idx.i, align 8
+  %t97.fca.2.gep.4.i = getelementptr inbounds i8, ptr %l0.i, i64 152
+  store i64 %t94.fca.0.0.extract.4.i, ptr %l37.sroa.17.0.l0.sroa_idx.i, align 8
+  store ptr %t94.fca.0.1.extract.4.i, ptr %l37.sroa.18.0.l0.sroa_idx.i, align 8
+  store i64 %newret31.i, ptr %l37.sroa.19.0.l0.sroa_idx.i, align 8
+  store i64 %newret33.i, ptr %t97.fca.2.gep.4.i, align 8
+  %t104445.4.i = icmp sgt i64 %t97.fca.1.load.4.i, 0
+  br i1 %t104445.4.i, label %bb26.4.i, label %bb27.4.i
+
+bb26.4.i:                                         ; preds = %bb26.4.i, %bb27.3.i
+  %l66.0446.4.i = phi i64 [ %t114.4.i, %bb26.4.i ], [ 0, %bb27.3.i ]
+  %t110.4.i = getelementptr { i64, ptr }, ptr %t97.fca.0.1.load.4.i, i64 %l66.0446.4.i
+  %t111.elt43.4.i = getelementptr inbounds i8, ptr %t110.4.i, i64 8
+  %t111.unpack44.4.i = load ptr, ptr %t111.elt43.4.i, align 8
+  call fastcc void @__olang_slot_release(ptr %t111.unpack44.4.i) #18
+  %t114.4.i = add nuw nsw i64 %l66.0446.4.i, 1
+  %exitcond.not.4.i = icmp eq i64 %t114.4.i, %t97.fca.1.load.4.i
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %t110.4.i, i8 0, i64 16, i1 false)
+  br i1 %exitcond.not.4.i, label %bb27.4.i, label %bb26.4.i
+
+bb27.4.i:                                         ; preds = %bb26.4.i, %bb27.3.i
+  call fastcc void @__olang_region_release_part(ptr %t97.fca.0.1.load.4.i, i64 %t97.fca.0.0.load.4.i) #18
+  %t94.5.i = call fastcc { { i64, ptr }, i64, i64 } @ctc_2emk(ptr nonnull %s0.i, i64 5)
+  %newret23.i = extractvalue { { i64, ptr }, i64, i64 } %t94.5.i, 0
+  %newret25.i = extractvalue { { i64, ptr }, i64, i64 } %t94.5.i, 1
+  %newret27.i = extractvalue { { i64, ptr }, i64, i64 } %t94.5.i, 2
+  %t94.fca.0.0.extract.5.i = extractvalue { i64, ptr } %newret23.i, 0
+  %t94.fca.0.1.extract.5.i = extractvalue { i64, ptr } %newret23.i, 1
+  %t97.fca.0.0.load.5.i = load i64, ptr %l37.sroa.21.0.l0.sroa_idx.i, align 8
+  %t97.fca.0.1.load.5.i = load ptr, ptr %l37.sroa.22.0.l0.sroa_idx.i, align 8
+  %t97.fca.1.load.5.i = load i64, ptr %l37.sroa.23.0.l0.sroa_idx.i, align 8
+  %t97.fca.2.gep.5.i = getelementptr inbounds i8, ptr %l0.i, i64 184
+  store i64 %t94.fca.0.0.extract.5.i, ptr %l37.sroa.21.0.l0.sroa_idx.i, align 8
+  store ptr %t94.fca.0.1.extract.5.i, ptr %l37.sroa.22.0.l0.sroa_idx.i, align 8
+  store i64 %newret25.i, ptr %l37.sroa.23.0.l0.sroa_idx.i, align 8
+  store i64 %newret27.i, ptr %t97.fca.2.gep.5.i, align 8
+  %t104445.5.i = icmp sgt i64 %t97.fca.1.load.5.i, 0
+  br i1 %t104445.5.i, label %bb26.5.i, label %bb27.5.i
+
+bb26.5.i:                                         ; preds = %bb26.5.i, %bb27.4.i
+  %l66.0446.5.i = phi i64 [ %t114.5.i, %bb26.5.i ], [ 0, %bb27.4.i ]
+  %t110.5.i = getelementptr { i64, ptr }, ptr %t97.fca.0.1.load.5.i, i64 %l66.0446.5.i
+  %t111.elt43.5.i = getelementptr inbounds i8, ptr %t110.5.i, i64 8
+  %t111.unpack44.5.i = load ptr, ptr %t111.elt43.5.i, align 8
+  call fastcc void @__olang_slot_release(ptr %t111.unpack44.5.i) #18
+  %t114.5.i = add nuw nsw i64 %l66.0446.5.i, 1
+  %exitcond.not.5.i = icmp eq i64 %t114.5.i, %t97.fca.1.load.5.i
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %t110.5.i, i8 0, i64 16, i1 false)
+  br i1 %exitcond.not.5.i, label %bb27.5.i, label %bb26.5.i
+
+bb27.5.i:                                         ; preds = %bb26.5.i, %bb27.4.i
+  call fastcc void @__olang_region_release_part(ptr %t97.fca.0.1.load.5.i, i64 %t97.fca.0.0.load.5.i) #18
+  %t94.6.i = call fastcc { { i64, ptr }, i64, i64 } @ctc_2emk(ptr nonnull %s0.i, i64 6)
+  %newret17.i = extractvalue { { i64, ptr }, i64, i64 } %t94.6.i, 0
+  %newret19.i = extractvalue { { i64, ptr }, i64, i64 } %t94.6.i, 1
+  %newret21.i = extractvalue { { i64, ptr }, i64, i64 } %t94.6.i, 2
+  %t94.fca.0.0.extract.6.i = extractvalue { i64, ptr } %newret17.i, 0
+  %t94.fca.0.1.extract.6.i = extractvalue { i64, ptr } %newret17.i, 1
+  %t97.fca.0.0.load.6.i = load i64, ptr %l37.sroa.25.0.l0.sroa_idx.i, align 8
+  %t97.fca.0.1.load.6.i = load ptr, ptr %l37.sroa.26.0.l0.sroa_idx.i, align 8
+  %t97.fca.1.load.6.i = load i64, ptr %l37.sroa.27.0.l0.sroa_idx.i, align 8
+  %t97.fca.2.gep.6.i = getelementptr inbounds i8, ptr %l0.i, i64 216
+  store i64 %t94.fca.0.0.extract.6.i, ptr %l37.sroa.25.0.l0.sroa_idx.i, align 8
+  store ptr %t94.fca.0.1.extract.6.i, ptr %l37.sroa.26.0.l0.sroa_idx.i, align 8
+  store i64 %newret19.i, ptr %l37.sroa.27.0.l0.sroa_idx.i, align 8
+  store i64 %newret21.i, ptr %t97.fca.2.gep.6.i, align 8
+  %t104445.6.i = icmp sgt i64 %t97.fca.1.load.6.i, 0
+  br i1 %t104445.6.i, label %bb26.6.i, label %bb27.6.i
+
+bb26.6.i:                                         ; preds = %bb26.6.i, %bb27.5.i
+  %l66.0446.6.i = phi i64 [ %t114.6.i, %bb26.6.i ], [ 0, %bb27.5.i ]
+  %t110.6.i = getelementptr { i64, ptr }, ptr %t97.fca.0.1.load.6.i, i64 %l66.0446.6.i
+  %t111.elt43.6.i = getelementptr inbounds i8, ptr %t110.6.i, i64 8
+  %t111.unpack44.6.i = load ptr, ptr %t111.elt43.6.i, align 8
+  call fastcc void @__olang_slot_release(ptr %t111.unpack44.6.i) #18
+  %t114.6.i = add nuw nsw i64 %l66.0446.6.i, 1
+  %exitcond.not.6.i = icmp eq i64 %t114.6.i, %t97.fca.1.load.6.i
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %t110.6.i, i8 0, i64 16, i1 false)
+  br i1 %exitcond.not.6.i, label %bb27.6.i, label %bb26.6.i
+
+bb27.6.i:                                         ; preds = %bb26.6.i, %bb27.5.i
+  call fastcc void @__olang_region_release_part(ptr %t97.fca.0.1.load.6.i, i64 %t97.fca.0.0.load.6.i) #18
+  %t94.7.i = call fastcc { { i64, ptr }, i64, i64 } @ctc_2emk(ptr nonnull %s0.i, i64 7)
+  %newret11.i = extractvalue { { i64, ptr }, i64, i64 } %t94.7.i, 0
+  %newret13.i = extractvalue { { i64, ptr }, i64, i64 } %t94.7.i, 1
+  %newret15.i = extractvalue { { i64, ptr }, i64, i64 } %t94.7.i, 2
+  %t94.fca.0.0.extract.7.i = extractvalue { i64, ptr } %newret11.i, 0
+  %t94.fca.0.1.extract.7.i = extractvalue { i64, ptr } %newret11.i, 1
+  %t97.fca.0.0.load.7.i = load i64, ptr %l37.sroa.29.0.l0.sroa_idx.i, align 8
+  %t97.fca.0.1.load.7.i = load ptr, ptr %l37.sroa.30.0.l0.sroa_idx.i, align 8
+  %t97.fca.1.load.7.i = load i64, ptr %l37.sroa.31.0.l0.sroa_idx.i, align 8
+  %t97.fca.2.gep.7.i = getelementptr inbounds i8, ptr %l0.i, i64 248
+  store i64 %t94.fca.0.0.extract.7.i, ptr %l37.sroa.29.0.l0.sroa_idx.i, align 8
+  store ptr %t94.fca.0.1.extract.7.i, ptr %l37.sroa.30.0.l0.sroa_idx.i, align 8
+  store i64 %newret13.i, ptr %l37.sroa.31.0.l0.sroa_idx.i, align 8
+  store i64 %newret15.i, ptr %t97.fca.2.gep.7.i, align 8
+  %t104445.7.i = icmp sgt i64 %t97.fca.1.load.7.i, 0
+  br i1 %t104445.7.i, label %bb26.7.i, label %bb27.7.i
+
+bb26.7.i:                                         ; preds = %bb26.7.i, %bb27.6.i
+  %l66.0446.7.i = phi i64 [ %t114.7.i, %bb26.7.i ], [ 0, %bb27.6.i ]
+  %t110.7.i = getelementptr { i64, ptr }, ptr %t97.fca.0.1.load.7.i, i64 %l66.0446.7.i
+  %t111.elt43.7.i = getelementptr inbounds i8, ptr %t110.7.i, i64 8
+  %t111.unpack44.7.i = load ptr, ptr %t111.elt43.7.i, align 8
+  call fastcc void @__olang_slot_release(ptr %t111.unpack44.7.i) #18
+  %t114.7.i = add nuw nsw i64 %l66.0446.7.i, 1
+  %exitcond.not.7.i = icmp eq i64 %t114.7.i, %t97.fca.1.load.7.i
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %t110.7.i, i8 0, i64 16, i1 false)
+  br i1 %exitcond.not.7.i, label %bb27.7.i, label %bb26.7.i
+
+bb27.7.i:                                         ; preds = %bb26.7.i, %bb27.6.i
+  call fastcc void @__olang_region_release_part(ptr %t97.fca.0.1.load.7.i, i64 %t97.fca.0.0.load.7.i) #18
+  %t94.8.i = call fastcc { { i64, ptr }, i64, i64 } @ctc_2emk(ptr nonnull %s0.i, i64 8)
+  %newret5.i = extractvalue { { i64, ptr }, i64, i64 } %t94.8.i, 0
+  %newret7.i = extractvalue { { i64, ptr }, i64, i64 } %t94.8.i, 1
+  %newret9.i = extractvalue { { i64, ptr }, i64, i64 } %t94.8.i, 2
+  %t94.fca.0.0.extract.8.i = extractvalue { i64, ptr } %newret5.i, 0
+  %t94.fca.0.1.extract.8.i = extractvalue { i64, ptr } %newret5.i, 1
+  %t97.fca.0.0.load.8.i = load i64, ptr %l37.sroa.33.0.l0.sroa_idx.i, align 8
+  %t97.fca.0.1.load.8.i = load ptr, ptr %l37.sroa.34.0.l0.sroa_idx.i, align 8
+  %t97.fca.1.load.8.i = load i64, ptr %l37.sroa.35.0.l0.sroa_idx.i, align 8
+  %t97.fca.2.gep.8.i = getelementptr inbounds i8, ptr %l0.i, i64 280
+  store i64 %t94.fca.0.0.extract.8.i, ptr %l37.sroa.33.0.l0.sroa_idx.i, align 8
+  store ptr %t94.fca.0.1.extract.8.i, ptr %l37.sroa.34.0.l0.sroa_idx.i, align 8
+  store i64 %newret7.i, ptr %l37.sroa.35.0.l0.sroa_idx.i, align 8
+  store i64 %newret9.i, ptr %t97.fca.2.gep.8.i, align 8
+  %t104445.8.i = icmp sgt i64 %t97.fca.1.load.8.i, 0
+  br i1 %t104445.8.i, label %bb26.8.i, label %bb27.8.i
+
+bb26.8.i:                                         ; preds = %bb26.8.i, %bb27.7.i
+  %l66.0446.8.i = phi i64 [ %t114.8.i, %bb26.8.i ], [ 0, %bb27.7.i ]
+  %t110.8.i = getelementptr { i64, ptr }, ptr %t97.fca.0.1.load.8.i, i64 %l66.0446.8.i
+  %t111.elt43.8.i = getelementptr inbounds i8, ptr %t110.8.i, i64 8
+  %t111.unpack44.8.i = load ptr, ptr %t111.elt43.8.i, align 8
+  call fastcc void @__olang_slot_release(ptr %t111.unpack44.8.i) #18
+  %t114.8.i = add nuw nsw i64 %l66.0446.8.i, 1
+  %exitcond.not.8.i = icmp eq i64 %t114.8.i, %t97.fca.1.load.8.i
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %t110.8.i, i8 0, i64 16, i1 false)
+  br i1 %exitcond.not.8.i, label %bb27.8.i, label %bb26.8.i
+
+bb27.8.i:                                         ; preds = %bb26.8.i, %bb27.7.i
+  call fastcc void @__olang_region_release_part(ptr %t97.fca.0.1.load.8.i, i64 %t97.fca.0.0.load.8.i) #18
+  %t94.9.i = call fastcc { { i64, ptr }, i64, i64 } @ctc_2emk(ptr nonnull %s0.i, i64 9)
+  %newret.i = extractvalue { { i64, ptr }, i64, i64 } %t94.9.i, 0
+  %newret1.i = extractvalue { { i64, ptr }, i64, i64 } %t94.9.i, 1
+  %newret3.i = extractvalue { { i64, ptr }, i64, i64 } %t94.9.i, 2
+  %t94.fca.0.0.extract.9.i = extractvalue { i64, ptr } %newret.i, 0
+  %t94.fca.0.1.extract.9.i = extractvalue { i64, ptr } %newret.i, 1
+  %t97.fca.0.0.load.9.i = load i64, ptr %l37.sroa.37.0.l0.sroa_idx.i, align 8
+  %t97.fca.0.1.load.9.i = load ptr, ptr %l37.sroa.38.0.l0.sroa_idx.i, align 8
+  %t97.fca.1.load.9.i = load i64, ptr %l37.sroa.39.0.l0.sroa_idx.i, align 8
+  %t97.fca.2.gep.9.i = getelementptr inbounds i8, ptr %l0.i, i64 312
+  store i64 %t94.fca.0.0.extract.9.i, ptr %l37.sroa.37.0.l0.sroa_idx.i, align 8
+  store ptr %t94.fca.0.1.extract.9.i, ptr %l37.sroa.38.0.l0.sroa_idx.i, align 8
+  store i64 %newret1.i, ptr %l37.sroa.39.0.l0.sroa_idx.i, align 8
+  store i64 %newret3.i, ptr %t97.fca.2.gep.9.i, align 8
+  %t104445.9.i = icmp sgt i64 %t97.fca.1.load.9.i, 0
+  br i1 %t104445.9.i, label %bb26.9.i, label %bb27.9.i
+
+bb26.9.i:                                         ; preds = %bb26.9.i, %bb27.8.i
+  %l66.0446.9.i = phi i64 [ %t114.9.i, %bb26.9.i ], [ 0, %bb27.8.i ]
+  %t110.9.i = getelementptr { i64, ptr }, ptr %t97.fca.0.1.load.9.i, i64 %l66.0446.9.i
+  %t111.elt43.9.i = getelementptr inbounds i8, ptr %t110.9.i, i64 8
+  %t111.unpack44.9.i = load ptr, ptr %t111.elt43.9.i, align 8
+  call fastcc void @__olang_slot_release(ptr %t111.unpack44.9.i) #18
+  %t114.9.i = add nuw nsw i64 %l66.0446.9.i, 1
+  %exitcond.not.9.i = icmp eq i64 %t114.9.i, %t97.fca.1.load.9.i
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %t110.9.i, i8 0, i64 16, i1 false)
+  br i1 %exitcond.not.9.i, label %bb27.9.i, label %bb26.9.i
+
+bb27.9.i:                                         ; preds = %bb26.9.i, %bb27.8.i
+  call fastcc void @__olang_region_release_part(ptr %t97.fca.0.1.load.9.i, i64 %t97.fca.0.0.load.9.i) #18
+  %.fca.1.gep2.i = getelementptr inbounds i8, ptr %s5.i, i64 8
+  %.fca.2.gep3.i = getelementptr inbounds i8, ptr %s5.i, i64 16
+  %.fca.4.gep5.i = getelementptr inbounds i8, ptr %s5.i, i64 32
+  %.fca.6.gep.i = getelementptr inbounds i8, ptr %s5.i, i64 48
+; ctc.olang:22  for i in range N { t += longest(rows[i % 10]) }
+;    passed   inline: '__olang_scope_close' inlined into 'main' with (cost=always): always inline attribute (x2)
+;    passed   inline: 'vec.Vec<String>' inlined into 'main' with (cost=30, threshold=375)
+;    missed   inline: 'longest' not inlined into 'main' because too costly to inline (cost=635, threshold=625) (x2)
+;    passed   licm: hoisting getelementptr (x6)
+;    passed   inline: 'longest' inlined into 'main' with (cost=-14280, threshold=250)
+;    missed   regalloc: 5 spills 1.600000e+02 total spills cost 6 reloads 7.880000e+02 total reloads cost 25 virtual registers copies 5.121882e+03 total copies cost generated in loop
+  call void @llvm.memset.p0.i64(ptr noundef nonnull align 8 dereferenceable(56) %s5.i, i8 0, i64 56, i1 false)
+  %.fca.0.2.gep.i.i = getelementptr inbounds i8, ptr %t40.i.i, i64 16
+  %0 = getelementptr inbounds i8, ptr %t40.i.i, i64 8
+  %a0.fca.0.1.gep.i.i = getelementptr inbounds i8, ptr %l0.i.i, i64 8
+  %a0.fca.1.gep.i.i = getelementptr inbounds i8, ptr %l0.i.i, i64 16
+  %.fca.1.gep2.i.i = getelementptr inbounds i8, ptr %s0.i82.i, i64 8
+  %.fca.2.gep3.i.i = getelementptr inbounds i8, ptr %s0.i82.i, i64 16
+  %.fca.4.gep5.i.i = getelementptr inbounds i8, ptr %s0.i82.i, i64 32
+  %.fca.6.gep7.i.i = getelementptr inbounds i8, ptr %s0.i82.i, i64 48
+  %.fca.0.2.gep.i.i.i = getelementptr inbounds i8, ptr %t29.i.i.i, i64 16
+  %1 = getelementptr inbounds i8, ptr %t29.i.i.i, i64 8
+  br label %bb39.i
+
+__olang_scope_close.exit.i:                       ; preds = %__olang_scope_close.exit106.i
+  %t184.i.lcssa = phi i64 [ %t184.i, %__olang_scope_close.exit106.i ]
+; ctc.olang:23  io.PutLine($t)!
+;    passed   inline: '__olang_scope_close' inlined into 'main' with (cost=always): always inline attribute
+;    passed   inline: '__olang_scope_alloc' inlined into 'main' with (cost=always): always inline attribute (x3)
+;    passed   inline: '__olang_sb_room' inlined into 'main' with (cost=always): always inline attribute
+;    passed   inline: 'olang_textcopy' inlined into 'main' with (cost=always): always inline attribute
+;    missed   inline: __olang_fmt_i64 will not be inlined into main because its definition is unavailable (x6)
+;    missed   inline: __olang_bang_failed_plain will not be inlined into main because its definition is unavailable (x4)
+;    missed   inline: __olang_sb_put will not be inlined into main because its definition is unavailable (x6)
+;    missed   inline: __olang_errpay_top_get will not be inlined into main because its definition is unavailable (x2)
+;    missed   inline: __olang_sb_add will not be inlined into main because its definition is unavailable (x2)
+;    missed   inline: __olang_sb_done will not be inlined into main because its definition is unavailable (x2)
+;    missed   inline: __olang_bang_failed_text will not be inlined into main because its definition is unavailable (x2)
+;    missed   inline: 'PutLine<String>' not inlined into 'main' because too costly to inline (cost=625, threshold=625) (x2)
+;    missed   gvn: load of type i64 not eliminated because it is clobbered by call (x8)
+;    missed   gvn: load of type ptr not eliminated in favor of store because it is clobbered by call (x16)
+;    missed   gvn: load of type i64 not eliminated in favor of load because it is clobbered by call (x8)
+;    missed   gvn: load of type ptr not eliminated because it is clobbered by call (x14)
+;    missed   gvn: load of type ptr not eliminated in favor of store because it is clobbered by store (x16)
+;    missed   gvn: load of type ptr not eliminated in favor of load because it is clobbered by store (x24)
+;    missed   gvn: load of type ptr not eliminated in favor of load because it is clobbered by call (x20)
+;    missed   gvn: load of type ptr not eliminated because it is clobbered by store (x8)
+;    passed   inline: '__olang_fmt_i64' inlined into 'main' with (cost=90, threshold=250)
+;    missed   inline: '__olang_fmt_i64' not inlined into 'main' because too costly to inline (cost=300, threshold=250)
+;    passed   inline: 'PutLine<String>' inlined into 'main' with (cost=-13295, threshold=250)
+;    missed   inline: '__olang_bang_failed_plain' not inlined into 'main' because too costly to inline (cost=10, threshold=0) (x2)
+;    missed   inline: '__olang_sb_put' not inlined into 'main' because too costly to inline (cost=45, threshold=45) (x3)
+;    passed   inline: '__olang_errpay_top_get' inlined into 'main' with (cost=-20, threshold=45)
+;    missed   inline: '__olang_fmt_i64' not inlined into 'main' because too costly to inline (cost=45, threshold=45)
+;    passed   inline: '__olang_sb_add' inlined into 'main' with (cost=-35, threshold=45)
+;    missed   inline: '__olang_sb_done' not inlined into 'main' because too costly to inline (cost=70, threshold=45)
+;    missed   inline: '__olang_bang_failed_text' not inlined into 'main' because too costly to inline (cost=10, threshold=0)
+;    missed   inline: '__olang_bang_failed_plain' not inlined into 'startup' because too costly to inline (cost=10, threshold=0) (x2)
+;    missed   inline: '__olang_bang_failed_text' not inlined into 'startup' because too costly to inline (cost=10, threshold=0)
+;    missed   inline: '__olang_sb_done' not inlined into 'startup' because too costly to inline (cost=70, threshold=45)
+;    missed   inline: '__olang_sb_put' not inlined into 'startup' because too costly to inline (cost=45, threshold=45) (x3)
+;    missed   inline: '__olang_fmt_i64' not inlined into 'startup' because too costly to inline (cost=45, threshold=45)
+;    missed   inline: '__olang_fmt_i64' not inlined into 'startup' because too costly to inline (cost=300, threshold=250)
+;    passed   gvn: load eliminated by PRE
+;    missed   gvn: load of type i64 not eliminated in favor of store because it is clobbered by call (x2)
+;    missed   slp-vectorizer: Cannot SLP vectorize list: vectorization was impossible with available vectorization factors
+  %neg.i.i = icmp slt i64 %t184.i.lcssa, 0
+  br i1 %neg.i.i, label %minus.i.i, label %plain.i.i
+
+plain.i.i:                                        ; preds = %__olang_scope_close.exit.i
+  %v1.i.i.i = or i64 %t184.i.lcssa, 1
+  %lz.i.i.i = call range(i64 0, 64) i64 @llvm.ctlz.i64(i64 %v1.i.i.i, i1 true)
+  %bits.i.i.i = sub nuw nsw i64 64, %lz.i.i.i
+  %t0.i.i.i = mul nuw nsw i64 %bits.i.i.i, 1233
+  %t.i.i.i = lshr i64 %t0.i.i.i, 12
+  %pp.i.i.i = getelementptr [20 x i64], ptr @__olang_pow10, i64 0, i64 %t.i.i.i
+  %pw.i.i.i = load i64, ptr %pp.i.i.i, align 8
+  %below.i.i.i = icmp ult i64 %v1.i.i.i, %pw.i.i.i
+  %belowi.neg.i.i.i = sext i1 %below.i.i.i to i64
+  %t1.i.i.i = add nuw nsw i64 %t.i.i.i, 1
+  %len.i.i.i = add nsw i64 %t1.i.i.i, %belowi.neg.i.i.i
+  br label %__olang_fmt_i64.exit.i
+
+minus.i.i:                                        ; preds = %__olang_scope_close.exit.i
+  %mag.i.i = sub i64 0, %t184.i.lcssa
+  %v1.i1.i.i = or i64 %mag.i.i, 1
+  %lz.i2.i.i = call range(i64 0, 64) i64 @llvm.ctlz.i64(i64 %v1.i1.i.i, i1 true)
+  %bits.i3.i.i = sub nuw nsw i64 64, %lz.i2.i.i
+  %t0.i4.i.i = mul nuw nsw i64 %bits.i3.i.i, 1233
+  %t.i5.i.i = lshr i64 %t0.i4.i.i, 12
+  %pp.i6.i.i = getelementptr [20 x i64], ptr @__olang_pow10, i64 0, i64 %t.i5.i.i
+  %pw.i7.i.i = load i64, ptr %pp.i6.i.i, align 8
+  %below.i8.i.i = icmp ult i64 %v1.i1.i.i, %pw.i7.i.i
+  %op.rdx = select i1 %below.i8.i.i, i64 1, i64 2
+  %op.rdx50 = add nuw nsw i64 %op.rdx, %t.i5.i.i
+  br label %__olang_fmt_i64.exit.i
+
+__olang_fmt_i64.exit.i:                           ; preds = %minus.i.i, %plain.i.i
+  %common.ret.op.i59.i = phi i64 [ %op.rdx50, %minus.i.i ], [ %len.i.i.i, %plain.i.i ]
+  %sizeup.i.i = add nuw nsw i64 %common.ret.op.i59.i, 7
+  %size8.i212.i = and i64 %sizeup.i.i, 56
+  %size0.i213.i = icmp eq i64 %size8.i212.i, 0
+  %size.i214.i = select i1 %size0.i213.i, i64 8, i64 %size8.i212.i
+  %head.i215.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %headnull.i216.i = icmp eq ptr %head.i215.i, null
+  br i1 %headnull.i216.i, label %needchunk.i235.i, label %checkspace.i217.i
+
+checkspace.i217.i:                                ; preds = %__olang_fmt_i64.exit.i
+  %csusedptr.i221.i = getelementptr i8, ptr %head.i215.i, i64 8
+  %csused.i222.i = load i64, ptr %csusedptr.i221.i, align 4, !tbaa !39
+  %cscapptr.i223.i = getelementptr i8, ptr %head.i215.i, i64 16
+  %cscap.i224.i = load i64, ptr %cscapptr.i223.i, align 4, !tbaa !39
+  %remaining.i228.i = sub i64 %cscap.i224.i, %csused.i222.i
+  %fits.not.i229.i = icmp ult i64 %remaining.i228.i, %size.i214.i
+  br i1 %fits.not.i229.i, label %needchunk.i235.i, label %bump.i230.i
+
+bump.i230.i:                                      ; preds = %checkspace.i217.i
+  %dataptr.i231.i = getelementptr i8, ptr %head.i215.i, i64 64
+  %result.i232.i = getelementptr i8, ptr %dataptr.i231.i, i64 %csused.i222.i
+  %newused.i233.i = add i64 %csused.i222.i, %size.i214.i
+  store i64 %newused.i233.i, ptr %csusedptr.i221.i, align 4, !tbaa !39
+  br label %__olang_scope_alloc_a.exit237.i
+
+needchunk.i235.i:                                 ; preds = %checkspace.i217.i, %__olang_fmt_i64.exit.i
+; (no line of the program)
+  %slow.i236.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i, i64 %common.ret.op.i59.i, i64 8) #18
+  br label %__olang_scope_alloc_a.exit237.i
+
+__olang_scope_alloc_a.exit237.i:                  ; preds = %needchunk.i235.i, %bump.i230.i
+  %common.ret.op.i234.i = phi ptr [ %result.i232.i, %bump.i230.i ], [ %slow.i236.i, %needchunk.i235.i ]
+; ctc.olang:23  io.PutLine($t)!
+  %t194.i = call fastcc i64 @__olang_fmt_i64(ptr %common.ret.op.i234.i, i64 %t184.i.lcssa) #18
+  call void @llvm.lifetime.start.p0(i64 56, ptr nonnull %s0.i.i)
+  %.fca.1.gep.i.i = getelementptr inbounds i8, ptr %s0.i.i, i64 8
+  %.fca.2.gep.i.i = getelementptr inbounds i8, ptr %s0.i.i, i64 16
+  %.fca.4.gep.i.i = getelementptr inbounds i8, ptr %s0.i.i, i64 32
+  %.fca.6.gep.i.i = getelementptr inbounds i8, ptr %s0.i.i, i64 48
+; ../std/io.olang:68  fn PutLine<T>(x T = "") ? Error { try Write(Stdout, $x + "\n") }
+  %t8.i.i = add nuw nsw i64 %common.ret.op.i59.i, 1
+  %2 = and i64 %common.ret.op.i59.i, -8
+  %size8.i76.i.i = add nuw nsw i64 %2, 8
+  call void @llvm.memset.p0.i64(ptr noundef nonnull align 8 dereferenceable(56) %s0.i.i, i8 0, i64 56, i1 false)
+; (no line of the program)
+  %slow.i100.i.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i.i, i64 %t8.i.i, i64 8) #18
+  %big.i.i.i = icmp ugt i64 %common.ret.op.i59.i, 16
+  br i1 %big.i.i.i, label %call.i.i.i, label %s8.i.i.i
+
+call.i.i.i:                                       ; preds = %__olang_scope_alloc_a.exit237.i
+  call void @llvm.memcpy.p0.p0.i64(ptr align 1 %slow.i100.i.i, ptr align 1 %common.ret.op.i234.i, i64 %common.ret.op.i59.i, i1 false)
+  br label %olang_textcopy.exit.i.i
+
+s8.i.i.i:                                         ; preds = %__olang_scope_alloc_a.exit237.i
+  %ge8.i.i.i = icmp ugt i64 %common.ret.op.i59.i, 7
+  br i1 %ge8.i.i.i, label %w8.i.i.i, label %s4.i.i.i
+
+w8.i.i.i:                                         ; preds = %s8.i.i.i
+  %e8.i.i.i = add nsw i64 %common.ret.op.i59.i, -8
+  %a8.i.i.i = load i64, ptr %common.ret.op.i234.i, align 1
+  %sb8.i.i.i = getelementptr i8, ptr %common.ret.op.i234.i, i64 %e8.i.i.i
+  %b8.i.i.i = load i64, ptr %sb8.i.i.i, align 1
+  store i64 %a8.i.i.i, ptr %slow.i100.i.i, align 1
+  %db8.i.i.i = getelementptr i8, ptr %slow.i100.i.i, i64 %e8.i.i.i
+  store i64 %b8.i.i.i, ptr %db8.i.i.i, align 1
+  br label %olang_textcopy.exit.i.i
+
+s4.i.i.i:                                         ; preds = %s8.i.i.i
+  %ge4.i.i.i = icmp ugt i64 %common.ret.op.i59.i, 3
+  br i1 %ge4.i.i.i, label %w4.i.i.i, label %s1.i.i.i
+
+w4.i.i.i:                                         ; preds = %s4.i.i.i
+  %e4.i.i.i = add nsw i64 %common.ret.op.i59.i, -4
+  %a4.i.i.i = load i32, ptr %common.ret.op.i234.i, align 1
+  %sb4.i.i.i = getelementptr i8, ptr %common.ret.op.i234.i, i64 %e4.i.i.i
+  %b4.i.i.i = load i32, ptr %sb4.i.i.i, align 1
+  store i32 %a4.i.i.i, ptr %slow.i100.i.i, align 1
+  %db4.i.i.i = getelementptr i8, ptr %slow.i100.i.i, i64 %e4.i.i.i
+  store i32 %b4.i.i.i, ptr %db4.i.i.i, align 1
+  br label %olang_textcopy.exit.i.i
+
+s1.i.i.i:                                         ; preds = %s4.i.i.i
+  %none.i.i.i = icmp eq i64 %common.ret.op.i59.i, 0
+  br i1 %none.i.i.i, label %olang_textcopy.exit.i.i, label %w1.i.i.i
+
+w1.i.i.i:                                         ; preds = %s1.i.i.i
+  %h.i.i.i = lshr i64 %common.ret.op.i59.i, 1
+  %e1.i.i.i = add nsw i64 %common.ret.op.i59.i, -1
+  %a1.i.i.i = load i8, ptr %common.ret.op.i234.i, align 1
+  %sh.i.i.i = getelementptr i8, ptr %common.ret.op.i234.i, i64 %h.i.i.i
+  %m1.i.i.i = load i8, ptr %sh.i.i.i, align 1
+  %se.i.i.i = getelementptr i8, ptr %common.ret.op.i234.i, i64 %e1.i.i.i
+  %z1.i.i.i = load i8, ptr %se.i.i.i, align 1
+  store i8 %a1.i.i.i, ptr %slow.i100.i.i, align 1
+  %dh.i.i.i = getelementptr i8, ptr %slow.i100.i.i, i64 %h.i.i.i
+  store i8 %m1.i.i.i, ptr %dh.i.i.i, align 1
+  %de.i.i.i = getelementptr i8, ptr %slow.i100.i.i, i64 %e1.i.i.i
+  store i8 %z1.i.i.i, ptr %de.i.i.i, align 1
+  br label %olang_textcopy.exit.i.i
+
+olang_textcopy.exit.i.i:                          ; preds = %w1.i.i.i, %s1.i.i.i, %w4.i.i.i, %w8.i.i.i, %call.i.i.i
+; ../std/io.olang:68  fn PutLine<T>(x T = "") ? Error { try Write(Stdout, $x + "\n") }
+  %t10.i.i = getelementptr i8, ptr %slow.i100.i.i, i64 %common.ret.op.i59.i
+  store i8 10, ptr %t10.i.i, align 1
+  %head.i74.i.i = load ptr, ptr %s0.i.i, align 8, !tbaa !37
+  %headnull.i.i.i = icmp eq ptr %head.i74.i.i, null
+  br i1 %headnull.i.i.i, label %needchunk.i.i.i, label %checkspace.i.i.i
+
+checkspace.i.i.i:                                 ; preds = %olang_textcopy.exit.i.i
+  %csusedptr.i.i.i = getelementptr i8, ptr %head.i74.i.i, i64 8
+  %csused.i.i.i = load i64, ptr %csusedptr.i.i.i, align 4, !tbaa !39
+  %cscapptr.i.i.i = getelementptr i8, ptr %head.i74.i.i, i64 16
+  %cscap.i.i.i = load i64, ptr %cscapptr.i.i.i, align 4, !tbaa !39
+  %remaining.i.i.i = sub i64 %cscap.i.i.i, %csused.i.i.i
+  %fits.not.i.i.i = icmp ult i64 %remaining.i.i.i, %size8.i76.i.i
+  br i1 %fits.not.i.i.i, label %needchunk.i.i.i, label %bump.i.i.i
+
+bump.i.i.i:                                       ; preds = %checkspace.i.i.i
+  %dataptr.i.i.i = getelementptr i8, ptr %head.i74.i.i, i64 64
+  %result.i.i.i = getelementptr i8, ptr %dataptr.i.i.i, i64 %csused.i.i.i
+  %newused.i.i.i = add i64 %csused.i.i.i, %size8.i76.i.i
+  store i64 %newused.i.i.i, ptr %csusedptr.i.i.i, align 4, !tbaa !39
+  br label %__olang_scope_alloc_a.exit.i.i
+
+needchunk.i.i.i:                                  ; preds = %checkspace.i.i.i, %olang_textcopy.exit.i.i
+; (no line of the program)
+  %slow.i.i60.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s0.i.i, i64 %t8.i.i, i64 8) #18
+  br label %__olang_scope_alloc_a.exit.i.i
+
+__olang_scope_alloc_a.exit.i.i:                   ; preds = %needchunk.i.i.i, %bump.i.i.i
+  %common.ret.op.i.i.i = phi ptr [ %result.i.i.i, %bump.i.i.i ], [ %slow.i.i60.i, %needchunk.i.i.i ]
+; ../std/io.olang:68  fn PutLine<T>(x T = "") ? Error { try Write(Stdout, $x + "\n") }
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef align 1 %common.ret.op.i.i.i, ptr noundef align 1 %slow.i100.i.i, i64 %t8.i.i, i1 false)
+; ../std/io.olang:36  if total == 0: return
+;    analysis loop-vectorize: loop not vectorized: could not determine number of loop iterations (x2)
+;    missed   loop-vectorize: loop not vectorized
+;    missed   regalloc: 1 virtual registers copies 2.845256e+01 total copies cost generated in loop
+  br label %bb4.i.i.i
+
+bb4.i.i.i:                                        ; preds = %bb17.i.i.i, %__olang_scope_alloc_a.exit.i.i
+; (no line of the program)
+  %l3.0.i.i.i = phi i64 [ %t88.i.i.i, %bb17.i.i.i ], [ 0, %__olang_scope_alloc_a.exit.i.i ]
+; ../std/io.olang:39  tail := data[sent:]
+;    missed   inline: '__olang_check_failed' not inlined into 'main' because too costly to inline (cost=10, threshold=0) (x2)
+;    missed   inline: '__olang_check_failed' not inlined into 'startup' because too costly to inline (cost=10, threshold=0) (x2)
+  %t18.i.i.i = icmp sgt i64 %l3.0.i.i.i, -1
+  br i1 %t18.i.i.i, label %bb5.i.i.i, label %bb6.i.i.i
+
+bb5.i.i.i:                                        ; preds = %bb4.i.i.i
+  %t22.not.i.i.i = icmp sgt i64 %l3.0.i.i.i, %t8.i.i
+  br i1 %t22.not.i.i.i, label %bb8.i.i.i, label %bb9.i.i.i
+
+bb6.i.i.i:                                        ; preds = %bb4.i.i.i
+  call fastcc void @__olang_check_failed(ptr nonnull @olang_loc_405125a8bfc97357_6687826239f87cdb) #18
+  unreachable
+
+bb8.i.i.i:                                        ; preds = %bb5.i.i.i
+  call fastcc void @__olang_check_failed(ptr nonnull @olang_loc_405125a8bfc97357_6687826239f87cdb) #18
+  unreachable
+
+bb9.i.i.i:                                        ; preds = %bb5.i.i.i
+  %t32.i.i.i = getelementptr i8, ptr %common.ret.op.i.i.i, i64 %l3.0.i.i.i
+  %t33.i.i.i = sub nsw i64 %t8.i.i, %l3.0.i.i.i
+; ../std/io.olang:40  n I64 = unistd.write(fd, tail, U64(tail.Len()))
+  %t48.i.i.i = call i64 @write(i32 1, ptr %t32.i.i.i, i64 %t33.i.i.i) #18
+; ../std/io.olang:41  if n < 0: error Error.Failed
+;    missed   inline: '__olang_errpay_push' not inlined into 'main' because too costly to inline (cost=50, threshold=45)
+;    missed   inline: '__olang_errpay_push' not inlined into 'startup' because too costly to inline (cost=50, threshold=45)
+  %t52.i.i.i = icmp sgt i64 %t48.i.i.i, -1
+  br i1 %t52.i.i.i, label %bb14.i.i.i, label %bb12.i.i.i
+
+bb12.i.i.i:                                       ; preds = %bb9.i.i.i
+  %t52.i.i.i.lcssa = phi i1 [ %t52.i.i.i, %bb9.i.i.i ]
+  %t57.i.i.i = call fastcc ptr @__olang_errpay_push() #18
+  %head.i.i.i.i = load ptr, ptr %t57.i.i.i, align 8, !tbaa !37
+  %headnull.i.i.i.i = icmp eq ptr %head.i.i.i.i, null
+  br i1 %headnull.i.i.i.i, label %needchunk.i.i.i.i, label %checkspace.i.i.i.i
+
+checkspace.i.i.i.i:                               ; preds = %bb12.i.i.i
+  %csusedptr.i.i.i.i = getelementptr i8, ptr %head.i.i.i.i, i64 8
+  %csused.i.i.i.i = load i64, ptr %csusedptr.i.i.i.i, align 4, !tbaa !39
+  %cscapptr.i.i.i.i = getelementptr i8, ptr %head.i.i.i.i, i64 16
+  %cscap.i.i.i.i = load i64, ptr %cscapptr.i.i.i.i, align 4, !tbaa !39
+  %remaining.i.i.i.i = sub i64 %cscap.i.i.i.i, %csused.i.i.i.i
+  %fits.not.i.i.i.i = icmp ult i64 %remaining.i.i.i.i, 16
+  br i1 %fits.not.i.i.i.i, label %needchunk.i.i.i.i, label %bump.i.i.i.i
+
+bump.i.i.i.i:                                     ; preds = %checkspace.i.i.i.i
+  %dataptr.i.i.i.i = getelementptr i8, ptr %head.i.i.i.i, i64 64
+  %result.i.i.i.i = getelementptr i8, ptr %dataptr.i.i.i.i, i64 %csused.i.i.i.i
+  %newused.i.i.i.i = add i64 %csused.i.i.i.i, 16
+  store i64 %newused.i.i.i.i, ptr %csusedptr.i.i.i.i, align 4, !tbaa !39
+  br label %__olang_scope_alloc_a.exit.i.i.i
+
+needchunk.i.i.i.i:                                ; preds = %checkspace.i.i.i.i, %bb12.i.i.i
+; (no line of the program)
+  %slow.i.i.i.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %t57.i.i.i, i64 16, i64 8) #18
+  br label %__olang_scope_alloc_a.exit.i.i.i
+
+__olang_scope_alloc_a.exit.i.i.i:                 ; preds = %needchunk.i.i.i.i, %bump.i.i.i.i
+  %common.ret.op.i.i.i.i = phi ptr [ %result.i.i.i.i, %bump.i.i.i.i ], [ %slow.i.i.i.i, %needchunk.i.i.i.i ]
+; ../std/io.olang:41  if n < 0: error Error.Failed
+  call void @llvm.memset.p0.i64(ptr noundef align 4 dereferenceable(16) %common.ret.op.i.i.i.i, i8 0, i64 16, i1 false)
+  br label %3
+
+bb14.i.i.i:                                       ; preds = %bb9.i.i.i
+; ../std/io.olang:43  if n == 0: error Error.Partial(sent)
+;    missed   inline: '__olang_errpay_push' not inlined into 'main' because too costly to inline (cost=50, threshold=45)
+;    missed   inline: '__olang_errpay_push' not inlined into 'startup' because too costly to inline (cost=50, threshold=45)
+  %t67.i.i.i = icmp eq i64 %t48.i.i.i, 0
+  br i1 %t67.i.i.i, label %bb15.i.i.i, label %bb17.i.i.i
+
+bb15.i.i.i:                                       ; preds = %bb14.i.i.i
+; ../std/io.olang:41  if n < 0: error Error.Failed
+  %t52.i.i.i.lcssa56 = phi i1 [ %t52.i.i.i, %bb14.i.i.i ]
+; (no line of the program)
+  %l3.0.i.i.i.lcssa54 = phi i64 [ %l3.0.i.i.i, %bb14.i.i.i ]
+; ../std/io.olang:43  if n == 0: error Error.Partial(sent)
+  %t76.i.i.i = call fastcc ptr @__olang_errpay_push() #18
+  %head.i17.i.i.i = load ptr, ptr %t76.i.i.i, align 8, !tbaa !37
+  %headnull.i18.i.i.i = icmp eq ptr %head.i17.i.i.i, null
+  br i1 %headnull.i18.i.i.i, label %needchunk.i33.i.i.i, label %checkspace.i19.i.i.i
+
+checkspace.i19.i.i.i:                             ; preds = %bb15.i.i.i
+  %csusedptr.i20.i.i.i = getelementptr i8, ptr %head.i17.i.i.i, i64 8
+  %csused.i21.i.i.i = load i64, ptr %csusedptr.i20.i.i.i, align 4, !tbaa !39
+  %cscapptr.i22.i.i.i = getelementptr i8, ptr %head.i17.i.i.i, i64 16
+  %cscap.i23.i.i.i = load i64, ptr %cscapptr.i22.i.i.i, align 4, !tbaa !39
+  %remaining.i26.i.i.i = sub i64 %cscap.i23.i.i.i, %csused.i21.i.i.i
+  %fits.not.i27.i.i.i = icmp ult i64 %remaining.i26.i.i.i, 16
+  br i1 %fits.not.i27.i.i.i, label %needchunk.i33.i.i.i, label %bump.i28.i.i.i
+
+bump.i28.i.i.i:                                   ; preds = %checkspace.i19.i.i.i
+  %dataptr.i29.i.i.i = getelementptr i8, ptr %head.i17.i.i.i, i64 64
+  %result.i30.i.i.i = getelementptr i8, ptr %dataptr.i29.i.i.i, i64 %csused.i21.i.i.i
+  %newused.i31.i.i.i = add i64 %csused.i21.i.i.i, 16
+  store i64 %newused.i31.i.i.i, ptr %csusedptr.i20.i.i.i, align 4, !tbaa !39
+  br label %__olang_scope_alloc_a.exit35.i.i.i
+
+needchunk.i33.i.i.i:                              ; preds = %checkspace.i19.i.i.i, %bb15.i.i.i
+; (no line of the program)
+  %slow.i34.i.i.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %t76.i.i.i, i64 16, i64 8) #18
+  br label %__olang_scope_alloc_a.exit35.i.i.i
+
+__olang_scope_alloc_a.exit35.i.i.i:               ; preds = %needchunk.i33.i.i.i, %bump.i28.i.i.i
+  %common.ret.op.i32.i.i.i = phi ptr [ %result.i30.i.i.i, %bump.i28.i.i.i ], [ %slow.i34.i.i.i, %needchunk.i33.i.i.i ]
+; ../std/io.olang:43  if n == 0: error Error.Partial(sent)
+  store i64 1, ptr %common.ret.op.i32.i.i.i, align 4
+  %t81.repack14.i.i.i = getelementptr inbounds i8, ptr %common.ret.op.i32.i.i.i, i64 8
+  store i64 %l3.0.i.i.i.lcssa54, ptr %t81.repack14.i.i.i, align 4
+  br label %3
+
+bb17.i.i.i:                                       ; preds = %bb14.i.i.i
+; ../std/io.olang:44  sent = sent + n
+  %t88.i.i.i = add nuw i64 %t48.i.i.i, %l3.0.i.i.i
+; ../std/io.olang:45  } for sent < total
+  %t94.not.i.i.i.not = icmp sgt i64 %t88.i.i.i, %common.ret.op.i59.i
+; ../std/io.olang:38  do {
+  br i1 %t94.not.i.i.i.not, label %bb3.i.i, label %bb4.i.i.i
+
+3:                                                ; preds = %__olang_scope_alloc_a.exit35.i.i.i, %__olang_scope_alloc_a.exit.i.i.i
+  %t52.i.i.i58 = phi i1 [ %t52.i.i.i.lcssa56, %__olang_scope_alloc_a.exit35.i.i.i ], [ %t52.i.i.i.lcssa, %__olang_scope_alloc_a.exit.i.i.i ]
+  %common.ret.op.i32.sink.i.i.i = phi ptr [ %common.ret.op.i32.i.i.i, %__olang_scope_alloc_a.exit35.i.i.i ], [ %common.ret.op.i.i.i.i, %__olang_scope_alloc_a.exit.i.i.i ]
+; (no line of the program)
+  %rec.i.i.i.i = load ptr, ptr @__olang_errpay_top, align 8
+  %pp.i.i.i.i = getelementptr i8, ptr %rec.i.i.i.i, i64 16
+  store ptr %common.ret.op.i32.sink.i.i.i, ptr %pp.i.i.i.i, align 8
+  %f.i.i.i = load ptr, ptr %.fca.4.gep.i.i, align 8, !tbaa !37
+  %hasf.not.i.i.i = icmp eq ptr %f.i.i.i, null
+  %dcur.i114.pre120.i.i = load ptr, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  br i1 %hasf.not.i.i.i, label %start.i.i.i, label %parts.i.i.i
+
+parts.i.i.i:                                      ; preds = %3
+  %ph.i.i.i = load ptr, ptr %s0.i.i, align 8, !tbaa !37
+  %pt.i.i.i = load ptr, ptr %.fca.2.gep.i.i, align 8, !tbaa !37
+  %folded.i.i.i = call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %f.i.i.i, ptr %dcur.i114.pre120.i.i, ptr %ph.i.i.i, ptr %pt.i.i.i) #18
+  %fd.i.i.i = extractvalue { ptr, ptr, ptr } %folded.i.i.i, 0
+  store ptr %fd.i.i.i, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  %has.not.i110.i.i = icmp eq ptr %fd.i.i.i, null
+  br i1 %has.not.i110.i.i, label %__olang_dtor_head.exit113.i.i, label %fix.i111.i.i
+
+fix.i111.i.i:                                     ; preds = %parts.i.i.i
+  %ppp.i112.i.i = getelementptr i8, ptr %fd.i.i.i, i64 24
+  store ptr %.fca.1.gep.i.i, ptr %ppp.i112.i.i, align 8
+  %dcur.i114.pre.pre.i.i = load ptr, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  br label %__olang_dtor_head.exit113.i.i
+
+__olang_dtor_head.exit113.i.i:                    ; preds = %fix.i111.i.i, %parts.i.i.i
+  %dcur.i114.pre.i.i = phi ptr [ null, %parts.i.i.i ], [ %dcur.i114.pre.pre.i.i, %fix.i111.i.i ]
+  %fh.i.i.i = extractvalue { ptr, ptr, ptr } %folded.i.i.i, 1
+  store ptr %fh.i.i.i, ptr %s0.i.i, align 8, !tbaa !37
+  %ft.i.i.i = extractvalue { ptr, ptr, ptr } %folded.i.i.i, 2
+  store ptr %ft.i.i.i, ptr %.fca.2.gep.i.i, align 8, !tbaa !37
+  store ptr null, ptr %.fca.4.gep.i.i, align 8, !tbaa !37
+  br label %start.i.i.i
+
+start.i.i.i:                                      ; preds = %__olang_dtor_head.exit113.i.i, %3
+  %dcur.i114.i.i = phi ptr [ %dcur.i114.pre.i.i, %__olang_dtor_head.exit113.i.i ], [ %dcur.i114.pre120.i.i, %3 ]
+  %dempty.i115.i.i = icmp eq ptr %dcur.i114.i.i, null
+  br i1 %dempty.i115.i.i, label %chunks.i.i.i, label %dcall.i.i.i
+
+dcall.i.i.i:                                      ; preds = %dloop.i.backedge.i.i, %start.i.i.i
+  %dcur.i116.i.i = phi ptr [ %dcur.i.i.i, %dloop.i.backedge.i.i ], [ %dcur.i114.i.i, %start.i.i.i ]
+  %dnext.i.i.i = load ptr, ptr %dcur.i116.i.i, align 8
+  store ptr %dnext.i.i.i, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  %dhasnext.not.i.i.i = icmp eq ptr %dnext.i.i.i, null
+  br i1 %dhasnext.not.i.i.i, label %drun.i.i.i, label %dfixpp.i.i.i
+
+dfixpp.i.i.i:                                     ; preds = %dcall.i.i.i
+  %dnpp.i.i.i = getelementptr i8, ptr %dnext.i.i.i, i64 24
+  store ptr %.fca.1.gep.i.i, ptr %dnpp.i.i.i, align 8
+  br label %drun.i.i.i
+
+drun.i.i.i:                                       ; preds = %dfixpp.i.i.i, %dcall.i.i.i
+  %instptr.i.i.i = getelementptr i8, ptr %dcur.i116.i.i, i64 8
+  %inst.i.i.i = load ptr, ptr %instptr.i.i.i, align 8
+  %fnptr.i.i.i = getelementptr i8, ptr %dcur.i116.i.i, i64 16
+  %fn.i.i.i = load ptr, ptr %fnptr.i.i.i, align 8
+  call void %fn.i.i.i(ptr %inst.i.i.i, ptr nonnull %s0.i.i) #18
+  %wp.i.i.i = load atomic ptr, ptr %.fca.4.gep.i.i acquire, align 8
+  %haswp.not.i.i.i = icmp eq ptr %wp.i.i.i, null
+  %dcur.i.pre122.i.i = load ptr, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  br i1 %haswp.not.i.i.i, label %dloop.i.backedge.i.i, label %dparts.i.i.i
+
+dloop.i.backedge.i.i:                             ; preds = %__olang_dtor_head.exit109.i.i, %drun.i.i.i
+  %dcur.i.i.i = phi ptr [ %dcur.i.pre122.i.i, %drun.i.i.i ], [ %dcur.i.pre.i.i, %__olang_dtor_head.exit109.i.i ]
+  %dempty.i.i.i = icmp eq ptr %dcur.i.i.i, null
+  br i1 %dempty.i.i.i, label %chunks.i.i.i, label %dcall.i.i.i
+
+dparts.i.i.i:                                     ; preds = %drun.i.i.i
+  %wh.i.i.i = load ptr, ptr %s0.i.i, align 8, !tbaa !37
+  %wt.i.i.i = load ptr, ptr %.fca.2.gep.i.i, align 8, !tbaa !37
+  %wfolded.i.i.i = call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %wp.i.i.i, ptr %dcur.i.pre122.i.i, ptr %wh.i.i.i, ptr %wt.i.i.i) #18
+  %wfd.i.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i.i.i, 0
+  store ptr %wfd.i.i.i, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  %has.not.i106.i.i = icmp eq ptr %wfd.i.i.i, null
+  br i1 %has.not.i106.i.i, label %__olang_dtor_head.exit109.i.i, label %fix.i107.i.i
+
+fix.i107.i.i:                                     ; preds = %dparts.i.i.i
+  %ppp.i108.i.i = getelementptr i8, ptr %wfd.i.i.i, i64 24
+  store ptr %.fca.1.gep.i.i, ptr %ppp.i108.i.i, align 8
+  %dcur.i.pre.pre.i.i = load ptr, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  br label %__olang_dtor_head.exit109.i.i
+
+__olang_dtor_head.exit109.i.i:                    ; preds = %fix.i107.i.i, %dparts.i.i.i
+  %dcur.i.pre.i.i = phi ptr [ null, %dparts.i.i.i ], [ %dcur.i.pre.pre.i.i, %fix.i107.i.i ]
+  %wfh.i.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i.i.i, 1
+  store ptr %wfh.i.i.i, ptr %s0.i.i, align 8, !tbaa !37
+  %wft.i.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i.i.i, 2
+  store ptr %wft.i.i.i, ptr %.fca.2.gep.i.i, align 8, !tbaa !37
+  store ptr null, ptr %.fca.4.gep.i.i, align 8, !tbaa !37
+  br label %dloop.i.backedge.i.i
+
+chunks.i.i.i:                                     ; preds = %dloop.i.backedge.i.i, %start.i.i.i
+  %kids.i.i.i = load ptr, ptr %.fca.6.gep.i.i, align 8, !tbaa !37
+  %haskids.not.i.i.i = icmp eq ptr %kids.i.i.i, null
+  br i1 %haskids.not.i.i.i, label %ownchunks.i.i.i, label %closekids.i.i.i
+
+closekids.i.i.i:                                  ; preds = %chunks.i.i.i
+  store ptr null, ptr %.fca.6.gep.i.i, align 8, !tbaa !37
+  call fastcc void @__olang_close_kids(ptr nonnull %kids.i.i.i) #18
+  br label %ownchunks.i.i.i
+
+ownchunks.i.i.i:                                  ; preds = %closekids.i.i.i, %chunks.i.i.i
+  %head.i.i.i = load ptr, ptr %s0.i.i, align 8, !tbaa !37
+  %empty.i.i.i = icmp eq ptr %head.i.i.i, null
+  br i1 %empty.i.i.i, label %std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i, label %give.i.i.i
+
+give.i.i.i:                                       ; preds = %ownchunks.i.i.i
+  store ptr null, ptr %s0.i.i, align 8, !tbaa !37
+  %hnext.i.i.i = load ptr, ptr %head.i.i.i, align 8
+  %single.i.i.i = icmp eq ptr %hnext.i.i.i, null
+  %hclassptr.i.i.i = getelementptr i8, ptr %head.i.i.i, i64 40
+  %hclass.i.i.i = load i64, ptr %hclassptr.i.i.i, align 4
+  %hsmall.i.i.i = icmp eq i64 %hclass.i.i.i, 0
+  %spare.i.i.i = load ptr, ptr @__olang_pool_spare, align 8
+  %nospare.i.i.i = icmp eq ptr %spare.i.i.i, null
+  %one.i.i.i = and i1 %single.i.i.i, %hsmall.i.i.i
+  %quick.i.i.i = and i1 %one.i.i.i, %nospare.i.i.i
+  br i1 %quick.i.i.i, label %tospare.i.i.i, label %list.i.i.i
+
+tospare.i.i.i:                                    ; preds = %give.i.i.i
+  store ptr %head.i.i.i, ptr @__olang_pool_spare, align 8
+  br label %std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i
+
+list.i.i.i:                                       ; preds = %give.i.i.i
+  call fastcc void @__olang_pool_give_list(ptr nonnull %head.i.i.i) #18
+  br label %std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i
+
+bb3.i.i:                                          ; preds = %bb17.i.i.i
+  %f.i2.i.i = load ptr, ptr %.fca.4.gep.i.i, align 8, !tbaa !37
+  %hasf.not.i3.i.i = icmp eq ptr %f.i2.i.i, null
+  %dcur.i17117.pre124.i.i = load ptr, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  br i1 %hasf.not.i3.i.i, label %start.i14.i.i, label %parts.i4.i.i
+
+parts.i4.i.i:                                     ; preds = %bb3.i.i
+  %ph.i7.i.i = load ptr, ptr %s0.i.i, align 8, !tbaa !37
+  %pt.i9.i.i = load ptr, ptr %.fca.2.gep.i.i, align 8, !tbaa !37
+  %folded.i10.i.i = call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %f.i2.i.i, ptr %dcur.i17117.pre124.i.i, ptr %ph.i7.i.i, ptr %pt.i9.i.i) #18
+  %fd.i11.i.i = extractvalue { ptr, ptr, ptr } %folded.i10.i.i, 0
+  store ptr %fd.i11.i.i, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  %has.not.i102.i.i = icmp eq ptr %fd.i11.i.i, null
+  br i1 %has.not.i102.i.i, label %__olang_dtor_head.exit105.i.i, label %fix.i103.i.i
+
+fix.i103.i.i:                                     ; preds = %parts.i4.i.i
+  %ppp.i104.i.i = getelementptr i8, ptr %fd.i11.i.i, i64 24
+  store ptr %.fca.1.gep.i.i, ptr %ppp.i104.i.i, align 8
+  %dcur.i17117.pre.pre.i.i = load ptr, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  br label %__olang_dtor_head.exit105.i.i
+
+__olang_dtor_head.exit105.i.i:                    ; preds = %fix.i103.i.i, %parts.i4.i.i
+  %dcur.i17117.pre.i.i = phi ptr [ null, %parts.i4.i.i ], [ %dcur.i17117.pre.pre.i.i, %fix.i103.i.i ]
+  %fh.i12.i.i = extractvalue { ptr, ptr, ptr } %folded.i10.i.i, 1
+  store ptr %fh.i12.i.i, ptr %s0.i.i, align 8, !tbaa !37
+  %ft.i13.i.i = extractvalue { ptr, ptr, ptr } %folded.i10.i.i, 2
+  store ptr %ft.i13.i.i, ptr %.fca.2.gep.i.i, align 8, !tbaa !37
+  store ptr null, ptr %.fca.4.gep.i.i, align 8, !tbaa !37
+  br label %start.i14.i.i
+
+start.i14.i.i:                                    ; preds = %__olang_dtor_head.exit105.i.i, %bb3.i.i
+  %dcur.i17117.i.i = phi ptr [ %dcur.i17117.pre.i.i, %__olang_dtor_head.exit105.i.i ], [ %dcur.i17117.pre124.i.i, %bb3.i.i ]
+  %dempty.i18118.i.i = icmp eq ptr %dcur.i17117.i.i, null
+  br i1 %dempty.i18118.i.i, label %chunks.i40.i.i, label %dcall.i19.i.i
+
+dcall.i19.i.i:                                    ; preds = %dloop.i16.backedge.i.i, %start.i14.i.i
+  %dcur.i17119.i.i = phi ptr [ %dcur.i17.i.i, %dloop.i16.backedge.i.i ], [ %dcur.i17117.i.i, %start.i14.i.i ]
+  %dnext.i20.i.i = load ptr, ptr %dcur.i17119.i.i, align 8
+  store ptr %dnext.i20.i.i, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  %dhasnext.not.i21.i.i = icmp eq ptr %dnext.i20.i.i, null
+  br i1 %dhasnext.not.i21.i.i, label %drun.i24.i.i, label %dfixpp.i22.i.i
+
+dfixpp.i22.i.i:                                   ; preds = %dcall.i19.i.i
+  %dnpp.i23.i.i = getelementptr i8, ptr %dnext.i20.i.i, i64 24
+  store ptr %.fca.1.gep.i.i, ptr %dnpp.i23.i.i, align 8
+  br label %drun.i24.i.i
+
+drun.i24.i.i:                                     ; preds = %dfixpp.i22.i.i, %dcall.i19.i.i
+  %instptr.i25.i.i = getelementptr i8, ptr %dcur.i17119.i.i, i64 8
+  %inst.i26.i.i = load ptr, ptr %instptr.i25.i.i, align 8
+  %fnptr.i27.i.i = getelementptr i8, ptr %dcur.i17119.i.i, i64 16
+  %fn.i28.i.i = load ptr, ptr %fnptr.i27.i.i, align 8
+  call void %fn.i28.i.i(ptr %inst.i26.i.i, ptr nonnull %s0.i.i) #18
+  %wp.i29.i.i = load atomic ptr, ptr %.fca.4.gep.i.i acquire, align 8
+  %haswp.not.i30.i.i = icmp eq ptr %wp.i29.i.i, null
+  %dcur.i17.pre126.i.i = load ptr, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  br i1 %haswp.not.i30.i.i, label %dloop.i16.backedge.i.i, label %dparts.i31.i.i
+
+dloop.i16.backedge.i.i:                           ; preds = %__olang_dtor_head.exit.i.i, %drun.i24.i.i
+  %dcur.i17.i.i = phi ptr [ %dcur.i17.pre126.i.i, %drun.i24.i.i ], [ %dcur.i17.pre.i.i, %__olang_dtor_head.exit.i.i ]
+  %dempty.i18.i.i = icmp eq ptr %dcur.i17.i.i, null
+  br i1 %dempty.i18.i.i, label %chunks.i40.i.i, label %dcall.i19.i.i
+
+dparts.i31.i.i:                                   ; preds = %drun.i24.i.i
+  %wh.i33.i.i = load ptr, ptr %s0.i.i, align 8, !tbaa !37
+  %wt.i35.i.i = load ptr, ptr %.fca.2.gep.i.i, align 8, !tbaa !37
+  %wfolded.i36.i.i = call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %wp.i29.i.i, ptr %dcur.i17.pre126.i.i, ptr %wh.i33.i.i, ptr %wt.i35.i.i) #18
+  %wfd.i37.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i36.i.i, 0
+  store ptr %wfd.i37.i.i, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  %has.not.i.i.i = icmp eq ptr %wfd.i37.i.i, null
+  br i1 %has.not.i.i.i, label %__olang_dtor_head.exit.i.i, label %fix.i.i.i
+
+fix.i.i.i:                                        ; preds = %dparts.i31.i.i
+  %ppp.i.i.i = getelementptr i8, ptr %wfd.i37.i.i, i64 24
+  store ptr %.fca.1.gep.i.i, ptr %ppp.i.i.i, align 8
+  %dcur.i17.pre.pre.i.i = load ptr, ptr %.fca.1.gep.i.i, align 8, !tbaa !37
+  br label %__olang_dtor_head.exit.i.i
+
+__olang_dtor_head.exit.i.i:                       ; preds = %fix.i.i.i, %dparts.i31.i.i
+  %dcur.i17.pre.i.i = phi ptr [ null, %dparts.i31.i.i ], [ %dcur.i17.pre.pre.i.i, %fix.i.i.i ]
+  %wfh.i38.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i36.i.i, 1
+  store ptr %wfh.i38.i.i, ptr %s0.i.i, align 8, !tbaa !37
+  %wft.i39.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i36.i.i, 2
+  store ptr %wft.i39.i.i, ptr %.fca.2.gep.i.i, align 8, !tbaa !37
+  store ptr null, ptr %.fca.4.gep.i.i, align 8, !tbaa !37
+  br label %dloop.i16.backedge.i.i
+
+chunks.i40.i.i:                                   ; preds = %dloop.i16.backedge.i.i, %start.i14.i.i
+  %kids.i42.i.i = load ptr, ptr %.fca.6.gep.i.i, align 8, !tbaa !37
+  %haskids.not.i43.i.i = icmp eq ptr %kids.i42.i.i, null
+  br i1 %haskids.not.i43.i.i, label %ownchunks.i45.i.i, label %closekids.i44.i.i
+
+closekids.i44.i.i:                                ; preds = %chunks.i40.i.i
+  store ptr null, ptr %.fca.6.gep.i.i, align 8, !tbaa !37
+  call fastcc void @__olang_close_kids(ptr nonnull %kids.i42.i.i) #18
+  br label %ownchunks.i45.i.i
+
+ownchunks.i45.i.i:                                ; preds = %closekids.i44.i.i, %chunks.i40.i.i
+  %head.i46.i.i = load ptr, ptr %s0.i.i, align 8, !tbaa !37
+  %empty.i47.i.i = icmp eq ptr %head.i46.i.i, null
+  br i1 %empty.i47.i.i, label %std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i.thread, label %give.i48.i.i
+
+give.i48.i.i:                                     ; preds = %ownchunks.i45.i.i
+  store ptr null, ptr %s0.i.i, align 8, !tbaa !37
+  %hnext.i49.i.i = load ptr, ptr %head.i46.i.i, align 8
+  %single.i50.i.i = icmp eq ptr %hnext.i49.i.i, null
+  %hclassptr.i51.i.i = getelementptr i8, ptr %head.i46.i.i, i64 40
+  %hclass.i52.i.i = load i64, ptr %hclassptr.i51.i.i, align 4
+  %hsmall.i53.i.i = icmp eq i64 %hclass.i52.i.i, 0
+  %spare.i54.i.i = load ptr, ptr @__olang_pool_spare, align 8
+  %nospare.i55.i.i = icmp eq ptr %spare.i54.i.i, null
+  %one.i56.i.i = and i1 %single.i50.i.i, %hsmall.i53.i.i
+  %quick.i57.i.i = and i1 %one.i56.i.i, %nospare.i55.i.i
+  br i1 %quick.i57.i.i, label %tospare.i59.i.i, label %list.i58.i.i
+
+tospare.i59.i.i:                                  ; preds = %give.i48.i.i
+  store ptr %head.i46.i.i, ptr @__olang_pool_spare, align 8
+  br label %std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i.thread
+
+list.i58.i.i:                                     ; preds = %give.i48.i.i
+  call fastcc void @__olang_pool_give_list(ptr nonnull %head.i46.i.i) #18
+  br label %std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i.thread
+
+std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i.thread: ; preds = %list.i58.i.i, %tospare.i59.i.i, %ownchunks.i45.i.i
+; ../std/io.olang:68  fn PutLine<T>(x T = "") ? Error { try Write(Stdout, $x + "\n") }
+  call void @llvm.lifetime.end.p0(i64 56, ptr nonnull %s0.i.i)
+  %f.i108.i = load ptr, ptr %.fca.4.gep10.i, align 8, !tbaa !37
+  %hasf.not.i109.i = icmp eq ptr %f.i108.i, null
+  %dcur.i123456.pre465.i = load ptr, ptr %.fca.1.gep7.i, align 8, !tbaa !37
+  br i1 %hasf.not.i109.i, label %start.i120.i, label %parts.i110.i
+
+std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i: ; preds = %list.i.i.i, %tospare.i.i.i, %ownchunks.i.i.i
+  call void @llvm.lifetime.end.p0(i64 56, ptr nonnull %s0.i.i)
+; ctc.olang:23  io.PutLine($t)!
+  br i1 %t52.i.i.i58, label %bb48.i, label %bb46.i, !prof !165
+
+bb39.i:                                           ; preds = %__olang_scope_close.exit106.i, %bb27.9.i
+  %l7.0452.i = phi i64 [ 0, %bb27.9.i ], [ %t184.i, %__olang_scope_close.exit106.i ]
+  %l12.0451.i = phi i64 [ 0, %bb27.9.i ], [ %t188.i, %__olang_scope_close.exit106.i ]
+; ctc.olang:22  for i in range N { t += longest(rows[i % 10]) }
+  %t174.urem.i = urem i64 %l12.0451.i, 10
+  %t176.i = getelementptr [10 x %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44.8"], ptr %l0.i, i64 0, i64 %t174.urem.i
+  %t177.fca.0.0.load.i = load i64, ptr %t176.i, align 8
+  %t177.fca.0.1.gep40.i = getelementptr inbounds i8, ptr %t176.i, i64 8
+  %t177.fca.0.1.load.i = load ptr, ptr %t177.fca.0.1.gep40.i, align 8
+  %t177.fca.1.gep41.i = getelementptr inbounds i8, ptr %t176.i, i64 16
+  %4 = load <2 x i64>, ptr %t177.fca.1.gep41.i, align 8
+  call void @llvm.lifetime.start.p0(i64 128, ptr nonnull %t40.i.i)
+  %t4.i.i = shl i64 %t177.fca.0.0.load.i, 4
+  %a32.inv.i22.i.i = icmp ult i64 %t4.i.i, 32
+  %alnA.i23.i.i = select i1 %a32.inv.i22.i.i, i64 8, i64 32
+  %a64.inv.i24.i.i = icmp ult i64 %t4.i.i, 64
+  %aln.i25.i.i = select i1 %a64.inv.i24.i.i, i64 %alnA.i23.i.i, i64 64
+; (no line of the program)
+  %slow.i.i81.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %s5.i, i64 %t4.i.i, i64 %aln.i25.i.i) #18
+  %t1056.i.i = icmp sgt i64 %t177.fca.0.0.load.i, 0
+  br i1 %t1056.i.i, label %bb2.i77.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit.i
+
+bb2.i77.i:                                        ; preds = %bb6.i.i, %bb39.i
+  %l3.057.i.i = phi i64 [ %t39.i.i, %bb6.i.i ], [ 0, %bb39.i ]
+  %t15.i.i = getelementptr { i64, ptr }, ptr %t177.fca.0.1.load.i, i64 %l3.057.i.i
+  %t16.unpack.i.i = load i64, ptr %t15.i.i, align 8, !tbaa !41
+  %t16.elt10.i.i = getelementptr inbounds i8, ptr %t15.i.i, i64 8
+  %t16.unpack11.i.i = load ptr, ptr %t16.elt10.i.i, align 8, !tbaa !41
+  %t20.i78.i = getelementptr { i64, ptr }, ptr %slow.i.i81.i, i64 %l3.057.i.i
+  store i64 %t16.unpack.i.i, ptr %t20.i78.i, align 8, !tbaa !41
+  %t20.repack13.i.i = getelementptr inbounds i8, ptr %t20.i78.i, i64 8
+  store ptr %t16.unpack11.i.i, ptr %t20.repack13.i.i, align 8, !tbaa !41
+  %t28.i79.i = icmp sgt i64 %t16.unpack.i.i, 0
+  br i1 %t28.i79.i, label %bb4.i.i, label %bb6.i.i
+
+bb4.i.i:                                          ; preds = %bb2.i77.i
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(120) %0, i8 0, i64 120, i1 false)
+  store ptr @__olang_slot_chunk, ptr %t40.i.i, align 8
+  store ptr %s5.i, ptr %.fca.0.2.gep.i.i, align 8
+  %sizeup.i.i.i = add nuw i64 %t16.unpack.i.i, 7
+  %a32.inv.i.i.i = icmp ult i64 %t16.unpack.i.i, 25
+  %alnA.i.i.i = select i1 %a32.inv.i.i.i, i64 8, i64 32
+  %a64.inv.i.i.i = icmp ult i64 %t16.unpack.i.i, 57
+  %aln.i.i.i = select i1 %a64.inv.i.i.i, i64 %alnA.i.i.i, i64 64
+  %size8.i29.i.i = and i64 %sizeup.i.i.i, -8
+  %size0.i30.i.i = icmp eq i64 %size8.i29.i.i, 0
+  %size.i31.i.i = select i1 %size0.i30.i.i, i64 8, i64 %size8.i29.i.i
+  %round.i35.i.i = icmp ugt i64 %aln.i.i.i, 8
+  %alnmask.i36.i.i = sub nsw i64 0, %aln.i.i.i
+  %alnm1.i37.i.i = add nsw i64 %aln.i.i.i, -1
+  %csused.i39.i.i = load i64, ptr getelementptr inbounds (i8, ptr @__olang_slot_chunk, i64 8), align 8, !tbaa !39
+  %cscap.i41.i.i = load i64, ptr getelementptr inbounds (i8, ptr @__olang_slot_chunk, i64 16), align 16, !tbaa !39
+  %csup.i42.i.i = add i64 %alnm1.i37.i.i, %csused.i39.i.i
+  %csrounded.i43.i.i = and i64 %csup.i42.i.i, %alnmask.i36.i.i
+  %csaligned.i44.i.i = select i1 %round.i35.i.i, i64 %csrounded.i43.i.i, i64 %csused.i39.i.i
+  %remaining.i45.i.i = sub i64 %cscap.i41.i.i, %csaligned.i44.i.i
+  %fits.not.i46.i.i = icmp ult i64 %remaining.i45.i.i, %size.i31.i.i
+  br i1 %fits.not.i46.i.i, label %needchunk.i52.i.i, label %bump.i47.i.i
+
+bb6.i.i:                                          ; preds = %__olang_scope_alloc_a.exit54.i.i, %bb2.i77.i
+  %storemerge55.i.i = phi i64 [ %t16.unpack.i.i, %__olang_scope_alloc_a.exit54.i.i ], [ 0, %bb2.i77.i ]
+  %storemerge.i.i = phi ptr [ %common.ret.op.i51.i.i, %__olang_scope_alloc_a.exit54.i.i ], [ null, %bb2.i77.i ]
+  store i64 %storemerge55.i.i, ptr %t20.i78.i, align 8, !tbaa !41
+  store ptr %storemerge.i.i, ptr %t20.repack13.i.i, align 8, !tbaa !41
+  %t39.i.i = add nuw nsw i64 %l3.057.i.i, 1
+  %exitcond.not.i.i = icmp eq i64 %t39.i.i, %t177.fca.0.0.load.i
+  br i1 %exitcond.not.i.i, label %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit.i, label %bb2.i77.i
+
+bump.i47.i.i:                                     ; preds = %bb4.i.i
+  %result.i49.i.i = getelementptr i8, ptr getelementptr inbounds (i8, ptr @__olang_slot_chunk, i64 64), i64 %csaligned.i44.i.i
+  %newused.i50.i.i = add i64 %csaligned.i44.i.i, %size.i31.i.i
+  store i64 %newused.i50.i.i, ptr getelementptr inbounds (i8, ptr @__olang_slot_chunk, i64 8), align 8, !tbaa !39
+  br label %__olang_scope_alloc_a.exit54.i.i
+
+needchunk.i52.i.i:                                ; preds = %bb4.i.i
+  %slow.i53.i.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %t40.i.i, i64 %t16.unpack.i.i, i64 %aln.i.i.i) #18
+  br label %__olang_scope_alloc_a.exit54.i.i
+
+__olang_scope_alloc_a.exit54.i.i:                 ; preds = %needchunk.i52.i.i, %bump.i47.i.i
+  %common.ret.op.i51.i.i = phi ptr [ %result.i49.i.i, %bump.i47.i.i ], [ %slow.i53.i.i, %needchunk.i52.i.i ]
+  call void @llvm.memmove.p0.p0.i64(ptr align 1 %common.ret.op.i51.i.i, ptr align 1 %t16.unpack11.i.i, i64 %t16.unpack.i.i, i1 false)
+  br label %bb6.i.i
+
+olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit.i: ; preds = %bb6.i.i, %bb39.i
+  call void @llvm.lifetime.end.p0(i64 128, ptr nonnull %t40.i.i)
+  call void @llvm.lifetime.start.p0(i64 32, ptr nonnull %l0.i.i)
+  call void @llvm.lifetime.start.p0(i64 56, ptr nonnull %s0.i82.i)
+  store i64 %t177.fca.0.0.load.i, ptr %l0.i.i, align 8
+  store ptr %slow.i.i81.i, ptr %a0.fca.0.1.gep.i.i, align 8
+  store <2 x i64> %4, ptr %a0.fca.1.gep.i.i, align 8
+  call void @llvm.memset.p0.i64(ptr noundef nonnull align 8 dereferenceable(56) %s0.i82.i, i8 0, i64 56, i1 false)
+; ../std/prelude/vec.olang:67  if v.n == v.data.Len() { v.room(v.n + 1) }
+;    missed   inline: 'Vec<String>.roo...' not inlined into 'main' because it should never be inlined (cost=never): noinline function attribute
+;    missed   inline: 'Vec<String>.roo...' not inlined into 'startup' because it should never be inlined (cost=never): noinline function attribute
+  call void @llvm.lifetime.start.p0(i64 128, ptr nonnull %t29.i.i.i)
+  %5 = extractelement <2 x i64> %4, i64 0
+  %t13.i.i.i = icmp eq i64 %5, %t177.fca.0.0.load.i
+  br i1 %t13.i.i.i, label %bb1.i.i.i, label %checkspace.i.i.i83.i
+
+bb1.i.i.i:                                        ; preds = %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit.i
+  %t21.i.i.i = add i64 %t177.fca.0.0.load.i, 1
+  call fastcc void @std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_3e_2eroo_H01fd441282e5d5ec4ad843c8950095e6(ptr nonnull %s0.i82.i, ptr nonnull %l0.i.i, i64 %t21.i.i.i)
+; ../std/prelude/vec.olang:68  v.data[v.n].occupy(x)
+;    missed   licm: failed to move load with loop-invariant address because the loop may invalidate its value (x4)
+;    passed   licm: hoisting getelementptr (x2)
+;    missed   gvn: load of type i64 not eliminated in favor of store because it is clobbered by call (x2)
+;    missed   gvn: load of type ptr not eliminated in favor of store because it is clobbered by call (x2)
+  %t28.pre.i.i.i = load i64, ptr %a0.fca.1.gep.i.i, align 8, !tbaa !33
+; ../std/prelude/vec.olang:67  if v.n == v.data.Len() { v.room(v.n + 1) }
+  br label %checkspace.i.i.i83.i
+
+checkspace.i.i.i83.i:                             ; preds = %bb1.i.i.i, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit.i
+; ../std/prelude/vec.olang:68  v.data[v.n].occupy(x)
+  %t58.i.i.i = phi i64 [ %t28.pre.i.i.i, %bb1.i.i.i ], [ %5, %olang_2emir_2eHelperKind_2eCopy_2eArray_3cstd_2fprelude_2ftext_3aString_3e.exit.i ]
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(120) %1, i8 0, i64 120, i1 false)
+  store ptr @__olang_slot_chunk, ptr %t29.i.i.i, align 8
+  store ptr %s0.i82.i, ptr %.fca.0.2.gep.i.i.i, align 8
+  %csused.i.i.i84.i = load i64, ptr getelementptr inbounds (i8, ptr @__olang_slot_chunk, i64 8), align 8, !tbaa !39
+  %cscap.i.i.i85.i = load i64, ptr getelementptr inbounds (i8, ptr @__olang_slot_chunk, i64 16), align 16, !tbaa !39
+  %csup.i.i.i.i = add i64 %csused.i.i.i84.i, 31
+  %csrounded.i.i.i.i = and i64 %csup.i.i.i.i, -32
+  %remaining.i.i.i86.i = sub i64 %cscap.i.i.i85.i, %csrounded.i.i.i.i
+  %fits.not.i.i.i87.i = icmp ult i64 %remaining.i.i.i86.i, 32
+  br i1 %fits.not.i.i.i87.i, label %needchunk.i.i.i96.i, label %bump.i.i.i88.i
+
+bump.i.i.i88.i:                                   ; preds = %checkspace.i.i.i83.i
+  %result.i.i.i89.i = getelementptr i8, ptr getelementptr inbounds (i8, ptr @__olang_slot_chunk, i64 64), i64 %csrounded.i.i.i.i
+  %newused.i.i.i90.i = add i64 %csrounded.i.i.i.i, 32
+  store i64 %newused.i.i.i90.i, ptr getelementptr inbounds (i8, ptr @__olang_slot_chunk, i64 8), align 8, !tbaa !39
+  br label %std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_3e_2ePus_H7d1143c374f11cf9cab67f1e79e7bcb4.exit.i.i
+
+needchunk.i.i.i96.i:                              ; preds = %checkspace.i.i.i83.i
+; (no line of the program)
+  %slow.i.i.i97.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull %t29.i.i.i, i64 30, i64 32) #18
+  br label %std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_3e_2ePus_H7d1143c374f11cf9cab67f1e79e7bcb4.exit.i.i
+
+std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_3e_2ePus_H7d1143c374f11cf9cab67f1e79e7bcb4.exit.i.i: ; preds = %needchunk.i.i.i96.i, %bump.i.i.i88.i
+  %common.ret.op.i.i.i91.i = phi ptr [ %result.i.i.i89.i, %bump.i.i.i88.i ], [ %slow.i.i.i97.i, %needchunk.i.i.i96.i ]
+; ../std/prelude/vec.olang:68  v.data[v.n].occupy(x)
+  call void @llvm.memcpy.p0.p0.i64(ptr noundef align 1 dereferenceable(30) %common.ret.op.i.i.i91.i, ptr noundef nonnull align 8 dereferenceable(30) getelementptr inbounds (i8, ptr @.d0, i64 8), i64 30, i1 false)
+  %t53.i.i.i = load ptr, ptr %a0.fca.0.1.gep.i.i, align 8, !tbaa !27
+  %t54.i.i.i = getelementptr { i64, ptr }, ptr %t53.i.i.i, i64 %t58.i.i.i
+  store i64 30, ptr %t54.i.i.i, align 8, !tbaa !41
+  %t54.repack5.i.i.i = getelementptr inbounds i8, ptr %t54.i.i.i, i64 8
+  store ptr %common.ret.op.i.i.i91.i, ptr %t54.repack5.i.i.i, align 8, !tbaa !41
+; ../std/prelude/vec.olang:69  v.n++
+  %t60.i.i.i = add i64 %t58.i.i.i, 1
+  store i64 %t60.i.i.i, ptr %a0.fca.1.gep.i.i, align 8, !tbaa !33
+  call void @llvm.lifetime.end.p0(i64 128, ptr nonnull %t29.i.i.i)
+; ctc.olang:14  for s in v { n = n.Max(s.Len()) }
+;    passed   loop-vectorize: vectorized loop (vectorization width: 8, interleaved count: 4)
+;    missed   regalloc: 1 virtual registers copies 3.840000e+02 total copies cost generated in loop
+  %t11.not159.i.i = icmp ult i64 %t58.i.i.i, 9223372036854775807
+  br i1 %t11.not159.i.i, label %__olang_scope_close.exit72.i.i.preheader, label %__olang_scope_close.exit.i.i
+
+__olang_scope_close.exit72.i.i.preheader:         ; preds = %std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_3e_2ePus_H7d1143c374f11cf9cab67f1e79e7bcb4.exit.i.i
+  %min.iters.check = icmp ult i64 %t60.i.i.i, 32
+  br i1 %min.iters.check, label %__olang_scope_close.exit72.i.i.preheader51, label %vector.ph
+
+__olang_scope_close.exit72.i.i.preheader51:       ; preds = %middle.block, %__olang_scope_close.exit72.i.i.preheader
+  %l1.0161.i.i.ph = phi i64 [ 0, %__olang_scope_close.exit72.i.i.preheader ], [ %15, %middle.block ]
+  %l3.0160.i.i.ph = phi i64 [ 0, %__olang_scope_close.exit72.i.i.preheader ], [ %n.vec, %middle.block ]
+  br label %__olang_scope_close.exit72.i.i
+
+vector.ph:                                        ; preds = %__olang_scope_close.exit72.i.i.preheader
+  %n.vec = and i64 %t60.i.i.i, -32
+  br label %vector.body
+
+vector.body:                                      ; preds = %vector.body, %vector.ph
+  %index = phi i64 [ 0, %vector.ph ], [ %index.next, %vector.body ]
+  %vec.phi = phi <8 x i64> [ zeroinitializer, %vector.ph ], [ %10, %vector.body ]
+  %vec.phi34 = phi <8 x i64> [ zeroinitializer, %vector.ph ], [ %11, %vector.body ]
+  %vec.phi35 = phi <8 x i64> [ zeroinitializer, %vector.ph ], [ %12, %vector.body ]
+  %vec.phi36 = phi <8 x i64> [ zeroinitializer, %vector.ph ], [ %13, %vector.body ]
+  %vec.ind = phi <8 x i64> [ <i64 0, i64 1, i64 2, i64 3, i64 4, i64 5, i64 6, i64 7>, %vector.ph ], [ %vec.ind.next, %vector.body ]
+  %step.add = add <8 x i64> %vec.ind, <i64 8, i64 8, i64 8, i64 8, i64 8, i64 8, i64 8, i64 8>
+  %step.add37 = add <8 x i64> %vec.ind, <i64 16, i64 16, i64 16, i64 16, i64 16, i64 16, i64 16, i64 16>
+  %step.add38 = add <8 x i64> %vec.ind, <i64 24, i64 24, i64 24, i64 24, i64 24, i64 24, i64 24, i64 24>
+  %6 = getelementptr { i64, ptr }, ptr %t53.i.i.i, <8 x i64> %vec.ind
+  %7 = getelementptr { i64, ptr }, ptr %t53.i.i.i, <8 x i64> %step.add
+  %8 = getelementptr { i64, ptr }, ptr %t53.i.i.i, <8 x i64> %step.add37
+  %9 = getelementptr { i64, ptr }, ptr %t53.i.i.i, <8 x i64> %step.add38
+; ../std/prelude/vec.olang:117  fn (v Vec<T>&) At(i I64) T { return v.data[i] }
+;    missed   gvn: load of type i64 not eliminated because it is clobbered by call (x2)
+  %wide.masked.gather = call <8 x i64> @llvm.masked.gather.v8i64.v8p0(<8 x ptr> %6, i32 8, <8 x i1> <i1 true, i1 true, i1 true, i1 true, i1 true, i1 true, i1 true, i1 true>, <8 x i64> poison), !tbaa !41
+  %wide.masked.gather40 = call <8 x i64> @llvm.masked.gather.v8i64.v8p0(<8 x ptr> %7, i32 8, <8 x i1> <i1 true, i1 true, i1 true, i1 true, i1 true, i1 true, i1 true, i1 true>, <8 x i64> poison), !tbaa !41
+  %wide.masked.gather41 = call <8 x i64> @llvm.masked.gather.v8i64.v8p0(<8 x ptr> %8, i32 8, <8 x i1> <i1 true, i1 true, i1 true, i1 true, i1 true, i1 true, i1 true, i1 true>, <8 x i64> poison), !tbaa !41
+  %wide.masked.gather42 = call <8 x i64> @llvm.masked.gather.v8i64.v8p0(<8 x ptr> %9, i32 8, <8 x i1> <i1 true, i1 true, i1 true, i1 true, i1 true, i1 true, i1 true, i1 true>, <8 x i64> poison), !tbaa !41
+; ../std/prelude/number.olang:465  return b if a < b else a
+  %10 = call <8 x i64> @llvm.smax.v8i64(<8 x i64> %vec.phi, <8 x i64> %wide.masked.gather)
+  %11 = call <8 x i64> @llvm.smax.v8i64(<8 x i64> %vec.phi34, <8 x i64> %wide.masked.gather40)
+  %12 = call <8 x i64> @llvm.smax.v8i64(<8 x i64> %vec.phi35, <8 x i64> %wide.masked.gather41)
+  %13 = call <8 x i64> @llvm.smax.v8i64(<8 x i64> %vec.phi36, <8 x i64> %wide.masked.gather42)
+; ctc.olang:14  for s in v { n = n.Max(s.Len()) }
+  %index.next = add nuw i64 %index, 32
+  %vec.ind.next = add <8 x i64> %vec.ind, <i64 32, i64 32, i64 32, i64 32, i64 32, i64 32, i64 32, i64 32>
+  %14 = icmp eq i64 %index.next, %n.vec
+  br i1 %14, label %middle.block, label %vector.body, !llvm.loop !192
+
+middle.block:                                     ; preds = %vector.body
+; ../std/prelude/number.olang:465  return b if a < b else a
+  %.lcssa61 = phi <8 x i64> [ %10, %vector.body ]
+  %.lcssa60 = phi <8 x i64> [ %11, %vector.body ]
+  %.lcssa59 = phi <8 x i64> [ %12, %vector.body ]
+  %.lcssa = phi <8 x i64> [ %13, %vector.body ]
+; ctc.olang:14  for s in v { n = n.Max(s.Len()) }
+  %rdx.minmax = call <8 x i64> @llvm.smax.v8i64(<8 x i64> %.lcssa61, <8 x i64> %.lcssa60)
+  %rdx.minmax43 = call <8 x i64> @llvm.smax.v8i64(<8 x i64> %rdx.minmax, <8 x i64> %.lcssa59)
+  %rdx.minmax44 = call <8 x i64> @llvm.smax.v8i64(<8 x i64> %rdx.minmax43, <8 x i64> %.lcssa)
+  %15 = call i64 @llvm.vector.reduce.smax.v8i64(<8 x i64> %rdx.minmax44)
+  %cmp.n = icmp eq i64 %t60.i.i.i, %n.vec
+  br i1 %cmp.n, label %__olang_scope_close.exit.i.i, label %__olang_scope_close.exit72.i.i.preheader51
+
+__olang_scope_close.exit.i.i:                     ; preds = %__olang_scope_close.exit72.i.i, %middle.block, %std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_3e_2ePus_H7d1143c374f11cf9cab67f1e79e7bcb4.exit.i.i
+; (no line of the program)
+  %l1.0.lcssa.i.i = phi i64 [ 0, %std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_3e_2ePus_H7d1143c374f11cf9cab67f1e79e7bcb4.exit.i.i ], [ %15, %middle.block ], [ %a1.a0.i.i.i, %__olang_scope_close.exit72.i.i ]
+  %f.i74.i.i = load ptr, ptr %.fca.4.gep5.i.i, align 8, !tbaa !37
+  %hasf.not.i75.i.i = icmp eq ptr %f.i74.i.i, null
+  %dcur.i89169.pre172.i.i = load ptr, ptr %.fca.1.gep2.i.i, align 8, !tbaa !37
+  br i1 %hasf.not.i75.i.i, label %start.i86.i.i, label %parts.i76.i.i
+
+parts.i76.i.i:                                    ; preds = %__olang_scope_close.exit.i.i
+  %ph.i79.i.i = load ptr, ptr %s0.i82.i, align 8, !tbaa !37
+  %pt.i81.i.i = load ptr, ptr %.fca.2.gep3.i.i, align 8, !tbaa !37
+  %folded.i82.i.i = call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %f.i74.i.i, ptr %dcur.i89169.pre172.i.i, ptr %ph.i79.i.i, ptr %pt.i81.i.i) #18
+  %fd.i83.i.i = extractvalue { ptr, ptr, ptr } %folded.i82.i.i, 0
+  store ptr %fd.i83.i.i, ptr %.fca.1.gep2.i.i, align 8, !tbaa !37
+  %has.not.i133.i.i = icmp eq ptr %fd.i83.i.i, null
+  br i1 %has.not.i133.i.i, label %__olang_dtor_head.exit136.i.i, label %fix.i134.i.i
+
+fix.i134.i.i:                                     ; preds = %parts.i76.i.i
+  %ppp.i135.i.i = getelementptr i8, ptr %fd.i83.i.i, i64 24
+  store ptr %.fca.1.gep2.i.i, ptr %ppp.i135.i.i, align 8
+  %dcur.i89169.pre.pre.i.i = load ptr, ptr %.fca.1.gep2.i.i, align 8, !tbaa !37
+  br label %__olang_dtor_head.exit136.i.i
+
+__olang_dtor_head.exit136.i.i:                    ; preds = %fix.i134.i.i, %parts.i76.i.i
+  %dcur.i89169.pre.i.i = phi ptr [ null, %parts.i76.i.i ], [ %dcur.i89169.pre.pre.i.i, %fix.i134.i.i ]
+  %fh.i84.i.i = extractvalue { ptr, ptr, ptr } %folded.i82.i.i, 1
+  store ptr %fh.i84.i.i, ptr %s0.i82.i, align 8, !tbaa !37
+  %ft.i85.i.i = extractvalue { ptr, ptr, ptr } %folded.i82.i.i, 2
+  store ptr %ft.i85.i.i, ptr %.fca.2.gep3.i.i, align 8, !tbaa !37
+  store ptr null, ptr %.fca.4.gep5.i.i, align 8, !tbaa !37
+  br label %start.i86.i.i
+
+start.i86.i.i:                                    ; preds = %__olang_dtor_head.exit136.i.i, %__olang_scope_close.exit.i.i
+  %dcur.i89169.i.i = phi ptr [ %dcur.i89169.pre.i.i, %__olang_dtor_head.exit136.i.i ], [ %dcur.i89169.pre172.i.i, %__olang_scope_close.exit.i.i ]
+  %dempty.i90170.i.i = icmp eq ptr %dcur.i89169.i.i, null
+  br i1 %dempty.i90170.i.i, label %chunks.i112.i.i, label %dcall.i91.i.i
+
+dcall.i91.i.i:                                    ; preds = %dloop.i88.backedge.i.i, %start.i86.i.i
+  %dcur.i89171.i.i = phi ptr [ %dcur.i89.i.i, %dloop.i88.backedge.i.i ], [ %dcur.i89169.i.i, %start.i86.i.i ]
+  %dnext.i92.i.i = load ptr, ptr %dcur.i89171.i.i, align 8
+  store ptr %dnext.i92.i.i, ptr %.fca.1.gep2.i.i, align 8, !tbaa !37
+  %dhasnext.not.i93.i.i = icmp eq ptr %dnext.i92.i.i, null
+  br i1 %dhasnext.not.i93.i.i, label %drun.i96.i.i, label %dfixpp.i94.i.i
+
+dfixpp.i94.i.i:                                   ; preds = %dcall.i91.i.i
+  %dnpp.i95.i.i = getelementptr i8, ptr %dnext.i92.i.i, i64 24
+  store ptr %.fca.1.gep2.i.i, ptr %dnpp.i95.i.i, align 8
+  br label %drun.i96.i.i
+
+drun.i96.i.i:                                     ; preds = %dfixpp.i94.i.i, %dcall.i91.i.i
+  %instptr.i97.i.i = getelementptr i8, ptr %dcur.i89171.i.i, i64 8
+  %inst.i98.i.i = load ptr, ptr %instptr.i97.i.i, align 8
+  %fnptr.i99.i.i = getelementptr i8, ptr %dcur.i89171.i.i, i64 16
+  %fn.i100.i.i = load ptr, ptr %fnptr.i99.i.i, align 8
+  call void %fn.i100.i.i(ptr %inst.i98.i.i, ptr nonnull %s0.i82.i) #18
+  %wp.i101.i.i = load atomic ptr, ptr %.fca.4.gep5.i.i acquire, align 8
+  %haswp.not.i102.i.i = icmp eq ptr %wp.i101.i.i, null
+  %dcur.i89.pre174.i.i = load ptr, ptr %.fca.1.gep2.i.i, align 8, !tbaa !37
+  br i1 %haswp.not.i102.i.i, label %dloop.i88.backedge.i.i, label %dparts.i103.i.i
+
+dloop.i88.backedge.i.i:                           ; preds = %__olang_dtor_head.exit.i95.i, %drun.i96.i.i
+  %dcur.i89.i.i = phi ptr [ %dcur.i89.pre174.i.i, %drun.i96.i.i ], [ %dcur.i89.pre.i.i, %__olang_dtor_head.exit.i95.i ]
+  %dempty.i90.i.i = icmp eq ptr %dcur.i89.i.i, null
+  br i1 %dempty.i90.i.i, label %chunks.i112.i.i, label %dcall.i91.i.i
+
+dparts.i103.i.i:                                  ; preds = %drun.i96.i.i
+  %wh.i105.i.i = load ptr, ptr %s0.i82.i, align 8, !tbaa !37
+  %wt.i107.i.i = load ptr, ptr %.fca.2.gep3.i.i, align 8, !tbaa !37
+  %wfolded.i108.i.i = call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %wp.i101.i.i, ptr %dcur.i89.pre174.i.i, ptr %wh.i105.i.i, ptr %wt.i107.i.i) #18
+  %wfd.i109.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i108.i.i, 0
+  store ptr %wfd.i109.i.i, ptr %.fca.1.gep2.i.i, align 8, !tbaa !37
+  %has.not.i.i92.i = icmp eq ptr %wfd.i109.i.i, null
+  br i1 %has.not.i.i92.i, label %__olang_dtor_head.exit.i95.i, label %fix.i.i93.i
+
+fix.i.i93.i:                                      ; preds = %dparts.i103.i.i
+  %ppp.i.i94.i = getelementptr i8, ptr %wfd.i109.i.i, i64 24
+  store ptr %.fca.1.gep2.i.i, ptr %ppp.i.i94.i, align 8
+  %dcur.i89.pre.pre.i.i = load ptr, ptr %.fca.1.gep2.i.i, align 8, !tbaa !37
+  br label %__olang_dtor_head.exit.i95.i
+
+__olang_dtor_head.exit.i95.i:                     ; preds = %fix.i.i93.i, %dparts.i103.i.i
+  %dcur.i89.pre.i.i = phi ptr [ null, %dparts.i103.i.i ], [ %dcur.i89.pre.pre.i.i, %fix.i.i93.i ]
+  %wfh.i110.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i108.i.i, 1
+  store ptr %wfh.i110.i.i, ptr %s0.i82.i, align 8, !tbaa !37
+  %wft.i111.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i108.i.i, 2
+  store ptr %wft.i111.i.i, ptr %.fca.2.gep3.i.i, align 8, !tbaa !37
+  store ptr null, ptr %.fca.4.gep5.i.i, align 8, !tbaa !37
+  br label %dloop.i88.backedge.i.i
+
+chunks.i112.i.i:                                  ; preds = %dloop.i88.backedge.i.i, %start.i86.i.i
+  %kids.i114.i.i = load ptr, ptr %.fca.6.gep7.i.i, align 8, !tbaa !37
+  %haskids.not.i115.i.i = icmp eq ptr %kids.i114.i.i, null
+  br i1 %haskids.not.i115.i.i, label %ownchunks.i117.i.i, label %closekids.i116.i.i
+
+closekids.i116.i.i:                               ; preds = %chunks.i112.i.i
+  store ptr null, ptr %.fca.6.gep7.i.i, align 8, !tbaa !37
+  call fastcc void @__olang_close_kids(ptr nonnull %kids.i114.i.i) #18
+  br label %ownchunks.i117.i.i
+
+ownchunks.i117.i.i:                               ; preds = %closekids.i116.i.i, %chunks.i112.i.i
+  %head.i118.i.i = load ptr, ptr %s0.i82.i, align 8, !tbaa !37
+  %empty.i119.i.i = icmp eq ptr %head.i118.i.i, null
+  br i1 %empty.i119.i.i, label %ctc_2elongest.exit.i, label %give.i120.i.i
+
+give.i120.i.i:                                    ; preds = %ownchunks.i117.i.i
+  store ptr null, ptr %s0.i82.i, align 8, !tbaa !37
+  %hnext.i121.i.i = load ptr, ptr %head.i118.i.i, align 8
+  %single.i122.i.i = icmp eq ptr %hnext.i121.i.i, null
+  %hclassptr.i123.i.i = getelementptr i8, ptr %head.i118.i.i, i64 40
+  %hclass.i124.i.i = load i64, ptr %hclassptr.i123.i.i, align 4
+  %hsmall.i125.i.i = icmp eq i64 %hclass.i124.i.i, 0
+  %spare.i126.i.i = load ptr, ptr @__olang_pool_spare, align 8
+  %nospare.i127.i.i = icmp eq ptr %spare.i126.i.i, null
+  %one.i128.i.i = and i1 %single.i122.i.i, %hsmall.i125.i.i
+  %quick.i129.i.i = and i1 %one.i128.i.i, %nospare.i127.i.i
+  br i1 %quick.i129.i.i, label %tospare.i131.i.i, label %list.i130.i.i
+
+tospare.i131.i.i:                                 ; preds = %give.i120.i.i
+  store ptr %head.i118.i.i, ptr @__olang_pool_spare, align 8
+  br label %ctc_2elongest.exit.i
+
+list.i130.i.i:                                    ; preds = %give.i120.i.i
+  call fastcc void @__olang_pool_give_list(ptr nonnull %head.i118.i.i) #18
+  br label %ctc_2elongest.exit.i
+
+__olang_scope_close.exit72.i.i:                   ; preds = %__olang_scope_close.exit72.i.i, %__olang_scope_close.exit72.i.i.preheader51
+  %l1.0161.i.i = phi i64 [ %a1.a0.i.i.i, %__olang_scope_close.exit72.i.i ], [ %l1.0161.i.i.ph, %__olang_scope_close.exit72.i.i.preheader51 ]
+  %l3.0160.i.i = phi i64 [ %t31.i.i, %__olang_scope_close.exit72.i.i ], [ %l3.0160.i.i.ph, %__olang_scope_close.exit72.i.i.preheader51 ]
+; ../std/prelude/vec.olang:117  fn (v Vec<T>&) At(i I64) T { return v.data[i] }
+  %t8.i.i.i = getelementptr { i64, ptr }, ptr %t53.i.i.i, i64 %l3.0160.i.i
+  %t9.unpack.i.i.i = load i64, ptr %t8.i.i.i, align 8, !tbaa !41
+; ../std/prelude/number.olang:465  return b if a < b else a
+  %a1.a0.i.i.i = call i64 @llvm.smax.i64(i64 %l1.0161.i.i, i64 %t9.unpack.i.i.i)
+; ctc.olang:14  for s in v { n = n.Max(s.Len()) }
+  %t31.i.i = add nuw nsw i64 %l3.0160.i.i, 1
+  %exitcond.not = icmp eq i64 %l3.0160.i.i, %t58.i.i.i
+  br i1 %exitcond.not, label %__olang_scope_close.exit.i.i, label %__olang_scope_close.exit72.i.i, !llvm.loop !198
+
+ctc_2elongest.exit.i:                             ; preds = %list.i130.i.i, %tospare.i131.i.i, %ownchunks.i117.i.i
+; ctc.olang:15  return n
+  call void @llvm.lifetime.end.p0(i64 32, ptr nonnull %l0.i.i)
+  call void @llvm.lifetime.end.p0(i64 56, ptr nonnull %s0.i82.i)
+; ctc.olang:22  for i in range N { t += longest(rows[i % 10]) }
+  %t184.i = add i64 %l1.0.lcssa.i.i, %l7.0452.i
+  %f.i48.i = load ptr, ptr %.fca.4.gep5.i, align 8, !tbaa !37
+  %hasf.not.i49.i = icmp eq ptr %f.i48.i, null
+  %dcur.i63448.pre461.i = load ptr, ptr %.fca.1.gep2.i, align 8, !tbaa !37
+  br i1 %hasf.not.i49.i, label %start.i60.i, label %parts.i50.i
+
+parts.i50.i:                                      ; preds = %ctc_2elongest.exit.i
+  %ph.i53.i = load ptr, ptr %s5.i, align 8, !tbaa !37
+  %pt.i55.i = load ptr, ptr %.fca.2.gep3.i, align 8, !tbaa !37
+; (no line of the program)
+  %folded.i56.i = call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %f.i48.i, ptr %dcur.i63448.pre461.i, ptr %ph.i53.i, ptr %pt.i55.i) #18
+  %fd.i57.i = extractvalue { ptr, ptr, ptr } %folded.i56.i, 0
+  store ptr %fd.i57.i, ptr %.fca.1.gep2.i, align 8, !tbaa !37
+  %has.not.i246.i = icmp eq ptr %fd.i57.i, null
+  br i1 %has.not.i246.i, label %__olang_dtor_head.exit249.i, label %fix.i247.i
+
+fix.i247.i:                                       ; preds = %parts.i50.i
+  %ppp.i248.i = getelementptr i8, ptr %fd.i57.i, i64 24
+  store ptr %.fca.1.gep2.i, ptr %ppp.i248.i, align 8
+  %dcur.i63448.pre.pre.i = load ptr, ptr %.fca.1.gep2.i, align 8, !tbaa !37
+  br label %__olang_dtor_head.exit249.i
+
+__olang_dtor_head.exit249.i:                      ; preds = %fix.i247.i, %parts.i50.i
+  %dcur.i63448.pre.i = phi ptr [ null, %parts.i50.i ], [ %dcur.i63448.pre.pre.i, %fix.i247.i ]
+  %fh.i58.i = extractvalue { ptr, ptr, ptr } %folded.i56.i, 1
+  store ptr %fh.i58.i, ptr %s5.i, align 8, !tbaa !37
+  %ft.i59.i = extractvalue { ptr, ptr, ptr } %folded.i56.i, 2
+  store ptr %ft.i59.i, ptr %.fca.2.gep3.i, align 8, !tbaa !37
+  store ptr null, ptr %.fca.4.gep5.i, align 8, !tbaa !37
+  br label %start.i60.i
+
+start.i60.i:                                      ; preds = %__olang_dtor_head.exit249.i, %ctc_2elongest.exit.i
+  %dcur.i63448.i = phi ptr [ %dcur.i63448.pre.i, %__olang_dtor_head.exit249.i ], [ %dcur.i63448.pre461.i, %ctc_2elongest.exit.i ]
+  %dempty.i64449.i = icmp eq ptr %dcur.i63448.i, null
+  br i1 %dempty.i64449.i, label %chunks.i86.i, label %dcall.i65.i
+
+dcall.i65.i:                                      ; preds = %dloop.i62.backedge.i, %start.i60.i
+  %dcur.i63450.i = phi ptr [ %dcur.i63.i, %dloop.i62.backedge.i ], [ %dcur.i63448.i, %start.i60.i ]
+  %dnext.i66.i = load ptr, ptr %dcur.i63450.i, align 8
+  store ptr %dnext.i66.i, ptr %.fca.1.gep2.i, align 8, !tbaa !37
+  %dhasnext.not.i67.i = icmp eq ptr %dnext.i66.i, null
+  br i1 %dhasnext.not.i67.i, label %drun.i70.i, label %dfixpp.i68.i
+
+dfixpp.i68.i:                                     ; preds = %dcall.i65.i
+  %dnpp.i69.i = getelementptr i8, ptr %dnext.i66.i, i64 24
+  store ptr %.fca.1.gep2.i, ptr %dnpp.i69.i, align 8
+  br label %drun.i70.i
+
+drun.i70.i:                                       ; preds = %dfixpp.i68.i, %dcall.i65.i
+  %instptr.i71.i = getelementptr i8, ptr %dcur.i63450.i, i64 8
+  %inst.i72.i = load ptr, ptr %instptr.i71.i, align 8
+  %fnptr.i73.i = getelementptr i8, ptr %dcur.i63450.i, i64 16
+  %fn.i74.i = load ptr, ptr %fnptr.i73.i, align 8
+  call void %fn.i74.i(ptr %inst.i72.i, ptr nonnull %s5.i) #18
+  %wp.i75.i = load atomic ptr, ptr %.fca.4.gep5.i acquire, align 8
+  %haswp.not.i76.i = icmp eq ptr %wp.i75.i, null
+  %dcur.i63.pre463.i = load ptr, ptr %.fca.1.gep2.i, align 8, !tbaa !37
+  br i1 %haswp.not.i76.i, label %dloop.i62.backedge.i, label %dparts.i77.i
+
+dloop.i62.backedge.i:                             ; preds = %__olang_dtor_head.exit245.i, %drun.i70.i
+  %dcur.i63.i = phi ptr [ %dcur.i63.pre463.i, %drun.i70.i ], [ %dcur.i63.pre.i, %__olang_dtor_head.exit245.i ]
+  %dempty.i64.i = icmp eq ptr %dcur.i63.i, null
+  br i1 %dempty.i64.i, label %chunks.i86.i, label %dcall.i65.i
+
+dparts.i77.i:                                     ; preds = %drun.i70.i
+  %wh.i79.i = load ptr, ptr %s5.i, align 8, !tbaa !37
+  %wt.i81.i = load ptr, ptr %.fca.2.gep3.i, align 8, !tbaa !37
+  %wfolded.i82.i = call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %wp.i75.i, ptr %dcur.i63.pre463.i, ptr %wh.i79.i, ptr %wt.i81.i) #18
+  %wfd.i83.i = extractvalue { ptr, ptr, ptr } %wfolded.i82.i, 0
+  store ptr %wfd.i83.i, ptr %.fca.1.gep2.i, align 8, !tbaa !37
+  %has.not.i242.i = icmp eq ptr %wfd.i83.i, null
+  br i1 %has.not.i242.i, label %__olang_dtor_head.exit245.i, label %fix.i243.i
+
+fix.i243.i:                                       ; preds = %dparts.i77.i
+  %ppp.i244.i = getelementptr i8, ptr %wfd.i83.i, i64 24
+  store ptr %.fca.1.gep2.i, ptr %ppp.i244.i, align 8
+  %dcur.i63.pre.pre.i = load ptr, ptr %.fca.1.gep2.i, align 8, !tbaa !37
+  br label %__olang_dtor_head.exit245.i
+
+__olang_dtor_head.exit245.i:                      ; preds = %fix.i243.i, %dparts.i77.i
+  %dcur.i63.pre.i = phi ptr [ null, %dparts.i77.i ], [ %dcur.i63.pre.pre.i, %fix.i243.i ]
+  %wfh.i84.i = extractvalue { ptr, ptr, ptr } %wfolded.i82.i, 1
+  store ptr %wfh.i84.i, ptr %s5.i, align 8, !tbaa !37
+  %wft.i85.i = extractvalue { ptr, ptr, ptr } %wfolded.i82.i, 2
+  store ptr %wft.i85.i, ptr %.fca.2.gep3.i, align 8, !tbaa !37
+  store ptr null, ptr %.fca.4.gep5.i, align 8, !tbaa !37
+  br label %dloop.i62.backedge.i
+
+chunks.i86.i:                                     ; preds = %dloop.i62.backedge.i, %start.i60.i
+  %kids.i88.i = load ptr, ptr %.fca.6.gep.i, align 8, !tbaa !37
+  %haskids.not.i89.i = icmp eq ptr %kids.i88.i, null
+  br i1 %haskids.not.i89.i, label %ownchunks.i91.i, label %closekids.i90.i
+
+closekids.i90.i:                                  ; preds = %chunks.i86.i
+  store ptr null, ptr %.fca.6.gep.i, align 8, !tbaa !37
+  call fastcc void @__olang_close_kids(ptr nonnull %kids.i88.i) #18
+  br label %ownchunks.i91.i
+
+ownchunks.i91.i:                                  ; preds = %closekids.i90.i, %chunks.i86.i
+  %head.i92.i = load ptr, ptr %s5.i, align 8, !tbaa !37
+  %empty.i93.i = icmp eq ptr %head.i92.i, null
+  br i1 %empty.i93.i, label %__olang_scope_close.exit106.i, label %give.i94.i
+
+give.i94.i:                                       ; preds = %ownchunks.i91.i
+  store ptr null, ptr %s5.i, align 8, !tbaa !37
+  %hnext.i95.i = load ptr, ptr %head.i92.i, align 8
+  %single.i96.i = icmp eq ptr %hnext.i95.i, null
+  %hclassptr.i97.i = getelementptr i8, ptr %head.i92.i, i64 40
+  %hclass.i98.i = load i64, ptr %hclassptr.i97.i, align 4
+  %hsmall.i99.i = icmp eq i64 %hclass.i98.i, 0
+  %spare.i100.i = load ptr, ptr @__olang_pool_spare, align 8
+  %nospare.i101.i = icmp eq ptr %spare.i100.i, null
+  %one.i102.i = and i1 %single.i96.i, %hsmall.i99.i
+  %quick.i103.i = and i1 %one.i102.i, %nospare.i101.i
+  br i1 %quick.i103.i, label %tospare.i105.i, label %list.i104.i
+
+tospare.i105.i:                                   ; preds = %give.i94.i
+  store ptr %head.i92.i, ptr @__olang_pool_spare, align 8
+  br label %__olang_scope_close.exit106.i
+
+list.i104.i:                                      ; preds = %give.i94.i
+  call fastcc void @__olang_pool_give_list(ptr nonnull %head.i92.i) #18
+  br label %__olang_scope_close.exit106.i
+
+__olang_scope_close.exit106.i:                    ; preds = %list.i104.i, %tospare.i105.i, %ownchunks.i91.i
+; ctc.olang:22  for i in range N { t += longest(rows[i % 10]) }
+  %t188.i = add nuw nsw i64 %l12.0451.i, 1
+  %exitcond460.i = icmp eq i64 %t188.i, 1000000
+  call void @llvm.memset.p0.i64(ptr noundef nonnull align 8 dereferenceable(56) %s5.i, i8 0, i64 56, i1 false)
+  br i1 %exitcond460.i, label %__olang_scope_close.exit.i, label %bb39.i
+
+bb46.i:                                           ; preds = %std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i
+; ctc.olang:23  io.PutLine($t)!
+  call fastcc void @__olang_bang_failed_plain(ptr nonnull @olang_loc_1efa29fce346fd81_b04aec1a77da7885) #18
+  unreachable
+
+bb48.i:                                           ; preds = %std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i
+  %.fca.1.gep.i = getelementptr inbounds i8, ptr %s8.i, i64 8
+  %.fca.2.gep.i = getelementptr inbounds i8, ptr %s8.i, i64 16
+  store i64 0, ptr %.fca.1.gep.i, align 8
+  store i64 64, ptr %.fca.2.gep.i, align 8
+  %.fca.3.gep.i = getelementptr inbounds i8, ptr %s8.i, i64 24
+  call void @llvm.memset.p0.i64(ptr noundef align 8 dereferenceable(16) %.fca.3.gep.i, i8 0, i64 16, i1 false)
+  store ptr %s8room.i, ptr %s8.i, align 8
+  call fastcc void @__olang_sb_put(ptr nonnull %s8.i, ptr nonnull getelementptr inbounds (i8, ptr @.d1, i64 8), i64 16) #18
+  %rec.i.i = load ptr, ptr @__olang_errpay_top, align 8
+  %pp.i.i = getelementptr i8, ptr %rec.i.i, i64 16
+  %p.i.i = load ptr, ptr %pp.i.i, align 8
+  call fastcc void @__olang_sb_put(ptr nonnull %s8.i, ptr nonnull getelementptr inbounds (i8, ptr @.d2, i64 8), i64 1) #18
+  %t213.i = getelementptr i8, ptr %p.i.i, i64 8
+  %t215.i = load i64, ptr %t213.i, align 4
+  %len.i.i = load i64, ptr %.fca.1.gep.i, align 8
+  %cap.i.i = load i64, ptr %.fca.2.gep.i, align 8
+  %want.i.i = add i64 %len.i.i, 24
+  %fits.not.i.i = icmp ugt i64 %want.i.i, %cap.i.i
+  br i1 %fits.not.i.i, label %grow.i.i, label %ok.i.i
+
+ok.i.i:                                           ; preds = %bb48.i
+  %data.i.i = load ptr, ptr %s8.i, align 8
+  %p.i179.i = getelementptr i8, ptr %data.i.i, i64 %len.i.i
+  br label %__olang_sb_room.exit.i
+
+grow.i.i:                                         ; preds = %bb48.i
+; (no line of the program)
+  %g.i.i = call fastcc ptr @__olang_sb_grow(ptr nonnull %s8.i, i64 24) #18
+; ctc.olang:23  io.PutLine($t)!
+  %len.i98.i.pre = load i64, ptr %.fca.1.gep.i, align 8
+  br label %__olang_sb_room.exit.i
+
+__olang_sb_room.exit.i:                           ; preds = %grow.i.i, %ok.i.i
+  %len.i98.i = phi i64 [ %len.i.i, %ok.i.i ], [ %len.i98.i.pre, %grow.i.i ]
+  %common.ret.op.i.i = phi ptr [ %p.i179.i, %ok.i.i ], [ %g.i.i, %grow.i.i ]
+  %t218.i = call fastcc i64 @__olang_fmt_i64(ptr %common.ret.op.i.i, i64 %t215.i) #18
+  %l2.i.i = add i64 %len.i98.i, %t218.i
+  store i64 %l2.i.i, ptr %.fca.1.gep.i, align 8
+  call fastcc void @__olang_sb_put(ptr nonnull %s8.i, ptr nonnull getelementptr inbounds (i8, ptr @.d3, i64 8), i64 1) #18
+  %t221.i = load ptr, ptr %s8.i, align 8
+  %t223.i = load i64, ptr %.fca.1.gep.i, align 8
+  %sizeup.i167.i = add i64 %t223.i, 7
+  %a32.inv.i168.i = icmp ult i64 %sizeup.i167.i, 32
+  %alnA.i169.i = select i1 %a32.inv.i168.i, i64 8, i64 32
+  %a64.inv.i170.i = icmp ult i64 %sizeup.i167.i, 64
+  %aln.i171.i = select i1 %a64.inv.i170.i, i64 %alnA.i169.i, i64 64
+  %size8.i185.i = and i64 %sizeup.i167.i, -8
+  %size0.i186.i = icmp eq i64 %size8.i185.i, 0
+  %size.i187.i = select i1 %size0.i186.i, i64 8, i64 %size8.i185.i
+  %head.i188.i = load ptr, ptr @__olang_global_scope, align 16, !tbaa !37
+  %headnull.i189.i = icmp eq ptr %head.i188.i, null
+  br i1 %headnull.i189.i, label %needchunk.i208.i, label %checkspace.i190.i
+
+checkspace.i190.i:                                ; preds = %__olang_sb_room.exit.i
+  %round.i191.i = icmp ugt i64 %aln.i171.i, 8
+  %alnmask.i192.i = sub nsw i64 0, %aln.i171.i
+  %alnm1.i193.i = add nsw i64 %aln.i171.i, -1
+  %csusedptr.i194.i = getelementptr i8, ptr %head.i188.i, i64 8
+  %csused.i195.i = load i64, ptr %csusedptr.i194.i, align 4, !tbaa !39
+  %cscapptr.i196.i = getelementptr i8, ptr %head.i188.i, i64 16
+  %cscap.i197.i = load i64, ptr %cscapptr.i196.i, align 4, !tbaa !39
+  %csup.i198.i = add i64 %alnm1.i193.i, %csused.i195.i
+  %csrounded.i199.i = and i64 %csup.i198.i, %alnmask.i192.i
+  %csaligned.i200.i = select i1 %round.i191.i, i64 %csrounded.i199.i, i64 %csused.i195.i
+  %remaining.i201.i = sub i64 %cscap.i197.i, %csaligned.i200.i
+  %fits.not.i202.i = icmp ult i64 %remaining.i201.i, %size.i187.i
+  br i1 %fits.not.i202.i, label %needchunk.i208.i, label %bump.i203.i
+
+bump.i203.i:                                      ; preds = %checkspace.i190.i
+  %dataptr.i204.i = getelementptr i8, ptr %head.i188.i, i64 64
+  %result.i205.i = getelementptr i8, ptr %dataptr.i204.i, i64 %csaligned.i200.i
+  %newused.i206.i = add i64 %csaligned.i200.i, %size.i187.i
+  store i64 %newused.i206.i, ptr %csusedptr.i194.i, align 4, !tbaa !39
+  br label %__olang_scope_alloc_a.exit210.i
+
+needchunk.i208.i:                                 ; preds = %checkspace.i190.i, %__olang_sb_room.exit.i
+; (no line of the program)
+  %slow.i209.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull @__olang_global_scope, i64 %t223.i, i64 %aln.i171.i) #18
+  br label %__olang_scope_alloc_a.exit210.i
+
+__olang_scope_alloc_a.exit210.i:                  ; preds = %needchunk.i208.i, %bump.i203.i
+  %common.ret.op.i207.i = phi ptr [ %result.i205.i, %bump.i203.i ], [ %slow.i209.i, %needchunk.i208.i ]
+  %big.i.i = icmp ugt i64 %t223.i, 16
+  br i1 %big.i.i, label %call.i.i, label %s8.i.i
+
+call.i.i:                                         ; preds = %__olang_scope_alloc_a.exit210.i
+  call void @llvm.memcpy.p0.p0.i64(ptr align 1 %common.ret.op.i207.i, ptr align 1 %t221.i, i64 %t223.i, i1 false)
+  br label %olang_textcopy.exit.i
+
+s8.i.i:                                           ; preds = %__olang_scope_alloc_a.exit210.i
+  %ge8.i.i = icmp ugt i64 %t223.i, 7
+  br i1 %ge8.i.i, label %w8.i.i, label %s4.i.i
+
+w8.i.i:                                           ; preds = %s8.i.i
+  %e8.i.i = add nsw i64 %t223.i, -8
+  %a8.i.i = load i64, ptr %t221.i, align 1
+  %sb8.i.i = getelementptr i8, ptr %t221.i, i64 %e8.i.i
+  %b8.i.i = load i64, ptr %sb8.i.i, align 1
+  store i64 %a8.i.i, ptr %common.ret.op.i207.i, align 1
+  %db8.i.i = getelementptr i8, ptr %common.ret.op.i207.i, i64 %e8.i.i
+  store i64 %b8.i.i, ptr %db8.i.i, align 1
+  br label %olang_textcopy.exit.i
+
+s4.i.i:                                           ; preds = %s8.i.i
+  %ge4.i.i = icmp ugt i64 %t223.i, 3
+  br i1 %ge4.i.i, label %w4.i.i, label %s1.i.i
+
+w4.i.i:                                           ; preds = %s4.i.i
+  %e4.i.i = add nsw i64 %t223.i, -4
+  %a4.i.i = load i32, ptr %t221.i, align 1
+  %sb4.i.i = getelementptr i8, ptr %t221.i, i64 %e4.i.i
+  %b4.i.i = load i32, ptr %sb4.i.i, align 1
+  store i32 %a4.i.i, ptr %common.ret.op.i207.i, align 1
+  %db4.i.i = getelementptr i8, ptr %common.ret.op.i207.i, i64 %e4.i.i
+  store i32 %b4.i.i, ptr %db4.i.i, align 1
+  br label %olang_textcopy.exit.i
+
+s1.i.i:                                           ; preds = %s4.i.i
+  %none.i.i = icmp eq i64 %t223.i, 0
+  br i1 %none.i.i, label %olang_textcopy.exit.i, label %w1.i.i
+
+w1.i.i:                                           ; preds = %s1.i.i
+  %h.i.i = lshr i64 %t223.i, 1
+  %e1.i.i = add nsw i64 %t223.i, -1
+  %a1.i.i = load i8, ptr %t221.i, align 1
+  %sh.i.i = getelementptr i8, ptr %t221.i, i64 %h.i.i
+  %m1.i.i = load i8, ptr %sh.i.i, align 1
+  %se.i.i = getelementptr i8, ptr %t221.i, i64 %e1.i.i
+  %z1.i.i = load i8, ptr %se.i.i, align 1
+  store i8 %a1.i.i, ptr %common.ret.op.i207.i, align 1
+  %dh.i.i = getelementptr i8, ptr %common.ret.op.i207.i, i64 %h.i.i
+  store i8 %m1.i.i, ptr %dh.i.i, align 1
+  %de.i.i = getelementptr i8, ptr %common.ret.op.i207.i, i64 %e1.i.i
+  store i8 %z1.i.i, ptr %de.i.i, align 1
+  br label %olang_textcopy.exit.i
+
+olang_textcopy.exit.i:                            ; preds = %w1.i.i, %s1.i.i, %w4.i.i, %w8.i.i, %call.i.i
+; ctc.olang:23  io.PutLine($t)!
+  %t229.i = load ptr, ptr %.fca.3.gep.i, align 8
+  %t230.not.i = icmp eq ptr %t229.i, null
+  br i1 %t230.not.i, label %sbdone.232.i, label %sbgrew.231.i
+
+sbgrew.231.i:                                     ; preds = %olang_textcopy.exit.i
+  call fastcc void @__olang_sb_done(ptr nonnull %s8.i) #18
+  br label %sbdone.232.i
+
+sbdone.232.i:                                     ; preds = %sbgrew.231.i, %olang_textcopy.exit.i
+  %head.i181.i = load ptr, ptr @__olang_global_scope, align 16, !tbaa !37
+  %headnull.i.i = icmp eq ptr %head.i181.i, null
+  br i1 %headnull.i.i, label %needchunk.i.i, label %checkspace.i.i
+
+checkspace.i.i:                                   ; preds = %sbdone.232.i
+  %round.i.i = icmp ugt i64 %aln.i171.i, 8
+  %alnmask.i.i = sub nsw i64 0, %aln.i171.i
+  %alnm1.i.i = add nsw i64 %aln.i171.i, -1
+  %csusedptr.i.i = getelementptr i8, ptr %head.i181.i, i64 8
+  %csused.i.i = load i64, ptr %csusedptr.i.i, align 4, !tbaa !39
+  %cscapptr.i.i = getelementptr i8, ptr %head.i181.i, i64 16
+  %cscap.i.i = load i64, ptr %cscapptr.i.i, align 4, !tbaa !39
+  %csup.i.i = add i64 %alnm1.i.i, %csused.i.i
+  %csrounded.i.i = and i64 %csup.i.i, %alnmask.i.i
+  %csaligned.i.i = select i1 %round.i.i, i64 %csrounded.i.i, i64 %csused.i.i
+  %remaining.i.i = sub i64 %cscap.i.i, %csaligned.i.i
+  %fits.not.i182.i = icmp ult i64 %remaining.i.i, %size.i187.i
+  br i1 %fits.not.i182.i, label %needchunk.i.i, label %bump.i.i
+
+bump.i.i:                                         ; preds = %checkspace.i.i
+  %dataptr.i.i = getelementptr i8, ptr %head.i181.i, i64 64
+  %result.i.i = getelementptr i8, ptr %dataptr.i.i, i64 %csaligned.i.i
+  %newused.i.i = add i64 %csaligned.i.i, %size.i187.i
+  store i64 %newused.i.i, ptr %csusedptr.i.i, align 4, !tbaa !39
+  br label %__olang_scope_alloc_a.exit.i
+
+needchunk.i.i:                                    ; preds = %checkspace.i.i, %sbdone.232.i
+; (no line of the program)
+  %slow.i.i = call fastcc ptr @__olang_scope_alloc_slow(ptr nonnull @__olang_global_scope, i64 %t223.i, i64 %aln.i171.i) #18
+  br label %__olang_scope_alloc_a.exit.i
+
+__olang_scope_alloc_a.exit.i:                     ; preds = %needchunk.i.i, %bump.i.i
+  %common.ret.op.i183.i = phi ptr [ %result.i.i, %bump.i.i ], [ %slow.i.i, %needchunk.i.i ]
+; ctc.olang:23  io.PutLine($t)!
+  %t226.i = insertvalue { i64, ptr } undef, i64 %t223.i, 0
+  call void @llvm.memcpy.p0.p0.i64(ptr align 1 %common.ret.op.i183.i, ptr align 1 %common.ret.op.i207.i, i64 %t223.i, i1 false)
+  %t240.i = insertvalue { i64, ptr } %t226.i, ptr %common.ret.op.i183.i, 1
+  call fastcc void @__olang_bang_failed_text({ i64, ptr } %t240.i) #18
+  unreachable
+
+parts.i110.i:                                     ; preds = %std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i.thread
+  %ph.i113.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %pt.i115.i = load ptr, ptr %.fca.2.gep8.i, align 8, !tbaa !37
+; (no line of the program)
+  %folded.i116.i = call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %f.i108.i, ptr %dcur.i123456.pre465.i, ptr %ph.i113.i, ptr %pt.i115.i) #18
+  %fd.i117.i = extractvalue { ptr, ptr, ptr } %folded.i116.i, 0
+  store ptr %fd.i117.i, ptr %.fca.1.gep7.i, align 8, !tbaa !37
+  %has.not.i238.i = icmp eq ptr %fd.i117.i, null
+  br i1 %has.not.i238.i, label %__olang_dtor_head.exit241.i, label %fix.i239.i
+
+fix.i239.i:                                       ; preds = %parts.i110.i
+  %ppp.i240.i = getelementptr i8, ptr %fd.i117.i, i64 24
+  store ptr %.fca.1.gep7.i, ptr %ppp.i240.i, align 8
+  %dcur.i123456.pre.pre.i = load ptr, ptr %.fca.1.gep7.i, align 8, !tbaa !37
+  br label %__olang_dtor_head.exit241.i
+
+__olang_dtor_head.exit241.i:                      ; preds = %fix.i239.i, %parts.i110.i
+  %dcur.i123456.pre.i = phi ptr [ null, %parts.i110.i ], [ %dcur.i123456.pre.pre.i, %fix.i239.i ]
+  %fh.i118.i = extractvalue { ptr, ptr, ptr } %folded.i116.i, 1
+  store ptr %fh.i118.i, ptr %s0.i, align 8, !tbaa !37
+  %ft.i119.i = extractvalue { ptr, ptr, ptr } %folded.i116.i, 2
+  store ptr %ft.i119.i, ptr %.fca.2.gep8.i, align 8, !tbaa !37
+  store ptr null, ptr %.fca.4.gep10.i, align 8, !tbaa !37
+  br label %start.i120.i
+
+start.i120.i:                                     ; preds = %__olang_dtor_head.exit241.i, %std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i.thread
+  %dcur.i123456.i = phi ptr [ %dcur.i123456.pre.i, %__olang_dtor_head.exit241.i ], [ %dcur.i123456.pre465.i, %std_2fio_2ePutLine_3cstd_2fprelude_2ftext_3aString_3e.exit.i.thread ]
+  %dempty.i124457.i = icmp eq ptr %dcur.i123456.i, null
+  br i1 %dempty.i124457.i, label %chunks.i146.i, label %dcall.i125.i
+
+dcall.i125.i:                                     ; preds = %dloop.i122.backedge.i, %start.i120.i
+  %dcur.i123458.i = phi ptr [ %dcur.i123.i, %dloop.i122.backedge.i ], [ %dcur.i123456.i, %start.i120.i ]
+  %dnext.i126.i = load ptr, ptr %dcur.i123458.i, align 8
+  store ptr %dnext.i126.i, ptr %.fca.1.gep7.i, align 8, !tbaa !37
+  %dhasnext.not.i127.i = icmp eq ptr %dnext.i126.i, null
+  br i1 %dhasnext.not.i127.i, label %drun.i130.i, label %dfixpp.i128.i
+
+dfixpp.i128.i:                                    ; preds = %dcall.i125.i
+  %dnpp.i129.i = getelementptr i8, ptr %dnext.i126.i, i64 24
+  store ptr %.fca.1.gep7.i, ptr %dnpp.i129.i, align 8
+  br label %drun.i130.i
+
+drun.i130.i:                                      ; preds = %dfixpp.i128.i, %dcall.i125.i
+  %instptr.i131.i = getelementptr i8, ptr %dcur.i123458.i, i64 8
+  %inst.i132.i = load ptr, ptr %instptr.i131.i, align 8
+  %fnptr.i133.i = getelementptr i8, ptr %dcur.i123458.i, i64 16
+  %fn.i134.i = load ptr, ptr %fnptr.i133.i, align 8
+  call void %fn.i134.i(ptr %inst.i132.i, ptr nonnull %s0.i) #18
+  %wp.i135.i = load atomic ptr, ptr %.fca.4.gep10.i acquire, align 8
+  %haswp.not.i136.i = icmp eq ptr %wp.i135.i, null
+  %dcur.i123.pre467.i = load ptr, ptr %.fca.1.gep7.i, align 8, !tbaa !37
+  br i1 %haswp.not.i136.i, label %dloop.i122.backedge.i, label %dparts.i137.i
+
+dloop.i122.backedge.i:                            ; preds = %__olang_dtor_head.exit.i, %drun.i130.i
+  %dcur.i123.i = phi ptr [ %dcur.i123.pre467.i, %drun.i130.i ], [ %dcur.i123.pre.i, %__olang_dtor_head.exit.i ]
+  %dempty.i124.i = icmp eq ptr %dcur.i123.i, null
+  br i1 %dempty.i124.i, label %chunks.i146.i, label %dcall.i125.i
+
+dparts.i137.i:                                    ; preds = %drun.i130.i
+  %wh.i139.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %wt.i141.i = load ptr, ptr %.fca.2.gep8.i, align 8, !tbaa !37
+  %wfolded.i142.i = call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %wp.i135.i, ptr %dcur.i123.pre467.i, ptr %wh.i139.i, ptr %wt.i141.i) #18
+  %wfd.i143.i = extractvalue { ptr, ptr, ptr } %wfolded.i142.i, 0
+  store ptr %wfd.i143.i, ptr %.fca.1.gep7.i, align 8, !tbaa !37
+  %has.not.i.i = icmp eq ptr %wfd.i143.i, null
+  br i1 %has.not.i.i, label %__olang_dtor_head.exit.i, label %fix.i.i
+
+fix.i.i:                                          ; preds = %dparts.i137.i
+  %ppp.i.i = getelementptr i8, ptr %wfd.i143.i, i64 24
+  store ptr %.fca.1.gep7.i, ptr %ppp.i.i, align 8
+  %dcur.i123.pre.pre.i = load ptr, ptr %.fca.1.gep7.i, align 8, !tbaa !37
+  br label %__olang_dtor_head.exit.i
+
+__olang_dtor_head.exit.i:                         ; preds = %fix.i.i, %dparts.i137.i
+  %dcur.i123.pre.i = phi ptr [ null, %dparts.i137.i ], [ %dcur.i123.pre.pre.i, %fix.i.i ]
+  %wfh.i144.i = extractvalue { ptr, ptr, ptr } %wfolded.i142.i, 1
+  store ptr %wfh.i144.i, ptr %s0.i, align 8, !tbaa !37
+  %wft.i145.i = extractvalue { ptr, ptr, ptr } %wfolded.i142.i, 2
+  store ptr %wft.i145.i, ptr %.fca.2.gep8.i, align 8, !tbaa !37
+  store ptr null, ptr %.fca.4.gep10.i, align 8, !tbaa !37
+  br label %dloop.i122.backedge.i
+
+chunks.i146.i:                                    ; preds = %dloop.i122.backedge.i, %start.i120.i
+  %kids.i148.i = load ptr, ptr %.fca.6.gep12.i, align 8, !tbaa !37
+  %haskids.not.i149.i = icmp eq ptr %kids.i148.i, null
+  br i1 %haskids.not.i149.i, label %ownchunks.i151.i, label %closekids.i150.i
+
+closekids.i150.i:                                 ; preds = %chunks.i146.i
+  store ptr null, ptr %.fca.6.gep12.i, align 8, !tbaa !37
+  call fastcc void @__olang_close_kids(ptr nonnull %kids.i148.i) #18
+  br label %ownchunks.i151.i
+
+ownchunks.i151.i:                                 ; preds = %closekids.i150.i, %chunks.i146.i
+  %head.i152.i = load ptr, ptr %s0.i, align 8, !tbaa !37
+  %empty.i153.i = icmp eq ptr %head.i152.i, null
+  br i1 %empty.i153.i, label %ctc_2emain.exit, label %give.i154.i
+
+give.i154.i:                                      ; preds = %ownchunks.i151.i
+  store ptr null, ptr %s0.i, align 8, !tbaa !37
+  %hnext.i155.i = load ptr, ptr %head.i152.i, align 8
+  %single.i156.i = icmp eq ptr %hnext.i155.i, null
+  %hclassptr.i157.i = getelementptr i8, ptr %head.i152.i, i64 40
+  %hclass.i158.i = load i64, ptr %hclassptr.i157.i, align 4
+  %hsmall.i159.i = icmp eq i64 %hclass.i158.i, 0
+  %spare.i160.i = load ptr, ptr @__olang_pool_spare, align 8
+  %nospare.i161.i = icmp eq ptr %spare.i160.i, null
+  %one.i162.i = and i1 %single.i156.i, %hsmall.i159.i
+  %quick.i163.i = and i1 %one.i162.i, %nospare.i161.i
+  br i1 %quick.i163.i, label %tospare.i165.i, label %list.i164.i
+
+tospare.i165.i:                                   ; preds = %give.i154.i
+  store ptr %head.i152.i, ptr @__olang_pool_spare, align 8
+  br label %ctc_2emain.exit
+
+list.i164.i:                                      ; preds = %give.i154.i
+  call fastcc void @__olang_pool_give_list(ptr nonnull %head.i152.i) #18
+  br label %ctc_2emain.exit
+
+ctc_2emain.exit:                                  ; preds = %list.i164.i, %tospare.i165.i, %ownchunks.i151.i
+; ctc.olang:23  io.PutLine($t)!
+  call void @llvm.lifetime.end.p0(i64 320, ptr nonnull %l0.i)
+  call void @llvm.lifetime.end.p0(i64 56, ptr nonnull %s0.i)
+  call void @llvm.lifetime.end.p0(i64 56, ptr nonnull %s5.i)
+  call void @llvm.lifetime.end.p0(i64 40, ptr nonnull %s8.i)
+  call void @llvm.lifetime.end.p0(i64 64, ptr nonnull %s8room.i)
+; (no line of the program)
+  %f.i.i = load ptr, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 32), align 16, !tbaa !37
+  %hasf.not.i.i = icmp eq ptr %f.i.i, null
+  %dcur.i1.pre4.i = load ptr, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 8), align 8, !tbaa !37
+  br i1 %hasf.not.i.i, label %start.i.i, label %parts.i.i
+
+parts.i.i:                                        ; preds = %ctc_2emain.exit
+  %ph.i.i = load ptr, ptr @__olang_global_scope, align 16, !tbaa !37
+  %pt.i.i = load ptr, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 16), align 16, !tbaa !37
+  %folded.i.i = tail call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %f.i.i, ptr %dcur.i1.pre4.i, ptr %ph.i.i, ptr %pt.i.i)
+  %fd.i.i = extractvalue { ptr, ptr, ptr } %folded.i.i, 0
+  store ptr %fd.i.i, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 8), align 8, !tbaa !37
+  %has.not.i1.i.i = icmp eq ptr %fd.i.i, null
+  br i1 %has.not.i1.i.i, label %__olang_dtor_head.exit4.i.i, label %fix.i2.i.i
+
+fix.i2.i.i:                                       ; preds = %parts.i.i
+  %ppp.i3.i.i = getelementptr i8, ptr %fd.i.i, i64 24
+  store ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 8), ptr %ppp.i3.i.i, align 8
+  %dcur.i1.pre.pre.i = load ptr, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 8), align 8, !tbaa !37
+  br label %__olang_dtor_head.exit4.i.i
+
+__olang_dtor_head.exit4.i.i:                      ; preds = %fix.i2.i.i, %parts.i.i
+  %dcur.i1.pre.i = phi ptr [ %dcur.i1.pre.pre.i, %fix.i2.i.i ], [ null, %parts.i.i ]
+  %fh.i.i = extractvalue { ptr, ptr, ptr } %folded.i.i, 1
+  store ptr %fh.i.i, ptr @__olang_global_scope, align 16, !tbaa !37
+  %ft.i.i = extractvalue { ptr, ptr, ptr } %folded.i.i, 2
+  store ptr %ft.i.i, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 16), align 16, !tbaa !37
+  store ptr null, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 32), align 16, !tbaa !37
+  br label %start.i.i
+
+start.i.i:                                        ; preds = %__olang_dtor_head.exit4.i.i, %ctc_2emain.exit
+  %dcur.i1.i = phi ptr [ %dcur.i1.pre.i, %__olang_dtor_head.exit4.i.i ], [ %dcur.i1.pre4.i, %ctc_2emain.exit ]
+  %dempty.i2.i = icmp eq ptr %dcur.i1.i, null
+  br i1 %dempty.i2.i, label %chunks.i.i, label %dcall.i.i
+
+dcall.i.i:                                        ; preds = %dloop.i.backedge.i, %start.i.i
+  %dcur.i3.i = phi ptr [ %dcur.i.i, %dloop.i.backedge.i ], [ %dcur.i1.i, %start.i.i ]
+  %dnext.i.i = load ptr, ptr %dcur.i3.i, align 8
+  store ptr %dnext.i.i, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 8), align 8, !tbaa !37
+  %dhasnext.not.i.i = icmp eq ptr %dnext.i.i, null
+  br i1 %dhasnext.not.i.i, label %drun.i.i, label %dfixpp.i.i
+
+dfixpp.i.i:                                       ; preds = %dcall.i.i
+  %dnpp.i.i = getelementptr i8, ptr %dnext.i.i, i64 24
+  store ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 8), ptr %dnpp.i.i, align 8
+  br label %drun.i.i
+
+drun.i.i:                                         ; preds = %dfixpp.i.i, %dcall.i.i
+  %instptr.i.i = getelementptr i8, ptr %dcur.i3.i, i64 8
+  %inst.i.i = load ptr, ptr %instptr.i.i, align 8
+  %fnptr.i.i = getelementptr i8, ptr %dcur.i3.i, i64 16
+  %fn.i.i = load ptr, ptr %fnptr.i.i, align 8
+  tail call void %fn.i.i(ptr %inst.i.i, ptr nonnull @__olang_global_scope) #18
+  %wp.i.i = load atomic ptr, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 32) acquire, align 16
+  %haswp.not.i.i = icmp eq ptr %wp.i.i, null
+  %dcur.i.pre6.i = load ptr, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 8), align 8, !tbaa !37
+  br i1 %haswp.not.i.i, label %dloop.i.backedge.i, label %dparts.i.i
+
+dloop.i.backedge.i:                               ; preds = %__olang_dtor_head.exit.i.i4, %drun.i.i
+  %dcur.i.i = phi ptr [ %dcur.i.pre6.i, %drun.i.i ], [ %dcur.i.pre.i, %__olang_dtor_head.exit.i.i4 ]
+  %dempty.i.i = icmp eq ptr %dcur.i.i, null
+  br i1 %dempty.i.i, label %chunks.i.i, label %dcall.i.i
+
+dparts.i.i:                                       ; preds = %drun.i.i
+  %wh.i.i = load ptr, ptr @__olang_global_scope, align 16, !tbaa !37
+  %wt.i.i = load ptr, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 16), align 16, !tbaa !37
+  %wfolded.i.i = tail call fastcc { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr nonnull %wp.i.i, ptr %dcur.i.pre6.i, ptr %wh.i.i, ptr %wt.i.i)
+  %wfd.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i.i, 0
+  store ptr %wfd.i.i, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 8), align 8, !tbaa !37
+  %has.not.i.i.i1 = icmp eq ptr %wfd.i.i, null
+  br i1 %has.not.i.i.i1, label %__olang_dtor_head.exit.i.i4, label %fix.i.i.i2
+
+fix.i.i.i2:                                       ; preds = %dparts.i.i
+  %ppp.i.i.i3 = getelementptr i8, ptr %wfd.i.i, i64 24
+  store ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 8), ptr %ppp.i.i.i3, align 8
+  %dcur.i.pre.pre.i = load ptr, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 8), align 8, !tbaa !37
+  br label %__olang_dtor_head.exit.i.i4
+
+__olang_dtor_head.exit.i.i4:                      ; preds = %fix.i.i.i2, %dparts.i.i
+  %dcur.i.pre.i = phi ptr [ %dcur.i.pre.pre.i, %fix.i.i.i2 ], [ null, %dparts.i.i ]
+  %wfh.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i.i, 1
+  store ptr %wfh.i.i, ptr @__olang_global_scope, align 16, !tbaa !37
+  %wft.i.i = extractvalue { ptr, ptr, ptr } %wfolded.i.i, 2
+  store ptr %wft.i.i, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 16), align 16, !tbaa !37
+  store ptr null, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 32), align 16, !tbaa !37
+  br label %dloop.i.backedge.i
+
+chunks.i.i:                                       ; preds = %dloop.i.backedge.i, %start.i.i
+  %kids.i.i = load ptr, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 48), align 16, !tbaa !37
+  %haskids.not.i.i = icmp eq ptr %kids.i.i, null
+  br i1 %haskids.not.i.i, label %ownchunks.i.i, label %closekids.i.i
+
+closekids.i.i:                                    ; preds = %chunks.i.i
+  store ptr null, ptr getelementptr inbounds (i8, ptr @__olang_global_scope, i64 48), align 16, !tbaa !37
+  tail call fastcc void @__olang_close_kids(ptr nonnull %kids.i.i)
+  br label %ownchunks.i.i
+
+ownchunks.i.i:                                    ; preds = %closekids.i.i, %chunks.i.i
+  %head.i.i = load ptr, ptr @__olang_global_scope, align 16, !tbaa !37
+  %empty.i.i = icmp eq ptr %head.i.i, null
+  br i1 %empty.i.i, label %__olang_prog_end.exit, label %give.i.i
+
+give.i.i:                                         ; preds = %ownchunks.i.i
+  store ptr null, ptr @__olang_global_scope, align 16, !tbaa !37
+  %hnext.i.i = load ptr, ptr %head.i.i, align 8
+  %single.i.i = icmp eq ptr %hnext.i.i, null
+  %hclassptr.i.i = getelementptr i8, ptr %head.i.i, i64 40
+  %hclass.i.i = load i64, ptr %hclassptr.i.i, align 4
+  %hsmall.i.i = icmp eq i64 %hclass.i.i, 0
+  %spare.i.i = load ptr, ptr @__olang_pool_spare, align 8
+  %nospare.i.i = icmp eq ptr %spare.i.i, null
+  %one.i.i = and i1 %single.i.i, %hsmall.i.i
+  %quick.i.i = and i1 %one.i.i, %nospare.i.i
+  br i1 %quick.i.i, label %tospare.i.i, label %list.i.i
+
+tospare.i.i:                                      ; preds = %give.i.i
+  store ptr %head.i.i, ptr @__olang_pool_spare, align 8
+  br label %__olang_prog_end.exit
+
+list.i.i:                                         ; preds = %give.i.i
+  tail call fastcc void @__olang_pool_give_list(ptr nonnull %head.i.i)
+  br label %__olang_prog_end.exit
+
+__olang_prog_end.exit:                            ; preds = %list.i.i, %tospare.i.i, %ownchunks.i.i
+  ret i32 0
+}
+; remarks on lines left with no code here:
+;   (no line of the program)
+;      passed   inline: '__olang_scope_alloc_a' inlined into 'main' with (cost=always): always inline attribute (x3)
+;      passed   inline: '__olang_dtor_head' inlined into 'main' with (cost=always): always inline attribute (x6)
+;      missed   inline: __olang_scope_fold_parts will not be inlined into main because its definition is unavailable (x10)
+;      missed   inline: __olang_close_kids will not be inlined into main because its definition is unavailable (x5)
+;      missed   inline: __olang_pool_give_list will not be inlined into main because its definition is unavailable (x5)
+;      missed   inline: __olang_scope_alloc_slow will not be inlined into main because its definition is unavailable (x6)
+;      missed   inline: __olang_sb_grow will not be inlined into main because its definition is unavailable (x2)
+;      missed   inline: 'mir.HelperKind.Copy.Array<String>' not inlined into 'main' because too costly to inline (cost=400, threshold=250) (x12)
+;      missed   licm: failed to move load with loop-invariant address because the loop may invalidate its value (x209)
+;      missed   gvn: load of type ptr not eliminated in favor of store because it is clobbered by call (x126)
+;      missed   gvn: load of type ptr not eliminated in favor of store because it is clobbered by store (x98)
+;      passed   gvn: load eliminated by PRE (x32)
+;      missed   gvn: load of type ptr not eliminated because it is clobbered by store (x398)
+;      missed   gvn: load of type ptr not eliminated because it is clobbered by call (x562)
+;      missed   gvn: load of type ptr not eliminated in favor of store because it is clobbered by load (x64)
+;      missed   gvn: load of type i64 not eliminated because it is clobbered by store (x40)
+;      missed   gvn: load of type ptr not eliminated because it is clobbered by load (x156)
+;      passed   gvn: load of type ptr eliminated in favor of null (x4)
+;      missed   gvn: load of type i64 not eliminated in favor of store because it is clobbered by call (x30)
+;      missed   gvn: load of type i64 not eliminated because it is clobbered by call (x78)
+;      missed   gvn: load of type i8 not eliminated because it is clobbered by call (x20)
+;      missed   gvn: load of type i8 not eliminated because it is clobbered by store (x16)
+;      missed   gvn: load of type i32 not eliminated because it is clobbered by call (x20)
+;      missed   gvn: load of type i32 not eliminated because it is clobbered by store (x16)
+;      missed   gvn: load of type ptr not eliminated in favor of load because it is clobbered by call (x130)
+;      missed   gvn: load of type ptr not eliminated in favor of load because it is clobbered by load (x36)
+;      passed   inline: 'mir.HelperKind.Copy.Array<String>' inlined into 'main' with (cost=95, threshold=250) (x10)
+;      missed   inline: __olang_thread_init will not be inlined into startup because its definition is unavailable
+;      missed   inline: __olang_prog_end will not be inlined into startup because its definition is unavailable
+;      missed   inline: 'main' not inlined into 'startup' because too costly to inline (cost=665, threshold=625)
+;      missed   loop-vectorize: loop not vectorized (x9)
+;      missed   inline: '__olang_scope_alloc_slow' not inlined into 'main' because it should never be inlined (cost=never): noinline function attribute (x20)
+;      passed   inline: 'mir.HelperKind.Copy.Array<String>' inlined into 'main' with (cost=-14625, threshold=250)
+;      missed   inline: '__olang_scope_fold_parts' not inlined into 'main' because it should never be inlined (cost=never): noinline function attribute (x10)
+;      missed   inline: '__olang_close_kids' not inlined into 'main' because it should never be inlined (cost=never): noinline function attribute (x5)
+;      missed   inline: '__olang_pool_give_list' not inlined into 'main' because it should never be inlined (cost=never): noinline function attribute (x5)
+;      missed   inline: '__olang_sb_grow' not inlined into 'main' because it should never be inlined (cost=never): noinline function attribute
+;      passed   inline: '__olang_thread_init' inlined into 'startup' with (cost=-15025, threshold=375)
+;      passed   inline: 'main' inlined into 'startup' with (cost=-6925, threshold=250)
+;      passed   inline: '__olang_prog_end' inlined into 'startup' with (cost=-14560, threshold=250)
+;      missed   inline: '__olang_pool_give_list' not inlined into 'startup' because it should never be inlined (cost=never): noinline function attribute (x6)
+;      missed   inline: '__olang_close_kids' not inlined into 'startup' because it should never be inlined (cost=never): noinline function attribute (x6)
+;      missed   inline: '__olang_scope_fold_parts' not inlined into 'startup' because it should never be inlined (cost=never): noinline function attribute (x12)
+;      missed   inline: '__olang_scope_alloc_slow' not inlined into 'startup' because it should never be inlined (cost=never): noinline function attribute (x20)
+;      missed   inline: '__olang_sb_grow' not inlined into 'startup' because it should never be inlined (cost=never): noinline function attribute
+;      passed   licm: hoisting getelementptr (x9)
+;      missed   gvn: load of type i64 not eliminated in favor of load because it is clobbered by call (x10)
+;      missed   gvn: load of type ptr not eliminated in favor of load because it is clobbered by store (x38)
+;      analysis loop-vectorize: loop not vectorized: control flow cannot be substituted for a select (x7)
+;      analysis loop-vectorize: loop not vectorized: value that could not be identified as reduction is used outside the loop (x7)
+;      analysis loop-vectorize: loop not vectorized: could not determine number of loop iterations (x12)
+;      analysis loop-vectorize: loop not vectorized: call instruction cannot be vectorized
+;      analysis loop-vectorize: loop not vectorized: instruction cannot be vectorized
+;      missed   slp-vectorizer: Cannot SLP vectorize list: vectorization was impossible with available vectorization factors (x23)
+;      missed   slp-vectorizer: List vectorization was possible but not beneficial with cost 0 >= 0 (x45)
+;      passed   slp-vectorizer: Stores SLP vectorized with cost -1 and with tree size 2
+;      missed   regalloc: 2 virtual registers copies 9.744685e+04 total copies cost generated in loop
+;      missed   regalloc: 2 virtual registers copies 2.878093e+01 total copies cost generated in loop (x3)
+;      missed   regalloc: 1 reloads 6.400000e+02 total reloads cost 8 virtual registers copies 2.400000e+03 total copies cost generated in loop
+;      missed   regalloc: 2 virtual registers copies 1.040000e+03 total copies cost generated in loop (x2)
+;      missed   regalloc: 11 spills 1.630000e+02 total spills cost 12 reloads 7.910000e+02 total reloads cost 116 virtual registers copies 1.027299e+05 total copies cost generated in function
+;      analysis prologepilog: 1096 stack bytes in function 'startup'

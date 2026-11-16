@@ -1,0 +1,422 @@
+olang scope record
+run <stdlib.h> 0-0 ctor <stdlib.h>:div_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:div_t	0,1
+marks 2a0ce6b2a5222ce1986ffee081616d3b
+read -ctor	I32
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<stdlib.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 184b27218ebbd6277057b06206ac51e2
+run <stdlib.h> 0-0 ctor <stdlib.h>:ldiv_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:ldiv_t	0,1
+marks c1522da174bc2c77c7ee7eba2ba02a9f
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<stdlib.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 9cdff1642c9ebfca3cfab1622ddd239e
+run <stdlib.h> 0-0 ctor <stdlib.h>:lldiv_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:lldiv_t	0,1
+marks 917af24719cd45ce1d2cabf4e56be17d
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<stdlib.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out a69842204da322fa1875f7c68d6a2838
+run <stdlib.h> 0-0 ctor <stdlib.h>:c___locale_struct	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:c___locale_struct	0,1,2,3,4
+marks a595713cbcc9d2837ffde23598ab3d95
+read -ctor	Array<<stdlib.h>:c___locale_data?&, 13>
+read -ctor	Array<std/prelude/text:CStr?&, 13>
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 2 5 1 | V0 V0 | F F F F F | b1 b00000 b00 b00000 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:7724:7752 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 1e1fb662f3d9dad37a8e5f5dd23ecfb9
+run <stdlib.h> 0-0 ctor <stdlib.h>:c___sigset_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:c___sigset_t	0
+marks 215902e13440dff25694c29bddd39536
+read -ctor	Array<U64, 16>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:7899:7913 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 4744d014de79dfa2886ed052da684697
+run <stdlib.h> 0-0 ctor <stdlib.h>:timeval	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:timeval	0,1
+marks 3d1edd05bf81ffe8687188725ee5694e
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<stdlib.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out d29f8492ce8c2658f59b459e45df0a3a
+run <stdlib.h> 0-0 ctor <stdlib.h>:timespec	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:timespec	0,1
+marks e4df33304baccd653914223b88ac2a5e
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<stdlib.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out c0f877d368f52b3d84db8e8c3ce313bb
+run <stdlib.h> 0-0 ctor <stdlib.h>:fd_set	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:fd_set	0
+marks 33865bb29c9bc74fb2fa25c42a13553b
+read -ctor	Array<I64, 16>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:8073:8087 t i,-1 t i i c0/i/i f0010
+hid fs1
+out a695a7dc4f0cb6626e4986367ff8740c
+run <stdlib.h> 0-0 ctor <stdlib.h>:c___atomic_wide_counter	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:c___atomic_wide_counter	0
+marks 5758bedeb9384d0d4ed1dd1260bbce75
+read -ctor	Array<I64, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:8144:8157 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 2501a4f9f86e9468812db15de6c3d09d
+run <stdlib.h> 0-0 ctor <stdlib.h>:c___pthread_internal_list	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:c___pthread_internal_list	0,1
+marks 37accb461b8558397b4d1a144ad94a92
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<stdlib.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out b86c58f01dd537610f21d92b0f139b4b
+run <stdlib.h> 0-0 ctor <stdlib.h>:c___pthread_internal_slist	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:c___pthread_internal_slist	0
+marks 5c2a5a3b0cbc1c9f2e8b77de1f90dcb9
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b b b b b b a,<stdlib.h>:0:0 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 7a423456d6af9c74d4ae2b44c5676b4f
+run <stdlib.h> 0-0 ctor <stdlib.h>:pthread_mutexattr_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:pthread_mutexattr_t	0
+marks be6b42a6568b81889894f17f0efdb3dc
+read -ctor	Array<I32, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:8352:8365 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 7ac9c2f539db4f8b2a8f99bfcd87412a
+run <stdlib.h> 0-0 ctor <stdlib.h>:pthread_condattr_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:pthread_condattr_t	0
+marks 1b75fcfd0d6475fa9c01f0a97d7c010d
+read -ctor	Array<I32, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:8417:8430 t i,-1 t i i c0/i/i f0010
+hid fs1
+out acdb211efa44acc20a34e673720a922d
+run <stdlib.h> 0-0 ctor <stdlib.h>:pthread_attr_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:pthread_attr_t	0
+marks 624e27c9207dd4069300352a7dd61dbd
+read -ctor	Array<I64, 7>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:8478:8491 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 7cd375ae8c2ff5402be9ba177d179055
+run <stdlib.h> 0-0 ctor <stdlib.h>:pthread_mutex_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:pthread_mutex_t	0
+marks db3b71d9bca1bc9fee7f14f0cf4ac565
+read -ctor	Array<I64, 5>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:8540:8553 t i,-1 t i i c0/i/i f0010
+hid fs1
+out ad41f9e8cf786fcea716f0e76f6b9ece
+run <stdlib.h> 0-0 ctor <stdlib.h>:pthread_cond_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:pthread_cond_t	0
+marks db91daf3898326fce7b5f4ecb6060679
+read -ctor	Array<I64, 6>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:8601:8614 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 988ad57fa37f59a46a82a544a61d6823
+run <stdlib.h> 0-0 ctor <stdlib.h>:pthread_rwlock_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:pthread_rwlock_t	0
+marks fc528d7eb565210f1e7093090819c095
+read -ctor	Array<I64, 7>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:8664:8677 t i,-1 t i i c0/i/i f0010
+hid fs1
+out e80fdece39d9c67ef575f0f75504f792
+run <stdlib.h> 0-0 ctor <stdlib.h>:pthread_rwlockattr_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:pthread_rwlockattr_t	0
+marks 4594f7ed012712f9bd8048571865428c
+read -ctor	Array<I64, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:8731:8744 t i,-1 t i i c0/i/i f0010
+hid fs1
+out d29ca72e70bde56de5f663623920abea
+run <stdlib.h> 0-0 ctor <stdlib.h>:pthread_barrier_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:pthread_barrier_t	0
+marks f034868cbba766cd4572b7e57b502f23
+read -ctor	Array<I64, 4>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:8795:8808 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 2597acf041dcf17e37afc15f4511d029
+run <stdlib.h> 0-0 ctor <stdlib.h>:pthread_barrierattr_t	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:pthread_barrierattr_t	0
+marks 3383622c4152675daad126f806010f18
+read -ctor	Array<I32, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:8863:8876 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 2ce2e6198b451184c027d5228afb2ec5
+run <stdlib.h> 0-0 ctor <stdlib.h>:random_data	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:random_data	0,1,2,3,4,5,6
+marks 28f51dee029d785ee39f1662dee66456
+read -ctor	I32
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 7 1 | | F F F F F F F | b0 b0000000 b b0000000 | | | ||
+sum r b0 b0 b b b b b b a,<stdlib.h>:0:0 t i,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 3d9153f642f90d0128bfb2e43e183a65
+run <stdlib.h> 0-0 ctor <stdlib.h>:drand48_data	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+mark <stdlib.h> 0-0 ctor <stdlib.h>:drand48_data	0,1,2,3,4
+marks cf990584735c341de77db044e8f83d83
+read -ctor	Array<U16, 3>
+read -ctor	U16
+read -ctor	U64
+hits 0
+body 1 2 5 1 | V0 V0 | F F F F F | b1 b00000 b00 b00000 | | | ||
+sum r b1 b1 b b b b b b a,<stdlib.h>:9073:9086 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 6c8db5dfbfa2e01633050434095fd5e2
+run <stdlib.h> global WNOHANG	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f6fe27b2c4b5300097d48de3f4c99163
+run <stdlib.h> global WUNTRACED	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2b694ed1edfc1cbc3fdedb8179c66825
+run <stdlib.h> global WSTOPPED	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3f78a910f185e2cbc229295b8d9f3d0b
+run <stdlib.h> global WEXITED	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4e79a52db4f415f47c684484f86fafc0
+run <stdlib.h> global WCONTINUED	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0641ec797e861348662fee959766437e
+run <stdlib.h> global WNOWAIT	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4416bcaafe068ff51dab1b6c63855731
+run <stdlib.h> global RAND_MAX	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f2e05b6643c41488fe1a6360b7345e94
+run <stdlib.h> global EXIT_FAILURE	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7330cd51f6e9fec1f2dc13f20c706855
+run <stdlib.h> global EXIT_SUCCESS	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b6c06c7d659e4d5b2327cafaf88dcbfe
+run <stdlib.h> global LITTLE_ENDIAN	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 82ddb69dda684a9920f7e9892b5afde3
+run <stdlib.h> global BIG_ENDIAN	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 723de7479f22f249e1b697b811e56c5c
+run <stdlib.h> global PDP_ENDIAN	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2420f38cc2702efe9cc1da8e071c0664
+run <stdlib.h> global BYTE_ORDER	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1a01d416e3dfb87ab8b873e66aef5dad
+run <stdlib.h> global FD_SETSIZE	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 68a33e0db07fb19fca93a192a86900b7
+run <stdlib.h> global NFDBITS	
+ctx r1 g1 p0
+keys <stdlib.h>=39a86a7f6c82712c9f66d18ff54b5842c66e8a306edd30a41dfdb54e90ed8d44
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2934eb6da10ced405889136659929b03
+end
+sum 14492-13139028417615586792

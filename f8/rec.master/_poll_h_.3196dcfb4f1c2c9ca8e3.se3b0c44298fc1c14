@@ -1,0 +1,170 @@
+olang scope record
+run <poll.h> 0-0 ctor <poll.h>:pollfd	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+mark <poll.h> 0-0 ctor <poll.h>:pollfd	0,1,2
+marks 4964ea0fedcd29d8d1283c0dc15296a0
+read -ctor	I16
+read -ctor	I32
+hits 0
+body 1 0 3 1 | | F F F | b0 b000 b b000 | | | ||
+sum r b0 b0 b b b b b b a,<poll.h>:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out eaf49e5163be72d38bfc35e8b41d8254
+run <poll.h> 0-0 ctor <poll.h>:c___sigset_t	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+mark <poll.h> 0-0 ctor <poll.h>:c___sigset_t	0
+marks e531eaa849342e604a5c9aabb9df8259
+read -ctor	Array<U64, 16>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<poll.h>:295:309 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 3c57a08bbfeee2101c1394871893a316
+run <poll.h> 0-0 ctor <poll.h>:timespec	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+mark <poll.h> 0-0 ctor <poll.h>:timespec	0,1
+marks 7b9c6910cf035a9b1b99fb909cbdd55b
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<poll.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 58a8cd351810baf5ce39bb90e87c4b0d
+run <poll.h> global POLLIN	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2bb747be520a1c1c3bb9aedb8dc01c96
+run <poll.h> global POLLPRI	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5d5b152cb1109df0df199e376ccd59c7
+run <poll.h> global POLLOUT	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7646f05cc0fb7b95101758ad68726a7b
+run <poll.h> global POLLRDNORM	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6c77c730e74ea7fda2fa6a2a4706c416
+run <poll.h> global POLLRDBAND	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bb8c35534bf13cbc180982f626c4ec3d
+run <poll.h> global POLLWRNORM	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 873c508da3b5ccafac9ed75a5480bccf
+run <poll.h> global POLLWRBAND	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 053ff69ec3a84fdd73fe3ac42b4ab2ef
+run <poll.h> global POLLMSG	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8805444e0643e58cb279aaadaffa291a
+run <poll.h> global POLLREMOVE	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1f086af3306ab4040cacbc8d37d87bef
+run <poll.h> global POLLRDHUP	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 041d815f408788c98d3a3f3282f95620
+run <poll.h> global POLLERR	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7ad9d041d5e583ab5e8d01b9d349951a
+run <poll.h> global POLLHUP	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4f55f33376daabd5966dd3471f2df280
+run <poll.h> global POLLNVAL	
+ctx r1 g1 p0
+keys <poll.h>=3196dcfb4f1c2c9ca8e3b5304dc26cb81599d5763d618818d5ab37a03092ddc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 255b4008d559746ad42774b8a3c7ce95
+end
+sum 5184-13316432294498453465

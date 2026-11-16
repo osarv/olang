@@ -1,0 +1,116 @@
+diff --git a/compiler/free.olang b/compiler/free.olang
+index 77bf8c35..6a4509c4 100644
+--- a/compiler/free.olang
++++ b/compiler/free.olang
+@@ -2403,11 +2403,15 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
+ }
+ 
+ # a value holding owners made with no store into their places (a copy, a call's value copied, D9h): those places keep
+-fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&) {
++fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made Bool = false) {
+     if not w.Final or w.quiet > 0 { return }
++    # (O8f, round 8: a copy lowering makes - made: not a fill's, nor one a declared Copy makes, E31d - builds the text
++    # of a place built in slots in slots of where it goes, as the place's own stores do: lower.copySlots)
++    slots := made and not w.T().RunsCopy(ty)
+     for k in w.F.heldPlaces(ty) {
+         # (O8f: a part place's values a copy makes are built in no part region, which its let-go leaves where they are)
+         if w.F.PartPlace(k): continue
++        if slots and w.F.SlotPlace(k): continue
+         if w.F.Debug { try io.PutErr($"untracked " + $k + " at " + $w.F.P.L.Diags.Locate(w.body().File, I64(sp.Start)) + "\n") catch io.Error { } }
+         w.F.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by " + $how + ": '" + $w.text(sp) + "'")
+     }
+@@ -2610,7 +2614,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
+     try w.targets.Pop() catch { }
+     # (a value array stored whole from existing storage is copied there, T7b)
+     if p != typed.Lvalue.Local and w.T().KindOf(w.T().Repr(p.Type())) == types.Kind.Array and copiedStore(x) {
+-        w.untracked(p.Type(), sp, "a whole array of them stored")
++        w.untracked(p.Type(), sp, "a whole array of them stored", true)
+     }
+     match p {
+         case typed.Lvalue.Local(_, _, l) {
+@@ -3549,7 +3553,7 @@ fn (w mut walker&) reachTo(p typed.Lvalue&) Vec<I64> {
+ # struct held in place copies with it
+ fn (w mut walker&) readOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
+     f := w.F
+-    if p == typed.Lvalue.Local and I64(p.id) != w.copyRead and w.heldCopy.Has(I64(p.id)) { w.untracked(ty, p.Span(), "a copy of a value holding it") }
++    if p == typed.Lvalue.Local and I64(p.id) != w.copyRead and w.heldCopy.Has(I64(p.id)) { w.untracked(ty, p.Span(), "a copy of a value holding it", true) }
+     o := w.reach(p)
+     w.elemRead(p, o)
+     k := f.placeOfPlace(p)
+@@ -3745,7 +3749,7 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
+     filled := m.Kind == typed.MakeKind.Fill and m.Items.Len() > 0
+     # (gap 17: nor does a fill of a value holding no storage - `Array<Vec<String>>(10)`'s ten empty Vecs)
+     if filled and w.F.emptyValue(m.Items[0], null, 0): filled = false
+-    if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it") }
++    if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it", not filled) }
+     w.makeStores(m, ty, sp)
+     return out
+ }
+@@ -3886,7 +3890,9 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
+     if fresh and w.Final: f.freshAt.Put(pair.Pair(w.Id, I64(c.Site)), true)
+     # (nor a temporary only lent for reading: what it holds is no value any store gives a place - gap 17)
+     lent := I64(c.Site) == w.readArg and c.Site >= typed.SiteId(0)
+-    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite and not lent { w.untracked(ty, sp, "a call's value copied") }
++    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite and not lent {
++        w.untracked(ty, sp, "a call's value copied", b2 >= 0 and not unknown)
++    }
+     if b2 >= 0 and not unknown {
+         if f.isCase(b2) {
+             for a in args { addAllTo(out, a) }
+diff --git a/compiler/lower.olang b/compiler/lower.olang
+index dd463cf2..48f3d117 100644
+--- a/compiler/lower.olang
++++ b/compiler/lower.olang
+@@ -7056,9 +7056,17 @@ fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
+         n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(a))], sp)
+         buf := ln.temp(ty, sp)
+         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
++        # (O8f: text elements of a place built in slots copied into slots of at too - copySlots)
++        k := ln.copySlots(ty, -1)
+         ln.eachIndex(n, sp, fn(i mir.LocalId) {
+-            e := ln.copyAt(ln.with(a, mir.Proj.Index(i)), el, at, sp)
+-            ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(pl(mir.Base.Local(buf)), mir.Proj.Index(i))), mir.Rvalue.Use(e)))
++            src := ln.with(a, mir.Proj.Index(i))
++            dst := ln.with(pl(mir.Base.Local(buf)), mir.Proj.Index(i))
++            if k < 0 {
++                ln.emit(mir.Stmt.Assign(sp, ln.mk(dst), mir.Rvalue.Use(ln.copyAt(src, el, at, sp))))
++                return
++            }
++            ln.emit(mir.Stmt.Assign(sp, ln.mk(dst), mir.Rvalue.Use(mir.Operand.Copy(ln.mk(src)))))
++            ln.textSlotCopy(dst, el, k, at, sp)
+         })
+         return mir.Operand.Copy(mir.Lvalue.L(buf))
+     }
+@@ -7068,7 +7076,12 @@ fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
+     dp := pl(mir.Base.Local(d))
+     if mir.HasFields(ln.T, ty) {
+         parts := ln.partsOf(ty)
+-        for i in range parts.Len() { ln.copyPart(ln.with(dp, mir.Proj.Field(i)), parts[i], at, sp) }
++        for i in range parts.Len() {
++            q := ln.with(dp, mir.Proj.Field(i))
++            k := ln.copySlots(ty, i)
++            if k >= 0: ln.textSlotCopy(q, parts[i], k, at, sp)
++            else: ln.copyPart(q, parts[i], at, sp)
++        }
+     } else if mir.HasCases(ln.T, ty) {
+         tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(dp)), sp)
+         ln.payloads(ln.casesOf(ty), tag, sp, fn(c I64, rec types.TypeId) {
+@@ -7084,6 +7097,18 @@ fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
+     return mir.Operand.Copy(mir.Lvalue.L(d))
+ }
+ 
++# O8f (round 7's item 3, round 8): the text place a copy's text parts belong to - the elements of an array of text
++# (field -1) or a struct's text field i - where it is one built in slots (free.SlotPlace), so that the copy builds them
++# in slots of where it goes, guarded by the place's decision as every site is: a copy then makes values as the place's
++# own stores do, and no copy keeps the place (free.untracked); -1 for none, or where nothing frees early
++fn (ln mut lowering&) copySlots(ty types.TypeId, i I64) I64 {
++    if ln.L.Free == null or not ln.L.Free!.Done: return -1
++    fr := ln.L.Free!
++    k := fr.ElemPlace(ty) if i < 0 else fr.FieldPlace(ty, i)
++    if not fr.SlotPlace(k): return -1
++    return k
++}
++
+ # E31d: the copy of what place a holds, of a type declaring its own Copy, made in scope at - its Copy called on it, the
+ # new value built where the copy goes (Copy only builds, so nothing else it reaches needs a scope: the program's). A
+ # buffer's room (a Vec's past its count, a Map's empty slots) is held as zeros, never an element (M19d): a value whose

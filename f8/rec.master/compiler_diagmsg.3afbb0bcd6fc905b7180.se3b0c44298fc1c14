@@ -1,0 +1,16 @@
+olang scope record
+run compiler/diagmsg 0-0 ctor compiler/diagmsg:Msg	
+ctx r1 g1 p0
+keys compiler/diagmsg=3afbb0bcd6fc905b718054682287aad7fdec7cbe7d2936c9e3839d79325835d0
+in 0
+mark compiler/diagmsg 0-0 ctor compiler/diagmsg:Msg	0,1,2,3,4
+marks d3e2d9ef520c2218031ddfe328260232
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	compiler/msgs:Diag
+hits 0
+body 1 0 10 5 | | F F F F F F F F F F | b00000 b0000000000 b b0000000000 | | | ||
+sum r;V0,V4,0,799,803,1,0,0;V1,V4,0,808,812,1,0,0;V2,V4,0,817,821,1,0,0;V3,V4,0,826,830,1,0,0 b00000 b00000 b01111 b00000 b00000 b b b a,compiler/diagmsg:0:0,compiler/diagmsg:0:0,compiler/diagmsg:0:0,compiler/diagmsg:0:0,compiler/diagmsg:0:0 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/msgs:Diag	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out 4b2a5f73c3352c16bf12d0cedab0f1e3
+end
+sum 894-7675344591332204706

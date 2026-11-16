@@ -1,0 +1,542 @@
+olang scope record
+run std/chan 0-0 ctor std/chan:Chan<I64>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+mark std/chan 0-0 ctor std/chan:Chan<I64>	0,1,2,3,4,5,6,7,8,9,10,11,12
+marks 57b69628386f6182e9bf5915a2a667f5
+read -ctor	Array<I64>
+read -ctor	Bool
+read -ctor	I64
+read <pthread.h> 0-0 ctor <pthread.h>:pthread_cond_t	42fec2efca8dc06ca83ea18947bc05c9
+read <pthread.h> 0-0 ctor <pthread.h>:pthread_mutex_t	2889514705dc22d4b6cf77b3b291c764
+hits 0
+body 1 5 14 1 | V0 V0 U U U | F F F F F F F F F F F F F F | b1 b00000000000000 b00000 b00000000000000 | 2:,V0 3:,V0 4:,V0 | | ||
+sum r b1 b1 b0 b0 b0 b b b a,std/chan:3393:3404 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64
+out 2bc9a5320d9619f51b72aad3867fd1e9
+run std/chan 5473-5611 fn <I64;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:5473:5611 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I64>&
+out 7fbeeb3fafd19e78af0b288364db8f00
+run std/chan 3886-4161 fn <I64;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+mark std/chan 0-0 ctor std/chan:Chan<I64>	1
+marks 8a51e4ca8db999b17f2fafe50b8c3dc5
+read std/chan 0-0 ctor std/chan:Chan<I64>	78a0a09c558407313290904ffab63167
+hits 0
+body 1 3 2 1 | V0 V0 U | F F | b1 b00 b000 b00 | | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/chan:3961:3980 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I64>&	o0I64
+out ab78b08c2765b40090bc7dd32b46967c
+run std/chan 5842-5977 fn <I64;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:5842:5977 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I64>&
+out 077ba3e3232194c640ebbe5b944b9fe8
+run std/chan 6211-6669 fn <I64;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 3886-4161 fn <I64;>	f28fc1cf7a9385bf186861f186df60bf
+read std/chan 5473-5611 fn <I64;>	237e407a402c2eedf5bf5f726d9aff9e
+read std/chan 5842-5977 fn <I64;>	da77a8996ab67b51b1a6592915983caf
+hits 0
+body 1 8 3 1 | U U U U U U U U | F F F | b1 b000 b00000000 b000 | 2:,V0 3:,V0 5:,V0 6:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/chan:3961:3980 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I64>&	o0I64
+out 8fe219f47041ae23a0ff201c2707e29f
+run std/chan 4236-4502 fn <I64;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+mark std/chan 0-0 ctor std/chan:Chan<I64>	1
+marks 8a51e4ca8db999b17f2fafe50b8c3dc5
+read std/chan 0-0 ctor std/chan:Chan<I64>	78a0a09c558407313290904ffab63167
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:4236:4502 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I64>&
+out 9b84d269750159996c40467339d38b4e
+run std/chan 6841-7210 fn <I64;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 4236-4502 fn <I64;>	8c52a22097c310b3422ce0dd3533bef2
+hits 0
+body 1 5 2 1 | U U U U U | F F | b0 b00 b00000 b00 | 3:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:6841:7210 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I64>&
+out ae6a21353353178ff4febb6fd3f7371e
+run std/chan 7379-7482 fn <I64;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 6841-7210 fn <I64;>	aeb5f9c1901c3d4f2d7a5434b2ded0b8
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:7379:7482 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I64>&
+out c7ba780075d28f6493d6ea00a8eb7fd7
+run std/chan 4792-5016 fn <I64;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 4 1 1 | U U U U | F | b0 b0 b0000 b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:4792:5016 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I64>&
+out 30c279356a2cd3dd39dfc9a5cc98f1d8
+run std/chan 5473-5611 fn <I32;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:5473:5611 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&
+out 1d3249c9ba0b91bd009d889b21aa5a16
+run std/chan 3886-4161 fn <I32;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	std/chan:Chan<I32>
+hits 0
+body 1 3 2 1 | V0 V0 U | F F | b1 b00 b000 b00 | | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/chan:3961:3980 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0I32
+out 1e4dead730e81f9fc38766d32f21aae2
+run std/chan 5842-5977 fn <I32;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:5842:5977 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&
+out 26a497996b8db302cfb4a68890d2f0cb
+run std/chan 6211-6669 fn <I32;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 3886-4161 fn <I32;>	f28fc1cf7a9385bf186861f186df60bf
+read std/chan 5473-5611 fn <I32;>	237e407a402c2eedf5bf5f726d9aff9e
+read std/chan 5842-5977 fn <I32;>	da77a8996ab67b51b1a6592915983caf
+hits 0
+body 1 8 3 1 | U U U U U U U U | F F F | b1 b000 b00000000 b000 | 2:,V0 3:,V0 5:,V0 6:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/chan:3961:3980 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0I32
+out 3999a4fbd0d70f0e77e39f1611711ea9
+run std/chan 9786-9894 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I32
+read std/chan 6211-6669 fn <I32;>	f28fc1cf7a9385bf186861f186df60bf
+hits 0
+body 1 1 8 1 | U | F F F F F F F F | b1 b00000000 b0 b00000000 | 0:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/chan:3961:3980 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0I32
+out ef248260b0ff20bb76262d3ed0bd8899
+run std/chan 4236-4502 fn <I32;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	std/chan:Chan<I32>
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:4236:4502 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&
+out efe63c1fa6c4f804b32a8c69fa9d17b2
+run std/chan 6841-7210 fn <I32;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 4236-4502 fn <I32;>	8c52a22097c310b3422ce0dd3533bef2
+hits 0
+body 1 5 2 1 | U U U U U | F F | b0 b00 b00000 b00 | 3:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:6841:7210 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&
+out af039ee0c1a60856e31f74b2f5fcdb28
+run std/chan 9896-10007 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I32
+read std/chan 6841-7210 fn <I32;>	aeb5f9c1901c3d4f2d7a5434b2ded0b8
+hits 0
+body 1 1 9 2 | U | F F F F F F F F F | b00 b000000000 b0 b000000000 | 0:,V0 | | ||
+sum r b00 b00 b000 b000 b000 b b b a,std/chan:9896:10007,std/chan:9896:10007 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0I32	o0mut std/chan:sumBox&
+out a70511156be440d8776c874a29d1175b
+run std/chan 10556-10655 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 1 7 0 | B0 | F F F F F F F | b b0000000 b0 b0000000 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out cb1205f0fd5fae11e3b2d25873c4e045
+run std/chan 8883-9488 fn <I32;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/cancel 1980-2038 fn	b66401efeac3e39a1178d89600f225b3
+read std/cancel 2347-2458 fn	758c0c4ca6f1b110ff6a7a3e164cc626
+read std/cancel 2858-3350 fn	3e14df92b902cbbf98bc6fbd2399901f
+read std/chan 4236-4502 fn <I32;>	8c52a22097c310b3422ce0dd3533bef2
+hits 0
+body 1 10 4 2 | B0 U U U U U U U U U | F F F F | b00 b0000 b0000000000 b0000 | 2:,V1 4:,V1 5:,V1,B0 8:,V0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/chan:8883:9488,std/chan:8883:9488 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0std/cancel:Token&
+out 147d7f22696781abf11ce35c04c6c4b1
+run std/chan 11923-12084 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 8883-9488 fn <I32;>	f46a1ea96d663d255e3be7e580e316cc
+hits 0
+body 1 1 3 3 | U | F F F | b000 b000 b0 b000 | 0:,V0,V1 | | ||
+sum r b000 b000 b000 b000 b000 b b b a,std/chan:11923:12084,std/chan:11923:12084,std/chan:11923:12084 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0std/cancel:Token&	o0mut std/chan:sumBox&
+out 7be4159988c48ca1912fb61963f1accd
+run std/chan 12710-13023 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I32
+read std/cancel 1859-1915 fn	dbe86241247837c12fe8409ae9ba2e8f
+read std/cancel 961-997 fn	6d787cc7b01b150765dce615d1f27491
+read std/chan 8883-9488 fn <I32;>	f46a1ea96d663d255e3be7e580e316cc
+hits 0
+body 1 5 4 2 | U U B1 U U | F F F F | b11 b0000 b00000 b0000 | 0: 1:,V0,V1 3: 4:,V1 | | ||
+sum r b11 b00 b00 b00 b00 b b b a,std/chan:12850:12859,std/chan:12850:12859 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0mut std/cancel:Token&
+out 8e69d9a08556a1ff9e543024b6a5a898
+run std/chan 5473-5611 fn <std/chan:reading;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:5473:5611 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<std/chan:reading>&
+out ddc1532555d5de571fb4efdb37299a49
+run std/chan 3886-4161 fn <std/chan:reading;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	std/chan:Chan<std/chan:reading>
+hits 0
+body 1 3 2 1 | V0 V0 U | F F | b1 b00 b000 b00 | | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/chan:3961:3980 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<std/chan:reading>&	o0std/chan:reading
+out e5560e6832028e331057d881cbc28eb0
+run std/chan 5842-5977 fn <std/chan:reading;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:5842:5977 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<std/chan:reading>&
+out 1cb18f7efe45befe57e3e4b3bb044c6b
+run std/chan 6211-6669 fn <std/chan:reading;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 3886-4161 fn <std/chan:reading;>	f28fc1cf7a9385bf186861f186df60bf
+read std/chan 5473-5611 fn <std/chan:reading;>	237e407a402c2eedf5bf5f726d9aff9e
+read std/chan 5842-5977 fn <std/chan:reading;>	da77a8996ab67b51b1a6592915983caf
+hits 0
+body 1 8 3 1 | U U U U U U U U | F F F | b1 b000 b00000000 b000 | 2:,V0 3:,V0 5:,V0 6:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/chan:3961:3980 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<std/chan:reading>&	o0std/chan:reading
+out 3f214034ee4dac3e400aba059f59159e
+run std/chan 0-0 ctor std/chan:reading	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+mark std/chan 0-0 ctor std/chan:reading	0,1
+marks f7c050afb200e71d8ce8431e1798a4d9
+read -ctor	F64
+read -ctor	I32
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/chan:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I32	o0F64
+out 72b4a4feba1102d74a8ad879da2e21b9
+run std/chan 13921-14049 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I32
+read std/chan 0-0 ctor std/chan:reading	bf72455712beac1a895a829b4511d96c
+read std/chan 6211-6669 fn <std/chan:reading;>	f28fc1cf7a9385bf186861f186df60bf
+hits 0
+body 1 2 8 1 | U U | F F F F F F F F | b1 b00000000 b00 b00000000 | 0:,B2 1:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/chan:3961:3980 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<std/chan:reading>&	o0I32
+out 76ca9d26b6042be65fdc89440375dc27
+run std/chan 4236-4502 fn <std/chan:reading;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	std/chan:Chan<std/chan:reading>
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:4236:4502 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<std/chan:reading>&
+out 3b43c047e5756c50a48cfed986715df1
+run std/chan 6841-7210 fn <std/chan:reading;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 4236-4502 fn <std/chan:reading;>	8c52a22097c310b3422ce0dd3533bef2
+hits 0
+body 1 5 2 1 | U U U U U | F F | b0 b00 b00000 b00 | 3:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:6841:7210 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<std/chan:reading>&
+out 5ad4f74c41ea442a043fc88623995931
+run std/chan 14051-14205 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I32
+read std/chan 6841-7210 fn <std/chan:reading;>	aeb5f9c1901c3d4f2d7a5434b2ded0b8
+hits 0
+body 1 1 10 2 | U | F F F F F F F F F F | b00 b0000000000 b0 b0000000000 | 0:,V0 | | ||
+sum r b00 b00 b000 b000 b000 b b b a,std/chan:14051:14205,std/chan:14051:14205 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<std/chan:reading>&	o0I32	o0mut std/chan:sumBox&
+out e87306713e2839b057e1dba920a286d8
+run std/chan 14868-15008 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I32
+read std/chan 6211-6669 fn <I32;>	f28fc1cf7a9385bf186861f186df60bf
+hits 0
+body 1 1 9 2 | U | F F F F F F F F F | b10 b000000000 b0 b000000000 | 0:,V0 | | ||
+sum r b10 b10 b100 b100 b100 b b b a,std/chan:3961:3980,std/chan:14868:15008 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0I32	o0mut std/chan:sumBox&
+out 1f4bf2ee22af10cd05e58f86c2cfb6a8
+run std/chan 4792-5016 fn <I32;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 4 1 1 | U U U U | F | b0 b0 b0000 b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:4792:5016 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&
+out 9a27f1e27bfbaf5f4a0d1cb59adea35a
+run std/chan 16622-16737 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I32
+read std/chan 4792-5016 fn <I32;>	e18a8fec0478f767a3fd5458b433e0f3
+read std/chan 6211-6669 fn <I32;>	f28fc1cf7a9385bf186861f186df60bf
+hits 0
+body 1 2 8 1 | U U | F F F F F F F F | b1 b00000000 b00 b00000000 | 0:,V0 1:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/chan:3961:3980 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0I32
+out 4191b291b321113caa6be67cdfe44433
+run std/chan 7379-7482 fn <I32;>	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 6841-7210 fn <I32;>	aeb5f9c1901c3d4f2d7a5434b2ded0b8
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:7379:7482 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&
+out e63b9fce4b9b8c2c74b7f8637dcee9f1
+run std/chan 16739-16831 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 7379-7482 fn <I32;>	f21618bbd2faec8964187864eacd0d6a
+hits 0
+body 1 1 4 2 | U | F F F F | b00 b0000 b0 b0000 | 0:,V0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/chan:16739:16831,std/chan:16739:16831 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0mut std/chan:sumBox&
+out a7514f42933bb4ec08c19cc5dee63109
+run std/chan 17254-17345 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 7379-7482 fn <I32;>	f21618bbd2faec8964187864eacd0d6a
+hits 0
+body 1 1 4 2 | U | F F F F | b00 b0000 b0 b0000 | 0:,V0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/chan:17254:17345,std/chan:17254:17345 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0mut std/chan:sumBox&
+out 4558a5dd587591c48dc68d0e6ac144d4
+run std/chan 17892-18130 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 8883-9488 fn <I32;>	f46a1ea96d663d255e3be7e580e316cc
+hits 0
+body 1 1 4 4 | U | F F F F | b0000 b0000 b0 b0000 | 0:,V0,V1 | | ||
+sum r b0000 b0000 b0000 b0000 b0000 b b b a,std/chan:17892:18130,std/chan:17892:18130,std/chan:17892:18130,std/chan:17892:18130 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I32>&	o0std/cancel:Token&	o0mut std/chan:sumBox&	o0mut std/chan:sumBox&
+out 4bc3d0ed00ee0af2f03daadaa0b2cad0
+run std/chan 19579-19647 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:19579:19647 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:idle&
+out 0957b1d6132139b2bd009719698db5a1
+run std/chan 19648-19683 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:19648:19683 t i t i i c0/i/i f0010
+hid fs1	o0std/chan:idle&
+out 3147693cca98292150ae9d983adbe50d
+run std/chan 22472-22582 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out b56944f427dce6734c80c7f5918e4722
+run std/chan 23332-23532 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read <time.h> 0-0 ctor <time.h>:timespec	cc3bcf616d564545a9272d6ddaa4200a
+hits 0
+body 1 3 3 0 | U U U | F F F | b b000 b000 b000 | 0:,B0 1:,B0 | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out b21e3076ea2ba935e9ac46f3e19d465e
+run std/chan 22762-23247 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/chan 23332-23532 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+read std/time 7110-7205 fn	6d787cc7b01b150765dce615d1f27491
+read std/time 7394-7623 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 4 4 0 | U U U U | F F F F | b b0000 b0000 b0000 | 0: 1: 2: 3: | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out e9c1aaa4e5fccad8ac9b5b8dfc4057c1
+run std/chan 23534-23623 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/chan 6211-6669 fn <I64;>	f28fc1cf7a9385bf186861f186df60bf
+hits 0
+body 1 1 8 1 | U | F F F F F F F F | b1 b00000000 b0 b00000000 | 0:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/chan:3961:3980 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I64>&	o0I64
+out 8888cfa007b2a7265d28cdc36ae2233f
+run std/chan 24462-24560 fn	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/chan 6841-7210 fn <I64;>	aeb5f9c1901c3d4f2d7a5434b2ded0b8
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/chan:24462:24560,std/chan:24462:24560 t i t i i c0/i/i f0010
+hid fs1	o0mut std/chan:Chan<I64>&	o0mut std/chan:sumBox&
+out fb487d187654cfb6533e2aea06c3f0db
+run std/chan 0-0 ctor std/chan:sumBox	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+mark std/chan 0-0 ctor std/chan:sumBox	0
+marks e4e86af61209f217e969436c75b6afcc
+read -ctor	I32
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/chan:0:0 t i,-1 t i i c0/i/i f0010
+hid fs1	o0I32
+out 025fd00ed36f2096372e2ab136f6f787
+run std/chan 0-0 ctor std/chan:Sent	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 1 | | | b0 b b b | | | ||
+sum r b0 b0 b b b b b b a,std/chan:0:0 t i t i i c0/i/i f0010
+hid fs1
+out d88f51643a3b0236dba7651102170dd1
+run std/chan 0-0 ctor std/chan:idle	
+ctx r1 g1 p0
+keys std/chan=4b7f6cdd45a52f1f335cfb44c8e405d61b76fe239745432a2e3dc4e47026bb19
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 1 | | | b0 b b b | | | ||
+sum r b0 b0 b b b b b b a,std/chan:0:0 t i t i i c0/i/i f0010
+hid fs1
+out 4989e9a1f0bfa439792900077b17040b
+end
+sum 22358-12460862041980514202

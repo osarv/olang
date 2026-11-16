@@ -1,0 +1,1826 @@
+olang scope record
+run <fcntl.h> 0-0 ctor <fcntl.h>:flock	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+mark <fcntl.h> 0-0 ctor <fcntl.h>:flock	0,1,2,3,4
+marks 7a17e0524ee75d611af4fc49cd1675c7
+read -ctor	I16
+read -ctor	I32
+read -ctor	I64
+hits 0
+body 1 0 5 1 | | F F F F F | b0 b00000 b b00000 | | | ||
+sum r b0 b0 b b b b b b a,<fcntl.h>:0:0 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 7b9365b7386c1aa76823e2458163bee4
+run <fcntl.h> 0-0 ctor <fcntl.h>:flock64	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+mark <fcntl.h> 0-0 ctor <fcntl.h>:flock64	0,1,2,3,4
+marks 0c0a179718e6b9a41919f663619b8fdb
+read -ctor	I16
+read -ctor	I32
+read -ctor	I64
+hits 0
+body 1 0 5 1 | | F F F F F | b0 b00000 b b00000 | | | ||
+sum r b0 b0 b b b b b b a,<fcntl.h>:0:0 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 8b5943195dab9256c4c9e8be21ac218d
+run <fcntl.h> 0-0 ctor <fcntl.h>:iovec	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+mark <fcntl.h> 0-0 ctor <fcntl.h>:iovec	0,1
+marks a23b5964d29cca1d3e74acd345fc0272
+read -ctor	U64
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<fcntl.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 1f26cacdca0bb766cfe111637b7ba54b
+run <fcntl.h> 0-0 ctor <fcntl.h>:f_owner_ex	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+mark <fcntl.h> 0-0 ctor <fcntl.h>:f_owner_ex	0,1
+marks 7fc540b8e9a58e52b8d620981f2e06b4
+read -ctor	I32
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<fcntl.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 81545740fe761d9c4797566a9615080c
+run <fcntl.h> 0-0 ctor <fcntl.h>:file_handle	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+mark <fcntl.h> 0-0 ctor <fcntl.h>:file_handle	0,1,2
+marks bc004d22f8c1d9fc789ad254f6b5fe75
+read -ctor	Array<U8, 0>
+read -ctor	I32
+read -ctor	U32
+hits 0
+body 1 1 3 1 | V0 | F F F | b1 b000 b0 b000 | | | ||
+sum r b1 b1 b b b b b b a,<fcntl.h>:1907:1919 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 8556b50983db24734d0cdcb8e02c8a99
+run <fcntl.h> 0-0 ctor <fcntl.h>:timespec	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+mark <fcntl.h> 0-0 ctor <fcntl.h>:timespec	0,1
+marks f23123ced9528ffcb03d12c070c13866
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<fcntl.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 0a2dc390508d389417f57eb9095cc180
+run <fcntl.h> 0-0 ctor <fcntl.h>:stat	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+mark <fcntl.h> 0-0 ctor <fcntl.h>:stat	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+marks bc1306b2e8771ad6b02fb5d409ada669
+read -ctor	Array<I64, 3>
+read -ctor	I32
+read -ctor	I64
+read -ctor	U32
+read -ctor	U64
+read <fcntl.h> 0-0 ctor <fcntl.h>:timespec	2aa5b3e8053a903d5aade5dacee01353
+hits 0
+body 1 4 15 1 | U U U V0 | F F F F F F F F F F F F F F F | b1 b000000000000000 b0000 b000000000000000 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b1 b1 b b b b b b a,<fcntl.h>:2263:2276 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out dba3ba71c59264ab60143a02db56c8c3
+run <fcntl.h> 0-0 ctor <fcntl.h>:stat64	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+mark <fcntl.h> 0-0 ctor <fcntl.h>:stat64	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+marks 627927058ec4c9c617a5985c4a799c99
+read -ctor	Array<I64, 3>
+read -ctor	I32
+read -ctor	I64
+read -ctor	U32
+read -ctor	U64
+read <fcntl.h> 0-0 ctor <fcntl.h>:timespec	2aa5b3e8053a903d5aade5dacee01353
+hits 0
+body 1 4 15 1 | U U U V0 | F F F F F F F F F F F F F F F | b1 b000000000000000 b0000 b000000000000000 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b1 b1 b b b b b b a,<fcntl.h>:2563:2576 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out d3ecfd1edbee139a24ce31491e5edd56
+run <fcntl.h> global F_OWNER_TID	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b12af5b301568101bf0709b5d442dc5b
+run <fcntl.h> global F_OWNER_PID	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 01db91887e8cce36f79f328624e0c875
+run <fcntl.h> global F_OWNER_PGRP	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 08ce61568bd317be896b3948fdf5a87c
+run <fcntl.h> global F_OWNER_GID	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1eee63603dd5b3190ebba08adcfb5cb6
+run <fcntl.h> global F_GETLK64	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 67b41531a6eb88c76de0cb4197498ab4
+run <fcntl.h> global F_SETLK64	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 02f6d46c60917bfd31d3f423f5d0e74d
+run <fcntl.h> global F_SETLKW64	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 44647e65c443e9a89cfbda220ebe74fc
+run <fcntl.h> global O_ACCMODE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 929002a1d91fe745af023b7b59080c3d
+run <fcntl.h> global O_RDONLY	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a82c504a2e4eb3af8b27a28b95f21109
+run <fcntl.h> global O_WRONLY	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b5a6ccead40d5f6fc6f5ec71bf3a8d41
+run <fcntl.h> global O_RDWR	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 77a2b20398aef25340a09de6a640246f
+run <fcntl.h> global O_CREAT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 292d7e345b3fa37318268fd6063591a4
+run <fcntl.h> global O_EXCL	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1626e354b834390f17c5d10854c1d50d
+run <fcntl.h> global O_NOCTTY	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 850098474406d74c8f66a647c55ae5da
+run <fcntl.h> global O_TRUNC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8000b1444ce155671417bd36c5c70b1a
+run <fcntl.h> global O_APPEND	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 51f92532eccbce6c6fa415c455f49548
+run <fcntl.h> global O_NONBLOCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bfc97419dc60a1754dcfb448be557792
+run <fcntl.h> global O_NDELAY	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 98e321ec51edbe5c4dab186b8e92b870
+run <fcntl.h> global O_SYNC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1a6f1a28cf0fb3c22d426d18b87fc8f8
+run <fcntl.h> global O_FSYNC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4f53a2250e35da6bc3e83840ec8ddbcd
+run <fcntl.h> global O_ASYNC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 52f437c8124a298873f060fde68b8194
+run <fcntl.h> global F_GETLK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 073fb1655db64275666c3f7589106bde
+run <fcntl.h> global F_SETLK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 59301babd31f02ab453cc144b2812284
+run <fcntl.h> global F_SETLKW	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5703d43e89c4b45ddd0cc74169742bc2
+run <fcntl.h> global F_OFD_GETLK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5ec4e5312dc2542271dd6c8a2c4af826
+run <fcntl.h> global F_OFD_SETLK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5feaca9e331990567e65128bdf3acb74
+run <fcntl.h> global F_OFD_SETLKW	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7b101b31818b791e751d7fbc76348e27
+run <fcntl.h> global O_LARGEFILE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2f89c4823be04fab06694c64ce28a676
+run <fcntl.h> global O_DIRECTORY	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 57e25f696cfa08b77b9233b48750eac1
+run <fcntl.h> global O_NOFOLLOW	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 17db34b02fba683e31e7421bba0ca692
+run <fcntl.h> global O_CLOEXEC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 91edf1fae5c790982561b39f6c4bfb87
+run <fcntl.h> global O_DIRECT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4be674dabecb9480ee43aefc360dd19a
+run <fcntl.h> global O_NOATIME	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d18250f2de9d8a8511b6c85fc2c3ca8e
+run <fcntl.h> global O_PATH	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6aa6d92d260a3205260ee1871d33902b
+run <fcntl.h> global O_TMPFILE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fcccbfc8e5a54ab304b26d22fdc24b80
+run <fcntl.h> global O_DSYNC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 307ff21c05d1005bda63f8220d204717
+run <fcntl.h> global O_RSYNC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out be435e250a0c1b714c4894f07392fc59
+run <fcntl.h> global F_DUPFD	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 51addff0267a735d0a23a41c173dceb5
+run <fcntl.h> global F_GETFD	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ff3f3d1694b927522da8c57809e1bd81
+run <fcntl.h> global F_SETFD	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 62155b4d5ef59822f9888c9b9ca1b182
+run <fcntl.h> global F_GETFL	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 86f248ad4d4154b1aaac707009940249
+run <fcntl.h> global F_SETFL	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d465fac22fdc8a42eac6f478733dd341
+run <fcntl.h> global F_SETOWN	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9f539e006d45d73675bd72a1ffc4c11a
+run <fcntl.h> global F_GETOWN	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 69b7fb1f4322525ae355c16608711f5f
+run <fcntl.h> global F_SETSIG	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7ef4460c39a53d5c2224e1f6fc6669e3
+run <fcntl.h> global F_GETSIG	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1acd9810e0cc79f589cfdf755a3f43a0
+run <fcntl.h> global F_SETOWN_EX	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 923569272a8259cd7f516e72fc77067b
+run <fcntl.h> global F_GETOWN_EX	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 415462da8f08089d0dc2dda8b550b8b5
+run <fcntl.h> global F_SETLEASE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 02732395cb79c5373f1033b574ff895b
+run <fcntl.h> global F_GETLEASE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 96cbd2e6bff222090bc32ce9b07d373a
+run <fcntl.h> global F_NOTIFY	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c7d95af9434ef0bba5b3ce6f7e89a905
+run <fcntl.h> global F_SETPIPE_SZ	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bc19ad9d9be46b06017258d1522149a6
+run <fcntl.h> global F_GETPIPE_SZ	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 91ef44768e7e86a670d9798218b6218f
+run <fcntl.h> global F_ADD_SEALS	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 554d6dcd57c48ca05e920e55031e2364
+run <fcntl.h> global F_GET_SEALS	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dde2a41a1342c1fab1b7f960ed451699
+run <fcntl.h> global F_GET_RW_HINT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f214e15867da2f7b3e10e19052945a69
+run <fcntl.h> global F_SET_RW_HINT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9029cca0d108c3fd3ed3bacaec301424
+run <fcntl.h> global F_GET_FILE_RW_HINT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c752874ed74a4afa4ae2608ef271ed76
+run <fcntl.h> global F_SET_FILE_RW_HINT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 653e168146f0c79256aa1de1d687d8a8
+run <fcntl.h> global F_DUPFD_CLOEXEC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 65a8e43a4b5ded14486834e3e0e026ec
+run <fcntl.h> global FD_CLOEXEC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fd5a00243f5d395d93555002551998d4
+run <fcntl.h> global F_RDLCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 320793ad520355654471c3aede7f5389
+run <fcntl.h> global F_WRLCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2b1af761ef9de07ffd8936ee5ff8232f
+run <fcntl.h> global F_UNLCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6d59e82700edcab93bcbecda92528a4f
+run <fcntl.h> global F_EXLCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 27568d8b5ea0ffeb059e7b9736aceee9
+run <fcntl.h> global F_SHLCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 92fd47546b919827ef61c65ee527a93b
+run <fcntl.h> global LOCK_SH	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6ee88a24cf9b0a67afd571cb21bcf9cf
+run <fcntl.h> global LOCK_EX	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5f255090474690a5fec6330207054891
+run <fcntl.h> global LOCK_NB	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 42d9c713e23fed048ba4af7c8625b827
+run <fcntl.h> global LOCK_UN	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ba0a0ed13f6e7b26095129fc703a966c
+run <fcntl.h> global LOCK_MAND	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 94ab74777d1ea402c8abc5ac25a3dfa7
+run <fcntl.h> global LOCK_READ	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1e6497f11d3e921d280120bc42508f64
+run <fcntl.h> global LOCK_WRITE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 98078335d34964cf270230d305ac8ecd
+run <fcntl.h> global LOCK_RW	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d0172f83e9d910e4785e4a38cc18524f
+run <fcntl.h> global DN_ACCESS	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 068ecb87bc9c6aa1bc51949dbeb5f343
+run <fcntl.h> global DN_MODIFY	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d6ad080230442a37754ea8491871c9db
+run <fcntl.h> global DN_CREATE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bcaf334128d146be9fc8bd4c0f0897c7
+run <fcntl.h> global DN_DELETE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4c5a5fae3f1ef37bc6344abb8ec65f53
+run <fcntl.h> global DN_RENAME	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c0c187c908dad8c3f4d0262ed5de7e26
+run <fcntl.h> global DN_ATTRIB	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3d28a2c68ef565e3c2a60cb6ad12a4aa
+run <fcntl.h> global DN_MULTISHOT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8460b7f4ee88c792946974a42cfa985d
+run <fcntl.h> global F_SEAL_SEAL	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2e57dc623449e01d97a565e32595ecf7
+run <fcntl.h> global F_SEAL_SHRINK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2909042419b8d970e35bde53f0b8565a
+run <fcntl.h> global F_SEAL_GROW	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c9eb1aab772a0a237646cc28015a4fa1
+run <fcntl.h> global F_SEAL_WRITE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4dc6fd0251b7d1d6214375f2c70a00db
+run <fcntl.h> global F_SEAL_FUTURE_WRITE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out eba06f443a298fbf54bad0d2e5c5cde3
+run <fcntl.h> global F_SEAL_EXEC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 20fda057c0ca3c26ccae08581cc843be
+run <fcntl.h> global RWH_WRITE_LIFE_NOT_SET	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e0de2435a81e3af409ff97cc7ee80704
+run <fcntl.h> global RWF_WRITE_LIFE_NOT_SET	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 498788973b3714d88defc427bd60d7e7
+run <fcntl.h> global RWH_WRITE_LIFE_NONE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1051362b0a9761c2df35872839532291
+run <fcntl.h> global RWH_WRITE_LIFE_SHORT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2e6de0950500b53a3397af077765cb51
+run <fcntl.h> global RWH_WRITE_LIFE_MEDIUM	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7fcf0b2865212fa99c0ad6ae7134c4c8
+run <fcntl.h> global RWH_WRITE_LIFE_LONG	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7cb53db9c732c6484f0699580097f1ce
+run <fcntl.h> global RWH_WRITE_LIFE_EXTREME	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5b1066e8693045c19c117afc835bde03
+run <fcntl.h> global FAPPEND	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5102b716bb69e3a6a5f19b6443178570
+run <fcntl.h> global FFSYNC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 56b884150c37f31d11657a8aedc6f5ff
+run <fcntl.h> global FASYNC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6189e8591f5cf82dcac618620254d862
+run <fcntl.h> global FNONBLOCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0d159189260ff38a61ce6a525c29ba17
+run <fcntl.h> global FNDELAY	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1f098035c57d8ec5f29929724217efb4
+run <fcntl.h> global POSIX_FADV_NORMAL	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0d0125b9f5c420956dec6fbc0709d341
+run <fcntl.h> global POSIX_FADV_RANDOM	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5eb4b8340d2214fb1e53c6fc93bb174c
+run <fcntl.h> global POSIX_FADV_SEQUENTIAL	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9d0bc8cacaec2bab045160efa80db91c
+run <fcntl.h> global POSIX_FADV_WILLNEED	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 11931db8644cff98fb36af22231d5020
+run <fcntl.h> global POSIX_FADV_DONTNEED	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 646a15b430d1213492078974013cc2ff
+run <fcntl.h> global POSIX_FADV_NOREUSE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e4467e84f40f288996fcfaea2452a5ca
+run <fcntl.h> global SYNC_FILE_RANGE_WAIT_BEFORE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0c4329be4b30895b5df3053aeb8737ca
+run <fcntl.h> global SYNC_FILE_RANGE_WRITE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 68bbc6273194910c42c9c03e447d4aa7
+run <fcntl.h> global SYNC_FILE_RANGE_WAIT_AFTER	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ee1c96a0dafdda08b8f95efcd7ffde33
+run <fcntl.h> global SYNC_FILE_RANGE_WRITE_AND_WAIT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 62c5c809fc497f6ea4503939446a7a6b
+run <fcntl.h> global SPLICE_F_MOVE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b28d3ec71c5394cb2fc5f593535e853b
+run <fcntl.h> global SPLICE_F_NONBLOCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 60503bfac6a0204ca92182e1bad7b3c5
+run <fcntl.h> global SPLICE_F_MORE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 142d9e71e70e3d543e4e69a3fb1dcd72
+run <fcntl.h> global SPLICE_F_GIFT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fbe5c1261e860b0fa51ba31274f4ac8e
+run <fcntl.h> global FALLOC_FL_ALLOCATE_RANGE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1f6118e11cee900a3f5a6e5c7e79be3e
+run <fcntl.h> global FALLOC_FL_KEEP_SIZE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ddc65245592e58256982927ab54827b5
+run <fcntl.h> global FALLOC_FL_PUNCH_HOLE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f2c83b29e6c73c3cf47899d5a59360a7
+run <fcntl.h> global FALLOC_FL_NO_HIDE_STALE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9ba9463e5ef680acd89664fffd9d1bc4
+run <fcntl.h> global FALLOC_FL_COLLAPSE_RANGE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8c4f79d4b7942010a363de8796b294d6
+run <fcntl.h> global FALLOC_FL_ZERO_RANGE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e10cf9447733c62df28c380ceccb5f84
+run <fcntl.h> global FALLOC_FL_INSERT_RANGE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5b4e49ff61bb1fb4ae9256405243ab6b
+run <fcntl.h> global FALLOC_FL_UNSHARE_RANGE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1e6165fb44ddd3837e195c301e877f02
+run <fcntl.h> global MAX_HANDLE_SZ	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out acf5dce88905a92ca0f473392382b64c
+run <fcntl.h> global AT_HANDLE_FID	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 26432c3d5bbbb1cd4d4eaa0867c1677e
+run <fcntl.h> global UTIME_NOW	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 96d89c089d5a38a9b016aefeef809b49
+run <fcntl.h> global UTIME_OMIT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e359720eb30563ac094452fdde56d87d
+run <fcntl.h> global S_IFMT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 228df3ad6dea0ed8ca2ecf07729f478d
+run <fcntl.h> global S_IFDIR	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out af8d8a7c2640239a9e82aabe237c7bb3
+run <fcntl.h> global S_IFCHR	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d4359f1a0f8ad7b12ae726f989c41f37
+run <fcntl.h> global S_IFBLK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7c6dd821b76127a7e6f2a3177452b5be
+run <fcntl.h> global S_IFREG	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a3fab8265bb663365744f3629632f642
+run <fcntl.h> global S_IFIFO	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 45c095787ce540edc28677e847a9baf6
+run <fcntl.h> global S_IFLNK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 54b6c579a86638ee9a9b6c403cb96a55
+run <fcntl.h> global S_IFSOCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d2130cdf87533685cd239e0bf9e35fa5
+run <fcntl.h> global S_ISUID	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 431b34b7fbffa7886b8d348f6d50b9d5
+run <fcntl.h> global S_ISGID	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 56b5cba9df9e9cdc1ae7bcde012fac10
+run <fcntl.h> global S_ISVTX	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 04f694db79e72dc0dac1ff1470fab329
+run <fcntl.h> global S_IRUSR	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0ead4e9020bed0ec8a040365d714f9ac
+run <fcntl.h> global S_IWUSR	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 76378efe25177af6ee7c15efc5110e18
+run <fcntl.h> global S_IXUSR	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b2f9231686c0f3cfa2bc15c7b2308164
+run <fcntl.h> global S_IRWXU	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0d26b63708cacdd0dc4d90200a27faac
+run <fcntl.h> global S_IRGRP	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 201249569d5f222a46b3779cb88959b9
+run <fcntl.h> global S_IWGRP	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9a1f8979092a81567b1dbd811fb94ab5
+run <fcntl.h> global S_IXGRP	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 60c3a9e43b8a5ae1b3be1bbd167b4bdf
+run <fcntl.h> global S_IRWXG	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out af2a55c0e2ea55a74fdffc03c0f3b067
+run <fcntl.h> global S_IROTH	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0ea77ff971f04c6da2be9a3631165914
+run <fcntl.h> global S_IWOTH	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 14ae3c0c1f567e385fe0c43bc69bccd9
+run <fcntl.h> global S_IXOTH	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 37f2b469402a98ed14e8110c8a4ff7bf
+run <fcntl.h> global S_IRWXO	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a0b558a8ea5445f2e3bfe27b7b8611dd
+run <fcntl.h> global R_OK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6d42f60e83ab013ef399435a29f0e8eb
+run <fcntl.h> global W_OK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 27959fa74bad4f4524df7e8efca3e85f
+run <fcntl.h> global X_OK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 275171ae1c2115dae4e756fbbf001750
+run <fcntl.h> global F_OK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 91e127cba3005d4282a209a37a5ee8c8
+run <fcntl.h> global SEEK_SET	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3fe6c9f49f1242372a88fbba2b1ff840
+run <fcntl.h> global SEEK_CUR	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a0f6e204b96892b19b11124988053fb3
+run <fcntl.h> global SEEK_END	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3e3a11dbecdbe3040bae63e5f2f05c39
+run <fcntl.h> global AT_FDCWD	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1be5b697c62427c75d812b3be459b007
+run <fcntl.h> global AT_SYMLINK_NOFOLLOW	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c8f9d90ca0054b591d9105038f627335
+run <fcntl.h> global AT_REMOVEDIR	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1e6397c12be1201287eb8b441e3a311c
+run <fcntl.h> global AT_SYMLINK_FOLLOW	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4abeab14f3d4ccddc8e3935b8609b75d
+run <fcntl.h> global AT_NO_AUTOMOUNT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 42cff9ac5ec9a424293b9caee3258999
+run <fcntl.h> global AT_EMPTY_PATH	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5cd56bf66d13425dee89425024850e77
+run <fcntl.h> global AT_STATX_SYNC_TYPE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9e2ca3485f565fdeab3bfb0a986eb193
+run <fcntl.h> global AT_STATX_SYNC_AS_STAT	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 245ec819cc8c52fdd9846eb7c0ed828b
+run <fcntl.h> global AT_STATX_FORCE_SYNC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 093dbf7ddd97ce8ce75acb6d308d6317
+run <fcntl.h> global AT_STATX_DONT_SYNC	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 65714c703219ad3880f3ad090ddaa546
+run <fcntl.h> global AT_RECURSIVE	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out edd98e8a52854967b573b295ecc238ec
+run <fcntl.h> global AT_EACCESS	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2e822815bcf5c72d1ee99a1977ce3287
+run <fcntl.h> global F_ULOCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f073bfb5cf8adededfbddbdd00bad33b
+run <fcntl.h> global F_LOCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 57040b736c79353f8b9d79ec645ace81
+run <fcntl.h> global F_TLOCK	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c7d6a9f9f1a6df8205709e3ec676fdc2
+run <fcntl.h> global F_TEST	
+ctx r1 g1 p0
+keys <fcntl.h>=fabfbe7632822f327a6571c1d8c62892ac908e7b1b7ddf167b4206e1b29c9f2a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 62aa73b80999d97404c069cef5439274
+end
+sum 56426-15319061521790005800

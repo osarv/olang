@@ -1,0 +1,2773 @@
+olang scope record
+read place E31b compiler/effects@26432
+run compiler/effects 6193-6633 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 9 1 1 | U U U U U U U U U | F | b0 b0 b000000000 b0 | 0:,V0,B0 1:,V0,B0 2:,V0,B0 3:,V0,B0 4:,V0,B0 5:,V0,B0 6:,V0,B0 7:,V0,B0 8:,V0,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:6193:6633 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 81b776a994eaa16ef425e2219d8b68f1
+run compiler/effects 4343-4474 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:4343:4474 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Facts&
+out a01c213a61c7775ac5fd04d6388b545f
+run compiler/effects 4976-5174 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:4976:5174 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Facts&	o0I64
+out 425b252847d7e532b7e1ea4970e29afe
+run compiler/effects 4647-4729 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 4343-4474 fn	1affd54ec14de0bf19f19b8213d5c4aa
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:4647:4729 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Facts&
+out 926c76d3614ebb97be17d576c2327b1f
+run compiler/effects 6775-7466 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 4343-4474 fn	1affd54ec14de0bf19f19b8213d5c4aa
+read compiler/effects 4647-4729 fn	18b1b8d334f4a14c9edf1479e379a1e5
+read compiler/effects 4976-5174 fn	0c7a54cff8454f067adcd2e6962cd659
+hits 0
+body 1 3 2 1 | U U U | F F | b0 b00 b000 b00 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/effects:6775:7466 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Facts&	o0compiler/effects:Fact
+out 482680d25605b818640b934dbe3a9cf2
+run compiler/effects 0-0 ctor compiler/effects:Facts	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Facts	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22
+marks 82bb656d0bfd3027c9a23d237a80c17f
+read -ctor	Array<I64, 6>
+read -ctor	Bool
+read -ctor	I64
+hits 0
+body 1 1 23 1 | V0 | F F F F F F F F F F F F F F F F F F F F F F F | b1 b00000000000000000000000 b0 b00000000000000000000000 | | | ||
+sum r b1 b1 b b b b b b a,compiler/effects:3751:3768 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 809cb14db0849f8ec52cc0bf5e6fb06f
+run compiler/effects 19129-19947 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+marks 7ef61ca6c6a1fbd7580614d5a1750433
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read std/prelude/map 3468-3514 fn <I64;I64;>	86f91b0f497c73631b7e92cff89727d4
+read std/prelude/map 5979-6292 fn <I64;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 5979-6292 fn <compiler/types:TypeId;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:link>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <Bool;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <compiler/effects:Facts;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/prelude/vec:Vec<I64>;>	652312eadcb9c7b54bf0276e2dba4089
+read std/prelude/vec 4660-4775 fn <std/prelude/vec:Vec<compiler/effects:link>;>	652312eadcb9c7b54bf0276e2dba4089
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/load:Module&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 31 15 1 | U U U U U U U U U U U U U U U U U U U U U U B4 U U U U B9 U B10 U | F F F F F F F F F F F F F F F | b1 b000000000000000 b0000000000000000000000000000000 b000000000000000 | 0:,V0 1:,V0 2:,B1 3:,V0 4:,B1 5:,V0,B1 6:,B1 7:,V0,B1 8:,B1 9:,V0,B1 10:,B1 11:,V0 12:,V0 13:,V0 14:,V0 15:,V0 16:,V0 17:,V0 18:,V0 19:,V0 20:,V0 21:,V0,V0 23:,V0 24:,V0 25:,V0 26:,V0,V0 28:,V0,V0 30:,V0 | | ||
+sum r b1 b1 b1 b1 b1 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U	o0mut compiler/effects:Effects&	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64
+out bbeb647040a4a9a0d8d9029eeb827807
+run compiler/effects 88089-88207 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 1 5 1 | U | F F F F F | b0 b00000 b0 b00000 | 0:,V0,P | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:88089:88207 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0Array<std/prelude/text:String&, 26>&
+out 8d10b134232fbd63335d5ffe44cf17da
+run compiler/effects 20396-20601 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/generic 171888-171954 fn	b090e1b17cc1a156db5113053f17be48
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 5 7 1 | U U U U B2 | F F F F F F F | b0 b0000000 b00000 b0000000 | 0:,V0 1:,V0,V0 2:,V0 3:,V0,B2 | | ||
+sum r b0 b0 b1 b1 b0 b b b a,compiler/effects:20396:20601 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64
+out 27a86a7fbc4858c6e4fba89a0a1f9c6b
+run compiler/effects 20187-20394 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+marks 7ef61ca6c6a1fbd7580614d5a1750433
+read compiler/effects 0-0 ctor compiler/effects:Effects	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/effects 20396-20601 fn	d08ec738ebe19fe0d472cf7acfef4b86
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/load 41507-41768 fn	1e7aff85d7a4b15af10922f7346ccbab
+read std/prelude/map 3468-3514 fn <I64;Bool;>	86f91b0f497c73631b7e92cff89727d4
+hits 0
+body 1 3 1 1 | U U U | F | b0 b0 b000 b0 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b0 b0 b1 b1 b0 b b b a,compiler/effects:20187:20394 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&
+out b353dab5395caa6b6fc07784df644e0c
+run compiler/effects 86901-87296 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 5 17 1 | U U U U U | F F F F F F F F F F F F F F F F F | b0 b00000000000000000 b00000 b00000000000000000 | 0:,V0,P 1:,V0,P 2:,V0,P 3:,V0,P 4:,V0,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:86901:87296 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0Array<std/prelude/text:String&, 25>&	o0I64	o0Array<std/prelude/text:String&, 7>&	o0I64	o0Array<std/prelude/text:String&, 12>&	o0I64	o0Array<std/prelude/text:String&, 5>&	o0I64	o0I64
+out 27e0f9fc800433eaff0e54a44bb20e62
+run compiler/effects 85004-85122 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 7 0 | | F F F F F F F | b b0000000 b b0000000 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out 497c193b56dbb90f7bbd43bd472e5baa
+run compiler/effects 84846-85002 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 85004-85122 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 3 1 | U | F F F | b0 b000 b0 b000 | 0: | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/effects:84846:85002 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64
+out 3e57d482f771191db9d8caf717312565
+run compiler/effects 85564-86844 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	3
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/load 0-0 ctor compiler/load:Module	2
+marks a049c53357799e9d82660757170b19d6
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/effects 0-0 ctor compiler/effects:Effects	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/effects 20187-20394 fn	bf2656e5872eeb9ba50bc6af00e7ed48
+read compiler/effects 84846-85002 fn	2527e907cb087614c67c5f4f89731cbc
+read compiler/effects 86901-87296 fn	e12fccedcc63d29802fce8e619ab297c
+read compiler/effects 88089-88207 fn	d6486c09ed59ec36446b073bccecc36d
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read compiler/typed 192494-192677 fn	00012d7933a12cf03f87a8ef92986690
+read compiler/typed 192961-193034 fn	ceee7194a806c9d9b85152d435ed0e62
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+hits 0
+body 1 19 6 1 | U U U U U U U U U U U U U U U B0 U U U | F F F F F F | b0 b000000 b0000000000000000000 b000000 | 0:,V0,V0 1:,V0,V0 2:,V0 3:,V0,B0 4:,V0 5:,V0,B0 6:,V0,B0 7:,V0,B0 8:,V0 9:,V0,B0 10:,V0 11:,V0 12:,V0 13:,V0 14:,V0,V0 16:,V0,B0 17:,V0,B0 18:,V0 | | ||
+sum r b0 b0 b10 b10 b00 b b b a,compiler/effects:85564:86844 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0I64
+out aaba32dbc6f949b06902629e24361efc
+run compiler/effects 21602-21779 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/effects 19129-19947 fn	57bdf077e905f022ca0072b8456aba84
+read compiler/effects 85564-86844 fn	977e632d36987efe6d736a33d8f5b2ef
+hits 0
+body 1 3 4 1 | U U U | F F F F | b1 b0000 b000 b0000 | 0:,V0 1:,B0 2:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64
+out 43be160ffb7848cef29a07ba27ca0246
+run compiler/effects 0-0 ctor compiler/effects:Effects	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67
+marks 4aa34d92d190a947404d09d71f97c2c9
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Bool
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+read compiler/typed 0-0 ctor compiler/typed:RefsKept	70a5a3159da452f59c621fe35ce873ce
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, Bool>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, I64>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, std/prelude/vec:Vec<I64>>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/effects:fret>>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/effects:fslot>>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/effects:given>>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/typed:Expr&>>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<compiler/effects:pair, Bool>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<compiler/types:TypeId, I64>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<compiler/types:TypeId, std/prelude/vec:Vec<compiler/effects:fpath>>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<Bool>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:Facts>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:given>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:link>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:part>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:pend>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/typed:Expr&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<mut compiler/typed:Body&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/vec:Vec<compiler/effects:link>>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 47 70 3 | U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F V2 F F V2 F F F F F F F F F F F F F F F F | b001 b0000000000000000000000000000000000000000000000000000000000000000000000 b00000000000000000000000000000000000000000000000 b0000000000000000000000000000000000000000000000000000000000000000000000 | 0:,V2 1:,V2 2:,V2 3:,V2 4:,V2 5:,V2 6:,V2 7:,V2 8:,V2 9:,V2 10:,V2 11:,V2 12:,V2 13:,V2 14:,V2 15:,V2 16:,V2 17:,V2 18:,V2 19:,V2 20:,V2 21:,V2 22:,V2 23:,V2 24:,V2 25:,V2 26:,V2 27:,V2 28:,V2 29:,V2 30:,V2 31:,V2 32:,V2 33:,V2 34:,V2 35:,V2 36:,V2 37:,V2 38:,V2 39:,V2 40:,V2 41:,V2 42:,V2 43:,V2 44:,V2 45:,V2 46:,V2 | | ||
+sum r;V0,V2,0,14052,14053,1,0,0;V2,V0,0,14052,14053,1,0,1;V1,V2,0,14058,14064,1,0,0;V2,V1,0,14058,14064,1,0,1 b001 b001 b10 b00 b00 b b b a,compiler/effects:0:0,compiler/effects:0:0,std/prelude/vec:3184:3188 t i,-1,-1,-1,0,1,2,3,-1,-1,4,5,6,7,-1,8,9,-1,-1,10,11,12,13,-1,-1,14,15,-1,16,17,-1,-1,-1,-1,-1,-1,18,19,-1,-1,20,21,-1,-1,-1,22,23,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,24 t,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U;1280:U	o0mut compiler/generic:Program&	o0std/prelude/vec:Vec<mut compiler/typed:Body&>
+out 57be6f1ffa4d6b16a962ce302e532745
+run compiler/effects 7533-7638 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Fact
+out a3715237254aca09c8b5edc4eb4d2f1b
+run compiler/effects 23168-23255 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+hits 0
+body 1 2 2 1 | U B0 | F F | b0 b00 b00 b00 | 0:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/effects:23168:23255 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0compiler/types:TypeId
+out 568622f5bb3930bc46ee017761c2a7fc
+run compiler/effects 0-0 ctor compiler/effects:pair	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:pair	0,1
+marks d5a249e23d03415c5278666a4643f5d6
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/effects:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out 5de49e0e57ab84539c1ab4ced38aeafb
+run compiler/effects 47161-47454 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:pair	0b052b714fde4121cb2da348cef7c0d3
+read compiler/typed 160139-160436 fn	6f0231ab3a0036824c1929bb3bf835d6
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+read std/prelude/map 5979-6292 fn <compiler/effects:pair;Bool;>	84d15a9aa2358f70b3ab648ac4f058d2
+hits 0
+body 1 7 5 2 | U U U U U U U | F F F F F | b10 b00000 b0000000 b00000 | 0:,V1 1:,V0 2:,B1 3:,V0 4:,V0 5:,B2 6:,V0 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/map:6065:6082,compiler/effects:47161:47454 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Lvalue&
+out cf7788c7380a3278a4dd708a608581b0
+run compiler/effects 49778-50238 fn	compiler/effects 49551-49776 fn	compiler/effects 47526-49549 fn	compiler/effects 45881-47090 fn	compiler/effects 45763-45879 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+in 0
+in 0
+in 0
+in 0
+mark compiler/typed 0-0 ctor compiler/typed:Alt	0,1
+mark compiler/typed 0-0 ctor compiler/typed:Arm	1,2,3,4
+mark compiler/typed 0-0 ctor compiler/typed:Bind	1
+mark compiler/typed 0-0 ctor compiler/typed:Block	1
+mark compiler/typed 0-0 ctor compiler/typed:Call	0,1
+mark compiler/typed 0-0 ctor compiler/typed:Capture	1
+mark compiler/typed 0-0 ctor compiler/typed:Clause	3,4
+mark compiler/typed 0-0 ctor compiler/typed:Collect	0,1
+mark compiler/typed 0-0 ctor compiler/typed:Cond	0,1,2
+mark compiler/typed 0-0 ctor compiler/typed:Elem	0,1
+mark compiler/typed 0-0 ctor compiler/typed:If	0,1,2
+mark compiler/typed 0-0 ctor compiler/typed:Join	0,2
+mark compiler/typed 0-0 ctor compiler/typed:Make	2,3
+mark compiler/typed 0-0 ctor compiler/typed:Match	0,1,2
+mark compiler/typed 0-0 ctor compiler/typed:Payload	0
+mark compiler/typed 0-0 ctor compiler/typed:Promote	0
+mark compiler/typed 0-0 ctor compiler/typed:Seq	0,1
+mark compiler/typed 0-0 ctor compiler/typed:Slice	0,1,2
+mark compiler/typed 0-0 ctor compiler/typed:Spawn	0,1
+mark compiler/typed 0-0 ctor compiler/typed:Text	0
+mark compiler/typed 0-0 ctor compiler/typed:Try	0,1
+marks 15508f6421fc37ed4fcf589d98a800bb
+read -ctor	I64
+read compiler/effects 47161-47454 fn	909743425fcf5c6d7090f72c5ddbaabb
+read compiler/typed 0-0 ctor compiler/typed:Alt	e8f7104afca0109ee12fc6e41faf1faa
+read compiler/typed 0-0 ctor compiler/typed:Arm	fa4b081f041e0b5e7b4cd1d2022ae5fc
+read compiler/typed 0-0 ctor compiler/typed:Bind	3a36c069620b8326f8aeb9b6f3ca1cd0
+read compiler/typed 0-0 ctor compiler/typed:Block	8f897d4fc5dddac7d5593d9625b0566b
+read compiler/typed 0-0 ctor compiler/typed:Call	c36b1901823863ee5389714cd02f9eea
+read compiler/typed 0-0 ctor compiler/typed:Capture	0f7a8c6b286c9d4529b923125b6a42a0
+read compiler/typed 0-0 ctor compiler/typed:Clause	9ae18995bfe3f45ebe08bef4e8ddd8b6
+read compiler/typed 0-0 ctor compiler/typed:Collect	a112ccfab8911961bef6d28f12af3121
+read compiler/typed 0-0 ctor compiler/typed:Cond	cd98adefba29f151a9ff918b45188a87
+read compiler/typed 0-0 ctor compiler/typed:Elem	6e56a7c62626e2df16331aefdc04632c
+read compiler/typed 0-0 ctor compiler/typed:If	643c5cef783042ddeecc56395378bd09
+read compiler/typed 0-0 ctor compiler/typed:Join	1a6d7ccb0e977e2088e7e3ae41036a2c
+read compiler/typed 0-0 ctor compiler/typed:Make	767cae19166a8d0d7b5f89ada1e72080
+read compiler/typed 0-0 ctor compiler/typed:Match	7916b24e98195d4f7d6c1abeff53ff3b
+read compiler/typed 0-0 ctor compiler/typed:Payload	76ba95767108153e3887a50079bc5970
+read compiler/typed 0-0 ctor compiler/typed:Promote	bf862eabee93b132e5197e12a6252ccd
+read compiler/typed 0-0 ctor compiler/typed:Seq	c0afbcb82a706817ab37465b93c91247
+read compiler/typed 0-0 ctor compiler/typed:Slice	a7beefca1937fcf12c3e4a1fd36d6e32
+read compiler/typed 0-0 ctor compiler/typed:Spawn	9429b4de17e4d1d43625b15366c882cd
+read compiler/typed 0-0 ctor compiler/typed:Text	e1c157c442851db01e8b679ceafe9c6e
+read compiler/typed 0-0 ctor compiler/typed:Try	56b0865ea34d369b7586982e16abdb61
+hits 0
+body 1 6 7 2 | U U U U U U | F F F F F F F | b10 b0000000 b000000 b0000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 4:,V0,V1 5:,V0,V1 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/map:6065:6082,compiler/effects:49778:50238 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Lvalue&
+body 1 5 10 2 | U U U U U | F F F F F F F F F F | b10 b0000000000 b00000 b0000000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 4:,V0,V1 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/map:6065:6082,compiler/effects:49551:49776 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Arm&
+body 1 26 59 2 | U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b00000000000000000000000000000000000000000000000000000000000 b00000000000000000000000000 b00000000000000000000000000000000000000000000000000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 4:,V0,V1 5:,V0,V1 6:,V0,V1 7:,V0,V1 8:,V0,V1 9:,V0,V1 10:,V0,V1 11:,V0,V1 12:,V0,V1 13:,V0,V1 14:,V0,V1 15:,V0,V1 16:,V0,V1 17:,V0,V1 18:,V0,V1 19:,V0,V1 20:,V0,V1 21:,V0,V1 22:,V0,V1 23:,V0,V1 24:,V0,V1 25:,V0,V1 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/map:6065:6082,compiler/effects:47526:49549 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Expr?&
+body 1 17 23 2 | U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F | b10 b00000000000000000000000 b00000000000000000 b00000000000000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 4:,V0,V1 5:,V0,V1 6:,V0,V1 7:,V0,V1 8:,V0,V1 9:,V0,V1 10:,V0,V1 11:,V0,V1 12:,V0,V1 13:,V0,V1 14:,V0,V1 15:,V0,V1 16:,V0,V1 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/map:6065:6082,compiler/effects:45881:47090 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Stmt&
+body 1 1 6 2 | U | F F F F F F | b10 b000000 b0 b000000 | 0:,V0,V1 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/map:6065:6082,compiler/effects:45763:45879 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Block?&
+out 1bc45f8843957794e93571b8ed3a47c6
+run compiler/effects 45622-45761 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/typed 0-0 ctor compiler/typed:Body	11
+marks dff7275ff68510bd83e94b40a39a8f10
+read -ctor	I64
+read compiler/effects 45763-45879 fn	d1a009757188b24b97b40fc65b4afcc2
+read compiler/typed 0-0 ctor compiler/typed:Body	b70a7d766d21f3b2ec7686364add6b30
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 3 4 1 | U U U | F F F F | b1 b0000 b000 b0000 | 0:,V0 1:,V0,V0 2:,V0,V0 | | ||
+sum r b1 b1 b1 b1 b0 b b b a,std/prelude/map:6065:6082 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64
+out fb2909687966ed9579e19acfd42a8f90
+run compiler/effects 35422-35609 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 0-0 ctor compiler/effects:pair	0b052b714fde4121cb2da348cef7c0d3
+read compiler/effects 45622-45761 fn	09515da6a515573f97f51a26e125bc26
+read std/prelude/map 7666-7764 fn <compiler/effects:pair;Bool;>	a3df79d624c5ad6625ff228e23d69dd0
+hits 0
+body 1 5 3 1 | U U U U U | F F F | b1 b000 b00000 b000 | 0:,V0 1:,B0 2:,V0 3:,B0 4:,V0 | | ||
+sum r b1 b1 b100 b100 b000 b b b a,std/prelude/map:6065:6082 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/types:TypeId	o0I64
+out d9faa06ce4a0da4486b264bcec88eb06
+run compiler/effects 0-0 ctor compiler/effects:fpath	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:fpath	0,1
+marks 265cc652384613e4ac839e31689aecaf
+read -ctor	I32
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 0 4 2 | | F F F F | b00 b0000 b b0000 | | | ||
+sum r;V0,V1,0,34498,34502,1,0,0 b00 b00 b00 b00 b00 b b b a,compiler/effects:0:0,compiler/effects:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/prelude/vec:Vec<I64>	o0compiler/types:TypeId
+out 8a1b2449073807d415815ab4db602383
+run compiler/effects 35043-35305 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34269-34339 fn	c963616c9d0b05a0f26e01da8fa14f33
+read compiler/types 34690-34762 fn	c43df76d84aaf0b9649473b59ae55cb1
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+read compiler/types 70865-70937 fn	cb8f17ef06a0997263071d4dc9ed94d2
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+hits 0
+body 1 8 3 1 | U U U U B0 U U B0 | F F F | b0 b000 b00000000 b000 | 0:,V0 1:,V0 2:,V0 3:,V0 5:,V0 6:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/effects:35043:35305 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0compiler/types:TypeId	o0compiler/types:TypeId
+out f20c52d3a7c9157f28e513e158e20eb1
+run compiler/effects 35705-36508 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/effects 0-0 ctor compiler/effects:fpath	1
+marks 0e096da65b19a2752d8501046b42eae7
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:fpath	3ee7d6ea4101119c5ed1cbee7e7d4809
+read compiler/effects 23168-23255 fn	2c7accb4f7ee3c0bfd8f0b1e04d0ab29
+read compiler/effects 35043-35305 fn	49088b16b3e812b1e5aab71e13359dc0
+read compiler/effects 35422-35609 fn	4c0f8976b01fa883885011876b109913
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+read compiler/types 72388-72457 fn	d6521026b258c7c738e9558dd0dfe636
+read std/prelude/array 17668-17731 fn <I64;>	1cf54824239b5d01ed4111cee66d9405
+read std/prelude/map 5979-6292 fn <compiler/types:TypeId;std/prelude/vec:Vec<compiler/effects:fpath>;>	f4a2adbe30fa1aa98d8a080575d7db3a
+read std/prelude/map 7053-7137 fn <compiler/types:TypeId;std/prelude/vec:Vec<compiler/effects:fpath>;>	8a3cd6175f44f72cdd3c59b4d7fa6f1b
+read std/prelude/map 7666-7764 fn <compiler/types:TypeId;std/prelude/vec:Vec<compiler/effects:fpath>;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:fpath>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <compiler/effects:fpath;>	652312eadcb9c7b54bf0276e2dba4089
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:fpath;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5431-5662 fn <I64;std/prelude/array:ArrayIter<I64>;?;>	28c13c53525c574bf1e1f61fdf6d8ff0
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:fpath;>	eaf54fc64b65a4b1358d16ada54dac7b
+hits 0
+body 1 38 17 2 | U U U U U U U U U U U B6 B6 U B6 U U U U U U B8 U B9 U B9 B9 U B9 B9 U U U B9 U U B0 U | F F V1 F F F F F F F F F F F F F F | b11 b00000000000000000 b00000000000000000000000000000000000000 b00100000000000000 | 0:,V1 1:,V0 2:,V0,V1 3:,V1 4:,B0 5:,V0,B0 6:,V1 7:,V0 8:,V0,V0 9:,V0 10:,V0 13:,B6,B6 15:,B6,B6 16:,B6,B6 17:,V1,B6 18:,V0 19:,V0 20:,V0,B8 22:,B8 23:,B8,B8 24:,B9 27:,B9,B9 29:,B9,B9 30:,B9 31:,B9 32:,B9 34:,B9,B9 35:,V1,B9 37:,V0,B0 | | ||
+sum r;V0,V1,0,35833,35887,0,0,0 b11 b11 b10 b10 b10 b b b a,std/prelude/map:6065:6082,std/prelude/vec:3184:3188 t,U i t i i c0/i/i f1010
+hid fs1;1280:U;1280:U;1280:U;1280:U;140032:B6;140033:U;140032:B9;140033:U	o0mut compiler/effects:Effects&	o0compiler/types:TypeId	o0compiler/types:TypeId	o0std/prelude/vec:Vec<compiler/effects:fpath>	o1std/prelude/map:Map<compiler/types:TypeId, std/prelude/vec:Vec<compiler/effects:fpath>>&	o1compiler/types:TypeId	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId	o0std/prelude/array:ArrayIter<I64>	o1Array<I64>&	o0std/prelude/vec:Vec<I64>	o1mut std/prelude/array:ArrayIter<I64>&	o0std/prelude/vec:Vec<compiler/effects:fpath>	o1mut compiler/effects:Effects&	o1compiler/types:TypeId	o0compiler/effects:fpath	o1std/prelude/vec:Vec<compiler/effects:fpath>&	o1I64	o0I64	o0std/prelude/array:ArrayIter<I64>	o1Array<I64>&	o0std/prelude/vec:Vec<I64>	o1mut std/prelude/array:ArrayIter<I64>&
+out 09e5e1e6cd467669972a0fe0bf43a719
+run compiler/effects 42219-42312 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 35043-35305 fn	49088b16b3e812b1e5aab71e13359dc0
+read compiler/effects 35705-36508 fn	7555f39657fbbb2295d72e5f2c355272
+read std/prelude/vec 5133-5172 fn <compiler/effects:fpath;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+hits 0
+body 1 4 2 1 | U U B0 U | F F | b1 b00 b0000 b00 | 0:,V0 1:,V0,V0 3:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/map:6065:6082 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/types:TypeId	o0std/prelude/vec:Vec<compiler/effects:fpath>	o1mut compiler/effects:Effects&	o1compiler/types:TypeId
+out 55b5f3f95e925c2ec6479cbb53ecf6f1
+run compiler/effects 53471-53858 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/typed 0-0 ctor compiler/typed:LocalUses	110aa9e90afc57a1b34e948a648c82f9
+read compiler/typed 42949-43531 fn	cdd122b76c047f47e4a0d5e2c7678227
+read compiler/typed 47282-47905 fn	fd854f8b116def28751f3e1074ef139b
+read std/prelude/vec 4660-4775 fn <Bool;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <compiler/typed:Local;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <Bool;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:Local;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 7906-7950 fn <Bool;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 8 10 2 | U U U U U U U B2 | F F F F F F F F F F | b10 b0000000000 b00000000 b0000000000 | 0:,V0,V1,V0 1:,V0 2:,V1 3:,V0,V0,V0,V1,V0 4:,V0 5:,V0 6:,V1 | | ||
+sum r;V1,V0,0,53526,53527,0,0,0 b10 b10 b11 b10 b00 b b b a,compiler/typed:43013:43028,compiler/effects:53471:53858 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Body&	o0compiler/typed:LocalUses	o1compiler/types:Table&	o1compiler/typed:Body&
+out 95ee038ecbca2097523795cd9cb5f98f
+run compiler/effects 53471-53858 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 95ee038ecbca2097523795cd9cb5f98f
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/typed 42949-43531 fn	7aebe0cc654b39b9339d79674f628cd0
+read compiler/typed 47282-47905 fn	ac820612b36d35dfe825c313b09bcbd8
+read std/prelude/vec 4660-4775 fn <Bool;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <compiler/typed:Local;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <Bool;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:Local;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 7906-7950 fn <Bool;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 8 10 2 | U U U U U U U B2 | F F F F F F F F F F | b10 b0000000000 b00000000 b0000000000 | 0:,V0,V1,B0 1:,V0 2:,V1 3:,V0,V0,V0,V1,B0 4:,V0 5:,V0 6:,V1 | | ||
+sum r b10 b10 b11 b10 b00 b b b a,std/prelude/map:6065:6082,compiler/effects:53471:53858 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Body&	o0compiler/typed:LocalUses	o1compiler/types:Table&	o1compiler/typed:Body&
+out b53c79b45231860b575a39648184ec79
+run compiler/effects 0-0 ctor compiler/effects:coldMark	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:coldMark	0,1
+marks e84b4abfc19fdca062af228cf2505050
+read -ctor	Bool
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/effects:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0Bool
+out c68c5d48c9e85bee13bda962c52df1cb
+run compiler/effects 62153-62264 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 0-0 ctor compiler/effects:coldMark	0b052b714fde4121cb2da348cef7c0d3
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+hits 0
+body 1 2 1 1 | U U | F | b0 b0 b00 b0 | 0:,V0 1:,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:62153:62264 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&
+out 6bb89dd55f53ee40277d6eba8815cabc
+run compiler/effects 80748-81071 fn	compiler/effects 80212-80635 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/typed 0-0 ctor compiler/typed:Elem	0
+mark compiler/typed 0-0 ctor compiler/typed:Payload	0
+marks f7239734c0a73613c6a6b3e053ef9baa
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/typed 0-0 ctor compiler/typed:Elem	6e56a7c62626e2df16331aefdc04632c
+read compiler/typed 0-0 ctor compiler/typed:Payload	76ba95767108153e3887a50079bc5970
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+read compiler/types 45753-47463 fn	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 5 6 2 | U U U U U | F F F F F F | b10 b000000 b00000 b000000 | 0:,V0,V1 1:,V0 2:,V0 3:,V0,V1 4:,V0,V1 | | ||
+sum r b10 b10 b00 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/effects:80748:81071 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Expr&
+body 1 4 6 2 | U U U U | F F F F F F | b10 b000000 b0000 b000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 | | ||
+sum r b10 b10 b00 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/effects:80212:80635 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Lvalue&
+out 8cc93081727a3064ab94e602c59c17f0
+run compiler/effects 0-0 ctor compiler/effects:root	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:root	0,1
+marks ac4adec8842ab011227d34f5f86c9222
+read -ctor	Bool
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/effects:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0Bool
+out b8fb5c69293269cdb234ec4651b5fbc6
+run compiler/effects 81802-82170 fn	compiler/effects 81174-81800 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/typed 0-0 ctor compiler/typed:Elem	0
+mark compiler/typed 0-0 ctor compiler/typed:Payload	0
+mark compiler/typed 0-0 ctor compiler/typed:Seq	1
+marks 6fd4ecd056d3a3fb5d927e78252adde4
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:root	0b052b714fde4121cb2da348cef7c0d3
+read compiler/typed 0-0 ctor compiler/typed:Elem	6e56a7c62626e2df16331aefdc04632c
+read compiler/typed 0-0 ctor compiler/typed:Payload	76ba95767108153e3887a50079bc5970
+read compiler/typed 0-0 ctor compiler/typed:Seq	c0afbcb82a706817ab37465b93c91247
+read compiler/typed 160139-160436 fn	6f0231ab3a0036824c1929bb3bf835d6
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+hits 0
+body 1 4 5 2 | U B1 U U | F F F F F | b00 b00000 b0000 b00000 | 0:,V0,V1 2:,V0,V1 3:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/effects:81802:82170,compiler/effects:81802:82170 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Expr&
+body 1 10 9 2 | U U U U U U U U U U | F F F F F F F F F | b00 b000000000 b0000000000 b000000000 | 0:,B1 1:,V0,V1 2:,V0,V1 3:,V1 4:,V0 5:,B3 6:,V0,V1 7:,V0,V1 8:,B5 9:,B6 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/effects:81174:81800,compiler/effects:81174:81800 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Lvalue&
+out 218f43b3993e3d9e2675d816d92cbd05
+run compiler/effects 32268-32338 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out b1e39502daf943f2d087685e9b685676
+run compiler/effects 79833-80124 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 32268-32338 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 4 4 1 | U U U U | F F F F | b1 b0000 b0000 b0000 | 0:,V0 1:,V0 2: 3:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64
+out b47d4d8814819b91755f6416dd3422c4
+run compiler/effects 78629-78887 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 79833-80124 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/effects 80212-80635 fn	551cec0e8b8a5c896c1389486dbfdfae
+read compiler/effects 81174-81800 fn	cf56ac731702761ddb93b81765ee6a71
+hits 0
+body 1 3 3 2 | U U U | F F F | b10 b000 b000 b000 | 0:,V0,V1 1:,V0,V1 2:,V0 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/effects:78629:78887 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Lvalue&
+out 9717fec60fa81f8a4884826710c82132
+run compiler/effects 84438-84829 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/generic 0-0 ctor compiler/generic:Program	1
+marks 46f8a6a53bbe52faf08160d63d6317d4
+read -ctor	Bool
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:pair	0b052b714fde4121cb2da348cef7c0d3
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read std/prelude/map 5979-6292 fn <compiler/effects:pair;Bool;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7053-7137 fn <compiler/effects:pair;Bool;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/map 7666-7764 fn <compiler/effects:pair;Bool;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 5133-5172 fn <compiler/names:Entry;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/names:Table&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/names:Entry;>	442c72fb9063f8bdc126d0eee7d856dc
+read std/prelude/vec 6401-6448 fn <mut compiler/names:Table&;>	f0004e4823ff89d9c30e4c6dd0376f7b
+hits 0
+body 1 9 8 1 | U U U U U B3 U U U | F F F F F F F F | b1 b00000000 b000000000 b00000000 | 0:,B0 1:,V0 2:,V0 3:,V0 4:,V0,V0 6:,V0 7:,V0,V0 8:,V0 | | ||
+sum r b1 b1 b100 b100 b000 b b b a,std/prelude/map:6065:6082 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0compiler/source:NameId	o0mut compiler/names:Table&	o1std/prelude/vec:Vec<mut compiler/names:Table&>&	o1I64	o0compiler/names:Entry	o1std/prelude/vec:Vec<compiler/names:Entry>&	o1I64
+out eef5e409a38ac03a759f93ee56443c10
+run compiler/effects 76486-76688 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+read std/prelude/map 7053-7137 fn <compiler/types:TypeId;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 4 3 1 | U U U U | F F F | b1 b000 b0000 b000 | 0:,V0 1:,V0 2:,V0 3:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/types:TypeId
+out ab433f442d3f30d8692cc0093f8cfaf4
+run compiler/effects 76810-77660 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 76486-76688 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34269-34339 fn	c963616c9d0b05a0f26e01da8fa14f33
+read compiler/types 34500-34568 fn	8f28bfd58126e605ffe2570bcfabc30d
+read compiler/types 35169-35238 fn	515af8c060be0f940383f308ea132590
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+read compiler/types 51048-51117 fn	cd16acb5ff5e998ddc63d28c8075cb0e
+read compiler/types 70865-70937 fn	cb8f17ef06a0997263071d4dc9ed94d2
+read compiler/types 72388-72457 fn	d6521026b258c7c738e9558dd0dfe636
+read compiler/types 72458-72525 fn	e308ad2cb4bdbe43fd294fa4ded8b36d
+read compiler/types 72592-72661 fn	89f6f21bbea4e8afc8b76045928f926a
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+hits 0
+body 1 20 17 1 | U U U U U U U U B2 U U U U U U U U U U U | F F F F F F F F F F F F F F F F F | b1 b00000000000000000 b00000000000000000000 b00000000000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 9:,V0 10:,V0,V0 11:,V0 12:,V0 13:,V0,V0 14:,V0 15:,V0 16:,V0,V0 17:,V0 18:,V0 19:,V0 | | ||
+sum r b1 b1 b100 b000 b000 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/types:TypeId	o0I64	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId
+out 18b96b537d22fbffbdb16c2267c5e69c
+run compiler/effects 0-0 ctor compiler/effects:fslot	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:fslot	0,1,2
+marks 444f735ba889e5a540692c917e38b891
+read -ctor	I32
+read -ctor	I64
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 0 6 2 | | F F F F F F | b00 b000000 b b000000 | | | ||
+sum r;V0,V1,0,34693,34697,1,0,0 b00 b00 b000 b000 b000 b b b a,compiler/effects:0:0,compiler/effects:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0std/prelude/vec:Vec<I64>	o0compiler/types:TypeId
+out b08888b1581481cdc1d6ba47cbc49ca8
+run compiler/effects 36578-36947 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:fpath	0,1
+marks 265cc652384613e4ac839e31689aecaf
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:fpath	3ee7d6ea4101119c5ed1cbee7e7d4809
+read compiler/effects 0-0 ctor compiler/effects:fslot	42015f30cac53756ef585bdfeaba291f
+read compiler/effects 35043-35305 fn	49088b16b3e812b1e5aab71e13359dc0
+read compiler/effects 35705-36508 fn	7555f39657fbbb2295d72e5f2c355272
+read std/prelude/map 5979-6292 fn <I64;std/prelude/vec:Vec<compiler/effects:fslot>;>	f4a2adbe30fa1aa98d8a080575d7db3a
+read std/prelude/map 7053-7137 fn <I64;std/prelude/vec:Vec<compiler/effects:fslot>;>	8a3cd6175f44f72cdd3c59b4d7fa6f1b
+read std/prelude/map 7666-7764 fn <I64;std/prelude/vec:Vec<compiler/effects:fslot>;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:fslot>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <compiler/effects:fslot;>	652312eadcb9c7b54bf0276e2dba4089
+read std/prelude/vec 5133-5172 fn <compiler/effects:fpath;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/effects:fpath;>	eaf54fc64b65a4b1358d16ada54dac7b
+read std/prelude/vec 6401-6448 fn <compiler/typed:Local;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:LocalId;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 19 13 2 | U U U U U U U U B4 U U B4 U B5 B5 U U B0 U | F F V1 F F F F F F F F F F | b11 b0000000000000 b0000000000000000000 b0010000000000 | 0:,V0 1:,V0,V1 2:,V1 3:,V1 4:,V0,V0 5:,V0 6:,V0 7:,V0 9:,V0 10:,V0,B4 12:,B4 13:,B4,B4 15:,B5,B5 16:,V1,B5 18:,V0,B0 | | ||
+sum r;V0,V1,0,36653,36706,0,0,0 b11 b11 b10 b10 b10 b b b a,std/prelude/map:6065:6082,std/prelude/vec:3184:3188 t,U i t i i c0/i/i f1010
+hid fs1;1280:U;1280:U;140288:U;140289:B5;140290:U	o0mut compiler/effects:Effects&	o0I64	o0std/prelude/vec:Vec<compiler/effects:fslot>	o1std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/effects:fslot>>&	o1I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0std/prelude/vec:Vec<compiler/effects:fpath>	o1mut compiler/effects:Effects&	o1compiler/types:TypeId	o0compiler/effects:fpath	o1std/prelude/vec:Vec<compiler/effects:fpath>&	o1I64
+out fcc0595b32b1a6c9e6e28de21e979974
+run compiler/effects 37029-37215 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 5133-5172 fn <compiler/typed:Local;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/typed:Local;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 4 7 1 | U U U U | F F F F F F F | b0 b0000000 b0000 b0000000 | 0:,V0,V0 1:,V0 2:,V0 3:,V0 | | ||
+sum r b0 b0 b10 b10 b00 b b b a,compiler/effects:37029:37215 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64
+out 3dda9dfbc3ee1a6eac6b508104099c2a
+run compiler/effects 0-0 ctor compiler/effects:pend	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:pend	0,1,2,3
+marks 8e1762916a859f98b371914480254a4a
+read -ctor	I64
+read -ctor	compiler/typed:Expr
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 1 7 2 | U | F F F F F F F | b01 b0000000 b0 b0000000 | 0:,V1 | | ||
+sum r;V0,V1,0,13117,13118,1,0,0 b01 b01 b001 b000 b000 b b b a,compiler/effects:0:0,std/prelude/vec:3184:3188 t i,-1,-1,-1,0 t,U i i c0/i/i f0010
+hid fs1;1280:U	o0I64	o0I64	o0compiler/typed:Expr&
+out 630222b810f8409ad31b5e1e8124b69b
+run compiler/effects 42405-42779 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:fslot	1
+mark compiler/effects 0-0 ctor compiler/effects:pend	3
+mark compiler/typed 0-0 ctor compiler/typed:Call	1
+marks 838f2e83c5daa5464a0eaedae415401e
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:fslot	42015f30cac53756ef585bdfeaba291f
+read compiler/effects 0-0 ctor compiler/effects:pend	d77d2be69b5f1c64f7f6fb514c0a871f
+read compiler/effects 36578-36947 fn	890641c2ef1d2b1d78fe8bbe1bb9832a
+read compiler/effects 37029-37215 fn	ded200e46e9457fae91ff858807baf95
+read compiler/typed 0-0 ctor compiler/typed:Call	c36b1901823863ee5389714cd02f9eea
+read std/prelude/vec 4660-4775 fn <compiler/effects:pend;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 5133-5172 fn <compiler/effects:fslot;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/effects:fslot;>	b51ed69aecd7674ca5263126de5a48dc
+hits 0
+body 1 12 14 2 | B0 U U U U B3 U U B3 V0 V0 U | F F F F F F F F F F F F F V0 | b10 b00000000000000 b000000000000 b00000000000000 | 0:,V0,B0 1:,B0 2:,V0 3:,B0 4:,B0,B3 6:,V1,V0 7:,B0,B0 11:,V0,V0 | | ||
+sum r;V1,V0,0,42655,42657,0,0,0 b10 b10 b1000 b1000 b1000 b b b a,std/prelude/map:6065:6082,compiler/effects:42405:42779 t i t i i c0/i/i f0010
+hid fs1;140800:U;140801:U;140802:V1	o0mut compiler/effects:Effects&	o0I64	o0I64	o0compiler/typed:Call&	o0std/prelude/vec:Vec<compiler/effects:fslot>	o1mut compiler/effects:Effects&	o1I64	o0compiler/effects:fslot	o1std/prelude/vec:Vec<compiler/effects:fslot>&	o1I64	o0compiler/effects:fslot	o1std/prelude/vec:Vec<compiler/effects:fslot>&	o1I64
+out fe4372fa092eaf1e8c265ab8813dffbd
+run compiler/effects 82348-82884 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 81174-81800 fn	cf56ac731702761ddb93b81765ee6a71
+read compiler/types 45753-47463 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+hits 0
+body 1 7 7 2 | U U B1 U U U U | F F F F F F F | b10 b0000000 b0000000 b0000000 | 0:,V0 1:,V0,V1 3:,V0 4:,V0,V1 5:,V0 6:,V0,V1 | | ||
+sum r b10 b10 b00 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/effects:82348:82884 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Expr&
+out 9ced13e6bc4340584c5fe392b3299c56
+run compiler/effects 0-0 ctor compiler/effects:link	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:link	0,1,2
+marks 796223cccc91e77c7a2dd997aee65dde
+read -ctor	I64
+hits 0
+body 1 0 6 1 | | F F F F F F | b0 b000000 b b000000 | | | ||
+sum r b0 b0 b000 b000 b000 b b b a,compiler/effects:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0I64
+out e280645c433ecc938d5ed754e807ebd5
+run compiler/effects 84194-84436 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 80212-80635 fn	551cec0e8b8a5c896c1389486dbfdfae
+read compiler/effects 81174-81800 fn	cf56ac731702761ddb93b81765ee6a71
+read std/prelude/map 7666-7764 fn <I64;I64;>	a3df79d624c5ad6625ff228e23d69dd0
+hits 0
+body 1 5 3 2 | U B0 U U U | F F F | b10 b000 b00000 b000 | 0:,V0,V1 2:,V0,V1 3:,V0 4:,V0 | | ||
+sum r b10 b10 b00 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/effects:84194:84436 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Lvalue&	o0I64	o0I64
+out f56235cfb58ae69635e599ee3ebfb9c7
+run compiler/effects 61234-61431 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/typed 0-0 ctor compiler/typed:Call	0
+marks 7356b6ac3fafe648f6cc4e312bfbad64
+read compiler/typed 0-0 ctor compiler/typed:Call	c36b1901823863ee5389714cd02f9eea
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 2 4 2 | U B1 | F F F F | b00 b0000 b00 b0000 | 0:,V0,V0 | | ||
+sum r b00 b00 b10 b10 b00 b b b a,compiler/effects:61234:61431,compiler/effects:61234:61431 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0compiler/typed:Call&	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64
+out 3b17df0ddcf762edd9daaed25bf7a169
+run compiler/effects 83648-84192 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 61234-61431 fn	7b798d30d6a6c2e61062bc7b29dbda17
+read compiler/effects 81174-81800 fn	cf56ac731702761ddb93b81765ee6a71
+read compiler/effects 84194-84436 fn	d7daeaa31b94bfd6f8580f70862c902a
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+read compiler/types 45753-47463 fn	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 10 8 2 | U U U U B3 U U U U U | F F F F F F F F | b10 b00000000 b0000000000 b00000000 | 0:,V0 1:,V0 2:,V0,V1 3:,V0,V1 5:,V0,V1 6:,V0,V1 7:,V0 8:,V0 9:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b00 b b b a,std/prelude/vec:4512:4530,compiler/effects:83648:84192 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Expr&	o0I64
+out 2f6a46b0600b9feed3dfc87368f10e50
+run compiler/effects 83054-83384 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 0-0 ctor compiler/effects:link	6e4cd2328a6050f3db3a421f04c4d58a
+read compiler/effects 80748-81071 fn	ff760bbe38e396ee0d0b898076703b54
+read compiler/effects 82348-82884 fn	6a7abe4be430caa4b9b7f54778f2ab55
+read compiler/effects 83648-84192 fn	1ebd3c4bb410ef5151fb56f06ae8731d
+read std/prelude/vec 4660-4775 fn <compiler/effects:link;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 9 6 2 | U U U U U U U U U | F F F F F F | b10 b000000 b000000000 b000000 | 0:,V0,V1 1:,B1 2:,V0 3:,V0,V1 4:,B3 5:,V0 6:,V0,V1 7:,B6 8:,V0 | | ||
+sum r b10 b10 b1000 b1000 b0000 b b b a,std/prelude/vec:4512:4530,compiler/effects:83054:83384 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0I64	o0compiler/typed:Expr&	o0I64
+out 2692bab1803772fd056c775906b5ab90
+run compiler/effects 23341-23652 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 23168-23255 fn	2c7accb4f7ee3c0bfd8f0b1e04d0ab29
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:Local;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:LocalId;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+hits 0
+body 1 11 6 1 | U U U U U U U B4 U U U | F F F F F F | b0 b000000 b00000000000 b000000 | 0:,V0 1:,V0 2:,V0 3:,V0,V0 4:,V0 5:,V0 6:,V0 8:,V0 9:,V0 10:,V0 | | ||
+sum r b0 b0 b10 b10 b00 b b b a,compiler/effects:23341:23652 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64
+out edf0c452bce213b82fc0574fd411fc20
+run compiler/effects 72383-72981 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 78629-78887 fn	fc5f912cb1a49b88bd15f1d0a468bcb1
+read compiler/effects 79833-80124 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/effects 80212-80635 fn	551cec0e8b8a5c896c1389486dbfdfae
+read compiler/effects 81174-81800 fn	cf56ac731702761ddb93b81765ee6a71
+hits 0
+body 1 5 6 2 | U U U U U | F F F F F F | b10 b000000 b00000 b000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0 4:,V0,V1 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/effects:72383:72981 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Expr&
+out a74751ddc748b0160cb2477ba9d345ce
+run compiler/effects 32480-33631 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 8 2 | | F F F F F F F F | b00 b00000000 b b00000000 | | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/effects:32480:33631,compiler/effects:32480:33631 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Facts&	o0compiler/effects:Facts&	o0I64
+out e7b949f4a39e67f8c57946537bf7b26d
+run compiler/effects 8141-9219 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/types 21931-22017 fn	dd0e6ca4696e358a196ad7859f7e4559
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+hits 0
+body 1 4 7 1 | U U B0 U | F F F F F F F | b0 b0000000 b0000 b0000000 | 0:,B0 1:,V0 3:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/effects:8141:9219 t i t i i c0/i/i f0010
+hid fs1	o0compiler/types:Table&	o0compiler/types:TypeId	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64
+out e5853c71343c38badfa50d388c1a0a32
+run compiler/effects 75595-76400 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/typed 0-0 ctor compiler/typed:Call	1
+marks a17c52dedc7a7b78f781a095cc8fccc6
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/typed 0-0 ctor compiler/typed:Call	c36b1901823863ee5389714cd02f9eea
+read compiler/typed 21743-21864 fn	24a64c98acfc57df160a03c8d816eaa3
+read compiler/typed 44143-44519 fn	93ec1936ffbe86a01196aa44f94be031
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34690-34762 fn	c43df76d84aaf0b9649473b59ae55cb1
+read compiler/types 34763-34817 fn	99df16af957139a554ad51a3027dc77d
+read compiler/types 34845-34915 fn	b54a7bc988c4ebbd0d7c2ade15d17e1f
+read compiler/types 34916-34986 fn	56923687717b623eb0589819f4bd62a9
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+read compiler/types 45753-47463 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/types 49458-49585 fn	889e4530caacea72af65e3ea1415f93b
+read compiler/types 50011-50084 fn	0e0db143c6e601f3df217e4dbbbd3ac9
+read compiler/types 51048-51117 fn	cd16acb5ff5e998ddc63d28c8075cb0e
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 18 11 2 | U U B0 U U U U U U U U U U B0 U U U U | F F F F F F F F F F F | b10 b00000000000 b000000000000000000 b00000000000 | 0:,V1 1:,V0,V0 3:,V0 4:,V0,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0 10:,V0 11:,V0 12:,V0 14:,V0 15:,V0 16:,V0 17:,V0,V0,V0 | | ||
+sum r b10 b10 b100 b100 b000 b b b a,std/prelude/vec:4512:4530,compiler/effects:75595:76400 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Call&	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId	o0I64	o0compiler/types:TypeId	o0compiler/types:TypeId
+out bf8a56413c6a259ca46c4db58f524a9d
+run compiler/effects 75595-76400 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in bf8a56413c6a259ca46c4db58f524a9d
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/typed 0-0 ctor compiler/typed:Call	1
+marks a17c52dedc7a7b78f781a095cc8fccc6
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/typed 0-0 ctor compiler/typed:Call	c36b1901823863ee5389714cd02f9eea
+read compiler/typed 21743-21864 fn	24a64c98acfc57df160a03c8d816eaa3
+read compiler/typed 44143-44519 fn	0f01f2bd86da7f7c66c97ca35528192f
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34690-34762 fn	c43df76d84aaf0b9649473b59ae55cb1
+read compiler/types 34763-34817 fn	99df16af957139a554ad51a3027dc77d
+read compiler/types 34845-34915 fn	b54a7bc988c4ebbd0d7c2ade15d17e1f
+read compiler/types 34916-34986 fn	56923687717b623eb0589819f4bd62a9
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+read compiler/types 45753-47463 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/types 49458-49585 fn	889e4530caacea72af65e3ea1415f93b
+read compiler/types 50011-50084 fn	0e0db143c6e601f3df217e4dbbbd3ac9
+read compiler/types 51048-51117 fn	cd16acb5ff5e998ddc63d28c8075cb0e
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 18 11 2 | U U B0 U U U U U U U U U U B0 U U U U | F F F F F F F F F F F | b10 b00000000000 b000000000000000000 b00000000000 | 0:,V1 1:,V0,V0 3:,V0 4:,V0,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0 10:,V0 11:,V0 12:,V0 14:,V0 15:,V0 16:,V0 17:,V0,V0,V0 | | ||
+sum r b10 b10 b100 b100 b000 b b b a,std/prelude/vec:4512:4530,compiler/effects:75595:76400 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Call&	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0Array<compiler/types:TypeId>&	o1compiler/types:Table&	o1compiler/types:ListId	o0I64	o0compiler/types:TypeId	o0compiler/types:TypeId
+out 67c5929ab557239cb1aea26cea58eed2
+run compiler/effects 70176-70692 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/typed 0-0 ctor compiler/typed:Make	2
+marks e34e0229b185e9ddb19518d5c4d1a9e3
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/typed 0-0 ctor compiler/typed:Make	767cae19166a8d0d7b5f89ada1e72080
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34500-34568 fn	8f28bfd58126e605ffe2570bcfabc30d
+read compiler/types 34569-34639 fn	a6a8e99c6abe45c75b2b92afdb9df9e8
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+read compiler/types 49458-49585 fn	889e4530caacea72af65e3ea1415f93b
+read compiler/types 50011-50084 fn	0e0db143c6e601f3df217e4dbbbd3ac9
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+hits 0
+body 1 10 6 2 | U U U B0 U U B0 U U U | F F F F F F | b00 b000000 b0000000000 b000000 | 0:,V0 1:,V0 2:,V0 4:,V0 5:,V0 7:,V0 8:,V0 9:,V0 | | ||
+sum r b00 b00 b000 b000 b000 b b b a,compiler/effects:70176:70692,compiler/effects:70176:70692 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/types:TypeId	o0compiler/typed:Make&
+out c5304cc83bfe8271f55147e9ecc75192
+run compiler/effects 78996-79645 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/typed 0-0 ctor compiler/typed:Arm	4
+mark compiler/typed 0-0 ctor compiler/typed:Cond	1,2
+mark compiler/typed 0-0 ctor compiler/typed:Match	1
+marks 9b8dd14876c1d04c2a681740e43f52e1
+read -ctor	I64
+read compiler/effects 32268-32338 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/effects 81802-82170 fn	24e0cc161aa38f3e4d7d45b49af17575
+read compiler/typed 0-0 ctor compiler/typed:Arm	fa4b081f041e0b5e7b4cd1d2022ae5fc
+read compiler/typed 0-0 ctor compiler/typed:Cond	cd98adefba29f151a9ff918b45188a87
+read compiler/typed 0-0 ctor compiler/typed:Match	7916b24e98195d4f7d6c1abeff53ff3b
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+hits 0
+body 1 7 12 2 | U U U U U U U | F F F F F F F F F F F F | b00 b000000000000 b0000000 b000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 4:,V0 5: 6:,V0 | | ||
+sum r b00 b00 b000 b000 b000 b b b a,compiler/effects:78996:79645,compiler/effects:78996:79645 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Expr&	o0I64
+out 67ed9c79eb154dbaa2ee263d2458769d
+run compiler/effects 60850-61232 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 61234-61431 fn	7b798d30d6a6c2e61062bc7b29dbda17
+hits 0
+body 1 2 5 2 | U U | F F F F F | b00 b00000 b00 b00000 | 0:,V0,V1 1:,V0,V1 | | ||
+sum r b00 b00 b10 b10 b00 b b b a,compiler/effects:60850:61232,compiler/effects:60850:61232 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0compiler/typed:Expr&
+out 39a00fc01acda4102bc588f4d4767fe2
+run compiler/effects 59418-60018 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 23168-23255 fn	2c7accb4f7ee3c0bfd8f0b1e04d0ab29
+read compiler/effects 42219-42312 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/effects 60850-61232 fn	f14696d27feeba881e574195ce0a8892
+read compiler/effects 78996-79645 fn	9f315f58add5a84b2a0d3fd044fdfd21
+read compiler/typed 159594-160137 fn	d170dbedd4cc16f3c14b1a14be26c12a
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+read compiler/types 45753-47463 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/map 5979-6292 fn <I64;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 5979-6292 fn <I64;std/prelude/vec:Vec<compiler/typed:Expr&>;>	e64a455de30249a902626f5e5c173c4b
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/map 7513-7609 fn <I64;std/prelude/vec:Vec<compiler/typed:Expr&>;>	54cc25e19c647528c06a88ab2efc50be
+read std/prelude/map 7666-7764 fn <I64;std/prelude/vec:Vec<compiler/typed:Expr&>;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/typed:Expr&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <compiler/typed:Expr&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 20 5 2 | U U U U U U U U U U U U U U U U U U U U | F F F F F | b10 b00000 b00000000000000000000 b00000 | 0:,V1 1:,V0 2:,V0 3:,V0 4:,V0,V0 5:,V0,V0 6:,V0,V1 7:,V0 8:,V0 9:,V0 10:,V0,V0 11:,V0,V0 12:,V0,V1 13:,V0 14:,V0 15:,V0,V1 16:,V0 17:,V0 18:,V0,V1 19:,V0 | | ||
+sum r;V1,V0,0,59585,59613,0,0,0 b10 b10 b101 b100 b100 b b b a,std/prelude/vec:3184:3188,compiler/effects:59418:60018 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U	o0mut compiler/effects:Effects&	o0I64	o0compiler/typed:Expr&	o0mut std/prelude/vec:Vec<compiler/typed:Expr&>&	o1mut std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/typed:Expr&>>&	o1I64	o0mut std/prelude/vec:Vec<compiler/typed:Expr&>&	o1mut std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/typed:Expr&>>&	o1I64
+out 24c4db1b24edc20ac8ee714e9af3d1c8
+run compiler/effects 22450-22663 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/typed:Local;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 4 11 1 | U U U B2 | F F F F F F F F F F F | b0 b00000000000 b0000 b00000000000 | 0:,V0,V0 1:,V0 2:,V0 | | ||
+sum r b0 b0 b100 b100 b000 b b b a,compiler/effects:22450:22663 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0I64	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64
+out e169e6c4066ba461b575c04200bcefa9
+run compiler/effects 74978-75246 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/typed 42949-43531 fn	cdd122b76c047f47e4a0d5e2c7678227
+read compiler/typed 46326-46678 fn	eab0415b39ce78a55c8dc25770b83f5b
+read std/prelude/map 5979-6292 fn <I64;Bool;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7053-7137 fn <I64;Bool;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/map 7666-7764 fn <I64;Bool;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 7 4 1 | U U U U B0 U U | F F F F | b1 b0000 b0000000 b0000 | 0:,V0 1:,V0 2:,V0,V0 3:,V0,V0,V0 5:,V0,V0,V0,V0,V0 6:,V0 | | ||
+sum r b1 b1 b10 b10 b00 b b b a,compiler/typed:43013:43028 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0compiler/typed:LocalUses	o1compiler/types:Table&	o1mut compiler/typed:Body&
+out c3b7475ae78e0c8c7898cf1380bcddf8
+run compiler/effects 74978-75246 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in c3b7475ae78e0c8c7898cf1380bcddf8
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/typed 42949-43531 fn	7aebe0cc654b39b9339d79674f628cd0
+read compiler/typed 46326-46678 fn	480c147187c729a26acd07071df3abca
+read std/prelude/map 5979-6292 fn <I64;Bool;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7053-7137 fn <I64;Bool;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/map 7666-7764 fn <I64;Bool;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 7 4 1 | U U U U B0 U U | F F F F | b1 b0000 b0000000 b0000 | 0:,V0 1:,V0 2:,V0,V0 3:,V0,V0,V0 5:,V0,V0,V0,V0,V0 6:,V0 | | ||
+sum r b1 b1 b10 b10 b00 b b b a,compiler/typed:43013:43028 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0compiler/typed:LocalUses	o1compiler/types:Table&	o1mut compiler/typed:Body&
+out 9736a51083df0d6070d518b5b1b07345
+run compiler/effects 62266-62491 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+hits 0
+body 1 2 8 1 | U U | F F F F F F F F | b1 b00000000 b00 b00000000 | 0:,V0 1:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/effects:coldMark
+out ce80bfdb631da2941d2573dcd70e0cab
+run compiler/effects 66625-66776 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 3 1 | | F F F | b0 b000 b b000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:66625:66776 t i t i i c0/i/i f0010
+hid fs1	o0compiler/typed:Expr&	o0compiler/types:TypeId
+out 81d79fe012cc564456fc27798b1dcc1d
+run compiler/effects 63595-63736 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 5979-6292 fn <I64;Bool;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 3 2 1 | U U U | F F | b1 b00 b000 b00 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/map:6065:6082 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64
+out 99614b81930062fbd7114fa1458f2705
+run compiler/effects 32340-32404 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 32268-32338 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 2 0 | U | F F | b b00 b0 b00 | 0: | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out d79a97663e37909f62710aec8689928c
+run compiler/effects 22782-23166 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 32340-32404 fn	753360899e792dedf06ee057d76e9c16
+read compiler/types 34763-34817 fn	99df16af957139a554ad51a3027dc77d
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/typed:Local;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:LocalId;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 8 11 1 | U U U U U B3 U U | F F F F F F F F F F F | b0 b00000000000 b00000000 b00000000000 | 0:,V0,V0 1: 2:,V0 3:,V0 4:,V0 6:,V0 7:,V0 | | ||
+sum r b0 b0 b100 b100 b000 b b b a,compiler/effects:22782:23166 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0I64	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0I64
+out 89515fb608425659597a63dc2d3fb32c
+run compiler/effects 10349-10736 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 2 | | F | b00 b0 b b0 | | | ||
+sum r b00 b00 b0 b0 b0 b b b a,compiler/effects:10349:10736,compiler/effects:10349:10736 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Facts&
+out 28a2623efb3abb14570469428e81a755
+run compiler/effects 10738-11139 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 2 | | F | b00 b0 b b0 | | | ||
+sum r b00 b00 b0 b0 b0 b b b a,compiler/effects:10738:11139,compiler/effects:10738:11139 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Facts&	o0I64
+out 0f3c300279e913e6400161107dc8ae0a
+run compiler/effects 9603-10347 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 10349-10736 fn	ead5c43382e25e329cd676a960046131
+read compiler/effects 10738-11139 fn	31d2ba726f4fc0a9445efb24cc6a3c8c
+read compiler/effects 6775-7466 fn	4fc0989f904f964ffa6ebe73c17d6406
+hits 0
+body 1 6 2 2 | U U U U U U | F F | b00 b00 b000000 b00 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0,V1 5:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/effects:9603:10347,compiler/effects:9603:10347 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Facts&	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64
+out f983579a01e37482446a698d7f801870
+run compiler/effects 97942-98090 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 22782-23166 fn	365c9f888f8ae5393e761dfd81cc8d8f
+read compiler/effects 9603-10347 fn	4600927f627037f021796c3554f25ebf
+hits 0
+body 1 2 2 2 | U U | F F | b00 b00 b00 b00 | 0:,V0 1:,B0,V1 | | ||
+sum r b00 b00 b1 b1 b0 b b b a,compiler/effects:97942:98090,compiler/effects:97942:98090 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&
+out 0bf12a4976001ecb8acaace8212ac914
+run compiler/effects 97871-97940 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 97942-98090 fn	34a0d1e33a2692fe95d6ed214ce8d454
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 3 1 1 | U B0 U | F | b0 b0 b000 b0 | 0:,V0,B0 2:,B0,V0 | | ||
+sum r b0 b0 b1 b1 b0 b b b a,compiler/effects:97871:97940 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&
+out c69936219e554584318c795431ae31a0
+run compiler/effects 21865-22398 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 36578-36947 fn	890641c2ef1d2b1d78fe8bbe1bb9832a
+read compiler/effects 37029-37215 fn	ded200e46e9457fae91ff858807baf95
+read std/prelude/vec 5133-5172 fn <compiler/effects:fslot;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:Local;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/effects:fslot;>	b51ed69aecd7674ca5263126de5a48dc
+read std/prelude/vec 6401-6448 fn <compiler/typed:Local;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:LocalId;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 16 13 1 | U U U U B1 U B2 U U B2 U U U B4 U B6 | F F F F F F F F F F F F F | b1 b0000000000000 b0000000000000000 b0000000000000 | 0:,V0,V0 1:,V0 2:,V0 3:,V0 5:,V0 6:,V0,B2 7:,B2 8:,B2,B2 10:,V0 11:,V0 12:,V0 14:,V0 | | ||
+sum r b1 b1 b100 b100 b100 b b b a,std/prelude/map:6065:6082 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0std/prelude/vec:Vec<compiler/effects:fslot>	o1mut compiler/effects:Effects&	o1I64	o0compiler/effects:fslot	o1std/prelude/vec:Vec<compiler/effects:fslot>&	o1I64	o0compiler/types:TypeId	o0compiler/types:TypeId
+out b68d59bd3c9f675157eca2179e853568
+run compiler/effects 21123-21350 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 21865-22398 fn	78142f61282099ffbd02086543bcc17c
+read compiler/effects 32340-32404 fn	753360899e792dedf06ee057d76e9c16
+read compiler/effects 32480-33631 fn	f7be2af4073c3b5d2760f7b2741b6371
+read compiler/effects 8141-9219 fn	a4b22a979a2d50aec8ac9bf5e7f66346
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:Facts;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+hits 0
+body 1 8 9 1 | U U U U U U B4 U | F F F F F F F F F | b1 b000000000 b00000000 b000000000 | 0:,V0 1:,V0 2:,V0 3: 4:,V0 5:,V0 7:,B0,B4 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/map:6065:6082 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64
+out 8ee5a95c4fdc28d4227a41587b4ed7f3
+run compiler/effects 98092-98239 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	51
+marks 30329e889eb4c6d7aa2e6f35fa047bef
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+hits 0
+body 1 1 3 2 | V0 | F F F | b10 b000 b0 b000 | | | ||
+sum r b10 b10 b000 b000 b000 b b b a,compiler/effects:98231:98232,compiler/effects:98092:98239 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/source:Span	o0std/prelude/text:String&
+out 8859b526ebee91bde656068f32d3ec61
+run compiler/effects 66805-67402 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 6 1 | | F F F F F F | b0 b000000 b b000000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:66805:67402 t i t i i c0/i/i f0010
+hid fs1	o0compiler/typed:Stmt&
+out 2d7d072a21ff48196cfc23ac6093f2e9
+run compiler/effects 98324-98689 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 600d8550c82f1dbb0d32ae9c14e2ff7d
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 171888-171954 fn	b090e1b17cc1a156db5113053f17be48
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 7 4 2 | U B0 U U B1 U V1 | F F F F | b01 b0000 b0000000 b0000 | 0:,V0,V0 2:,V0 3:,V0,B1 5:,V0,B1 | | ||
+sum r b01 b01 b10 b10 b00 b b b a,compiler/effects:98324:98689,compiler/effects:98435:98504 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId
+out 53a49a1fd338b94e59159b33b7180abb
+run compiler/effects 62939-63483 fn	compiler/effects 62691-62819 fn	compiler/effects 70863-71680 fn	compiler/effects 67404-67512 fn	compiler/effects 69685-69951 fn	compiler/effects 71682-72304 fn	compiler/effects 72983-74820 fn	compiler/effects 77879-78512 fn	compiler/effects 77706-77812 fn	compiler/effects 67514-69683 fn	compiler/effects 63738-66623 fn	compiler/effects 62493-62617 fn	compiler/effects 61433-61810 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/typed 0-0 ctor compiler/typed:Alt	0,1
+mark compiler/typed 0-0 ctor compiler/typed:Arm	1,2,3,4
+mark compiler/typed 0-0 ctor compiler/typed:Bind	1
+mark compiler/typed 0-0 ctor compiler/typed:Block	1
+mark compiler/typed 0-0 ctor compiler/typed:Call	0,1
+mark compiler/typed 0-0 ctor compiler/typed:Capture	1
+mark compiler/typed 0-0 ctor compiler/typed:Clause	3,4
+mark compiler/typed 0-0 ctor compiler/typed:Collect	0,1
+mark compiler/typed 0-0 ctor compiler/typed:Cond	0,1,2
+mark compiler/typed 0-0 ctor compiler/typed:Elem	0,1
+mark compiler/typed 0-0 ctor compiler/typed:If	0,1,2
+mark compiler/typed 0-0 ctor compiler/typed:Join	0,2
+mark compiler/typed 0-0 ctor compiler/typed:Make	2,3
+mark compiler/typed 0-0 ctor compiler/typed:Match	0,1,2
+mark compiler/typed 0-0 ctor compiler/typed:Payload	0
+mark compiler/typed 0-0 ctor compiler/typed:Promote	0
+mark compiler/typed 0-0 ctor compiler/typed:Seq	0,1
+mark compiler/typed 0-0 ctor compiler/typed:Slice	0,1,2
+mark compiler/typed 0-0 ctor compiler/typed:Spawn	0,1,2
+mark compiler/typed 0-0 ctor compiler/typed:TaskClause	3
+mark compiler/typed 0-0 ctor compiler/typed:Text	0
+mark compiler/typed 0-0 ctor compiler/typed:Try	0,1
+marks 174eed25803bb8786ad1db619e22dd42
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:pend	d77d2be69b5f1c64f7f6fb514c0a871f
+read compiler/effects 21123-21350 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/effects 22450-22663 fn	2d8c2035d03978786d629f6f62ccd2fa
+read compiler/effects 23168-23255 fn	2c7accb4f7ee3c0bfd8f0b1e04d0ab29
+read compiler/effects 23341-23652 fn	b8e163434c32c395ba86168ef09453ca
+read compiler/effects 32480-33631 fn	f7be2af4073c3b5d2760f7b2741b6371
+read compiler/effects 42219-42312 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/effects 42405-42779 fn	332909c7d7a99e83b2e31889532a0eaf
+read compiler/effects 59418-60018 fn	ab94de10cddc480fe76de8c0134b9db1
+read compiler/effects 62153-62264 fn	e4454ee42d49c331244c2bc59aeac86c
+read compiler/effects 62266-62491 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/effects 63595-63736 fn	d3892e43b3f76d394aa763ea55534cb7
+read compiler/effects 66625-66776 fn	855fdfcdb4dccb255983a77ae94afe22
+read compiler/effects 66805-67402 fn	541b00e573b559df4783b450df41f982
+read compiler/effects 70176-70692 fn	60d6bc0c1d615536b2b611101737c6d3
+read compiler/effects 72383-72981 fn	6ac9f86a8aead024acf6f288989132ee
+read compiler/effects 74978-75246 fn	e01218ff93de8c7aec236f93648f5f2b
+read compiler/effects 75595-76400 fn	0405f70df73e360d6f5507125a265a86
+read compiler/effects 76810-77660 fn	681a76eea1cc73f47553f891ae828cb1
+read compiler/effects 78629-78887 fn	fc5f912cb1a49b88bd15f1d0a468bcb1
+read compiler/effects 8141-9219 fn	a4b22a979a2d50aec8ac9bf5e7f66346
+read compiler/effects 83054-83384 fn	e1ef08aeb3fc706a69ee34cb1e4bc2df
+read compiler/effects 84438-84829 fn	4c0f8976b01fa883885011876b109913
+read compiler/effects 84846-85002 fn	2527e907cb087614c67c5f4f89731cbc
+read compiler/effects 85564-86844 fn	977e632d36987efe6d736a33d8f5b2ef
+read compiler/effects 9603-10347 fn	4600927f627037f021796c3554f25ebf
+read compiler/effects 97871-97940 fn	f0567a48cc8aab7f8ee6e4f85003cf09
+read compiler/effects 97942-98090 fn	34a0d1e33a2692fe95d6ed214ce8d454
+read compiler/effects 98092-98239 fn	db64b9174bff7917d6b963f22f3ac7e1
+read compiler/effects 98324-98689 fn	81e2dd135d6933a0dc837edafa69c208
+read compiler/typed 0-0 ctor compiler/typed:Alt	e8f7104afca0109ee12fc6e41faf1faa
+read compiler/typed 0-0 ctor compiler/typed:Arm	fa4b081f041e0b5e7b4cd1d2022ae5fc
+read compiler/typed 0-0 ctor compiler/typed:Bind	3a36c069620b8326f8aeb9b6f3ca1cd0
+read compiler/typed 0-0 ctor compiler/typed:Block	8f897d4fc5dddac7d5593d9625b0566b
+read compiler/typed 0-0 ctor compiler/typed:Call	c36b1901823863ee5389714cd02f9eea
+read compiler/typed 0-0 ctor compiler/typed:Capture	0f7a8c6b286c9d4529b923125b6a42a0
+read compiler/typed 0-0 ctor compiler/typed:Clause	9ae18995bfe3f45ebe08bef4e8ddd8b6
+read compiler/typed 0-0 ctor compiler/typed:Collect	a112ccfab8911961bef6d28f12af3121
+read compiler/typed 0-0 ctor compiler/typed:Cond	cd98adefba29f151a9ff918b45188a87
+read compiler/typed 0-0 ctor compiler/typed:Elem	6e56a7c62626e2df16331aefdc04632c
+read compiler/typed 0-0 ctor compiler/typed:If	643c5cef783042ddeecc56395378bd09
+read compiler/typed 0-0 ctor compiler/typed:Join	1a6d7ccb0e977e2088e7e3ae41036a2c
+read compiler/typed 0-0 ctor compiler/typed:Make	767cae19166a8d0d7b5f89ada1e72080
+read compiler/typed 0-0 ctor compiler/typed:Match	7916b24e98195d4f7d6c1abeff53ff3b
+read compiler/typed 0-0 ctor compiler/typed:Payload	76ba95767108153e3887a50079bc5970
+read compiler/typed 0-0 ctor compiler/typed:Promote	bf862eabee93b132e5197e12a6252ccd
+read compiler/typed 0-0 ctor compiler/typed:Seq	c0afbcb82a706817ab37465b93c91247
+read compiler/typed 0-0 ctor compiler/typed:Slice	a7beefca1937fcf12c3e4a1fd36d6e32
+read compiler/typed 0-0 ctor compiler/typed:Spawn	9429b4de17e4d1d43625b15366c882cd
+read compiler/typed 0-0 ctor compiler/typed:TaskClause	a79e51eabb5cf10f9e6cdcdf4138843a
+read compiler/typed 0-0 ctor compiler/typed:Text	e1c157c442851db01e8b679ceafe9c6e
+read compiler/typed 0-0 ctor compiler/typed:Try	56b0865ea34d369b7586982e16abdb61
+read compiler/typed 128458-128817 fn	0479238ed645170fa3327e75b4b92896
+read compiler/typed 159594-160137 fn	d170dbedd4cc16f3c14b1a14be26c12a
+read compiler/typed 169889-170185 fn	bf901ac382de90cf20b57f2ec06559cd
+read compiler/types 34690-34762 fn	c43df76d84aaf0b9649473b59ae55cb1
+read compiler/types 34763-34817 fn	99df16af957139a554ad51a3027dc77d
+read compiler/types 35935-36006 fn	572471800412abaa20c24cb6801baeed
+read std/prelude/map 5979-6292 fn <I64;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7666-7764 fn <I64;Bool;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <compiler/effects:pend;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 4660-4775 fn <compiler/typed:Expr&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <Bool;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <Bool;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 22 12 2 | U U U U U U U U B3 U U U U B3 B3 U U U U B7 B7 U | F F F F F F F F F F F F | b10 b000000000000 b0000000000000000000000 b000000000000 | 0:,V0 1:,V0 2:,V0,V1 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 9:,B3,B3 10:,B3,B3 11:,V1 12:,V0,B3 15:,V0,B3 16:,V0 17:,V1 18:,V0,B7 21:,V0,B7 | | ||
+sum r;V1,V0,0,63040,63050,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/effects:62939:63483 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Stmt&
+body 1 3 3 2 | U U U | F F F | b10 b000 b000 b000 | 0:,V0 1:,V0,V1 2:,V0 | | ||
+sum r;V1,V0,0,62789,62798,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/effects:62691:62819 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Expr?&
+body 1 10 15 2 | U U U U U U U U U U | F F F F F F F F F F F F F F F | b10 b000000000000000 b0000000000 b000000000000000 | 0:,V0,V1 1:,V0 2:,V0 3:,V1 4:,V0 5:,V0 6:,V1,V0 7:,V0,V0 8:,V0,V1 9:,V0 | | ||
+sum r;V1,V0,0,71386,71461,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/effects:70863:71680 t i t i i c0/i/i f0010
+hid fs1;140800:U;140801:U;140802:V1	o0mut compiler/effects:Effects&	o0compiler/typed:FnVal&
+body 1 2 6 2 | U U | F F F F F F | b10 b000000 b00 b000000 | 0:,V0,V1 1:,V0,V1 | | ||
+sum r;V1,V0,0,67455,67471,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/effects:67404:67512 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Clause&
+body 1 6 10 2 | U U U U U U | F F F F F F F F F F | b10 b0000000000 b000000 b0000000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 4:,V0,V1 5:,V0,V1 | | ||
+sum r;V1,V0,0,69844,69873,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/effects:69685:69951 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Arm&
+body 1 5 7 2 | U U U U U | F F F F F F F | b10 b0000000 b00000 b0000000 | 0:,V1 1:,V0 2:,V0 3:,V0,V1 4:,V0,V1 | | ||
+sum r;V1,V0,0,72291,72300,0,0,0 b10 b10 b100 b100 b100 b b b a,std/prelude/vec:4512:4530,compiler/effects:71682:72304 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:PrimOp	o0Array<compiler/typed:Expr&>&
+body 1 32 36 2 | U U U U U U U U U U U U U U U U U U U U B12 U U U U U U U U B20 U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b000000000000000000000000000000000000 b00000000000000000000000000000000 b000000000000000000000000000000000000 | 0:,V0 1:,V0 2:,V0 3:,V0,V1 4:,V0,V1 5:,V0 6:,V1 7:,V0 8:,V1,V0 9:,V0,V0 10:,V0 11:,V1,V0 12:,V0,V0 13:,V0,V1 14:,V1 15:,V0 16:,V1 17:,V0 18:,V0,V1 19:,V0 21:,V0,B12 22:,V1 23:,V0 24:,V1 25:,V0 26:,V0,V1 27:,V0,V1 30:,V0,V1 31:,V0,V1 | | ||
+sum r;V1,V0,0,73216,73247,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/effects:72983:74820 t i t i i c0/i/i f0010
+hid fs1;140800:U;140801:U;140802:V1;140800:U;140801:U;140802:V1	o0mut compiler/effects:Effects&	o0compiler/typed:Call&	o0I64	o0I64
+body 1 7 9 2 | U U U U U U U | F F F F F F F F F | b10 b000000000 b0000000 b000000000 | 0:,V0 1:,V0,V1 2:,V0,V1 3:,V0,V1 4:,V0,V1 5:,V0,V1 6:,V0,V1 | | ||
+sum r;V1,V0,0,78180,78189,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/map:6065:6082,compiler/effects:77879:78512 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Lvalue&
+body 1 2 3 2 | U U | F F F | b10 b000 b00 b000 | 0:,V0,V1 1:,V0,V1 | | ||
+sum r;V1,V0,0,77795,77810,0,0,0 b10 b10 b100 b100 b100 b b b a,std/prelude/vec:4512:4530,compiler/effects:77706:77812 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Lvalue&	o0Bool
+body 1 28 45 2 | U U U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b000000000000000000000000000000000000000000000 b0000000000000000000000000000 b000000000000000000000000000000000000000000000 | 0:,V0,V1 1:,V0 2:,V0 3:,V0 4:,V0,V1 5:,V0,V1 6:,V0,V1 7:,V0,V1 8:,V0,V1 9:,V0,V1 10:,V0,V1 11:,V0,V1 12:,V0,V1 13:,V0,V1 14:,V0,V1 15:,V0,V1 16:,V0,V1 17:,V0,V1 18:,V0,V1 19:,V0,V1 20:,V0,V1 21:,V0,V1 22:,V0,V1 23:,V0,V1 24:,V0,V1 25:,V0,V1 26:,V0,V1 27:,V0,V1 | | ||
+sum r;V1,V0,0,68519,68529,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/effects:67514:69683 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Expr?&	o0compiler/types:TypeId
+body 1 40 57 2 | U U U U U U U U B5 U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b000000000000000000000000000000000000000000000000000000000 b0000000000000000000000000000000000000000 b000000000000000000000000000000000000000000000000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0 3:,V0 4:,V0,V1 5:,V0,V1 6:,V0 9:,V0,V1 10:,V0,V1 11:,V0 12:,V0 13:,V0,V1 14:,V0,V1 15:,V0,V1 16:,V0,V1 17:,V0 18:,V0,V1 19:,V0,V1 20:,V0,V1 21:,V0,V1 22:,V0,V1 23:,V0,V1 24:,V0,V1 25:,V0,V0 26:,V0,V1 27:,V0 28:,V0,V1 29:,V0,V1 30:,V1 31:,V0,V1 32:,V0,V1 33:,V0,V1 34:,V0,V1 35:,V0 36:,V0,V1 37:,V0 38:,V0,V1 39:,V0,V1 | | ||
+sum r;V1,V0,0,63848,63857,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/effects:63738:66623 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Stmt&	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0I64
+body 1 3 7 2 | U U U | F F F F F F F | b10 b0000000 b000 b0000000 | 0:,V0 1:,V0,V1 2:,V0 | | ||
+sum r;V1,V0,0,62586,62596,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/effects:62493:62617 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Block&
+body 1 4 6 2 | U U U U | F F F F F F | b10 b000000 b0000 b000000 | 0:,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 | | ||
+sum r;V1,V0,0,61665,61679,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/effects:61433:61810 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/typed:Block?&
+out 362362b9ced768b7e0e8806a12a469a3
+run compiler/effects 0-0 ctor compiler/effects:part	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:part	0,1,2,3,4,5
+marks d77edcf3cfd1cfa78e407d4971f9d30c
+read -ctor	I32
+read -ctor	I64
+read -ctor	compiler/typed:Expr
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 1 10 2 | U | F F F F F F F F F F | b01 b0000000000 b0 b0000000000 | 0:,V1 | | ||
+sum r;V0,V1,0,12435,12436,1,0,0 b01 b01 b0001 b0000 b0000 b b b a,compiler/effects:0:0,std/prelude/vec:3184:3188 t i,-1,-1,-1,-1,0,-1 t,U i i c0/i/i f0010
+hid fs1;1280:U	o0I64	o0I64	o0compiler/types:TypeId	o0compiler/typed:Expr?&
+out bb397e31e8a5d0d8a15fb2a2db320cd6
+run compiler/effects 37296-37518 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 36578-36947 fn	890641c2ef1d2b1d78fe8bbe1bb9832a
+read compiler/effects 37029-37215 fn	ded200e46e9457fae91ff858807baf95
+read std/prelude/vec 13073-13146 fn <I64;>	b436a9a13ea7329a676067a24fb1fb35
+read std/prelude/vec 5133-5172 fn <compiler/effects:fslot;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/effects:fslot;>	b51ed69aecd7674ca5263126de5a48dc
+hits 0
+body 1 8 11 2 | B0 U U B2 U B2 U U | F F F F F F F F F F F | b10 b00000000000 b00000000 b00000000000 | 0:,V0,B0 1:,B0 2:,B0,B2 4:,B0,B0 6:,B0,V1 7:,V0 | | ||
+sum r b10 b10 b1000 b1000 b1000 b b b a,std/prelude/map:6065:6082,compiler/effects:37296:37518 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0I64	o0std/prelude/vec:Vec<I64>&	o0std/prelude/vec:Vec<compiler/effects:fslot>	o1mut compiler/effects:Effects&	o1I64	o0compiler/effects:fslot	o1std/prelude/vec:Vec<compiler/effects:fslot>&	o1I64	o0compiler/effects:fslot	o1std/prelude/vec:Vec<compiler/effects:fslot>&	o1I64
+out 4e7c295487be78eea6b9540a00234047
+run compiler/effects 38203-38614 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/typed:LocalId;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+hits 0
+body 1 3 10 2 | U U U | F F F F F F F F F F | b00 b0000000000 b000 b0000000000 | 0:,V0,V1 1:,V0 2:,V0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/effects:38203:38614,compiler/effects:38203:38614 t i t i i c0/i/i f0010
+hid fs1	o0compiler/typed:Body&	o0compiler/typed:Expr&
+out fdeb0595332d9a32304429b695d642b7
+run compiler/effects 37675-38152 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/typed 0-0 ctor compiler/typed:Block	1
+mark compiler/typed 0-0 ctor compiler/typed:Body	11
+marks 44d3735f915c9c44af31b5b5fc37929a
+read -ctor	I64
+read compiler/effects 38203-38614 fn	ee43303c7b1001008c87b96704445e64
+read compiler/typed 0-0 ctor compiler/typed:Block	8f897d4fc5dddac7d5593d9625b0566b
+read compiler/typed 0-0 ctor compiler/typed:Body	b70a7d766d21f3b2ec7686364add6b30
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/typed:LocalId;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 5 13 1 | U U U B2 U | F F F F F F F F F F F F F | b0 b0000000000000 b00000 b0000000000000 | 0:,V0,V0 1:,V0 2:,V0 4:,V0,V0 | | ||
+sum r b0 b0 b100 b100 b000 b b b a,compiler/effects:37675:38152 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0I64	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64
+out 419e71c84919c7074db61a714f07c9b3
+run compiler/effects 58339-58685 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 0-0 ctor compiler/effects:part	afa0eaf5e7b60f70508ec53e01a5953d
+read compiler/typed 159594-160137 fn	d170dbedd4cc16f3c14b1a14be26c12a
+hits 0
+body 1 6 6 4 | U U U U U U | F F F F F F | b0001 b000000 b000000 b000000 | 0:,V2 1:,V3,V3 2:,V2 3:,V2,V3 4:,V2 5:,V3,V3 | | ||
+sum r;V2,V3,0,58404,58683,3,0,0 b0001 b0001 b000 b000 b000 b b b a,compiler/effects:58339:58685,compiler/effects:58339:58685,compiler/effects:58339:58685,std/prelude/vec:3184:3188 t,U,U,U,U i t i i c0/i/i f0010
+hid fs1;140544:U;140545:U;140546:U;140547:V3;140544:U;140545:U;140546:U;140547:V2;140544:U;140545:U;140546:U;140547:V3	o0compiler/effects:Effects&	o0compiler/typed:FnVal&	o0compiler/typed:Expr&	o0I64	o0I64	o0I64
+out 52342d5785bd983e8a5fd8aca48976a9
+run compiler/effects 58770-59236 fn	compiler/effects 56167-58337 fn	compiler/effects 41239-42104 fn	compiler/effects 39611-40239 fn	compiler/effects 38725-39508 fn	compiler/effects 40348-41237 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:part	4
+mark compiler/typed 0-0 ctor compiler/typed:Arm	4
+mark compiler/typed 0-0 ctor compiler/typed:Call	0,1
+mark compiler/typed 0-0 ctor compiler/typed:Clause	4
+mark compiler/typed 0-0 ctor compiler/typed:Cond	1,2
+mark compiler/typed 0-0 ctor compiler/typed:Match	1,2
+mark compiler/typed 0-0 ctor compiler/typed:Promote	0
+mark compiler/typed 0-0 ctor compiler/typed:Seq	1
+mark compiler/typed 0-0 ctor compiler/typed:Try	0,1
+marks 52b9fda992257736951d1d5565e4af27
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:part	afa0eaf5e7b60f70508ec53e01a5953d
+read compiler/effects 23168-23255 fn	2c7accb4f7ee3c0bfd8f0b1e04d0ab29
+read compiler/effects 35043-35305 fn	49088b16b3e812b1e5aab71e13359dc0
+read compiler/effects 35422-35609 fn	4c0f8976b01fa883885011876b109913
+read compiler/effects 37296-37518 fn	9fe12ebc847efa67d4d4d8ac67ab1f5c
+read compiler/effects 37675-38152 fn	2a18bc9c54d95fa4aff3871da4e5d9b5
+read compiler/effects 58339-58685 fn	c97a0dbc02350f6a6f13e566d1d204a5
+read compiler/typed 0-0 ctor compiler/typed:Arm	fa4b081f041e0b5e7b4cd1d2022ae5fc
+read compiler/typed 0-0 ctor compiler/typed:Call	c36b1901823863ee5389714cd02f9eea
+read compiler/typed 0-0 ctor compiler/typed:Clause	9ae18995bfe3f45ebe08bef4e8ddd8b6
+read compiler/typed 0-0 ctor compiler/typed:Cond	cd98adefba29f151a9ff918b45188a87
+read compiler/typed 0-0 ctor compiler/typed:Match	7916b24e98195d4f7d6c1abeff53ff3b
+read compiler/typed 0-0 ctor compiler/typed:Promote	bf862eabee93b132e5197e12a6252ccd
+read compiler/typed 0-0 ctor compiler/typed:Seq	c0afbcb82a706817ab37465b93c91247
+read compiler/typed 0-0 ctor compiler/typed:Try	56b0865ea34d369b7586982e16abdb61
+read compiler/typed 159594-160137 fn	d170dbedd4cc16f3c14b1a14be26c12a
+read compiler/typed 160139-160436 fn	6f0231ab3a0036824c1929bb3bf835d6
+read std/prelude/array 17668-17731 fn <I64;>	1cf54824239b5d01ed4111cee66d9405
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/map 7053-7137 fn <I64;std/prelude/vec:Vec<compiler/typed:Expr&>;>	8a3cd6175f44f72cdd3c59b4d7fa6f1b
+read std/prelude/map 7666-7764 fn <I64;Bool;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/map 7666-7764 fn <I64;std/prelude/vec:Vec<compiler/typed:Expr&>;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/typed:Expr&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <compiler/effects:part;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:Expr&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5431-5662 fn <I64;std/prelude/array:ArrayIter<I64>;?;>	28c13c53525c574bf1e1f61fdf6d8ff0
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:Expr&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 13 9 1 | U U U U U U U U U U U U U | F F F F F F F F F | b1 b000000000 b0000000000000 b000000000 | 0:,V0 1:,V0,V0 2:,V0,V0 3:,V0 4:,V0 5:,V0,V0 6:,V0,V0 7:,V0 8:,V0,V0 9:,V0 10:,V0 11:,V0,V0 12:,V0,V0 | | ||
+sum r b1 b1 b1000 b1000 b1000 b b b a,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;1280:U	o0mut compiler/effects:Effects&	o0I64	o0compiler/types:TypeId	o0I64	o0I64	o0I64	o0std/prelude/vec:Vec<compiler/typed:Expr&>	o1std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/typed:Expr&>>&	o1I64	o0compiler/typed:Expr&	o1std/prelude/vec:Vec<compiler/typed:Expr&>&	o1I64
+body 1 41 35 2 | U U U U U U U U U U U U U U U U B14 U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b11 b00000000000000000000000000000000000 b00000000000000000000000000000000000000000 b00000000000000000000000000000000000 | 0:,V1 1:,V0,V0 2:,V0,V0 3:,V0,V1 4:,V1 5:,V0 6:,V0,V1 7:,V1 8:,V0,V0 9:,V0,V0 10:,V1 11:,V0,V0 12:,V0,V0 13:,V0,V1 14:,V0,V1 15:,V0,V1 17:,V0,V1 18:,V0,V1 19:,V0,V1 20:,V1 21:,V0,V0 22:,V0,V0 23:,V0,V1 24:,V0,V1,V1,V1 25:,V0,V1 26:,V0 27:,B28 28:,V0,V1,B28 29:,V0,V0 30:,V0,V0 31:,V1 32:,V0,V0 33:,V0,V0 34:,V0,V0 35:,V0,V0 36:,V0,V0 37:,V0,V0 38:,V1 39:,V0,V0 40:,V0,V0 | | ||
+sum r;V1,V0,0,57474,57502,0,0,0 b11 b11 b100 b100 b100 b b b a,std/prelude/vec:3184:3188,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;1280:U;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0	o0mut compiler/effects:Effects&	o0compiler/typed:Expr?&	o0I64	o0I64	o0I64	o0I64	o0I64	o0compiler/effects:part	o1mut compiler/effects:Effects&	o1compiler/typed:FnVal&	o1compiler/typed:Expr&	o0I64	o0I64	o0I64	o0I64	o0I64
+body 1 20 17 3 | U U U B0 U V0 U V0 U U U U U U U B0 U U U U | F F F F F F F F V0 F F F F F F F F | b110 b00000000000000000 b00000000000000000000 b00000000000000000 | 0:,V0,V0 1:,V0,V0 2:,V0,V0 4:,V0,V0 6:,V0 8:,V0,V0 9:,V2 10:,V0 11:,V0,V0 12:,V0,V0 13:,V2 14:,V0,V1 15:,B0 16:,V2 17:,V2 18:,B0 19:,V0,V1,B0 | | ||
+sum r;V1,V0,0,41925,41958,0,0,0 b110 b110 b10000 b10000 b10000 b b b a,std/prelude/vec:3184:3188,std/prelude/vec:3184:3188,compiler/effects:41239:42104 t i t i i c0/i/i f0010
+hid fs1;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;1280:U	o0mut compiler/effects:Effects&	o0compiler/typed:Call&	o0std/prelude/vec:Vec<I64>&	o0compiler/types:TypeId	o0I64	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0I64	o0I64
+body 1 17 11 2 | U U B1 U U U U U U U U U U U U U U | F F F F F F F F F F F | b10 b00000000000 b00000000000000000 b00000000000 | 0:,V0 1:,V0,V0 3:,V0 4:,V0,V1 5:,V0,V0 6:,V0,V0 7:,V0,V0 8:,V0 9:,V0 10:,V0,V0 11:,V0,V0 12:,V0,V0 13:,V0 14:,V0 15:,V0,V0 16:,V0,V0,V1 | | ||
+sum r b10 b10 b10000 b10000 b10000 b b b a,std/prelude/map:6065:6082,compiler/effects:39611:40239 t i t i i c0/i/i f0010
+hid fs1;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;1280:U	o0mut compiler/effects:Effects&	o0I64	o0std/prelude/vec:Vec<I64>&	o0compiler/types:TypeId	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0I64	o0I64	o0I64	o0std/prelude/vec:Vec<compiler/typed:Expr&>	o1std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/typed:Expr&>>&	o1I64	o0compiler/typed:Expr&	o1std/prelude/vec:Vec<compiler/typed:Expr&>&	o1I64
+body 1 22 13 3 | U U U U U U U U B2 B2 U B2 B2 U U U B2 U U U U U | F F F F F F F F F F F F F | b110 b0000000000000 b0000000000000000000000 b0000000000000 | 0:,V2 1:,V0,V0 2:,V0,V0 3:,V1 4:,V0 5:,V0 6:,V0,V0 7:,V0,V0 10:,B2,B2 12:,B2,B2 13:,B0 14:,B0 15:,B2 17:,V0,V1,B2 18:,V0,V2 19:,V0,V1,V2 20:,V0,V0 21:,V0,V0 | | ||
+sum r;V1,V0,0,39404,39442,0,0,0 b110 b110 b10000 b10000 b10000 b b b a,std/prelude/vec:3184:3188,std/prelude/vec:3184:3188,compiler/effects:38725:39508 t i t i i c0/i/i f0010
+hid fs1;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0	o0mut compiler/effects:Effects&	o0compiler/typed:Lvalue&	o0std/prelude/vec:Vec<I64>	o0compiler/types:TypeId	o0I64	o0I64	o0I64	o0I64	o0std/prelude/array:ArrayIter<I64>	o1Array<I64>&	o0std/prelude/vec:Vec<I64>	o1mut std/prelude/array:ArrayIter<I64>&	o0I64
+body 1 13 10 3 | U U U U B4 U U U U U U U U | F F F F F F F F F F | b110 b0000000000 b0000000000000 b0000000000 | 0:,V0,V0 1:,V0,V0 2:,V0,V1,V2 3:,V0,V1,V2 5:,V0,V1,B4 6:,V0,V0 7:,V0,V0 8:,V0,V1,V2 9:,V0,V1,V2 10:,V0,V1,V2 11:,V0,V0 12:,V0,V0 | | ||
+sum r;V1,V0,0,41127,41166,0,0,0 b110 b110 b10000 b10000 b10000 b b b a,std/prelude/vec:3184:3188,std/prelude/vec:3184:3188,compiler/effects:40348:41237 t i t i i c0/i/i f0010
+hid fs1;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0;140544:U;140545:U;140546:U;140547:V0	o0mut compiler/effects:Effects&	o0compiler/typed:Expr&	o0std/prelude/vec:Vec<I64>&	o0compiler/types:TypeId	o0I64	o0I64	o0I64	o0I64
+out 8d32c8be20519358ca4e473eeda0cd21
+run compiler/effects 0-0 ctor compiler/effects:given	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:given	0,1,2,3,4,5,6
+marks d726bab93584bf436c459719944068fd
+read -ctor	I32
+read -ctor	I64
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 1 12 1 | U | F F F F F F F F F F F F | b1 b000000000000 b0 b000000000000 | 0:,V0 | | ||
+sum r b1 b1 b00000 b00000 b00000 b b b a,std/prelude/vec:3184:3188 t i,-1,-1,-1,-1,-1,0,-1 t,U i i c0/i/i f0010
+hid fs1;1280:U	o0I64	o0I64	o0I64	o0I64	o0compiler/types:TypeId
+out 9d8b9384a918819e5e0f0f4fcb9a2fb5
+run compiler/effects 54731-56107 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/effects 0-0 ctor compiler/effects:given	5
+mark compiler/effects 0-0 ctor compiler/effects:part	1,2,4
+mark compiler/effects 0-0 ctor compiler/effects:pend	0,1,2
+marks 37eca793c0a5e634c7a4389139caa6b7
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:given	ecf22cc71e19b71e92e86979cab6e319
+read compiler/effects 0-0 ctor compiler/effects:part	afa0eaf5e7b60f70508ec53e01a5953d
+read compiler/effects 0-0 ctor compiler/effects:pend	d77d2be69b5f1c64f7f6fb514c0a871f
+read compiler/effects 21865-22398 fn	78142f61282099ffbd02086543bcc17c
+read compiler/effects 32268-32338 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/effects 32480-33631 fn	f7be2af4073c3b5d2760f7b2741b6371
+read compiler/effects 40348-41237 fn	e1edfd5dd1de1f6377b8b6bb606630ea
+read compiler/effects 56167-58337 fn	af0504d23e4076081d8ecb114da6457c
+read compiler/effects 8141-9219 fn	a4b22a979a2d50aec8ac9bf5e7f66346
+read compiler/effects 97871-97940 fn	f0567a48cc8aab7f8ee6e4f85003cf09
+read compiler/effects 97942-98090 fn	34a0d1e33a2692fe95d6ed214ce8d454
+read compiler/effects 98092-98239 fn	db64b9174bff7917d6b963f22f3ac7e1
+read compiler/typed 159055-159592 fn	11b0d89c3a36b5e18d46726e0a3cb53a
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/vec 4660-4775 fn <compiler/effects:given;>	652312eadcb9c7b54bf0276e2dba4089
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:part;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:part;>	d04f2e5a858d17b205c489fe32a47a71
+read std/prelude/vec 7906-7950 fn <compiler/effects:part;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 30 9 2 | U U U U U U U U U B7 B7 B7 U U U U B9 U U B11 U U U U U U U B0 B0 U | F F F F F F F F F | b11 b000000000 b000000000000000000000000000000 b000000000 | 0:,V0 1:,V1 2:,V0 3:,V0 4:,V0,V1,V1 5:,V0,V1 6:,V0 7:,V0 8:,V0,V0 9:,B7 12:,V0,B7 13: 14:,V0 15:,V0 17:,V0,B9 18:,V0 20:,V0,B11 21:,B13 22:,V0,B13 23:,V0 24:,V0,B0 25:,V1 26:,B0,B0 29:,V0,B0 | | ||
+sum r;V1,V0,0,54815,54883,0,0,0 b11 b11 b10 b10 b10 b b b a,std/prelude/map:6065:6082,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1;139776:U;139777:U;139778:U;139779:U;139780:U;139776:U;139777:U;139778:U;139779:U;139780:U	o0mut compiler/effects:Effects&	o0compiler/effects:pend&	o0compiler/effects:part	o1std/prelude/vec:Vec<compiler/effects:part>&	o1I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64
+out a38b7dec3e7fa1c370b86d612925d4d1
+run compiler/effects 60184-60714 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	27
+marks 1aaa895fd6cf223a16df0651c5b2070c
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:link	6e4cd2328a6050f3db3a421f04c4d58a
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, Bool>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 5979-6292 fn <I64;Bool;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7053-7137 fn <I64;Bool;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:link>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <compiler/effects:link;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:link;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:link;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+hits 0
+body 1 16 12 1 | B0 U U U U U U U U U U U U U U V0 | F F F F F F F F V0 F F F | b1 b000000000000 b0000000000000000 b000000000000 | 0:,B0 1:,V0 2:,V0 3:,B0 4:,B0 5:,V0 6:,V0 7:,B0 8:,V0 9:,V0 10:,V0 11:,V0 12:,B0 13:,B13 14:,V0 | | ||
+sum r b1 b1 b1 b1 b1 b b b a,compiler/effects:60483:60487 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/effects:Effects&	o0I64	o0I64	o0I64
+out 98a77abcfee3f82a94f4eccdc71acb7d
+run compiler/effects 0-0 ctor compiler/effects:fret	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:fret	0,1
+marks b75167944f7d3b957b72d12091193f80
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:part>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 0 4 3 | | F F F F | b000 b0000 b b0000 | | | ||
+sum r;V0,V2,0,34844,34848,1,0,0;V1,V2,0,34853,34858,1,0,0 b000 b000 b00 b00 b00 b b b a,compiler/effects:0:0,compiler/effects:0:0,compiler/effects:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/prelude/vec:Vec<I64>	o0std/prelude/vec:Vec<compiler/effects:part>
+out 54874cfcc8e4e72cebe9bd57c278324e
+run compiler/effects 42895-43459 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/effects 0-0 ctor compiler/effects:fpath	0
+mark compiler/effects 0-0 ctor compiler/effects:part	1,2,4
+marks 18673fe307132eb7917a0a20eecae696
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:fpath	3ee7d6ea4101119c5ed1cbee7e7d4809
+read compiler/effects 0-0 ctor compiler/effects:fret	c3cd2a44504b600f02ad343fc91b8e99
+read compiler/effects 0-0 ctor compiler/effects:part	afa0eaf5e7b60f70508ec53e01a5953d
+read compiler/effects 35043-35305 fn	49088b16b3e812b1e5aab71e13359dc0
+read compiler/effects 35705-36508 fn	7555f39657fbbb2295d72e5f2c355272
+read compiler/effects 40348-41237 fn	e1edfd5dd1de1f6377b8b6bb606630ea
+read compiler/types 34916-34986 fn	56923687717b623eb0589819f4bd62a9
+read std/prelude/map 5979-6292 fn <I64;std/prelude/vec:Vec<compiler/effects:fret>;>	e64a455de30249a902626f5e5c173c4b
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:fret>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:part>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <compiler/effects:fret;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 4660-4775 fn <compiler/effects:part;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 5133-5172 fn <compiler/effects:fpath;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:part;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:Expr&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/effects:fpath;>	eaf54fc64b65a4b1358d16ada54dac7b
+read std/prelude/vec 6401-6448 fn <compiler/effects:part;>	d04f2e5a858d17b205c489fe32a47a71
+read std/prelude/vec 6401-6448 fn <compiler/typed:Expr&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+read std/prelude/vec 7906-7950 fn <compiler/effects:part;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 26 15 1 | U U B1 U U U B1 U B2 U U U U U U U U V0 V0 U V0 V0 U U V0 U | F F V0 F F F F F F V0 F F F F V0 | b1 b000000000000000 b00000000000000000000000000 b000000000000000 | 0:,V0 1:,V0,V0 3:,V0 4:,V0 5:,V0,B1 7:,B1 8:,B1,B1 9:,V0 10:,V0 11:,V0,V0 12:,V0,V0,B2 13:,V0 14:,V0 15:,V0,V0 16:,V0,V0 19:,V0,V0 22:,V0,V0,V0 23:,V0,V0 25:,V0,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,compiler/effects:42938:42941 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U;140544:U;140545:U;140546:U;140547:V0;204800:V0;204801:V0	o0mut compiler/effects:Effects&	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0std/prelude/vec:Vec<compiler/effects:fpath>	o1mut compiler/effects:Effects&	o1compiler/types:TypeId	o0compiler/effects:fpath	o1std/prelude/vec:Vec<compiler/effects:fpath>&	o1I64	o0compiler/typed:Expr&	o1std/prelude/vec:Vec<compiler/typed:Expr&>&	o1I64	o0compiler/effects:part	o1std/prelude/vec:Vec<compiler/effects:part>&	o1I64	o0I64	o0I64	o0I64
+out ce44a9098859acb41047e7b5f5f3842a
+run compiler/effects 54040-54601 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 42895-43459 fn	db35ef5f5c9fac887464a311dc78bd9a
+read compiler/effects 54731-56107 fn	09d092de84fdf45411ddf08a4dd6c393
+read compiler/effects 56167-58337 fn	af0504d23e4076081d8ecb114da6457c
+read compiler/effects 60184-60714 fn	b2e03dc5077c4d4248fa64fd404164fb
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:part;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:pend;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:Expr&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/effects:part;>	d04f2e5a858d17b205c489fe32a47a71
+read std/prelude/vec 6401-6448 fn <compiler/effects:pend;>	b51ed69aecd7674ca5263126de5a48dc
+read std/prelude/vec 6401-6448 fn <compiler/typed:Expr&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 7906-7950 fn <compiler/effects:part;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 13 10 1 | U U U U U U U U U U U U U | F F F V0 F F F F F F | b1 b0000000000 b0000000000000 b0000000000 | 0:,V0 1:,V0,V0 2:,V0,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0,V0 8:,V0 9:,V0,V0 10:,V0 11:,V0,V0 12:,V0 | | ||
+sum r b1 b1 b1 b1 b1 b b b a,compiler/effects:54075:54108 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/effects:pend	o1std/prelude/vec:Vec<compiler/effects:pend>&	o1I64	o0compiler/typed:Expr&	o1std/prelude/vec:Vec<compiler/typed:Expr&>&	o1I64	o0compiler/effects:part	o1std/prelude/vec:Vec<compiler/effects:part>&	o1I64	o0I64	o0I64
+out 10c4fe224e6e9b565b5b81212bb6f18a
+run compiler/effects 51089-53132 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0,24,25,27,29,30,31,32
+mark compiler/typed 0-0 ctor compiler/typed:Body	11
+marks 3bd529aedbb42609a0330cfa0dbcfdae
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/effects 23168-23255 fn	2c7accb4f7ee3c0bfd8f0b1e04d0ab29
+read compiler/effects 42219-42312 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/effects 53471-53858 fn	20e153a9e4d70502f6363e14cf2c4b39
+read compiler/effects 54040-54601 fn	2912f8067870c2aaeb96376ecc1f4cb5
+read compiler/effects 61433-61810 fn	8d3a0e966a58ea28e36a2fcdc5b9c1e0
+read compiler/typed 0-0 ctor compiler/typed:Body	b70a7d766d21f3b2ec7686364add6b30
+read compiler/typed 126299-126457 fn	5dc2c043cea6b18cc9e5b51b5aaf3f50
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34916-34986 fn	56923687717b623eb0589819f4bd62a9
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, Bool>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, I64>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 3468-3514 fn <I64;Bool;>	86f91b0f497c73631b7e92cff89727d4
+read std/prelude/map 3468-3514 fn <I64;I64;>	86f91b0f497c73631b7e92cff89727d4
+read std/prelude/map 3468-3514 fn <I64;std/prelude/vec:Vec<compiler/typed:Expr&>;>	86f91b0f497c73631b7e92cff89727d4
+read std/prelude/map 5979-6292 fn <I64;Bool;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 5979-6292 fn <I64;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/map 9171-9435 fn <I64;Bool;>	8bc664614ba52ff76330ccc759826859
+read std/prelude/map 9171-9435 fn <I64;I64;>	8bc664614ba52ff76330ccc759826859
+read std/prelude/map 9171-9435 fn <I64;std/prelude/vec:Vec<compiler/typed:Expr&>;>	8bc664614ba52ff76330ccc759826859
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:link>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:given;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:pend;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:BlockId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:Expr&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:Local;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/typed:BlockId;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:Local;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:LocalId;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+read std/prelude/vec 7906-7950 fn <I64;>	a18ca10380cf10c77190fe509fec348c
+read std/prelude/vec 7906-7950 fn <compiler/effects:given;>	a18ca10380cf10c77190fe509fec348c
+read std/prelude/vec 7906-7950 fn <compiler/effects:pend;>	a18ca10380cf10c77190fe509fec348c
+read std/prelude/vec 7906-7950 fn <compiler/typed:Expr&;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 56 21 1 | U U U U U U U U U U U U U U U U U U U U U U B0 U U U B0 U U U U U U U U U U U U U U U U U U B18 U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F | b1 b000000000000000000000 b00000000000000000000000000000000000000000000000000000000 b000000000000000000000 | 0:,V0,V0 1:,B0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0 10:,V0 11:,V0 12:,V0 13:,V0 14:,V0 15:,V0 16:,V0 17:,V0 18:,V0 19:,V0 20:,V0 21:,V0 23:,V0 24:,V0 25:,V0 27:,V0 28:,V0 29:,V0 30:,V0 31:,V0 32:,V0 33:,V0 34:,V0 35:,V0 36:,V0 37:,V0 38:,V0 39:,V0 40:,V0 41:,V0 42:,V0 43:,V0 44:,V0 46:,V0 47:,V0 48:,V0 49:,V0 50:,V0 51:,V0,V0 52:,V0 53:,V0,V0 54:,V0,V0 55:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U	o0mut compiler/effects:Effects&	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0std/prelude/map:Map<I64, Bool>	o1mut compiler/typed:Body&
+out 557c8f6b6e6aeed0afc58f77facdeccc
+run compiler/effects 51089-53132 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 557c8f6b6e6aeed0afc58f77facdeccc
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0,24,25,27,29,30,31,32
+mark compiler/typed 0-0 ctor compiler/typed:Body	11
+marks 3bd529aedbb42609a0330cfa0dbcfdae
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/effects 23168-23255 fn	2c7accb4f7ee3c0bfd8f0b1e04d0ab29
+read compiler/effects 42219-42312 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/effects 53471-53858 fn	4ef621f31c474d4d3faee19f38723a30
+read compiler/effects 54040-54601 fn	2912f8067870c2aaeb96376ecc1f4cb5
+read compiler/effects 61433-61810 fn	8d3a0e966a58ea28e36a2fcdc5b9c1e0
+read compiler/typed 0-0 ctor compiler/typed:Body	b70a7d766d21f3b2ec7686364add6b30
+read compiler/typed 126299-126457 fn	5dc2c043cea6b18cc9e5b51b5aaf3f50
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34916-34986 fn	56923687717b623eb0589819f4bd62a9
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, Bool>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, I64>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 3468-3514 fn <I64;Bool;>	86f91b0f497c73631b7e92cff89727d4
+read std/prelude/map 3468-3514 fn <I64;I64;>	86f91b0f497c73631b7e92cff89727d4
+read std/prelude/map 3468-3514 fn <I64;std/prelude/vec:Vec<compiler/typed:Expr&>;>	86f91b0f497c73631b7e92cff89727d4
+read std/prelude/map 5979-6292 fn <I64;Bool;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 5979-6292 fn <I64;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/map 9171-9435 fn <I64;Bool;>	8bc664614ba52ff76330ccc759826859
+read std/prelude/map 9171-9435 fn <I64;I64;>	8bc664614ba52ff76330ccc759826859
+read std/prelude/map 9171-9435 fn <I64;std/prelude/vec:Vec<compiler/typed:Expr&>;>	8bc664614ba52ff76330ccc759826859
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:link>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:given;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:pend;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:BlockId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:Expr&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:Local;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/typed:BlockId;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:Local;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/typed:LocalId;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+read std/prelude/vec 7906-7950 fn <I64;>	a18ca10380cf10c77190fe509fec348c
+read std/prelude/vec 7906-7950 fn <compiler/effects:given;>	a18ca10380cf10c77190fe509fec348c
+read std/prelude/vec 7906-7950 fn <compiler/effects:pend;>	a18ca10380cf10c77190fe509fec348c
+read std/prelude/vec 7906-7950 fn <compiler/typed:Expr&;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 56 21 1 | U U U U U U U U U U U U U U U U U U U U U U B0 U U U B0 U U U U U U U U U U U U U U U U U U B18 U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F | b1 b000000000000000000000 b00000000000000000000000000000000000000000000000000000000 b000000000000000000000 | 0:,V0,V0 1:,B0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0 10:,V0 11:,V0 12:,V0 13:,V0 14:,V0 15:,V0 16:,V0 17:,V0 18:,V0 19:,V0 20:,V0 21:,V0 23:,V0 24:,V0 25:,V0 27:,V0 28:,V0 29:,V0 30:,V0 31:,V0 32:,V0 33:,V0 34:,V0 35:,V0 36:,V0 37:,V0 38:,V0 39:,V0 40:,V0 41:,V0 42:,V0 43:,V0 44:,V0 46:,V0 47:,V0 48:,V0 49:,V0 50:,V0 51:,V0,V0 52:,V0 53:,V0,V0 54:,V0,V0 55:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U	o0mut compiler/effects:Effects&	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0std/prelude/map:Map<I64, Bool>	o1mut compiler/typed:Body&
+out 429bda2e161c97f374ade942098e1964
+run compiler/effects 50274-50926 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	24,25,27,28,45
+marks 786c7487c6c0131ea86fe827dfc4f625
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 51089-53132 fn	9d162539fd6859e93f3d1023f71d61e0
+read std/prelude/map 5979-6292 fn <I64;std/prelude/vec:Vec<I64>;>	f4a2adbe30fa1aa98d8a080575d7db3a
+read std/prelude/map 5979-6292 fn <I64;std/prelude/vec:Vec<compiler/effects:given>;>	f4a2adbe30fa1aa98d8a080575d7db3a
+read std/prelude/vec 5133-5172 fn <compiler/effects:given;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 7153-7207 fn <Bool;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/prelude/vec 7153-7207 fn <compiler/effects:Facts;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/prelude/vec 7153-7207 fn <std/prelude/vec:Vec<I64>;>	3d5a59ccb96724b52e721a7142753be2
+read std/prelude/vec 7153-7207 fn <std/prelude/vec:Vec<compiler/effects:link>;>	3d5a59ccb96724b52e721a7142753be2
+hits 0
+body 1 16 2 1 | U U U B0 U B0 U B0 U U B1 U U U B3 U | F F | b1 b00 b0000000000000000 b00 | 0:,V0 1:,V0 2:,V0 4:,V0,B0 6:,V0,B0 8:,V0,B0 9:,V0 11:,V0,B1 12:,V0 13:,V0 15:,V0,B3 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64
+out c31b617903a079e9333c6d677fa9e2f0
+run compiler/effects 26165-26257 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 7053-7137 fn <I64;std/prelude/vec:Vec<I64>;>	8a3cd6175f44f72cdd3c59b4d7fa6f1b
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 2 2 2 | U U | F F | b01 b00 b00 b00 | 0:,V0,V1 1:,V1 | | ||
+sum r;V0,V1,0,26206,26255,0,0,0 b01 b01 b00 b00 b00 b b b a,compiler/effects:26165:26257,std/prelude/vec:3184:3188 t,U i t i i c0/i/i f0010
+hid fs1;1280:U	o0compiler/effects:Effects&	o0I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/map:Map<I64, std/prelude/vec:Vec<I64>>&	o1I64
+out ac4c3a4acba7678106728baa740a50c2
+run compiler/effects 44110-45456 fn	compiler/effects 43734-44108 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:fret	1
+mark compiler/effects 0-0 ctor compiler/effects:given	2,3,4
+mark compiler/effects 0-0 ctor compiler/effects:part	2
+marks 9db4df3ee42326044bbb0120e69d3979
+read -ctor	Bool
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:fret	c3cd2a44504b600f02ad343fc91b8e99
+read compiler/effects 0-0 ctor compiler/effects:given	ecf22cc71e19b71e92e86979cab6e319
+read compiler/effects 0-0 ctor compiler/effects:part	afa0eaf5e7b60f70508ec53e01a5953d
+read compiler/effects 26165-26257 fn	72dd775a8b9968003be0e23ee1f59e25
+read std/prelude/map 7053-7137 fn <I64;std/prelude/vec:Vec<compiler/effects:fret>;>	8a3cd6175f44f72cdd3c59b4d7fa6f1b
+read std/prelude/map 7053-7137 fn <I64;std/prelude/vec:Vec<compiler/effects:given>;>	8a3cd6175f44f72cdd3c59b4d7fa6f1b
+read std/prelude/map 7666-7764 fn <I64;std/prelude/vec:Vec<I64>;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:given>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 13073-13146 fn <I64;>	b436a9a13ea7329a676067a24fb1fb35
+read std/prelude/vec 4660-4775 fn <compiler/effects:part;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:fret;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:given;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:part;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:fret;>	eaf54fc64b65a4b1358d16ada54dac7b
+read std/prelude/vec 6401-6448 fn <compiler/effects:given;>	442c72fb9063f8bdc126d0eee7d856dc
+read std/prelude/vec 6401-6448 fn <compiler/effects:part;>	d04f2e5a858d17b205c489fe32a47a71
+hits 0
+body 1 31 17 4 | V3 U U U B3 U U U U U U B0 U U B8 U U U U U U U B14 U U U U U U U U | F F F F F F F F F F F F F F F F F | b1001 b00000000000000000 b0000000000000000000000000000000 b00000000000000000 | 1:,V3,V3 2:,V0 3:,V0,B3 5:,B3 6:,B3 7:,V3,V3 8:,V3,V3 9:,V3,V3 10:,V3,V3 11:,V0,V0 12:,V0 13:,B0 14:,B0,B0 15:,V0,B8,V3 16:,V3,V3 17:,V3,V3 18:,V0 19:,V3,V3 20:,V3,V3 21:,V0,B14 23:,B14 24:,B14 25:,V3,V3 26:,V3,V3 27:,V3,V3 28:,V3,V3 29:,V3,V3 30:,V3,V3 | | ||
+sum r;V2,V3,0,44280,44292,0,0,0;V0,V3,0,44863,44896,0,0,0 b1001 b1001 b000010 b000010 b000010 b b b a,std/prelude/vec:3184:3188,compiler/effects:44110:45456,compiler/effects:44110:45456,compiler/effects:44289:44291 t i t i i c0/i/i f0010
+hid fs1;140544:U;140545:U;140546:U;140547:V3;140544:U;140545:U;140546:U;140547:V3;1280:U;140544:U;140545:U;140546:U;140547:V3;140544:U;140545:U;140546:U;140547:V3;140544:U;140545:U;140546:U;140547:V3;140544:U;140545:U;140546:U;140547:V3;140544:U;140545:U;140546:U;140547:V3	o0mut compiler/effects:Effects&	o0I64	o0compiler/effects:given&	o0compiler/effects:part&	o0mut std/prelude/vec:Vec<compiler/effects:part>&	o0I64	o0I64	o0I64	o0I64	o0I64	o0std/prelude/vec:Vec<I64>	o1mut compiler/effects:Effects&	o1I64	o0I64	o0I64	o0I64	o0std/prelude/vec:Vec<compiler/effects:given>	o1std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/effects:given>>&	o1I64	o0compiler/effects:given	o1std/prelude/vec:Vec<compiler/effects:given>&	o1I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0std/prelude/vec:Vec<I64>	o1mut compiler/effects:Effects&	o1I64	o0I64	o0I64
+body 1 11 12 3 | U U U U U U U U U U U | F F F F F F F F F F F V0 | b101 b000000000000 b00000000000 b000000000000 | 0:,V0,V0 1:,V2,V2 2:,V2,V2 3:,V0 4:,V0,V0 5:,V0,V1 6:,V0 7:,V0,V0 8:,V0,V1,V0,V2 9:,V2,V2 10:,V2,V2 | | ||
+sum r;V0,V2,0,44010,44041,0,0,0 b101 b101 b00010 b00010 b00010 b b b a,compiler/effects:43991:44041,compiler/effects:43734:44108,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1;140544:U;140545:U;140546:U;140547:V2;140544:U;140545:U;140546:U;140547:V2	o0mut compiler/effects:Effects&	o0I64	o0compiler/effects:given&	o0mut std/prelude/vec:Vec<compiler/effects:part>&	o0I64	o0std/prelude/vec:Vec<compiler/effects:fret>	o1std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/effects:fret>>&	o1I64	o0I64	o0compiler/effects:fret	o1std/prelude/vec:Vec<compiler/effects:fret>&	o1I64	o0compiler/effects:part	o1std/prelude/vec:Vec<compiler/effects:part>&	o1I64	o0I64
+out dc7fc737a4ddc247fb35dbb6e5a51934
+run compiler/effects 33750-33906 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 32480-33631 fn	f7be2af4073c3b5d2760f7b2741b6371
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | 0:,V0,B0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/effects:33750:33906 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Facts&	o0compiler/effects:Facts
+out 37636644ce8bcda73b7b5f313b4b1fb3
+run compiler/effects 28666-29673 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 32268-32338 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/effects 32340-32404 fn	753360899e792dedf06ee057d76e9c16
+read std/prelude/map 7666-7764 fn <I64;Bool;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:link;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:Facts;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:link;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <std/prelude/vec:Vec<compiler/effects:link>;>	ecc3d96246a2bd4251be3d6cf1aa2e3d
+read std/prelude/vec 7015-7075 fn <compiler/effects:Facts;>	606a6fe30967200ebb834aab7a132353
+hits 0
+body 1 34 23 3 | U B1 U U U U U U U B2 U U B6 U U U U U U B11 U U U U U U B2 U U U U B2 U U | F F F F F F F F F F F F F F F F F F F F F F F | b000 b00000000000000000000000 b0000000000000000000000000000000000 b00000000000000000000000 | 0:,V0,B1 2:,B1 3:,B1 4:,V0 5:,V0 6:,V2 7:,V0 8:,V0 10: 11:,V0 13:,V1 14:,V1 17:,V0,V0 18:,V0 20:,V1 21:,V1 24:,V0,V0 25:,V0 27: 30:,V0 32: 33:,V0,V0 | | ||
+sum r b000 b000 b1000 b0000 b0000 b b b a,compiler/effects:28666:29673,compiler/effects:28666:29673,compiler/effects:28666:29673 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0std/prelude/vec:Vec<I64>&	o0std/prelude/map:Map<I64, Bool>&	o0std/prelude/vec:Vec<compiler/effects:link>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<compiler/effects:link>>&	o1I64	o0I64	o0mut compiler/effects:Facts&	o1mut std/prelude/vec:Vec<compiler/effects:Facts>&	o1I64	o0I64	o0mut compiler/effects:Facts&	o1mut std/prelude/vec:Vec<compiler/effects:Facts>&	o1I64	o0mut compiler/effects:Facts&	o1mut std/prelude/vec:Vec<compiler/effects:Facts>&	o1I64
+out b0da281cad5b8c6034af211bee486820
+run compiler/effects 29778-30359 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 32268-32338 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/effects 32340-32404 fn	753360899e792dedf06ee057d76e9c16
+read std/prelude/map 7053-7137 fn <I64;std/prelude/vec:Vec<compiler/effects:given>;>	8a3cd6175f44f72cdd3c59b4d7fa6f1b
+read std/prelude/map 7666-7764 fn <I64;Bool;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/map 7666-7764 fn <I64;std/prelude/vec:Vec<compiler/effects:given>;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:given>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 5133-5172 fn <compiler/effects:given;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <Bool;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:Facts;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:given;>	442c72fb9063f8bdc126d0eee7d856dc
+read std/prelude/vec 6401-6448 fn <std/prelude/vec:Vec<I64>;>	ecc3d96246a2bd4251be3d6cf1aa2e3d
+read std/prelude/vec 7015-7075 fn <compiler/effects:Facts;>	606a6fe30967200ebb834aab7a132353
+hits 0
+body 1 24 12 2 | U U B0 U U B3 U B3 U U U U U B3 U U B3 U U U U B3 U U | F F F F F F F F F F F F | b10 b000000000000 b000000000000000000000000 b000000000000 | 0:,V0 1:,V0 2:,V0,V0 3:,V0 4:,B0 5:,B0,B0 6:,V0,V0 8:,V0 9:,V0 10:,V1 11:,V0 12:,V0 14: 15:,V0 17: 20:,V0 22: 23:,V0,V0 | | ||
+sum r b10 b10 b100 b000 b000 b b b a,std/prelude/vec:3184:3188,compiler/effects:29778:30359 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/effects:Effects&	o0I64	o0std/prelude/map:Map<I64, Bool>&	o0std/prelude/vec:Vec<compiler/effects:given>	o1std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/effects:given>>&	o1I64	o0compiler/effects:given	o1std/prelude/vec:Vec<compiler/effects:given>&	o1I64	o0I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64	o0mut compiler/effects:Facts&	o1mut std/prelude/vec:Vec<compiler/effects:Facts>&	o1I64
+out fcbd11e387fda0dabdc94e7b32e414e0
+run compiler/effects 30720-30928 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <std/prelude/vec:Vec<I64>;>	ecc3d96246a2bd4251be3d6cf1aa2e3d
+hits 0
+body 1 8 9 1 | U B1 U U B2 U U U | F F F F F F F F F | b0 b000000000 b00000000 b000000000 | 0:,V0,V0 2:,V0 3:,V0,V0 5:,V0 6:,V0 7:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/effects:30720:30928 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64
+out 8d16ba0543b84067eecafd488e0d32f9
+run compiler/effects 31163-31879 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read -ctor	Bool
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/effects 21865-22398 fn	78142f61282099ffbd02086543bcc17c
+read compiler/effects 32340-32404 fn	753360899e792dedf06ee057d76e9c16
+read compiler/effects 32480-33631 fn	f7be2af4073c3b5d2760f7b2741b6371
+read compiler/effects 8141-9219 fn	a4b22a979a2d50aec8ac9bf5e7f66346
+read std/prelude/map 7053-7137 fn <I64;std/prelude/vec:Vec<compiler/effects:given>;>	8a3cd6175f44f72cdd3c59b4d7fa6f1b
+read std/prelude/map 7666-7764 fn <I64;std/prelude/vec:Vec<I64>;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:given>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:given;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:given;>	442c72fb9063f8bdc126d0eee7d856dc
+read std/prelude/vec 6401-6448 fn <std/prelude/vec:Vec<I64>;>	ecc3d96246a2bd4251be3d6cf1aa2e3d
+hits 0
+body 1 23 21 1 | U B0 U U B1 U U B2 U U U U U U B8 U U B10 U U U B12 U | F F F F F F F F F F F F F F F F F F F F F | b1 b000000000000000000000 b00000000000000000000000 b000000000000000000000 | 0:,B0 1:,V0,V0 2:,V0 3:,V0,V0 5:,V0 6:,V0,V0 8:,V0 9:,V0 10:,V0 11:,V0 12: 13:,B0 14:,B0,B0 15:,V0 16:,V0 18:,B0,B10 19:,V0 20:,V0 22:,B0,B12 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/effects:Effects&	o0I64	o0std/prelude/vec:Vec<compiler/effects:given>	o1std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/effects:given>>&	o1I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64	o0compiler/effects:given	o1std/prelude/vec:Vec<compiler/effects:given>&	o1I64	o0I64	o0I64
+out aeb916f6fb5c167921fb9ca930bb0a28
+run compiler/effects 30453-30654 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/effects 30720-30928 fn	8ea4449c0ef88ea2ba593940a567de85
+read compiler/effects 31163-31879 fn	9d162539fd6859e93f3d1023f71d61e0
+read compiler/effects 32480-33631 fn	f7be2af4073c3b5d2760f7b2741b6371
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 7015-7075 fn <compiler/effects:Facts;>	606a6fe30967200ebb834aab7a132353
+hits 0
+body 1 11 9 2 | U U U U U B3 U U U U U | F F F F F F F F F | b10 b000000000 b00000000000 b000000000 | 0:,B0 1:,V1 2:,V1 3:,V0 4:,V0 6:,B0,B3 7:,V1 8:,V1 9:,V0,V0 10:,V0,B0 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/vec:3184:3188,compiler/effects:30453:30654 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0std/prelude/vec:Vec<I64>&	o0mut compiler/effects:Facts&	o1mut std/prelude/vec:Vec<compiler/effects:Facts>&	o1I64
+out 55bddf48bc20eff77042cebb6ea1fade
+run compiler/effects 26794-28514 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Bool
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/effects 22782-23166 fn	365c9f888f8ae5393e761dfd81cc8d8f
+read compiler/effects 28666-29673 fn	985d8602b820d76af8599b83eaa4ed8f
+read compiler/effects 29778-30359 fn	9b76394e15443f934de02d0bd336f6b1
+read compiler/effects 30453-30654 fn	ab115444363ca07dc5fa5d54639d7c27
+read compiler/effects 30720-30928 fn	8ea4449c0ef88ea2ba593940a567de85
+read compiler/effects 32480-33631 fn	f7be2af4073c3b5d2760f7b2741b6371
+read compiler/effects 33750-33906 fn	e141f68d8f6e74ac7d28b3d9e3b9998a
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, Bool>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 5979-6292 fn <I64;Bool;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7666-7764 fn <I64;Bool;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 11899-12021 fn <I64;>	070649b6438561053a4c440dd8ca066c
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <Bool;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:Facts;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <std/prelude/vec:Vec<I64>;>	ecc3d96246a2bd4251be3d6cf1aa2e3d
+read std/prelude/vec 7015-7075 fn <compiler/effects:Facts;>	606a6fe30967200ebb834aab7a132353
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/prelude/vec 7153-7207 fn <compiler/effects:Facts;>	d1692f7c43989772e6fbeee7a37d64ae
+hits 0
+body 1 59 40 2 | U B0 U U U U U U U B5 U U B6 U U B7 U U U U B7 U U U U U U B7 U U U U B17 U B17 U U U U U U U U B25 U U B25 U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b0000000000000000000000000000000000000000 b00000000000000000000000000000000000000000000000000000000000 b0000000000000000000000000000000000000000 | 0:,B0 1:,B0 2:,V1 3:,V1 4:,B0 5:,V1 6:,V1 7:,V1 8:,V0 10:,B0,B5 11:,V0,V0 13:,V0 14:,V0,V0 16:,V0 17:,V0 18:,B0 19:,V0,V0 21:,V0 22:,V0 23:,B0 24:,V0 25:,V0 26:,V0 28:,B0,B7 29:,V1 30:,V1 31:,V0 33:,V0 35:,V0 36:,V1 37:,V1 38:,V0,V1,B0 39:,V0,B0 40:,V1 41:,V1 42:,V0 44:,V0 45:,V0 47:,V0 48:,V1 49:,V1 50:,V0 51:,V0 52:,V0,V1 53:,V1 54:,V1 57:,V0,V0 58:,V0 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/vec:3184:3188,compiler/effects:26794:28514 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0std/prelude/vec:Vec<I64>&	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64	o0mut compiler/effects:Facts&	o1mut std/prelude/vec:Vec<compiler/effects:Facts>&	o1I64
+out 680cf8bf019703adda8e03f358347853
+run compiler/effects 25707-26082 fn	compiler/effects 26259-26469 fn	compiler/effects 24646-25513 fn	compiler/effects 24114-24416 fn	compiler/effects 23682-24112 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+in 0
+in 0
+in 0
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+marks 228e06fdd0a9e3a6583cef158ca082ec
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 26165-26257 fn	72dd775a8b9968003be0e23ee1f59e25
+read compiler/effects 26794-28514 fn	4e46043bb74c572b85ea67b45f2ef476
+read compiler/effects 32268-32338 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/effects 32340-32404 fn	753360899e792dedf06ee057d76e9c16
+read compiler/effects 32480-33631 fn	f7be2af4073c3b5d2760f7b2741b6371
+read compiler/effects 43734-44108 fn	e2cf5d2cf39d3b934a4409635cd1b94c
+read compiler/effects 50274-50926 fn	9d162539fd6859e93f3d1023f71d61e0
+read compiler/effects 8141-9219 fn	a4b22a979a2d50aec8ac9bf5e7f66346
+read std/prelude/map 7053-7137 fn <I64;std/prelude/vec:Vec<compiler/effects:given>;>	8a3cd6175f44f72cdd3c59b4d7fa6f1b
+read std/prelude/map 7666-7764 fn <I64;std/prelude/vec:Vec<I64>;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/map 7666-7764 fn <I64;std/prelude/vec:Vec<compiler/effects:given>;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:given>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:part>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:given;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:part;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <Bool;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:given;>	442c72fb9063f8bdc126d0eee7d856dc
+read std/prelude/vec 6401-6448 fn <compiler/effects:part;>	d04f2e5a858d17b205c489fe32a47a71
+read std/prelude/vec 6401-6448 fn <std/prelude/vec:Vec<I64>;>	ecc3d96246a2bd4251be3d6cf1aa2e3d
+read std/prelude/vec 7015-7075 fn <compiler/effects:Facts;>	606a6fe30967200ebb834aab7a132353
+read std/prelude/vec 7015-7075 fn <std/prelude/vec:Vec<I64>;>	0847fdcafe26a2a7b6308f0d010e95dd
+read std/prelude/vec 7153-7207 fn <Bool;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/prelude/vec 7703-7833 fn <I64;>	656905b4c4d095280c75cf8b4c816a75
+hits 0
+body 1 11 8 2 | U U U U U U U B5 U U U | F F F F F F F F | b10 b00000000 b00000000000 b00000000 | 0:,B0 1:,V0,V1,B0 2:,B0 3:,B0,B0 4:,V0 5:,V0,V0 6:,V0 8:,V0,B5 9:,V0,V0 10: | | ||
+sum r b10 b10 b100 b100 b100 b b b a,compiler/effects:43991:44041,compiler/effects:25707:26082 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/effects:Effects&	o0I64	o0compiler/effects:given&	o0compiler/effects:part	o1std/prelude/vec:Vec<compiler/effects:part>&	o1I64	o0I64	o0I64	o0mut compiler/effects:Facts&	o1mut std/prelude/vec:Vec<compiler/effects:Facts>&	o1I64	o0I64	o0mut compiler/effects:Facts&	o1mut std/prelude/vec:Vec<compiler/effects:Facts>&	o1I64
+body 1 11 6 1 | U U U B2 U U U U U U U | F F F F F F | b1 b000000 b00000000000 b000000 | 0:,V0 1:,V0 2:,V0,B2 4:,B2 5:,B2 8:,V0 9:,V0,V0 10:,V0 | | ||
+sum r b1 b1 b100 b100 b100 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64	o0mut std/prelude/vec:Vec<I64>&	o1mut std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64
+body 1 25 10 1 | U U B0 U U B3 U B5 U U U U U U U U U B10 U U U U U B14 U | F F F F F F F F F F | b1 b0000000000 b0000000000000000000000000 b0000000000 | 0:,V0 1:,V0 2:,V0,V0 3:,V0 4:,B0 5:,B0,B0 6:,V0,V0 8:,V0 9:,V0 10:,V0 11:,V0 12: 13:,V0 14:,V0,B3 15:,V0 16:,V0,B10 18:,B10 19:,B10 20:,V0 21:,V0,V0 22:,V0 24:,V0,B14 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/effects:Effects&	o0I64	o0std/prelude/vec:Vec<compiler/effects:given>	o1std/prelude/map:Map<I64, std/prelude/vec:Vec<compiler/effects:given>>&	o1I64	o0compiler/effects:given	o1std/prelude/vec:Vec<compiler/effects:given>&	o1I64	o0I64	o0I64	o0I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64	o0I64	o0I64	o0std/prelude/vec:Vec<I64>	o1mut compiler/effects:Effects&	o1I64	o0mut compiler/effects:Facts&	o1mut std/prelude/vec:Vec<compiler/effects:Facts>&	o1I64
+body 1 13 3 1 | U U U U U U U U U U U U U | F F F | b1 b000 b0000000000000 b000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0 10:,V0 11:,V0 12:,V0 | | ||
+sum r b1 b1 b100 b100 b100 b b b a,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0I64
+body 1 18 7 1 | U U U U U U B1 U U U U U U B0 U U U U | F F F F F F F | b1 b0000000 b000000000000000000 b0000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0,B1 7:,B1 8:,B1 9:,V0 10:,V0 11:,V0 12:,V0 13:,B0 14:,V0 15:,V0 16:,B0 17:,V0,B0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/effects:Effects&	o0I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64
+out 3374f0ac158c03c29897db52593e1fea
+run compiler/effects 20757-21021 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/effects 19129-19947 fn	57bdf077e905f022ca0072b8456aba84
+read compiler/effects 21123-21350 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/effects 23682-24112 fn	9d162539fd6859e93f3d1023f71d61e0
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:Facts;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+hits 0
+body 1 8 3 1 | U U U U U U U U | F F F | b1 b000 b00000000 b000 | 0:,V0 1:,B1 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64
+out aff044541de67e0d98400b23a3f080d9
+run compiler/effects 0-0 ctor compiler/effects:Verdict	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Verdict	0,1,2,3,4,5,6,7
+marks 5a6524314445d022051452ea6a38545c
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Bool
+read -ctor	I32
+read -ctor	I64
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 1 8 1 | U | V0 V0 F F V0 F F V0 | b1 b00000000 b0 b00000000 | 0:,V0 | | ||
+sum r b1 b1 b b b b b b a,compiler/effects:13368:13372 t i,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/types:TypeId
+out 9b7fb6ebf02404c1ea47bb798228c752
+run compiler/effects 93582-93797 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:given	5
+mark compiler/effects 0-0 ctor compiler/effects:part	1,2,4
+marks 10aa33e1736bb2ba7b07b8d10faeb5ef
+read compiler/effects 0-0 ctor compiler/effects:given	ecf22cc71e19b71e92e86979cab6e319
+read compiler/effects 0-0 ctor compiler/effects:part	afa0eaf5e7b60f70508ec53e01a5953d
+read compiler/effects 43734-44108 fn	e2cf5d2cf39d3b934a4409635cd1b94c
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:part>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 4 5 3 | B0 B0 U U | F F F F V2 | b101 b00000 b0000 b00001 | 0:,B0 2:,V2 3:,V0,B0,V2 | | ||
+sum r;V0,V2,0,93756,93780,0,0,0 b101 b101 b000 b000 b000 b b b a,compiler/effects:43991:44041,compiler/effects:93582:93797,compiler/effects:93738:93741 t,U i t i i c0/i/i f1010
+hid fs1;139776:U;139777:U;139778:U;139779:U;139780:U;1280:U	o0mut compiler/effects:Effects&	o0I64	o0compiler/effects:part&	o0I64
+out f77b03058a3d34664e063eef28fe9e45
+run compiler/effects 93313-93580 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:part	afa0eaf5e7b60f70508ec53e01a5953d
+read compiler/effects 93582-93797 fn	652e228bfc74d146baa18c105fd54686
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/effects:part>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <compiler/effects:part;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 5133-5172 fn <compiler/effects:part;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/effects:part;>	d04f2e5a858d17b205c489fe32a47a71
+hits 0
+body 1 11 10 3 | U U U V2 U U V2 U U V2 U | F F F V2 F F F F F V2 | b101 b0000000000 b00000000000 b0001000000 | 0:,V2 1:,V1 2:,V1,V1 4:,V2,V2 5:,V0,B2,V2 7:,V2 8:,V2,V2 10:,V2,V2 | | ||
+sum r;V1,V2,0,93464,93476,0,0,0;V0,V2,0,93516,93557,0,0,0 b101 b101 b000 b000 b000 b b b a,compiler/effects:43991:44041,compiler/effects:93313:93580,compiler/effects:93383:93386 t,U i t i i c0/i/i f1010
+hid fs1;1280:U	o0mut compiler/effects:Effects&	o0I64	o0std/prelude/vec:Vec<compiler/effects:part>&	o0compiler/effects:part	o1std/prelude/vec:Vec<compiler/effects:part>&	o1I64	o0I64	o0std/prelude/vec:Vec<compiler/effects:part>	o1mut compiler/effects:Effects&	o1I64	o1compiler/effects:part&	o0compiler/effects:part	o1std/prelude/vec:Vec<compiler/effects:part>&	o1I64
+out c35a19a34dd11f88a4206ee6ca0f62f2
+run compiler/effects 96325-96639 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Verdict	0,1
+marks 842f03167b2bd71619a9ee09cfd46b6d
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Verdict	cfa51374fc8b9866a80cffd0fde03cc4
+read compiler/effects 9603-10347 fn	4600927f627037f021796c3554f25ebf
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 4 12 3 | U U V2 V2 | F F F F F F F F F F F V2 | b001 b000000000000 b0000 b000000000000 | 0:,V1,V2 1:,V2,B2 | | ||
+sum r b001 b001 b0000 b0000 b0000 b b b a,compiler/effects:96325:96639,compiler/effects:96325:96639,compiler/effects:96515:96529 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0compiler/effects:Facts&	o0I64	o0mut compiler/effects:Verdict&	o0Array<std/prelude/text:String&, 8>	o0std/prelude/text:String&
+out 207435cf1715dcb201f4444d20c05e8c
+run compiler/effects 97308-97779 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	48
+mark compiler/effects 0-0 ctor compiler/effects:Verdict	4,7
+marks f0c5e97fb24a950519ce7413ee864419
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:Verdict	cfa51374fc8b9866a80cffd0fde03cc4
+read compiler/effects 51089-53132 fn	9d162539fd6859e93f3d1023f71d61e0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 8 12 4 | V3 V3 U V0 U U B0 V3 | F F F F V3 F F F F F F F | b1001 b000000000000 b00000000 b000010000000 | 2:,P,B0 4:,V0 5:,V0,V0 | | ||
+sum r b1001 b1001 b1000 b1000 b1000 b b b a,compiler/effects:97577:97583,compiler/effects:97308:97779,compiler/effects:97308:97779,compiler/effects:97387:97388 t i t i i c0/i/i f1010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/effects:Verdict	o0I64	o0std/prelude/text:String&	o0Array<std/prelude/text:String&, 8>	o0std/prelude/text:String&	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64
+out a3477bd3f1ac7eaa12e914cd406c09fc
+run compiler/effects 96868-97243 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0
+mark compiler/effects 0-0 ctor compiler/effects:Verdict	0
+marks 871b17d5532de553a8f93c60d8633ebb
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:Verdict	cfa51374fc8b9866a80cffd0fde03cc4
+read compiler/effects 8141-9219 fn	a4b22a979a2d50aec8ac9bf5e7f66346
+read compiler/effects 9603-10347 fn	4600927f627037f021796c3554f25ebf
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 5 12 2 | U U B2 U V1 | F F F F F F F F F F F F | b01 b000000000000 b00000 b000000000000 | 0:,V0 1:,B0,B2 3:,B2,B2 | | ||
+sum r b01 b01 b0000 b0000 b0000 b b b a,compiler/effects:96868:97243,compiler/effects:97148:97149 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0compiler/types:TypeId	o0I64	o0mut compiler/effects:Verdict&	o0Array<std/prelude/text:String&, 8>	o0std/prelude/text:String&
+out e4823a70752e3b4f30f734831f984b0c
+run compiler/effects 94989-95660 fn	compiler/effects 93979-94894 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0,36
+mark compiler/effects 0-0 ctor compiler/effects:part	3
+mark compiler/typed 0-0 ctor compiler/typed:Capture	1
+marks d491143cae2db7f86782d7bdd3c05d79
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:Facts	631836a8591fd667bcb889af59f9106a
+read compiler/effects 0-0 ctor compiler/effects:part	afa0eaf5e7b60f70508ec53e01a5953d
+read compiler/effects 20757-21021 fn	8713f48cd237b14b912fd723450ed836
+read compiler/effects 21865-22398 fn	78142f61282099ffbd02086543bcc17c
+read compiler/effects 22450-22663 fn	2d8c2035d03978786d629f6f62ccd2fa
+read compiler/effects 26165-26257 fn	72dd775a8b9968003be0e23ee1f59e25
+read compiler/effects 32340-32404 fn	753360899e792dedf06ee057d76e9c16
+read compiler/effects 32480-33631 fn	f7be2af4073c3b5d2760f7b2741b6371
+read compiler/effects 36578-36947 fn	890641c2ef1d2b1d78fe8bbe1bb9832a
+read compiler/effects 37029-37215 fn	ded200e46e9457fae91ff858807baf95
+read compiler/effects 51089-53132 fn	9d162539fd6859e93f3d1023f71d61e0
+read compiler/effects 56167-58337 fn	af0504d23e4076081d8ecb114da6457c
+read compiler/effects 8141-9219 fn	a4b22a979a2d50aec8ac9bf5e7f66346
+read compiler/effects 93582-93797 fn	652e228bfc74d146baa18c105fd54686
+read compiler/typed 0-0 ctor compiler/typed:Capture	0f7a8c6b286c9d4529b923125b6a42a0
+read compiler/typed 159594-160137 fn	d170dbedd4cc16f3c14b1a14be26c12a
+read std/prelude/map 7666-7764 fn <I64;std/prelude/vec:Vec<I64>;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:fslot;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:part;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/typed:LocalId;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:Facts;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:part;>	d04f2e5a858d17b205c489fe32a47a71
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+read std/prelude/vec 7906-7950 fn <compiler/effects:part;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 24 11 2 | U U U U U U U U V0 U U U B8 U U U U B11 U U U B12 U U | F F F F F F V0 F F F F | b11 b00000000000 b000000000000000000000000 b00000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0,V1 5:,B5 6:,B6 7:,V0,V1,V0 9:,V0 10:,V0,V0 11:,V0,V0 13:,B6,B8 14:,V0 15:,B10 16:,V0,B11 18:,B11 19:,B11 20:,V0 22:,B10,B12 23:,V0 | | ||
+sum r;V1,V0,0,95249,95287,0,0,0 b11 b11 b100 b100 b100 b b b a,std/prelude/vec:4512:4530,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0compiler/effects:part&	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0std/prelude/vec:Vec<compiler/effects:part>	o1mut compiler/effects:Effects&	o1I64	o1compiler/effects:part&	o0compiler/effects:part	o1std/prelude/vec:Vec<compiler/effects:part>&	o1I64	o0I64	o0std/prelude/vec:Vec<I64>	o1mut compiler/effects:Effects&	o1I64
+body 1 34 27 2 | U U U B2 U U U U B4 U U U B6 U U U U B8 U U U U U U V0 U U U B15 U U U B18 U | F F F F F F F F F F F F F F F F F F F F F F F F F F V0 | b11 b000000000000000000000000000 b0000000000000000000000000000000000 b000000000000000000000000000 | 0:,V0 1:,V0 2:,V0,V0 4:,V0 5: 6:,V0 7:,V0 9:,B0,B4 10:,V0 11:,V0,V0 13:,V0 14: 15:,V0 16:,V0 18:,B0,B8 19:,V0 20: 21:,V0 22:,V0 23:,V0,V1 25:,V0 26:,V0,V0 27:,V0,V0 29:,B0,B15 30:,V1 31:,V0 33:,B0,B18 | | ||
+sum r;V1,V0,0,94676,94699,0,0,0 b11 b11 b1000 b1000 b1000 b b b a,std/prelude/vec:4512:4530,std/prelude/vec:3184:3188 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0I64	o0compiler/typed:Expr&	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64	o0std/prelude/vec:Vec<compiler/effects:fslot>	o1mut compiler/effects:Effects&	o1I64	o0compiler/effects:part	o1std/prelude/vec:Vec<compiler/effects:part>&	o1I64
+out fa59009ae56799dee63e0775d520b9ee
+run compiler/effects 91679-93203 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+mark compiler/effects 0-0 ctor compiler/effects:Effects	0,36
+mark compiler/effects 0-0 ctor compiler/effects:part	3
+marks e8060f477e08fb725908e1fe96e54193
+read -ctor	I64
+read compiler/effects 0-0 ctor compiler/effects:Effects	1c6fb9814b643f20b8487a718650b177
+read compiler/effects 0-0 ctor compiler/effects:Verdict	cfa51374fc8b9866a80cffd0fde03cc4
+read compiler/effects 0-0 ctor compiler/effects:part	afa0eaf5e7b60f70508ec53e01a5953d
+read compiler/effects 20757-21021 fn	8713f48cd237b14b912fd723450ed836
+read compiler/effects 21865-22398 fn	78142f61282099ffbd02086543bcc17c
+read compiler/effects 26165-26257 fn	72dd775a8b9968003be0e23ee1f59e25
+read compiler/effects 32340-32404 fn	753360899e792dedf06ee057d76e9c16
+read compiler/effects 51089-53132 fn	9d162539fd6859e93f3d1023f71d61e0
+read compiler/effects 56167-58337 fn	af0504d23e4076081d8ecb114da6457c
+read compiler/effects 93313-93580 fn	e67a2c0dab7d466772d3ac319f9cc973
+read compiler/effects 93979-94894 fn	244953c3b922da283d9403ee0c553964
+read compiler/effects 96325-96639 fn	b404a851db914f96e9cce60df787e9c3
+read compiler/effects 96868-97243 fn	ea3fc47ea1e41c689f5f107270234e71
+read compiler/effects 97308-97779 fn	66833ee16b7aa5ca98dbb095976299c4
+read compiler/effects 98324-98689 fn	81e2dd135d6933a0dc837edafa69c208
+read compiler/types 21931-22017 fn	dd0e6ca4696e358a196ad7859f7e4559
+read std/prelude/map 7666-7764 fn <I64;std/prelude/vec:Vec<I64>;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/effects:part;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/effects:part;>	d04f2e5a858d17b205c489fe32a47a71
+read std/prelude/vec 7906-7950 fn <compiler/effects:part;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 48 15 3 | U U U U U U U V0 U V0 U U U U B5 U U U B6 U U V2 U V2 U U U U U B11 U U V2 U V2 U U U U U V2 U U B16 U U V2 U | F F F F V2 F V0 F F F F F F F F | b111 b000000000000000 b000000000000000000000000000000000000000000000000 b000010000000000 | 0:,V2 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0,V1 8:,V0,V0,V0 10:,V0 11:,V0,V0 12:,V0 13:,V0,B5 15:,B5 16:,B5 17:,V0 19:,V0,B6,V2 20:,V2,B6 22:,V0,V2 24:,V0,V2,V2,V2 25:,V0 26:,V0,V2 27:,V2,B9 28:,V0 30:,V0,B11,V2 31:,V2,B11 33:,V0,V2 35:,V0,V2,V2,V2 36:,V0 37: 38:,V0,B13,V2 39:,V2,B13 41:,V0,V2,V2,V2 42:,V0,V0 44:,V0,B16,V2 45:,V2,B16 47:,V0,V2,V2,V2 | | ||
+sum r;V1,V0,0,91941,91957,0,0,0 b111 b111 b1000 b1000 b1000 b b b a,std/prelude/vec:4512:4530,std/prelude/vec:3184:3188,compiler/effects:91765:91774 t i t i i c0/i/i f1010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0compiler/typed:Expr&	o0compiler/types:TypeId	o0I64	o0std/prelude/vec:Vec<compiler/effects:part>	o1mut compiler/effects:Effects&	o1I64	o1std/prelude/vec:Vec<compiler/effects:part>&	o0compiler/effects:part	o1std/prelude/vec:Vec<compiler/effects:part>&	o1I64	o0I64	o0std/prelude/vec:Vec<I64>	o1mut compiler/effects:Effects&	o1I64	o0compiler/effects:Verdict	o1mut compiler/effects:Effects&	o1compiler/effects:Verdict	o1I64	o1std/prelude/text:String&	o0I64	o0I64	o0I64	o0I64	o0I64	o0compiler/effects:Verdict	o1mut compiler/effects:Effects&	o1compiler/effects:Verdict	o1I64	o1std/prelude/text:String&	o0I64	o0compiler/effects:Verdict	o1mut compiler/effects:Effects&	o1compiler/effects:Verdict	o1I64	o1std/prelude/text:String&	o0I64	o0compiler/effects:Verdict	o1mut compiler/effects:Effects&	o1compiler/effects:Verdict	o1I64	o1std/prelude/text:String&
+out 02d3dfe4744b8f1e18ed72897d799b59
+run compiler/effects 95766-95859 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 96325-96639 fn	b404a851db914f96e9cce60df787e9c3
+hits 0
+body 1 1 4 3 | U | F F F F | b001 b0000 b0 b0000 | 0:,V0,V1,V2 | | ||
+sum r b001 b001 b0000 b0000 b0000 b b b a,compiler/effects:95766:95859,compiler/effects:95766:95859,compiler/effects:96515:96529 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Effects&	o0compiler/effects:Facts&	o0I64	o0mut compiler/effects:Verdict&
+out 48ebd83473169024ea4c54b22c1f4dd1
+run compiler/effects 96172-96268 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 0-0 ctor compiler/effects:Verdict	cfa51374fc8b9866a80cffd0fde03cc4
+read compiler/effects 97308-97779 fn	66833ee16b7aa5ca98dbb095976299c4
+hits 0
+body 1 2 4 4 | V3 U | F F F F | b1001 b0000 b00 b0000 | 1:,V0,V3,V2,V3 | | ||
+sum r b1001 b1001 b1000 b1000 b1000 b b b a,compiler/effects:97577:97583,compiler/effects:96172:96268,compiler/effects:96172:96268,compiler/effects:96255:96256 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0compiler/effects:Verdict	o0I64	o0std/prelude/text:String&	o0compiler/effects:Verdict	o1mut compiler/effects:Effects&	o1compiler/effects:Verdict	o1I64	o1std/prelude/text:String&
+out e6469c5bcd17cc3cf0218f68ab92faac
+run compiler/effects 95953-96107 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 20757-21021 fn	8713f48cd237b14b912fd723450ed836
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/typed:Body&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <std/prelude/vec:Vec<I64>;>	ecc3d96246a2bd4251be3d6cf1aa2e3d
+hits 0
+body 1 6 5 1 | U U B1 U U U | F F F F F | b1 b00000 b000000 b00000 | 0:,V0 1:,V0,B1 3:,B1 4:,B1 5:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<I64>>&	o1I64
+out db2d2b928b477bf283a03730b98ecd37
+run compiler/effects 21399-21519 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 19129-19947 fn	57bdf077e905f022ca0072b8456aba84
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/vec 6401-6448 fn <mut compiler/typed:Body&;>	2856310b0838e67f04dbe748a150a835
+hits 0
+body 1 4 2 1 | U U B0 U | F F | b1 b00 b0000 b00 | 0:,V0 1:,V0,V0 3:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/effects:Effects&	o0I64	o0mut compiler/typed:Body&	o1std/prelude/vec:Vec<mut compiler/typed:Body&>&	o1I64
+out 155a5ba60251a8a3008d033a7f3e5691
+run compiler/effects 1607-1816 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:1607:1816 t i t i i c0/i/i f0010
+hid fs1	o0I64
+out 99e3d77136d4b424cfbe1a3c868352b1
+run compiler/effects 90670-91004 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 1607-1816 fn	f1921fbbf2b5365c0128182e21617628
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 9 10 3 | U U B0 B0 U U B0 U U | F F F F F F F F F F | b001 b0000000000 b000000000 b0000000000 | 0:,B0 1:,B4 4:,B0,B0 5:,B0 7:,B0,B0 8:,B0,B0,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/effects:90670:91004,compiler/effects:90670:91004,std/prelude/text:11453:11467 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0compiler/effects:Facts&	o0Array<std/prelude/text:String&>&	o0I64
+out 25b49053e24788986825e6d830fd9bc6
+run compiler/effects 90440-90569 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/effects 4343-4474 fn	1affd54ec14de0bf19f19b8213d5c4aa
+hits 0
+body 1 1 1 2 | U | F | b00 b0 b0 b0 | 0:,V0 | | ||
+sum r b00 b00 b0 b0 b0 b b b a,compiler/effects:90440:90569,compiler/effects:90440:90569 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Facts&
+out 01dd4bea706d30a809743b29b4274bc5
+run compiler/effects 5539-5791 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:5539:5791 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Facts&
+out 4f3179ffc172dac5d2bd5d59480ffa29
+run compiler/effects 5352-5488 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/effects:5352:5488 t i t i i c0/i/i f0010
+hid fs1	o0compiler/effects:Facts&
+out d45b2655ce9cef5e0afaa089a3da596a
+run compiler/effects 91006-91185 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 1607-1816 fn	f1921fbbf2b5365c0128182e21617628
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 5 8 2 | U U B0 U U | F F F F F F F F | b01 b00000000 b00000 b00000000 | 0:,B0 1:,B0 3:,B0,B0 4:,B0,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/effects:91006:91185,std/prelude/text:11453:11467 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0compiler/effects:Facts&	o0I64
+out ba79a0e0e6b61d3d7f6a38c06671ceba
+run compiler/effects 88781-90438 fn	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/effects 32340-32404 fn	753360899e792dedf06ee057d76e9c16
+read compiler/effects 4343-4474 fn	1affd54ec14de0bf19f19b8213d5c4aa
+read compiler/effects 5352-5488 fn	d0bae4bf6d7feb3f3e29192e83ed8422
+read compiler/effects 5539-5791 fn	93b5390829cc086368a38b69fe811eb4
+read compiler/effects 90440-90569 fn	7a344bbc1ccc24e6abeae4fe84e9c71d
+read compiler/effects 91006-91185 fn	be5c3a28d4218ed5ab3d9cfa2a7c6e77
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+hits 0
+body 1 49 18 3 | U V2 U V2 U U U V2 U V2 U U U B0 B0 U U U B0 B0 U U U B0 B0 U U U B0 B0 U U B0 U U U U U U U U B0 U U U U U U U | F F F F F F F F F F F F F F F F F F | b001 b000000000000000000 b0000000000000000000000000000000000000000000000000 b000000000000000000 | 0:,V0,B2 2:,V0,B3 4:,V0 5:,V0 6:,V0,B5 8:,V0,B4 10:,B0 11:,B0 12: 15:,B0,B0 16:,B0 17:,B0,B10,B10 20:,B0,B0 21:,B0 22: 25:,B0,B0 26:,B0 27:,B0,B15,B15 30:,B0,B0 31:,B0,B0 33:,B0,B0 34:,B0,B0 35:,B0,B0 36:,V0,B0 37:,B0,B0 38:,B0,B0 39:,B0,B0 40:,B0,B0 42:,B0,B0 43:,B0,B0 44:,V0 45:,B0,B0 46:,V0 47:,B0,B0 48:,B0,B0,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/effects:88781:90438,compiler/effects:88781:90438,compiler/effects:88951:89031 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U	o0compiler/effects:Facts&	o0Array<std/prelude/text:String&>&
+out dd8b389dfbf5ff07203ae4f28555f9da
+run compiler/effects global fileNames	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f8bdc0329bf8716fcb2b38e81af2182f
+run compiler/effects global netNames	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6fa2a97152e256e48700ddcc4a5db78f
+run compiler/effects global procNames	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e3298db185587f5d17d09eefab1f6f82
+run compiler/effects global envNames	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e6d02a49682ae0ed2e0b1d45e65c5a49
+run compiler/effects global quickNames	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bed38675dc668da3f34087e857e954c5
+run compiler/effects global CapFiles	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out afef31116e40829ede5cd9685b4f1b81
+run compiler/effects global CapNetwork	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b1eab6def8533acf03e058cd84fd1b9e
+run compiler/effects global CapProcesses	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 457e17e1d073df343a508f5de99df489
+run compiler/effects global CapEnvironment	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2d274f184c0edea721f42c9718047454
+run compiler/effects global CapC	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 252da937f41d2b3aed049d69d067ae97
+run compiler/effects global CapThreads	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d498a0237e808062b003119e4e691356
+run compiler/effects global CapCount	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 43922c0a04a7af77e4aa3d1c4ed7005d
+run compiler/effects global EffectWords	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64
+out da3b7985653220070ed1b9d8a171f111
+run compiler/effects global GivNamed	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out efe80ae24b98f7c66c7585d210d55b3b
+run compiler/effects global GivSlot	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8899274a784aa72dff470d8b20878911
+run compiler/effects global GivBound	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ca1a9ff05984261ecb95d545b18538f9
+run compiler/effects global GivMade	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 83629f96ffe33fea310967d79a677d78
+run compiler/effects global GivResult	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bd0fc907a67e14312cc02071f731fba8
+run compiler/effects global PartLambda	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3657e10d87dfa819b03d4f5dce67f4c8
+run compiler/effects global PartAdapter	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out be4a26843e6b82ef6ce454a940eb259b
+run compiler/effects global GivResField	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1f65fe0505d2dd83a2fef345c4c3d468
+run compiler/effects global globalParam	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c6ec39824fd67751a64dbfdfb045d784
+run compiler/effects global outParam	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e3feaf6a9467b436e70380589478d8d1
+run compiler/effects global outLocal	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a9d27713bfa62417c103bd717a0e40cf
+run compiler/effects global FieldDepth	
+ctx r1 g1 p0
+keys compiler/effects=622155da4d7f46d9eb9e97de5a42b65072865b6007154b811297cc8c2aa8b1ae
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4fd048039001b4fd8347df3d7d717a52
+end
+sum 192949-17766447733853883208

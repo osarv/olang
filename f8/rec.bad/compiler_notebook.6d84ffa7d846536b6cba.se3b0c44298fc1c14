@@ -1,0 +1,291 @@
+olang scope record
+run compiler/notebook 2385-2498 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/io 3193-3244 fn <std/prelude/text:String;>	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 1 1 | B0 U | F | b0 b0 b00 b0 | 1: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/notebook:2385:2498 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out ef5e3b43439618b94f68b4b9b3b014ad
+run compiler/notebook 2500-2599 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read std/json 4440-5542 fn <std/prelude/text:String&;>	29f8fa8d7f9b78812e65efb08442916c
+read std/json 7544-7683 fn	656b96a082399099a7567556adf274a3
+hits 0
+body 1 2 2 3 | U U | F F | b000 b00 b00 b00 | 0:,V0,V1,V0 1:,V0,V2 | | ||
+sum r;V0,V2,0,2544,2597,0,0,0 b000 b000 b00 b00 b00 b b b a,compiler/notebook:2500:2599,compiler/notebook:2500:2599,compiler/notebook:2500:2599 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&	o0std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&
+out 4edd91b114fa9fd865553b1ef8dfa308
+run compiler/notebook 3107-3539 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+mark std/json 0-0 ctor std/json:Object	0,1
+marks bedaa41437b17f5e14ad8078b70dfb1f
+read -ctor	Bool
+read -ctor	I64
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/json:Json&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/json:Json&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/json:Json&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 11 12 4 | U U U U U U U U U U U | F F F V3 V3 F F F F F F F | b0001 b000000000000 b00000000000 b000000000000 | 0:,V3 1:,V3 2:,V3,V0 3:,V0,V1 4:,V3,O0 5:,V0,V1 6:,V3,V1 7:,V3,V2 8:,V3,V3 9:,V3,V3 10:,V3,V3,V3 | | || 4:rN34
+sum r;V0,V3,0,3266,3276,0,0,0;V2,V3,0,3342,3355,0,0,0;V1,V3,0,3423,3435,0,0,0 b0001 b0001 b011 b000 b000 b b b a,compiler/notebook:3107:3539,compiler/notebook:3107:3539,compiler/notebook:3107:3539,compiler/notebook:3175:3177 t,V3,V3 i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U;27904:V3;27905:V3	o0std/json:Object&	o0std/prelude/text:String&	o0std/json:Json&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0mut Array<std/json:Json&>&	o1std/prelude/vec:Vec<std/json:Json&>&
+out 5b58874e126e380d8fe147223fb19428
+run compiler/notebook 3600-3811 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	std/json:Json
+read compiler/notebook 3107-3539 fn	f6184363bc94df2172a93aeac731240d
+read std/json 7989-8128 fn	2f8c3e3f00354ef7318b6159202621f8
+hits 0
+body 1 5 5 5 | U U V4 U V4 | F F F F F | b00001 b00000 b00000 b00000 | 0:,V0,V4 1:,V4,V1,V2,V4 3:,V4,V4,V3,V4 | | ||
+sum r;V0,V4,0,3686,3687,0,0,0;V2,V4,0,3739,3809,0,0,0;V1,V4,0,3739,3809,0,0,0;V3,V4,0,3739,3809,0,0,0 b00001 b00001 b0111 b0000 b0000 b b b a,compiler/notebook:3600:3811,compiler/notebook:3600:3811,compiler/notebook:3600:3811,compiler/notebook:3600:3811,compiler/notebook:3760:3808 t i t i i c0/i/i f1010
+hid fs1	o0std/json:Json&	o0std/prelude/text:String&	o0std/json:Json&	o0std/json:Json&	o0std/json:Object&	o1std/json:Json&	o0std/json:Object	o1std/json:Object&	o1std/prelude/text:String&	o1std/json:Json&	o0std/json:Object	o1std/json:Object&	o1std/prelude/text:String&	o1std/json:Json&
+out 4024ea17e4bf53f3b936ff4ee7f026cd
+run compiler/notebook 2886-3032 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/json 7544-7683 fn	656b96a082399099a7567556adf274a3
+read std/json 7771-7924 fn	1f696cee56c72539dbea77f5899e25c7
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 5 6 2 | B0 U U U U | F F F F F F | b01 b000000 b00000 b000000 | 0:,B0 1:,V0,V0 2:,V0,V0 3:,B0,V0 4:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/notebook:2886:3032,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&	o0Array<std/json:Json&>&	o1std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&
+out 8bfe5eb55276244edb2037532bd5ddb4
+run compiler/notebook 2649-2884 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/notebook 2886-3032 fn	30cf73fd30a96c0f26586df3935ba044
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 7544-7683 fn	656b96a082399099a7567556adf274a3
+hits 0
+body 1 7 2 2 | U V0 U U B0 B0 V1 | F F | b11 b00 b0000000 b00 | 0:,V0,V0 2:,V0,B0 3:,V0,B0 | | ||
+sum r b11 b11 b0 b0 b0 b b b a,compiler/notebook:2732:2746,compiler/notebook:2796:2882 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&
+out bde15424a87b17c3a20b9abdf2b77ca8
+run compiler/notebook 5746-6120 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/jupyter 15814-15915 fn	941ba4ec2fad30a7ae8a44409d75ba16
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 9 9 3 | U U B0 U U B0 U U V2 | F F F F F F F F F | b001 b000000000 b000000000 b000000000 | 0:,B0 1:,V1,B0 3:,B0,B0 4:,V1,B0 6:,B0,B0 7:,B0,B0,B0 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/notebook:5746:6120,compiler/notebook:5746:6120,compiler/notebook:6027:6118 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0std/prelude/text:String&	o0std/prelude/text:String&
+out 4cddf9a47dbca3507ee514257e2c48b2
+run compiler/notebook 4540-5671 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+mark compiler/prompt 0-0 ctor compiler/prompt:Reply	1,4,5
+marks 9079b9ed63e62689fdd60b273b24231c
+read -ctor	std/json:Json
+read compiler/jupyter 0-0 ctor compiler/jupyter:Capture	6582db4c68ebc10f8ca49764f3c1bd03
+read compiler/jupyter 13470-13559 fn	a1cdc39c8b1fc18e52ef369cc5cd52e7
+read compiler/jupyter 13722-14025 fn	ef69ceb04a54f45f413d9a74d2b06644
+read compiler/jupyter 15814-15915 fn	941ba4ec2fad30a7ae8a44409d75ba16
+read compiler/jupyter 16187-16607 fn	cccf85a81d49c7a2be464251362aefea
+read compiler/notebook 5746-6120 fn	c45c3401b74bbdb0723f2213dcd5ba7e
+read compiler/prompt 0-0 ctor compiler/prompt:Reply	338823f3afbd299d94b072ef5821b689
+read compiler/prompt 16957-18800 fn	90528689b6854ce0b3d31b6a677c9bb8
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/prelude/text 10176-10230 fn	ecc907d1b80ad51f7de503ad33f4d4b6
+read std/prelude/text 10447-10795 fn	1f5be6d0ca3785e37b467f570786f397
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 7121-7240 fn	24ce05ea22e719b590c94d9a8cf2f626
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 40 17 3 | U U B0 B0 U U U U U U B0 U B0 U U B0 U U B0 B0 U U U U U U U B4 U U B4 U U B0 B0 U U V2 V2 U | F F F F F F F F F F F F F F F F F | b101 b00000000000000000 b0000000000000000000000000000000000000000 b00000000000000000 | 0:,B0 1:,B0 4:,V0,V1,B0,V0 5:,B0,B0 6:,B0,B0 7:,B0 8:,B0,B0 9:,B1,B0,B0 11:,B0,B0 13:,B0,B0 14:,B2,B0,B0 16:,B0,B0 17:,V0,B3 20:,B0,B0 21:,V0,B0 22:,B4 23:,V0,V0 24:,V0,V0 25:,V0,V0 26:,V0,B4 28:,B4,B4 29:,V0,B4 31:,B4,B4 32:,B4,B4,B4 35:,B0,B0 36:,B0,B0,B0 39:,V2,V2 | | ||
+sum r b101 b101 b110 b100 b100 b b b a,compiler/prompt:22036:22094,compiler/notebook:4540:5671,compiler/notebook:5589:5617 t i t i i c0/i/i f1010
+hid fs1;1280:U;1280:U	o0mut compiler/prompt:Session&	o0std/prelude/text:String&	o0I64	o0compiler/prompt:Reply	o1mut compiler/prompt:Session&	o1std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:LineIter	o1std/prelude/text:String&	o0std/prelude/text:String&	o1mut std/prelude/text:LineIter&	o0std/json:Json&	o1std/prelude/text:String&
+out df843ca0eb27c797015d28dcd9af5c8f
+run compiler/notebook 4540-5671 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in df843ca0eb27c797015d28dcd9af5c8f
+mark compiler/prompt 0-0 ctor compiler/prompt:Reply	1,4,5
+mark compiler/prompt 0-0 ctor compiler/prompt:Session	0
+marks 491d6fec54360e762af7c9cc1819c177
+read -ctor	std/json:Json
+read compiler/jupyter 0-0 ctor compiler/jupyter:Capture	6582db4c68ebc10f8ca49764f3c1bd03
+read compiler/jupyter 13470-13559 fn	a1cdc39c8b1fc18e52ef369cc5cd52e7
+read compiler/jupyter 13722-14025 fn	ef69ceb04a54f45f413d9a74d2b06644
+read compiler/jupyter 15814-15915 fn	941ba4ec2fad30a7ae8a44409d75ba16
+read compiler/jupyter 16187-16607 fn	cccf85a81d49c7a2be464251362aefea
+read compiler/notebook 5746-6120 fn	c45c3401b74bbdb0723f2213dcd5ba7e
+read compiler/prompt 0-0 ctor compiler/prompt:Reply	338823f3afbd299d94b072ef5821b689
+read compiler/prompt 0-0 ctor compiler/prompt:Session	6f3c4c90fcd08ff7ffec8d6bc3bf6fd5
+read compiler/prompt 16957-18800 fn	5a61aa28737d602a735224e1d8abd4ad
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/prelude/text 10176-10230 fn	ecc907d1b80ad51f7de503ad33f4d4b6
+read std/prelude/text 10447-10795 fn	1f5be6d0ca3785e37b467f570786f397
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 7121-7240 fn	24ce05ea22e719b590c94d9a8cf2f626
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 40 17 3 | U U B0 B0 U U U U U U B0 U B0 U U B0 U U B0 B0 U U U U U U U B4 U U B4 U U B0 B0 U U V2 V2 U | F F F F F F F F F F F F F F F F F | b101 b00000000000000000 b0000000000000000000000000000000000000000 b00000000000000000 | 0:,B0 1:,B0 4:,V0,V1,B0,V0 5:,B0,B0 6:,B0,B0 7:,B0 8:,B0,B0 9:,B1,B0,B0 11:,B0,B0 13:,B0,B0 14:,B2,B0,B0 16:,B0,B0 17:,V0,B3 20:,B0,B0 21:,V0,B0 22:,B4 23:,V0,V0 24:,V0,V0 25:,V0,V0 26:,V0,B4 28:,B4,B4 29:,V0,B4 31:,B4,B4 32:,B4,B4,B4 35:,B0,B0 36:,B0,B0,B0 39:,V2,V2 | 0,0 | 4:,0/0/D0/0 || 220:rR4551,4572,26:mut compiler/build:Config&,-1(F4551,4572,26:mut compiler/build:Config&,0(D4551,4572,23:compiler/prompt:Session(R4551,4572,28:mut compiler/prompt:Session&,-1(V4551,4572,28:mut compiler/prompt:Session&,0))))
+sum r;D0/0,V0,0,4672,4673,0,0,0 b101 b101 b110 b100 b100 b b b a,compiler/prompt:22036:22094,compiler/notebook:4540:5671,compiler/notebook:5589:5617 t i t i,0 i,0 c0/i/i f1010
+hid fs1;1280:U;1280:U	o0mut compiler/prompt:Session&	o0std/prelude/text:String&	o0I64	o0compiler/prompt:Reply	o1mut compiler/prompt:Session&	o1std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:LineIter	o1std/prelude/text:String&	o0std/prelude/text:String&	o1mut std/prelude/text:LineIter&	o0std/json:Json&	o1std/prelude/text:String&
+out 0a5b2f3799bdebdc53fa82babb504228
+run compiler/notebook 3968-4141 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/notebook 2500-2599 fn	a7f7bc62032b53b75a7060b9a818d19a
+read std/json 7771-7924 fn	1f696cee56c72539dbea77f5899e25c7
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 5 2 1 | U U B0 B0 U | F F | b0 b00 b00000 b00 | 0:,V0,V0 1:,V0,B0,B0 4:,B0,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/notebook:3968:4141 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&	o0Array<std/json:Json&>&	o1std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&
+out 9c41c1f7c8d4cf3437ad7b2ec43cbdd5
+run compiler/notebook 3813-3923 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+hits 0
+body 1 4 0 1 | U V0 V0 U | | b1 b b0000 b | 3:,V0,V0,V0 | | ||
+sum r b1 b1 b b b b b b a,compiler/notebook:3879:3898 t,V0,V0 i t i i c0/i/i f0010
+hid fs1;27904:V0;27905:V0
+out 439e5cc6e36b71518af75c63556a9eee
+run compiler/notebook 4207-4466 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/notebook 3107-3539 fn	f6184363bc94df2172a93aeac731240d
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 8480-8579 fn	c465368129114998c9cea3ccfccd651a
+hits 0
+body 1 3 2 2 | U U U | F F | b01 b00 b000 b00 | 0:,V0,B0 1:,V1,V1 2:,V0,V1,V1,V1 | | ||
+sum r;V0,V1,0,4279,4287,0,0,0 b01 b01 b0 b0 b0 b b b a,compiler/notebook:4207:4466,std/json:14229:14241 t,U,U i t i i c0/i/i f1010
+hid fs1	o0std/json:Object&	o0std/json:Json&	o1std/prelude/text:String&	o0std/json:Object	o1std/json:Object&	o1std/prelude/text:String&	o1std/json:Json&
+out 9a6f62d3eb581e4bf8a729ff65b9cd2d
+run compiler/notebook 840-2383 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Bool
+read -ctor	I64
+read -ctor	struct(I32, std/json:Error$payload)
+read -ctor	struct(I32, std/os:Error$payload)
+read compiler/cells 11727-11777 fn	34847ebd8f6f1f00742c9766ce24afb8
+read compiler/cells 8909-10173 fn	3f7c95da3cbf70a2e955b3e446708bfa
+read compiler/notebook 2385-2498 fn	24d1567da4c6ae75f261153334caa218
+read compiler/notebook 2500-2599 fn	a7f7bc62032b53b75a7060b9a818d19a
+read compiler/notebook 2649-2884 fn	b46aaf16d3aed7d43f3a49bbe9775e51
+read compiler/notebook 3107-3539 fn	f6184363bc94df2172a93aeac731240d
+read compiler/notebook 3600-3811 fn	9ce86d50082ecdaab60c5cac77e0dfe0
+read compiler/notebook 3813-3923 fn	6f4d28dc6601429df00235e632269175
+read compiler/notebook 3968-4141 fn	fb76bab7f46b31ee56df0d6ce2f5bcff
+read compiler/notebook 4207-4466 fn	fac1cfd3ff4a244f3d18fe549d7042ba
+read compiler/notebook 4540-5671 fn	2b21fd7e14f9a76c0ec4a3ca6126d246
+read compiler/prompt 0-0 ctor compiler/prompt:Session	fd9d122a82231fce7cca3959e8c39d21
+read compiler/prompt 16957-18800 fn	90528689b6854ce0b3d31b6a677c9bb8
+read compiler/prompt 20180-21296 fn	ba0539729c5ad5bb2bb77b25dfb9a154
+read compiler/prompt 21531-22322 fn	2b19deeb7a46b8e7fbc068080bfc84dc
+read compiler/prompt 22666-23609 fn	a31a72cec1420b9b491b495eda1f3785
+read compiler/prompt 23839-24158 fn	e12e8ca043e1ca0952b7a1281965f00c
+read compiler/prompt 26242-28259 fn	94a79eb4b32b55dcb1bfc2eaeeb1f170
+read compiler/prompt 29081-29183 fn	5848b2fb5b8d6567194a1df9f8a74bc5
+read compiler/prompt 40628-41122 fn	80722678c4ae0373afd2b81d206c8b91
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 31581-31733 fn <std/json:Json;>	548c94ac8687707c20e22f91c172d03d
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 7771-7924 fn	1f696cee56c72539dbea77f5899e25c7
+read std/json 7989-8128 fn	2f8c3e3f00354ef7318b6159202621f8
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 6638-6813 fn	c32509e8a76db962290b03809b10d6a8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/json:Json&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/json:Json&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/json:Json&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <compiler/prompt:Decl;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/prompt:Value;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/prompt:Decl;>	d04f2e5a858d17b205c489fe32a47a71
+read std/prelude/vec 6401-6448 fn <compiler/prompt:Value;>	b51ed69aecd7674ca5263126de5a48dc
+want decl compiler/prompt:Session
+hits 0
+body 1 76 23 3 | U B0 B1 B1 B1 U U B0 B2 B2 B2 U U U B3 B3 U U U U B5 U U B0 B0 B0 B0 U B0 U U B9 U U B0 B0 B0 B0 U B0 U U B11 U U B0 U B0 U U U B13 B13 U U B0 U U U U B0 B0 U B0 B0 U U U B0 B0 U B0 B14 B14 B14 U | F F F F F F F F F V0 F F F F F F F F B0 F F F F | b100 b00000000000000000000000 b0000000000000000000000000000000000000000000000000000000000000000000000000000 b00000000000000000000000 | 0:,V1,B0 5:,B1 6:,B0,B0 11:,B2 12:,B0,B0 13:,B0,B0 16:,B3 17:,V0,V0 18:,B0 19:,B0,B5,B5 21:,B5,B5 22:,B0,B0 27:,B0,B0,B0,B0,B0 29:,B0,B0 30:,B0,B9 32:,B9,B9 33:,B9,B9 38:,B0,B0,B0,B0,B0 40:,B0,B0 41:,B0,B11 43:,V0,B11,B0 44:,B0 46:,B0,B0,B0,B0,B0 48:,B0,B0 49:,V0 50:,B0,B0 53:,B13 54:,B0,B0 56:,B0,B0,B0,B0 57:,B0,B0 58:,B0,B0 59:,B0 62:,B0,B0 65:,B0,B0,B0,B0 66:,V2,B0 67:,B0,B0,B0 70:,O0,B0 75:,B14 | | || 5:rN174
+sum r b100 b100 b1110 b0000 b0000 b b b a,compiler/notebook:1243:1262,compiler/notebook:840:2383,compiler/notebook:840:2383 t i t i i c0/i/i f0010
+hid fs1;55296:V0;1280:U	o0mut compiler/build:Config&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0Bool	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0Array<std/json:Json&>&	o1std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json	o1std/json:Json&	o1std/prelude/text:String&	o1std/json:Json&	o1std/json:Json&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/json:Json	o1std/json:Json&	o1std/prelude/text:String&	o1std/json:Json&	o1std/json:Json&	o0std/json:Json	o1mut compiler/prompt:Session&	o1std/prelude/text:String&	o1I64	o0std/json:Json	o1std/json:Json&	o1std/prelude/text:String&	o1std/json:Json&	o1std/json:Json&	o0std/json:Object&	o1std/json:Json&	o0mut Array<std/json:Json&>&	o1std/prelude/vec:Vec<std/json:Json&>&	o0std/json:Object	o1std/json:Object&	o1std/prelude/text:String&	o1std/json:Json&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Object&	o1std/json:Json&	o0std/json:Object	o0std/json:Object	o1std/json:Object&	o0std/json:Object	o1std/json:Object&	o1std/prelude/text:String&	o1std/json:Json&	o0std/prelude/text:String&	o1std/json:Json	o1std/prelude/text:String&	o1std/json:Naming
+out e8622c0d1360970af2397174ab213800
+run compiler/notebook 840-2383 fn	
+ctx r1 g1 p0
+keys compiler/notebook=6d84ffa7d846536b6cbafb064049b2324d718bf60dd1c18f2d5bd25461cab668
+in e8622c0d1360970af2397174ab213800
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Bool
+read -ctor	I64
+read -ctor	struct(I32, std/json:Error$payload)
+read -ctor	struct(I32, std/os:Error$payload)
+read compiler/notebook 2385-2498 fn	24d1567da4c6ae75f261153334caa218
+read compiler/notebook 2500-2599 fn	a7f7bc62032b53b75a7060b9a818d19a
+read compiler/notebook 2649-2884 fn	b46aaf16d3aed7d43f3a49bbe9775e51
+read compiler/notebook 3107-3539 fn	f6184363bc94df2172a93aeac731240d
+read compiler/notebook 3600-3811 fn	9ce86d50082ecdaab60c5cac77e0dfe0
+read compiler/notebook 3813-3923 fn	6f4d28dc6601429df00235e632269175
+read compiler/notebook 3968-4141 fn	fb76bab7f46b31ee56df0d6ce2f5bcff
+read compiler/notebook 4207-4466 fn	fac1cfd3ff4a244f3d18fe549d7042ba
+read compiler/notebook 4540-5671 fn	31898230903479913f434e683ff56cb3
+read compiler/prompt 0-0 ctor compiler/prompt:Session	6f3c4c90fcd08ff7ffec8d6bc3bf6fd5
+read compiler/prompt 40628-41122 fn	e5ee9171884de6ab44586a01a939498e
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 31581-31733 fn <std/json:Json;>	548c94ac8687707c20e22f91c172d03d
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 7771-7924 fn	1f696cee56c72539dbea77f5899e25c7
+read std/json 7989-8128 fn	2f8c3e3f00354ef7318b6159202621f8
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 6638-6813 fn	c32509e8a76db962290b03809b10d6a8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/json:Json&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/json:Json&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/json:Json&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 76 23 3 | U B0 B1 B1 B1 U U B0 B2 B2 B2 U U U B3 B3 U U U U B5 U U B0 B0 B0 B0 U B0 U U B9 U U B0 B0 B0 B0 U B0 U U B11 U U B0 U B0 U U U B13 B13 U U B0 U U U U B0 B0 U B0 B0 U U U B0 B0 U B0 B14 B14 B14 U | F F F F F F F F F F F F F F F F F F B0 F F F F | b000 b00000000000000000000000 b0000000000000000000000000000000000000000000000000000000000000000000000000000 b00000000000000000000000 | 0:,V1,B0 5:,B1 6:,B0,B0 11:,B2 12:,B0,B0 13:,B0,B0 16:,B3 17:,V0,B0 18:,B0 19:,B0,B5,B5 21:,B5,B5 22:,B0,B0 27:,B0,B0,B0,B0,B0 29:,B0,B0 30:,B0,B9 32:,B9,B9 33:,B9,B9 38:,B0,B0,B0,B0,B0 40:,B0,B0 41:,B0,B11 43:,B0,B11,B0 44:,B0 46:,B0,B0,B0,B0,B0 48:,B0,B0 49:,B0 50:,B0,B0 53:,B13 54:,B0,B0 56:,B0,B0,B0,B0 57:,B0,B0 58:,B0,B0 59:,B0 62:,B0,B0 65:,B0,B0,B0,B0 66:,V2,B0 67:,B0,B0,B0 70:,O0,B0 75:,B14 | | 43:,0/0/V0 49:,0/0/V0 || 5:rN174
+sum r b000 b000 b1110 b0000 b0000 b b b a,compiler/notebook:840:2383,compiler/notebook:840:2383,compiler/notebook:840:2383 t i t i i c0/i/i f0010
+hid fs1;55296:V0;1280:U	o0mut compiler/build:Config&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0Bool	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0Array<std/json:Json&>&	o1std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json	o1std/json:Json&	o1std/prelude/text:String&	o1std/json:Json&	o1std/json:Json&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/json:Json	o1std/json:Json&	o1std/prelude/text:String&	o1std/json:Json&	o1std/json:Json&	o0std/json:Json	o1mut compiler/prompt:Session&	o1std/prelude/text:String&	o1I64	o0std/json:Json	o1std/json:Json&	o1std/prelude/text:String&	o1std/json:Json&	o1std/json:Json&	o0std/json:Object&	o1std/json:Json&	o0mut Array<std/json:Json&>&	o1std/prelude/vec:Vec<std/json:Json&>&	o0std/json:Object	o1std/json:Object&	o1std/prelude/text:String&	o1std/json:Json&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Object&	o1std/json:Json&	o0std/json:Object	o0std/json:Object	o1std/json:Object&	o0std/json:Object	o1std/json:Object&	o1std/prelude/text:String&	o1std/json:Json&	o0std/prelude/text:String&	o1std/json:Json	o1std/prelude/text:String&	o1std/json:Naming
+out c5d6cc29f8b07f46a54460087aab6332
+end
+sum 24223-2286739247053794466

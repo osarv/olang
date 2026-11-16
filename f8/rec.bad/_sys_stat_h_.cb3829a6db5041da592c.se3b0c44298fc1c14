@@ -1,0 +1,670 @@
+olang scope record
+run <sys/stat.h> 0-0 ctor <sys/stat.h>:timespec	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+mark <sys/stat.h> 0-0 ctor <sys/stat.h>:timespec	0,1
+marks 0dd1cca23f504118634a58a687aac88c
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<sys/stat.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out eaef3f7cef53b413000ed2e7d99dbbc2
+run <sys/stat.h> 0-0 ctor <sys/stat.h>:stat_t	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+mark <sys/stat.h> 0-0 ctor <sys/stat.h>:stat_t	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+marks 06f5c35d24a8dddcda1d33b6cf9bade7
+read -ctor	Array<I64, 3>
+read -ctor	I32
+read -ctor	I64
+read -ctor	U32
+read -ctor	U64
+read <sys/stat.h> 0-0 ctor <sys/stat.h>:timespec	0559649318cfc4b734ca1079c41bf92f
+hits 0
+body 1 4 15 1 | U U U V0 | F F F F F F F F F F F F F F F | b1 b000000000000000 b0000 b000000000000000 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b1 b1 b b b b b b a,<sys/stat.h>:1654:1667 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out ee4e3ab5ddcf43aabd71555db5af196c
+run <sys/stat.h> 0-0 ctor <sys/stat.h>:stat64_t	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+mark <sys/stat.h> 0-0 ctor <sys/stat.h>:stat64_t	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+marks 3cba722e405b40443d5e01f0fb369034
+read -ctor	Array<I64, 3>
+read -ctor	I32
+read -ctor	I64
+read -ctor	U32
+read -ctor	U64
+read <sys/stat.h> 0-0 ctor <sys/stat.h>:timespec	0559649318cfc4b734ca1079c41bf92f
+hits 0
+body 1 4 15 1 | U U U V0 | F F F F F F F F F F F F F F F | b1 b000000000000000 b0000 b000000000000000 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b1 b1 b b b b b b a,<sys/stat.h>:1956:1969 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 30d7dcc88cf0b988d2e4341280e7fe61
+run <sys/stat.h> 0-0 ctor <sys/stat.h>:statx_timestamp	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+mark <sys/stat.h> 0-0 ctor <sys/stat.h>:statx_timestamp	0,1,2
+marks 703dfef4434e14d264918560af700b2d
+read -ctor	I32
+read -ctor	I64
+read -ctor	U32
+hits 0
+body 1 0 3 1 | | F F F | b0 b000 b b000 | | | ||
+sum r b0 b0 b b b b b b a,<sys/stat.h>:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out e3c985f737ea07e2a54eeddb94a29d10
+run <sys/stat.h> 0-0 ctor <sys/stat.h>:statx_t	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+mark <sys/stat.h> 0-0 ctor <sys/stat.h>:statx_t	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23
+marks 4e5e35e651b827ca8bff49d4c4763c67
+read -ctor	Array<U16, 1>
+read -ctor	Array<U64, 12>
+read -ctor	U16
+read -ctor	U32
+read -ctor	U64
+read <sys/stat.h> 0-0 ctor <sys/stat.h>:statx_timestamp	8a3c36d7218ec1fee1ed62266f446ba5
+hits 0
+body 1 6 24 1 | V0 U U U U V0 | F F F F F F F F F F F F F F F F F F F F F F F F | b1 b000000000000000000000000 b000000 b000000000000000000000000 | 1:,V0 2:,V0 3:,V0 4:,V0 | | ||
+sum r b1 b1 b b b b b b a,<sys/stat.h>:2221:2234 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 4d5d53184b8c218f7e6f58f3c9d1d541
+run <sys/stat.h> global UTIME_NOW	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6deb9058c0a48a617d621f9afadf271d
+run <sys/stat.h> global UTIME_OMIT	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 198fcd5687f3be32fe55b9d7569ed792
+run <sys/stat.h> global S_IFMT	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6bd5c9af152bd9b1b2171c775ade8519
+run <sys/stat.h> global S_IFDIR	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bc3a56ec9f83df27a733cec7d9a6aafa
+run <sys/stat.h> global S_IFCHR	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2280067c45aa0e9e11e73534ce14f81a
+run <sys/stat.h> global S_IFBLK	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2b9fcd8d84bda2085850d3987874ef39
+run <sys/stat.h> global S_IFREG	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 02e409b23a47fe2b49d0072275160d5a
+run <sys/stat.h> global S_IFIFO	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 46b697d31990934f3af6fc996743fb82
+run <sys/stat.h> global S_IFLNK	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5f124ed853e7d4e906764cee8f392719
+run <sys/stat.h> global S_IFSOCK	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e8bd83104297af0a400f59492f4942a2
+run <sys/stat.h> global S_ISUID	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 55bf1f6a61b4f09593a7f2de209b5588
+run <sys/stat.h> global S_ISGID	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5332d6ac1a633cd116e95a0de3ff598e
+run <sys/stat.h> global S_ISVTX	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 460f820c9f8f90f7d2a00b5fecb351c0
+run <sys/stat.h> global S_IRUSR	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c8ffac6552fdd5d63eac1a0075966552
+run <sys/stat.h> global S_IWUSR	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 57958bcdf15316690f52125f80dfeb37
+run <sys/stat.h> global S_IXUSR	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 675ec42acb08d26b88e6c8b80d7f78f9
+run <sys/stat.h> global S_IRWXU	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8bfc33912d20b7fa86c955d827a7761b
+run <sys/stat.h> global S_IREAD	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 49a76a710eed2edb77d000f78ae8a783
+run <sys/stat.h> global S_IWRITE	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 84cde81290ef3093416ad0ee96aa229f
+run <sys/stat.h> global S_IEXEC	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 950b6964b019476e322bdfa66ce44b4b
+run <sys/stat.h> global S_IRGRP	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ebe1044cf8b6a10b5d226ff7ff9f9e52
+run <sys/stat.h> global S_IWGRP	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fb91fccb61f5f13e844a770770497ac3
+run <sys/stat.h> global S_IXGRP	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 800788c3d9879828d051014cee73bf39
+run <sys/stat.h> global S_IRWXG	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a3f8ccba4067b10a8578256d9fd86b96
+run <sys/stat.h> global S_IROTH	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 23b5113fd4d63f48ea8f2b6f3228caf2
+run <sys/stat.h> global S_IWOTH	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1eca942b21a0c8ca820530377fabb650
+run <sys/stat.h> global S_IXOTH	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 18371251ad389604c9e1f62dcb822d71
+run <sys/stat.h> global S_IRWXO	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 242bc85fbb7325fbf4b2a1a1ce8f1298
+run <sys/stat.h> global ACCESSPERMS	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5b363066859279947342e1e0d113a7a1
+run <sys/stat.h> global ALLPERMS	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b6b531541433f0637062b25f264abc16
+run <sys/stat.h> global DEFFILEMODE	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dbf43b2b2b5a86ee025e113b3ee870ee
+run <sys/stat.h> global S_BLKSIZE	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4c295d950c00ded22a7a4f9af0e83166
+run <sys/stat.h> global STATX_TYPE	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9c250d8b01bad8fb9dcbd318ad615def
+run <sys/stat.h> global STATX_MODE	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 593b8984f8bae5f9f5a7255e782e0e4c
+run <sys/stat.h> global STATX_NLINK	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8339aa9887378a524a8f9431c36b1a1f
+run <sys/stat.h> global STATX_UID	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a3ce3da67b8ef092a990b818e6d82cda
+run <sys/stat.h> global STATX_GID	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a278d6bb1f8c0ce48d5504e06b77a265
+run <sys/stat.h> global STATX_ATIME	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 696a0f6415c556c5148d991e849a41ce
+run <sys/stat.h> global STATX_MTIME	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 20a908e8c57fe434cfaee7d4e4b76ef4
+run <sys/stat.h> global STATX_CTIME	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bbe3977557b11d1332070d0c5b07e4e9
+run <sys/stat.h> global STATX_INO	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 759f9f99cbbe295ab1d66e1d9246a9db
+run <sys/stat.h> global STATX_SIZE	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0939d6e75b7420ef9f23fe13300f4057
+run <sys/stat.h> global STATX_BLOCKS	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 46b48d0f0fd322dfd8e730b62f6eed19
+run <sys/stat.h> global STATX_BASIC_STATS	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 37812542fde32c189670e30c72fdeca1
+run <sys/stat.h> global STATX_BTIME	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fa439cd9ab9898a211e93eefdbaa6957
+run <sys/stat.h> global STATX_MNT_ID	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 27cc7c06298438a676083bee082b300a
+run <sys/stat.h> global STATX_DIOALIGN	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 32cf53ab9ba9933557eabbce0341f596
+run <sys/stat.h> global STATX_MNT_ID_UNIQUE	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 39bf05a647737753c5c8c5a35183f37e
+run <sys/stat.h> global STATX__RESERVED	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2ec03ab33c2f9783e90074ccc44c9cda
+run <sys/stat.h> global STATX_ALL	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f1497092e5cdd7c735f87b835a69ae3f
+run <sys/stat.h> global STATX_ATTR_COMPRESSED	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dfddd324a03ec0256df781619a961bee
+run <sys/stat.h> global STATX_ATTR_IMMUTABLE	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c4ce6039d4709698e83c01cbc8ff730b
+run <sys/stat.h> global STATX_ATTR_APPEND	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 25dfee113fa7d40b581ff10619543dc8
+run <sys/stat.h> global STATX_ATTR_NODUMP	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4ca51355f53ad446bac8458d320d9b91
+run <sys/stat.h> global STATX_ATTR_ENCRYPTED	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ffd8cb112af77fcab50c555d1ab0ccdf
+run <sys/stat.h> global STATX_ATTR_AUTOMOUNT	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7c04a89ae372b6c25d0dffc649a76ff8
+run <sys/stat.h> global STATX_ATTR_MOUNT_ROOT	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3cd613b258546fc5c44ff6fb0f621b1a
+run <sys/stat.h> global STATX_ATTR_VERITY	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bd8c65d3c6f29e18111195a2a77abe46
+run <sys/stat.h> global STATX_ATTR_DAX	
+ctx r1 g1 p0
+keys <sys/stat.h>=cb3829a6db5041da592c6b4294f7b5484be7906f5497702e8d0b8b6f89430241
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8a8fda4f6d962a6f43219fdb309a6a69
+end
+sum 21634-4281433050675880914

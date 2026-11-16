@@ -1,0 +1,46 @@
+olang scope record
+run std/hex 310-535 fn	
+ctx r1 g1 p0
+keys std/hex=2562b5aa4cbd00e8363a9bc07341e8ee2616f9e123a1ddbdb85a7c60d2f8aca4
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 2 8 2 | V1 V1 | F V1 F F F F F F | b01 b01000000 b00 b00000000 | | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/hex:310:535,std/hex:357:384 t i t i i c0/i/i f0010
+hid fs1	o0Array<U8>&	o0std/prelude/text:Char	o0std/prelude/text:Char
+out 2367251911121493da6f4f0db5171e96
+run std/hex 537-766 fn	
+ctx r1 g1 p0
+keys std/hex=2562b5aa4cbd00e8363a9bc07341e8ee2616f9e123a1ddbdb85a7c60d2f8aca4
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char
+out 53b6b7dd1c223909f2bfd039926441db
+run std/hex 768-1014 fn	
+ctx r1 g1 p0
+keys std/hex=2562b5aa4cbd00e8363a9bc07341e8ee2616f9e123a1ddbdb85a7c60d2f8aca4
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/hex 537-766 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 3 8 2 | V1 U U | F V1 F F F F F F | b01 b01000000 b000 b00000000 | 1: 2: | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/hex:768:1014,std/hex:876:898 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 478ed97066c68965e1366938742384af
+run std/hex global digits	
+ctx r1 g1 p0
+keys std/hex=2562b5aa4cbd00e8363a9bc07341e8ee2616f9e123a1ddbdb85a7c60d2f8aca4
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 28ae962c315d259a4631e5c5dcf6eff1
+end
+sum 1582-6132408875886375590

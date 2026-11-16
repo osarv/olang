@@ -1,0 +1,13 @@
+olang scope record
+run std/prelude/axis 733-942 fn	
+ctx r1 g1 p0
+keys std/prelude/axis=0d4df5ebe7bc35fd565b37bfcc7fb0d16126096d0fcd7eb5d248649bb6f0dd46
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 5 0 | | F F F F F | b b00000 b b00000 | | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/axis:Axis	o0I64
+out 79fb62a27cc62a8c9dd401b080de8ce7
+end
+sum 391-2854800090274027664

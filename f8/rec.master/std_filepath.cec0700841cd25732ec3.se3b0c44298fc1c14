@@ -1,0 +1,223 @@
+olang scope record
+run std/filepath 2888-4848 fn	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Bool
+read -ctor	I64
+hits 0
+body 1 4 21 2 | B0 V1 V1 V1 | F F F F F F F F F F F F F F V1 F F F F F F | b01 b000000000000000000000 b0000 b000000000000000000000 | | | ||
+sum r;V0,V1,0,4736,4751,0,1,0 b01 b01 b1 b0 b0 b b b a,std/filepath:2888:4848,std/filepath:4766:4780 t i t i i c0/i/i f1010
+hid fs1	o0std/prelude/text:String&
+out 748d392a8ef450423878af9de01e038d
+run std/filepath 2134-2266 fn	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read std/filepath 2888-4848 fn	7ab5fe539736344b4904fde48539ae84
+hits 0
+body 1 1 2 2 | U | F F | b01 b00 b0 b00 | 0:,V0,V1 | | ||
+sum r;V0,V1,0,2238,2264,0,1,0 b01 b01 b1 b0 b0 b b b a,std/filepath:2134:2266,std/filepath:4766:4780 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out bf9f2a69bc4d5fa20eba3038c737a1c6
+run std/filepath 5201-5683 fn	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/filepath 2888-4848 fn	7ab5fe539736344b4904fde48539ae84
+hits 0
+body 1 4 16 2 | B0 B0 B0 U | F F F F F F F F F F F F F F F F | b00 b0000000000000000 b0000 b0000000000000000 | 3:,B0,B0 | | ||
+sum r b00 b00 b0 b0 b0 b b b a,std/filepath:5201:5683,std/filepath:5201:5683 t i t i i c0/i/i f0010
+hid fs1	o0Array<std/prelude/text:String&>&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out df9ead88bc4368f66ad37c5d4b23a7e0
+run std/filepath 1289-1576 fn	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+hits 0
+body 1 0 3 2 | | F F F | b00 b000 b b000 | | | ||
+sum r;V0,V1,0,1453,1468,0,1,0 b00 b00 b1 b0 b0 b b b a,std/filepath:1289:1576,std/filepath:1289:1576 t i t i i c0/i/i f1010
+hid fs1	o0std/prelude/text:String&
+out cf996944b547d01b2364e3e10a69d939
+run std/filepath 1060-1132 fn	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/filepath:1060:1132 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out ff7d320fc89385e7f533528095809f9c
+run std/filepath 1744-1917 fn	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+hits 0
+body 1 0 2 2 | | F F | b00 b00 b b00 | | | ||
+sum r;V0,V1,0,1866,1881,0,1,0 b00 b00 b1 b0 b0 b b b a,std/filepath:1744:1917,std/filepath:1744:1917 t i t i i c0/i/i f1010
+hid fs1	o0std/prelude/text:String&
+out 843f1794252aec50dd8cd99baba11988
+run std/filepath 6236-7532 fn	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read std/filepath 1060-1132 fn	d5838cb328f3d7a10ce2fb1489c9d948
+read std/filepath 2888-4848 fn	7ab5fe539736344b4904fde48539ae84
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 10 30 3 | U U U U U U U U V2 V2 | F F F F F F F F F F F F F F F F F F V2 F F F F F F F F F F F | b001 b000000000000000000100000000000 b0000000000 b000000000000000000000000000000 | 0:,V0,B0 1:,V1,B0 2:,B0,B0 3:,B0,B0 4:,B0 5:,B0 6:,B0,B0 7:,B0,B0 | | ||
+sum r b001 b001 b11 b00 b00 b b b a,std/filepath:6236:7532,std/filepath:6236:7532,std/filepath:7125:7193 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 891709582aa0834a23fc689b948846a8
+run std/filepath 7726-7905 fn	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 1 8 0 | B2 | F F F F F F F F | b b00000000 b0 b00000000 | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 89c137e2be51d15198480988619f0b39
+run std/filepath 9029-9453 fn	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/filepath 2888-4848 fn	7ab5fe539736344b4904fde48539ae84
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 12 9 1 | B0 U U B3 B3 U U U B4 B4 U U | F F F F F F F F F | b1 b000000000 b000000000000 b000000000 | 0:,B0 1:,P,B2 2:,B2,P 5:,B0,B3 6:,B2,B2 7:,B2,B2 10:,B0,B4 11:,B0,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0Array<std/prelude/text:String&, 76>	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 40c60117f37756350c45e04e4fb5f33a
+run std/filepath 10697-11026 fn	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/filepath 1289-1576 fn	d4a2b2db0fffbb2b59db7f030588fc9b
+read std/filepath 2134-2266 fn	c21d410093af7bd7620495b18370c76f
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 14 8 1 | B0 U U U B3 B3 U U U U B4 B4 U U | F F F F F F F F | b1 b00000000 b00000000000000 b00000000 | 0:,B0 1:,P,P 2:,P,P 3:,P,B3 6:,B0,B3 7:,P,B2 8:,B2,P 9:,P,B4 12:,B0,B4 13:,B0,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0Array<std/prelude/text:String&, 57>	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out d540fa9442f49946f8ca24f8d017fd64
+run std/filepath 13467-13777 fn	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/filepath 6236-7532 fn	ba2df6d8814f1f893b64bc2ed12b5df6
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 7 8 1 | B0 U U B3 B3 U U | F F F F F F F F | b1 b00000000 b0000000 b00000000 | 0:,B0 1:,P,P,B2 2:,B2,P 5:,B0,B3 6:,B0,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0Array<std/prelude/text:String&, 117>	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out 02a3302739e0006cfe30500e4d3596f5
+run std/filepath global cleanCases	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 622e9b045abe0f2a263148764e0667ad
+run std/filepath global partCases	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 821c908463126d14b232ea5fb9f9a4dd
+run std/filepath global relCases	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 171d6567aefc036a367e9abe5fea7b57
+run std/filepath global cleanMissesBaked	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/filepath 9029-9453 fn	f01cf2376be357a3fcfe65813f8714a5
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0:,P | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9419e6f75fe8c2784d24d80efac0c8f5
+run std/filepath global partMissesBaked	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/filepath 10697-11026 fn	f01cf2376be357a3fcfe65813f8714a5
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0:,P | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 60a5e5b4051c2239a561b7e3e62ced0b
+run std/filepath global relMissesBaked	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/filepath 13467-13777 fn	f01cf2376be357a3fcfe65813f8714a5
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0:,P | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d5256b2288d9c2b9189d21e2dd2e4883
+run std/filepath global livePath	
+ctx r1 g1 p0
+keys std/filepath=cec0700841cd25732ec3086b1f5577ece4d47c782debfe7c066e7f102d80007a
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fea79db4d98e1e537a508d6b81dfa64f
+end
+sum 10318-3718451751178772486

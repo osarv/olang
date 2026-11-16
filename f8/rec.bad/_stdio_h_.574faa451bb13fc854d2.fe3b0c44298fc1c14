@@ -1,0 +1,37 @@
+olang front record
+body global BUFSIZ	known p
+body global EOF	known p
+body global FILENAME_MAX	known p
+body global FOPEN_MAX	known p
+body global L_ctermid	known p
+body global L_cuserid	known p
+body global L_tmpnam	known p
+body global P_tmpdir	known p
+body global RENAME_EXCHANGE	known p
+body global RENAME_NOREPLACE	known p
+body global RENAME_WHITEOUT	known p
+body global SEEK_CUR	known p
+body global SEEK_DATA	known p
+body global SEEK_END	known p
+body global SEEK_HOLE	known p
+body global SEEK_SET	known p
+body global TMP_MAX	known p
+baked BUFSIZ [8 00200000]
+baked EOF [8 ffffffff]
+baked FILENAME_MAX [8 00100000]
+baked FOPEN_MAX [8 10000000]
+baked L_ctermid [8 09000000]
+baked L_cuserid [8 09000000]
+baked L_tmpnam [8 14000000]
+baked P_tmpdir [8 04000000000000000000000000000000 @8>1+0][8 2f746d70]
+baked RENAME_EXCHANGE [8 02000000]
+baked RENAME_NOREPLACE [8 01000000]
+baked RENAME_WHITEOUT [8 04000000]
+baked SEEK_CUR [8 01000000]
+baked SEEK_DATA [8 03000000]
+baked SEEK_END [8 02000000]
+baked SEEK_HOLE [8 04000000]
+baked SEEK_SET [8 00000000]
+baked TMP_MAX [8 f8a20300]
+end
+sum e2f352654c8da12409856c1388c205995742fc347f0018c4b0e0c0edb7dc4f6e

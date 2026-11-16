@@ -1,0 +1,83 @@
+olang front record
+body fn 10020-10960	known p
+body fn 11018-11137	known p,0
+body fn 11370-11465	known p
+body fn 11625-11915	known p grows|0|-|-|.|0|0|compiler/api|11719|11723|-1 keeps|1|-|-|.|0|0|compiler/api|11661|11661|0 keeps|2|-|-|.|0|0|compiler/api|11668|11668|0
+body fn 12257-12931	known p,0,1
+body fn 13078-13386	known p,0,1
+body fn 13388-13477	known p
+body fn 13667-14289	known p
+body fn 14827-15646	known p grows|2|-|-|.|0|0|compiler/api|15305|15309|-1
+body fn 1507-2827	known p
+body fn 15871-16442	known p grows|1|-|-|.|0|0|compiler/api|16259|16269|-1
+body fn 16542-16929	known p
+body fn 16998-17234	known p
+body fn 17344-17669	known p
+body fn 17705-17911	known p
+body fn 18177-18709	known p
+body fn 18903-19583	known p,0,1
+body fn 19719-20140	known p
+body fn 20201-20674	known p
+body fn 20676-20812	known p
+body fn 20863-20978	known p
+body fn 2829-2879	known p
+body fn 2881-2954	known p grows|0|-|-|..starts|7|0|compiler/api|2930|2936|-1
+body fn 2956-3339	known p
+body fn 3461-4132	known p grows|2|-|-|..warns|6|0|compiler/api|3695|3700|-1 grows|2|-|-|..records|8|0|compiler/api|3695|3700|-1 grows|2|-|-|..notes|6|0|compiler/api|3695|3700|-1
+body fn 4208-4391	known p
+body fn 4561-5016	known p,1
+body fn 5018-5281	known p
+body fn 5478-6136	known p
+body fn 6250-6766	known p
+body fn 6768-7444	known p grows|0|-|-|..chars|6|0|compiler/api|6881|6885|-1
+body fn 7684-7881	known p grows|0|-|-|..chars|6|0|compiler/api|7817|7821|-1
+body fn 7945-8170	known p
+body fn 8371-8702	known p grows|0|-|-|..chars|6|0|compiler/api|8640|8644|-1
+body fn 8791-8888	known p
+body fn 8974-9178	known p
+body fn 9180-9616	known p
+body fn 9618-9887	known p
+body global EffectWords	known p
+body lambda 5206-5263	known p
+body lambda 5695-5744	known p
+baked EffectWords [64 0700000000000000000000000000000007000000000000000000000000000000070000000000000000000000000000000700000000000000000000000000000009000000000000000000000000000000080000000000000000000000000000000400000000000000000000000000000008000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0 @120>8+0][8c 72657475726e73][8c 6e6f616c6c6f63][8c 6e6f626c6f636b][8c 6e6f737061776e][8c 6e6f72656375727365][8c 6e6f65787465726e][8c 70757265][8c 6e6f626f72726f77]
+sig Mode@1507 fn&(String&, String&, String&, mut Config&) I32
+sig addBreaks@11370 fn&(String&) Bool
+sig change.changed@18903 fn&(sig, sig) change
+sig change.deprecation@11018 fn&(sig) change
+sig change.fits@12257 fn&(sig, sig) change
+sig change.requires@13078 fn&(sig, sig) change
+sig compare@10020 fn&(Vec<sig>&, Vec<sig>&) Vec<change>
+sig depMark@8791 fn&(Entry&) String
+sig entries@5478 fn&(String&, String&, String&, mut Config&) Vec<sig> ? Unread
+sig fnTypeAt@16542 fn&(String&, I64) I64
+sig git@4208 fn&(...String&) String ? Unread
+sig itemKind@9180 fn&(String&) String
+sig itemSigs@6768 fn&(mut StringBuilder&, Entry&)
+sig items@20201 fn&(String&) Array<String&>
+sig matching@16998 fn&(String&, I64) I64
+sig memberKind@9618 fn&(String&, String&, Bool) String
+sig pushChange@11625 fn&(mut Vec<change>&, sig, sig)
+sig pushFits@8371 fn&(mut StringBuilder&, String&, Entry&)
+sig pushRequires@7684 fn&(mut StringBuilder&, String&, Entry&)
+sig relation@13388 fn&(String&) Bool
+sig requiresOf@7945 fn&(String&) Array<String&>
+sig rowOf@2956 fn&(change&) String
+sig said@2881 fn&(mut Diagnostics&) I32
+sig say@2829 fn&(String&)
+sig side@3461 fn&(String&, String&, mut Diagnostics&) String ? Unread
+sig sigLine@8974 fn&(String&) String
+sig sources@4561 fn&(String&, String&) Vec<String&>
+sig splitErrors@19719 fn&(String&) String, Array<String&>
+sig stripSig@15871 fn&(String&, mut Vec<fnType>&) String
+sig stripWords@14827 fn&(String&, Bool, mut Vec<fnType>&) String
+sig subset@20676 fn&(Array<String&>&, Array<String&>&) Bool
+sig tailEnd@17344 fn&(String&, I64) I64
+sig union@5018 fn&(Vec<String&>&, Vec<String&>&) Vec<String&>
+sig untilWords@17705 fn&(String&, Array<String&>&) String
+sig valueless@20863 fn&(String&) String
+sig wordsOf@13667 fn&(String&) Array<String&>
+sig wordsOnly@18177 fn&(String&, String&) Bool
+sig writeSigs@6250 fn&(String&, String&, mut Config&) I32
+end
+sum 7915262bffa91568cac3b23f47b8a86d51c61f3cffd16d1a84f31ec49cdf2a43

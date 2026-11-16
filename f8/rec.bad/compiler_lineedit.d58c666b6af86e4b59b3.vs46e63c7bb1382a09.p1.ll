@@ -1,0 +1,17 @@
+; olang - emitted by the self-hosted compiler (compiler/emit.olang)
+target triple = "x86_64-pc-linux-gnu"
+
+@olang_loc_126b4ead7e969a49_c70e2460580ad75 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:506: slice bounds out of range\0A\00"
+@olang_loc_22a9a5775aa8f43a_f3d22121f345f80e = weak_odr constant [56 x i8] c"compiler/lineedit.olang:471: slice bounds out of range\0A\00"
+@olang_loc_54806be5a60651c2_4a35e5984fb8c156 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:745: slice bounds out of range\0A\00"
+@olang_loc_55814703dba0f3c7_baa829e140d7f09b = weak_odr constant [56 x i8] c"compiler/lineedit.olang:684: slice bounds out of range\0A\00"
+@olang_loc_576d906cf1a69575_2b5fe4737c0e1301 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:460: slice bounds out of range\0A\00"
+@olang_loc_6d8e321d50b20c8b_e1e5724559d494c7 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:855: slice bounds out of range\0A\00"
+@olang_loc_7dccba76dee48f7e_602c3d6b6ac3d592 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:825: slice bounds out of range\0A\00"
+@olang_loc_8dc6cdcca3960da7_c3faaa8d27204ea3 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:515: slice bounds out of range\0A\00"
+@olang_loc_9f82c4ae2fb92c09_610471f21aec4c45 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:913: slice bounds out of range\0A\00"
+@olang_loc_c6edc95ce3a108e9_a40785e2dad47f45 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:363: slice bounds out of range\0A\00"
+@olang_loc_d87e059e3fca2959_92a9b8111884af55 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:557: slice bounds out of range\0A\00"
+@olang_loc_d9375333dfb29074_4c1db221b9426bf0 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:385: slice bounds out of range\0A\00"
+@olang_loc_dd36f3cf990f8aca_64500bf1420cd6c6 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:514: slice bounds out of range\0A\00"
+@olang_loc_efd16dbbcc037fb0_1aeb292baa76ec64 = weak_odr constant [56 x i8] c"compiler/lineedit.olang:235: slice bounds out of range\0A\00"

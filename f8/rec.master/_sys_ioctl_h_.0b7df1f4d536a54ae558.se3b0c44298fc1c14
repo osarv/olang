@@ -1,0 +1,1909 @@
+olang scope record
+run <sys/ioctl.h> 0-0 ctor <sys/ioctl.h>:winsize	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+mark <sys/ioctl.h> 0-0 ctor <sys/ioctl.h>:winsize	0,1,2,3
+marks 856fc22c9e807c2d071b60b6b65a8435
+read -ctor	U16
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b b b b b b a,<sys/ioctl.h>:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out a8e6978259e476ba98c44c4410a95ba9
+run <sys/ioctl.h> 0-0 ctor <sys/ioctl.h>:termio	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+mark <sys/ioctl.h> 0-0 ctor <sys/ioctl.h>:termio	0,1,2,3,4,5
+marks 80862edd63d5ca1783c256a85c8cd7c8
+read -ctor	Array<U8, 8>
+read -ctor	U16
+read -ctor	U8
+hits 0
+body 1 1 6 1 | V0 | F F F F F F | b1 b000000 b0 b000000 | | | ||
+sum r b1 b1 b b b b b b a,<sys/ioctl.h>:368:380 t i,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 96191610e78e31f8717031788f420261
+run <sys/ioctl.h> global IOC_IN	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out eea4fcfe1dd913cf8672b3bcce3150df
+run <sys/ioctl.h> global IOC_OUT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 38a80c9fd212cca870e186dd7431923c
+run <sys/ioctl.h> global IOC_INOUT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 07f56b63d4a54f0d187294bb2a0aca1e
+run <sys/ioctl.h> global IOCSIZE_MASK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 775d3ed6195b523b90796785cbb6dcd3
+run <sys/ioctl.h> global IOCSIZE_SHIFT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2b9f1c50f0c7520602148aa224ee239a
+run <sys/ioctl.h> global TCGETS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2b87b236adedf317922046c04a992a32
+run <sys/ioctl.h> global TCSETS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 54482872cf47798ad70774e998aac6fb
+run <sys/ioctl.h> global TCSETSW	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7dbbd7f158571d97f56cc351215f9ee9
+run <sys/ioctl.h> global TCSETSF	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 246e4c2203be1813a5b65ef526cee31a
+run <sys/ioctl.h> global TCGETA	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 807a601c9a8eed493071d4f414c281f3
+run <sys/ioctl.h> global TCSETA	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3f0add5d04d8821ad68f3bd93597ca2c
+run <sys/ioctl.h> global TCSETAW	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7d2824c1dbd5316148835a9af35ee2dc
+run <sys/ioctl.h> global TCSETAF	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d0f57e7a65ed94899c8d90b3bc8acd32
+run <sys/ioctl.h> global TCSBRK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a9ef13008fc72d39e01402cfc7b0b250
+run <sys/ioctl.h> global TCXONC	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a035fdeff51082063176f566b63ee92d
+run <sys/ioctl.h> global TCFLSH	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 88ac37617ff456bd2e8a64cb250d0402
+run <sys/ioctl.h> global TIOCEXCL	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 46dd9bc3960148ca1924239f96629b0b
+run <sys/ioctl.h> global TIOCNXCL	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 84a95b0c5c39971d0a1669233382cf34
+run <sys/ioctl.h> global TIOCSCTTY	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4191c7082a42508227e9fde205c8058d
+run <sys/ioctl.h> global TIOCGPGRP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6b8fff3a8de05583a0e6ad024950eb5b
+run <sys/ioctl.h> global TIOCSPGRP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3a5390c1399284996213b4197ed19562
+run <sys/ioctl.h> global TIOCOUTQ	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3f5ed2bbec6fcb53df36e7b9efa2a6f9
+run <sys/ioctl.h> global TIOCSTI	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8a32d52e271b1fb3ec0532dee6ebb43d
+run <sys/ioctl.h> global TIOCGWINSZ	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e9981d6d71e2b706cdfc2a4e83adbf8e
+run <sys/ioctl.h> global TIOCSWINSZ	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 75ed77642bf1ea5a61d5fb66ce71b1aa
+run <sys/ioctl.h> global TIOCMGET	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1855a2e4b3b0940ecdfe18a8ddff41c1
+run <sys/ioctl.h> global TIOCMBIS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ab40b6b464eb85ade896cba89f67e04a
+run <sys/ioctl.h> global TIOCMBIC	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1d2422181d339c4a6a4707480cdd4485
+run <sys/ioctl.h> global TIOCMSET	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 86a0635eff651ee423fd453627f6518b
+run <sys/ioctl.h> global TIOCGSOFTCAR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out da5f46fb81fb52b83803a8952820e964
+run <sys/ioctl.h> global TIOCSSOFTCAR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e6462d4cc8beec3759c1ebd62bb50b1d
+run <sys/ioctl.h> global FIONREAD	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c7704b9e3559eb69966b2868e3bceca6
+run <sys/ioctl.h> global TIOCINQ	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 31f91413b61cc872ef75e85724d1d459
+run <sys/ioctl.h> global TIOCLINUX	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0208c99f4640e255a21ba4c38c420599
+run <sys/ioctl.h> global TIOCCONS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d8a9d27bcffb20647e569a4f44c94911
+run <sys/ioctl.h> global TIOCGSERIAL	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7970b60ce18facea7888c84f8e15aa81
+run <sys/ioctl.h> global TIOCSSERIAL	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8b98b4a434a70e298d64d895b9c0c86d
+run <sys/ioctl.h> global TIOCPKT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a7c7a563d719cc6df4bd86184dfb3078
+run <sys/ioctl.h> global FIONBIO	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4c88711bfe9ead3f2a94dad1e8507fd0
+run <sys/ioctl.h> global TIOCNOTTY	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c1c0652ef1706b6496312f4d6f5c6365
+run <sys/ioctl.h> global TIOCSETD	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a75dadd9ff59dab18168fd27a879724f
+run <sys/ioctl.h> global TIOCGETD	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 51de10951e6ba616484b14ff26123786
+run <sys/ioctl.h> global TCSBRKP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5680d5d833680129d53acb29a9047743
+run <sys/ioctl.h> global TIOCSBRK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 83c87accd0025d3b740d840cf6732905
+run <sys/ioctl.h> global TIOCCBRK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5d53bc3c77c93ee388ada75eccfc2c7d
+run <sys/ioctl.h> global TIOCGSID	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5ee3f8e0f2cd487c95636fe0a53545a6
+run <sys/ioctl.h> global TIOCGRS485	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1d4513c34cb68eba9b46ccaf3f4fd458
+run <sys/ioctl.h> global TIOCSRS485	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c67a2636f7a6120729abad5fdd7a13e2
+run <sys/ioctl.h> global TIOCGPTN	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1ad64326c34e9a886a8fed98ae1cdd65
+run <sys/ioctl.h> global TIOCSPTLCK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d45281a25e17cf5fff792e09b3b5ef0b
+run <sys/ioctl.h> global TIOCGDEV	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 018480c3ee1692b074c8e2b12864e10c
+run <sys/ioctl.h> global TCGETX	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7b3d1ae63df0c094724ba1a5765ee7ac
+run <sys/ioctl.h> global TCSETX	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5d9bf15077c9f2bad8556e8ffbff511c
+run <sys/ioctl.h> global TCSETXF	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 424780a7b2094ba68fc8c64412f6e25c
+run <sys/ioctl.h> global TCSETXW	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0d1d59e413660a487c8a11e507257392
+run <sys/ioctl.h> global TIOCSIG	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7fb64fcbbce2ce0b55ed694034eb4b68
+run <sys/ioctl.h> global TIOCVHANGUP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5f7eb6b9053a1b2b36aec0b9bb933205
+run <sys/ioctl.h> global TIOCGPKT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c0d77c763a8d54fcaa7e962f9b6ec204
+run <sys/ioctl.h> global TIOCGPTLCK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 98326c3ad43f01eed0d5c735fdf7fad4
+run <sys/ioctl.h> global TIOCGEXCL	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out be4da43501c1126eb5555809c9c819c0
+run <sys/ioctl.h> global TIOCGPTPEER	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8e8b22c64c5d7d8000a770dda9d3da24
+run <sys/ioctl.h> global FIONCLEX	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9191c15b5ef3184ccfee666f51704694
+run <sys/ioctl.h> global FIOCLEX	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out eff99d1a3b670f8cfa4fc2baa06e5aed
+run <sys/ioctl.h> global FIOASYNC	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0709a191341a3ab89db78fcca702c086
+run <sys/ioctl.h> global TIOCSERCONFIG	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 63ef61eaee14cc5dd3def160ba6912b3
+run <sys/ioctl.h> global TIOCSERGWILD	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6971160547fbb352b2c915fa6791b750
+run <sys/ioctl.h> global TIOCSERSWILD	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1a2d9291b6c39e51f9d3424845368937
+run <sys/ioctl.h> global TIOCGLCKTRMIOS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6992c4223fbe2099334495ea7ce1ca99
+run <sys/ioctl.h> global TIOCSLCKTRMIOS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 615191fd9ae2471cc40012772869ac66
+run <sys/ioctl.h> global TIOCSERGSTRUCT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f300eb6c109133fc544e52de46d5ceb4
+run <sys/ioctl.h> global TIOCSERGETLSR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 64fd1800bfcd7ac872201c1e3f0ae862
+run <sys/ioctl.h> global TIOCSERGETMULTI	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e858ce13e815ed93b8d745f2705d60e0
+run <sys/ioctl.h> global TIOCSERSETMULTI	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 961c6163ef277c3e728939669f321e40
+run <sys/ioctl.h> global TIOCMIWAIT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ffeb62826f036d1afe767e68b4b69936
+run <sys/ioctl.h> global TIOCGICOUNT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2079afa5fe066c5ae954e675d067ee03
+run <sys/ioctl.h> global FIOQSIZE	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a56887db261a3ba3a38b76abffeb7895
+run <sys/ioctl.h> global TIOCPKT_DATA	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out de52a4269b4877a4b96bd3ccfe077ca0
+run <sys/ioctl.h> global TIOCPKT_FLUSHREAD	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4983c3b96307456407a8d31b68599185
+run <sys/ioctl.h> global TIOCPKT_FLUSHWRITE	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3cacb969b39a595d4aa3106f98687153
+run <sys/ioctl.h> global TIOCPKT_STOP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 60eea6e6325cfe7249188f515b8e15b6
+run <sys/ioctl.h> global TIOCPKT_START	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ef8104f768c32b81360c2ad304cf6fbf
+run <sys/ioctl.h> global TIOCPKT_NOSTOP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 28cf7f5e591865c044d4fc1683c2b2b0
+run <sys/ioctl.h> global TIOCPKT_DOSTOP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9bf5bb9a559f3e9cc8c04b370ef5d338
+run <sys/ioctl.h> global TIOCPKT_IOCTL	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 20b5c152e981bdb917161c7a9dcb206c
+run <sys/ioctl.h> global TIOCSER_TEMT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d60f713e3d957f6263cefec00063094b
+run <sys/ioctl.h> global SIOCADDRT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 304eea3ecfdb7abf59d7288582164a36
+run <sys/ioctl.h> global SIOCDELRT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c0f06e45f66eca9036962c244be31b3e
+run <sys/ioctl.h> global SIOCRTMSG	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f048431253692edf6c3a77a34b4773dc
+run <sys/ioctl.h> global SIOCGIFNAME	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c258f2137c093059bcf78be2d7ee1517
+run <sys/ioctl.h> global SIOCSIFLINK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ae4d9c885ed41042c958ef39a5646e6a
+run <sys/ioctl.h> global SIOCGIFCONF	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bb73b4f5ac0739c4210521ab648db8b4
+run <sys/ioctl.h> global SIOCGIFFLAGS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 743954d818617eb0c75c1676c57b3c81
+run <sys/ioctl.h> global SIOCSIFFLAGS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dcd79d58e5278179e88e7ac596f99c3a
+run <sys/ioctl.h> global SIOCGIFADDR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 60196c97baa3b1697f28a10007905749
+run <sys/ioctl.h> global SIOCSIFADDR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cacc90305e2059f8871b752bc306a3ff
+run <sys/ioctl.h> global SIOCGIFDSTADDR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e81ed795b7d82ea5f8976387dd6df4c9
+run <sys/ioctl.h> global SIOCSIFDSTADDR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 467feeddf060c9496345f9461e8a1ab6
+run <sys/ioctl.h> global SIOCGIFBRDADDR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 433e87b56cc112f3f58a7b0ff22fc757
+run <sys/ioctl.h> global SIOCSIFBRDADDR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3eea47c3dde06eabebf40ac33f083d78
+run <sys/ioctl.h> global SIOCGIFNETMASK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bf1af372ebda009d671e19c7ae044c0e
+run <sys/ioctl.h> global SIOCSIFNETMASK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9dcdc97742e3e054a527e3b89ea4791e
+run <sys/ioctl.h> global SIOCGIFMETRIC	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a4b284a34fc54000ac23af5e1000aa0b
+run <sys/ioctl.h> global SIOCSIFMETRIC	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 15442640baf4e61d738495aaa4869c91
+run <sys/ioctl.h> global SIOCGIFMEM	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e8fa3345708e4518693e086194865523
+run <sys/ioctl.h> global SIOCSIFMEM	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 610c986e9c373381c863e9bc711e02d1
+run <sys/ioctl.h> global SIOCGIFMTU	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e07c5499dcc60037684849f3dee0a2da
+run <sys/ioctl.h> global SIOCSIFMTU	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 151c4d0abb2034ae5d765306f0421132
+run <sys/ioctl.h> global SIOCSIFNAME	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 02931b6d67d0cade031f1897896e6e9e
+run <sys/ioctl.h> global SIOCSIFHWADDR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f023eef6d5c3adeaacf1fc52de235e6f
+run <sys/ioctl.h> global SIOCGIFENCAP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c2455edbe357eaceb62ddebd89d82557
+run <sys/ioctl.h> global SIOCSIFENCAP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e1f74e55ca2e88f1cea2a18671118b38
+run <sys/ioctl.h> global SIOCGIFHWADDR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9522848a59a1f33fc7780b473237e3f5
+run <sys/ioctl.h> global SIOCGIFSLAVE	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cd2136a3c742534f331755108f1c0406
+run <sys/ioctl.h> global SIOCSIFSLAVE	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 24183800f991f52e3bd30067c9e9edcd
+run <sys/ioctl.h> global SIOCADDMULTI	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2701bea01ec4ae36bc10540d5ad4749d
+run <sys/ioctl.h> global SIOCDELMULTI	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3afdebc1d1bebe64b416fdd1817beb35
+run <sys/ioctl.h> global SIOCGIFINDEX	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d2136241e076c29c8c790e32937276c8
+run <sys/ioctl.h> global SIOGIFINDEX	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 82b52e0c89a6bf8130397bc8d0591efe
+run <sys/ioctl.h> global SIOCSIFPFLAGS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 91ef94e3ac0232e7b934ee95d79b33d0
+run <sys/ioctl.h> global SIOCGIFPFLAGS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out eba52d3c2c70ecbaddf9ec6b1685b9f4
+run <sys/ioctl.h> global SIOCDIFADDR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4139f657c7864b8a99632f0a64ef2546
+run <sys/ioctl.h> global SIOCSIFHWBROADCAST	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 02b6b110c080b5289e6df765bea2519b
+run <sys/ioctl.h> global SIOCGIFCOUNT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 126b25ce0454c432cb4fc3d452ec2003
+run <sys/ioctl.h> global SIOCGIFBR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 16310778d10f5706bf4c8db3ca25b9a1
+run <sys/ioctl.h> global SIOCSIFBR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 981f88507fc7e3b29874570516a9707a
+run <sys/ioctl.h> global SIOCGIFTXQLEN	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 68ccead8265de3c22dec95f5762fdd20
+run <sys/ioctl.h> global SIOCSIFTXQLEN	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ae6b1cef3cb0beef55257555a6e7cfa3
+run <sys/ioctl.h> global SIOCDARP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1edc742dcc1a3ccada8e6d81fbc9b2b0
+run <sys/ioctl.h> global SIOCGARP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 602b3ee5673443a79d5f5f6b470bc232
+run <sys/ioctl.h> global SIOCSARP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ccb6d58e058c368b7d4657ccc1262e0d
+run <sys/ioctl.h> global SIOCDRARP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a27e418cde3325360622cf2fa12d89d1
+run <sys/ioctl.h> global SIOCGRARP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0c3bf1e60a9c3e93bac9225b80e900f8
+run <sys/ioctl.h> global SIOCSRARP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 92be8b011e21ec161f7cc626fc194e73
+run <sys/ioctl.h> global SIOCGIFMAP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 550e474d274990c92dc6c854707e10ea
+run <sys/ioctl.h> global SIOCSIFMAP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9d97fba03c5ffbe9e61214035f845bd3
+run <sys/ioctl.h> global SIOCADDDLCI	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b26748c4e9d00c5b68ba8fa6c4651aa8
+run <sys/ioctl.h> global SIOCDELDLCI	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2c30e88114c597449472d1104403c23a
+run <sys/ioctl.h> global SIOCDEVPRIVATE	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bc1a7cd5082d55a21259362916dd4fd0
+run <sys/ioctl.h> global SIOCPROTOPRIVATE	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5c00ea136ae5da103a7d7a64e11c348a
+run <sys/ioctl.h> global NCC	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0ecb74e51c34e56fc77ae54fca80811c
+run <sys/ioctl.h> global TIOCM_LE	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e10ea2cb303e8c96c36299362f1cdfcd
+run <sys/ioctl.h> global TIOCM_DTR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3c8740114a3393ac908a45fa24178b48
+run <sys/ioctl.h> global TIOCM_RTS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 730cb7461c414f7f8b23645372ce3ded
+run <sys/ioctl.h> global TIOCM_ST	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3702abda93e8b0b615d63d089c2d1cf5
+run <sys/ioctl.h> global TIOCM_SR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7d14c199e8c3850d79ad6f1b590fd09e
+run <sys/ioctl.h> global TIOCM_CTS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ab6d4bfa95d89cc5c5cda570059b5480
+run <sys/ioctl.h> global TIOCM_CAR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 579a5453080e46497ba908c7c8d37b2b
+run <sys/ioctl.h> global TIOCM_RNG	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2399235a102e3c0ed21c012e7ab48bea
+run <sys/ioctl.h> global TIOCM_DSR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2898e3152a311ef1467f4761f2dc9a89
+run <sys/ioctl.h> global TIOCM_CD	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7fef0990600bc55f264791a72920fe7d
+run <sys/ioctl.h> global TIOCM_RI	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 26a7e45d1b7892a9fd996cdbaf1fe39b
+run <sys/ioctl.h> global N_TTY	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7cc800a99a1e5ab5bc21ca83e9063d8a
+run <sys/ioctl.h> global N_SLIP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a2ed3fbde73f67ccb85a7c5827a557c1
+run <sys/ioctl.h> global N_MOUSE	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7d2cf56ad15c5d380ead3ee440ffea10
+run <sys/ioctl.h> global N_PPP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8838792ce427308c010ca6a611dfefa8
+run <sys/ioctl.h> global N_STRIP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 740318613e3c055fa2d15133c7684ea5
+run <sys/ioctl.h> global N_AX25	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a4ab984c1e0a3dc1a8b3b8251916b4d7
+run <sys/ioctl.h> global N_X25	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f03523dcc1d60ada49f8e8479eb217cf
+run <sys/ioctl.h> global N_6PACK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5ae6e1b99959bf5283a8fe9f7e6fcc87
+run <sys/ioctl.h> global N_MASC	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8a9e8b9637310ca31d3d79bd6c0f98b5
+run <sys/ioctl.h> global N_R3964	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b4fc5e1d4950142a2e3e37d1e8ba1470
+run <sys/ioctl.h> global N_PROFIBUS_FDL	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c1384ea230d6b79df55f9e6a83620f0b
+run <sys/ioctl.h> global N_IRDA	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out af3f988f9bcd1b0af2781735e37f2751
+run <sys/ioctl.h> global N_SMSBLOCK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6de6bfeac21d114457ce2edb9f1878e0
+run <sys/ioctl.h> global N_HDLC	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cda1d11cb804d9a0f0e08d958b99f348
+run <sys/ioctl.h> global N_SYNC_PPP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b2064c66bd4067cea866c4f1804b3e37
+run <sys/ioctl.h> global N_HCI	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 31ec7d450110c695343cb7a9f98826ac
+run <sys/ioctl.h> global CEOF	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f70a2288eaf243df9e80716f19fc2d44
+run <sys/ioctl.h> global CEOL	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 543b95c7d72a52a5acca021a4c684598
+run <sys/ioctl.h> global CERASE	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ee8a56b18478497216b7cc9ee03367f0
+run <sys/ioctl.h> global CINTR	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dadffb1013f20eb247b705e042f7d646
+run <sys/ioctl.h> global CSTATUS	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 60f1a167d1acef1fe5f478d6ff5a235f
+run <sys/ioctl.h> global CKILL	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a93d2c2624756cf7ec418a37519f25cd
+run <sys/ioctl.h> global CMIN	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5f0ea16824ba921b93ce88e6a9d74c6f
+run <sys/ioctl.h> global CQUIT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9cc23f8f39eb2953d34fbc91f91ce0af
+run <sys/ioctl.h> global CSUSP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cb938cf188621cfc5eec4a2e3c37bab4
+run <sys/ioctl.h> global CTIME	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9aa4bad6c5a44e09cb523f16e73f3c18
+run <sys/ioctl.h> global CDSUSP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fc81fa0663c4f1243f72c33262a85b54
+run <sys/ioctl.h> global CSTART	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 518429e1e836141b134baf2f4e1ba4dd
+run <sys/ioctl.h> global CSTOP	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d8c13e03dad77435a62bd2bd58cb1ec3
+run <sys/ioctl.h> global CLNEXT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1a70a333e73979c39e3d1737a34c292b
+run <sys/ioctl.h> global CDISCARD	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 08092400aec589d6a24d7c29e94e163a
+run <sys/ioctl.h> global CWERASE	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0f1f414558e0f2cf7160e5489c877563
+run <sys/ioctl.h> global CREPRINT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c2ba86156b9fa775330412ba88f98c81
+run <sys/ioctl.h> global CEOT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e81a84ffb961249f546a05073fb98ff9
+run <sys/ioctl.h> global CBRK	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bed367c0e348a7878f031ff46bb414f8
+run <sys/ioctl.h> global CRPRNT	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7c95383a015730873680de58fa51841c
+run <sys/ioctl.h> global CFLUSH	
+ctx r1 g1 p0
+keys <sys/ioctl.h>=0b7df1f4d536a54ae5582024ce5aa4837b6d1b903e2076acb8f61c6b3f0ae6c7
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6bac6f9f3eeb18fd3984e37e9e2811be
+end
+sum 59694-849920111299862384

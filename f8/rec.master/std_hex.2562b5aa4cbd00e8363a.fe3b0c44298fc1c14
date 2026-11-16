@@ -1,0 +1,11 @@
+olang front record
+body fn 310-535	known p
+body fn 537-766	known p
+body fn 768-1014	known p
+body global digits	known p
+baked digits [8 10000000000000000000000000000000 @8>1+0][8 30313233343536373839616263646566]
+sig Decode@768 fn&(String&) Array<U8> ? Error.Invalid
+sig Encode@310 fn&(Array<U8>&) String
+sig digit@537 fn&(Char) U8 ? Error.Invalid
+end
+sum 32c27aad50466b451ce9226614f2620ccc811e07e5738b1540e3569428231b3c

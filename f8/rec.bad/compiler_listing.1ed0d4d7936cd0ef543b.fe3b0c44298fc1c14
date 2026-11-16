@@ -1,0 +1,94 @@
+olang front record
+body fn 10310-10435	known p
+body fn 10762-10897	known p
+body fn 10964-11365	known p grows|0|-|-|..lines|6|0|compiler/listing|11201|11204|-1 keeps|1|-|-|.|0|0|compiler/listing|10989|10989|0
+body fn 11400-11551	known p
+body fn 11654-12164	known p
+body fn 12206-12370	known p
+body fn 12620-13931	known p
+body fn 14033-14647	known p
+body fn 14726-15006	known p
+body fn 15162-15347	known p
+body fn 15454-16005	known p
+body fn 16122-16251	known p
+body fn 16309-16594	known p
+body fn 16892-18021	known p
+body fn 1800-1850	known p
+body fn 18926-19058	known p keeps|1|-|-|.|0|0|compiler/listing|18951|18951|0 keeps|2|-|-|.|0|0|compiler/listing|18965|18965|0
+body fn 1899-2215	known p
+body fn 19152-19385	known p grows|0|-|-|..out.chars|10|0|compiler/listing|19312|19317|-1 grows|0|-|-|..src.lines|10|0|compiler/listing|19312|19317|-1 grows|0|-|-|..said|5|0|compiler/listing|19312|19317|-1
+body fn 19546-20082	known p grows|0|-|-|..out.chars|10|0|compiler/listing|19723|19727|-1 grows|0|-|-|..src.lines|10|0|compiler/listing|19882|19886|-1 grows|0|-|-|..said|5|0|compiler/listing|19947|19956|-1
+body fn 20215-20343	known p
+body fn 20454-21116	known p grows|0|-|-|..said|5|0|compiler/listing|20586|20590|-1
+body fn 21177-21341	known p
+body fn 21410-22286	known p grows|0|-|-|..said|5|0|compiler/listing|22229|22238|-1
+body fn 22358-22649	known p
+body fn 22930-23967	known p grows|0|-|-|..out.chars|10|0|compiler/listing|23855|23859|-1 grows|0|-|-|..src.lines|10|0|compiler/listing|23855|23859|-1 grows|0|-|-|..said|5|0|compiler/listing|23855|23859|-1
+body fn 2313-2442	known p
+body fn 24054-24716	known p grows|0|-|-|..out.chars|10|0|compiler/listing|24628|24632|-1 grows|0|-|-|..src.lines|10|0|compiler/listing|24628|24632|-1 grows|0|-|-|..said|5|0|compiler/listing|24628|24632|-1
+body fn 24812-25636	known p grows|1|-|-|.|0|0|compiler/listing|25544|25547|-1 grows|2|-|-|.|0|0|compiler/listing|25587|25590|-1
+body fn 25696-25985	known p
+body fn 26169-26849	known p grows|0|-|-|..out.chars|10|0|compiler/listing|26781|26787|-1 grows|0|-|-|..src.lines|10|0|compiler/listing|26781|26787|-1 grows|0|-|-|..said|5|0|compiler/listing|26781|26787|-1
+body fn 26944-27500	known p grows|0|-|-|..out.chars|10|0|compiler/listing|27428|27432|-1 grows|0|-|-|..src.lines|10|0|compiler/listing|27428|27432|-1 grows|0|-|-|..said|5|0|compiler/listing|27428|27432|-1
+body fn 27568-28188	known p
+body fn 28309-28942	known p
+body fn 3467-4037	known p
+body fn 4150-4811	known p
+body fn 4861-5047	known p
+body fn 5220-5314	known p
+body fn 5316-5454	known p
+body fn 5575-5825	known p
+body fn 5893-7339	known p grows|3|-|-|.|0|0|compiler/listing|6557|6561|-1
+body fn 7400-7740	known p
+body fn 7783-8003	known p
+body fn 8240-8448	known p
+body fn 8609-9650	known p
+body fn 9803-10238	known p
+body lambda 21776-21881	known p
+sig Name@8609 fn&(Namer&, String&) String
+sig Namer.Make@8240 fn&(Program&) Namer
+sig Remarks@5575 fn&(Vec<String&>&, Array<String&>&, Namer&) Vec<Remark>
+sig Render@11654 fn&(Inputs&) String
+sig Shown@11400 fn&(Sources&, String&) String
+sig Sources.Make@10762 fn&() Sources
+sig Text@10964 fn&(mut Sources&, String&, I64) String
+sig aliasee@16309 fn&(String&) String
+sig asmLine@24054 fn&(mut Writer&, String&, String&, Map<I64, String&>&, Map<I64, String&>&)
+sig asmPart@22930 fn&(mut Writer&, String&, String&)
+sig body@16892 fn&(Inputs&, String&, String&, Array<String&>&, Vec<String&>&, Namer&, mut Sources&) String
+sig callersOf@14726 fn&(Vec<Remark>&, String&) Vec<String&>
+sig code@19152 fn&(mut Writer&, String&, Bool)
+sig commentOf@2313 fn&(Config&, Bool) String
+sig definedIn@15454 fn&(String&, String&, Bool) String
+sig field@4150 fn&(String&, String&) String
+sig fileLine@24812 fn&(String&, mut Map<I64, String&>&, mut Map<I64, String&>&)
+sig found@15162 fn&(Vec<String&>&, String&, Bool) String
+sig how@1899 fn&(Config&, Bool) String
+sig instance@12620 fn&(Inputs&, Code&, Vec<String&>&, Namer&, mut Sources&) String
+sig irDefines@16122 fn&(String&, String&) Bool
+sig irLine@26944 fn&(mut Writer&, String&, Map<I64, String&>&)
+sig irPart@26169 fn&(mut Writer&, String&, String&)
+sig irPlace@27568 fn&(mut Writer&, I64, Map<I64, String&>&)
+sig keyValue@4861 fn&(String&) String, String
+sig kindWord@7783 fn&(String&) String
+sig leftover@21410 fn&(mut Writer&) String
+sig locOf@25696 fn&(String&) I64, I64
+sig metaField@28309 fn&(String&, String&) String
+sig noCode@14033 fn&(String&, String&, Vec<String&>&, Namer&) String
+sig ofAny@5316 fn&(String&, Array<String&>&) Bool
+sig ofSym@5220 fn&(String&, String&) Bool
+sig place@19546 fn&(mut Writer&)
+sig placeLess@22358 fn&(String&, String&) Bool
+sig placeOf@20215 fn&(Remark&) String
+sig reach@18926 fn&(mut Writer&, String&, String&, I64)
+sig readParts@12206 fn&(Vec<String&>&) Vec<String&>
+sig readRemarks@5893 fn&(String&, Array<String&>&, Namer&, mut Vec<Remark>&)
+sig remarksAt@20454 fn&(mut Writer&, String&, String&) String
+sig same@21177 fn&(Remark&, Remark&) Bool
+sig say@1800 fn&(String&)
+sig topLevel@7400 fn&(String&, mut Remark&)
+sig typeDelim@10310 fn&(Char) Bool
+sig typesNamed@9803 fn&(Namer&, String&) String
+sig unquote@3467 fn&(String&) String
+end
+sum d722e2ad2ad57966dfe081461546b7d4df2ad0d92ec680c734baa4253acba603

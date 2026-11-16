@@ -1,0 +1,468 @@
+olang scope record
+run compiler/cabi 0-0 ctor compiler/cabi:Way	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+mark compiler/cabi 0-0 ctor compiler/cabi:Way	0,1,2,3,4
+marks aa18e2504f65f9985834b6e557835670
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	compiler/cabi:Pass
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 0 10 5 | | F F F F F F F F F F | b00000 b0000000000 b b0000000000 | | | ||
+sum r;V0,V4,0,2022,2027,1,0,0;V1,V4,0,2032,2036,1,0,0;V2,V4,0,2041,2046,1,0,0;V3,V4,0,2076,2080,1,0,0 b00000 b00000 b00001 b00000 b00000 b b b a,compiler/cabi:0:0,compiler/cabi:0:0,compiler/cabi:0:0,compiler/cabi:0:0,compiler/cabi:0:0 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/cabi:Pass	o0std/prelude/vec:Vec<std/prelude/text:String&>	o0std/prelude/vec:Vec<I64>	o0std/prelude/vec:Vec<I64>	o0std/prelude/text:String&
+out 1b24222a6e1f3716e292dc7e568ed199
+run compiler/cabi 3573-3744 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34269-34339 fn	c963616c9d0b05a0f26e01da8fa14f33
+read compiler/types 70865-70937 fn	cb8f17ef06a0997263071d4dc9ed94d2
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+hits 0
+body 1 6 3 1 | U U B0 U U B0 | F F F | b0 b000 b000000 b000 | 0:,V0 1:,V0 3:,V0 4:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/cabi:3573:3744 t i t i i c0/i/i f0010
+hid fs1	o0compiler/types:Table&	o0compiler/types:TypeId
+out 7bfba81e2e4a7cc994880aa8b909ebf6
+run compiler/cabi 3934-4211 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/types 38424-38535 fn	8b3259af40ae34746a994d4febafeb3d
+read compiler/types 38536-38673 fn	ed569c24b51073133f4ddf28e15c5b8a
+read compiler/types 38803-38947 fn	6479c2a862a42b027f90cb90f52e0331
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 5 4 3 | U U U U U | F F F F | b000 b0000 b00000 b0000 | 0:,V1,B0 1:,V0 2:,V0 3:,V0 4:,V0 | | ||
+sum r b000 b000 b000 b000 b000 b b b a,compiler/cabi:3934:4211,compiler/cabi:3934:4211,compiler/cabi:3934:4211 t i t i i c0/i/i f0010
+hid fs1	o0compiler/types:Table&	o0std/prelude/text:String&	o0compiler/types:TypeId	o0compiler/types:TypeId
+out 9b423b7b8a85345e760c05fc5fefea74
+run compiler/cabi 0-0 ctor compiler/cabi:Scalar	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+mark compiler/cabi 0-0 ctor compiler/cabi:Scalar	0,1,2,3
+marks 2be07f6a4bf2158360fd287736f38f04
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Bool
+read -ctor	I64
+hits 0
+body 1 0 8 2 | | F F F F F F F F | b00 b00000000 b b00000000 | | | ||
+sum r;V0,V1,0,1574,1578,1,0,0 b00 b00 b0010 b0000 b0000 b b b a,compiler/cabi:0:0,compiler/cabi:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0std/prelude/text:String&	o0Bool
+out 8131170ca92020ad143b32cb5a49265b
+run compiler/cabi 2414-3484 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/cabi 0-0 ctor compiler/cabi:Scalar	0df46309d9b46a2fcc22f434d4b2664c
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34269-34339 fn	c963616c9d0b05a0f26e01da8fa14f33
+read compiler/types 34500-34568 fn	8f28bfd58126e605ffe2570bcfabc30d
+read compiler/types 34569-34639 fn	a6a8e99c6abe45c75b2b92afdb9df9e8
+read compiler/types 35344-35402 fn	60e44572ef13cc02210a9aa97d50207c
+read compiler/types 38674-38760 fn	1c3442d86432736dd0e9fabba9dd6b96
+read compiler/types 52558-52673 fn	38616f8e617137d7490fcc67eadb5a96
+read compiler/types 70865-70937 fn	cb8f17ef06a0997263071d4dc9ed94d2
+read compiler/types 72388-72457 fn	d6521026b258c7c738e9558dd0dfe636
+read compiler/types 75214-75275 fn	a18e8625f4332c4d056dbb2fd8c3b965
+read compiler/types 75399-75735 fn	125a1bd6bdda3fb5d749addb30078002
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+read compiler/types 84264-84423 fn	7666393c8d712cfd39f1a29e5f9c3813
+read std/prelude/vec 4660-4775 fn <compiler/cabi:Scalar;>	037faee32f508921f991db6223f2f61a
+hits 0
+body 1 35 29 2 | U U B0 U U U B0 U U U B2 U U U U U U U U U B0 U U B0 U U U U U U V1 V1 U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b11 b00000000000000000000000000000 b00000000000000000000000000000000000 b00000000000000000000000000000 | 0:,V0 1:,V0 3:,V1,V1 4:,V1,V1 5:,V0 7:,V0 8:,V0 9:,V0 11:,V0 12:,V0 13:,V0 14:,V0,V1 15:,V0 16:,V0 17:,V1,V1 18:,V1,V1 19:,V0 21:,V0 22:,V0 24:,V0 25:,V0,V0 26:,V0,B10 27:,V0,V1 28:,V0 29:,V0,B0 32:,V0 33:,V1,V1 34:,V1,V1 | | ||
+sum r b11 b11 b1001 b1001 b1001 b b b a,compiler/types:84385:84400,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1;148480:U;148481:U;148482:V1;148483:U;148480:U;148481:U;148482:V1;148483:U;148480:U;148481:U;148482:V1;148483:U	o0mut compiler/types:Table&	o0compiler/types:TypeId	o0I64	o0mut std/prelude/vec:Vec<compiler/cabi:Scalar>&	o0Array<compiler/types:TypeId>&	o1mut compiler/types:Table&	o1compiler/types:ListId	o0compiler/types:TypeId	o0std/prelude/text:String&	o1mut compiler/types:Table&	o1compiler/types:TypeId
+out 6d138427e97f13b3bb2e30bff32963de
+run compiler/cabi 2414-3484 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 6d138427e97f13b3bb2e30bff32963de
+mark compiler/types 0-0 ctor compiler/types:Table	0
+marks 37e57235c9b3f7123f1cd48f41d71ab9
+read -ctor	I64
+read compiler/cabi 0-0 ctor compiler/cabi:Scalar	0df46309d9b46a2fcc22f434d4b2664c
+read compiler/types 0-0 ctor compiler/types:Table	8a4ecbaeb70ab48be7119fb9345ef287
+read compiler/types 17202-17273 fn	6c15f0e5da632c89eaef5a2cb76648f1
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34269-34339 fn	c963616c9d0b05a0f26e01da8fa14f33
+read compiler/types 34500-34568 fn	8f28bfd58126e605ffe2570bcfabc30d
+read compiler/types 34569-34639 fn	a6a8e99c6abe45c75b2b92afdb9df9e8
+read compiler/types 35344-35402 fn	60e44572ef13cc02210a9aa97d50207c
+read compiler/types 38674-38760 fn	1c3442d86432736dd0e9fabba9dd6b96
+read compiler/types 52558-52673 fn	38616f8e617137d7490fcc67eadb5a96
+read compiler/types 70865-70937 fn	cb8f17ef06a0997263071d4dc9ed94d2
+read compiler/types 72388-72457 fn	d6521026b258c7c738e9558dd0dfe636
+read compiler/types 75214-75275 fn	a18e8625f4332c4d056dbb2fd8c3b965
+read compiler/types 75399-75735 fn	125a1bd6bdda3fb5d749addb30078002
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+read compiler/types 84264-84423 fn	17607e3b21c6e534bf8d03ab294f4187
+read std/prelude/vec 4660-4775 fn <compiler/cabi:Scalar;>	037faee32f508921f991db6223f2f61a
+hits 0
+body 1 35 29 2 | U U B0 U U U B0 U U U B2 U U U U U U U U U B0 U U B0 U U U U U U V1 V1 U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b11 b00000000000000000000000000000 b00000000000000000000000000000000000 b00000000000000000000000000000 | 0:,V0 1:,V0 3:,V1,V1 4:,V1,V1 5:,V0 7:,V0 8:,V0 9:,V0 11:,V0 12:,V0 13:,V0 14:,V0,V1 15:,V0 16:,V0 17:,V1,V1 18:,V1,V1 19:,V0 21:,V0 22:,V0 24:,V0 25:,V0,V0 26:,V0,B10 27:,V0,V1 28:,V0 29:,V0,B0 32:,V0 33:,V1,V1 34:,V1,V1 | 0,0 | 14:,0/0/D0/0 27:,0/0/D0/1 29:,0/0/D0/2 || 211:rR2425,2443,26:mut compiler/source:Names&,-1(F2425,2443,26:mut compiler/source:Names&,0(D2425,2443,20:compiler/types:Table(R2425,2443,25:mut compiler/types:Table&,-1(V2425,2443,25:mut compiler/types:Table&,0)))) 211:rR2425,2443,26:mut compiler/source:Names&,-1(F2425,2443,26:mut compiler/source:Names&,0(D2425,2443,20:compiler/types:Table(R2425,2443,25:mut compiler/types:Table&,-1(V2425,2443,25:mut compiler/types:Table&,0)))) 211:rR2425,2443,26:mut compiler/source:Names&,-1(F2425,2443,26:mut compiler/source:Names&,0(D2425,2443,20:compiler/types:Table(R2425,2443,25:mut compiler/types:Table&,-1(V2425,2443,25:mut compiler/types:Table&,0))))
+sum r b11 b11 b1001 b1001 b1001 b b b a,compiler/types:84385:84400,std/prelude/vec:4512:4530 t i t i,0 i,0 c0/i/i f0010
+hid fs1;148480:U;148481:U;148482:V1;148483:U;148480:U;148481:U;148482:V1;148483:U;148480:U;148481:U;148482:V1;148483:U	o0mut compiler/types:Table&	o0compiler/types:TypeId	o0I64	o0mut std/prelude/vec:Vec<compiler/cabi:Scalar>&	o0Array<compiler/types:TypeId>&	o1mut compiler/types:Table&	o1compiler/types:ListId	o0compiler/types:TypeId	o0std/prelude/text:String&	o1mut compiler/types:Table&	o1compiler/types:TypeId
+out fbe75f644792bff08a92b733afe610db
+run compiler/cabi 8420-8537 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 5133-5172 fn <compiler/cabi:Scalar;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/cabi:Scalar;>	d04f2e5a858d17b205c489fe32a47a71
+hits 0
+body 1 2 6 1 | U U | F F F F F F | b0 b000000 b00 b000000 | 0:,V0 1:,V0,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/cabi:8420:8537 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/vec:Vec<compiler/cabi:Scalar>&	o0I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64
+out ca716b7bd898ca35d6f3e2a0e74ce55a
+run compiler/cabi 8213-8369 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 5133-5172 fn <compiler/cabi:Scalar;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/cabi:Scalar;>	d04f2e5a858d17b205c489fe32a47a71
+hits 0
+body 1 2 6 1 | U U | F F F F F F | b0 b000000 b00 b000000 | 0:,V0 1:,V0,V0 | | ||
+sum r b0 b0 b000 b000 b000 b b b a,compiler/cabi:8213:8369 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/vec:Vec<compiler/cabi:Scalar>&	o0I64	o0I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64
+out 2856d398b2af3c95310feeab136dfb32
+run compiler/cabi 9252-9911 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+mark compiler/cabi 0-0 ctor compiler/cabi:Scalar	2
+marks 57883a07675be9bb3a0cf86c9b0e142d
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/cabi 0-0 ctor compiler/cabi:Scalar	0df46309d9b46a2fcc22f434d4b2664c
+read compiler/cabi 8213-8369 fn	9e01f89eeabcad04999cbfb51b6a3113
+read compiler/cabi 8420-8537 fn	a953ec71778549542ed042951d354daa
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 5133-5172 fn <compiler/cabi:Scalar;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/cabi:Scalar;>	d04f2e5a858d17b205c489fe32a47a71
+hits 0
+body 1 19 9 2 | U U B0 U U U B0 U U U U V1 U V1 U U U B0 U | F F F F F F F F F | b01 b000000000 b0000000000000000000 b000000000 | 0:,V0 1:,V0,V0 3:,V0 4:,V0,V0 5:,B0,B2 7:,V0 8:,V0,B5 9:,V0,B5 10:,V0 12:,B0,B0 14:,V0 15:,V0,B0 16:,V0,V0 18:,V0,B0 | | ||
+sum r b01 b01 b00 b00 b00 b b b a,compiler/cabi:9252:9911,compiler/cabi:9666:9686 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/vec:Vec<compiler/cabi:Scalar>&	o0I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64
+out 7f550b72740a3ed48e6685f505ea4ab3
+run compiler/cabi 8778-9131 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+mark compiler/cabi 0-0 ctor compiler/cabi:Scalar	2
+marks 57883a07675be9bb3a0cf86c9b0e142d
+read compiler/cabi 0-0 ctor compiler/cabi:Scalar	0df46309d9b46a2fcc22f434d4b2664c
+read compiler/cabi 8213-8369 fn	9e01f89eeabcad04999cbfb51b6a3113
+read compiler/cabi 8420-8537 fn	a953ec71778549542ed042951d354daa
+read std/prelude/number 15161-15491 fn <I64;>	753360899e792dedf06ee057d76e9c16
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 6401-6448 fn <compiler/cabi:Scalar;>	d04f2e5a858d17b205c489fe32a47a71
+hits 0
+body 1 9 6 2 | U U B0 U U U V1 U V1 | F F F F F F | b01 b000000 b000000000 b000000 | 0:,V0 1:,V0,B0 3:,V0,V0 4:,V0,B1 5:,V0 7: | | ||
+sum r b01 b01 b000 b000 b000 b b b a,compiler/cabi:8778:9131,compiler/cabi:9034:9054 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/vec:Vec<compiler/cabi:Scalar>&	o0I64	o0I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64
+out 325a1195bf0ffc86e71c0c2ffb008f76
+run compiler/cabi 5525-7619 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+mark compiler/cabi 0-0 ctor compiler/cabi:Scalar	2
+marks 57883a07675be9bb3a0cf86c9b0e142d
+read -ctor	Bool
+read -ctor	I64
+read compiler/cabi 0-0 ctor compiler/cabi:Scalar	0df46309d9b46a2fcc22f434d4b2664c
+read compiler/cabi 0-0 ctor compiler/cabi:Way	ee26e6d65b0b079dbffa3278f83d8a3d
+read compiler/cabi 2414-3484 fn	4e4416f5bdf7a08d259f94ebb5326405
+read compiler/cabi 8778-9131 fn	835b7cda6c2fbfc7459e8607f53b5cfc
+read compiler/cabi 9252-9911 fn	973239088816ae936e9a9b0412fc56e4
+read compiler/types 75214-75275 fn	a18e8625f4332c4d056dbb2fd8c3b965
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/cabi:Scalar>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <compiler/cabi:Scalar;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/cabi:Scalar;>	d04f2e5a858d17b205c489fe32a47a71
+hits 0
+body 1 67 37 3 | U U U U U U U U U U U U B3 U B6 B7 U U U U U U V2 U U V2 V2 U U U U B6 U V2 V2 V2 U V2 V2 V2 U V2 V2 U U U U U V2 V2 V2 U V2 V2 V2 U U U U U U U U V2 V2 V2 U | F F F F F F V2 V2 V2 F F F F F F F F F F F F F F F F F F F F F F F F F F V2 F | b101 b0000000000000000000000000000000000000 b0000000000000000000000000000000000000000000000000000000000000000000 b0000000000000000000000000000000000000 | 0:,V0 1:,B0 2:,V0,B0 3:,V2 4:,V2 5:,V2 6:,V1,B0 7:,B0 8:,B0 9:,B0 10:,B0,B0 11:,B0,B3 13:,B0,B0 15:,B7 16:,B7,B7 17:,B0 18:,B7,B10 19:,B7,B0 20:,B7,B7 21:,B7,V2 23:,V2,V2 24:,B0 27:,V2,V2 28:,V2 29:,B0 30:,B0,B6 32:,V2 36:,V2,V2,V2,V2,V2 40:,V2,V2,V2,V2,V2 43:,V2,V2 44:,V2 45:,V2,V2 46:,V2 47:,V2 51:,V2,V2,V2,V2,V2 55:,V2,V2,V2,V2,V2 56:,B0 57:,B0,B0 58:,B0,B18 59:,B0,B18 60:,V2,V2 61:,V2 62:,V2 66:,V2,V2,V2,V2,V2 | | ||
+sum r b101 b101 b1000 b1000 b1000 b b b a,compiler/types:84385:84400,compiler/cabi:5525:7619,compiler/cabi:5683:5688 t,U,V2,V2,V2,V2 i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U;1280:U;48896:U;48897:V2;48898:V2;48899:V2;48900:V2;48896:U;48897:V2;48898:V2;48899:V2;48900:V2;48896:U;48897:V2;48898:V2;48899:V2;48900:V2;48896:U;48897:V2;48898:V2;48899:V2;48900:V2;48896:U;48897:V2;48898:V2;48899:V2;48900:V2	o0mut compiler/types:Table&	o0std/prelude/text:String&	o0compiler/types:TypeId	o0Bool	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64
+out ed57bdccf503f4cf74337aa9bafa7364
+run compiler/cabi 5525-7619 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in ed57bdccf503f4cf74337aa9bafa7364
+mark compiler/cabi 0-0 ctor compiler/cabi:Scalar	2
+mark compiler/types 0-0 ctor compiler/types:Table	0
+marks 86e82e72b2d6cdf0ca17ccb8c2096253
+read -ctor	Bool
+read -ctor	I64
+read compiler/cabi 0-0 ctor compiler/cabi:Scalar	0df46309d9b46a2fcc22f434d4b2664c
+read compiler/cabi 0-0 ctor compiler/cabi:Way	ee26e6d65b0b079dbffa3278f83d8a3d
+read compiler/cabi 2414-3484 fn	be5799f899518e9f59390ff4f5b73bdd
+read compiler/cabi 8778-9131 fn	835b7cda6c2fbfc7459e8607f53b5cfc
+read compiler/cabi 9252-9911 fn	973239088816ae936e9a9b0412fc56e4
+read compiler/types 0-0 ctor compiler/types:Table	8a4ecbaeb70ab48be7119fb9345ef287
+read compiler/types 75214-75275 fn	a18e8625f4332c4d056dbb2fd8c3b965
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/cabi:Scalar>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <compiler/cabi:Scalar;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/cabi:Scalar;>	d04f2e5a858d17b205c489fe32a47a71
+hits 0
+body 1 67 37 3 | U U U U U U U U U U U U B3 U B6 B7 U U U U U U V2 U U V2 V2 U U U U B6 U V2 V2 V2 U V2 V2 V2 U V2 V2 U U U U U V2 V2 V2 U V2 V2 V2 U U U U U U U U V2 V2 V2 U | F F F F F F V2 V2 V2 F F F F F F F F F F F F F F F F F F F F F F F F F F V2 F | b101 b0000000000000000000000000000000000000 b0000000000000000000000000000000000000000000000000000000000000000000 b0000000000000000000000000000000000000 | 0:,V0 1:,B0 2:,V0,B0 3:,V2 4:,V2 5:,V2 6:,V1,B0 7:,B0 8:,B0 9:,B0 10:,B0,B0 11:,B0,B3 13:,B0,B0 15:,B7 16:,B7,B7 17:,B0 18:,B7,B10 19:,B7,B0 20:,B7,B7 21:,B7,V2 23:,V2,V2 24:,B0 27:,V2,V2 28:,V2 29:,B0 30:,B0,B6 32:,V2 36:,V2,V2,V2,V2,V2 40:,V2,V2,V2,V2,V2 43:,V2,V2 44:,V2 45:,V2,V2 46:,V2 47:,V2 51:,V2,V2,V2,V2,V2 55:,V2,V2,V2,V2,V2 56:,B0 57:,B0,B0 58:,B0,B18 59:,B0,B18 60:,V2,V2 61:,V2 62:,V2 66:,V2,V2,V2,V2,V2 | 0,0 | 2:,0/0/D0/0 || 211:rR5541,5559,26:mut compiler/source:Names&,-1(F5541,5559,26:mut compiler/source:Names&,0(D5541,5559,20:compiler/types:Table(R5541,5559,25:mut compiler/types:Table&,-1(V5541,5559,25:mut compiler/types:Table&,0))))
+sum r b101 b101 b1000 b1000 b1000 b b b a,compiler/types:84385:84400,compiler/cabi:5525:7619,compiler/cabi:5683:5688 t,U,V2,V2,V2,V2 i t i,0 i,0 c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U;1280:U;48896:U;48897:V2;48898:V2;48899:V2;48900:V2;48896:U;48897:V2;48898:V2;48899:V2;48900:V2;48896:U;48897:V2;48898:V2;48899:V2;48900:V2;48896:U;48897:V2;48898:V2;48899:V2;48900:V2;48896:U;48897:V2;48898:V2;48899:V2;48900:V2	o0mut compiler/types:Table&	o0std/prelude/text:String&	o0compiler/types:TypeId	o0Bool	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64	o0compiler/cabi:Scalar	o1std/prelude/vec:Vec<compiler/cabi:Scalar>&	o1I64
+out e5f1881a687430ce724635acdeedeb38
+run compiler/cabi 5019-5247 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/cabi 0-0 ctor compiler/cabi:Way	ee26e6d65b0b079dbffa3278f83d8a3d
+read compiler/cabi 3573-3744 fn	8628e38d681f76db5c86688ca41b19f3
+read compiler/cabi 3934-4211 fn	e6fd86c53c692b07e5c3ac128b70489a
+read compiler/cabi 5525-7619 fn	f42fe18d78a137a3fff387f52b3f5dc1
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 8 3 3 | U U U U U V2 U U | F F F | b101 b000 b00000000 b000 | 0:,V0 1:,V2 2:,V2 3:,V2 4:,V0,V1,V2 6:,V2,V2,V2,V2,V2 7:,V0,V1,V2 | | ||
+sum r b101 b101 b100 b100 b100 b b b a,compiler/types:84385:84400,compiler/cabi:5019:5247,std/prelude/vec:3184:3188 t,U,V2,V2,V2,V2 i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U;48896:U;48897:V2;48898:V2;48899:V2;48900:V2	o0mut compiler/types:Table&	o0std/prelude/text:String&	o0compiler/types:TypeId	o0compiler/cabi:Way	o1mut compiler/types:Table&	o1std/prelude/text:String&	o1compiler/types:TypeId	o1Bool
+out 20ffa30b88b838d688c427b9b52a5511
+run compiler/cabi 5019-5247 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 20ffa30b88b838d688c427b9b52a5511
+mark compiler/types 0-0 ctor compiler/types:Table	0
+marks 37e57235c9b3f7123f1cd48f41d71ab9
+read compiler/cabi 0-0 ctor compiler/cabi:Way	ee26e6d65b0b079dbffa3278f83d8a3d
+read compiler/cabi 3573-3744 fn	8628e38d681f76db5c86688ca41b19f3
+read compiler/cabi 3934-4211 fn	e6fd86c53c692b07e5c3ac128b70489a
+read compiler/cabi 5525-7619 fn	138afb258ec71ffac16be8f0bed16210
+read compiler/types 0-0 ctor compiler/types:Table	8a4ecbaeb70ab48be7119fb9345ef287
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 8 3 3 | U U U U U V2 U U | F F F | b101 b000 b00000000 b000 | 0:,V0 1:,V2 2:,V2 3:,V2 4:,V0,V1,V2 6:,V2,V2,V2,V2,V2 7:,V0,V1,V2 | 0,0 | 7:,0/0/D0/0 || 211:rR5033,5051,26:mut compiler/source:Names&,-1(F5033,5051,26:mut compiler/source:Names&,0(D5033,5051,20:compiler/types:Table(R5033,5051,25:mut compiler/types:Table&,-1(V5033,5051,25:mut compiler/types:Table&,0))))
+sum r b101 b101 b100 b100 b100 b b b a,compiler/types:84385:84400,compiler/cabi:5019:5247,std/prelude/vec:3184:3188 t,U,V2,V2,V2,V2 i t i,0 i,0 c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U;48896:U;48897:V2;48898:V2;48899:V2;48900:V2	o0mut compiler/types:Table&	o0std/prelude/text:String&	o0compiler/types:TypeId	o0compiler/cabi:Way	o1mut compiler/types:Table&	o1std/prelude/text:String&	o1compiler/types:TypeId	o1Bool
+out 350fcebd47c1815ee4888ed05f91c8f3
+run compiler/cabi 0-0 ctor compiler/cabi:Regs	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+mark compiler/cabi 0-0 ctor compiler/cabi:Regs	0,1
+marks 9760bb4052e1abb45931d8e112abb3f1
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/cabi:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out d786cbfd838e8967dd28910022a7bc13
+run compiler/cabi 5304-5458 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+hits 0
+body 1 5 1 1 | U U U U U | F | b0 b0 b00000 b0 | 0:,V0,B0 1:,V0,B0 2:,V0,B0 3:,V0,B0 4:,V0,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/cabi:5304:5458 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out a4992a5c377e46cc0a64874251619f51
+run compiler/cabi 4295-4971 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/cabi 0-0 ctor compiler/cabi:Way	ee26e6d65b0b079dbffa3278f83d8a3d
+read compiler/cabi 3573-3744 fn	8628e38d681f76db5c86688ca41b19f3
+read compiler/cabi 3934-4211 fn	e6fd86c53c692b07e5c3ac128b70489a
+read compiler/cabi 5304-5458 fn	479ae341f19ae1b1c923e7ff8119a4a2
+read compiler/cabi 5525-7619 fn	f42fe18d78a137a3fff387f52b3f5dc1
+read compiler/types 38674-38760 fn	1c3442d86432736dd0e9fabba9dd6b96
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 18 11 4 | U U U U U U U V3 U U U U U U U U U U | F F F F F V3 F F F F F | b1001 b00000000000 b000000000000000000 b00000100000 | 0:,V0 1:,V0 2:,V0 3:,V3 4:,V3 5:,V3 6:,V0,V1,V3 8:,V3,V3,V3,V3,V3 9:,V0,V1,V3 10:,V1,B0 11:,V3 12:,V3,V3 13:,V3 14:,V3 15:,V3 16:,V3 17:,V3,V3,V3,V3,V3 | | ||
+sum r b1001 b1001 b1000 b1000 b1000 b b b a,compiler/types:84385:84400,compiler/cabi:4295:4971,compiler/cabi:4295:4971,std/prelude/vec:3184:3188 t,U,V3,V3,V3,V3 i t i i c0/i/i f1010
+hid fs1;1280:U;1280:U;1280:U;48896:U;48897:V3;48898:V3;48899:V3;48900:V3;1280:U;1280:U;1280:U;48896:U;48897:V3;48898:V3;48899:V3;48900:V3	o0mut compiler/types:Table&	o0std/prelude/text:String&	o0compiler/types:TypeId	o0mut compiler/cabi:Regs&	o0compiler/cabi:Way	o1mut compiler/types:Table&	o1std/prelude/text:String&	o1compiler/types:TypeId	o1Bool	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 95502941c54f995867d056c99627180e
+run compiler/cabi 4295-4971 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 95502941c54f995867d056c99627180e
+mark compiler/types 0-0 ctor compiler/types:Table	0
+marks 37e57235c9b3f7123f1cd48f41d71ab9
+read -ctor	I64
+read compiler/cabi 0-0 ctor compiler/cabi:Way	ee26e6d65b0b079dbffa3278f83d8a3d
+read compiler/cabi 3573-3744 fn	8628e38d681f76db5c86688ca41b19f3
+read compiler/cabi 3934-4211 fn	e6fd86c53c692b07e5c3ac128b70489a
+read compiler/cabi 5304-5458 fn	479ae341f19ae1b1c923e7ff8119a4a2
+read compiler/cabi 5525-7619 fn	138afb258ec71ffac16be8f0bed16210
+read compiler/types 0-0 ctor compiler/types:Table	8a4ecbaeb70ab48be7119fb9345ef287
+read compiler/types 38674-38760 fn	1c3442d86432736dd0e9fabba9dd6b96
+read compiler/types 77361-77661 fn	b7e3d2d7bfb77cde88b053b2a3bed861
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 18 11 4 | U U U U U U U V3 U U U U U U U U U U | F F F F F V3 F F F F F | b1001 b00000000000 b000000000000000000 b00000100000 | 0:,V0 1:,V0 2:,V0 3:,V3 4:,V3 5:,V3 6:,V0,V1,V3 8:,V3,V3,V3,V3,V3 9:,V0,V1,V3 10:,V1,B0 11:,V3 12:,V3,V3 13:,V3 14:,V3 15:,V3 16:,V3 17:,V3,V3,V3,V3,V3 | 0,0 | 9:,0/0/D0/0 || 211:rR4308,4326,26:mut compiler/source:Names&,-1(F4308,4326,26:mut compiler/source:Names&,0(D4308,4326,20:compiler/types:Table(R4308,4326,25:mut compiler/types:Table&,-1(V4308,4326,25:mut compiler/types:Table&,0))))
+sum r b1001 b1001 b1000 b1000 b1000 b b b a,compiler/types:84385:84400,compiler/cabi:4295:4971,compiler/cabi:4295:4971,std/prelude/vec:3184:3188 t,U,V3,V3,V3,V3 i t i,0 i,0 c0/i/i f1010
+hid fs1;1280:U;1280:U;1280:U;48896:U;48897:V3;48898:V3;48899:V3;48900:V3;1280:U;1280:U;1280:U;48896:U;48897:V3;48898:V3;48899:V3;48900:V3	o0mut compiler/types:Table&	o0std/prelude/text:String&	o0compiler/types:TypeId	o0mut compiler/cabi:Regs&	o0compiler/cabi:Way	o1mut compiler/types:Table&	o1std/prelude/text:String&	o1compiler/types:TypeId	o1Bool	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 506bc7467c0bd54ff80c072cf143cb90
+run compiler/cabi 10023-10222 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/types 75214-75275 fn	a18e8625f4332c4d056dbb2fd8c3b965
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+hits 0
+body 1 6 10 2 | U U U U U U | F F F F F F F F F F | b00 b0000000000 b000000 b0000000000 | 0:,V0 1:,V1 2:,V1 3:,V1 4:,V1 5:,V1 | | ||
+sum r b00 b00 b000 b000 b000 b b b a,compiler/cabi:10023:10222,compiler/cabi:10023:10222 t i t i i c0/i/i f0010
+hid fs1	o0compiler/types:Table&	o0compiler/cabi:Way&	o0compiler/types:TypeId
+out 6446bc357f435462e183e425ce58c496
+run compiler/cabi 7704-7951 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 11 6 2 | U U V1 B0 U U U U U U U | F F F F F F | b01 b000000 b00000000000 b000000 | 0:,V0 1:,V0,B1 3:,B0 4:,B0,B0 5:,V0 6:,V0,V0 7:,B0,B4 8:,B0,V0 9:,B0,B0 10:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/cabi:7704:7951,compiler/cabi:7769:7780 t i t i i c0/i/i f0010
+hid fs1	o0compiler/cabi:Way&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 634dafb7cdb70e4b0578f6ec1a75c19a
+run compiler/cabi 7994-8158 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 6 6 2 | B0 U U U U U | F F F F F F | b01 b000000 b000000 b000000 | 0:,B0 1:,V0 2:,V0,V0 3:,B0,B3 4:,B0,V0 5:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/cabi:7994:8158,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0compiler/cabi:Way&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 2af9739259643bc89d099d223d569b55
+run compiler/cabi 10306-10651 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/source 1061-1198 fn	058f7df2993e48e5e8d9db58190c213d
+read compiler/types 16707-17100 fn	82a3254098df9426e3e125487bdeca1e
+read compiler/types 17382-17541 fn	09d3b15a27893dfaaac3b85b324ab4df
+read compiler/types 70458-70711 fn	9cdc12f4c9f81b4755eb25c411a791a8
+read compiler/types 71544-71694 fn	92d0cb77f63b026b3cf4a2871fcbd803
+read compiler/types 79338-82051 fn	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 7 9 4 | U U U U U U U | F F F F F F F F F | b1100 b000000000 b0000000 b000000000 | 0:,V1,V2 1:,V0 2:,V0 3:,V0,V3 4:,V0 5:,V0 6:,V0 | | ||
+sum r b1100 b1100 b1100 b1100 b1100 b b b a,std/prelude/vec:4512:4530,compiler/source:1296:1298,compiler/cabi:10306:10651,compiler/cabi:10306:10651 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/types:Table&	o0mut compiler/source:Names&	o0std/prelude/text:String&	o0Array<compiler/types:TypeId>&
+out 4a88c6b087c69a804fdf2be0b31e4b83
+run compiler/cabi 10306-10651 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 4a88c6b087c69a804fdf2be0b31e4b83
+mark compiler/types 0-0 ctor compiler/types:Table	0
+marks 37e57235c9b3f7123f1cd48f41d71ab9
+read -ctor	I64
+read compiler/source 1061-1198 fn	058f7df2993e48e5e8d9db58190c213d
+read compiler/types 0-0 ctor compiler/types:Table	8a4ecbaeb70ab48be7119fb9345ef287
+read compiler/types 16707-17100 fn	82a3254098df9426e3e125487bdeca1e
+read compiler/types 17382-17541 fn	09d3b15a27893dfaaac3b85b324ab4df
+read compiler/types 70458-70711 fn	602fa31cbd0f11fe6a72e005235ad159
+read compiler/types 71544-71694 fn	92d0cb77f63b026b3cf4a2871fcbd803
+read compiler/types 79338-82051 fn	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 7 9 4 | U U U U U U U | F F F F F F F F F | b1100 b000000000 b0000000 b000000000 | 0:,V1,V2 1:,V0 2:,V0 3:,V0,V3 4:,V0 5:,V0 6:,V0 | 0,0 | 1:,0/0/D0/0 || 221:rR10320,10338,26:mut compiler/source:Names&,-1(F10320,10338,26:mut compiler/source:Names&,0(D10320,10338,20:compiler/types:Table(R10320,10338,25:mut compiler/types:Table&,-1(V10320,10338,25:mut compiler/types:Table&,0))))
+sum r b1100 b1100 b1100 b1100 b1100 b b b a,std/prelude/vec:4512:4530,compiler/source:1296:1298,compiler/cabi:10306:10651,compiler/cabi:10306:10651 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/types:Table&	o0mut compiler/source:Names&	o0std/prelude/text:String&	o0Array<compiler/types:TypeId>&
+out c69c6357682d2f7557f2965149e55e42
+run compiler/cabi 10738-11388 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/cabi 0-0 ctor compiler/cabi:Regs	3a4b5fd450858931cf1a8da2f8e59023
+read compiler/cabi 4295-4971 fn	072442b758756e3efd3b5473b2b42296
+read compiler/cabi 5019-5247 fn	8dfe5cc8615ed20d0f6c012e000b5a40
+read compiler/cabi 7704-7951 fn	70fb6e8bebdecf13bd08fd60cf933653
+read compiler/cabi 7994-8158 fn	4c39d7f2e86ed75196e0a95756e72073
+read compiler/types 84264-84423 fn	7666393c8d712cfd39f1a29e5f9c3813
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 16 10 3 | U U U B0 U B0 U U U B0 B0 U B0 U U V2 | F F F F F F F F F F | b101 b0000000000 b0000000000000000 b0000000000 | 0:,V0,V1,B0 1:,B0 2:,V0,B1 4:,B0,B0 5:,B0 6:,B0,B4 7:,V0,V1,B0,B0 8:,V0,B5 11:,B0,B0 13:,B0,B0 14:,B0,B0 | | ||
+sum r b101 b101 b100 b100 b100 b b b a,compiler/types:84385:84400,compiler/cabi:10738:11388,compiler/cabi:11353:11386 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/types:Table&	o0std/prelude/text:String&	o0compiler/types:TypeId	o0compiler/cabi:Way	o1mut compiler/types:Table&	o1std/prelude/text:String&	o1compiler/types:TypeId	o0std/prelude/text:String&	o1mut compiler/types:Table&	o1compiler/types:TypeId	o0compiler/cabi:Way	o1mut compiler/types:Table&	o1std/prelude/text:String&	o1compiler/types:TypeId	o1mut compiler/cabi:Regs&	o0std/prelude/text:String&	o1mut compiler/types:Table&	o1compiler/types:TypeId
+out 6ed06f07df8f4b99ad16ea5a465b22bf
+run compiler/cabi 10738-11388 fn	
+ctx r1 g1 p0
+keys compiler/cabi=89a9489ac8ea8774a1fc759e048590c571dccaf192e24e9ebb3f7ab3c806ac36
+in 6ed06f07df8f4b99ad16ea5a465b22bf
+mark compiler/types 0-0 ctor compiler/types:Table	0
+marks 37e57235c9b3f7123f1cd48f41d71ab9
+read compiler/cabi 0-0 ctor compiler/cabi:Regs	3a4b5fd450858931cf1a8da2f8e59023
+read compiler/cabi 4295-4971 fn	9c6cea776f2052b0e058fd48504e4082
+read compiler/cabi 5019-5247 fn	a4c0373f940343650b4eb727e45aba0b
+read compiler/cabi 7704-7951 fn	70fb6e8bebdecf13bd08fd60cf933653
+read compiler/cabi 7994-8158 fn	4c39d7f2e86ed75196e0a95756e72073
+read compiler/types 0-0 ctor compiler/types:Table	8a4ecbaeb70ab48be7119fb9345ef287
+read compiler/types 84264-84423 fn	17607e3b21c6e534bf8d03ab294f4187
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 16 10 3 | U U U B0 U B0 U U U B0 B0 U B0 U U V2 | F F F F F F F F F F | b101 b0000000000 b0000000000000000 b0000000000 | 0:,V0,V1,B0 1:,B0 2:,V0,B1 4:,B0,B0 5:,B0 6:,B0,B4 7:,V0,V1,B0,B0 8:,V0,B5 11:,B0,B0 13:,B0,B0 14:,B0,B0 | 0,0 | 0:,0/0/D0/0 2:,0/0/D0/1 7:,0/0/D0/2 8:,0/0/D0/3 || 221:rR10750,10768,26:mut compiler/source:Names&,-1(F10750,10768,26:mut compiler/source:Names&,0(D10750,10768,20:compiler/types:Table(R10750,10768,25:mut compiler/types:Table&,-1(V10750,10768,25:mut compiler/types:Table&,0)))) 221:rR10750,10768,26:mut compiler/source:Names&,-1(F10750,10768,26:mut compiler/source:Names&,0(D10750,10768,20:compiler/types:Table(R10750,10768,25:mut compiler/types:Table&,-1(V10750,10768,25:mut compiler/types:Table&,0)))) 221:rR10750,10768,26:mut compiler/source:Names&,-1(F10750,10768,26:mut compiler/source:Names&,0(D10750,10768,20:compiler/types:Table(R10750,10768,25:mut compiler/types:Table&,-1(V10750,10768,25:mut compiler/types:Table&,0)))) 221:rR10750,10768,26:mut compiler/source:Names&,-1(F10750,10768,26:mut compiler/source:Names&,0(D10750,10768,20:compiler/types:Table(R10750,10768,25:mut compiler/types:Table&,-1(V10750,10768,25:mut compiler/types:Table&,0))))
+sum r b101 b101 b100 b100 b100 b b b a,compiler/types:84385:84400,compiler/cabi:10738:11388,compiler/cabi:11353:11386 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/types:Table&	o0std/prelude/text:String&	o0compiler/types:TypeId	o0compiler/cabi:Way	o1mut compiler/types:Table&	o1std/prelude/text:String&	o1compiler/types:TypeId	o0std/prelude/text:String&	o1mut compiler/types:Table&	o1compiler/types:TypeId	o0compiler/cabi:Way	o1mut compiler/types:Table&	o1std/prelude/text:String&	o1compiler/types:TypeId	o1mut compiler/cabi:Regs&	o0std/prelude/text:String&	o1mut compiler/types:Table&	o1compiler/types:TypeId
+out 17606ce81c8f99ef460f0f94b24bdf0b
+end
+sum 38553-12095037723818463055

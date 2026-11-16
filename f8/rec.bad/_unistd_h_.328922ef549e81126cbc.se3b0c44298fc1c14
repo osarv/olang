@@ -1,0 +1,213 @@
+olang scope record
+run <unistd.h> global STDIN_FILENO	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 26fbbf75583f7ef1880b62ddb97bb1fa
+run <unistd.h> global STDOUT_FILENO	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c8422db4a68838e5518490a7ec19b21b
+run <unistd.h> global STDERR_FILENO	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7ee9a928e2d188651476996c9c91431e
+run <unistd.h> global R_OK	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a7195b396974a47157c276d6e792073c
+run <unistd.h> global W_OK	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8476cd1d64b46285af4f51d69ed36204
+run <unistd.h> global X_OK	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 429bb3acb96d7b563c92605f2dacbe08
+run <unistd.h> global F_OK	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 793a0998eead9eda731bab5308624857
+run <unistd.h> global SEEK_SET	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c6fe199cf4fe86f4f29a6a24422b260f
+run <unistd.h> global SEEK_CUR	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e4c15a85d7750ed4753b0f7dd0eae571
+run <unistd.h> global SEEK_END	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6dca09f2a9927fa607aa7761d6ae9a34
+run <unistd.h> global SEEK_DATA	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ba6c07fa451039c8e1026b9e1ea6e624
+run <unistd.h> global SEEK_HOLE	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 71f4f97b85c7510c263611d110aef237
+run <unistd.h> global L_SET	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 60af79df0015b299f6481c6a4532a97f
+run <unistd.h> global L_INCR	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ee13356a5edcd585b7cf1d8a67ed0937
+run <unistd.h> global L_XTND	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4f34add9c172543291a354c73b11b23f
+run <unistd.h> global F_ULOCK	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3ba9074a5f80e07c7f89e4218bcb7732
+run <unistd.h> global F_LOCK	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f6525f7ab483e4229d2df5561e250277
+run <unistd.h> global F_TLOCK	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 54ff5e0b8469cd7b5a2067a47694e530
+run <unistd.h> global F_TEST	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 777dca73128216e55f9663e7db4b8640
+run <unistd.h> global CLOSE_RANGE_UNSHARE	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e62b47390aa0909ea6513f906a1059f6
+run <unistd.h> global CLOSE_RANGE_CLOEXEC	
+ctx r1 g1 p0
+keys <unistd.h>=328922ef549e81126cbca9cdbc7a2e718c41c40d0e556dd89bfc9b47f6f408c8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b581be6939e376b073809ee212e3b90a
+end
+sum 6437-18389631568631911366

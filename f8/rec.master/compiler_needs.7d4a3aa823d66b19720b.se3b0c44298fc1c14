@@ -1,0 +1,669 @@
+olang scope record
+run compiler/needs 0-0 ctor compiler/needs:walker	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+mark compiler/needs 0-0 ctor compiler/needs:walker	0,1,2,3,4,5,6,7
+marks 76d39d096ff2dea39012e78bde594ef0
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read std/prelude/map 0-0 ctor std/prelude/map:Map<compiler/source:NameId, I64>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/vec:Vec<std/prelude/text:String&>>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 4 11 2 | U U U U | F F F F F F F F F F F | b01 b00000000000 b0000 b00000000000 | 0:,V1 1:,V1 2:,V1 3:,V1 | | ||
+sum r;V0,V1,0,1745,1746,1,0,0;V1,V0,0,1745,1746,1,0,1 b01 b01 b100 b000 b000 b b b a,compiler/needs:0:0,std/prelude/map:2600:2604 t i,-1,-1,-1,-1,-1,-1,-1,0 t,U i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/check:Checker&	o0I64	o0I64
+out 2710427bc85b95ab59d17df390d8f7f5
+run compiler/needs 0-0 ctor compiler/needs:walker	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 2710427bc85b95ab59d17df390d8f7f5
+mark compiler/needs 0-0 ctor compiler/needs:walker	0,1,2,3,4,5,6,7
+marks be460a013c6331475cbf001678fdbba8
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read std/prelude/map 0-0 ctor std/prelude/map:Map<compiler/source:NameId, I64>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/vec:Vec<std/prelude/text:String&>>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 4 11 2 | U U U U | F F F F F F F F F F F | b01 b00000000000 b0000 b00000000000 | 0:,V1 1:,V1 2:,V1 3:,V1 | | ||
+sum r;V0,V1,0,1745,1746,2,0,0 b01 b01 b100 b000 b000 b b b a,compiler/needs:0:0,std/prelude/map:2600:2604 t i,-1,-1,-1,-1,-1,-1,-1,0 t,U i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/check:Checker&	o0I64	o0I64
+out 99bfd113870da527f232c83b76804799
+run compiler/needs 3035-3473 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 7053-7137 fn <compiler/source:NameId;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+hits 0
+body 1 3 6 2 | U U U | F F F F F F | b00 b000000 b000 b000000 | 0:,V0 1:,V0,V1 2:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/needs:3035:3473,compiler/needs:3035:3473 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:TypeRef?&
+out e17dee761ce8f4c09f239057bb2fbd99
+run compiler/needs 3560-4059 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/needs 0-0 ctor compiler/needs:walker	0
+marks 766f196fd19d8dd464c51144c7cbb706
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/needs 0-0 ctor compiler/needs:walker	9e10154a46d1d234d45f108b672687cf
+read compiler/needs 3035-3473 fn	c65a4f31eec76d0c7a0d851f75339d6c
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 6 7 2 | U U U U U U | F F F F F F F | b00 b0000000 b000000 b0000000 | 0:,V0,V0 1:,V0,B2 2:,V0,B2 3:,V0,V1 4:,V0,V1 5:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/needs:3560:4059,compiler/needs:3560:4059 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:TypeRef?&	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId
+out 5b0281af22ebc8cd6bf35166bf1f80e7
+run compiler/needs 3560-4059 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 5b0281af22ebc8cd6bf35166bf1f80e7
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/needs 0-0 ctor compiler/needs:walker	0
+marks 1625d3d8d3d673cd13e98211636a5904
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/load 0-0 ctor compiler/load:Loader	c57786966e9e41b2e6cd468b7362b539
+read compiler/needs 0-0 ctor compiler/needs:walker	e1aca02831d5a34e5a5ce669121782a4
+read compiler/needs 3035-3473 fn	c65a4f31eec76d0c7a0d851f75339d6c
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 6 7 2 | U U U U U U | F F F F F F F | b00 b0000000 b000000 b0000000 | 0:,D0/0,D0/1 1:,D0/2,B2 2:,D0/3,B2 3:,V0,V1 4:,V0,V1 5:,V0,V1 | 0,0 | 4:,0/0/D0/4 5:,0/0/D0/5 || 4:rN13 216:rR3564,3577,27:mut compiler/check:Checker&,-1(F3564,3577,27:mut compiler/check:Checker&,0(D3564,3577,21:compiler/needs:walker(R3564,3577,26:mut compiler/needs:walker&,-1(V3564,3577,26:mut compiler/needs:walker&,0)))) 4:rN33 4:rN37 216:rR3564,3577,27:mut compiler/check:Checker&,-1(F3564,3577,27:mut compiler/check:Checker&,0(D3564,3577,21:compiler/needs:walker(R3564,3577,26:mut compiler/needs:walker&,-1(V3564,3577,26:mut compiler/needs:walker&,0)))) 216:rR3564,3577,27:mut compiler/check:Checker&,-1(F3564,3577,27:mut compiler/check:Checker&,0(D3564,3577,21:compiler/needs:walker(R3564,3577,26:mut compiler/needs:walker&,-1(V3564,3577,26:mut compiler/needs:walker&,0))))
+sum r b00 b00 b00 b00 b00 b b b a,compiler/needs:3560:4059,compiler/needs:3560:4059 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:TypeRef?&	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	dd0:0:compiler/needs:walker
+out bb3e6ecf3906cd80a281017afa7dfe27
+run compiler/needs 2761-2935 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/needs 3035-3473 fn	c65a4f31eec76d0c7a0d851f75339d6c
+read compiler/needs 3560-4059 fn	05fddd8f6804897337992c1cf786687f
+read std/prelude/map 5979-6292 fn <compiler/source:NameId;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+hits 0
+body 1 4 5 2 | U U U U | F F F F F | b10 b00000 b0000 b00000 | 0:,V0,V1 1:,V0 2:,V0,V1 3:,V0 | | ||
+sum r b10 b10 b100 b000 b000 b b b a,std/prelude/map:6065:6082,compiler/needs:2761:2935 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/source:NameId	o0compiler/ast:TypeRef?&
+out 67995b4e1047f7b0543c0eb2848f8200
+run compiler/needs 2761-2935 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 67995b4e1047f7b0543c0eb2848f8200
+mark compiler/needs 0-0 ctor compiler/needs:walker	0
+marks f612d754fd058aaf8bc858d74e1685f7
+read compiler/needs 0-0 ctor compiler/needs:walker	e1aca02831d5a34e5a5ce669121782a4
+read compiler/needs 3035-3473 fn	c65a4f31eec76d0c7a0d851f75339d6c
+read compiler/needs 3560-4059 fn	6c00918c16a87ec3e05a9cfaec816c60
+read std/prelude/map 5979-6292 fn <compiler/source:NameId;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+hits 0
+body 1 4 5 2 | U U U U | F F F F F | b10 b00000 b0000 b00000 | 0:,V0,V1 1:,V0 2:,V0,V1 3:,V0 | 0,0 | 2:,0/0/D0/0 || 216:rR2765,2778,27:mut compiler/check:Checker&,-1(F2765,2778,27:mut compiler/check:Checker&,0(D2765,2778,21:compiler/needs:walker(R2765,2778,26:mut compiler/needs:walker&,-1(V2765,2778,26:mut compiler/needs:walker&,0))))
+sum r b10 b10 b100 b000 b000 b b b a,std/prelude/map:6065:6082,compiler/needs:2761:2935 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/source:NameId	o0compiler/ast:TypeRef?&
+out 6bdfb9adb56a00d9799d8a7c4be5514f
+run compiler/needs 4683-4834 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/vec 11899-12021 fn <std/prelude/text:String&;>	3de578b68bbea269afe98db3cd30bd73
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	ecc3d96246a2bd4251be3d6cf1aa2e3d
+read std/prelude/vec 7015-7075 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	0847fdcafe26a2a7b6308f0d010e95dd
+hits 0
+body 1 6 3 2 | U U B0 U U U | F F F | b10 b000 b000000 b000 | 0:,V0 1:,V0,V0 3:,V0,V1 4:,V0,V0 5:,V0,V1 | | ||
+sum r;V1,V0,0,4804,4832,0,0,0 b10 b10 b101 b100 b000 b b b a,std/prelude/vec:4512:4530,compiler/needs:4683:4834 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0I64	o0std/prelude/text:String&	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<std/prelude/text:String&>>&	o1I64	o0mut std/prelude/vec:Vec<std/prelude/text:String&>&	o1mut std/prelude/vec:Vec<std/prelude/vec:Vec<std/prelude/text:String&>>&	o1I64
+out 639d593777698498b9204585c702d2dc
+run compiler/needs 4447-4681 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 7053-7137 fn <compiler/source:NameId;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+hits 0
+body 1 2 4 2 | U U | F F F F | b00 b0000 b00 b0000 | 0:,V0 1:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/needs:4447:4681,compiler/needs:4447:4681 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr&
+out cce8856d32861ab44436d2109c3a687b
+run compiler/needs 4123-4445 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/needs 4447-4681 fn	7703bf1561c82f7ea3441ab89e31c9fd
+read std/prelude/map 7053-7137 fn <compiler/source:NameId;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+hits 0
+body 1 3 5 2 | U U U | F F F F F | b00 b00000 b000 b00000 | 0:,V0 1:,V0,V1 2:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/needs:4123:4445,compiler/needs:4123:4445 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr?&
+out b3aa873480212216f3902c47ab315246
+run compiler/needs 6309-6883 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/needs:6309:6883 t i t i i c0/i/i f0010
+hid fs1	o0compiler/token:Tok
+out e7fd25c05fb2d43bb613dc1d8f7216e3
+run compiler/needs 15232-15759 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	1
+mark compiler/needs 0-0 ctor compiler/needs:walker	0
+marks cd7cf2e61afba773940d0b62262e1ba3
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 149561-149713 fn	78142f61282099ffbd02086543bcc17c
+read compiler/names 16628-16752 fn	c5fe8a594e4962a7668574b15722d45d
+read compiler/names 16843-16975 fn	fda42076e1be6f1ad20143462d8b1eb3
+read compiler/needs 0-0 ctor compiler/needs:walker	9e10154a46d1d234d45f108b672687cf
+hits 0
+body 1 5 9 2 | U U U U U | F F F F F F F F F | b10 b000000000 b00000 b000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/map:6065:6082,compiler/needs:15232:15759 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr&
+out d2783a96eb27d1216d1149028fa18bbb
+run compiler/needs 15232-15759 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in d2783a96eb27d1216d1149028fa18bbb
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	1
+mark compiler/needs 0-0 ctor compiler/needs:walker	0
+marks d5efb6c794fe18ab856995970a5d6e66
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 149561-149713 fn	78142f61282099ffbd02086543bcc17c
+read compiler/names 16628-16752 fn	c5fe8a594e4962a7668574b15722d45d
+read compiler/names 16843-16975 fn	fda42076e1be6f1ad20143462d8b1eb3
+read compiler/needs 0-0 ctor compiler/needs:walker	e1aca02831d5a34e5a5ce669121782a4
+hits 0
+body 1 5 9 2 | U U U U U | F F F F F F F F F | b00 b000000000 b00000 b000000000 | 0:,D0/0 1:,D0/1 2:,D0/2 3:,D0/3 4:,V0,V1 | 0,0 | 4:,0/0/D0/4 || 3:rN9 4:rN21 4:rN35 4:rN47 226:rR15236,15249,27:mut compiler/check:Checker&,-1(F15236,15249,27:mut compiler/check:Checker&,0(D15236,15249,21:compiler/needs:walker(R15236,15249,26:mut compiler/needs:walker&,-1(V15236,15249,26:mut compiler/needs:walker&,0))))
+sum r b00 b00 b10 b10 b10 b b b a,compiler/needs:15232:15759,compiler/needs:15232:15759 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr&	dd0:0:compiler/needs:walker
+out 65560e5090e1c26da4e8e4e83c12b87b
+run compiler/needs 9706-10365 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/map 7666-7764 fn <compiler/source:NameId;I64;>	a3df79d624c5ad6625ff228e23d69dd0
+hits 0
+body 1 7 13 2 | U U U U U U U | F F F F F F F F F F F F F | b00 b0000000000000 b0000000 b0000000000000 | 0:,V0 1:,V0,V1 2:,V0,V1 3:,V0,V1 4:,V0,V1 5:,V0,V1 6:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/needs:9706:10365,compiler/needs:9706:10365 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr?&
+out 13257f2998cf89ebfbcff39d5ac29708
+run compiler/needs 10367-10615 fn	compiler/needs 9437-9623 fn	compiler/needs 8944-9320 fn	compiler/needs 8562-8942 fn	compiler/needs 10721-10919 fn	compiler/needs 10921-11069 fn	compiler/needs 12428-13240 fn	compiler/needs 14788-15097 fn	compiler/needs 14260-14684 fn	compiler/needs 13663-14258 fn	compiler/needs 13242-13493 fn	compiler/needs 11096-12364 fn	compiler/needs 6991-8467 fn	compiler/needs 6909-6989 fn	compiler/needs 2262-2759 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Branch	1
+mark compiler/ast 0-0 ctor compiler/ast:Case	3,4,5
+mark compiler/ast 0-0 ctor compiler/ast:Catch	2,3
+mark compiler/ast 0-0 ctor compiler/ast:Chain	1
+mark compiler/ast 0-0 ctor compiler/ast:Compr	1,4,5
+mark compiler/ast 0-0 ctor compiler/ast:For3	0,1,2,3
+mark compiler/ast 0-0 ctor compiler/ast:ForIn	2,4,5
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,3,4
+mark compiler/ast 0-0 ctor compiler/ast:If	0,1,2
+mark compiler/ast 0-0 ctor compiler/ast:JoinS	1,2
+mark compiler/ast 0-0 ctor compiler/ast:Match	1,3
+mark compiler/ast 0-0 ctor compiler/ast:Multi	2
+mark compiler/ast 0-0 ctor compiler/ast:Param	2
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+mark compiler/ast 0-0 ctor compiler/ast:VarDecl	0,2,3
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/needs 0-0 ctor compiler/needs:walker	0
+marks 82cb40cbfe32331f9f8cc50b71ce011a
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Branch	66acb0fbe745756bc22df8625c8c34e8
+read compiler/ast 0-0 ctor compiler/ast:Case	a86ebe8f71b83af8c941cdff145c6e0e
+read compiler/ast 0-0 ctor compiler/ast:Catch	fb47da419c9533df2ee10e8f18ffb1c3
+read compiler/ast 0-0 ctor compiler/ast:Chain	10f71466eafe8ab253d3a873cf0af465
+read compiler/ast 0-0 ctor compiler/ast:Compr	e703d414505ee78acb118fd0a27da2d7
+read compiler/ast 0-0 ctor compiler/ast:For3	b3ff77237fd9b4448110cf44f9edbd56
+read compiler/ast 0-0 ctor compiler/ast:ForIn	c8c1d697b9b3be256675211c333ac7a3
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:If	40671655d1fba8b621d2c508c063652f
+read compiler/ast 0-0 ctor compiler/ast:JoinS	eb974c31689742f8a47fc78037fb22c3
+read compiler/ast 0-0 ctor compiler/ast:Match	59ae547db3a3964d5cc7fa69be2e84fb
+read compiler/ast 0-0 ctor compiler/ast:Multi	0f7818ee22df4b3908ff7b752d6c47e7
+read compiler/ast 0-0 ctor compiler/ast:Param	38c6ee192659779d27da07f93c82b41a
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/ast 0-0 ctor compiler/ast:VarDecl	3d19a44c50c9c3e6f90fda2c40a230b5
+read compiler/ast 20675-20814 fn	5078e9221c5bf31be85e9cd798108027
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 172397-172455 fn	cfff7c46ba738fe5a01e37581de756a1
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/generic 20234-20413 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/generic 20415-20530 fn	81d633f3c95612faa4c9dcbc96a945aa
+read compiler/generic 34187-34308 fn	94e7c79d6beee2933a68251192c0a998
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/needs 0-0 ctor compiler/needs:walker	9e10154a46d1d234d45f108b672687cf
+read compiler/needs 15232-15759 fn	8eb0e0bc0c2c8e2d49e7204a6702631c
+read compiler/needs 2761-2935 fn	a9b166ac5003905df98b425ffce31f65
+read compiler/needs 3035-3473 fn	c65a4f31eec76d0c7a0d851f75339d6c
+read compiler/needs 4123-4445 fn	546c5bcfd52add022342b11c2d2c8468
+read compiler/needs 4447-4681 fn	7703bf1561c82f7ea3441ab89e31c9fd
+read compiler/needs 4683-4834 fn	bb87459d376b395fa7667a94f5478eb1
+read compiler/needs 6309-6883 fn	cee96bfaf6eb0d888592e4acaf534b07
+read compiler/needs 9706-10365 fn	0d5e36accbb9a29782577eafd71f9743
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/map 3468-3514 fn <compiler/source:NameId;I64;>	86f91b0f497c73631b7e92cff89727d4
+read std/prelude/map 5979-6292 fn <compiler/source:NameId;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7053-7137 fn <compiler/source:NameId;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/map 7666-7764 fn <compiler/source:NameId;I64;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 4660-4775 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 6401-6448 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	ecc3d96246a2bd4251be3d6cf1aa2e3d
+want decl compiler/needs:walker
+want decl compiler/needs:walker
+want decl compiler/needs:walker
+want decl compiler/needs:walker
+want decl compiler/needs:walker
+want decl compiler/needs:walker
+hits 0
+body 1 7 3 2 | U U U U U U U | F F F | b10 b000 b0000000 b000 | 0:,V0,V1 1:,V0 2:,V0,V1 3:,V0,V0 4:,V0,V1 5:,V0,V1 6:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/map:6065:6082,compiler/needs:10367:10615 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:ForIn&
+body 1 5 2 2 | U U B2 U U | F F | b10 b00 b00000 b00 | 0:,V0,V1 1:,V0,V1 3:,V0,V1 4:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:9437:9623 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:If&
+body 1 7 9 3 | U U U U U U U | F F F F F F F F F | b100 b000000000 b0000000 b000000000 | 0:,V0,V1 1:,V1 2:,V0,V0 3:,V0,V1 4:,V0,V1 5:,V0,V1 6:,V0,V2 | | ||
+sum r b100 b100 b100 b100 b100 b b b a,std/prelude/vec:4512:4530,compiler/needs:8944:9320,compiler/needs:8944:9320 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr&	o0compiler/ast:Expr&
+body 1 6 14 2 | U U U U U U | F F F F F F F F F F F F F F | b10 b00000000000000 b000000 b00000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0 3:,V0,V1 4:,V0 5:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/map:6065:6082,compiler/needs:8562:8942 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:VarDecl&
+body 1 4 6 2 | U U U U | F F F F F F | b10 b000000 b0000 b000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:10721:10919 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Match&
+body 1 2 10 2 | U U | F F F F F F F F F F | b10 b0000000000 b00 b0000000000 | 0:,V0,V1 1:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:10921:11069 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0Array<compiler/ast:Catch&>&
+body 1 12 16 2 | U U U U U U U U U U U U | F F F F F F F F F F F F F F F F | b10 b0000000000000000 b000000000000 b0000000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 4:,V0,V1 5:,V0,V1 6:,V0,V1 7:,V0,V1 8:,V0,V1 9:,V0,V1 10:,V0,V1 11:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:12428:13240 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr&
+body 1 11 10 3 | U V2 U U U U U V2 U U U | F F F F F V2 F F F F | b001 b0000000000 b00000000000 b0000010000 | 0:,V0,V2 2:,V2 3:,V2 4:,V2,V1 5:,V2 6:,V2,V2 8:,V2 9:,V2,V2 10:,V2,V2 | | ||
+sum r;V0,V2,0,14882,14887,3,0,0;V2,V0,0,14882,14887,0,0,1 b001 b001 b1000 b0000 b0000 b b b a,compiler/needs:14788:15097,compiler/needs:14788:15097,compiler/needs:14902:14921 t,U i t i i c0/i/i f1010
+hid fs1;50432:V0;50433:U;50434:U;1280:U	o0mut compiler/check:Checker&	o0I64	o0compiler/ast:TypeRef?&	o0I64	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<std/prelude/text:String&>>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+body 1 11 15 3 | U U U U B0 U U V0 U U U | F F F F F F F F F F F F F F F | b100 b000000000000000 b00000000000 b000000000000000 | 0:,V0,V1 1: 2:,V0 3:,V0,V0 5:,V0,V2 6:,V0,V0,V0 8:,V0 9:,V0,V0 10:,V0,V0 | | ||
+sum r b100 b100 b100 b100 b100 b b b a,std/prelude/map:6065:6082,compiler/needs:14260:14684,compiler/needs:14260:14684 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr&	o0Array<compiler/ast:Expr&>&	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/check:Checker&	o1I64	o1compiler/ast:TypeRef?&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+body 1 16 11 3 | U U U V0 V0 U U U V0 V0 U U U U U U | F F F F F F F F F F F | b100 b00000000000 b0000000000000000 b00000000000 | 0:,V0 1:,V0 2:,V0,B1 5:,V0,V0 6:,V0,V1 7:,V0,B2 10:,V0,V0 11:,V0,V1 12:,V0,V1 13:,V0,V0 14:,V0,V1,V2 15:,V0,V2 | | ||
+sum r b100 b100 b100 b100 b100 b b b a,compiler/needs:13944:13983,compiler/needs:13663:14258,compiler/needs:13663:14258 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr&	o0Array<compiler/ast:Expr&>&	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId
+body 1 8 5 3 | U U U U U U U U | F F F F V0 | b100 b00000 b00000000 b00000 | 0:,V0,V2 1:,V0,V0 2:,V0 3:,V0,B2 4:,V0,V1 5:,V0,V0 6:,V0,V1 7:,V0,V2 | | ||
+sum r b100 b100 b1000 b1000 b1000 b b b a,std/prelude/vec:4512:4530,compiler/needs:13242:13493,compiler/needs:13242:13493 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/token:Tok	o0compiler/ast:Expr&	o0compiler/ast:Expr&
+body 1 31 29 2 | U U U U U U U U U U U U U U V0 V0 U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b00000000000000000000000000000 b0000000000000000000000000000000 b00000000000000000000000000000 | 0:,V0,V1 1:,V0,V0 2:,V0,V1 3:,V0,V1,V1 4:,V0,V1 5:,V0,V0 6:,V0,V1 7:,V0,V1 8:,V0,V1 9:,V0,V0 10:,V0,V1 11:,V0,V1,V1 12:,V0,V1 13:,V0,B11 16:,V0,V0 17:,V0,V1 18:,V0,V1 19:,V1 20:,V0,V0 21:,V0,V1 22:,V0,V1 23:,V0,V1 24:,V0,V0 25:,V0,V1 26:,V0,V1 27:,V0,V1 28:,V0,V1 29:,V0,V1 30:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:11096:12364 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr?&	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId
+body 1 24 31 2 | U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b0000000000000000000000000000000 b000000000000000000000000 b0000000000000000000000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1,V1 4:,V0,V1 5:,V0,V1 6:,V0,V1 7:,V0,V1 8:,V0,V1 9:,V0,V1 10:,V0,V1 11:,V0,V1 12:,V0,V1 13:,V0,V1 14:,V0,V1 15:,V0,V1 16:,V0,V1 17:,V0,V1 18:,V0,V1 19:,V0,V1 20:,V0,V1 21:,V0,V1 22:,V0,V1 23:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:6991:8467 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Stmt&
+body 1 1 6 2 | U | F F F F F F | b10 b000000 b0 b000000 | 0:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:6909:6989 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0Array<compiler/ast:Stmt&>&
+body 1 18 13 1 | U U U U B0 U U U U U B3 U U B6 B6 U U U | F F F F F F F F F F F F F | b1 b0000000000000 b000000000000000000 b0000000000000 | 0: 1:,V0,V0 2:,V0 3:,V0,V0 5:,V0 6:,V0 7:,V0,V0 8:,V0 9:,V0 11:,V0 12:,V0 15:,V0,V0 16:,V0,V0 17:,V0,V0 | | ||
+sum r b1 b1 b1 b1 b1 b b b a,std/prelude/map:6065:6082 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/needs:walker&	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64
+out f18f5f6dbbbe3a760335f1ef97568253
+run compiler/needs 10367-10615 fn	compiler/needs 9437-9623 fn	compiler/needs 8944-9320 fn	compiler/needs 8562-8942 fn	compiler/needs 10721-10919 fn	compiler/needs 10921-11069 fn	compiler/needs 12428-13240 fn	compiler/needs 14788-15097 fn	compiler/needs 14260-14684 fn	compiler/needs 13663-14258 fn	compiler/needs 13242-13493 fn	compiler/needs 11096-12364 fn	compiler/needs 6991-8467 fn	compiler/needs 6909-6989 fn	compiler/needs 2262-2759 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+in f18f5f6dbbbe3a760335f1ef97568253
+mark compiler/ast 0-0 ctor compiler/ast:Branch	1
+mark compiler/ast 0-0 ctor compiler/ast:Case	3,4,5
+mark compiler/ast 0-0 ctor compiler/ast:Catch	2,3
+mark compiler/ast 0-0 ctor compiler/ast:Chain	1
+mark compiler/ast 0-0 ctor compiler/ast:Compr	1,4,5
+mark compiler/ast 0-0 ctor compiler/ast:For3	0,1,2,3
+mark compiler/ast 0-0 ctor compiler/ast:ForIn	2,4,5
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,3,4
+mark compiler/ast 0-0 ctor compiler/ast:If	0,1,2
+mark compiler/ast 0-0 ctor compiler/ast:JoinS	1,2
+mark compiler/ast 0-0 ctor compiler/ast:Match	1,3
+mark compiler/ast 0-0 ctor compiler/ast:Multi	2
+mark compiler/ast 0-0 ctor compiler/ast:Param	2
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0
+mark compiler/ast 0-0 ctor compiler/ast:VarDecl	0,2,3
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/needs 0-0 ctor compiler/needs:walker	0
+marks dee31cd7317d23b99498133e74863b5a
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Branch	66acb0fbe745756bc22df8625c8c34e8
+read compiler/ast 0-0 ctor compiler/ast:Case	a86ebe8f71b83af8c941cdff145c6e0e
+read compiler/ast 0-0 ctor compiler/ast:Catch	fb47da419c9533df2ee10e8f18ffb1c3
+read compiler/ast 0-0 ctor compiler/ast:Chain	10f71466eafe8ab253d3a873cf0af465
+read compiler/ast 0-0 ctor compiler/ast:Compr	e703d414505ee78acb118fd0a27da2d7
+read compiler/ast 0-0 ctor compiler/ast:For3	b3ff77237fd9b4448110cf44f9edbd56
+read compiler/ast 0-0 ctor compiler/ast:ForIn	c8c1d697b9b3be256675211c333ac7a3
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:If	40671655d1fba8b621d2c508c063652f
+read compiler/ast 0-0 ctor compiler/ast:JoinS	eb974c31689742f8a47fc78037fb22c3
+read compiler/ast 0-0 ctor compiler/ast:Match	59ae547db3a3964d5cc7fa69be2e84fb
+read compiler/ast 0-0 ctor compiler/ast:Multi	0f7818ee22df4b3908ff7b752d6c47e7
+read compiler/ast 0-0 ctor compiler/ast:Param	38c6ee192659779d27da07f93c82b41a
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/ast 0-0 ctor compiler/ast:VarDecl	3d19a44c50c9c3e6f90fda2c40a230b5
+read compiler/ast 20675-20814 fn	5078e9221c5bf31be85e9cd798108027
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 172397-172455 fn	cfff7c46ba738fe5a01e37581de756a1
+read compiler/generic 172456-172517 fn	bd45631352e70c16a11f624ddb512e47
+read compiler/generic 20234-20413 fn	706f290961e11e3ae740e7005df4dce4
+read compiler/generic 20415-20530 fn	81d633f3c95612faa4c9dcbc96a945aa
+read compiler/generic 34187-34308 fn	94e7c79d6beee2933a68251192c0a998
+read compiler/load 0-0 ctor compiler/load:Loader	c57786966e9e41b2e6cd468b7362b539
+read compiler/needs 0-0 ctor compiler/needs:walker	e1aca02831d5a34e5a5ce669121782a4
+read compiler/needs 15232-15759 fn	b87ff85ea69a08d4a897e0f41bc0b54f
+read compiler/needs 2761-2935 fn	16fa3b58ba5467ce4a5c837b2b20ccaa
+read compiler/needs 3035-3473 fn	c65a4f31eec76d0c7a0d851f75339d6c
+read compiler/needs 4123-4445 fn	546c5bcfd52add022342b11c2d2c8468
+read compiler/needs 4447-4681 fn	7703bf1561c82f7ea3441ab89e31c9fd
+read compiler/needs 4683-4834 fn	bb87459d376b395fa7667a94f5478eb1
+read compiler/needs 6309-6883 fn	cee96bfaf6eb0d888592e4acaf534b07
+read compiler/needs 9706-10365 fn	0d5e36accbb9a29782577eafd71f9743
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/map 3468-3514 fn <compiler/source:NameId;I64;>	86f91b0f497c73631b7e92cff89727d4
+read std/prelude/map 5979-6292 fn <compiler/source:NameId;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7053-7137 fn <compiler/source:NameId;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/map 7666-7764 fn <compiler/source:NameId;I64;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 4660-4775 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 6401-6448 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	ecc3d96246a2bd4251be3d6cf1aa2e3d
+hits 0
+body 1 7 3 2 | U U U U U U U | F F F | b10 b000 b0000000 b000 | 0:,V0,V1 1:,V0 2:,V0,V1 3:,V0,V0 4:,V0,V1 5:,V0,V1 6:,V0,V1 | 0,0 | 4:,0/0/D0/0 5:,0/0/D0/1 6:,0/0/D0/2 || 226:rR10371,10384,27:mut compiler/check:Checker&,-1(F10371,10384,27:mut compiler/check:Checker&,0(D10371,10384,21:compiler/needs:walker(R10371,10384,26:mut compiler/needs:walker&,-1(V10371,10384,26:mut compiler/needs:walker&,0)))) 226:rR10371,10384,27:mut compiler/check:Checker&,-1(F10371,10384,27:mut compiler/check:Checker&,0(D10371,10384,21:compiler/needs:walker(R10371,10384,26:mut compiler/needs:walker&,-1(V10371,10384,26:mut compiler/needs:walker&,0)))) 226:rR10371,10384,27:mut compiler/check:Checker&,-1(F10371,10384,27:mut compiler/check:Checker&,0(D10371,10384,21:compiler/needs:walker(R10371,10384,26:mut compiler/needs:walker&,-1(V10371,10384,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,10552,10568,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/map:6065:6082,compiler/needs:10367:10615 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:ForIn&
+body 1 5 2 2 | U U B2 U U | F F | b10 b00 b00000 b00 | 0:,V0,V1 1:,V0,V1 3:,V0,V1 4:,V0,V1 | 0,0 | 1:,0/0/D0/0 3:,0/0/D0/1 4:,0/0/D0/2 || 216:rR9441,9454,27:mut compiler/check:Checker&,-1(F9441,9454,27:mut compiler/check:Checker&,0(D9441,9454,21:compiler/needs:walker(R9441,9454,26:mut compiler/needs:walker&,-1(V9441,9454,26:mut compiler/needs:walker&,0)))) 216:rR9441,9454,27:mut compiler/check:Checker&,-1(F9441,9454,27:mut compiler/check:Checker&,0(D9441,9454,21:compiler/needs:walker(R9441,9454,26:mut compiler/needs:walker&,-1(V9441,9454,26:mut compiler/needs:walker&,0)))) 216:rR9441,9454,27:mut compiler/check:Checker&,-1(F9441,9454,27:mut compiler/check:Checker&,0(D9441,9454,21:compiler/needs:walker(R9441,9454,26:mut compiler/needs:walker&,-1(V9441,9454,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,9517,9531,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:9437:9623 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:If&
+body 1 7 9 3 | U U U U U U U | F F F F F F F F F | b100 b000000000 b0000000 b000000000 | 0:,V0,V1 1:,V1 2:,V0,V0 3:,V0,V1 4:,V0,V1 5:,V0,V1 6:,V0,V2 | 0,0 | 3:,0/0/D0/0 4:,0/0/D0/1 5:,0/0/D0/2 6:,0/0/D0/3 || 216:rR8948,8961,27:mut compiler/check:Checker&,-1(F8948,8961,27:mut compiler/check:Checker&,0(D8948,8961,21:compiler/needs:walker(R8948,8961,26:mut compiler/needs:walker&,-1(V8948,8961,26:mut compiler/needs:walker&,0)))) 216:rR8948,8961,27:mut compiler/check:Checker&,-1(F8948,8961,27:mut compiler/check:Checker&,0(D8948,8961,21:compiler/needs:walker(R8948,8961,26:mut compiler/needs:walker&,-1(V8948,8961,26:mut compiler/needs:walker&,0)))) 216:rR8948,8961,27:mut compiler/check:Checker&,-1(F8948,8961,27:mut compiler/check:Checker&,0(D8948,8961,21:compiler/needs:walker(R8948,8961,26:mut compiler/needs:walker&,-1(V8948,8961,26:mut compiler/needs:walker&,0)))) 216:rR8948,8961,27:mut compiler/check:Checker&,-1(F8948,8961,27:mut compiler/check:Checker&,0(D8948,8961,21:compiler/needs:walker(R8948,8961,26:mut compiler/needs:walker&,-1(V8948,8961,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,9207,9216,0,0,0 b100 b100 b100 b100 b100 b b b a,std/prelude/vec:4512:4530,compiler/needs:8944:9320,compiler/needs:8944:9320 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr&	o0compiler/ast:Expr&
+body 1 6 14 2 | U U U U U U | F F F F F F F F F F F F F F | b10 b00000000000000 b000000 b00000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0 3:,V0,V1 4:,V0 5:,V0,V1 | 0,0 | 0:,0/0/D0/0 5:,0/0/D0/1 || 216:rR8566,8579,27:mut compiler/check:Checker&,-1(F8566,8579,27:mut compiler/check:Checker&,0(D8566,8579,21:compiler/needs:walker(R8566,8579,26:mut compiler/needs:walker&,-1(V8566,8579,26:mut compiler/needs:walker&,0)))) 216:rR8566,8579,27:mut compiler/check:Checker&,-1(F8566,8579,27:mut compiler/check:Checker&,0(D8566,8579,21:compiler/needs:walker(R8566,8579,26:mut compiler/needs:walker&,-1(V8566,8579,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,8929,8938,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/map:6065:6082,compiler/needs:8562:8942 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:VarDecl&
+body 1 4 6 2 | U U U U | F F F F F F | b10 b000000 b0000 b000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 | 0,0 | 0:,0/0/D0/0 1:,0/0/D0/1 2:,0/0/D0/2 3:,0/0/D0/3 || 226:rR10725,10738,27:mut compiler/check:Checker&,-1(F10725,10738,27:mut compiler/check:Checker&,0(D10725,10738,21:compiler/needs:walker(R10725,10738,26:mut compiler/needs:walker&,-1(V10725,10738,26:mut compiler/needs:walker&,0)))) 226:rR10725,10738,27:mut compiler/check:Checker&,-1(F10725,10738,27:mut compiler/check:Checker&,0(D10725,10738,21:compiler/needs:walker(R10725,10738,26:mut compiler/needs:walker&,-1(V10725,10738,26:mut compiler/needs:walker&,0)))) 226:rR10725,10738,27:mut compiler/check:Checker&,-1(F10725,10738,27:mut compiler/check:Checker&,0(D10725,10738,21:compiler/needs:walker(R10725,10738,26:mut compiler/needs:walker&,-1(V10725,10738,26:mut compiler/needs:walker&,0)))) 226:rR10725,10738,27:mut compiler/check:Checker&,-1(F10725,10738,27:mut compiler/check:Checker&,0(D10725,10738,21:compiler/needs:walker(R10725,10738,26:mut compiler/needs:walker&,-1(V10725,10738,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,10795,10812,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:10721:10919 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Match&
+body 1 2 10 2 | U U | F F F F F F F F F F | b10 b0000000000 b00 b0000000000 | 0:,V0,V1 1:,V0,V1 | 0,0 | 0:,0/0/D0/0 1:,0/0/D0/1 || 226:rR10925,10938,27:mut compiler/check:Checker&,-1(F10925,10938,27:mut compiler/check:Checker&,0(D10925,10938,21:compiler/needs:walker(R10925,10938,26:mut compiler/needs:walker&,-1(V10925,10938,26:mut compiler/needs:walker&,0)))) 226:rR10925,10938,27:mut compiler/check:Checker&,-1(F10925,10938,27:mut compiler/check:Checker&,0(D10925,10938,21:compiler/needs:walker(R10925,10938,26:mut compiler/needs:walker&,-1(V10925,10938,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,11002,11018,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:10921:11069 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0Array<compiler/ast:Catch&>&
+body 1 12 16 2 | U U U U U U U U U U U U | F F F F F F F F F F F F F F F F | b10 b0000000000000000 b000000000000 b0000000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1 4:,V0,V1 5:,V0,V1 6:,V0,V1 7:,V0,V1 8:,V0,V1 9:,V0,V1 10:,V0,V1 11:,V0,V1 | 0,0 | 0:,0/0/D0/0 1:,0/0/D0/1 2:,0/0/D0/2 3:,0/0/D0/3 4:,0/0/D0/4 5:,0/0/D0/5 6:,0/0/D0/6 7:,0/0/D0/7 8:,0/0/D0/8 9:,0/0/D0/9 10:,0/0/D0/10 11:,0/0/D0/11 || 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0)))) 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0)))) 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0)))) 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0)))) 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0)))) 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0)))) 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0)))) 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0)))) 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0)))) 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0)))) 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0)))) 226:rR12432,12445,27:mut compiler/check:Checker&,-1(F12432,12445,27:mut compiler/check:Checker&,0(D12432,12445,21:compiler/needs:walker(R12432,12445,26:mut compiler/needs:walker&,-1(V12432,12445,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,12592,12601,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:12428:13240 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr&
+body 1 11 10 3 | U V2 U U U U U V2 U U U | F F F F F V2 F F F F | b001 b0000000000 b00000000000 b0000010000 | 0:,V0,V2 2:,V2 3:,V2 4:,V2,V1 5:,V2 6:,V2,V2 8:,V2 9:,V2,V2 10:,V2,V2 | | 2:,0/0/V0 ||
+sum r;V0,V2,0,14882,14887,3,0,0 b001 b001 b1000 b0000 b0000 b b b a,compiler/needs:14788:15097,compiler/needs:14788:15097,compiler/needs:14902:14921 t,U i t i i c0/i/i f1010
+hid fs1;50432:V0;50433:U;50434:U;1280:U	o0mut compiler/check:Checker&	o0I64	o0compiler/ast:TypeRef?&	o0I64	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1std/prelude/vec:Vec<std/prelude/vec:Vec<std/prelude/text:String&>>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+body 1 11 15 3 | U U U U B0 U U V0 U U U | F F F F F F F F F F F F F F F | b100 b000000000000000 b00000000000 b000000000000000 | 0:,V0,V1 1: 2:,D0/1 3:,D0/2,D0/3 5:,V0,V2 6:,D0/4,D0/5,V0 8:,V0 9:,V0,V0 10:,V0,V0 | 0,0 | 0:,0/0/D0/0 || 226:rR14264,14277,27:mut compiler/check:Checker&,-1(F14264,14277,27:mut compiler/check:Checker&,0(D14264,14277,21:compiler/needs:walker(R14264,14277,26:mut compiler/needs:walker&,-1(V14264,14277,26:mut compiler/needs:walker&,0)))) 4:rN20 4:rN30 226:rR14264,14277,27:mut compiler/check:Checker&,-1(F14264,14277,27:mut compiler/check:Checker&,0(D14264,14277,21:compiler/needs:walker(R14264,14277,26:mut compiler/needs:walker&,-1(V14264,14277,26:mut compiler/needs:walker&,0)))) 4:rN84 4:rN87
+sum r;D0/0,V0,0,14609,14676,0,0,0 b100 b100 b100 b100 b100 b b b a,compiler/needs:14618:14659,compiler/needs:14260:14684,compiler/needs:14260:14684 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr&	o0Array<compiler/ast:Expr&>&	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/check:Checker&	o1I64	o1compiler/ast:TypeRef?&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	dd0:0:compiler/needs:walker
+body 1 16 11 3 | U U U V0 V0 U U U V0 V0 U U U U U U | F F F F F F F F F F F | b100 b00000000000 b0000000000000000 b00000000000 | 0:,V0 1:,V0 2:,D0/0,B1 5:,V0,V0 6:,V0,V1 7:,D0/1,B2 10:,V0,V0 11:,V0,V1 12:,V0,V1 13:,V0,V0 14:,V0,V1,V2 15:,V0,V2 | 0,0 | 11:,0/0/D0/2 14:,0/0/D0/3 15:,0/0/D0/4 || 4:rN30 4:rN52 226:rR13667,13680,27:mut compiler/check:Checker&,-1(F13667,13680,27:mut compiler/check:Checker&,0(D13667,13680,21:compiler/needs:walker(R13667,13680,26:mut compiler/needs:walker&,-1(V13667,13680,26:mut compiler/needs:walker&,0)))) 226:rR13667,13680,27:mut compiler/check:Checker&,-1(F13667,13680,27:mut compiler/check:Checker&,0(D13667,13680,21:compiler/needs:walker(R13667,13680,26:mut compiler/needs:walker&,-1(V13667,13680,26:mut compiler/needs:walker&,0)))) 226:rR13667,13680,27:mut compiler/check:Checker&,-1(F13667,13680,27:mut compiler/check:Checker&,0(D13667,13680,21:compiler/needs:walker(R13667,13680,26:mut compiler/needs:walker&,-1(V13667,13680,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,14190,14208,0,0,0 b100 b100 b100 b100 b100 b b b a,compiler/needs:13944:13983,compiler/needs:13663:14258,compiler/needs:13663:14258 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr&	o0Array<compiler/ast:Expr&>&	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	dd0:0:compiler/needs:walker
+body 1 8 5 3 | U U U U U U U U | F F F F V0 | b100 b00000 b00000000 b00000 | 0:,V0,V2 1:,V0,V0 2:,V0 3:,V0,B2 4:,V0,V1 5:,V0,V0 6:,V0,V1 7:,V0,V2 | 0,0 | 6:,0/0/D0/0 7:,0/0/D0/1 || 226:rR13246,13259,27:mut compiler/check:Checker&,-1(F13246,13259,27:mut compiler/check:Checker&,0(D13246,13259,21:compiler/needs:walker(R13246,13259,26:mut compiler/needs:walker&,-1(V13246,13259,26:mut compiler/needs:walker&,0)))) 226:rR13246,13259,27:mut compiler/check:Checker&,-1(F13246,13259,27:mut compiler/check:Checker&,0(D13246,13259,21:compiler/needs:walker(R13246,13259,26:mut compiler/needs:walker&,-1(V13246,13259,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,13468,13477,0,0,0 b100 b100 b1000 b1000 b1000 b b b a,std/prelude/vec:4512:4530,compiler/needs:13242:13493,compiler/needs:13242:13493 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/token:Tok	o0compiler/ast:Expr&	o0compiler/ast:Expr&
+body 1 31 29 2 | U U U U U U U U U U U U U U V0 V0 U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b00000000000000000000000000000 b0000000000000000000000000000000 b00000000000000000000000000000 | 0:,V0,V1 1:,V0,V0 2:,V0,V1 3:,V0,V1,V1 4:,V0,V1 5:,V0,V0 6:,V0,V1 7:,V0,V1 8:,V0,V1 9:,V0,V0 10:,V0,V1 11:,V0,V1,V1 12:,V0,V1 13:,D0/6,B11 16:,V0,V0 17:,V0,V1 18:,V0,V1 19:,V1 20:,V0,V0 21:,V0,V1 22:,V0,V1 23:,V0,V1 24:,V0,V0 25:,V0,V1 26:,V0,V1 27:,V0,V1 28:,V0,V1 29:,V0,V1 30:,V0,V1 | 0,0 | 2:,0/0/D0/0 3:,0/0/D0/1 6:,0/0/D0/2 7:,0/0/D0/3 10:,0/0/D0/4 11:,0/0/D0/5 17:,0/0/D0/7 21:,0/0/D0/8 22:,0/0/D0/9 25:,0/0/D0/10 26:,0/0/D0/11 27:,0/0/D0/12 28:,0/0/D0/13 29:,0/0/D0/14 30:,0/0/D0/15 || 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 5:rN120 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0)))) 226:rR11100,11113,27:mut compiler/check:Checker&,-1(F11100,11113,27:mut compiler/check:Checker&,0(D11100,11113,21:compiler/needs:walker(R11100,11113,26:mut compiler/needs:walker&,-1(V11100,11113,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,11713,11728,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:11096:12364 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Expr?&	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	dd0:0:compiler/needs:walker
+body 1 24 31 2 | U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b0000000000000000000000000000000 b000000000000000000000000 b0000000000000000000000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,V1,V1 4:,V0,V1 5:,V0,V1 6:,V0,V1 7:,V0,V1 8:,V0,V1 9:,V0,V1 10:,V0,V1 11:,V0,V1 12:,V0,V1 13:,V0,V1 14:,V0,V1 15:,V0,V1 16:,V0,V1 17:,V0,V1 18:,V0,V1 19:,V0,V1 20:,V0,V1 21:,V0,V1 22:,V0,V1 23:,V0,V1 | 0,0 | 0:,0/0/D0/0 1:,0/0/D0/1 2:,0/0/D0/2 3:,0/0/D0/3 4:,0/0/D0/4 5:,0/0/D0/5 6:,0/0/D0/6 7:,0/0/D0/7 8:,0/0/D0/8 9:,0/0/D0/9 10:,0/0/D0/10 11:,0/0/D0/11 12:,0/0/D0/12 13:,0/0/D0/13 14:,0/0/D0/14 15:,0/0/D0/15 16:,0/0/D0/16 17:,0/0/D0/17 18:,0/0/D0/18 19:,0/0/D0/19 20:,0/0/D0/20 21:,0/0/D0/21 22:,0/0/D0/22 23:,0/0/D0/23 || 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0)))) 216:rR6995,7008,27:mut compiler/check:Checker&,-1(F6995,7008,27:mut compiler/check:Checker&,0(D6995,7008,21:compiler/needs:walker(R6995,7008,26:mut compiler/needs:walker&,-1(V6995,7008,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,7125,7134,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:6991:8467 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/ast:Stmt&
+body 1 1 6 2 | U | F F F F F F | b10 b000000 b0 b000000 | 0:,V0,V1 | 0,0 | 0:,0/0/D0/0 || 216:rR6913,6926,27:mut compiler/check:Checker&,-1(F6913,6926,27:mut compiler/check:Checker&,0(D6913,6926,21:compiler/needs:walker(R6913,6926,26:mut compiler/needs:walker&,-1(V6913,6926,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,6976,6985,0,0,0 b10 b10 b10 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/needs:6909:6989 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0Array<compiler/ast:Stmt&>&
+body 1 18 13 1 | U U U U B0 U U U U U B3 U U B6 B6 U U U | F F F F F F F F F F F F F | b1 b0000000000000 b000000000000000000 b0000000000000 | 0: 1:,D0/0,D0/1 2:,D0/2 3:,D0/3,D0/4 5:,D0/5 6:,V0 7:,V0,V0 8:,D0/6 9:,D0/7 11:,V0 12:,V0 15:,V0,D0/8 16:,V0,D0/10 17:,V0,D0/12 | 0,0 | 15:,0/0/D0/9 16:,0/0/D0/11 17:,0/0/D0/13 || 3:rN4 216:rR2266,2279,27:mut compiler/check:Checker&,-1(F2266,2279,27:mut compiler/check:Checker&,0(D2266,2279,21:compiler/needs:walker(R2266,2279,26:mut compiler/needs:walker&,-1(V2266,2279,26:mut compiler/needs:walker&,0)))) 4:rN19 4:rN13 216:rR2266,2279,27:mut compiler/check:Checker&,-1(F2266,2279,27:mut compiler/check:Checker&,0(D2266,2279,21:compiler/needs:walker(R2266,2279,26:mut compiler/needs:walker&,-1(V2266,2279,26:mut compiler/needs:walker&,0)))) 4:rN26 4:rN68 4:rN78 5:rN108 216:rR2266,2279,27:mut compiler/check:Checker&,-1(F2266,2279,27:mut compiler/check:Checker&,0(D2266,2279,21:compiler/needs:walker(R2266,2279,26:mut compiler/needs:walker&,-1(V2266,2279,26:mut compiler/needs:walker&,0)))) 5:rN134 216:rR2266,2279,27:mut compiler/check:Checker&,-1(F2266,2279,27:mut compiler/check:Checker&,0(D2266,2279,21:compiler/needs:walker(R2266,2279,26:mut compiler/needs:walker&,-1(V2266,2279,26:mut compiler/needs:walker&,0)))) 5:rN141 216:rR2266,2279,27:mut compiler/check:Checker&,-1(F2266,2279,27:mut compiler/check:Checker&,0(D2266,2279,21:compiler/needs:walker(R2266,2279,26:mut compiler/needs:walker&,-1(V2266,2279,26:mut compiler/needs:walker&,0))))
+sum r;D0/0,V0,0,2739,2757,0,0,0 b1 b1 b1 b1 b1 b b b a,std/prelude/vec:3184:3188 t i t i,0 i,0 c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/needs:walker&	o0compiler/ast:Func&	o1mut compiler/generic:Program&	o1I64	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	dd0:0:compiler/needs:walker
+out cfb05bd10f9ed472f9ce8ca869be7ce9
+run compiler/needs 5504-5990 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:TypeDecl	3
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/needs 0-0 ctor compiler/needs:walker	0
+marks b5694134ecb6f579b2982123fa2d7102
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:TypeDecl	3c7b73fb692de03b2a0a98e0425d9b01
+read compiler/ast 14681-14737 fn	ca8f6eae37353eafd94ad54adc624b9b
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 172899-172979 fn	e451141202459db313c04952aee5ed4c
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/needs 0-0 ctor compiler/needs:walker	9e10154a46d1d234d45f108b672687cf
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34269-34339 fn	c963616c9d0b05a0f26e01da8fa14f33
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 13 10 2 | U B0 U U U U V1 V1 U U V1 V1 U | F F F F F F F F F F | b01 b0000000000 b0000000000000 b0000000000 | 0:,V0 2:,V0 3:,V0,V0 4:,V0 5:,V0,B6 8:,V1,V1 9:,V0,B7 12:,V1,V1 | | ||
+sum r b01 b01 b101 b101 b001 b b b a,compiler/needs:5504:5990,compiler/needs:5843:5889 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/types:TypeId	o0mut std/prelude/vec:Vec<std/prelude/text:String&>&	o0compiler/ast:TypeDecl?&	o1mut compiler/generic:Program&	o1compiler/types:DeclId	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId
+out 359c1777d04fcfa47150375d07950204
+run compiler/needs 5504-5990 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 359c1777d04fcfa47150375d07950204
+mark compiler/ast 0-0 ctor compiler/ast:TypeDecl	3
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/needs 0-0 ctor compiler/needs:walker	0
+marks 22e7b5e7b0e8126ab4d5b4b92078a398
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:TypeDecl	3c7b73fb692de03b2a0a98e0425d9b01
+read compiler/ast 14681-14737 fn	ca8f6eae37353eafd94ad54adc624b9b
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 172899-172979 fn	e451141202459db313c04952aee5ed4c
+read compiler/load 0-0 ctor compiler/load:Loader	c57786966e9e41b2e6cd468b7362b539
+read compiler/needs 0-0 ctor compiler/needs:walker	e1aca02831d5a34e5a5ce669121782a4
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read compiler/types 33893-33951 fn	4206cc5daee40858b4afc70b82e0ee97
+read compiler/types 34269-34339 fn	c963616c9d0b05a0f26e01da8fa14f33
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 13 10 2 | U B0 U U U U V1 V1 U U V1 V1 U | F F F F F F F F F F | b01 b0000000000 b0000000000000 b0000000000 | 0:,D0/0 2:,D0/1 3:,D0/2,D0/3 4:,D0/4 5:,D0/5,B6 8:,V1,V1 9:,D0/6,B7 12:,V1,V1 | 0,0 | || 3:rN4 4:rN15 4:rN11 216:rR5508,5521,27:mut compiler/check:Checker&,-1(F5508,5521,27:mut compiler/check:Checker&,0(D5508,5521,21:compiler/needs:walker(R5508,5521,26:mut compiler/needs:walker&,-1(V5508,5521,26:mut compiler/needs:walker&,0)))) 4:rN43 4:rN49 4:rN61
+sum r b01 b01 b101 b101 b001 b b b a,compiler/needs:5504:5990,compiler/needs:5843:5889 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/needs:walker&	o0compiler/types:TypeId	o0mut std/prelude/vec:Vec<std/prelude/text:String&>&	o0compiler/ast:TypeDecl?&	o1mut compiler/generic:Program&	o1compiler/types:DeclId	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	dd0:0:compiler/needs:walker
+out c5802cc9415c21d9b3dd5fb646d1cea8
+run compiler/needs 6082-6307 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 3 5 1 | B1 B1 U | F F F F F | b0 b00000 b000 b00000 | 2:,V0,P | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/needs:6082:6307 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 945f15ecebe0c0eba2703fa0ba6e4354
+run compiler/needs 4905-5407 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/needs 0-0 ctor compiler/needs:walker	0
+marks a59e7d04dccf1c3d5af2f38a9582ee4a
+read -ctor	Bool
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 168429-168610 fn	798488446d59be94751fba690d1708b7
+read compiler/generic 199854-200184 fn	f198ce82a8e836a8ba7103cf80136ccb
+read compiler/generic 20415-20530 fn	81d633f3c95612faa4c9dcbc96a945aa
+read compiler/needs 0-0 ctor compiler/needs:walker	9e10154a46d1d234d45f108b672687cf
+read compiler/needs 5504-5990 fn	e0b9b46de93610bd1ec0f45f5ee3adde
+read compiler/needs 6082-6307 fn	aa48ec41ab2719b54aca4b36c3800b59
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11899-12021 fn <std/prelude/text:String&;>	3de578b68bbea269afe98db3cd30bd73
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 7015-7075 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	0847fdcafe26a2a7b6308f0d010e95dd
+hits 0
+body 1 14 13 2 | U U U U U B2 U U U U U U U U | F F F V1 F F F F F F F F F | b01 b0000000000000 b00000000000000 b0001000000000 | 0: 1:,V0 2:,V1 3:,B0 4:,V0,B2 6:,V0 7:,V0,B0 8:,V0,V0 9:,V0 10:,V0,V0 11:,B0,V0 12:,V0 13:,V1,V0 | | ||
+sum r;V0,V1,0,5373,5384,0,0,0 b01 b01 b10 b10 b00 b b b a,compiler/needs:4905:5407,compiler/needs:5007:5010 t,U i t i i c0/i/i f1010
+hid fs1;1280:U;1280:U	o0mut compiler/needs:walker&	o0I64	o0compiler/types:TypeId	o0mut std/prelude/vec:Vec<std/prelude/text:String&>&	o1mut std/prelude/vec:Vec<std/prelude/vec:Vec<std/prelude/text:String&>>&	o1I64	o0std/prelude/text:String&	o1mut std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 449d1401533ad5d0c8c4a61533e1a6e5
+run compiler/needs 4905-5407 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 449d1401533ad5d0c8c4a61533e1a6e5
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/needs 0-0 ctor compiler/needs:walker	0
+marks 9cd386bac305656ecd802a3727c4af79
+read -ctor	Bool
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 168429-168610 fn	798488446d59be94751fba690d1708b7
+read compiler/generic 199854-200184 fn	f198ce82a8e836a8ba7103cf80136ccb
+read compiler/generic 20415-20530 fn	81d633f3c95612faa4c9dcbc96a945aa
+read compiler/needs 0-0 ctor compiler/needs:walker	e1aca02831d5a34e5a5ce669121782a4
+read compiler/needs 5504-5990 fn	4394f5f7919eedeee024b0afee8e5c02
+read compiler/needs 6082-6307 fn	aa48ec41ab2719b54aca4b36c3800b59
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11899-12021 fn <std/prelude/text:String&;>	3de578b68bbea269afe98db3cd30bd73
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 7015-7075 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	0847fdcafe26a2a7b6308f0d010e95dd
+hits 0
+body 1 14 13 2 | U U U U U B2 U U U U U U U U | F F F V1 F F F F F F F F F | b01 b0000000000000 b00000000000000 b0001000000000 | 0: 1:,D0/0 2:,V1 3:,B0 4:,D0/1,B2 6:,D0/2 7:,V0,B0 8:,V0,V0 9:,V0 10:,V0,V0 11:,B0,V0 12:,V0 13:,V1,V0 | 0,0 | 7:,0/0/D0/3 || 3:rN1 4:rN20 4:rN35 216:rR4909,4922,27:mut compiler/check:Checker&,-1(F4909,4922,27:mut compiler/check:Checker&,0(D4909,4922,21:compiler/needs:walker(R4909,4922,26:mut compiler/needs:walker&,-1(V4909,4922,26:mut compiler/needs:walker&,0))))
+sum r;V0,V1,0,5373,5384,0,0,0 b01 b01 b10 b10 b00 b b b a,compiler/needs:4905:5407,compiler/needs:5007:5010 t,U i t i,0 i,0 c0/i/i f1010
+hid fs1;1280:U;1280:U	o0mut compiler/needs:walker&	o0I64	o0compiler/types:TypeId	o0mut std/prelude/vec:Vec<std/prelude/text:String&>&	o1mut std/prelude/vec:Vec<std/prelude/vec:Vec<std/prelude/text:String&>>&	o1I64	o0std/prelude/text:String&	o1mut std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	dd0:0:compiler/needs:walker
+out fab7ac7b985c111179dd306efe64952d
+run compiler/needs 1281-1674 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 0
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 1594a799783e188cbdfd362b75b1974d
+read -ctor	Array<std/prelude/text:String&>
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 20415-20530 fn	81d633f3c95612faa4c9dcbc96a945aa
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/needs 0-0 ctor compiler/needs:walker	9e10154a46d1d234d45f108b672687cf
+read compiler/needs 2262-2759 fn	e0f9685c987cf777dce8d8b8b955a400
+read compiler/needs 4905-5407 fn	fc9879d7adb0a5e6012438f7d5ccd105
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+want decl compiler/needs:walker
+hits 0
+body 1 16 12 2 | U V0 U U U U U U U B2 U U V1 V1 U U | F F F V1 F F F F F F F F | b11 b000000000000 b0000000000000000 b000000000000 | 0:,V0,V0 2:,V0 3:,V1 4: 5:,V0 6:,V0,B2 7:,B2 8:,V0 10:,V0,B2 11:,B2,B2,B2 14:,V1,V1 15:,V1,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,compiler/needs:1360:1375,compiler/needs:1392:1395 t i t i i c0/i/i f1010
+hid fs1;50432:V0;50433:U;50434:U;1280:U	o0mut compiler/check:Checker&	o0I64	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/needs:walker&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&
+out 2e0d5a4495033f6b422d48bf221f7d94
+run compiler/needs 1281-1674 fn	
+ctx r1 g1 p0
+keys compiler/needs=7d4a3aa823d66b19720bee87687b42cfc5b4159674e7fb47ce041d5b49db9214
+in 2e0d5a4495033f6b422d48bf221f7d94
+mark compiler/check 0-0 ctor compiler/check:Checker	1
+mark compiler/generic 0-0 ctor compiler/generic:Program	0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+marks 1594a799783e188cbdfd362b75b1974d
+read -ctor	Array<std/prelude/text:String&>
+read -ctor	I64
+read compiler/check 0-0 ctor compiler/check:Checker	4eb8559b63ba4881032dda2c5289be26
+read compiler/generic 0-0 ctor compiler/generic:Program	ea8ad9c31a58a6c865862416f2532e85
+read compiler/generic 11892-11934 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/generic 20415-20530 fn	81d633f3c95612faa4c9dcbc96a945aa
+read compiler/load 0-0 ctor compiler/load:Loader	c57786966e9e41b2e6cd468b7362b539
+read compiler/needs 0-0 ctor compiler/needs:walker	e1aca02831d5a34e5a5ce669121782a4
+read compiler/needs 2262-2759 fn	d8854145b0b53f437c04fbea0d723051
+read compiler/needs 4905-5407 fn	88f3ef262ce36b746f657eeb87e438c9
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/vec:Vec<std/prelude/text:String&>;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+hits 0
+body 1 16 12 2 | U B0 U U U U U U U B2 U U V1 V1 U U | F F F V1 F F F F F F F F | b01 b000000000000 b0000000000000000 b000000000000 | 0:,V0,B0 2:,B0 3:,V1 4: 5:,B0 6:,B0,B2 7:,B2 8:,V0 10:,V0,B2 11:,B2,B2,B2 14:,V1,V1 15:,V1,V1 | | 2:,0/0/V0 6:,0/0/V0 ||
+sum r b01 b01 b10 b00 b00 b b b a,compiler/needs:1281:1674,compiler/needs:1392:1395 t i t i i c0/i/i f1010
+hid fs1;50432:V0;50433:U;50434:U;1280:U	o0mut compiler/check:Checker&	o0I64	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/needs:walker&	o1I64	o0std/prelude/text:String&	o1mut compiler/source:Names&	o1compiler/source:NameId	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&
+out c1cb845248e7c1d9f13ba07b1bb32e67
+end
+sum 74679-10188567532816240622

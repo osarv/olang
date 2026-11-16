@@ -1,0 +1,461 @@
+olang module record
+size 438136
+split 1
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_26_3e_2e_H5dd47b74e50a5f91c0bc89c15be27e45
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cBool_3e_2ePush_3cBool_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2ePush_3cI64_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_26_3e_2e_H858b244a7d569c0419567613de7e1b7d
+inst std_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3aSaid_3e_2ector
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3arecord_3e_2eAt_3ccompiler_2fdiag_3arecord_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3aSaid_3e_2ePush_3ccompiler_2fdiag_3aSaid_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eSetAt_3cI64_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eLen_3cI64_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3acontext_3e_2eLen_3ccompiler_2fdiag_3acontext_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3arecord_3e_2eLen_3ccompiler_2fdiag_3arecord_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2ePop_3cI64_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eAt_3cI64_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3arecord_3e_2ePush_3ccompiler_2fdiag_3arecord_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eToArray_3cI64_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eClear_3cI64_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3arecord_3e_2eTruncate_3ccompiler_2fdiag_3arecord_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3anote_3e_2eLen_3ccompiler_2fdiag_3anote_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3anote_3e_2eAt_3ccompiler_2fdiag_3anote_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3anote_3e_2eSetAt_3ccompiler_2fdiag_3anote_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3anote_3e_2eTruncate_3ccompiler_2fdiag_3anote_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eTruncate_3cI64_3e
+inst std_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3aItem_3e_2ector
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3aItem_3e_2ePush_3ccompiler_2fdiag_3aItem_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3anote_3e_2ePush_3ccompiler_2fdiag_3anote_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_26_3e_2e_H2711111a2c34fd187b8c2034b3d60e52
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3acontext_3e_2ePop_3ccompiler_2fdiag_3acontext_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3acontext_3e_2ePush_3ccompiler_2fdiag_3acontext_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3acontext_3e_2eAt_3ccompiler_2fdiag_3acontext_3e
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cBool_3e_2eAt_3cBool_3e
+inst std_2fprelude_2fvec_3aVec_3cI64_3e_2ector
+inst std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eHas_3cI64_3e
+inst std_2fprelude_2farray_2eArray_3cI64_3e_2eSort_3cI64_2c_20_3f_3e
+inst std_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_26_3e_2ector
+inst std_2fprelude_2fvec_3aVec_3cBool_3e_2ector
+inst std_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3arecord_3e_2ector
+inst std_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3anote_3e_2ector
+inst std_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3acontext_3e_2ector
+read #fa05acbfc0c54322c35292c31bc2f5c7 D9h mutable globals
+read 0 O23a compiler_2fdiag_2eColorWanted
+read 0 O23a compiler_2fdiag_2eExplain
+read 0 O23a compiler_2fdiag_2eItem_2eitem
+read 0 O23a compiler_2fdiag_2eSpecPath
+read 0 O23a compiler_2fdiag_2eUntidy
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eAddFile
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eAllSaid
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eChoose
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eChooseAll
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eColumnAt
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eContextBase
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eContextDepth
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eCount
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eCutOff
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eDrop
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eEndHold
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eError
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eErrorAlone
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eErrorBare
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eErrorBefore
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eErrorOncePerLine
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eErrorUnheld
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eErrorWithin
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eErrors
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eFatal
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eFirm
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eForget
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eHasFatal
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eHold
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eHolds
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eIsCut
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eIsDropped
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eIsLibrary
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eIsPending
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eItems
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eLineAt
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eLocate
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eNameLines
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eNote
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2ePathOf
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2ePopContext
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2ePushContext
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eRecordCount
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eRender
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eReopen
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eReplay
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eScopeGroupEnd
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eScopeGroupStart
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eSince
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eSummary
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eTextOf
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eTopContext
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eUsage
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eUseOf
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eWarnings
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eYield
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2echosen
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eerrorWord
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eisLibrary
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2elineOf
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2emayReport
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eprogramUse
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2epushOwn
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eputExcerpt
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eputLocation
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eputNote
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eputPlain
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eputRow
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2ereport
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2esgr
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2eshown
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aDiagnostics_2ewritten
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aTaken_2eCount
+read 0 O23a compiler_2fdiag_2ecompiler_2fdiag_3aTaken_2eSame
+read 0 O23a compiler_2fdiag_2econtinues
+read 0 O23a compiler_2fdiag_2eisScopeRule
+read 0 O23a compiler_2fdiag_2eprintable
+read 0 O23a compiler_2fdiag_2eruleIdAt
+read 0 O23a compiler_2fdiag_2esection
+read 0 O23a compiler_2fdiag_2etermAllowsColor
+read 0 O23a compiler_2fmsgs_2eNoteInLibrary
+read 0 O23a compiler_2fsource_2eLineStarts
+read 0 O23a std_2fos_2eEnv
+read 0 O23a std_2fos_2eIsTerminal
+read 0 O23a std_2fos_2eReadLink
+read 0 O23a std_2fprelude_2farray_2eArray_3cI64_3e_2eSort_3cI64_2c_20_3f_3e
+read 0 O23a std_2fprelude_2ftext_2eI64_2ePadStart
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aChar_2eIsDigit
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aChar_2eIsLower
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aChar_2eIsUpper
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aChar_2eToUpper
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aStringBuilder_2ePush
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aStringBuilder_2ePushChar
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aStringBuilder_2eToString
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aString_2eEq
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aString_2eFindByte
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aString_2eFindLast
+read 0 O23a std_2fprelude_2ftext_2estd_2fprelude_2ftext_3aString_2eStartsWith
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cBool_3e_2eAt_3cBool_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cBool_3e_2ePush_3cBool_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eAt_3cI64_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eClear_3cI64_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eHas_3cI64_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eLen_3cI64_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2ePop_3cI64_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2ePush_3cI64_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eSetAt_3cI64_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eToArray_3cI64_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eTruncate_3cI64_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3aItem_3e_2ePush_3ccompiler_2fdiag_3aItem_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3aSaid_3e_2ePush_3ccompiler_2fdiag_3aSaid_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3acontext_3e_2eAt_3ccompiler_2fdiag_3acontext_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3acontext_3e_2eLen_3ccompiler_2fdiag_3acontext_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3acontext_3e_2ePop_3ccompiler_2fdiag_3acontext_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3acontext_3e_2ePush_3ccompiler_2fdiag_3acontext_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3anote_3e_2eAt_3ccompiler_2fdiag_3anote_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3anote_3e_2eLen_3ccompiler_2fdiag_3anote_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3anote_3e_2ePush_3ccompiler_2fdiag_3anote_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3anote_3e_2eSetAt_3ccompiler_2fdiag_3anote_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3anote_3e_2eTruncate_3ccompiler_2fdiag_3anote_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3arecord_3e_2eAt_3ccompiler_2fdiag_3arecord_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3arecord_3e_2eLen_3ccompiler_2fdiag_3arecord_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3arecord_3e_2ePush_3ccompiler_2fdiag_3arecord_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fdiag_3arecord_3e_2eTruncate_3ccompiler_2fdiag_3arecord_3e
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_26_3e_2e_H2711111a2c34fd187b8c2034b3d60e52
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_26_3e_2e_H5dd47b74e50a5f91c0bc89c15be27e45
+read 0 O23a std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cstd_2fprelude_2ftext_3aString_26_3e_2e_H858b244a7d569c0419567613de7e1b7d
+read plain T13d <time.h>.timespec
+read plain T13d compiler/api.change
+read plain T13d compiler/api.fnType
+read plain T13d compiler/api.sig
+read plain T13d compiler/ast.Attr
+read plain T13d compiler/ast.Case
+read plain T13d compiler/ast.CaseDecl
+read plain T13d compiler/ast.Catch
+read plain T13d compiler/ast.Decl
+read plain T13d compiler/ast.Expr
+read plain T13d compiler/ast.Func
+read plain T13d compiler/ast.If
+read plain T13d compiler/ast.Param
+read plain T13d compiler/ast.Path
+read plain T13d compiler/ast.Pattern
+read plain T13d compiler/ast.Promise
+read plain T13d compiler/ast.Req
+read plain T13d compiler/ast.Stmt
+read plain T13d compiler/ast.TypeDecl
+read plain T13d compiler/ast.TypeParam
+read plain T13d compiler/ast.TypeRef
+read plain T13d compiler/ast.VarDecl
+read plain T13d compiler/bindgen.CKind
+read plain T13d compiler/bindgen.cFunc
+read plain T13d compiler/bindgen.cMacro
+read plain T13d compiler/bindgen.ctype
+read plain T13d compiler/bindgen.record
+read plain T13d compiler/build.Aged
+read plain T13d compiler/build.Code
+read plain T13d compiler/build.Unit
+read plain T13d compiler/build.UnitKind
+read plain T13d compiler/cabi.Scalar
+read plain T13d compiler/check.Ask
+read plain T13d compiler/check.AssertAsk
+read plain T13d compiler/check.ContractAsk
+read plain T13d compiler/check.EmbedAsk
+read plain T13d compiler/check.Gap
+read plain T13d compiler/check.TopAssertAsk
+read plain T13d compiler/check.UnrollAsk
+read plain T13d compiler/check.ValueAsk
+read plain T13d compiler/check.ValueKind
+read plain T13d compiler/check.atRec
+read plain T13d compiler/check.effectPlace
+read plain T13d compiler/check.errBind
+read plain T13d compiler/check.errNarrow
+read plain T13d compiler/check.factRead
+read plain T13d compiler/check.fixedInit
+read plain T13d compiler/check.frame
+read plain T13d compiler/check.heldCand
+read plain T13d compiler/check.idleCall
+read plain T13d compiler/check.inPlaceRead
+read plain T13d compiler/check.knownRange
+read plain T13d compiler/check.landing
+read plain T13d compiler/check.laneNode
+read plain T13d compiler/check.loopUse
+read plain T13d compiler/check.narrowed
+read plain T13d compiler/check.nullNarrow
+read plain T13d compiler/check.payloadItem
+read plain T13d compiler/check.rangeIndex
+read plain T13d compiler/check.rawTable
+read plain T13d compiler/check.roArg
+read plain T13d compiler/check.roDeepArg
+read plain T13d compiler/check.roFn
+read plain T13d compiler/check.roOrigin
+read plain T13d compiler/check.setAt
+read plain T13d compiler/check.tailAsk
+read plain T13d compiler/check.typeCase
+read plain T13d compiler/check.unsetCand
+read plain T13d compiler/check.weakPlace
+read plain T13d compiler/cond.Global
+read plain T13d compiler/cond.Value
+read plain T13d compiler/cond.ValueKind
+read plain T13d compiler/diag.Diagnostics
+read plain T13d compiler/diag.Item
+read plain T13d compiler/diag.Said
+read plain T13d compiler/diag.Taken
+read plain T13d compiler/diag.Where
+read plain T13d compiler/diag.context
+read plain T13d compiler/diag.note
+read plain T13d compiler/diag.record
+read plain T13d compiler/diagmsg.Msg
+read plain T13d compiler/doc.Entry
+read plain T13d compiler/doc.Example
+read plain T13d compiler/doc.Module
+read plain T13d compiler/effects.Facts
+read plain T13d compiler/effects.fpath
+read plain T13d compiler/effects.fret
+read plain T13d compiler/effects.fslot
+read plain T13d compiler/effects.given
+read plain T13d compiler/effects.link
+read plain T13d compiler/effects.pair
+read plain T13d compiler/effects.part
+read plain T13d compiler/effects.pend
+read plain T13d compiler/emit.Object
+read plain T13d compiler/emit.ObjectKind
+read plain T13d compiler/emit.Reused
+read plain T13d compiler/eval.Blob
+read plain T13d compiler/eval.Image
+read plain T13d compiler/eval.Ptr
+read plain T13d compiler/eval.dkey
+read plain T13d compiler/eval.frame
+read plain T13d compiler/eval.genRec
+read plain T13d compiler/eval.gkey
+read plain T13d compiler/eval.global
+read plain T13d compiler/eval.reg
+read plain T13d compiler/eval.scope
+read plain T13d compiler/eval.task
+read plain T13d compiler/explain.Code
+read plain T13d compiler/free.VecWalk
+read plain T13d compiler/free.feed
+read plain T13d compiler/free.feedCall
+read plain T13d compiler/free.leaf
+read plain T13d compiler/free.letGo
+read plain T13d compiler/free.orCall
+read plain T13d compiler/free.orStore
+read plain T13d compiler/free.reason
+read plain T13d compiler/free.retire
+read plain T13d compiler/free.store
+read plain T13d compiler/generic.AnySlot
+read plain T13d compiler/generic.AnyTable
+read plain T13d compiler/generic.ConstAsk
+read plain T13d compiler/generic.Origin
+read plain T13d compiler/generic.fnRow
+read plain T13d compiler/generic.instance
+read plain T13d compiler/generic.pattern
+read plain T13d compiler/generic.varRow
+read plain T13d compiler/interp.CondErr
+read plain T13d compiler/interp.abortedAsk
+read plain T13d compiler/jupyter.pending
+read plain T13d compiler/lineedit.snap
+read plain T13d compiler/listing.Remark
+read plain T13d compiler/load.Import
+read plain T13d compiler/load.Module
+read plain T13d compiler/lower.Clone
+read plain T13d compiler/lower.CloneHand
+read plain T13d compiler/lower.CloneSite
+read plain T13d compiler/lower.CloneSum
+read plain T13d compiler/lower.Gap
+read plain T13d compiler/lower.collectCtx
+read plain T13d compiler/lower.level
+read plain T13d compiler/lower.loopCtx
+read plain T13d compiler/lower.pl
+read plain T13d compiler/lower.relPath
+read plain T13d compiler/lower.tryCtx
+read plain T13d compiler/lsp.Doc
+read plain T13d compiler/measure.Sample
+read plain T13d compiler/mir.Base
+read plain T13d compiler/mir.BasicBlock
+read plain T13d compiler/mir.Call
+read plain T13d compiler/mir.Callee
+read plain T13d compiler/mir.Case
+read plain T13d compiler/mir.ConstNode
+read plain T13d compiler/mir.ExitKind
+read plain T13d compiler/mir.Fn
+read plain T13d compiler/mir.FnKey
+read plain T13d compiler/mir.HelperKind
+read plain T13d compiler/mir.Local
+read plain T13d compiler/mir.LocalKind
+read plain T13d compiler/mir.Lvalue
+read plain T13d compiler/mir.Operand
+read plain T13d compiler/mir.Proj
+read plain T13d compiler/mir.Range
+read plain T13d compiler/mir.Rvalue
+read plain T13d compiler/mir.ScopeInfo
+read plain T13d compiler/mir.ScopeKind
+read plain T13d compiler/mir.ScopeRef
+read plain T13d compiler/mir.Stmt
+read plain T13d compiler/mir.StmtList
+read plain T13d compiler/mir.Task
+read plain T13d compiler/mir.TaskClause
+read plain T13d compiler/mir.Term
+read plain T13d compiler/mir.VarKind
+read plain T13d compiler/mir.WriteKind
+read plain T13d compiler/msgs.Diag
+read plain T13d compiler/msgs.Nearest
+read plain T13d compiler/names.Entry
+read plain T13d compiler/names.Ref
+read plain T13d compiler/names.Table
+read plain T13d compiler/names.Unread
+read plain T13d compiler/names.What
+read plain T13d compiler/names.local
+read plain T13d compiler/names.raised
+read plain T13d compiler/names.raisedName
+read plain T13d compiler/profile.Frame
+read plain T13d compiler/profile.Sample
+read plain T13d compiler/profile.elfFn
+read plain T13d compiler/profile.mapping
+read plain T13d compiler/profile.node
+read plain T13d compiler/prompt.Decl
+read plain T13d compiler/prompt.Value
+read plain T13d compiler/prompt.item
+read plain T13d compiler/scan.Diag
+read plain T13d compiler/scan.LexError
+read plain T13d compiler/scope.Gap
+read plain T13d compiler/scope.Placement
+read plain T13d compiler/scope.Term
+read plain T13d compiler/scope.compRun
+read plain T13d compiler/scope.diskRun
+read plain T13d compiler/scope.fnRec
+read plain T13d compiler/scope.fnRecs
+read plain T13d compiler/scope.followItem
+read plain T13d compiler/scope.fsBody
+read plain T13d compiler/scope.fsOpen
+read plain T13d compiler/scope.fsRow
+read plain T13d compiler/scope.instNode
+read plain T13d compiler/scope.instTree
+read plain T13d compiler/scope.markRead
+read plain T13d compiler/scope.placedRow
+read plain T13d compiler/scope.rel
+read plain T13d compiler/scope.sumRead
+read plain T13d compiler/scope.summary
+read plain T13d compiler/scope.verAtom
+read plain T13d compiler/scope.vrRow
+read plain T13d compiler/session.Use
+read plain T13d compiler/source.Names
+read plain T13d compiler/source.Source
+read plain T13d compiler/source.Span
+read plain T13d compiler/token.Tok
+read plain T13d compiler/token.Token
+read plain T13d compiler/typed.Alt
+read plain T13d compiler/typed.Arm
+read plain T13d compiler/typed.Bind
+read plain T13d compiler/typed.Block
+read plain T13d compiler/typed.BlockInfo
+read plain T13d compiler/typed.BlockKind
+read plain T13d compiler/typed.Body
+read plain T13d compiler/typed.Capture
+read plain T13d compiler/typed.Clause
+read plain T13d compiler/typed.ContractInfo
+read plain T13d compiler/typed.DerivedArg
+read plain T13d compiler/typed.Expr
+read plain T13d compiler/typed.Item
+read plain T13d compiler/typed.Local
+read plain T13d compiler/typed.LocalKind
+read plain T13d compiler/typed.Lvalue
+read plain T13d compiler/typed.Mark
+read plain T13d compiler/typed.Piece
+read plain T13d compiler/typed.Plan
+read plain T13d compiler/typed.PrimOp
+read plain T13d compiler/typed.Scope
+read plain T13d compiler/typed.ScopeVar
+read plain T13d compiler/typed.SiteInfo
+read plain T13d compiler/typed.SiteKind
+read plain T13d compiler/typed.Stmt
+read plain T13d compiler/typed.TaskClause
+read plain T13d compiler/typed.Versions
+read plain T13d compiler/typed.landLoop
+read plain T13d compiler/types.DeclKind
+read plain T13d compiler/types.Kind
+read plain T13d compiler/types.body
+read plain T13d compiler/types.data
+read plain T13d compiler/types.decl
+read plain T13d compiler/views.Cand
+read plain T13d compiler/views.Root
+read plain T13d compiler/views.fact
+read plain T13d compiler/views.holding
+read plain T13d compiler/views.loopFrame
+read plain T13d compiler/views.naming
+read plain T13d compiler/views.place
+read plain T13d compiler/views.state
+read plain T13d compiler/views.summary
+read plain T13d compiler/views.tasked
+read plain T13d compiler/views.view
+read plain T13d std/bench.Measurement
+read plain T13d std/cancel.Token
+read plain T13d std/io.Reader
+read plain T13d std/io.source
+read plain T13d std/json.Json
+read plain T13d std/net.Conn
+read plain T13d std/net.IP
+read plain T13d std/net.Listener
+read plain T13d std/os.FileInfo
+read plain T13d std/os.FileKind
+read plain T13d std/os.Output
+read plain T13d std/os.Process
+read plain T13d std/pair.Pair
+read plain T13d std/prelude/array.ArrayIter
+read plain T13d std/prelude/iterator.ViewGenerator
+read plain T13d std/prelude/map.Map
+read plain T13d std/prelude/map.MapEntry
+read plain T13d std/prelude/map.MapIter
+read plain T13d std/prelude/map.MapKeyIter
+read plain T13d std/prelude/text.CStr
+read plain T13d std/prelude/text.LineIter
+read plain T13d std/prelude/text.StringBuilder
+read plain T13d std/prelude/text.decimal
+read plain T13d std/prelude/vec.Vec
+read plain T13d std/zmtp.Socket
+part 703490e461b7d65d92e56c4deae54fe62734baa96a39f4ad5c746e1249ebe6e6 compiler/diag
+locs 1575db03cc23123804b8b326e5019895c1d908794dd1de1ff2e8ebff260385d9 compiler/diag
+end
+sum 609a52d5967b20f0060092b2c3c2459a4fa8e4369937e21001eab3ada19fda4f

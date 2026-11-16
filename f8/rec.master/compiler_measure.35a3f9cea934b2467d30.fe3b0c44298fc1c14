@@ -1,0 +1,16 @@
+olang front record
+body ctor 0-0	known p
+body fn 1832-2795	known p
+body fn 2903-3037	known p
+body fn 3063-3180	known p
+body fn 3389-3992	known p
+body fn 4423-5069	known p
+body fn 5296-5624	known p
+sig Line@3389 fn&(I64, Array<Sample>&) String
+sig Measure@4423 fn&(Array<String&>&, I64, I64, String&) I32
+sig Sample.Of@1832 fn&(Array<String&>&, I32, String&) Sample ? Error
+sig Total@5296 fn&(I64, I64) String
+sig secs@2903 fn&(F64) String
+sig secsSpread@3063 fn&(F64, F64) String
+end
+sum 81a5c7c30de96ab9e726082efd6ecd4c869fc19c26fd5abc0ab6e42a034b9983

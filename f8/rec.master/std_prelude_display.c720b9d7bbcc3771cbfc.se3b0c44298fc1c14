@@ -1,0 +1,23 @@
+olang scope record
+run std/prelude/display 880-1162 fn	
+ctx r1 g1 p0
+keys std/prelude/display=c720b9d7bbcc3771cbfc4246bef0370f6006390bcad336252bd3fffa74517d63
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 2 | | F | b00 b0 b b0 | | | ||
+sum r b00 b00 b0 b0 b0 b b b a,std/prelude/display:880:1162,std/prelude/display:880:1162 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/display:Display&
+out cedc0dd713f8315f3c0b080da249ba4b
+run std/prelude/display 1235-1470 fn	
+ctx r1 g1 p0
+keys std/prelude/display=c720b9d7bbcc3771cbfc4246bef0370f6006390bcad336252bd3fffa74517d63
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 5 6 2 | V1 V1 V1 V1 V1 | F F F F F F | b01 b000000 b00000 b000000 | | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/prelude/display:1235:1470,std/prelude/display:1318:1320 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/display:Display&
+out 85a325cc4e1b2a44609c067be09d7825
+end
+sum 908-9661230097070420321

@@ -1,0 +1,9 @@
+import "std/io"
+
+fn main() {
+    rows := Array<List<String>>(10)
+    for i in range 1000 {
+        rows[i % 10] = List<String>.Of(Array<String>[$i])
+        io.PutLine($rows[3].Len())!
+    }
+}

@@ -1,0 +1,787 @@
+olang scope record
+run compiler/profile 4610-5493 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/build 39504-39581 fn	e84f968fc0c43610c3f470505a766a2b
+read std/os 19982-20087 fn	341d1a291287e9e310934f1bd2261f0d
+read std/os 9791-10527 fn	c3cb226dddc43c03807399a0a4a98577
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 21 14 4 | U U U B0 U U U B4 U U U U U U B0 U B7 B7 U U U | F F F F F F F F F F F F F F | b0000 b00000000000000 b000000000000000000000 b00000000000000 | 0:,B0 1:,B0,V1 2:,B0,V2 6:,V0,B4 8:,B0,B0 9:,B4,B0 18:,B7 | | ||
+sum r b0000 b0000 b0100 b0000 b0000 b b b a,compiler/profile:4610:5493,compiler/profile:4610:5493,compiler/profile:4610:5493,compiler/profile:4610:5493 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0std/prelude/text:String&	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o0std/prelude/text:String&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&
+out 1b4ad02f891c4b79abb2c1d1a32e3dff
+run compiler/profile 4114-4164 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/spin 5372-5537 fn	a2daa70bdc1f9d3e449368bc207a2fda
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/profile:4114:4164 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I32
+out 0a162acdecd4098107b0873bc52988e1
+run compiler/profile 0-0 ctor compiler/profile:Profile	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:Profile	0,1,2,3,4,5
+marks 2c7dff5c186f628e8d91ddb2994f97f1
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/profile:Sample>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 2 6 1 | U U | F F F F F F | b1 b000000 b00 b000000 | 0:,V0 1:,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/vec:3184:3188 t i,-1,-1,-1,0,1,-1 t,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U
+out 0d15df9ef9aac49d6405948ba01cfc08
+run compiler/profile 6559-6686 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 9 1 | | F F F F F F F F F | b0 b000000000 b b000000000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/profile:6559:6686 t i t i i c0/i/i f0010
+hid fs1	o0Array<U8>&	o0I64
+out 148868a83754bba6a8f0c7bb9449ddf8
+run compiler/profile 0-0 ctor compiler/profile:Sample	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:Sample	0,1,2
+marks 5b697b593909974f2fd52446daa38b44
+read -ctor	I64
+hits 0
+body 1 0 6 1 | | F F F F F F | b0 b000000 b b000000 | | | ||
+sum r b0 b0 b000 b000 b000 b b b a,compiler/profile:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0I64
+out a82b73ecc79bd79821d5522f23be47c2
+run compiler/profile 7138-7871 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:Profile	5
+marks 319cc13752477d968fa86dc13a5465e8
+read -ctor	I64
+read compiler/profile 0-0 ctor compiler/profile:Profile	7cbf1ca027f5493d496021a47bcbc2bc
+read compiler/profile 0-0 ctor compiler/profile:Sample	aaaa18250e6483af32e935efdba1df05
+read compiler/profile 6559-6686 fn	e6aaffe61d1b6fbe535b189540a3fcde
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <compiler/profile:Sample;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+hits 0
+body 1 16 12 2 | U B0 B0 U U U U U U U U U U U V1 V1 | F V1 F F F F F F F F F F | b01 b000000000000 b0000000000000000 b010000000000 | 0:,V1 3:,B0,B0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V1 10:,B3 11:,V1 12:,V0 13:,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/profile:7138:7871,compiler/profile:7193:7202 t i t i i c0/i/i f1010
+hid fs1	o0Array<U8>&
+out ee8913506b913f2c89d58446f40bdcbd
+run compiler/profile 13600-14114 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/target 3591-4094 fn	74271cdf45d32cd99de1a4be31bf3eb0
+read compiler/target 4327-4383 fn	d39f771e8ff324dade994d6e731e84e2
+read std/filepath 2134-2266 fn	c21d410093af7bd7620495b18370c76f
+read std/os 24775-24946 fn	00e63c605b5eb7dd98bbd2add75d8716
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 15 8 1 | U U U B1 U U U V0 U B2 U B4 B4 U U | F F V0 F F F F V0 | b1 b00100001 b000000000000000 b00000000 | 0:,B0 1:,B0,B0 2:,B0,B1 4:,B1,B1 5:,B1,B1 6:,B1,B2 8:,V0,B2 10:,B2,B2 13:,P,V0 14:,V0,B5 | | ||
+sum r b1 b1 b b b b b b a,compiler/profile:13796:13836 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out b5beb1137c2d3ea203200e318e764418
+run compiler/profile 0-0 ctor compiler/profile:Places	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:Places	0,1,2,3,4,5
+marks 58423d343b2d21ad0b6f0f274577c264
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, I64>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String&, I64>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/profile:Frame>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 6 6 1 | U U U U U U | F F F F F F | b1 b000000 b000000 b000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/vec:3184:3188 t i,0,-1,1,2,3,-1 t,U,U,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U;1280:U
+out c934b205b7546a3a91d7b3b7699a0833
+run compiler/profile 0-0 ctor compiler/profile:mapping	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:mapping	0,1,2,3
+marks 77ea5459799f60b712c7e7bafd0c2c6c
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+hits 0
+body 1 0 8 2 | | F F F F F F F F | b00 b00000000 b b00000000 | | | ||
+sum r;V0,V1,0,8954,8958,1,0,0 b00 b00 b0001 b0000 b0000 b b b a,compiler/profile:0:0,compiler/profile:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0I64	o0std/prelude/text:String&
+out e6c2783df84d985b5ecf820c46f6c9f9
+run compiler/profile 8962-9029 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+hits 0
+body 1 2 1 1 | U U | F | b0 b0 b00 b0 | 0:,B0 1:,V0 | | ||
+sum r b0 b0 b1 b0 b0 b b b a,compiler/profile:8962:9029 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 2316208656f9dc30bda403bc0a40a6aa
+run compiler/profile 9087-9708 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/profile 0-0 ctor compiler/profile:mapping	e34fc2bf64174b7ff0dcf801eac99a9d
+read compiler/profile 8962-9029 fn	62ecd35681eb64cd1a2770700d1304d2
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 10176-10230 fn	ecc907d1b80ad51f7de503ad33f4d4b6
+read std/prelude/text 10447-10795 fn	1f5be6d0ca3785e37b467f570786f397
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3958-4053 fn	249b488abfd8979d5dc24c581a8aa85a
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/text 5222-6401 fn	ab98a5b2ea25c1706726cb198e1a4156
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/profile:mapping>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <compiler/profile:mapping;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 27 17 2 | U U U U U U U U U U B2 U U U U U B2 U U B2 U U U U V1 U U | F V1 F F F F F F F F F F F F F F F | b11 b00000000000000000 b000000000000000000000000000 b01000000000000000 | 0:,V1 1:,V0,V0 2:,V0,V0 3:,B2 4:,V0,B3,V0 5:,V0,B4 6:,B2,V0 7:,B2 8:,B2,B2 9:,B2,B2 10:,B2 11:,B2 12:,B2 13:,B2,B2 14:,B2,B2 15:,B2,B2 17:,B2 18:,B2,B2 20:,B2 21:,B2,B2 22:,B2 23:,B2,V1 25:,V1,V1 26:,V1,V1 | | ||
+sum r b11 b11 b1 b0 b0 b b b a,std/prelude/text:5338:5364,compiler/profile:9132:9135 t,U i t i i c0/i/i f1010
+hid fs1;1280:U;1280:U;158720:U;158721:U;158722:U;158723:V1	o0std/prelude/text:String&	o0std/prelude/text:LineIter	o1std/prelude/text:String&	o0std/prelude/text:String&	o1mut std/prelude/text:LineIter&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out a5bc813dd9e62ff1ce753a50c3d588c5
+run compiler/profile 9928-10682 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/profile 6559-6686 fn	e6aaffe61d1b6fbe535b189540a3fcde
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 10 14 2 | U U U U U U U U U U | F V1 F F F F F F F F F F F F | b01 b00000000000000 b0000000000 b01000000000000 | 0:,V1 1:,V0,B0 2:,B0 3:,B0 4:,B0 5:,V1 6:,B0 7:,V1 8:,B0 9:,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/profile:9928:10682,compiler/profile:9969:9972 t,U i t i i c0/i/i f1010
+hid fs1;1280:U	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 2b5f9c92693a7220e09ab64deeb7796e
+run compiler/profile 17999-18302 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+read std/prelude/text 9184-9457 fn	356f36b03625ee9fbb154e0faab3710a
+hits 0
+body 1 5 4 2 | U U V1 U U | F F F F | b01 b0000 b00000 b0000 | 0:,V0,B0 1:,V0,B0 3:,B0 4:,V0 | | ||
+sum r b01 b01 b1 b0 b0 b b b a,compiler/profile:17999:18302,compiler/profile:18242:18252 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 627d7d5415301c5a5c05b5c3276187ef
+run compiler/profile 10741-10871 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 10 1 | | F F F F F F F F F F | b0 b0000000000 b b0000000000 | | | ||
+sum r b0 b0 b000 b000 b000 b b b a,compiler/profile:10741:10871 t i t i i c0/i/i f0010
+hid fs1	o0Array<U8>&	o0I64	o0I64
+out c88d2f56a09dcc9067f99375a83533db
+run compiler/profile 0-0 ctor compiler/profile:elfFn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:elfFn	0,1,2
+marks 270b260467f0454829904c5ae55b2516
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+hits 0
+body 1 0 6 2 | | F F F F F F | b00 b000000 b b000000 | | | ||
+sum r;V0,V1,0,11031,11035,1,0,0 b00 b00 b001 b000 b000 b b b a,compiler/profile:0:0,compiler/profile:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0std/prelude/text:String&
+out 52c65b34b88b0011a90cc382b75795db
+run compiler/profile 12488-12540 lambda in compiler/profile 11289-12558 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 2 | | F F | b00 b00 b b00 | | | ||
+sum r b00 b00 b00 b00 b00 b00 b00 b00 a,compiler/profile:12488:12540,compiler/profile:12488:12540 t i t i i c0/i/i f0010
+hid fs1	o0compiler/profile:elfFn	o0compiler/profile:elfFn
+out 077ccee7b1336084731b93823e790f33
+run compiler/profile 11289-12558 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/profile 0-0 ctor compiler/profile:elfFn	931250b1da46f1bb5db52b7e5475fa8f
+read compiler/profile 10741-10871 fn	24ed3c3c3c65422a47281c67f7085ad2
+read compiler/profile 12488-12540 lambda in compiler/profile 11289-12558 fn	82a4674a91232d26f49561cc79789229
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/profile:elfFn>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11088-11181 fn <compiler/profile:elfFn;?;>	c22db8e7309beb50afc90ba16571f575
+read std/prelude/vec 4660-4775 fn <compiler/profile:elfFn;>	037faee32f508921f991db6223f2f61a
+hits 0
+body 1 18 29 2 | U U U U U U U U U U U U U U U U B0 U | F V1 F F F F F F F F F F F F F F F F F F F F F F F F F F F | b01 b00000000000000000000000000000 b000000000000000000 b01000000000000000000000000000 | 0:,V1 1:,V0,V1 2:,V1 3:,V1 4:,V1 5:,V1 6:,V1 7:,V1 8:,V1 9:,V1 10:,V1 11:,V1 12:,V1 13:,V1 14:,V1,V1 15:,V1,V1 16: 17:,V1,B0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/profile:11289:12558,compiler/profile:11339:11342 t,U i t i i c0/i/i f1010
+hid fs1;1280:U;158976:U;158977:U;158978:V1	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 6be733d00225d7cc34940d9c8a18cbd4
+run compiler/profile 13029-13399 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:elfFn	2
+marks 89488a3ea7be412d8fad21c043a640db
+read -ctor	I64
+read compiler/profile 0-0 ctor compiler/profile:elfFn	931250b1da46f1bb5db52b7e5475fa8f
+read std/prelude/vec 5133-5172 fn <compiler/profile:elfFn;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/profile:elfFn;>	b51ed69aecd7674ca5263126de5a48dc
+hits 0
+body 1 12 6 2 | U U B1 U B5 U B5 U B5 U B6 V1 | F F F F F F | b01 b000000 b000000000000 b000000 | 0:,V0 1:,V0,B1 3:,V0,B5 5:,V0,B5 7:,V0,B5 9:,V0,V0 | | ||
+sum r b01 b01 b00 b00 b00 b b b a,compiler/profile:13029:13399,compiler/profile:13362:13375 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/vec:Vec<compiler/profile:elfFn>&	o0I64	o0compiler/profile:elfFn	o1std/prelude/vec:Vec<compiler/profile:elfFn>&	o1I64	o0compiler/profile:elfFn	o1std/prelude/vec:Vec<compiler/profile:elfFn>&	o1I64	o0compiler/profile:elfFn	o1std/prelude/vec:Vec<compiler/profile:elfFn>&	o1I64	o0compiler/profile:elfFn	o1std/prelude/vec:Vec<compiler/profile:elfFn>&	o1I64	o0compiler/profile:elfFn	o1std/prelude/vec:Vec<compiler/profile:elfFn>&	o1I64
+out cce983728c5c38aafcef9d29767d6d50
+run compiler/profile 12749-13027 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read compiler/profile 11289-12558 fn	c649954c22197df2301b4615611f073b
+read compiler/profile 13029-13399 fn	4739ea4884e5b12b5843af1617e129e3
+read std/prelude/map 5979-6292 fn <std/prelude/text:String&;std/prelude/vec:Vec<compiler/profile:elfFn>;>	bd7d99b5dd4edfde72b96dfe486c871e
+read std/prelude/map 7350-7435 fn <std/prelude/text:String&;std/prelude/vec:Vec<compiler/profile:elfFn>;>	2992d75aa45f45c42dcc59d6bdb8e50a
+read std/prelude/map 7666-7764 fn <std/prelude/text:String&;std/prelude/vec:Vec<compiler/profile:elfFn>;>	fe003e99e4cf69075d6f5a8ac912acc0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/profile:elfFn>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 10 5 3 | U V0 U V0 U U U V0 U U | F F F F V2 | b101 b00001 b0000000000 b00000 | 0:,V0,V1 2:,V1,V0 4:,V0,V0,V0 5:,V0,V1,V0 6:,V0 8:,V0,V2 9:,V2,B0 | | ||
+sum r b101 b101 b100 b100 b100 b b b a,compiler/profile:12864:12869,compiler/profile:12749:13027,compiler/profile:12963:12978 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut std/prelude/map:Map<std/prelude/text:String&, std/prelude/vec:Vec<compiler/profile:elfFn>>&	o0std/prelude/text:String&	o0I64	o0std/prelude/vec:Vec<compiler/profile:elfFn>	o1std/prelude/text:String&	o0std/prelude/vec:Vec<compiler/profile:elfFn>&	o1mut std/prelude/map:Map<std/prelude/text:String&, std/prelude/vec:Vec<compiler/profile:elfFn>>&	o1std/prelude/text:String&
+out 8701f4d6a5435af2331b4e14123955be
+run compiler/profile 19714-19887 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 9184-9457 fn	356f36b03625ee9fbb154e0faab3710a
+hits 0
+body 1 4 2 2 | U U U V1 | F F | b01 b00 b0000 b00 | 0:,V0,B0 1:,V0,B0 2:,V0,B0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/profile:19714:19887,compiler/profile:19868:19885 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 6f5663611866df3443283ec9e99e25ea
+run compiler/profile 20296-20418 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 1123-1188 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 1 0 | U U | F | b b0 b00 b0 | 0: 1: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char
+out 0c3ed9e6bf5660d449f0ad0f38640484
+run compiler/profile 19952-20294 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/profile 19714-19887 fn	9028d5ad3b3c3bdcae59768f9be67f00
+read compiler/profile 20296-20418 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 8 9 2 | B0 U U U B2 U U U | F F F F F F F F F | b01 b000000000 b00000000 b000000000 | 0:,B0 1: 2:,B0,V0 3:,V0,B2 5:,B0,B2 6:,B0,V0 7:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/profile:19952:20294,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 96d0c1d7449291352f1c6632fca2f61c
+run compiler/profile 18676-19620 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/profile 19714-19887 fn	9028d5ad3b3c3bdcae59768f9be67f00
+read compiler/profile 19952-20294 fn	80555be81cf29d3d4e54ec0df5269c4b
+read compiler/types 97584-98492 fn	1bd951b953fb879363a70bebfa60effd
+read std/prelude/array 1568-1802 fn <std/prelude/text:Char;>	b79aa6ec5c1a91330451c13ebaf035ce
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 3958-4053 fn	249b488abfd8979d5dc24c581a8aa85a
+hits 0
+body 1 12 10 2 | U V1 U U U U U U U U U V1 | F V1 F F F F F F F F | b01 b0000000000 b000000000000 b0000000000 | 0:,V0,B0 2:,V0,V1 3:,V1,B2 4:,V1,B2 5:,V1,B2 6:,V1,B0 7:,V1,B0 8:,V1,B0 9:,V1,B0 10:,V1,B0 | | ||
+sum r b01 b01 b1 b0 b0 b b b a,compiler/profile:18676:19620,compiler/profile:18927:18931 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 6ad68c9097c423ddcdadaa32c23ae84e
+run compiler/profile 0-0 ctor compiler/profile:Frame	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:Frame	0,1,2
+marks 3270db402512ba5c4c0c4d2795fc35e7
+read -ctor	I64
+hits 0
+body 1 0 6 1 | | F F F F F F | b0 b000000 b b000000 | | | ||
+sum r b0 b0 b000 b000 b000 b b b a,compiler/profile:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0I64
+out b54cacf9be73cfc904c5fad08df134c7
+run compiler/profile 8523-8742 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 5979-6292 fn <std/prelude/text:String&;I64;>	c091782564f784c7ee2a1f7ed72a2723
+read std/prelude/map 7053-7137 fn <std/prelude/text:String&;I64;>	754aeb1d8fba623439d91ba7dc9137d0
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+hits 0
+body 1 5 3 2 | U U U U U | F F F | b10 b000 b00000 b000 | 0:,V0,V1 1:,V0,V1 2:,V0 3:,V0,V1 4:,V0 | | ||
+sum r;V1,V0,0,8648,8667,0,0,0 b10 b10 b11 b10 b10 b b b a,std/prelude/vec:4512:4530,compiler/profile:8523:8742 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/profile:Places&	o0std/prelude/text:String&
+out 26013c71d75aefe7f30d73dad46465e9
+run compiler/profile 14444-17910 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:Profile	5
+mark compiler/profile 0-0 ctor compiler/profile:mapping	3
+mark std/os 0-0 ctor std/os:Output	1
+marks 20fe99f4d993912b82d86ffd6fae8645
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/profile 0-0 ctor compiler/profile:Frame	aaaa18250e6483af32e935efdba1df05
+read compiler/profile 0-0 ctor compiler/profile:Places	4fabb3fba583bb43af220e3714348e66
+read compiler/profile 0-0 ctor compiler/profile:Profile	7cbf1ca027f5493d496021a47bcbc2bc
+read compiler/profile 0-0 ctor compiler/profile:mapping	e34fc2bf64174b7ff0dcf801eac99a9d
+read compiler/profile 11289-12558 fn	c649954c22197df2301b4615611f073b
+read compiler/profile 12749-13027 fn	4313a59615b5387c7f0cf2e0d6b440b9
+read compiler/profile 13029-13399 fn	4739ea4884e5b12b5843af1617e129e3
+read compiler/profile 17999-18302 fn	fbffffcaebf1d608306b2efb2854ead9
+read compiler/profile 18676-19620 fn	778ed152f7ed5fb40920485a50b00ce9
+read compiler/profile 8523-8742 fn	0a136b21043213158cb393fbd6a08842
+read compiler/profile 9087-9708 fn	4653f3093e1edcd6e1f341d23cb258cc
+read compiler/profile 9928-10682 fn	47ad1f897d14701fc776bafb196857c5
+read std/filepath 1289-1576 fn	d4a2b2db0fffbb2b59db7f030588fc9b
+read std/os 0-0 ctor std/os:Output	9b4d726e7e22a7e25dc12557d02f3b4f
+read std/os 8570-8787 fn	aad366597a709c1a43fc4ae152c19621
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String&, std/prelude/vec:Vec<I64>>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String&, std/prelude/vec:Vec<compiler/profile:elfFn>>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 5979-6292 fn <I64;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 5979-6292 fn <std/prelude/text:String&;std/prelude/vec:Vec<I64>;>	d77c22553f35d44cac0616f3634961d4
+read std/prelude/map 5979-6292 fn <std/prelude/text:String&;std/prelude/vec:Vec<compiler/profile:elfFn>;>	bd7d99b5dd4edfde72b96dfe486c871e
+read std/prelude/map 7350-7435 fn <std/prelude/text:String&;std/prelude/vec:Vec<I64>;>	2992d75aa45f45c42dcc59d6bdb8e50a
+read std/prelude/map 7350-7435 fn <std/prelude/text:String&;std/prelude/vec:Vec<compiler/profile:elfFn>;>	2992d75aa45f45c42dcc59d6bdb8e50a
+read std/prelude/map 7666-7764 fn <I64;I64;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/map 7666-7764 fn <std/prelude/text:String&;std/prelude/vec:Vec<I64>;>	fe003e99e4cf69075d6f5a8ac912acc0
+read std/prelude/map 7666-7764 fn <std/prelude/text:String&;std/prelude/vec:Vec<compiler/profile:elfFn>;>	fe003e99e4cf69075d6f5a8ac912acc0
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 10176-10230 fn	ecc907d1b80ad51f7de503ad33f4d4b6
+read std/prelude/text 10447-10795 fn	1f5be6d0ca3785e37b467f570786f397
+read std/prelude/text 16954-17042 fn	0ec8864eda84a3cfb62c68f9ef9d83b5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/profile:elfFn>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <compiler/profile:Frame;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/profile:Frame;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/profile:Sample;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/profile:mapping;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/profile:Sample;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/profile:mapping;>	d04f2e5a858d17b205c489fe32a47a71
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 123 64 3 | U U U B0 U U U U U U U U B0 U U U U U U U U U U B0 U U U U U U U U U U B21 U U U U U U B23 B23 U B26 U B26 U U U U U U U U U U U U U U U U U U U U U U U V2 U U U U U U V2 V2 U V2 U U U U U U U U U U B0 U U B0 U U U U B0 U U U U V2 U U U U U U U U U U U V2 V2 U U U U U | F F V2 F F F F F F F F F F F F F F F F F F B0 F F F F F F F F F F F F V2 F F F F F F F F F V2 V2 F F F F F F F F F F F F F V2 F F F F | b101 b0000000000000000000000000000000000000000000000000000000000000000 b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 b0010000000000000000000000000000000000000000000000000000000000000 | 0:,V2 1:,V0,B0 2:,B0 3:,B0 4:,V0 5:,V0 6:,V0 7:,V2 8:,B0 9:,V2 10:,B0 11:,B0 12:,B0 13:,B0 14:,B0 15:,B0 16:,B0,B0 17:,B0,B11 18:,B0,B0 19:,B0,B14 20:,B0,B0,B14 21:,B0,B0,B0 22:,B0 24:,B0 25:,B0 26:,B0 27:,B0 28:,B0 29:,B0 30:,B0,B0 31:,B0 32:,V2 33:,V1,B0 34:,B21 35:,B0 36:,B0 37:,B0,B23 38:,B0 39:,B23 40:,B23 43:,B21,B23 45:,B21,B26 47:,B26,B26,B26,V2 48:,V2,V2,V2 49:,V2,V2 50:,V2,V2 51:,V2,V2 52:,B0 53:,B0 54:,V2 55:,V2 56:,B0 57:,V2 58:,V2 59:,V2,V2 60:,V2,B33 61:,V2,V2 62:,V2,V2 63:,V2,B33 64:,V2,B33 65:,B0,B0 66:,B0,B33 67:,B0,B0 68:,B0 69:,B0,B0,V2 71:,V2,B33 72:,B0 73:,B35 74:,B35 75:,B0,B0 76:,B0,B35 79:,V2,V2 81:,V2,V2 82:,V2,V2 83:,B33 84:,V2 85:,B0 86:,B0,B0 87:,B0,B31 88:,B0,B0 89:,B0,B0 90:,B0,B38 92:,B0,B0 93:,B0,B0 95:,B0,B0,B0 96:,B0,B0 97:,B0,B0,B0 98:,B0 100:,B0 101:,B0,B37 102:,B37,B37 103:,B37,V2 105:,V2,V2 106:,V2,V2 107:,B39 108:,V2 109:,B0,B0 110:,B0,B40 111:,B0,B0 112:,B0,B40 113:,B0 114:,B40 115:,B40 118:,V2,V2 119:,V2,V2 120:,B40 121:,V2 122:,V2 | | ||
+sum r b101 b101 b01 b00 b00 b b b a,std/prelude/text:5338:5364,compiler/profile:14444:17910,compiler/profile:14507:14515 t i t i i c0/i/i f1010
+hid fs1;1280:U;1280:U;1280:U;1280:U;1280:U;12288:U;12289:V2;12290:V2;1280:U	o0compiler/profile:Profile&	o0std/prelude/text:String&	o0std/prelude/vec:Vec<compiler/profile:mapping>	o1std/prelude/text:String&	o0compiler/profile:mapping	o1std/prelude/vec:Vec<compiler/profile:mapping>&	o1I64	o0std/prelude/vec:Vec<I64>	o1std/prelude/text:String&	o0std/prelude/vec:Vec<I64>&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/vec:Vec<I64>>&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/os:Output	o1Array<std/prelude/text:String&>&	o1Array<U8>&	o1Bool	o1std/prelude/text:String&	o0std/prelude/text:LineIter	o1std/prelude/text:String&	o0std/prelude/text:String&	o1mut std/prelude/text:LineIter&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/vec:Vec<compiler/profile:elfFn>	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/vec:Vec<compiler/profile:elfFn>&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/vec:Vec<compiler/profile:elfFn>>&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/text:String&	fd1	fd2	fd3
+out 4d603c083a06a149d69711d1803326f7
+run compiler/profile 0-0 ctor compiler/profile:Tally	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:Tally	0,1,2,3,4,5,6
+marks dcf4f7118ac1baaae9205e5bfd2321dc
+read std/prelude/map 0-0 ctor std/prelude/map:Map<I64, I64>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 7 7 1 | U U U U U U U | F F F F F F F | b1 b0000000 b0000000 b0000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/map:2600:2604 t i,-1,-1,-1,-1,-1,0,1 t,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U
+out 89fed1280bf7713a69b2fd02f83bbfb4
+run compiler/profile 20547-20872 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+hits 0
+body 1 6 18 3 | U U U U U U | F F F V2 F F F F F F F F F F F F F F | b001 b000000000000000000 b000000 b000100000000000000 | 0:,V2 1:,V1 2:,V0 3:,V0 4:,V0 5:,V2 | | ||
+sum r b001 b001 b000 b000 b000 b b b a,compiler/profile:20547:20872,compiler/profile:20547:20872,compiler/profile:20606:20609 t,U i t i i c0/i/i f1010
+hid fs1;1280:U	o0compiler/profile:Places&	o0compiler/profile:Profile&	o0compiler/profile:Sample
+out 176ae35b89fb32291a23b35b91883ee1
+run compiler/profile 21382-21473 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 5979-6292 fn <I64;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+hits 0
+body 1 2 3 1 | U U | F F F | b1 b000 b00 b000 | 0:,V0 1:,V0 | | ||
+sum r b1 b1 b100 b000 b000 b b b a,std/prelude/map:6065:6082 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/map:Map<I64, I64>&	o0I64	o0I64
+out 28552957a89419f5f9c945570e96f190
+run compiler/profile 21475-22381 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/profile 0-0 ctor compiler/profile:Tally	d4a4b3b9d56651c0dac0c4d1738fc11e
+read compiler/profile 20547-20872 fn	d85f7495caf035fe50e14d1daed50cc6
+read compiler/profile 21382-21473 fn	84d15a9aa2358f70b3ab648ac4f058d2
+read compiler/profile 8523-8742 fn	0a136b21043213158cb393fbd6a08842
+read std/prelude/map 5979-6292 fn <I64;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/map 7666-7764 fn <I64;I64;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11899-12021 fn <I64;>	070649b6438561053a4c440dd8ca066c
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/profile:Sample;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/profile:Frame;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/profile:Sample;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 35 17 3 | U U U B2 U U U U U U U U V1 V1 U U U U U B2 U U U B7 U U U U U U U U U B10 U | F F V2 F F F F F F F F F F F F F F | b011 b00000000000000000 b00000000000000000000000000000000000 b00100000000000000 | 0:,V2 1:,V0 2:,V0 3:,V1,V0,B2 4:,B2 5:,B2 6:,V1 7:,V2 8:,V2 9:,V2 10:,V2 11:,V1,B2 14:,V1,V1 15:,V2 16:,V2 17:,V2 18:,V2 19:,B2 20:,B2 21:,B2 22:,V1 24:,B2 25:,B2 26:,V2 27:,V2 28:,V2 29:,V2 30:,B2 31:,B2 32:,V1 34:,V2 | | ||
+sum r b011 b011 b01 b01 b01 b b b a,compiler/profile:21475:22381,compiler/profile:21834:21873,compiler/profile:21537:21544 t i t i i c0/i/i f1010
+hid fs1;1280:U	o0compiler/profile:Profile&	o0mut compiler/profile:Places&	o0std/prelude/vec:Vec<I64>	o1mut compiler/profile:Places&	o1compiler/profile:Profile&	o1compiler/profile:Sample	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 31ca3aaa4fb5273f43e29a181715c4d1
+run compiler/profile 6412-6511 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 5133-5172 fn <compiler/profile:Sample;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/profile:Sample;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+hits 0
+body 1 2 5 1 | U U | F F F F F | b0 b00000 b00 b00000 | 0:,V0 1:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/profile:6412:6511 t i t i i c0/i/i f0010
+hid fs1	o0compiler/profile:Profile&
+out da95f64ee84cb19f067ccbd10cc3742b
+run compiler/profile 23452-23794 lambda in compiler/profile 22811-26235 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/text 9621-9684 fn	d6838a1805156f44ce16ca1acf6acece
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 7 8 2 | U U U U U U U | F F F F F F F F | b00 b00000000 b0000000 b00000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V1,V1 5:,V1,V1 6:,V1,V1 | | ||
+sum r b00 b00 b00 b00 b00 b00000000 b00000000 b00000000 a,compiler/profile:23452:23794,compiler/profile:23452:23794 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0compiler/profile:Tally	o0mut compiler/profile:Places&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 06ae5818a7287f63d0ab1f5b72565eae
+run compiler/profile 22535-22643 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/float 931-2699 fn	8bfb474905285c2fb956460cfaa491d5
+hits 0
+body 1 2 2 1 | U V0 | F F | b1 b00 b00 b00 | 0:,B0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,compiler/profile:22576:22641 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out 24501b52de48d0e920e99e73d78d9995
+run compiler/profile 24205-24412 lambda in compiler/profile 22811-26235 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/text 9621-9684 fn	d6838a1805156f44ce16ca1acf6acece
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 5 6 2 | U U U U U | F F F F F F | b00 b000000 b00000 b000000 | 0:,V0 1:,V0 2:,V1,V1 3:,V1,V1 4:,V1,V1 | | ||
+sum r b00 b00 b00 b00 b00 b000000 b000000 b000000 a,compiler/profile:24205:24412,compiler/profile:24205:24412 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0compiler/profile:Tally	o0mut compiler/profile:Places&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 4ae41df965e8eae9073d72c3a8841894
+run compiler/profile 26326-26506 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/os 25011-25068 fn	3496805786618800af6f853bb18137c1
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+hits 0
+body 1 6 2 2 | U U B0 B0 U V1 | F F | b01 b00 b000000 b00 | 0:,B0 1:,B0,B0 4:,V0,B0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/profile:26326:26506,compiler/profile:26463:26485 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&
+out 63c1bd36942ad9f0ed41e99a2011fc39
+run compiler/profile 25594-25857 lambda in compiler/profile 22811-26235 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/text 9621-9684 fn	d6838a1805156f44ce16ca1acf6acece
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 5 7 2 | U U U U U | F F F F F F F | b00 b0000000 b00000 b0000000 | 0:,V0 1:,V0 2:,V1,V1 3:,V1,V1 4:,V1,V1 | | ||
+sum r b00 b00 b00 b00 b00 b0000000 b0000000 b0000000 a,compiler/profile:25594:25857,compiler/profile:25594:25857 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0compiler/profile:Tally	o0I64	o0mut compiler/profile:Places&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 5ab5aedb166c0edcf7793ce2823a72e5
+run compiler/profile 22811-26235 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:Tally	5,6
+marks 660dd568291f0cf10444143ab50c899f
+read -ctor	I64
+read compiler/profile 0-0 ctor compiler/profile:Tally	d4a4b3b9d56651c0dac0c4d1738fc11e
+read compiler/profile 21475-22381 fn	e31ca1b382cb825ae9676b8d4294f172
+read compiler/profile 22535-22643 fn	f46bfc5ca6d1172784a95adedc7cf97f
+read compiler/profile 23452-23794 lambda in compiler/profile 22811-26235 fn	980ca27eec569741defb628eb924458a
+read compiler/profile 24205-24412 lambda in compiler/profile 22811-26235 fn	7470cebfe3b9b414e830c32e42ef27f1
+read compiler/profile 25594-25857 lambda in compiler/profile 22811-26235 fn	f4b48703b02be4844677177b0954ffad
+read compiler/profile 26326-26506 fn	04388aa7318e75c12d2099b57527e4c4
+read compiler/profile 6412-6511 fn	54fc28e99673d9ac6c4aa34f8c064368
+read std/prelude/array 10809-11527 fn <I64;?;>	0eb46ce4677d02d073660ff9e1fa660b
+read std/prelude/array 11748-12338 fn <I64;?;>	48cc9c050ebb8b3b742ce1bdfff1ecf0
+read std/prelude/array 12519-13122 fn <I64;?;>	99fcfea399243a9a32e2c0725d20f646
+read std/prelude/array 13691-13849 fn <I64;?;>	75899dd4cade03ab80bdec74dfce6845
+read std/prelude/array 13851-14124 fn <I64;?;>	a65234e7f0c9cc38a1a2f1447691ee45
+read std/prelude/array 8611-8894 fn <I64;?;>	947466db2cecba8f9f2f8e0081cc85e3
+read std/prelude/array 9942-10686 fn <I64;?;>	372a984d54fbb8bdf046a42547a96c0d
+read std/prelude/float 931-2699 fn	8bfb474905285c2fb956460cfaa491d5
+read std/prelude/map 7053-7137 fn <I64;I64;>	ecdee7590621ad1e0bb8dd7acd7ae2a4
+read std/prelude/map 7666-7764 fn <I64;I64;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 12114-12336 fn	d69b4f8828194d2881e598b51dffe86b
+read std/prelude/text 12522-12711 fn	1053d19742fdc667aa9f62ca990e3186
+read std/prelude/text 3214-3355 fn	f31bc2073e7a5166cb23a1806dc8cfdc
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11088-11181 fn <I64;?;>	bd41f08ff2a3f9912a69f8248520b442
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/profile:Sample;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 97 42 4 | B0 U B0 U U B0 B0 U B1 B1 U U U B0 F U U U U U U U B4 U U B4 U U B4 B4 U B0 F U B0 U U U U U U U U U U U U U U B0 B0 U U U U U U B17 U U U B17 U U B17 B17 U U U U U U B20 U U U U F U U U U U U U U B20 B20 U U U U B20 B20 B20 U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b0011 b000000000000000000000000000000000000000000 b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 b000000000000000000000000000000000000000000 | 0:,V1,V2,B0 1:,V1 2:,B0 3:,V1 4:,B0 7:,B0,B0 10:,B0,B1 11:,B0,B2 12:,B0,V3 14:,B0,V2 15:,B0,B0 16:,B0,B0 17:,B0 18:,B0 19:,B0 20:,B0 21:,B4 23:,B4,B4 24:,B4 26:,B4,B4 27:,V2,B4 30:,B0,B4 32:,B0,V2 33:,B0,B0 34:,B0 35:,B0 36:,B0 37:,B0 38:,B0 39:,V2,V2 40:,V2,B8 41:,B0 42:,B0 43:,B0 44:,V2,V2 45:,V2,B13 46:,V2,V2 47:,V2,B14 48:,B0,B0 51:,B0,B0 52:,B0 53:,B0 54:,B0 55:,B0 56:,B17 58:,B17,B17 59:,V2,V2 60:,V2,B17 62:,B17,B17 63:,V2,B17 66:,B0,B17 67:,B0,B0 68:,B0 69:,B0 70:,B0 71:,B0 72:,B20 73:,B0 74:,B0 75:,B0 76:,B20 77:,B0,V2 78:,B20,B20 79:,B20 80:,B20 81:,B20 82:,B20 83:,V2,B28 84:,B0 85:,B28 88:,B20,B20 89:,V2,B20 90:,B20 91:,B20,B20,B20 95:,B0,B20 96:,B0,V3 | | ||
+sum r b0011 b0011 b001 b001 b001 b b b a,compiler/profile:22811:26235,compiler/profile:22811:26235,compiler/profile:21834:21873,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U	o0std/prelude/text:String&	o0compiler/profile:Profile&	o0mut compiler/profile:Places&	o0compiler/profile:Tally	o1compiler/profile:Profile&	o1mut compiler/profile:Places&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 8560efe8a7b985358976088dec582da4
+run compiler/profile 0-0 ctor compiler/profile:node	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:node	0,1,2,3
+marks db524a8d86fe1b3723f4c4e31fd88a86
+read -ctor	I64
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 1 6 1 | U | F F F F F F | b1 b000000 b0 b000000 | 0:,V0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,std/prelude/vec:3184:3188 t i,-1,-1,-1,0 t,U i i c0/i/i f0010
+hid fs1;1280:U	o0I64	o0I64
+out c2c7155391d8482047ee3681f263e9f2
+run compiler/profile 28744-28822 lambda in compiler/profile 27539-30587 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 9621-9684 fn	d6838a1805156f44ce16ca1acf6acece
+read std/prelude/vec 6401-6448 fn <compiler/profile:node;>	eaf54fc64b65a4b1358d16ada54dac7b
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 7 4 2 | U B0 U U B0 U U | F F F F | b00 b0000 b0000000 b0000 | 0:,V1,B0 2:,V0,V0 3:,V1,B0 5:,V0,V0 6:,V0,V0 | | ||
+sum r b00 b00 b00 b00 b00 b0000 b0000 b0000 a,compiler/profile:28744:28822,compiler/profile:28744:28822 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0mut compiler/profile:Places&	o0std/prelude/vec:Vec<compiler/profile:node>	o0compiler/profile:node	o1std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0compiler/profile:node	o1std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out cb53fd4ff94f87d575dc6b3a4c4d1724
+run compiler/profile 22445-22533 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/float 931-2699 fn	8bfb474905285c2fb956460cfaa491d5
+hits 0
+body 1 1 2 1 | U | F F | b1 b00 b0 b00 | 0:,V0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out 6f854a7b236604641cd6746516738c79
+run compiler/profile 26806-27108 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 7 6 2 | B0 U U U U U U | F F F F F F | b01 b000000 b0000000 b000000 | 0:,B0 1:,B0,B3 2:,B0,B5 3:,B0,B7 4:,B0,B9 5:,B0 6:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/profile:26806:27108,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 56b8dd85af6d842283091923af1f78ec
+run compiler/profile 27539-30587 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+mark compiler/profile 0-0 ctor compiler/profile:node	3
+marks 5b834fe7585b2ffb054214cefa3d4e75
+read -ctor	I64
+read compiler/profile 0-0 ctor compiler/profile:node	370b51d5de3924d4392a91776d8759ef
+read compiler/profile 20547-20872 fn	d85f7495caf035fe50e14d1daed50cc6
+read compiler/profile 22445-22533 fn	8bfb474905285c2fb956460cfaa491d5
+read compiler/profile 22535-22643 fn	f46bfc5ca6d1172784a95adedc7cf97f
+read compiler/profile 26806-27108 fn	f73a0474d7dcb849a2939ac281cafd2a
+read compiler/profile 28744-28822 lambda in compiler/profile 27539-30587 fn	386516daa9f9c571ca9233c4da5597e8
+read compiler/profile 6412-6511 fn	54fc28e99673d9ac6c4aa34f8c064368
+read std/prelude/array 10809-11527 fn <I64;?;>	0eb46ce4677d02d073660ff9e1fa660b
+read std/prelude/array 11748-12338 fn <I64;?;>	48cc9c050ebb8b3b742ce1bdfff1ecf0
+read std/prelude/array 12519-13122 fn <I64;?;>	99fcfea399243a9a32e2c0725d20f646
+read std/prelude/array 13691-13849 fn <I64;?;>	75899dd4cade03ab80bdec74dfce6845
+read std/prelude/array 13851-14124 fn <I64;?;>	a65234e7f0c9cc38a1a2f1447691ee45
+read std/prelude/array 8611-8894 fn <I64;?;>	947466db2cecba8f9f2f8e0081cc85e3
+read std/prelude/array 9942-10686 fn <I64;?;>	372a984d54fbb8bdf046a42547a96c0d
+read std/prelude/float 931-2699 fn	8bfb474905285c2fb956460cfaa491d5
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2203-2322 fn	bfe506c36c6752c0c7d0655097a249c0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/profile:node>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11088-11181 fn <I64;?;>	bd41f08ff2a3f9912a69f8248520b442
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <compiler/profile:node;>	652312eadcb9c7b54bf0276e2dba4089
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/profile:Sample;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/profile:node;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/profile:Frame;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/profile:Sample;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <compiler/profile:node;>	eaf54fc64b65a4b1358d16ada54dac7b
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 6887-6936 fn <compiler/profile:node;>	8afbb2912a7fe97c6d9e2c47d9bedc45
+read std/prelude/vec 7015-7075 fn <compiler/profile:node;>	18949962f2ca61dd4b9c6263cb0d697e
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+hits 0
+body 1 90 53 4 | B0 U U U U B2 U U U U U U B3 U B4 U U U B5 U U B8 U U U B8 U U U U U B11 U B0 B0 B0 U B0 U B15 U U U U B18 B18 F U U U U U U B20 U U U U U U U B24 U U U B24 U B24 B24 U B0 U B0 B0 U U U U U U B0 B0 U U B0 B0 U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b0001 b00000000000000000000000000000000000000000000000000000 b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 b00000000000000000000000000000000000000000000000000000 | 0:,B0 1:,B0 2:,B0,B0 3:,V1 4:,V1 5:,V2,V1,B2 8:,B0,B0 9:,B2 10:,B2 11:,V2 13:,B0,B0 15:,B4 16:,B4 17:,B0,B5 19:,B0 20:,B0,B8 22:,B8 23:,B0,B8 24:,B0,B0 26:,B0 29:,B0,B0 30:,B0 31:,B0,B0 32:,B0,B0 34:,B0 35:,B0 36:,B0 37:,B0 38:,B0 39:,B0,B0 40:,B0 41:,B0 42:,B0 43:,B0,B0 46:,V2,B0 47:,B18,B18 48:,B0 49:,B18 50:,B18 51:,B0 52:,B0,B20 54:,B0 55:,B0 56:,B0 57:,B0,B0 58:,V2,B24 59:,B24 60:,B24 62:,B24 63:,B0 64:,B24,B24 66:,B24,B24 69:,B0,B24 70:,B0 71:,V0,B0 74:,B0,B0 75:,B0,B0 76:,V1 77:,V0,B0 78:,V1 79:,B0 82:,B0,B0 83:,B0,B0 86:,B0,B0 87:,B0,P 88:,B0,B0 89:,B0,V3 | | ||
+sum r b0001 b0001 b000 b000 b000 b b b a,compiler/profile:27539:30587,compiler/profile:27539:30587,compiler/profile:27539:30587,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1;1280:U;217344:U;217345:U;217344:U;217345:U;1280:U;1280:U	o0std/prelude/text:String&	o0compiler/profile:Profile&	o0mut compiler/profile:Places&	o0std/prelude/vec:Vec<I64>	o1mut compiler/profile:Places&	o1compiler/profile:Profile&	o1compiler/profile:Sample	o0mut compiler/profile:node&	o1mut std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0compiler/profile:node	o1std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0compiler/profile:node	o1std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0compiler/profile:node	o1std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0mut compiler/profile:node&	o1mut std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0mut compiler/profile:node&	o1mut std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0compiler/profile:node	o1std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0compiler/profile:node	o1std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0I64	o0compiler/profile:node	o1std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0compiler/profile:node	o1std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0compiler/profile:node	o1std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0compiler/profile:node&	o1std/prelude/vec:Vec<compiler/profile:node>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0I64	o0I64	o0I64	o0std/prelude/text:String&
+out 17a1b487b7785878546cd25e543fc5e0
+run compiler/profile 32022-32606 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/profile 0-0 ctor compiler/profile:Frame	aaaa18250e6483af32e935efdba1df05
+read compiler/profile 0-0 ctor compiler/profile:Places	4fabb3fba583bb43af220e3714348e66
+read compiler/profile 0-0 ctor compiler/profile:Profile	7cbf1ca027f5493d496021a47bcbc2bc
+read compiler/profile 0-0 ctor compiler/profile:Sample	aaaa18250e6483af32e935efdba1df05
+read compiler/profile 8523-8742 fn	0a136b21043213158cb393fbd6a08842
+read std/prelude/map 5979-6292 fn <I64;I64;>	84d15a9aa2358f70b3ab648ac4f058d2
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <compiler/profile:Frame;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <compiler/profile:Sample;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 26 11 1 | U U U U U B1 B1 U U B4 B4 U U U U U U U U U U U U U U U | V0 F F F F V0 F F F F F | b1 b00000000000 b00000000000000000000000000 b00000000000 | 0:,V0 1:,B0 2:,V0 3:,B0 4:,V0 7:,V0 8:,V0 11:,V0 12:,V0 13:,V0 14:,V0,V0 15:,V0,V0 16:,B0 17:,V0 18:,V0,V0 19:,V0,V0 20:,B0 21:,V0 22:,V0,V0 23:,V0,V0 24:,B0 25:,V0 | | ||
+sum r b1 b1 b b b b b b a,compiler/profile:32064:32073 t i t i i c0/i/i f1010
+hid fs1
+out 608a9f8d2d1defb32851dc58e66cbc22
+run compiler/profile 33919-34316 fn	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<U8>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <U8;>	44fdd55f051af23429be98afae112cb0
+read std/prelude/vec 4660-4775 fn <U8;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 8 31 3 | B0 U B4 B4 U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b000 b0000000000000000000000000000000 b00000000 b0000000000000000000000000000000 | 0:,B0 1:,B0 4:,B0 5:,B0 6:,B0 7:,B0,B0 | | ||
+sum r b000 b000 b00 b00 b00 b b b a,compiler/profile:33919:34316,compiler/profile:33919:34316,compiler/profile:33919:34316 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0Array<I64>&	o0std/prelude/text:String&	o0mut Array<U8>&	o1std/prelude/vec:Vec<U8>&
+out d3c6d4e65ef7e8616316a2fc588b3f25
+run compiler/profile global FlameWidth	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 98fc28a7aee355da4673d397bf09d497
+run compiler/profile global FrameHeight	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 33d6cce553b682db6a308aba92d5c056
+run compiler/profile global FlameScript	
+ctx r1 g1 p0
+keys compiler/profile=f4e75f6598825ba7ba470beb72b558e6a43d2f48d4309f413a4d0ca13fd1a078
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9e29a19d80d4a19f5ff959f0ada86f99
+end
+sum 58716-7617580542079558856

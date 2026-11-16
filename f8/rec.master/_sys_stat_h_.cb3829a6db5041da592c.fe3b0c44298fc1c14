@@ -1,0 +1,121 @@
+olang front record
+body global ACCESSPERMS	known p
+body global ALLPERMS	known p
+body global DEFFILEMODE	known p
+body global STATX_ALL	known p
+body global STATX_ATIME	known p
+body global STATX_ATTR_APPEND	known p
+body global STATX_ATTR_AUTOMOUNT	known p
+body global STATX_ATTR_COMPRESSED	known p
+body global STATX_ATTR_DAX	known p
+body global STATX_ATTR_ENCRYPTED	known p
+body global STATX_ATTR_IMMUTABLE	known p
+body global STATX_ATTR_MOUNT_ROOT	known p
+body global STATX_ATTR_NODUMP	known p
+body global STATX_ATTR_VERITY	known p
+body global STATX_BASIC_STATS	known p
+body global STATX_BLOCKS	known p
+body global STATX_BTIME	known p
+body global STATX_CTIME	known p
+body global STATX_DIOALIGN	known p
+body global STATX_GID	known p
+body global STATX_INO	known p
+body global STATX_MNT_ID	known p
+body global STATX_MNT_ID_UNIQUE	known p
+body global STATX_MODE	known p
+body global STATX_MTIME	known p
+body global STATX_NLINK	known p
+body global STATX_SIZE	known p
+body global STATX_TYPE	known p
+body global STATX_UID	known p
+body global STATX__RESERVED	known p
+body global S_BLKSIZE	known p
+body global S_IEXEC	known p
+body global S_IFBLK	known p
+body global S_IFCHR	known p
+body global S_IFDIR	known p
+body global S_IFIFO	known p
+body global S_IFLNK	known p
+body global S_IFMT	known p
+body global S_IFREG	known p
+body global S_IFSOCK	known p
+body global S_IREAD	known p
+body global S_IRGRP	known p
+body global S_IROTH	known p
+body global S_IRUSR	known p
+body global S_IRWXG	known p
+body global S_IRWXO	known p
+body global S_IRWXU	known p
+body global S_ISGID	known p
+body global S_ISUID	known p
+body global S_ISVTX	known p
+body global S_IWGRP	known p
+body global S_IWOTH	known p
+body global S_IWRITE	known p
+body global S_IWUSR	known p
+body global S_IXGRP	known p
+body global S_IXOTH	known p
+body global S_IXUSR	known p
+body global UTIME_NOW	known p
+body global UTIME_OMIT	known p
+baked ACCESSPERMS [8 ff010000]
+baked ALLPERMS [8 ff0f0000]
+baked DEFFILEMODE [8 b6010000]
+baked STATX_ALL [8 ff0f0000]
+baked STATX_ATIME [8 20000000]
+baked STATX_ATTR_APPEND [8 20000000]
+baked STATX_ATTR_AUTOMOUNT [8 00100000]
+baked STATX_ATTR_COMPRESSED [8 04000000]
+baked STATX_ATTR_DAX [8 00002000]
+baked STATX_ATTR_ENCRYPTED [8 00080000]
+baked STATX_ATTR_IMMUTABLE [8 10000000]
+baked STATX_ATTR_MOUNT_ROOT [8 00200000]
+baked STATX_ATTR_NODUMP [8 40000000]
+baked STATX_ATTR_VERITY [8 00001000]
+baked STATX_BASIC_STATS [8 ff070000]
+baked STATX_BLOCKS [8 00040000]
+baked STATX_BTIME [8 00080000]
+baked STATX_CTIME [8 80000000]
+baked STATX_DIOALIGN [8 00200000]
+baked STATX_GID [8 10000000]
+baked STATX_INO [8 00010000]
+baked STATX_MNT_ID [8 00100000]
+baked STATX_MNT_ID_UNIQUE [8 00400000]
+baked STATX_MODE [8 02000000]
+baked STATX_MTIME [8 40000000]
+baked STATX_NLINK [8 04000000]
+baked STATX_SIZE [8 00020000]
+baked STATX_TYPE [8 01000000]
+baked STATX_UID [8 08000000]
+baked STATX__RESERVED [8 0000008000000000]
+baked S_BLKSIZE [8 00020000]
+baked S_IEXEC [8 40000000]
+baked S_IFBLK [8 00600000]
+baked S_IFCHR [8 00200000]
+baked S_IFDIR [8 00400000]
+baked S_IFIFO [8 00100000]
+baked S_IFLNK [8 00a00000]
+baked S_IFMT [8 00f00000]
+baked S_IFREG [8 00800000]
+baked S_IFSOCK [8 00c00000]
+baked S_IREAD [8 00010000]
+baked S_IRGRP [8 20000000]
+baked S_IROTH [8 04000000]
+baked S_IRUSR [8 00010000]
+baked S_IRWXG [8 38000000]
+baked S_IRWXO [8 07000000]
+baked S_IRWXU [8 c0010000]
+baked S_ISGID [8 00040000]
+baked S_ISUID [8 00080000]
+baked S_ISVTX [8 00020000]
+baked S_IWGRP [8 10000000]
+baked S_IWOTH [8 02000000]
+baked S_IWRITE [8 80000000]
+baked S_IWUSR [8 80000000]
+baked S_IXGRP [8 08000000]
+baked S_IXOTH [8 01000000]
+baked S_IXUSR [8 40000000]
+baked UTIME_NOW [8 ffffff3f]
+baked UTIME_OMIT [8 feffff3f]
+end
+sum 0ddb83aed9741d8bf28f0e8128f89644702da2e1152c4e3193954140470099cc

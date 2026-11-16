@@ -1,0 +1,96 @@
+olang scope record
+run std/list 7409-7786 fn	
+ctx r1 g1 p0
+keys std/list=67d264d8ff44bd53e5b5b6fe473bae8e03d41880a1f01ef1f8d828fbecf93fb2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out 88d0cbae1b32c6c1f6bbd57bc109121f
+run std/list 20561-20824 fn <std/prelude/text:String&;>	
+ctx r1 g1 p0
+keys std/list=67d264d8ff44bd53e5b5b6fe473bae8e03d41880a1f01ef1f8d828fbecf93fb2 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:String&>
+read -ctor	std/list:listState<std/prelude/text:String&>
+hits 0
+body 1 0 5 2 | | F F F F F | b00 b00000 b b00000 | | | ||
+sum r;V0,V1,0,20707,20758,0,0,0 b00 b00 b000 b000 b000 b b b a,std/list:20561:20824,std/list:20561:20824 t i t i i c0/i/i f1010
+hid fs1	o0std/list:listState<std/prelude/text:String&>&	o0I64	o0I64	o0I64	o0I64
+out fa6f79b76510dda9aa470bcf7c60f63b
+run std/list 19996-20284 fn <std/prelude/text:String&;>	
+ctx r1 g1 p0
+keys std/list=67d264d8ff44bd53e5b5b6fe473bae8e03d41880a1f01ef1f8d828fbecf93fb2 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:String&>
+read -ctor	std/list:List<std/prelude/text:String&>
+read -ctor	std/list:listState<std/prelude/text:String&>
+read std/list 20561-20824 fn <std/prelude/text:String&;>	be69692b44b5e1b8067942ddd09983db
+read std/list 7409-7786 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 3 2 | U U | F F F | b00 b000 b00 b000 | 0: 1:,V0,V1 | | ||
+sum r;V0,V1,0,20144,20169,0,1,0;V1,V0,0,20144,20169,0,1,1 b00 b00 b10 b10 b00 b b b a,std/list:19996:20284,std/list:19996:20284 t i t i i c0/i/i f1010
+hid fs1	o0std/list:List<std/prelude/text:String&>&	o0I64	o0I64	o0I64	o0Array<std/prelude/text:String&>&	o1mut std/list:listState<std/prelude/text:String&>&	o1I64	o1I64
+out 1488114a614350e2fa79b75998e99488
+run std/list 7252-7298 fn <std/prelude/text:String&;>	
+ctx r1 g1 p0
+keys std/list=67d264d8ff44bd53e5b5b6fe473bae8e03d41880a1f01ef1f8d828fbecf93fb2 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	std/list:List<std/prelude/text:String&>
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/list:7252:7298 t i t i i c0/i/i f0010
+hid fs1	o0std/list:List<std/prelude/text:String&>&
+out 5d8e86921ba12be872f7490e2f359a7a
+run std/list 21656-22082 fn	
+ctx r1 g1 p0
+keys std/list=67d264d8ff44bd53e5b5b6fe473bae8e03d41880a1f01ef1f8d828fbecf93fb2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read -ctor	std/list:List<std/prelude/text:String&>
+read std/list 19996-20284 fn <std/prelude/text:String&;>	413ecdd3aa1dc96c9ba0cb06d7cc60a8
+read std/list 7252-7298 fn <std/prelude/text:String&;>	78f896dc28c31163b15852dbf2a2b0e3
+hits 0
+body 1 6 27 3 | U U U V2 U V2 | F F F F F F F F F V2 F F F F F F F F F F F F F F F F F | b001 b000000000100000000000000000 b000000 b000000000000000000000000000 | 0:,V0,V0 1:,V0 2:,V0 4:,V0,V0 | | ||
+sum r b001 b001 b10 b10 b00 b b b a,std/list:21656:22082,std/list:21656:22082,std/list:21816:21830 t i t i i c0/i/i f0010
+hid fs1	o0std/list:List<std/prelude/text:String&>&	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o1std/list:List<std/prelude/text:String&>&	o1I64	o0Array<std/prelude/text:String&>&	o1std/list:List<std/prelude/text:String&>&	o1I64
+out 648cae93c3cb079fe4f9b33ed61a53d6
+run std/list 25854-26130 fn	
+ctx r1 g1 p0
+keys std/list=67d264d8ff44bd53e5b5b6fe473bae8e03d41880a1f01ef1f8d828fbecf93fb2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b0 b0 b0 b b b a,std/list:26114:26128 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char
+out f063a2b1b82d65800e38f89bcc32817e
+run std/list global firstChunkLog	
+ctx r1 g1 p0
+keys std/list=67d264d8ff44bd53e5b5b6fe473bae8e03d41880a1f01ef1f8d828fbecf93fb2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2106f2bae2990bbb2b122c36bb0be04e
+run std/list global firstChunk	
+ctx r1 g1 p0
+keys std/list=67d264d8ff44bd53e5b5b6fe473bae8e03d41880a1f01ef1f8d828fbecf93fb2
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8f21fef0a244f14c911994f5eeb7a81a
+end
+sum 4562-15551097349279733178

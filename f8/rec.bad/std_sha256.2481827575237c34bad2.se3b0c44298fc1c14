@@ -1,0 +1,114 @@
+olang scope record
+run std/sha256 0-0 ctor std/sha256:Hasher	
+ctx r1 g1 p0
+keys std/sha256=2481827575237c34bad2d484efae0656691163b6246c21d81c9dcd4cf0c7d04b
+in 0
+mark std/sha256 0-0 ctor std/sha256:Hasher	0,1,2,3
+marks d83073abc3e7480759a9a51bb02985c1
+read -ctor	Array<U32, 8>
+read -ctor	Array<U8, 64>
+read -ctor	I64
+hits 0
+body 1 2 4 1 | V0 V0 | F F F F | b1 b0000 b00 b0000 | | | ||
+sum r b1 b1 b b b b b b a,std/sha256:1901:2007 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 1121af4128b20697c50b77d738f23d8b
+run std/sha256 1569-1632 fn	
+ctx r1 g1 p0
+keys std/sha256=2481827575237c34bad2d484efae0656691163b6246c21d81c9dcd4cf0c7d04b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U32	o0U32
+out fa43ce97d5a0ab660fc824b0c71b6fee
+run std/sha256 2240-3366 fn	
+ctx r1 g1 p0
+keys std/sha256=2481827575237c34bad2d484efae0656691163b6246c21d81c9dcd4cf0c7d04b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read -ctor	U32
+read std/sha256 1569-1632 fn	753360899e792dedf06ee057d76e9c16
+hits 0
+body 1 11 35 2 | B0 U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b00 b00000000000000000000000000000000000 b00000000000 b00000000000000000000000000000000000 | 1: 2: 3: 4: 5: 6: 7: 8: 9: 10: | | ||
+sum r b00 b00 b000 b000 b000 b b b a,std/sha256:2240:3366,std/sha256:2240:3366 t i t i i c0/i/i f0010
+hid fs1	o0mut std/sha256:Hasher&	o0Array<U8>&	o0I64	o0U32
+out a505c21fe26ad9a39966b7f3c60e811b
+run std/sha256 3412-3899 fn	
+ctx r1 g1 p0
+keys std/sha256=2481827575237c34bad2d484efae0656691163b6246c21d81c9dcd4cf0c7d04b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/sha256 2240-3366 fn	8ab64ae04b7bb94d892584f2f9fc2498
+hits 0
+body 1 2 3 2 | U U | F F F | b00 b000 b00 b000 | 0:,V0,V0 1:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/sha256:3412:3899,std/sha256:3412:3899 t i t i i c0/i/i f0010
+hid fs1	o0mut std/sha256:Hasher&	o0Array<U8>&
+out ccccd50def2228926fb571b2a0d1f516
+run std/sha256 4025-4656 fn	
+ctx r1 g1 p0
+keys std/sha256=2481827575237c34bad2d484efae0656691163b6246c21d81c9dcd4cf0c7d04b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/sha256 3412-3899 fn	c803c69a73bdc0ef8a7e5f3e26eddbf7
+hits 0
+body 1 7 20 2 | B0 U B0 U B0 U B0 | F F F F F F F F F F F F F F F F F F F F | b00 b00000000000000000000 b0000000 b00000000000000000000 | 1:,B0,B0 3:,B0,B0 5:,B0,B0 | | ||
+sum r b00 b00 b0 b0 b0 b b b a,std/sha256:4025:4656,std/sha256:4025:4656 t i t i i c0/i/i f0010
+hid fs1	o0std/sha256:Hasher&
+out 6415a679d290b459718727b94ce93352
+run std/sha256 4689-4780 fn	
+ctx r1 g1 p0
+keys std/sha256=2481827575237c34bad2d484efae0656691163b6246c21d81c9dcd4cf0c7d04b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/sha256 0-0 ctor std/sha256:Hasher	527a121037aec2a2a0ff888ad537b711
+read std/sha256 3412-3899 fn	c803c69a73bdc0ef8a7e5f3e26eddbf7
+read std/sha256 4025-4656 fn	345c8c89179d1fa7680a20c612c5333f
+hits 0
+body 1 3 2 2 | U U U | F F | b00 b00 b000 b00 | 0:,B0 1:,B0,V0 2:,B0,V1 | | ||
+sum r b00 b00 b0 b0 b0 b b b a,std/sha256:4689:4780,std/sha256:4689:4780 t i t i i c0/i/i f0010
+hid fs1	o0Array<U8>&
+out a29ee65b4d05a33c623f1202c2821902
+run std/sha256 4854-4917 fn	
+ctx r1 g1 p0
+keys std/sha256=2481827575237c34bad2d484efae0656691163b6246c21d81c9dcd4cf0c7d04b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/hex 310-535 fn	2191f92177036975b0816e3cbb6d999b
+read std/sha256 4689-4780 fn	324685c3253c31e55ef810248e260970
+hits 0
+body 1 3 1 2 | U B0 U | F | b01 b0 b000 b0 | 0:,V0,B0 2:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/sha256:4854:4917,std/hex:357:384 t i t i i c0/i/i f0010
+hid fs1	o0Array<U8>&
+out 83e56669ad9ce8fb3006b6cb79217538
+run std/sha256 5067-5667 fn	
+ctx r1 g1 p0
+keys std/sha256=2481827575237c34bad2d484efae0656691163b6246c21d81c9dcd4cf0c7d04b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/sha256 0-0 ctor std/sha256:Hasher	527a121037aec2a2a0ff888ad537b711
+read std/sha256 3412-3899 fn	c803c69a73bdc0ef8a7e5f3e26eddbf7
+read std/sha256 4025-4656 fn	345c8c89179d1fa7680a20c612c5333f
+read std/sha256 4689-4780 fn	324685c3253c31e55ef810248e260970
+hits 0
+body 1 12 35 3 | B0 U U U B0 U U U U B0 U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b000 b00000000000000000000000000000000000 b000000000000 b00000000000000000000000000000000000 | 1:,V0,B1 2:,B0 3:,B0 5:,B0,B0 6:,B0,V1 7:,B0,B0 8:,B0,B0 10:,B0,B0 11:,B0,V2 | | ||
+sum r b000 b000 b00 b00 b00 b b b a,std/sha256:5067:5667,std/sha256:5067:5667,std/sha256:5067:5667 t i t i i c0/i/i f0010
+hid fs1	o0Array<U8>&	o0Array<Array<U8>&>&
+out 4838eeb615530f572255c6ba445e2b96
+run std/sha256 global k	
+ctx r1 g1 p0
+keys std/sha256=2481827575237c34bad2d484efae0656691163b6246c21d81c9dcd4cf0c7d04b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 84579c20c00b4cde38caaa4f92899ffd
+end
+sum 5011-13527649340356149810

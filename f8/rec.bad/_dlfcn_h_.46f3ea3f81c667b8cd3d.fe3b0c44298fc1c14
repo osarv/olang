@@ -1,0 +1,55 @@
+olang front record
+body global DLFO_STRUCT_HAS_EH_COUNT	known p
+body global DLFO_STRUCT_HAS_EH_DBASE	known p
+body global LM_ID_BASE	known p
+body global LM_ID_NEWLM	known p
+body global RTLD_BINDING_MASK	known p
+body global RTLD_DEEPBIND	known p
+body global RTLD_DI_CONFIGADDR	known p
+body global RTLD_DI_LINKMAP	known p
+body global RTLD_DI_LMID	known p
+body global RTLD_DI_MAX	known p
+body global RTLD_DI_ORIGIN	known p
+body global RTLD_DI_PHDR	known p
+body global RTLD_DI_PROFILENAME	known p
+body global RTLD_DI_PROFILEOUT	known p
+body global RTLD_DI_SERINFO	known p
+body global RTLD_DI_SERINFOSIZE	known p
+body global RTLD_DI_TLS_DATA	known p
+body global RTLD_DI_TLS_MODID	known p
+body global RTLD_DL_LINKMAP	known p
+body global RTLD_DL_SYMENT	known p
+body global RTLD_GLOBAL	known p
+body global RTLD_LAZY	known p
+body global RTLD_LOCAL	known p
+body global RTLD_NODELETE	known p
+body global RTLD_NOLOAD	known p
+body global RTLD_NOW	known p
+baked DLFO_STRUCT_HAS_EH_COUNT [8 00000000]
+baked DLFO_STRUCT_HAS_EH_DBASE [8 00000000]
+baked LM_ID_BASE [8 00000000]
+baked LM_ID_NEWLM [8 ffffffff]
+baked RTLD_BINDING_MASK [8 03000000]
+baked RTLD_DEEPBIND [8 08000000]
+baked RTLD_DI_CONFIGADDR [8 03000000]
+baked RTLD_DI_LINKMAP [8 02000000]
+baked RTLD_DI_LMID [8 01000000]
+baked RTLD_DI_MAX [8 0b000000]
+baked RTLD_DI_ORIGIN [8 06000000]
+baked RTLD_DI_PHDR [8 0b000000]
+baked RTLD_DI_PROFILENAME [8 07000000]
+baked RTLD_DI_PROFILEOUT [8 08000000]
+baked RTLD_DI_SERINFO [8 04000000]
+baked RTLD_DI_SERINFOSIZE [8 05000000]
+baked RTLD_DI_TLS_DATA [8 0a000000]
+baked RTLD_DI_TLS_MODID [8 09000000]
+baked RTLD_DL_LINKMAP [8 02000000]
+baked RTLD_DL_SYMENT [8 01000000]
+baked RTLD_GLOBAL [8 00010000]
+baked RTLD_LAZY [8 01000000]
+baked RTLD_LOCAL [8 00000000]
+baked RTLD_NODELETE [8 00100000]
+baked RTLD_NOLOAD [8 04000000]
+baked RTLD_NOW [8 02000000]
+end
+sum bdefc9ef56b69bf634fb259c7b040770ee0da20ade4484d59755a5cf99f0d522

@@ -1,0 +1,7 @@
+olang front record
+body fn 1235-1470	known p
+body fn 880-1162	known p
+sig Body@1235 fn&(Display&) String
+sig Mime@880 fn&(Display&) String
+end
+sum 7e46ce94a6f9494a8a91331afad08f7929aca25f2b1b33332fc0244622ef08d1

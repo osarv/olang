@@ -1,0 +1,15 @@
+import "std/io"
+
+type Doc struct(t String) { t }
+
+fn (d Doc&) Copy() Doc { return Doc(d.t + "") }
+
+fn main() {
+    rows := Array<Doc>(10, Doc($0))
+    for i in range 1000 {
+        rows[i % 10] = Doc($i)
+        c := rows[(i + 3) % 10]
+        c.t = c.t + "x"
+        io.PutLine(c.t)!
+    }
+}

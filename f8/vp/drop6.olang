@@ -1,0 +1,180 @@
+# QCE (T7a, docs/rework.md sections 16 and 18): an array of a run-time length held by value inside another value - a
+# struct's field, an array's element, an enum's payload, a type argument - is that value's own, its elements stored
+# where the value is. A store copies what it is given in, a copy of the whole copies them too, a by-value parameter is
+# its callee's own copy, and nothing another name holds changes it. The text the tests write to show it is an
+# Array<Char> (a String never changes, T13a).
+
+type person struct(name Array<Char>, age I64) {
+    name, age
+}
+
+type shape enum {
+    Named(label Array<Char>, n I64)
+    Plain
+}
+
+type team struct(title String) {
+    title
+    members Vec<String> = Vec<String>()
+    tags Array<String> = Array<String>["a", "bc"]
+}
+
+# a holder of what it is given: its own copy, not the caller's storage kept
+type holder struct(s Array<Char>) {
+    s
+}
+
+fn holder.mk(t Array<Char>&) holder { return holder(t) }
+
+# a part stored from a block's own text outlives the block, and a later write to that text is not seen
+fn person.stored() person {
+    p := person($"x", 1)
+    {
+        t Array<Char> = $"inner"
+        p.name = t
+        t[0] = 'X'
+    }
+    return p
+}
+
+fn words() Array<Array<Char>> {
+    out := Array<Array<Char>>(3)
+    for i in range 3 {
+        w Array<Char> = $"w" + $i
+        out[i] = w
+        w[0] = 'z'
+    }
+    return out
+}
+
+fn person.renamed() person {
+    p := person($"bob", 3)
+    q := p
+    q.name[0] = 'B'
+    return q
+}
+
+# evaluated while compiling (K2, S17a): the evaluator copies as the run time does
+Baked person = person.renamed()
+assert person.renamed().name == "Bob" and person.stored().name == "inner"
+assert words()[2] == "w2"
+
+
+
+
+
+type node struct(v I64) { v }
+
+fn churn() I64 {
+    n I64 = 0
+    for i in range 100 {
+        s := $"xyzw" + $i
+        n += s.Len()
+    }
+    return n
+}
+
+test "a comprehension's elements are its own" {
+    ws := Array<Array<Char>>["ab", "c", "def"]
+    up := Array<String>[$w + "!" for w in ws]
+    same := Array<Array<Char>>[w for w in ws]
+    some := Array<Array<Char>>[w for w in ws if w.Len() > 1]
+    ns := Array<node>[node(i) for i in range 3]
+    ws[0][0] = 'X'
+    assert churn() > 0
+    assert up[0] == "ab!" and up[2] == "def!" and same[0] == "ab" and same[1] == "c" and some[1] == "def" and some[0] == "ab"
+    assert ns[2].v == 2 and ws[0] == "Xb"
+}
+
+# a by-value parameter is its callee's own copy, its parts too
+fn shout(p person) Array<Char> {
+    p.name[0] = 'X'
+    return p.name
+}
+
+
+# a part stored through a "&" parameter is built where its container is - so a caller must say exactly where that is,
+# even through a local found by a lookup (the store needs the scope exact, as a reference field's does: O25g)
+type opt struct(name String) {
+    name
+    t String = ""
+}
+
+type opts struct() {
+    all Vec<mut opt&> = Vec<mut opt&>()
+}
+
+fn (s opts&) byName(name String&) mut opt& ? NotFound {
+    for f in s.all {
+        if f.name == name: return f
+    }
+    error NotFound
+}
+
+fn (s opts&) setValue(f mut opt&, value String&) {
+    f.t = $value
+}
+
+fn (s opts&) parse(arg String&) {
+    f mut opt?& = null
+    f = try s.byName(arg[:3]) catch NotFound { return }
+    fl := f
+    s.setValue(fl, arg[4:])
+}
+
+
+test "a clone of an array is its own, its elements' parts too" {
+    a := Array<I64>[1, 2, 3]
+    b := a.Copy()
+    b[0] = 9
+    ws := Array<Array<Char>>["ab", "c"]
+    vs := ws.Copy()
+    vs[0][0] = 'X'
+    assert a[0] == 1 and b[0] == 9 and ws[0] == "ab" and vs[0] == "Xb"
+}
+
+# Handles as values (QCE, 2026-11-01): a for-in over a reference parameter's Vec of values owning storage reads each
+# element where it is while nothing in the loop's body can write storage of the element's types (D9h); where the body
+# can - pushing into the same Vec through another name, writing an element in place - each element is the walk's own
+# copy, as written. The same baked while compiling (VecWalksBaked, K2) and at run time
+type vwCell struct() {
+    xs Vec<I64> = Vec<I64>()
+    n I64 = 0
+}
+fn vwOther(o mut Vec<String&>&, k I64) { o.Push("x" if k > 0 else "") }
+fn vwSum(cs Vec<vwCell>&, o mut Vec<String&>&) I64 {
+    t I64 = 0
+    for c in cs {
+        vwOther(o, c.xs.Len())          # writes a Vec<String&>'s storage - no vwCell's, nothing it holds
+        t += c.xs.Len() * 10 + c.n
+    }
+    return t
+}
+fn vwGrowing(cs Vec<vwCell>&, w mut Vec<vwCell>&) I64 {
+    t I64 = 0
+    for c in cs {
+        w.RefMut(0).xs.Push(1)           # the same Vec's first element, through another name
+        w[0].n += 100                    # in place (E31b)
+        t += c.xs.Len() * 1000 + c.n
+    }
+    return t
+}
+fn vecWalks(k I64) I64 {
+    cs := Vec<vwCell>()
+    for i in range 3 {
+        c := vwCell()
+        for j in range i + k { c.xs.Push(j) }
+        c.n = i
+        cs.Push(c)
+    }
+    o := Vec<String&>()
+    a := vwSum(cs, o)
+    b := vwGrowing(cs, cs)
+    return a * 1000000 + b * 10 + o.Len()
+}
+VecWalksBaked := vecWalks(1)
+VwOne mut I64 = 1
+test "a walk of a Vec reads elements in place only where nothing can write them" {
+    assert churn() > 0
+    assert vecWalks(VwOne) == VecWalksBaked and VecWalksBaked == 63060033, $VecWalksBaked
+}

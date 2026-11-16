@@ -1,0 +1,111 @@
+olang scope record
+run compiler/token 12518-12675 fn	
+ctx r1 g1 p0
+keys compiler/token=b6c662d7f97adb76eeadafcb68a1eab7615bdb2eb77316e10fee41bf60eb9ec8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 9 2 | | F F F F F F F F F | b00 b000000000 b b000000000 | | | ||
+sum r b00 b00 b000 b000 b000 b b b a,compiler/token:12518:12675,compiler/token:12518:12675 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64	o0std/prelude/text:String&
+out 1cbecb3bea40e124a02baf6f0db56156
+run compiler/token 7443-12455 fn	
+ctx r1 g1 p0
+keys compiler/token=b6c662d7f97adb76eeadafcb68a1eab7615bdb2eb77316e10fee41bf60eb9ec8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/token 12518-12675 fn	4179b957731e4fb1952b6004ad9cfddf
+hits 0
+body 1 55 5 1 | U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F | b0 b00000 b0000000000000000000000000000000000000000000000000000000 b00000 | 0:,V0,B2 1:,V0,B2 2:,V0,B2 3:,V0,B7 4:,V0,B7 5:,V0,B7 6:,V0,B11 7:,V0,B11 8:,V0,B11 9:,V0,B11 10:,V0,B11 11:,V0,B17 12:,V0,B17 13:,V0,B17 14:,V0,B22 15:,V0,B22 16:,V0,B22 17:,V0,B22 18:,V0,B22 19:,V0,B22 20:,V0,B22 21:,V0,B30 22:,V0,B30 23:,V0,B34 24:,V0,B34 25:,V0,B40 26:,V0,B42 27:,V0,B42 28:,V0,B45 29:,V0,B45 30:,V0,B45 31:,V0,B45 32:,V0,B45 33:,V0,B45 34:,V0,B45 35:,V0,B45 36:,V0,B45 37:,V0,B57 38:,V0,B57 39:,V0,B57 40:,V0,B61 41:,V0,B61 42:,V0,B64 43:,V0,B66 44:,V0,B66 45:,V0,B66 46:,V0,B64 47:,V0,B71 48:,V0,B73 49:,V0,B73 50:,V0,B76 51:,V0,B76 52:,V0,B79 53:,V0,B81 54:,V0,B83 | | ||
+sum r b0 b0 b000 b000 b000 b b b a,compiler/token:7443:12455 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64	o0I64
+out 2e8eb8121324c9f9ade83a7ca417b232
+run compiler/token 2696-3250 fn	
+ctx r1 g1 p0
+keys compiler/token=b6c662d7f97adb76eeadafcb68a1eab7615bdb2eb77316e10fee41bf60eb9ec8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0compiler/token:Tok
+out 5968d974f5aa5f7004253a7b5c441d45
+run compiler/token 0-0 ctor compiler/token:Token	
+ctx r1 g1 p0
+keys compiler/token=b6c662d7f97adb76eeadafcb68a1eab7615bdb2eb77316e10fee41bf60eb9ec8
+in 0
+mark compiler/token 0-0 ctor compiler/token:Token	0,1,2,3
+marks 9cccbeec5695eab0bd40d740d1cf36c4
+read -ctor	I32
+read -ctor	U8
+read -ctor	compiler/token:Tok
+hits 0
+body 1 0 8 1 | | F F F F F F F F | b0 b00000000 b b00000000 | | | ||
+sum r b0 b0 b0000 b0000 b0000 b b b a,compiler/token:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/token:Tok	o0U8	o0I32	o0I32
+out 07df2b2f0d28956621026eee37cd16c6
+run compiler/token 2569-2632 fn	
+ctx r1 g1 p0
+keys compiler/token=b6c662d7f97adb76eeadafcb68a1eab7615bdb2eb77316e10fee41bf60eb9ec8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0compiler/token:Token	o0U8
+out 6c43dc4cf8576ee59b13ae2901c0d6e3
+run compiler/token 3414-6725 fn	
+ctx r1 g1 p0
+keys compiler/token=b6c662d7f97adb76eeadafcb68a1eab7615bdb2eb77316e10fee41bf60eb9ec8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/token:3414:6725 t i t i i c0/i/i f0010
+hid fs1	o0compiler/token:Tok
+out 2bd6a13e38ea21cf4bd5fa8ad8fc5123
+run compiler/token 6817-7248 fn	
+ctx r1 g1 p0
+keys compiler/token=b6c662d7f97adb76eeadafcb68a1eab7615bdb2eb77316e10fee41bf60eb9ec8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/token 3414-6725 fn	91c3d70d320240b895683765c17303a6
+hits 0
+body 1 2 1 1 | U V0 | F | b1 b0 b00 b0 | 0:,B9 | | ||
+sum r b1 b1 b0 b0 b0 b b b a,compiler/token:7219:7240 t i t i i c0/i/i f0010
+hid fs1	o0compiler/token:Tok	o0std/prelude/text:String&	o1compiler/token:Tok
+out 657b7bb2c907ea1793fbb625ad433201
+run compiler/token global LineBreak	
+ctx r1 g1 p0
+keys compiler/token=b6c662d7f97adb76eeadafcb68a1eab7615bdb2eb77316e10fee41bf60eb9ec8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f0ce2758d372960c0559aa663c1ec492
+run compiler/token global Space	
+ctx r1 g1 p0
+keys compiler/token=b6c662d7f97adb76eeadafcb68a1eab7615bdb2eb77316e10fee41bf60eb9ec8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8eb1706b070420a75fd0ddcfca215944
+run compiler/token global LineStart	
+ctx r1 g1 p0
+keys compiler/token=b6c662d7f97adb76eeadafcb68a1eab7615bdb2eb77316e10fee41bf60eb9ec8
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 363c941a937753a62ee33812e68559b2
+end
+sum 4833-3951524840516651076

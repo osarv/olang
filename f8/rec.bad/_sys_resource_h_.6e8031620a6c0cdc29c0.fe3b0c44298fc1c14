@@ -1,0 +1,59 @@
+olang front record
+body global PRIO_MAX	known p
+body global PRIO_MIN	known p
+body global PRIO_PGRP	known p
+body global PRIO_PROCESS	known p
+body global PRIO_USER	known p
+body global RLIMIT_AS	known p
+body global RLIMIT_CORE	known p
+body global RLIMIT_CPU	known p
+body global RLIMIT_DATA	known p
+body global RLIMIT_FSIZE	known p
+body global RLIMIT_LOCKS	known p
+body global RLIMIT_MEMLOCK	known p
+body global RLIMIT_MSGQUEUE	known p
+body global RLIMIT_NICE	known p
+body global RLIMIT_NLIMITS	known p
+body global RLIMIT_NOFILE	known p
+body global RLIMIT_NPROC	known p
+body global RLIMIT_OFILE	known p
+body global RLIMIT_RSS	known p
+body global RLIMIT_RTPRIO	known p
+body global RLIMIT_RTTIME	known p
+body global RLIMIT_SIGPENDING	known p
+body global RLIMIT_STACK	known p
+body global RLIM_NLIMITS	known p
+body global RUSAGE_CHILDREN	known p
+body global RUSAGE_LWP	known p
+body global RUSAGE_SELF	known p
+body global RUSAGE_THREAD	known p
+baked PRIO_MAX [8 14000000]
+baked PRIO_MIN [8 ecffffff]
+baked PRIO_PGRP [8 01000000]
+baked PRIO_PROCESS [8 00000000]
+baked PRIO_USER [8 02000000]
+baked RLIMIT_AS [8 09000000]
+baked RLIMIT_CORE [8 04000000]
+baked RLIMIT_CPU [8 00000000]
+baked RLIMIT_DATA [8 02000000]
+baked RLIMIT_FSIZE [8 01000000]
+baked RLIMIT_LOCKS [8 0a000000]
+baked RLIMIT_MEMLOCK [8 08000000]
+baked RLIMIT_MSGQUEUE [8 0c000000]
+baked RLIMIT_NICE [8 0d000000]
+baked RLIMIT_NLIMITS [8 10000000]
+baked RLIMIT_NOFILE [8 07000000]
+baked RLIMIT_NPROC [8 06000000]
+baked RLIMIT_OFILE [8 07000000]
+baked RLIMIT_RSS [8 05000000]
+baked RLIMIT_RTPRIO [8 0e000000]
+baked RLIMIT_RTTIME [8 0f000000]
+baked RLIMIT_SIGPENDING [8 0b000000]
+baked RLIMIT_STACK [8 03000000]
+baked RLIM_NLIMITS [8 10000000]
+baked RUSAGE_CHILDREN [8 ffffffff]
+baked RUSAGE_LWP [8 01000000]
+baked RUSAGE_SELF [8 00000000]
+baked RUSAGE_THREAD [8 01000000]
+end
+sum a854fef55f718080982e48ef2532b7282bffd16db7cf0f0bf14dbcd6b333a5c4

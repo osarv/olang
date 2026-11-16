@@ -1,0 +1,103 @@
+olang front record
+body fn 10658-12129	known p
+body fn 12221-12668	known p
+body fn 12786-13875	known p
+body fn 14165-14280	known p
+body fn 15131-15270	known p
+body fn 15353-15548	known p
+body fn 15550-15783	known p keeps|1|-|-|.|0|0|std/json|15574|15574|0
+body fn 15785-16029	known p keeps|1|-|-|.|0|0|std/json|15813|15813|0
+body fn 16031-16563	known p
+body fn 16657-17264	known p
+body fn 17266-17331	known p
+body fn 17552-17755	known p
+body fn 17880-18079	known p
+body fn 18081-18153	known p
+body fn 18305-19803	known p
+body fn 19852-20266	known p
+body fn 20322-20871	known p
+body fn 20873-21128	known p
+body fn 21255-22468	known p
+body fn 22675-24137	known p
+body fn 24231-24849	known p
+body fn 24946-25734	known p
+body fn 25905-26749	known p
+body fn 27195-28510	known p
+body fn 28512-28596	known p
+body fn 28819-29439	known p
+body fn 29645-29705	known p grows|0|-|-|..chars|6|0|std/json|29695|29699|-1
+body fn 32820-32987	known p
+body fn 32989-33931	known p grows|0|-|-|..chars|6|0|std/json|33091|33095|-1
+body fn 40995-41041	known p
+body fn 41252-41406	known p grows|0|-|-|..out.chars|10|0|std/json|41340|41348|-1
+body fn 41408-43002	known p grows|0|-|-|..out.chars|10|0|std/json|41500|41504|-1
+body fn 47382-47460	known p grows|0|-|-|..out.chars|10|0|std/json|47417|47421|-1
+body fn 47747-48495	known p grows|0|-|-|..out.chars|10|0|std/json|47794|47802|-1
+body fn 5608-5745	known p
+body fn 5747-5799	known p
+body fn 5921-6143	known p
+body fn 6300-6449	known p
+body fn 6546-6663	known p
+body fn 6802-7338	known p
+body fn 7340-7478	known p
+body fn 7544-7683	known p,0
+body fn 7771-7924	known p,0
+body fn 7989-8128	known p,0
+body fn 8156-8204	known p
+body fn 8313-8433	known p
+body fn 8480-8579	known p
+body fn 9899-10353	known p
+body global MaxDepth	known p
+body global hexDigits	known p
+baked MaxDepth [8 e803000000000000]
+baked hexDigits [8 10000000000000000000000000000000 @8>1+0][8 30313233343536373839616263646566]
+sig AsArr@7771 fn&(Json&) Array<Json&>& ? Error
+sig AsBool@7340 fn&(Json&) Bool ? Error
+sig AsInt@6300 fn&(Json&) I64 ? Error
+sig AsNum@5921 fn&(Json&) F64 ? Error
+sig AsObj@7989 fn&(Json&) Object& ? Error
+sig AsStr@7544 fn&(Json&) String& ? Error
+sig AsUint@6546 fn&(Json&) U64 ? Error
+sig At@8313 fn&(Object&, String&) Json& ? Error
+sig Eq@10658 fn&(Json&, Json&) Bool
+sig Has@5608 fn&(Json&, String&) Bool
+sig Has@8480 fn&(Object&, String&) Bool
+sig Hash@12786 fn&(Json&) I64
+sig IsNull@5747 fn&(Json&) Bool
+sig Json.Parse@14165 fn&(String&) Json& ? Error
+sig KeyOf@32820 fn&(String&, Naming) String
+sig Len@8156 fn&(Object&) I64
+sig Str@40995 fn&(Json&) String
+sig close@16657 fn&(mut reader&)
+sig col@15353 fn&(reader&) I64
+sig colon@47382 fn&(mut writer&)
+sig digitAt@28512 fn&(reader&, I64) Bool
+sig escape@22675 fn&(mut reader&, I64, mut Array<Char>&) I64 ? Error
+sig exact@28819 fn&(reader&, I64, F64) mut Json&
+sig hex4@24231 fn&(mut reader&, I64) I64 ? Error
+sig inObject@18081 fn&(reader&) Bool
+sig keyInto@32989 fn&(mut StringBuilder&, String&, Naming)
+sig line@15131 fn&(reader&) I64
+sig name@19852 fn&(mut reader&) ? Error
+sig nameIndex@9899 fn&(Array<String&>&) Array<I32>&
+sig newline@41252 fn&(mut writer&, I64)
+sig numEq@12221 fn&(Json&, Json&) Bool
+sig number@27195 fn&(mut reader&) F64 ? Error
+sig open@16031 fn&(mut reader&, Bool) ? Error
+sig plainEnd@17880 fn&(String&, I64) I64
+sig push@15550 fn&(mut reader&, mut Json&)
+sig pushName@15785 fn&(mut reader&, String&)
+sig putUtf8@24946 fn&(I64, I64, mut Array<Char>&) I64
+sig run@18305 fn&(mut reader&) ? Error
+sig scalar@20322 fn&(mut reader&, Char) ? Error
+sig skipSpace@17266 fn&(mut reader&)
+sig spaceEnd@17552 fn&(String&, I64) I64
+sig string@21255 fn&(mut reader&) String& ? Error
+sig text@47747 fn&(mut writer&, String&)
+sig utf8@25905 fn&(reader&) I64 ? Error
+sig value@41408 fn&(mut writer&, Json&, I64)
+sig whole@6802 fn&(Json&) I128 ? Error
+sig word@20873 fn&(mut reader&, String&) ? Error
+sig writeNumber@29645 fn&(mut StringBuilder&, F64)
+end
+sum 992a461a94622a2b2a1bbe07e1af9a52188bc3e439ae44ac8b6aaf87408870dd

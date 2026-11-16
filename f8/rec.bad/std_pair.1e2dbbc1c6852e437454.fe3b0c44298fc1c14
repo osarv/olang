@@ -1,0 +1,7 @@
+olang front record
+body fn 1719-1960	known p
+body global PairOfTextBaked	known p
+baked PairOfTextBaked [8 01]
+sig pairOfText@1719 fn&(I32) Bool
+end
+sum 5b1da81d48b8e37490d95fdc064e15cbb6c182e1ffb33834460c5aa9c5db8a1f

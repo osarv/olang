@@ -1,0 +1,102 @@
+olang scope record
+run std/base64 726-1612 fn	
+ctx r1 g1 p0
+keys std/base64=314372311d0eebda94b05c974d46816531df9ed206502e807dfe3ba20d8e2896
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read -ctor	U32
+hits 0
+body 1 2 16 3 | V2 V2 | F F F F F F V2 F F F F F F F F F | b001 b0000001000000000 b00 b0000000000000000 | | | ||
+sum r b001 b001 b000 b000 b000 b b b a,std/base64:726:1612,std/base64:726:1612,std/base64:922:936 t i t i i c0/i/i f0010
+hid fs1	o0Array<U8>&	o0std/prelude/text:String&	o0Bool
+out a26ad3af9ef402679acb40152242f351
+run std/base64 2810-2887 fn	
+ctx r1 g1 p0
+keys std/base64=314372311d0eebda94b05c974d46816531df9ed206502e807dfe3ba20d8e2896
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/base64 726-1612 fn	f7fbf1a3f16628ad40f9bc635036c5b5
+hits 0
+body 1 1 1 2 | U | F | b01 b0 b0 b0 | 0:,V0,P,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/base64:2810:2887,std/base64:922:936 t i t i i c0/i/i f0010
+hid fs1	o0Array<U8>&	o0std/prelude/text:String&
+out 92fc27a5975e4b103ce742340d47a127
+run std/base64 1659-1974 fn	
+ctx r1 g1 p0
+keys std/base64=314372311d0eebda94b05c974d46816531df9ed206502e807dfe3ba20d8e2896
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char	o0Bool
+out 313b118b4dd8db5b8114876792f57744
+run std/base64 1976-2759 fn	
+ctx r1 g1 p0
+keys std/base64=314372311d0eebda94b05c974d46816531df9ed206502e807dfe3ba20d8e2896
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read -ctor	U32
+read std/base64 1659-1974 fn	753360899e792dedf06ee057d76e9c16
+hits 0
+body 1 2 14 2 | V1 U | F F F V1 F F F F F F F F F F | b01 b00010000000000 b00 b00000000000000 | 1: | | ||
+sum r b01 b01 b00 b00 b00 b b b a,std/base64:1976:2759,std/base64:2262:2316 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0Bool
+out 7916e5392a22d2f7e217a854574d2113
+run std/base64 2965-3047 fn	
+ctx r1 g1 p0
+keys std/base64=314372311d0eebda94b05c974d46816531df9ed206502e807dfe3ba20d8e2896
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/base64 1976-2759 fn	3598370cf88f8ffec7f42121a0ba1204
+hits 0
+body 1 1 1 2 | U | F | b01 b0 b0 b0 | 0:,V0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/base64:2965:3047,std/base64:2262:2316 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out eb279dc30004a3058ea825e124ef6f08
+run std/base64 3098-3178 fn	
+ctx r1 g1 p0
+keys std/base64=314372311d0eebda94b05c974d46816531df9ed206502e807dfe3ba20d8e2896
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/base64 726-1612 fn	f7fbf1a3f16628ad40f9bc635036c5b5
+hits 0
+body 1 1 1 2 | U | F | b01 b0 b0 b0 | 0:,V0,P,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/base64:3098:3178,std/base64:922:936 t i t i i c0/i/i f0010
+hid fs1	o0Array<U8>&	o0std/prelude/text:String&
+out 3a6e57d31fe413fb0468973ab7a54ed5
+run std/base64 3274-3358 fn	
+ctx r1 g1 p0
+keys std/base64=314372311d0eebda94b05c974d46816531df9ed206502e807dfe3ba20d8e2896
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/base64 1976-2759 fn	3598370cf88f8ffec7f42121a0ba1204
+hits 0
+body 1 1 1 2 | U | F | b01 b0 b0 b0 | 0:,V0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/base64:3274:3358,std/base64:2262:2316 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out edf68488f363412e44f16827db7b7604
+run std/base64 global standard	
+ctx r1 g1 p0
+keys std/base64=314372311d0eebda94b05c974d46816531df9ed206502e807dfe3ba20d8e2896
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fd5a4eff31754feb33c3f82e67704070
+run std/base64 global urlSafe	
+ctx r1 g1 p0
+keys std/base64=314372311d0eebda94b05c974d46816531df9ed206502e807dfe3ba20d8e2896
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1ef8182b9a734cd8bdef70a61dd5b657
+end
+sum 3914-7888889650405484809

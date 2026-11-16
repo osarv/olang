@@ -1,0 +1,25 @@
+olang scope record
+run <sys/utsname.h> 0-0 ctor <sys/utsname.h>:utsname	
+ctx r1 g1 p0
+keys <sys/utsname.h>=98c1e9ff70ccd15b1c8cd944c7b37d8517949b6884372c5e79235741680dac7d
+in 0
+mark <sys/utsname.h> 0-0 ctor <sys/utsname.h>:utsname	0,1,2,3,4,5
+marks 3a833c41067aca3f684c90b275204998
+read -ctor	Array<U8, 65>
+hits 0
+body 1 6 6 1 | V0 V0 V0 V0 V0 V0 | F F F F F F | b1 b000000 b000000 b000000 | | | ||
+sum r b1 b1 b b b b b b a,<sys/utsname.h>:197:210 t i,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out c47e1a16e820b7596382ec65e7b9b322
+run <sys/utsname.h> global SYS_NMLN	
+ctx r1 g1 p0
+keys <sys/utsname.h>=98c1e9ff70ccd15b1c8cd944c7b37d8517949b6884372c5e79235741680dac7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out de420dccc6ad984f05babc58619cfaaa
+end
+sum 854-8066532093199440873

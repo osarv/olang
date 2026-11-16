@@ -1,0 +1,87 @@
+olang front record
+body fn 14681-14737	known p
+body fn 14857-15091	known p
+body fn 19775-20558	known p
+body fn 20675-20814	known p
+body fn 20875-21140	known p
+body fn 21308-21462	known p
+body fn 21463-21594	known p
+body fn 21595-21727	known p
+body fn 21876-22186	known p,0
+body fn 22188-22248	known p
+body fn 22327-22513	known p
+body fn 22585-22855	known p,0
+body fn 22857-23152	known p
+body fn 23154-23746	known p
+body fn 24133-24337	known p
+body fn 24339-25744	known p
+body fn 25746-25839	known p
+body fn 25841-26020	known p
+body fn 26022-26166	known p
+body fn 26168-26299	known p
+body fn 26301-26545	known p
+body fn 26547-26749	known p
+body fn 26820-28076	known p
+body fn 28078-28395	known p
+body fn 28520-28913	known p
+body fn 28915-29262	known p
+body fn 29338-29738	known p
+body fn 30027-30445	known p
+body fn 30734-30896	known p
+body fn 31098-31434	known p
+body fn 31484-31769	known p
+body fn 31851-32039	known p
+body fn 32739-33219	known p
+body fn 33300-33541	known p,0
+body fn 33597-34018	known p
+body fn 34020-34164	known p
+body fn 34280-34669	known p
+body fn 34856-35386	known p
+body fn 35388-35511	known p,0
+body fn 35513-35610	known p,1
+body fn 3610-3763	known p,0,1
+body global NoYield	known p
+baked NoYield [8 ffffffffffffffff]
+sig Decl.findTestIf@28915 fn&(TopIf?&, Span) Decl?&
+sig FindTest@28520 fn&(Array<Decl&>&, Span) Decl?&
+sig FirstYield@24133 fn&(Array<Stmt&>&) Span
+sig FuncSig@21876 fn&(TypeRef&) Sig?&
+sig IsBuilder@14681 fn&(Func&) Bool
+sig IsFunc@22188 fn&(TypeRef&) Bool
+sig IsGathered@21308 fn&(Expr&) Bool
+sig IsNamed@21595 fn&(Expr&) Bool
+sig IsRest@20875 fn&(Expr&) Bool
+sig IsSpread@21463 fn&(Expr&) Bool
+sig IsWeak@22327 fn&(TypeRef&) Bool
+sig OwnerName@14857 fn&(Func&) NameId
+sig OwnerTarget@30734 fn&(Func&, Names&) String
+sig RecvTarget@30027 fn&(Func&, Names&) String
+sig Req.leading@33300 fn&(Stmt&, Names&) Req?&
+sig ReqText@34856 fn&(Req&, String&) String
+sig Requirements@32739 fn&(Array<Stmt&>&, Names&, String&, Array<Param&>&, Param?&) Array<Req&>&
+sig Slicing@20675 fn&(Array<Expr&>&) Bool
+sig Span@19775 fn&(Expr&) Span
+sig Span@22857 fn&(TypeRef&) Span
+sig Span@23154 fn&(Stmt&) Span
+sig Span@28078 fn&(Pattern&) Span
+sig TestDesc@31484 fn&(Decl&, String&) String
+sig TestLabel@31851 fn&(Decl&, String&, Names&) String
+sig TestTarget@29338 fn&(Decl&, Names&) String
+sig Unweak@22585 fn&(TypeRef&) TypeRef&
+sig WithPromises@3610 fn&(Sig&, Array<Promise&>&) Sig&
+sig exprText@35513 fn&(Expr&, String&) String&
+sig isCheck@34280 fn&(If&, Names&) Bool
+sig nameOrConstraint@31098 fn&(Func&, NameId, Names&) String
+sig readsAny@33597 fn&(String&, Vec<String&>&) Bool
+sig unparen@35388 fn&(Expr&) Expr&
+sig wordAt@34020 fn&(String&, I64) Bool
+sig yieldIn@24339 fn&(Stmt?&) Span
+sig yieldInCase@26168 fn&(Case&) Span
+sig yieldInCatches@26301 fn&(Array<Catch&>&) Span
+sig yieldInExpr@26820 fn&(Expr?&) Span
+sig yieldInExprs@26547 fn&(Array<Expr&>&) Span
+sig yieldInIf@25841 fn&(If&) Span
+sig yieldInMatch@26022 fn&(Match&) Span
+sig yieldOr@25746 fn&(Span, Span) Span
+end
+sum dc138d71513efc195a050ac5b153e4c2a4d8e879d2afb8d0420a2e60704fe686

@@ -1,0 +1,487 @@
+olang scope record
+run compiler/unparse 0-0 ctor compiler/unparse:writer	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+mark compiler/unparse 0-0 ctor compiler/unparse:writer	0,1,2,3,4,5,6,7
+marks 32a99994309485157cbdfac6eb2cf9af
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Bool
+read -ctor	I64
+read compiler/diag 0-0 ctor compiler/diag:Diagnostics	4e493a3366ee9c5cf50f8b639584a034
+read compiler/source 0-0 ctor compiler/source:Names	82c984cb90276c6418330053317893af
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/source:Span>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 2 11 4 | U U | F F F F F F F F F F F | b0001 b00000000000 b00 b00000000000 | 0:,V3 1:,V3 | | ||
+sum r;V0,V3,0,1797,1802,1,0,0;V1,V3,0,1807,1811,1,0,0;V2,V3,0,1816,1821,1,0,0 b0001 b0001 b111 b000 b000 b b b a,compiler/unparse:0:0,compiler/unparse:0:0,compiler/unparse:0:0,std/prelude/vec:3184:3188 t i,-1,-1,-1,-1,-1,0,-1,-1 t,U i i c0/i/i f0010
+hid fs1;1280:U	o0compiler/source:Names&	o0std/prelude/text:String&	o0compiler/diag:Diagnostics&
+out 33fb832d7d52759d0a9f58f842663a10
+run compiler/unparse 2187-2236 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 1 2 2 | U | F F | b10 b00 b0 b00 | 0:,V0,V1 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/unparse:2187:2236 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0std/prelude/text:String&
+out 649263e45b44d52eb1e512224f7edd06
+run compiler/unparse 2238-2308 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+mark compiler/unparse 0-0 ctor compiler/unparse:writer	0
+marks 8edd9bed2649cc5dae009b55a5b82954
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read compiler/unparse 0-0 ctor compiler/unparse:writer	6367f4678c430604cef89657df0c6879
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 2 2 1 | U U | F F | b1 b00 b00 b00 | 0:,V0,V0 1:,V0,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/source:NameId	o0std/prelude/text:String&	o1compiler/source:Names&	o1compiler/source:NameId
+out 36d951acef07d041914604acee8ec4ea
+run compiler/unparse 2310-2387 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+mark compiler/unparse 0-0 ctor compiler/unparse:writer	1
+marks e406ac994a6c2af3f252dbef4b5126c9
+read compiler/unparse 0-0 ctor compiler/unparse:writer	6367f4678c430604cef89657df0c6879
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 1 2 1 | U | F F | b1 b00 b0 b00 | 0:,V0,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/source:Span
+out c36e53648ddb46ae3e302be535540af2
+run compiler/unparse 28933-29436 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 5 7 1 | U U U U U | F F F F F F F | b0 b0000000 b00000 b0000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/unparse:28933:29436 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Expr&
+out 99c080d0e1c9f9b493fdb0004f309876
+run compiler/unparse 8933-9055 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Path	1
+marks 17caa5cc9eb575cf5dee2ec557eddb5e
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Path	4516d7f29295cdd2bbc4d66121ba8267
+read compiler/unparse 2187-2236 fn	7405d1e6b1f6e874aecfb9febf695ed7
+read compiler/unparse 2238-2308 fn	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 2 7 2 | U U | F F F F F F F | b10 b0000000 b00 b0000000 | 0:,V0,B3 1:,V0 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/unparse:8933:9055 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Path&
+out 1fc34c9259f9d30376319737394a1e8b
+run compiler/unparse 8143-8269 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Sig	7
+marks 548287c2fbd4e2bf903f293853c21e6f
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/ast 21876-22186 fn	9f2fd53f68f2f40152c2ebfaa3e762b3
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | 0:,V0,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/unparse:8143:8269 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:TypeRef&	o0compiler/ast:Sig?&	o1compiler/ast:TypeRef&
+out c11bae8cad3912350d26c4ca89834a7a
+run compiler/unparse 8271-8451 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Sig	3
+marks 6237ef5c2bb3129ec533edab58eb709a
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/unparse 2187-2236 fn	7405d1e6b1f6e874aecfb9febf695ed7
+read compiler/unparse 8933-9055 fn	dfea645b62bc5fa7b8b9bd26001b8e07
+hits 0
+body 1 3 7 2 | U U U | F F F F F F F | b10 b0000000 b000 b0000000 | 0:,V0,B0 1:,V0,B3 2:,V0,V1 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/unparse:8271:8451 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Sig&
+out 84665b0baa0b38f3cf34a95956dc1c15
+run compiler/unparse 7757-8013 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Promise	2
+marks 55d711e174c11c8ba70644ee78ed5b78
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Promise	2f4b004cc146ae46ddbb67be6898c535
+read compiler/token 3414-6725 fn	91c3d70d320240b895683765c17303a6
+read compiler/unparse 2187-2236 fn	7405d1e6b1f6e874aecfb9febf695ed7
+read compiler/unparse 2238-2308 fn	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 5 11 2 | U U U U U | F F F F F F F F F F F | b10 b00000000000 b00000 b00000000000 | 0:,V0,B2 1:,B2 2:,V0,B2 3:,V0,B4 4:,V0 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/unparse:7757:8013 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0Array<compiler/ast:Promise&>&	o0std/prelude/text:String&	o1compiler/token:Tok
+out 820456395837517aa840fb50e52f423c
+run compiler/unparse 2658-2769 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/number 15161-15491 fn <I64;>	753360899e792dedf06ee057d76e9c16
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 3 7 1 | U U U | F F F F F F F | b1 b0000000 b000 b0000000 | 0:,V0 1: 2:,V0,B2 | | ||
+sum r b1 b1 b1 b0 b0 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0I64
+out 1680c54fabcb5b99437dcd9b149194e2
+run compiler/unparse 28677-28850 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 2 3 2 | U U | F F F | b00 b000 b00 b000 | 0:,V1,V1 1:,V1,B1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/unparse:28677:28850,compiler/unparse:28677:28850 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Expr&	o0compiler/source:Names&	o0std/prelude/text:String&	o1compiler/source:Names&	o1compiler/source:NameId
+out 1f72a6e34f51cf10825e421d2eb12845
+run compiler/unparse 23695-23814 fn	compiler/unparse 22322-22476 fn	compiler/unparse 22478-23449 fn	compiler/unparse 21789-22320 fn	compiler/unparse 16010-16361 fn	compiler/unparse 21546-21787 fn	compiler/unparse 20959-21451 fn	compiler/unparse 16827-17324 fn	compiler/unparse 23476-23604 fn	compiler/unparse 16363-16825 fn	compiler/unparse 17326-20774 fn	compiler/unparse 15596-15893 fn	compiler/unparse 9690-10278 fn	compiler/unparse 10280-12794 fn	compiler/unparse 8639-8931 fn	compiler/unparse 8453-8637 fn	compiler/unparse 7126-7657 fn	compiler/unparse 13556-13862 fn	compiler/unparse 12815-13390 fn	compiler/unparse 13864-15570 fn	compiler/unparse 23816-28610 fn	compiler/unparse 1237-1369 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Attr	1
+mark compiler/ast 0-0 ctor compiler/ast:Branch	1
+mark compiler/ast 0-0 ctor compiler/ast:Case	1,2,3,4,5
+mark compiler/ast 0-0 ctor compiler/ast:CaseDecl	2,4,5
+mark compiler/ast 0-0 ctor compiler/ast:Catch	1,2,3
+mark compiler/ast 0-0 ctor compiler/ast:Chain	0,1
+mark compiler/ast 0-0 ctor compiler/ast:Compr	0,1,4,5
+mark compiler/ast 0-0 ctor compiler/ast:For3	0,1,2,3
+mark compiler/ast 0-0 ctor compiler/ast:ForIn	2,4,5
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,3,4
+mark compiler/ast 0-0 ctor compiler/ast:If	0,1,2
+mark compiler/ast 0-0 ctor compiler/ast:JoinS	1,2
+mark compiler/ast 0-0 ctor compiler/ast:Match	1,3
+mark compiler/ast 0-0 ctor compiler/ast:Multi	0,2
+mark compiler/ast 0-0 ctor compiler/ast:Param	2,3,4
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0,1,3,7
+mark compiler/ast 0-0 ctor compiler/ast:StructBody	0,1,2,4,5
+mark compiler/ast 0-0 ctor compiler/ast:TypeParam	2,3
+mark compiler/ast 0-0 ctor compiler/ast:VarDecl	0,2,3,6
+mark compiler/unparse 0-0 ctor compiler/unparse:writer	0,1,2
+marks 278e90e04ff5e8a6379dda53271e0d1f
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Attr	eb70ff745016dfdb4ce8d59a33352661
+read compiler/ast 0-0 ctor compiler/ast:Branch	66acb0fbe745756bc22df8625c8c34e8
+read compiler/ast 0-0 ctor compiler/ast:Case	a86ebe8f71b83af8c941cdff145c6e0e
+read compiler/ast 0-0 ctor compiler/ast:CaseDecl	f748d7670d95db0288976f55c228df03
+read compiler/ast 0-0 ctor compiler/ast:Catch	fb47da419c9533df2ee10e8f18ffb1c3
+read compiler/ast 0-0 ctor compiler/ast:Chain	10f71466eafe8ab253d3a873cf0af465
+read compiler/ast 0-0 ctor compiler/ast:Compr	e703d414505ee78acb118fd0a27da2d7
+read compiler/ast 0-0 ctor compiler/ast:For3	b3ff77237fd9b4448110cf44f9edbd56
+read compiler/ast 0-0 ctor compiler/ast:ForIn	c8c1d697b9b3be256675211c333ac7a3
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:If	40671655d1fba8b621d2c508c063652f
+read compiler/ast 0-0 ctor compiler/ast:JoinS	eb974c31689742f8a47fc78037fb22c3
+read compiler/ast 0-0 ctor compiler/ast:Match	59ae547db3a3964d5cc7fa69be2e84fb
+read compiler/ast 0-0 ctor compiler/ast:Multi	0f7818ee22df4b3908ff7b752d6c47e7
+read compiler/ast 0-0 ctor compiler/ast:Param	38c6ee192659779d27da07f93c82b41a
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/ast 0-0 ctor compiler/ast:StructBody	5ae36285030cbc87a8a4e492b3dca1d1
+read compiler/ast 0-0 ctor compiler/ast:TypeParam	46fe115140fa05be4f5724d9ce2a3551
+read compiler/ast 0-0 ctor compiler/ast:VarDecl	3d19a44c50c9c3e6f90fda2c40a230b5
+read compiler/ast 21876-22186 fn	9f2fd53f68f2f40152c2ebfaa3e762b3
+read compiler/ast 22327-22513 fn	8c81fba94c80de3b2fdcef7247d21af8
+read compiler/ast 22585-22855 fn	2d28a1881e9898b302a5fc906dae57d9
+read compiler/ast 23154-23746 fn	621b7f00c5600c6005da13f7cf4ff4c0
+read compiler/diag 21663-21862 fn	633e0309d3733ab56654f1521c09cacc
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read compiler/token 3414-6725 fn	91c3d70d320240b895683765c17303a6
+read compiler/unparse 0-0 ctor compiler/unparse:writer	6367f4678c430604cef89657df0c6879
+read compiler/unparse 2187-2236 fn	7405d1e6b1f6e874aecfb9febf695ed7
+read compiler/unparse 2238-2308 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/unparse 2310-2387 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/unparse 2658-2769 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/unparse 28677-28850 fn	573ebae534803e8b72857322224b8d2b
+read compiler/unparse 28933-29436 fn	fb58d20b9370e2da7d1ed7c6e78e0fb9
+read compiler/unparse 7757-8013 fn	be50b4b4a1b06a1b8633128c989fe294
+read compiler/unparse 8143-8269 fn	336d471e6b2a36ce3ecf08fcf3d4dbaa
+read compiler/unparse 8271-8451 fn	d3e8c2685f5dababfb85e07a3c5049c4
+read compiler/unparse 8933-9055 fn	dfea645b62bc5fa7b8b9bd26001b8e07
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 4660-4775 fn <compiler/source:Span;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 1 3 2 | U | F F F | b11 b000 b0 b000 | 0:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0Array<compiler/ast:Expr&>&
+body 1 3 2 2 | U U U | F F | b11 b00 b000 b00 | 0:,V0,B1 1:,V0,V1 2:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Case&
+body 1 20 18 2 | U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F | b11 b000000000000000000 b00000000000000000000 b000000000000000000 | 0:,V0,B1 1:,V0,V1 2:,V0,V1 3:,V0,B3 4:,V0,B6 5:,V0,V1 6:,V0,B3 7:,V0 8:,V0,V1 9:,V0,V1 10:,V0,B10 11:,V0 12:,V0,V1 13:,V0,B12 14:,V0,V0 15:,V0,B12 16:,V0 17:,V0 18:,V0,B14 19:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Pattern&	o0std/prelude/text:String&	o1compiler/source:Names&	o1compiler/source:NameId
+body 1 14 16 2 | U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F | b11 b0000000000000000 b00000000000000 b0000000000000000 | 0:,V0,B0 1:,V0,V1 2:,V0,B0 3:,V0 4:,V0,B2 5:,V0,B5 6:,V0,V1 7:,V0,B9 8:,V0,V1 9:,V0,B11 10:,V0,V1 11:,V0,V1 12:,V0 13:,V0,B0 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Match&
+body 1 6 3 2 | U B1 U U U U | F F F | b11 b000 b000000 b000 | 0:,V1 2:,V0,B3 3:,V0,V1 4:,V0,B0 5:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0Array<compiler/ast:Stmt&>&
+body 1 5 2 2 | U U U U U | F F | b11 b00 b00000 b00 | 0:,V0 1:,V0,B2 2:,V0 3:,V0 4:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Branch&
+body 1 8 4 2 | U U U U U U U U | F F F F | b11 b0000 b00000000 b0000 | 0:,V0,V1 1:,V0,B0 2:,V0,V1 3:,V0,V1 4:,V0,B2 5:,V0,V1 6:,V0,B2 7:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:If&
+body 1 9 11 2 | U U U U U U U U U | F F F F F F F F F F F | b11 b00000000000 b000000000 b00000000000 | 0:,V0,B2 1:,V0,B4 2:,V0,V1 3:,V0,B6 4:,V0 5:,V0,B7 6:,V0,V1 7:,V0,B8 8:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0Array<compiler/ast:Catch&>&
+body 1 2 7 2 | U U | F F F F F F F | b11 b0000000 b00 b0000000 | 0:,V0,B3 1:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0Array<compiler/ast:Expr&>&
+body 1 11 7 2 | U U U U U U U U U U U | F F F F F F F | b11 b0000000 b00000000000 b0000000 | 0:,V0,V1 1:,V0,B3 2:,V0 3:,V0,B6 4:,V0,V1 5:,V0,B5 6:,V0,V1 7:,V0,B0 8:,V0,V1 9:,V0,B8 10:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:VarDecl&
+body 1 74 34 2 | U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b11 b0000000000000000000000000000000000 b00000000000000000000000000000000000000000000000000000000000000000000000000 b0000000000000000000000000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0,B3 4:,V0,V1 5:,V0,V1 6:,V0,B4 7:,B4 8:,V0,B4 9:,V0,B4 10:,V0,V1 11:,V0,B5 12:,V0,V1 13:,V0,V1 14:,V0,V1 15:,V0,B7 16:,V0,V1 17:,V0,B8 18:,V0,V1 19:,V0,V1 20:,V0,B9 21:,V0,V1 22:,V0,B9 23:,V0,V1 24:,V0,B9 25:,V0,V1 26:,V0,V1 27:,V0,B11 28:,V0,B10 29:,V0 30:,V0,B12 31:,V0 32:,V0,B10 33:,V0,B13 34:,V0,V1 35:,V0,V1 36:,V0,V1 37:,V0,B14 38:,V0,V1 39:,V0,B14 40:,V0,V1 41:,V0,V1 42:,V0,B16 43:,V0,B17 44:,V0,V1 45:,V0,B18 46:,V0,V1 47:,V0,B19 48:,V0,V1 49:,B20 50:,V0,B20 51:,V0,B21 52:,V0,V1 53:,V0,B22 54:,V0,V1 55:,V0,B23 56:,V0,V1 57:,V0,B24 58:,V0,B25 59:,V0,V1 60:,V0,B26 61:,V0,V1 62:,V0,B26 63:,V0,B27 64:,V0,V1 65:,V0,B28 66:,V0,V1 67:,V0,B30 68:,V0,B29 69:,V0,V1 70:,V0,V1 71:,V0,B31 72:,V0,V1 73:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Stmt&	o0std/prelude/text:String&	o1compiler/token:Tok	o0std/prelude/text:String&	o1compiler/token:Tok
+body 1 6 7 2 | U U U U U U | F F F F F F F | b11 b0000000 b000000 b0000000 | 0:,V0,B1 1:,V0,B0 2:,V0 3:,V0,V1 4:,V0 5:,V0,B0 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0Array<compiler/ast:Stmt&>&
+body 1 10 12 2 | U U U U U U U U U U | F F F F F F F F F F F F | b11 b000000000000 b0000000000 b000000000000 | 0:,V0,B0 1:,V0,B4 2:,V0 3:,V0,B5 4:,V0 5:,V0,B6 6:,V0,V1 7:,V0,B8 8:,V0,V1 9:,V0,B0 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0Array<compiler/ast:TypeParam&>&
+body 1 49 29 2 | U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b11 b00000000000000000000000000000 b0000000000000000000000000000000000000000000000000 b00000000000000000000000000000 | 0:,V0,B2 1:,V0,V1 2:,V0,B2 3:,V0,V1 4:,V0,B2 5:,V0,V1 6:,V0,B2 7:,V0,V1 8:,V0,B3 9:,V0,V1 10:,V0,B4 11:,V0,V1 12:,V0,B5 13:,V0,B4 14:,V0 15:,V0,V1 16:,V0 17:,V0,B8 18:,V0,V1 19:,V0,B10 20:,V0,V1 21:,V0,B10 22:,V0,B11 23:,V0,V1 24:,V0 25:,V0,B4 26:,V0,B13 27:,V0,B14 28:,V0,B17 29:,V0,V1 30:,V0,B14 31:,V0,B19 32:,V0,B22 33:,V0,V1 34:,V0,B19 35:,V0,B13 36:,V0 37:,V0,B26 38:,V0 39:,V0,V1 40:,V0 41:,V0,B13 42:,V0,V1 43:,V0,B29 44:,V0,V1 45:,V0,B29 46:,V0,V1 47:,V0,B29 48:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:TypeBody&
+body 1 6 2 2 | U U U U U U | F F | b11 b00 b000000 b00 | 0:,V0,V1 1:,V0 2:,V0,B3 3:,V0,V1 4:,V0,B4 5:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Param&
+body 1 2 8 2 | U U | F F F F F F F F | b11 b00000000 b00 b00000000 | 0:,V0,B3 1:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0Array<compiler/ast:Param&>&
+body 1 11 8 2 | U U U U U U U U U U U | F F F F F F F F | b11 b00000000 b00000000000 b00000000 | 0:,V0,B0 1:,V0,V1 2:,V0,B1 3:,V0,B0 4:,V0,B2 5:,V0,B4 6:,V1 7:,V0,V1 8:,V0,B7 9:,V0,V1 10:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Sig&
+body 1 4 5 3 | U U U U | F F F F F | b110 b00000 b0000 b00000 | 0:,V0,B0 1:,V0,V2 2:,V0,V1 3:,V0,B1 | | ||
+sum r b110 b110 b100 b000 b000 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725,compiler/unparse:13556:13862 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Sig&	o0std/prelude/text:String&
+body 1 5 14 2 | U U U U U | F F F F F F F F F F F F F F | b11 b00000000000000 b00000 b00000000000000 | 0:,V0,B3 1:,V0,B6 2:,V0,V1 3:,V0,B9 4:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0Array<compiler/ast:TypeRef&>&
+body 1 26 25 2 | U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F | b11 b0000000000000000000000000 b00000000000000000000000000 b0000000000000000000000000 | 0:,V0,B4 1:,V0 2:,V0,B6 3:,V0,V1 4:,V0,B6 5:,V0,V1,B7 6:,V0,V1 7:,V0,B10 8:,V1,V1 9:,V0,V1,B11 10:,V0,V1 11:,V0,B12 12:,V0,B13 13:,V0,V1 14:,V0,B14 15:,V0,V1 16:,V0,B15 17:,V0,B18 18:,V0,V1 19:,V1 20:,V0,B21 21:,V1,V1 22:,V0,V1 23:,V0,B22 24:,V0,B23 25:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:TypeRef&	o0compiler/ast:Sig?&	o1compiler/ast:TypeRef&	o0compiler/ast:TypeRef&	o1compiler/ast:TypeRef&
+body 1 100 59 2 | U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b11 b00000000000000000000000000000000000000000000000000000000000 b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 b00000000000000000000000000000000000000000000000000000000000 | 0:,V0 1:,V0 2:,V0,B3 3:,V0,V1 4:,V0,B3 5:,B4 6:,V0,B4 7:,V0,B5 8:,V1 9:,V0,B7 10:,V0,V1 11:,V0,V1 12:,B8 13:,V0,B8 14:,V0,V1 15:,V0,B10 16:,B9 17:,V0,B9 18:,V0,B9 19:,V0,V1 20:,V0,V1 21:,V0,B11 22:,V0,V1 23:,V0,B15 24:,B15 25:,V0,B15 26:,V0,B15 27:,V0,V1 28:,V0,V1 29:,V0,B17 30:,V0,V1 31:,V0,B17 32:,V0,V1 33:,V0,V1 34:,V0,B18 35:,V0,V1 36:,V0,V1 37:,V0,B19 38:,V0,V1 39:,V0,B19 40:,V0,V1 41:,V0,B20 42:,V0,V1 43:,V0,B20 44:,V0,V1 45:,V0,B21 46:,V0 47:,V0,V1 48:,V0,B22 49:,V0,V1 50:,V0,B22 51:,V0,V1 52:,V0,B23 53:,V0,V1 54:,V0,B23 55:,V0,V1 56:,V0,B23 57:,V0,V1 58:,V0,B26 59:,V0,V1 60:,V0,V1 61:,V0,B29 62:,V0,V1 63:,V0,B29 64:,V0,B30 65:,V0,V1 66:,V0,B30 67:,V0,V1 68:,V0,B32 69:,V0,V1 70:,V0,B31 71:,V0 72:,V0,B34 73:,V0 74:,V0,B31 75:,V0,V1 76:,V0,B35 77:,V0,V1 78:,V0,B36 79:,V0,B37 80:,V0,V1 81:,V0,V1 82:,V0,B38 83:,V0,V1 84:,V0,V1 85:,V0,V1 86:,V0,B40 87:,V0,V1 88:,V0,B41 89:,V0,B42 90:,V0,B43 91:,V0,V1 92:,V0 93:,V0,B44 94:,V0,V1 95:,V0,B45 96:,V1,V0 97:,V0,V1 98:,V0,B50 99:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Expr&	o0std/prelude/text:String&	o1compiler/token:Tok	o0std/prelude/text:String&	o1compiler/token:Tok	o0std/prelude/text:String&	o1compiler/token:Tok	o0std/prelude/text:String&	o1compiler/token:Tok
+body 1 3 6 2 | U U U | F F F F F F | b11 b000000 b000 b000000 | 0:,V0,B2 1:,V0,V1 2:,V0,B2 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0Array<compiler/ast:Attr&>&
+out 89983a0e3f8112aa00c6b51e3ecb7f1e
+run compiler/unparse 6309-6767 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1,3,4,5,8,9
+marks d321e1b64cf9d910cef630f548dcd74f
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 14681-14737 fn	ca8f6eae37353eafd94ad54adc624b9b
+read compiler/unparse 1237-1369 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 13864-15570 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 15596-15893 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 2187-2236 fn	7405d1e6b1f6e874aecfb9febf695ed7
+read compiler/unparse 2238-2308 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/unparse 7126-7657 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 8639-8931 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 9690-10278 fn	4511d5fca5dd080f38cdb1209c24c288
+hits 0
+body 1 15 2 2 | U U U U U U U U U U U U U U U | F F | b11 b00 b000000000000000 b00 | 0:,V0,V1 1:,V0,B1 2:,V0,B0 3:,V0,B2 4:,V0,V1 5:,V0,B2 6:,V1 7:,V0,V1 8:,V0,B3 9:,V0 10:,V0 11:,V0,V1 12:,V0,V1 13:,V0,B0 14:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Func&
+out e32c09f1044db4f04f6c71842be44115
+run compiler/unparse 7029-7124 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	3
+marks 229fa92088991eb416f684206f59ad09
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/unparse 2187-2236 fn	7405d1e6b1f6e874aecfb9febf695ed7
+read compiler/unparse 2238-2308 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/unparse 7126-7657 fn	4511d5fca5dd080f38cdb1209c24c288
+hits 0
+body 1 3 2 2 | U U U | F F | b11 b00 b000 b00 | 0:,V0,B0 1:,V0 2:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Func&
+out 15f35a86b1def4a7d86e2bfcb39a3217
+run compiler/unparse 4503-5018 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/unparse 2187-2236 fn	7405d1e6b1f6e874aecfb9febf695ed7
+read compiler/unparse 2238-2308 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/unparse 2310-2387 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/unparse 2658-2769 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/unparse 7029-7124 fn	4511d5fca5dd080f38cdb1209c24c288
+hits 0
+body 1 11 9 2 | U U U U U U U U U U U | F F F F F F F F F | b11 b000000000 b00000000000 b000000000 | 0:,V0,B0 1:,V0,B1 2:,V0 3:,V0,B1 4:,V0,B0 5:,V0 6:,V0,V1 7:,V0,B5 8:,V0 9:,V0 10:,V0,B0 | | ||
+sum r b11 b11 b100 b000 b000 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/source:Span	o0Array<compiler/ast:Decl&>&
+out d0e9bdcb1736796f1c131443dae9f055
+run compiler/unparse 9057-9590 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:TypeDecl	1,3,4
+marks 04442366b35a64734b1ebaba450bc3fd
+read compiler/ast 0-0 ctor compiler/ast:TypeDecl	3c7b73fb692de03b2a0a98e0425d9b01
+read compiler/unparse 10280-12794 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 1237-1369 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 2187-2236 fn	7405d1e6b1f6e874aecfb9febf695ed7
+read compiler/unparse 2238-2308 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/unparse 9690-10278 fn	4511d5fca5dd080f38cdb1209c24c288
+hits 0
+body 1 12 3 2 | U U U U U U U U U U U U | F F F | b11 b000 b000000000000 b000 | 0:,V0,V1 1:,V0,B1 2:,V0 3:,V0,B0 4:,V0 5:,V0,V1 6:,V0,B3 7:,V0,B4 8:,V0,B5 9:,V0,B6 10:,V0,B0 11:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:TypeDecl&
+out 3da9e4a68408063d738580d37764313f
+run compiler/unparse 5122-5706 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:CaseDecl	2
+marks 3936ea1732505c948272b5510ab20408
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:CaseDecl	f748d7670d95db0288976f55c228df03
+read compiler/unparse 2187-2236 fn	7405d1e6b1f6e874aecfb9febf695ed7
+read compiler/unparse 2238-2308 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/unparse 2658-2769 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/unparse 8453-8637 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 8933-9055 fn	dfea645b62bc5fa7b8b9bd26001b8e07
+hits 0
+body 1 13 15 4 | U U U U U U U U U U U U U | F F F F F F F F F F F F F F F | b1001 b000000000000000 b0000000000000 b000000000000000 | 0:,V0,B0 1:,V0 2:,V0,B0 3:,V0,B2 4:,V0,V2 5:,V0,B0 6:,V0 7:,V0 8:,V0,B6 9:,V0,V3 10:,V0,B6 11:,V0 12:,V0,B0 | | ||
+sum r b1001 b1001 b10000 b00000 b00000 b b b a,std/prelude/vec:4512:4530,compiler/unparse:5122:5706,compiler/unparse:5122:5706,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/source:NameId	o0Array<compiler/source:NameId>&	o0Array<compiler/ast:Path&>&	o0Array<compiler/ast:CaseDecl&>&
+out 1f77d0a190cc15fb4297aa6a7202eec3
+run compiler/unparse 1037-1162 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/unparse:1037:1162 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Decl&
+out 60fef31a95ebc20d335866f17c0f8e0d
+run compiler/unparse 5996-6307 fn	compiler/unparse 5708-5994 fn	compiler/unparse 2797-4419 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+in 0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Path	1
+mark compiler/ast 0-0 ctor compiler/ast:TopBranch	1
+mark compiler/ast 0-0 ctor compiler/ast:TopIf	0,1,2,3
+mark compiler/unparse 0-0 ctor compiler/unparse:writer	2
+marks 30e0e6e11fabb0574ea37a466ed06f4e
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Path	4516d7f29295cdd2bbc4d66121ba8267
+read compiler/ast 0-0 ctor compiler/ast:TopBranch	efd54d4b851314812283a957ed2b88a9
+read compiler/ast 0-0 ctor compiler/ast:TopIf	d061336cf87e7ba9ec024255c9394a16
+read compiler/diag 21663-21862 fn	633e0309d3733ab56654f1521c09cacc
+read compiler/unparse 0-0 ctor compiler/unparse:writer	6367f4678c430604cef89657df0c6879
+read compiler/unparse 1037-1162 fn	65ba3fbcb46060cbae773fc0da6722a6
+read compiler/unparse 15596-15893 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 16363-16825 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 2187-2236 fn	7405d1e6b1f6e874aecfb9febf695ed7
+read compiler/unparse 2238-2308 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/unparse 2310-2387 fn	6fbff10506db1de19a4bc199611f8137
+read compiler/unparse 23816-28610 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 2658-2769 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/unparse 4503-5018 fn	697b70d860d430dffd2229c272f34106
+read compiler/unparse 5122-5706 fn	350449c7b7c48b1c62a96f63cc7342d7
+read compiler/unparse 6309-6767 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 7029-7124 fn	4511d5fca5dd080f38cdb1209c24c288
+read compiler/unparse 9057-9590 fn	4511d5fca5dd080f38cdb1209c24c288
+read std/prelude/vec 4660-4775 fn <compiler/source:Span;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 9 6 2 | U U U U U U U U U | F F F F F F | b11 b000000 b000000000 b000000 | 0:,V0 1:,V0 2:,V0 3:,V0,B0 4:,V1 5:,V0 6:,V0,V1 7:,V0 8:,V0,B0 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:TopBranch&
+body 1 8 2 2 | U U U U U U U U | F F | b11 b00 b00000000 b00 | 0:,V0,B0 1:,V0,V1 2:,V0,B0 3:,V0,V1 4:,V0,B1 5:,V0,V1 6:,V0,B3 7:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:TopIf&
+body 1 28 28 2 | U U U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b11 b0000000000000000000000000000 b0000000000000000000000000000 b0000000000000000000000000000 | 0:,V0,V1 1:,V0,B2 2:,V0,V1 3:,V0,V1 4:,V0,V1 5:,V0,V1 6:,V0,B7 7:,V0 8:,V0,B8 9:,V0 10:,V0,B9 11:,V0 12:,V0,V1,V1,V1 13:,V0,B11 14:,V0,B15 15:,V0 16:,V0,B12 17:,V0 18:,V0,B11 19:,V0,V1 20:,V0,V1 21:,V0,V1 22:,V0,B18 23:,V0,V1 24:,V0,B19 25:,V0,V1 26:,V0,B20 27:,V0,V1 | | ||
+sum r b11 b11 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,compiler/ast:22689:22725 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/unparse:writer&	o0compiler/ast:Decl&
+out b11ce51ddfe1b929065ecf3ad87ec41f
+run compiler/unparse 1490-1710 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/unparse 0-0 ctor compiler/unparse:writer	6367f4678c430604cef89657df0c6879
+read compiler/unparse 2797-4419 fn	4511d5fca5dd080f38cdb1209c24c288
+read std/prelude/vec 12786-12977 fn <compiler/source:Span;>	44fdd55f051af23429be98afae112cb0
+hits 0
+body 1 3 9 5 | U U U | F F F F F F F F F | b10000 b000000000 b000 b000000000 | 0:,V1,V2,V3,B0 1:,B0,V0 2:,B0,B0 | | ||
+sum r b10000 b10000 b0111 b0000 b0000 b b b a,compiler/ast:22689:22725,compiler/unparse:1490:1710,compiler/unparse:1490:1710,compiler/unparse:1490:1710,compiler/unparse:1490:1710 t i t i i c0/i/i f0010
+hid fs1;47104:V1;47105:V2;47106:V3	o0Array<compiler/ast:Decl&>&	o0compiler/source:Names&	o0std/prelude/text:String&	o0compiler/diag:Diagnostics&	o0mut Array<compiler/source:Span>&	o1std/prelude/vec:Vec<compiler/source:Span>&
+out 72ff3dacd403fedb5c6e3a2f5cedf125
+run compiler/unparse 644-918 fn	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/unparse 0-0 ctor compiler/unparse:writer	6367f4678c430604cef89657df0c6879
+read compiler/unparse 1037-1162 fn	65ba3fbcb46060cbae773fc0da6722a6
+read compiler/unparse 2797-4419 fn	4511d5fca5dd080f38cdb1209c24c288
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 5 9 5 | U U U U U | F F F F F F F F F | b10001 b000000000 b00000 b000000000 | 0:,V1,V2,V3,B0 1:,V0 2:,B0,V0 3:,B0 4:,B0,V4 | | ||
+sum r b10001 b10001 b0111 b0000 b0000 b b b a,compiler/ast:22689:22725,compiler/unparse:644:918,compiler/unparse:644:918,compiler/unparse:644:918,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1;47104:V1;47105:V2;47106:V3	o0Array<compiler/ast:Decl&>&	o0compiler/source:Names&	o0std/prelude/text:String&	o0compiler/diag:Diagnostics&
+out 8deff2e26fd1105dc83aa57085fd4423
+run compiler/unparse global MaxIndent	
+ctx r1 g1 p0
+keys compiler/unparse=04424f04c1ac78dde44a421c9d2330556cec856f044ed89a3ae194c16312e7d6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 52720ce9dd332635b9cc498a4492cc1b
+end
+sum 35533-7596084713532512417

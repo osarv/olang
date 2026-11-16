@@ -1,0 +1,345 @@
+olang front record
+body global AT_EACCESS	known p
+body global AT_EMPTY_PATH	known p
+body global AT_FDCWD	known p
+body global AT_HANDLE_FID	known p
+body global AT_NO_AUTOMOUNT	known p
+body global AT_RECURSIVE	known p
+body global AT_REMOVEDIR	known p
+body global AT_STATX_DONT_SYNC	known p
+body global AT_STATX_FORCE_SYNC	known p
+body global AT_STATX_SYNC_AS_STAT	known p
+body global AT_STATX_SYNC_TYPE	known p
+body global AT_SYMLINK_FOLLOW	known p
+body global AT_SYMLINK_NOFOLLOW	known p
+body global DN_ACCESS	known p
+body global DN_ATTRIB	known p
+body global DN_CREATE	known p
+body global DN_DELETE	known p
+body global DN_MODIFY	known p
+body global DN_MULTISHOT	known p
+body global DN_RENAME	known p
+body global FALLOC_FL_ALLOCATE_RANGE	known p
+body global FALLOC_FL_COLLAPSE_RANGE	known p
+body global FALLOC_FL_INSERT_RANGE	known p
+body global FALLOC_FL_KEEP_SIZE	known p
+body global FALLOC_FL_NO_HIDE_STALE	known p
+body global FALLOC_FL_PUNCH_HOLE	known p
+body global FALLOC_FL_UNSHARE_RANGE	known p
+body global FALLOC_FL_ZERO_RANGE	known p
+body global FAPPEND	known p
+body global FASYNC	known p
+body global FD_CLOEXEC	known p
+body global FFSYNC	known p
+body global FNDELAY	known p
+body global FNONBLOCK	known p
+body global F_ADD_SEALS	known p
+body global F_DUPFD	known p
+body global F_DUPFD_CLOEXEC	known p
+body global F_EXLCK	known p
+body global F_GETFD	known p
+body global F_GETFL	known p
+body global F_GETLEASE	known p
+body global F_GETLK	known p
+body global F_GETLK64	known p
+body global F_GETOWN	known p
+body global F_GETOWN_EX	known p
+body global F_GETPIPE_SZ	known p
+body global F_GETSIG	known p
+body global F_GET_FILE_RW_HINT	known p
+body global F_GET_RW_HINT	known p
+body global F_GET_SEALS	known p
+body global F_LOCK	known p
+body global F_NOTIFY	known p
+body global F_OFD_GETLK	known p
+body global F_OFD_SETLK	known p
+body global F_OFD_SETLKW	known p
+body global F_OK	known p
+body global F_OWNER_GID	known p
+body global F_OWNER_PGRP	known p
+body global F_OWNER_PID	known p
+body global F_OWNER_TID	known p
+body global F_RDLCK	known p
+body global F_SEAL_EXEC	known p
+body global F_SEAL_FUTURE_WRITE	known p
+body global F_SEAL_GROW	known p
+body global F_SEAL_SEAL	known p
+body global F_SEAL_SHRINK	known p
+body global F_SEAL_WRITE	known p
+body global F_SETFD	known p
+body global F_SETFL	known p
+body global F_SETLEASE	known p
+body global F_SETLK	known p
+body global F_SETLK64	known p
+body global F_SETLKW	known p
+body global F_SETLKW64	known p
+body global F_SETOWN	known p
+body global F_SETOWN_EX	known p
+body global F_SETPIPE_SZ	known p
+body global F_SETSIG	known p
+body global F_SET_FILE_RW_HINT	known p
+body global F_SET_RW_HINT	known p
+body global F_SHLCK	known p
+body global F_TEST	known p
+body global F_TLOCK	known p
+body global F_ULOCK	known p
+body global F_UNLCK	known p
+body global F_WRLCK	known p
+body global LOCK_EX	known p
+body global LOCK_MAND	known p
+body global LOCK_NB	known p
+body global LOCK_READ	known p
+body global LOCK_RW	known p
+body global LOCK_SH	known p
+body global LOCK_UN	known p
+body global LOCK_WRITE	known p
+body global MAX_HANDLE_SZ	known p
+body global O_ACCMODE	known p
+body global O_APPEND	known p
+body global O_ASYNC	known p
+body global O_CLOEXEC	known p
+body global O_CREAT	known p
+body global O_DIRECT	known p
+body global O_DIRECTORY	known p
+body global O_DSYNC	known p
+body global O_EXCL	known p
+body global O_FSYNC	known p
+body global O_LARGEFILE	known p
+body global O_NDELAY	known p
+body global O_NOATIME	known p
+body global O_NOCTTY	known p
+body global O_NOFOLLOW	known p
+body global O_NONBLOCK	known p
+body global O_PATH	known p
+body global O_RDONLY	known p
+body global O_RDWR	known p
+body global O_RSYNC	known p
+body global O_SYNC	known p
+body global O_TMPFILE	known p
+body global O_TRUNC	known p
+body global O_WRONLY	known p
+body global POSIX_FADV_DONTNEED	known p
+body global POSIX_FADV_NOREUSE	known p
+body global POSIX_FADV_NORMAL	known p
+body global POSIX_FADV_RANDOM	known p
+body global POSIX_FADV_SEQUENTIAL	known p
+body global POSIX_FADV_WILLNEED	known p
+body global RWF_WRITE_LIFE_NOT_SET	known p
+body global RWH_WRITE_LIFE_EXTREME	known p
+body global RWH_WRITE_LIFE_LONG	known p
+body global RWH_WRITE_LIFE_MEDIUM	known p
+body global RWH_WRITE_LIFE_NONE	known p
+body global RWH_WRITE_LIFE_NOT_SET	known p
+body global RWH_WRITE_LIFE_SHORT	known p
+body global R_OK	known p
+body global SEEK_CUR	known p
+body global SEEK_END	known p
+body global SEEK_SET	known p
+body global SPLICE_F_GIFT	known p
+body global SPLICE_F_MORE	known p
+body global SPLICE_F_MOVE	known p
+body global SPLICE_F_NONBLOCK	known p
+body global SYNC_FILE_RANGE_WAIT_AFTER	known p
+body global SYNC_FILE_RANGE_WAIT_BEFORE	known p
+body global SYNC_FILE_RANGE_WRITE	known p
+body global SYNC_FILE_RANGE_WRITE_AND_WAIT	known p
+body global S_IFBLK	known p
+body global S_IFCHR	known p
+body global S_IFDIR	known p
+body global S_IFIFO	known p
+body global S_IFLNK	known p
+body global S_IFMT	known p
+body global S_IFREG	known p
+body global S_IFSOCK	known p
+body global S_IRGRP	known p
+body global S_IROTH	known p
+body global S_IRUSR	known p
+body global S_IRWXG	known p
+body global S_IRWXO	known p
+body global S_IRWXU	known p
+body global S_ISGID	known p
+body global S_ISUID	known p
+body global S_ISVTX	known p
+body global S_IWGRP	known p
+body global S_IWOTH	known p
+body global S_IWUSR	known p
+body global S_IXGRP	known p
+body global S_IXOTH	known p
+body global S_IXUSR	known p
+body global UTIME_NOW	known p
+body global UTIME_OMIT	known p
+body global W_OK	known p
+body global X_OK	known p
+baked AT_EACCESS [8 00020000]
+baked AT_EMPTY_PATH [8 00100000]
+baked AT_FDCWD [8 9cffffff]
+baked AT_HANDLE_FID [8 00020000]
+baked AT_NO_AUTOMOUNT [8 00080000]
+baked AT_RECURSIVE [8 00800000]
+baked AT_REMOVEDIR [8 00020000]
+baked AT_STATX_DONT_SYNC [8 00400000]
+baked AT_STATX_FORCE_SYNC [8 00200000]
+baked AT_STATX_SYNC_AS_STAT [8 00000000]
+baked AT_STATX_SYNC_TYPE [8 00600000]
+baked AT_SYMLINK_FOLLOW [8 00040000]
+baked AT_SYMLINK_NOFOLLOW [8 00010000]
+baked DN_ACCESS [8 01000000]
+baked DN_ATTRIB [8 20000000]
+baked DN_CREATE [8 04000000]
+baked DN_DELETE [8 08000000]
+baked DN_MODIFY [8 02000000]
+baked DN_MULTISHOT [8 0000008000000000]
+baked DN_RENAME [8 10000000]
+baked FALLOC_FL_ALLOCATE_RANGE [8 00000000]
+baked FALLOC_FL_COLLAPSE_RANGE [8 08000000]
+baked FALLOC_FL_INSERT_RANGE [8 20000000]
+baked FALLOC_FL_KEEP_SIZE [8 01000000]
+baked FALLOC_FL_NO_HIDE_STALE [8 04000000]
+baked FALLOC_FL_PUNCH_HOLE [8 02000000]
+baked FALLOC_FL_UNSHARE_RANGE [8 40000000]
+baked FALLOC_FL_ZERO_RANGE [8 10000000]
+baked FAPPEND [8 00040000]
+baked FASYNC [8 00200000]
+baked FD_CLOEXEC [8 01000000]
+baked FFSYNC [8 00101000]
+baked FNDELAY [8 00080000]
+baked FNONBLOCK [8 00080000]
+baked F_ADD_SEALS [8 09040000]
+baked F_DUPFD [8 00000000]
+baked F_DUPFD_CLOEXEC [8 06040000]
+baked F_EXLCK [8 04000000]
+baked F_GETFD [8 01000000]
+baked F_GETFL [8 03000000]
+baked F_GETLEASE [8 01040000]
+baked F_GETLK [8 05000000]
+baked F_GETLK64 [8 05000000]
+baked F_GETOWN [8 09000000]
+baked F_GETOWN_EX [8 10000000]
+baked F_GETPIPE_SZ [8 08040000]
+baked F_GETSIG [8 0b000000]
+baked F_GET_FILE_RW_HINT [8 0d040000]
+baked F_GET_RW_HINT [8 0b040000]
+baked F_GET_SEALS [8 0a040000]
+baked F_LOCK [8 01000000]
+baked F_NOTIFY [8 02040000]
+baked F_OFD_GETLK [8 24000000]
+baked F_OFD_SETLK [8 25000000]
+baked F_OFD_SETLKW [8 26000000]
+baked F_OK [8 00000000]
+baked F_OWNER_GID [8 02000000]
+baked F_OWNER_PGRP [8 02000000]
+baked F_OWNER_PID [8 01000000]
+baked F_OWNER_TID [8 00000000]
+baked F_RDLCK [8 00000000]
+baked F_SEAL_EXEC [8 20000000]
+baked F_SEAL_FUTURE_WRITE [8 10000000]
+baked F_SEAL_GROW [8 04000000]
+baked F_SEAL_SEAL [8 01000000]
+baked F_SEAL_SHRINK [8 02000000]
+baked F_SEAL_WRITE [8 08000000]
+baked F_SETFD [8 02000000]
+baked F_SETFL [8 04000000]
+baked F_SETLEASE [8 00040000]
+baked F_SETLK [8 06000000]
+baked F_SETLK64 [8 06000000]
+baked F_SETLKW [8 07000000]
+baked F_SETLKW64 [8 07000000]
+baked F_SETOWN [8 08000000]
+baked F_SETOWN_EX [8 0f000000]
+baked F_SETPIPE_SZ [8 07040000]
+baked F_SETSIG [8 0a000000]
+baked F_SET_FILE_RW_HINT [8 0e040000]
+baked F_SET_RW_HINT [8 0c040000]
+baked F_SHLCK [8 08000000]
+baked F_TEST [8 03000000]
+baked F_TLOCK [8 02000000]
+baked F_ULOCK [8 00000000]
+baked F_UNLCK [8 02000000]
+baked F_WRLCK [8 01000000]
+baked LOCK_EX [8 02000000]
+baked LOCK_MAND [8 20000000]
+baked LOCK_NB [8 04000000]
+baked LOCK_READ [8 40000000]
+baked LOCK_RW [8 c0000000]
+baked LOCK_SH [8 01000000]
+baked LOCK_UN [8 08000000]
+baked LOCK_WRITE [8 80000000]
+baked MAX_HANDLE_SZ [8 80000000]
+baked O_ACCMODE [8 03000000]
+baked O_APPEND [8 00040000]
+baked O_ASYNC [8 00200000]
+baked O_CLOEXEC [8 00000800]
+baked O_CREAT [8 40000000]
+baked O_DIRECT [8 00400000]
+baked O_DIRECTORY [8 00000100]
+baked O_DSYNC [8 00100000]
+baked O_EXCL [8 80000000]
+baked O_FSYNC [8 00101000]
+baked O_LARGEFILE [8 00000000]
+baked O_NDELAY [8 00080000]
+baked O_NOATIME [8 00000400]
+baked O_NOCTTY [8 00010000]
+baked O_NOFOLLOW [8 00000200]
+baked O_NONBLOCK [8 00080000]
+baked O_PATH [8 00002000]
+baked O_RDONLY [8 00000000]
+baked O_RDWR [8 02000000]
+baked O_RSYNC [8 00101000]
+baked O_SYNC [8 00101000]
+baked O_TMPFILE [8 00004100]
+baked O_TRUNC [8 00020000]
+baked O_WRONLY [8 01000000]
+baked POSIX_FADV_DONTNEED [8 04000000]
+baked POSIX_FADV_NOREUSE [8 05000000]
+baked POSIX_FADV_NORMAL [8 00000000]
+baked POSIX_FADV_RANDOM [8 01000000]
+baked POSIX_FADV_SEQUENTIAL [8 02000000]
+baked POSIX_FADV_WILLNEED [8 03000000]
+baked RWF_WRITE_LIFE_NOT_SET [8 00000000]
+baked RWH_WRITE_LIFE_EXTREME [8 05000000]
+baked RWH_WRITE_LIFE_LONG [8 04000000]
+baked RWH_WRITE_LIFE_MEDIUM [8 03000000]
+baked RWH_WRITE_LIFE_NONE [8 01000000]
+baked RWH_WRITE_LIFE_NOT_SET [8 00000000]
+baked RWH_WRITE_LIFE_SHORT [8 02000000]
+baked R_OK [8 04000000]
+baked SEEK_CUR [8 01000000]
+baked SEEK_END [8 02000000]
+baked SEEK_SET [8 00000000]
+baked SPLICE_F_GIFT [8 08000000]
+baked SPLICE_F_MORE [8 04000000]
+baked SPLICE_F_MOVE [8 01000000]
+baked SPLICE_F_NONBLOCK [8 02000000]
+baked SYNC_FILE_RANGE_WAIT_AFTER [8 04000000]
+baked SYNC_FILE_RANGE_WAIT_BEFORE [8 01000000]
+baked SYNC_FILE_RANGE_WRITE [8 02000000]
+baked SYNC_FILE_RANGE_WRITE_AND_WAIT [8 07000000]
+baked S_IFBLK [8 00600000]
+baked S_IFCHR [8 00200000]
+baked S_IFDIR [8 00400000]
+baked S_IFIFO [8 00100000]
+baked S_IFLNK [8 00a00000]
+baked S_IFMT [8 00f00000]
+baked S_IFREG [8 00800000]
+baked S_IFSOCK [8 00c00000]
+baked S_IRGRP [8 20000000]
+baked S_IROTH [8 04000000]
+baked S_IRUSR [8 00010000]
+baked S_IRWXG [8 38000000]
+baked S_IRWXO [8 07000000]
+baked S_IRWXU [8 c0010000]
+baked S_ISGID [8 00040000]
+baked S_ISUID [8 00080000]
+baked S_ISVTX [8 00020000]
+baked S_IWGRP [8 10000000]
+baked S_IWOTH [8 02000000]
+baked S_IWUSR [8 80000000]
+baked S_IXGRP [8 08000000]
+baked S_IXOTH [8 01000000]
+baked S_IXUSR [8 40000000]
+baked UTIME_NOW [8 ffffff3f]
+baked UTIME_OMIT [8 feffff3f]
+baked W_OK [8 02000000]
+baked X_OK [8 01000000]
+end
+sum c5f58f439857d51750fb24d4176cc561a5e76a976974aed26447712837031cbb

@@ -1,0 +1,410 @@
+olang scope record
+read #fa05acbfc0c54322c35292c31bc2f5c7 D9h mutable globals
+run std/bench 10902-11338 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	F64
+read std/prelude/float 931-2699 fn	8bfb474905285c2fb956460cfaa491d5
+hits 0
+body 1 4 12 1 | U V0 U V0 | F F F F F F F F F F F V0 | b1 b000000000001 b0000 b000000000000 | 0:,B0 2:,B0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,std/bench:11192:11233 t i t i i c0/i/i f0010
+hid fs1	o0F64	o0F64
+out 9e9d039b3e0c167f5228722bbf5eb319
+run std/bench 7680-7710 lambda in std/bench 7564-7799 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b00 b00 b00 b00 b00 b00 a t i t i i c0/i/i f0010
+hid fs1	o0F64	o0F64
+out 8afd54bad9d767508020c8936603d465
+run std/bench 7564-7799 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/bench 7680-7710 lambda in std/bench 7564-7799 fn	96070b3bce3409ca42c3372eb0e7bd68
+read std/prelude/array 8611-8894 fn <F64;?;>	947466db2cecba8f9f2f8e0081cc85e3
+hits 0
+body 1 3 3 1 | B0 B0 U | F F F | b0 b000 b000 b000 | 1: 2:,B0,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/bench:7564:7799 t i t i i c0/i/i f0010
+hid fs1	o0Array<F64>&
+out 63e9e5b78434186c6f2b91f469e18daa
+run std/bench 7980-8090 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/bench 7564-7799 fn	0431d8d16f6c669decce21a8cfd48c7d
+read std/prelude/number 14615-14884 fn <F64;>	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 5 6 1 | U U B0 B0 U | F F F F F F | b0 b000000 b00000 b000000 | 0:,V0 1: 4:,B0 | | ||
+sum r b0 b0 b1 b0 b0 b b b a,std/bench:7980:8090 t i t i i c0/i/i f0010
+hid fs1	o0Array<F64>&
+out 832acc17763b838edb0df1611775aa25
+run std/bench 2813-2893 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 15570-15822 fn <I64;>	753360899e792dedf06ee057d76e9c16
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/bench:2813:2893 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Measurement&
+out 7373df9eb3583ae00a5e864429f482a0
+run std/bench 2970-3066 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 15570-15822 fn <I64;>	753360899e792dedf06ee057d76e9c16
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/bench:2970:3066 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Measurement&
+out 36baf9bb9600f26cf6520599a2cb71cb
+run std/bench 3142-3235 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 15570-15822 fn <I64;>	753360899e792dedf06ee057d76e9c16
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/bench:3142:3235 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Measurement&
+out e49752f9b458333963487521af4209c3
+run std/bench 3322-3436 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 15570-15822 fn <I64;>	753360899e792dedf06ee057d76e9c16
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/bench:3322:3436 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Measurement&
+out ce703ad8148301b00615d06612441263
+run std/bench 4100-4256 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/float 931-2699 fn	8bfb474905285c2fb956460cfaa491d5
+hits 0
+body 1 4 1 1 | U U U U | F | b1 b0 b0000 b0 | 0:,V0 1:,V0 2:,V0 3:,V0 | | ||
+sum r b1 b1 b0 b0 b0 b b b a,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0F64
+out bdc1e93b0a080bd6050fc1295012c745
+run std/bench 3738-3979 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read std/bench 2970-3066 fn	701a2048a30760b6f560c2b60ea5c949
+read std/bench 3142-3235 fn	c30ccf7c641d0837e12822b49fda5e66
+read std/bench 3322-3436 fn	ef4c1923028829d36597956622ce42e8
+hits 0
+body 1 5 2 2 | U U V1 U V1 | F V1 | b01 b01 b00000 b00 | 0:,V0 1:,V0 3:,V0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/bench:3738:3979,std/bench:3780:3781 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Measurement&
+out a84418a2ca2b969f3013c36b475ff732
+run std/bench 3537-3648 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/bench 2813-2893 fn	91f9306a936d02a93507b1f1fe498bd9
+read std/bench 3738-3979 fn	4c2b25c767b508f57c95d8057f673634
+read std/bench 4100-4256 fn	6d4c65960ca9f309236d133660732834
+hits 0
+body 1 4 1 2 | U U U V1 | F | b01 b0 b0000 b0 | 0:,V0 1:,B0 2:,V0,B0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/bench:3537:3648,std/bench:3579:3646 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Measurement&
+out 19aaf694cbe4040f5f4063dbd56eb9c9
+run std/bench 4365-4412 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | U | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ce37947c8cb862057f4f664ae9b29d46
+run std/bench 5950-6124 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/number 15161-15491 fn <I64;>	753360899e792dedf06ee057d76e9c16
+read std/prelude/number 15570-15822 fn <I64;>	753360899e792dedf06ee057d76e9c16
+hits 0
+body 1 4 3 1 | U U U U | F F F | b0 b000 b0000 b000 | 0: 1: 2: 3: | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/bench:5950:6124 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Measurement&	o0I64	o0I64
+out a00a962835bc1bf48c247d976cebfdf6
+run std/bench 9157-9244 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/bench 2813-2893 fn	91f9306a936d02a93507b1f1fe498bd9
+hits 0
+body 1 2 5 2 | U V1 | F F F F F | b01 b00000 b00 b00000 | 0:,B2 | | ||
+sum r b01 b01 b1 b0 b0 b b b a,std/bench:9157:9244,std/bench:9200:9242 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Series&
+out 41e2434b3718413a7860e3b5f28070f0
+run std/bench 9286-9342 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/bench 7564-7799 fn	0431d8d16f6c669decce21a8cfd48c7d
+read std/bench 9157-9244 fn	5b56150361f5505ddd96bdc503db150b
+hits 0
+body 1 3 1 1 | U B0 U | F | b0 b0 b000 b0 | 0:,V0,B0 2:,B0 | | ||
+sum r b0 b0 b1 b0 b0 b b b a,std/bench:9286:9342 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Series&
+out ebf0ac9a85f42d07809b9732835141b9
+run std/bench 9378-9451 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	F64
+read -ctor	I64
+read std/bench 9157-9244 fn	5b56150361f5505ddd96bdc503db150b
+hits 0
+body 1 2 7 1 | U B0 | F F F F F F F | b0 b0000000 b00 b0000000 | 0:,V0,B0 | | ||
+sum r b0 b0 b1 b0 b0 b b b a,std/bench:9378:9451 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Series&
+out a3ced45f2aac535a020d6d2af0971e15
+run std/bench 9501-9557 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/bench 7980-8090 fn	e12c0952a35f11866f4599972aab6551
+read std/bench 9157-9244 fn	5b56150361f5505ddd96bdc503db150b
+hits 0
+body 1 3 1 1 | U B0 U | F | b0 b0 b000 b0 | 0:,V0,B0 2:,B0 | | ||
+sum r b0 b0 b1 b0 b0 b b b a,std/bench:9501:9557 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Series&
+out cbb18bbbe6fce6be61b151e0adc4781f
+run std/bench 9661-9878 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+mark std/bench 0-0 ctor std/bench:Series	0
+marks aee7a033a694db7ccecd375c5372da65
+read -ctor	I64
+read std/bench 0-0 ctor std/bench:Series	94e75e7eca2eea8ceac865d2b43328d4
+read std/bench 2813-2893 fn	91f9306a936d02a93507b1f1fe498bd9
+read std/bench 9286-9342 fn	6cbbedf61fe8f2726e96356feb590bb5
+read std/prelude/number 14615-14884 fn <F64;>	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 5 8 1 | U U U U U | F F F F F F F F | b0 b00000000 b00000 b00000000 | 0:,V0 1:,B2 2: 3:,V0 4: | | ||
+sum r b0 b0 b1 b0 b0 b b b a,std/bench:9661:9878 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Series&
+out bb474840090ab244e729bf9bd5280bf9
+run std/bench 9989-10175 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/bench 3738-3979 fn	4c2b25c767b508f57c95d8057f673634
+read std/bench 4100-4256 fn	6d4c65960ca9f309236d133660732834
+read std/bench 9286-9342 fn	6cbbedf61fe8f2726e96356feb590bb5
+read std/bench 9501-9557 fn	d6880c9236e9138029a67043ee385f57
+read std/bench 9661-9878 fn	c65ee84e54532616a75726948ce91cc1
+hits 0
+body 1 7 2 2 | U U U U U U V1 | F F | b01 b00 b0000000 b00 | 0:,V0 1:,V0 2:,B0 3:,V0 4:,B0 5:,B0,B0 | | ||
+sum r b01 b01 b1 b0 b0 b b b a,std/bench:9989:10175,std/bench:10051:10173 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Series&
+out cecb9b928638773996e1a9f28df43c86
+run std/bench 10300-10472 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/bench 10902-11338 fn	2006baa4eb2bffaba6ef8daf8ded9994
+read std/bench 9286-9342 fn	6cbbedf61fe8f2726e96356feb590bb5
+read std/bench 9501-9557 fn	d6880c9236e9138029a67043ee385f57
+read std/bench 9661-9878 fn	c65ee84e54532616a75726948ce91cc1
+hits 0
+body 1 5 2 2 | U U U U V1 | F F | b01 b00 b00000 b00 | 0:,V0 1:,V0 2:,V0 3:,B0 | | ||
+sum r b01 b01 b1 b0 b0 b b b a,std/bench:10300:10472,std/bench:10363:10470 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Series&
+out 2775f6ef03ddd20306a8b0001a9ac9ea
+run std/bench 10519-10798 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	std/prelude/display:Display
+read std/bench 10902-11338 fn	2006baa4eb2bffaba6ef8daf8ded9994
+read std/bench 9286-9342 fn	6cbbedf61fe8f2726e96356feb590bb5
+read std/bench 9378-9451 fn	653de192f533c211c9e5c69a29e2ad35
+read std/bench 9501-9557 fn	d6880c9236e9138029a67043ee385f57
+read std/bench 9661-9878 fn	c65ee84e54532616a75726948ce91cc1
+hits 0
+body 1 7 2 2 | U U U U U U V1 | F F | b01 b00 b0000000 b00 | 0:,V0 1:,V0 2:,V0 3:,B0 4:,V0 5:,B0 | | ||
+sum r b01 b01 b1 b0 b0 b b b a,std/bench:10519:10798,std/bench:10603:10795 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Series&
+out a3e76d439ec31a5b9c5018bbfbd54d58
+run std/bench 12012-12070 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/bench 7564-7799 fn	0431d8d16f6c669decce21a8cfd48c7d
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/bench:12012:12070 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Comparison&
+out 498e07602d095ff33c971ad962564cec
+run std/bench 12114-12178 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/bench 7980-8090 fn	e12c0952a35f11866f4599972aab6551
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b1 b0 b0 b b b a,std/bench:12114:12178 t i t i i c0/i/i f0010
+hid fs1	o0std/bench:Comparison&
+out e54a81baf4b6a0d5e5ac4cf9176859d5
+run std/bench 14140-14317 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 5 2 1 | B0 U V0 U V0 | F V0 | b1 b01 b00000 b00 | | | ||
+sum r b1 b1 b b b b b b a,std/bench:14247:14259 t i t i i c0/i/i f0010
+hid fs1
+out 8500df70e353f5a378091a7659939902
+run std/bench 0-0 ctor std/bench:Measurement	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+mark std/bench 0-0 ctor std/bench:Measurement	0,1,2,3,4
+marks 77c5ad5106d06e1dadd9a554cce4abf4
+read -ctor	I64
+hits 0
+body 1 0 10 1 | | F F F F F F F F F F | b0 b0000000000 b b0000000000 | | | ||
+sum r b0 b0 b00000 b00000 b00000 b b b a,std/bench:0:0 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0I64	o0I64	o0I64
+out a8e8e368897b29f039b8a7ade749ce02
+run std/bench 0-0 ctor std/bench:Series	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+mark std/bench 0-0 ctor std/bench:Series	0
+marks aee7a033a694db7ccecd375c5372da65
+read -ctor	Array<std/bench:Measurement>
+hits 0
+body 1 0 2 1 | | F V0 | b1 b00 b b00 | | | ||
+sum r b1 b1 b0 b0 b0 b b b a,std/bench:8239:8243 t i,-1 t i i c0/i/i f0010
+hid fs1	o0Array<std/bench:Measurement>
+out 6f0f73ef3a8b31279f4025f506f62e34
+run std/bench 19145-19167 lambda in std/bench 19079-19209 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+hits 0
+body 1 4 4 1 | U U U U | F F F F | b0 b0000 b0000 b0000 | 2:,V0 3:,V0 | | ||
+sum r b0 b0 b b b b0000 b0000 b0000 a,std/bench:19145:19167 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/vec:Vec<I64>&
+out d0fd6dde9d1e6d5aa07c1c8c9341c311
+run std/bench 4694-5050 fn <I64;>	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out c7299dabe14061ede080cb458931b15b
+run std/bench 19079-19209 fn	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/bench 19145-19167 lambda in std/bench 19079-19209 fn	c838e97b08bee731c1e48d7ae6eb63fd
+read std/bench 4694-5050 fn <I64;>	f7bb736ff25cfebe533b51ea3eff8305
+read std/bench 5125-5730 fn <?;>	8fe55d32a94272ea2ee96045b0bb9a4f
+read std/bench 6372-6641 fn <?;>	8fe57a998c12c39d803220142a54516f
+read std/bench 7030-7381 fn <?;>	7bbb21547406ecb6cb2ba25f5d2af55a
+read std/bench 8420-8676 fn <?;>	fe5edd550027769f4ff8ff2ccfc9065c
+read std/bench 8786-9110 fn <?;>	1aeef60bbd611451e9c347e867d54209
+read std/prelude/array 17668-17731 fn <I64;>	1cf54824239b5d01ed4111cee66d9405
+read std/prelude/vec 5431-5662 fn <I64;std/prelude/array:ArrayIter<I64>;?;>	28c13c53525c574bf1e1f61fdf6d8ff0
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+hits 0
+body 1 10 1 0 | U U B0 U B0 F U U U U | F | b b0 b0000000000 b0 | 1:,P,P 3:,P,B0 5:,B0 6:,B0,B0 7:,B0 8: 9:,B0 | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/array:ArrayIter<I64>	o1Array<I64>&	o0std/prelude/vec:Vec<I64>	o1mut std/prelude/array:ArrayIter<I64>&	o0std/time:Duration	o0I64
+out f19089c568a6521284e8cfcc0efb6706
+run std/bench global DefaultBudget	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 2723-2794 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0: | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f0d2e6858a4041ffaaa6b529ea4a7d7e
+run std/bench global MaxOps	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4fd40cc10b0ab6db7c35eab29913f2fb
+run std/bench global DefaultRuns	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5dbed17ef554f7389736736c78dbf3c8
+run std/bench 0-0 ctor std/bench:Comparison	
+ctx r1 g1 p0
+keys std/bench=87857b2ca9667d1e4901fcc5c2e59d3b9d2e4fc434d5ae0f1ee477b23a8a606e
+in 0
+mark std/bench 0-0 ctor std/bench:Comparison	0,1,2
+marks d8b463eebc32a57e15e15b053870b84b
+read -ctor	Array<F64>
+read std/bench 0-0 ctor std/bench:Series	395548687161ddf5fc373b478f412e30
+hits 0
+body 1 0 6 3 | | F F F F F V2 | b001 b000000 b b000000 | | | ||
+sum r;V0,V2,0,11926,11927,1,0,0;V1,V2,0,11929,11930,1,0,0 b001 b001 b000 b000 b000 b b b a,std/bench:0:0,std/bench:0:0,std/bench:11932:11938 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/bench:Series	o0std/bench:Series	o0Array<F64>
+out 893d49ea1470e0892e34b0ec412a6a8f
+end
+sum 17353-5663520677780344178

@@ -1,0 +1,112 @@
+olang scope record
+run std/prelude/hash 723-810 fn	
+ctx r1 g1 p0
+keys std/prelude/hash=ba16da7e2661753586d07ffd6d2f854c6ae1e45bb0e0ccb5e77cb41eda334057
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out 42fd13508edadd7e89cf125be3ed1dbe
+run std/prelude/hash 812-855 fn	
+ctx r1 g1 p0
+keys std/prelude/hash=ba16da7e2661753586d07ffd6d2f854c6ae1e45bb0e0ccb5e77cb41eda334057
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/hash 723-810 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out e3d6cfe3248d291b87ec3c9b8e9651f8
+run std/prelude/hash 856-899 fn	
+ctx r1 g1 p0
+keys std/prelude/hash=ba16da7e2661753586d07ffd6d2f854c6ae1e45bb0e0ccb5e77cb41eda334057
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/hash 723-810 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I32
+out 77fcdd9034fb6079223ef66f372e8962
+run std/prelude/hash 900-942 fn	
+ctx r1 g1 p0
+keys std/prelude/hash=ba16da7e2661753586d07ffd6d2f854c6ae1e45bb0e0ccb5e77cb41eda334057
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/hash 723-810 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U8
+out 80c62cc8dbf1a37e14206f1cc9f587b8
+run std/prelude/hash 943-985 fn	
+ctx r1 g1 p0
+keys std/prelude/hash=ba16da7e2661753586d07ffd6d2f854c6ae1e45bb0e0ccb5e77cb41eda334057
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/hash 723-810 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I8
+out 6386893a2fb9f5a46004c443749ecf76
+run std/prelude/hash 986-1029 fn	
+ctx r1 g1 p0
+keys std/prelude/hash=ba16da7e2661753586d07ffd6d2f854c6ae1e45bb0e0ccb5e77cb41eda334057
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/hash 723-810 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I16
+out a5910c247c0c0636fabe5e98958da425
+run std/prelude/hash 1030-1073 fn	
+ctx r1 g1 p0
+keys std/prelude/hash=ba16da7e2661753586d07ffd6d2f854c6ae1e45bb0e0ccb5e77cb41eda334057
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/hash 723-810 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U16
+out b04401bdf31e94ca49f8fd973356fb12
+run std/prelude/hash 1074-1117 fn	
+ctx r1 g1 p0
+keys std/prelude/hash=ba16da7e2661753586d07ffd6d2f854c6ae1e45bb0e0ccb5e77cb41eda334057
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/hash 723-810 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U32
+out 1353075fce33632b40b0b1c479977880
+run std/prelude/hash 1118-1166 fn	
+ctx r1 g1 p0
+keys std/prelude/hash=ba16da7e2661753586d07ffd6d2f854c6ae1e45bb0e0ccb5e77cb41eda334057
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/hash 723-810 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U64
+out 0927deb1a8421f5df49ad6a9222ab65b
+run std/prelude/hash 1243-1322 fn	
+ctx r1 g1 p0
+keys std/prelude/hash=ba16da7e2661753586d07ffd6d2f854c6ae1e45bb0e0ccb5e77cb41eda334057
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/hash 723-810 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 1 0 | U U | F | b b0 b00 b0 | 0: 1: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0Bool
+out 361ac1d6322b72f62bbe6a7cbd33956e
+end
+sum 3939-18194902071498263416

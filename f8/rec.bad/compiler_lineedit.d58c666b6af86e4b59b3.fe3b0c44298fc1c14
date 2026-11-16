@@ -1,0 +1,167 @@
+olang front record
+body fn 10163-10465	known p grows|0|-|-|..undos|6|0|compiler/lineedit|10232|10238|-1 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|10431|10440|-1
+body fn 10588-11007	known p grows|0|-|-|..undos|6|0|compiler/lineedit|10717|10721|-1 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|10717|10721|-1
+body fn 11009-11425	known p grows|0|-|-|..undos|6|0|compiler/lineedit|11271|11277|-1 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|11151|11155|-1
+body fn 11516-12411	known p grows|0|-|-|..undos|6|0|compiler/lineedit|12309|12315|-1
+body fn 12655-12971	known p
+body fn 12973-13187	known p grows|0|-|-|..undos|6|0|compiler/lineedit|13067|13073|-1
+body fn 13234-13610	known p grows|0|-|-|..Out.chars|10|0|compiler/lineedit|13347|13356|-1 grows|0|-|-|..undos|6|0|compiler/lineedit|13474|13480|-1
+body fn 13612-14372	known p grows|0|-|-|..undos|6|0|compiler/lineedit|13873|13879|-1 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|14325|14329|-1
+body fn 14420-14585	known p grows|0|-|-|..Out.chars|10|0|compiler/lineedit|14513|14517|-1
+body fn 14620-14721	known p
+body fn 14722-14822	known p
+body fn 14930-15130	known p
+body fn 15225-15445	known p
+body fn 15447-15623	known p
+body fn 15625-15859	known p
+body fn 15940-16138	known p grows|0|-|-|..undos|6|0|compiler/lineedit|16028|16032|-1
+body fn 16140-16249	known p
+body fn 16251-16443	known p grows|0|-|-|..undos|6|0|compiler/lineedit|16319|16323|-1
+body fn 16512-16699	known p grows|0|-|-|..undos|6|0|compiler/lineedit|16601|16605|-1
+body fn 16736-16981	known p
+body fn 17067-17433	known p
+body fn 17435-18179	known p grows|0|-|-|..undos|6|0|compiler/lineedit|18170|18174|-1 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|18170|18174|-1
+body fn 18181-18313	known p
+body fn 18380-18606	known p
+body fn 18624-18776	known p
+body fn 18855-18986	known p
+body fn 19045-19519	known p
+body fn 19521-19652	known p
+body fn 19654-20254	known p grows|0|-|-|..Out.chars|10|0|compiler/lineedit|19773|19782|-1 grows|0|-|-|..undos|6|0|compiler/lineedit|19863|19870|-1
+body fn 20256-20387	known p
+body fn 20389-20644	known p grows|0|-|-|..undos|6|0|compiler/lineedit|20538|20544|-1
+body fn 20760-21324	known p grows|0|-|-|..undos|6|0|compiler/lineedit|20864|20873|-1
+body fn 21326-21847	known p grows|0|-|-|..undos|6|0|compiler/lineedit|21471|21477|-1
+body fn 21849-22744	known p grows|0|-|-|..undos|6|0|compiler/lineedit|22021|22027|-1
+body fn 22746-22916	known p
+body fn 23075-23441	known p grows|0|-|-|..undos|6|0|compiler/lineedit|23325|23331|-1
+body fn 23443-23823	known p grows|0|-|-|..undos|6|0|compiler/lineedit|23750|23756|-1
+body fn 23923-24148	known p grows|0|-|-|..undos|6|0|compiler/lineedit|24080|24086|-1
+body fn 24249-24465	known p
+body fn 24529-24628	known p
+body fn 24630-24919	known p
+body fn 25081-25614	known p grows|0|-|-|..History|8|0|compiler/lineedit|25308|25312|-1 keeps|1|-|-|.|0|0|compiler/lineedit|25105|25105|0
+body fn 25722-26038	known p grows|0|-|-|..History|8|0|compiler/lineedit|25882|25886|-1 keeps|1|-|-|.|0|0|compiler/lineedit|25750|25750|0
+body fn 26040-26426	known p
+body fn 26575-26784	known p
+body fn 26880-27158	known p
+body fn 27211-27392	known p
+body fn 27471-27613	known p
+body fn 27615-27752	known p
+body fn 27990-28879	known p,0 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|28598|28602|-1 grows|0|-|-|..pending|8|0|compiler/lineedit|28797|28801|-1 grows|0|-|-|..undos|6|0|compiler/lineedit|28823|28834|-1 grows|0|-|-|..History|8|0|compiler/lineedit|28823|28834|-1
+body fn 28881-28965	known p,0 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|28928|28934|-1 grows|0|-|-|..History|8|0|compiler/lineedit|28928|28934|-1
+body fn 28967-29161	known p grows|0|-|-|..pending|8|0|compiler/lineedit|29129|29136|-1
+body fn 29240-29767	known p,0 grows|0|-|-|..undos|6|0|compiler/lineedit|29366|29370|-1 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|29366|29370|-1 grows|0|-|-|..History|8|0|compiler/lineedit|29582|29586|-1
+body fn 29828-29948	known p grows|0|-|-|..undos|6|0|compiler/lineedit|29925|29929|-1 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|29925|29929|-1
+body fn 29950-30065	known p
+body fn 3570-3622	known p
+body fn 3624-3728	known p
+body fn 3730-3834	known p
+body fn 3884-3991	known p
+body fn 3993-4132	known p
+body fn 4134-4260	known p
+body fn 4312-4496	known p
+body fn 4589-4810	known p
+body fn 4932-5141	known p
+body fn 5205-5405	known p
+body fn 5458-5612	known p
+body fn 5650-5872	known p
+body fn 5923-6165	known p
+body fn 6230-6368	known p
+body fn 6427-6565	known p
+body fn 6567-6622	known p
+body fn 6624-6829	known p
+body fn 6852-6994	known p,0
+body fn 6996-7166	known p
+body fn 7303-8489	known p grows|0|-|-|..Out.chars|10|0|compiler/lineedit|7355|7359|-1
+body fn 8541-8598	known p grows|0|-|-|..Out.chars|10|0|compiler/lineedit|8590|8594|-1
+body fn 8600-8799	known p
+body fn 8900-9070	known p,0 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|8992|8996|-1 grows|0|-|-|..History|8|0|compiler/lineedit|9044|9052|-1
+body fn 9188-9538	known p grows|0|-|-|..undos|6|0|compiler/lineedit|9451|9457|-1 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|9530|9534|-1
+body fn 9639-9892	known p grows|0|-|-|..undos|6|0|compiler/lineedit|9732|9736|-1 grows|0|-|-|..Out.chars|10|0|compiler/lineedit|9732|9736|-1
+body fn 9990-10161	known p grows|0|-|-|..Out.chars|10|0|compiler/lineedit|10153|10157|-1
+body global Keep	known p
+baked Keep [8 e803000000000000]
+sig Accept@8900 fn&(mut Editor&) String&
+sig Begin@8541 fn&(mut Editor&)
+sig Break@9188 fn&(mut Editor&)
+sig Choose@27211 fn&(Bool) ? Error
+sig ConfigPath@26575 fn&() String
+sig Editor.testing@29950 fn&(Bool) Editor
+sig Feed@9639 fn&(mut Editor&, U8) Event
+sig HistoryPath@24249 fn&() String
+sig Idle@9990 fn&(mut Editor&)
+sig Load@25081 fn&(mut Editor&, String&)
+sig Read@27990 fn&(mut Editor&, fn&(t String&) Bool) String& ? Ended
+sig Remember@25722 fn&(mut Editor&, String&)
+sig ViChosen@26880 fn&() Bool
+sig acceptSearch@18181 fn&(mut Editor&)
+sig again@18380 fn&(mut Editor&, Bool)
+sig appendLine@26040 fn&(String&, String&)
+sig backBy@22746 fn&(Editor&, I64) I64
+sig beginSearch@16736 fn&(mut Editor&, Bool, Bool)
+sig bracket@12655 fn&(mut Editor&, Bool) Event
+sig cells@3884 fn&(String&) I64
+sig clamp@18855 fn&(mut Editor&)
+sig class@4932 fn&(Char) I64
+sig columns@27471 fn&() I64
+sig command@21849 fn&(mut Editor&, Char, I64) Event
+sig control@13612 fn&(mut Editor&, Char)
+sig decode@24630 fn&(String&) String
+sig done@28881 fn&(mut Editor&) String&
+sig down@15225 fn&(mut Editor&)
+sig draw@7303 fn&(mut Editor&)
+sig encode@24529 fn&(String&) String
+sig enter@23075 fn&(mut Editor&, Char)
+sig escape@10588 fn&(mut Editor&, Char) Event
+sig feedPending@29240 fn&(mut Editor&, fn&(t String&) Bool) String?& ? Ended
+sig fill@28967 fn&(mut Editor&) ? Ended
+sig find@17067 fn&(mut Editor&, I64)
+sig firstWord@19521 fn&(String&, I64) I64
+sig flush@27615 fn&(mut Editor&)
+sig incomplete@4589 fn&(String&, I64) Bool
+sig indexOf@6624 fn&(String&, String&) I64
+sig insert@16251 fn&(mut Editor&, String&)
+sig interrupt@14420 fn&(mut Editor&) Event
+sig isCont@3570 fn&(Char) Bool
+sig key@13234 fn&(mut Editor&, Char) Event
+sig left@14620 fn&(Editor&) I64
+sig lineEnd@3730 fn&(String&, I64) I64
+sig lineStart@3624 fn&(String&, I64) I64
+sig meta@11009 fn&(mut Editor&, Char) Event
+sig moved@20256 fn&(Editor&, Char, I64) I64 ? NotMotion
+sig newer@15625 fn&(mut Editor&)
+sig nextAt@3993 fn&(String&, I64) I64
+sig normalKey@19654 fn&(mut Editor&, Char) Event
+sig offsetOf@4312 fn&(String&, I64, I64, I64) I64
+sig older@15447 fn&(mut Editor&)
+sig one@6567 fn&(Char) String
+sig operate@20760 fn&(mut Editor&, Char, I64) Event
+sig paste@23923 fn&(mut Editor&, Bool, I64)
+sig pasted@12973 fn&(mut Editor&, Char) Event
+sig prevAt@4134 fn&(String&, I64) I64
+sig promptOf@6852 fn&(Editor&, I64) String&
+sig remove@16512 fn&(mut Editor&, I64, I64, Bool)
+sig replace@20389 fn&(mut Editor&, Char) Event
+sig reset@8600 fn&(mut Editor&)
+sig right@14722 fn&(Editor&) I64
+sig save@15940 fn&(mut Editor&, I64)
+sig searchKey@17435 fn&(mut Editor&, Char) Event
+sig sequence@11516 fn&(mut Editor&, String&) Event
+sig status@6996 fn&(Editor&) String
+sig step@10163 fn&(mut Editor&, Char) Event
+sig target@19045 fn&(Editor&, Char, I64) I64 ? NotMotion
+sig toNormal@18624 fn&(mut Editor&)
+sig toggle@23443 fn&(mut Editor&, I64)
+sig typed@29828 fn&(mut Editor&, String&) Event
+sig undo@16140 fn&(mut Editor&)
+sig up@14930 fn&(mut Editor&)
+sig wholeLine@21326 fn&(mut Editor&, Char) Event
+sig wordBack@5205 fn&(String&, I64) I64
+sig wordEnd@5458 fn&(String&, I64) I64
+sig wordHere@6230 fn&(String&, I64) I64
+sig wordLast@5923 fn&(String&, I64) I64
+sig wordNext@5650 fn&(String&, I64) I64
+sig wordsHere@6427 fn&(Editor&, I64) I64
+end
+sum a499bdcfbfc98fb92524bdfbc001fc87fcebbad36e9087ee59ed68c42180a733

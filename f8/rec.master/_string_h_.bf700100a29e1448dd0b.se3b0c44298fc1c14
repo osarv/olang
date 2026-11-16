@@ -1,0 +1,17 @@
+olang scope record
+run <string.h> 0-0 ctor <string.h>:c___locale_struct	
+ctx r1 g1 p0
+keys <string.h>=bf700100a29e1448dd0ba98b1dff0d85687feae57ac5da6d069df5099405e333
+in 0
+mark <string.h> 0-0 ctor <string.h>:c___locale_struct	0,1,2,3,4
+marks 8c3bb218b1b2655be0401811167d5194
+read -ctor	Array<<string.h>:c___locale_data?&, 13>
+read -ctor	Array<std/prelude/text:CStr?&, 13>
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 2 5 1 | V0 V0 | F F F F F | b1 b00000 b00 b00000 | | | ||
+sum r b1 b1 b b b b b b a,<string.h>:3541:3569 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out faa9ea03549d0e745306e929dcd37e14
+end
+sum 612-16987607376991181091

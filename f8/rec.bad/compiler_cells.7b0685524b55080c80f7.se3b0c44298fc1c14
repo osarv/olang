@@ -1,0 +1,493 @@
+olang scope record
+run compiler/cells 0-0 ctor compiler/cells:Worker	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+mark compiler/cells 0-0 ctor compiler/cells:Worker	0,1,2,3,4,5,6,7,8
+marks 20fc75d0a38c7c28104e327a577edc28
+read -ctor	Bool
+read -ctor	I32
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<U8>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 1 10 1 | U | F F F F F F F F F F | b1 b0000000000 b0 b0000000000 | 0:,V0 | | ||
+sum r b1 b1 b0 b0 b0 b b b a,std/prelude/vec:3184:3188 t i,-1,-1,-1,-1,-1,-1,-1,-1,0 t,U i i c0/i/i f0010
+hid fs1;1280:U	o0Bool
+out bd47bc77a2503ca47449d573ade64195
+run compiler/cells 11727-11777 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/cells:11727:11777 t i t i i c0/i/i f0010
+hid fs1	o0compiler/cells:Worker&
+out bfd6dc25098f4681c8d145bf4d20b17d
+run compiler/cells 1916-1971 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/build 63591-63903 fn	5134dfc91324ac2f35eef33b2a303c55
+hits 0
+body 1 1 0 1 | U | | b1 b b0 b | 0:,B0,V0 | | ||
+sum r b1 b1 b b b b b b a,compiler/build:63713:63735 t i t i i c0/i/i f0010
+hid fs1
+out 43fac498f0246ada48e9e2ff52612a37
+run compiler/cells 2083-2409 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	0,1,2,3
+marks e003ef260a67c96e7d891cd5d16d9519
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/cells 1916-1971 fn	663cb3459df8727fb115cd0ff338cdc9
+hits 0
+body 1 4 2 2 | U V1 U V1 | F V1 | b01 b00 b0000 b01 | 0:,V1 2:,V1 | | ||
+sum r;V0,V1,0,2156,2176,0,0,0 b01 b01 b0 b0 b0 b b b a,compiler/cells:2083:2409,compiler/cells:2137:2151 t i t i i c0/i/i f1010
+hid fs1	o0compiler/build:Config&
+out b22c8db3055320a40f6131c9ddbba2d2
+run compiler/cells 4766-5189 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+mark std/os 0-0 ctor std/os:Output	1,2
+marks dd8fdc8a390eadeefb297e087c7fa7a4
+read compiler/diag 11636-11832 fn	c9afaf552fbc1dc124f59e9a1b2df5f2
+read compiler/msgs 40431-40534 fn	066d7604de0d7e7325cec8f3492c8531
+read std/io 3193-3244 fn <std/prelude/text:String;>	f7bb736ff25cfebe533b51ea3eff8305
+read std/os 0-0 ctor std/os:Output	9b4d726e7e22a7e25dc12557d02f3b4f
+read std/os 8570-8787 fn	aad366597a709c1a43fc4ae152c19621
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+hits 0
+body 1 8 4 3 | U U U U B0 U U U | F F F F | b101 b0000 b00000000 b0000 | 0:,V0,V0 1:,V0,B0,B0,B0 2:,V1,V2 3:,V2,V2 5: 6:,V1,V2 7:,V2,V2 | | ||
+sum r b101 b101 b001 b001 b001 b b b a,std/prelude/vec:12852:12863,compiler/cells:4766:5189,compiler/msgs:40501:40531 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/text:String&	o0mut compiler/diag:Diagnostics&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/os:Output	o1mut Array<std/prelude/text:String&>&	o1Array<U8>&	o1Bool	o1std/prelude/text:String&	o0compiler/diagmsg:Msg	o1std/prelude/text:String&	o0compiler/diagmsg:Msg	o1std/prelude/text:String&
+out 648c19e991678aaad6bc86232f845f20
+run compiler/cells 10257-11693 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	0,1,2
+mark compiler/build 0-0 ctor compiler/build:Program	2
+mark compiler/target 0-0 ctor compiler/target:Target	1
+marks 9167a040db60f850a0957611f5233adf
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 0-0 ctor compiler/build:Program	2285f538dc4073c57c417f46cd5eef4c
+read compiler/build 0-0 ctor compiler/build:Unit	1f881d673d7675390f8a90a5c7634687
+read compiler/build 12953-13969 fn	8d66829d9d5747c65e06f0c37835e897
+read compiler/build 2127-2212 fn	d2c452a227dc1abe5d9a4b2ebe743d4f
+read compiler/build 32448-33965 fn	0becf1734b368cafe5fc984644487211
+read compiler/cells 4766-5189 fn	f850c8777c820f1d88c6fd7c6348892d
+read compiler/diag 28187-28276 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/target 0-0 ctor compiler/target:Target	3cef9679ec8a2059795bc48c0a14b8cb
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/os 19982-20087 fn	341d1a291287e9e310934f1bd2261f0d
+read std/os 20635-21096 fn	ad919ca41158de6566af13197e4a6f4d
+read std/os 23785-23892 fn	18511e7d2ff91fd2a6b62c7e026c6869
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <compiler/build:Unit;>	037faee32f508921f991db6223f2f61a
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 53 29 3 | U U V1 V1 V1 V1 U U V1 V1 U U U B0 U U B4 B4 U U B0 U B0 V2 U B0 U U B0 U U U B0 U U U U U U U U U U U B0 B0 B0 B0 U U U U U | F F V1 V1 V1 V1 V1 F F F F F V2 F F F F F F F F F F F F F F F F | b111 b00000000000010000000000000000 b00000000000000000000000000000000000000000000000000000 b00000000000000000000000000000 | 0:,V0 1:,V1 6:,V1,P,V1,V1,V1,V1,V1,V1 7:,V1 10:,V1,V1,V1 11:,V1,V1 12:,V0,V1,V1,V1 13:,B0 14:,V1 15:,V1,V1 18:,B0,B4 19:,B0,B0 21:,B0,B0 24:,V2 26:,B0,B0 29:,B0 30:,B0,V0 31:,V0,B0 33:,B0 34:,B0,B0 35:,B0,B0 36:,B0,B0 37:,B0,B0 38:,V1 39:,V1,V1 40:,B0,V1 41:,V1 42:,V1,V1 43:,B0,V1 48:,B0,B0 49:,V1,B0 50:,B0,B0 51:,B0,V2,V1 52:,B0,V2 | | ||
+sum r;V0,V1,0,10830,10834,0,0,0 b111 b111 b11 b11 b11 b b b a,compiler/target:17425:17442,compiler/cells:10426:10441,compiler/cells:10941:11009 t i t i i c0/i/i f0010
+hid fs1;194304:V1;194305:U;194306:V1;1280:U	o0mut compiler/build:Config&	o0mut compiler/diag:Diagnostics&	o0fn?[compiler/cells:BuildFn](std/prelude/text:String&, std/prelude/text:String&, Array<std/prelude/text:String&>&, Array<std/prelude/text:String&>&, Array<I64>&, mut compiler/build:Config&, mut compiler/build:Program&, mut compiler/diag:Diagnostics&) ? compiler/build:Failed ![keeps 0 in 5, keeps 1 in 5, keeps 2 in 5, keeps 3 in 5, keeps 4 in 5, keeps 7 in 5, keeps 7 in 6]{r,t,sh,ps,ls,c,p,d}	o0fn[compiler/cells:BuildFn](std/prelude/text:String&, std/prelude/text:String&, Array<std/prelude/text:String&>&, Array<std/prelude/text:String&>&, Array<I64>&, mut compiler/build:Config&, mut compiler/build:Program&, mut compiler/diag:Diagnostics&) ? compiler/build:Failed ![keeps 0 in 5, keeps 1 in 5, keeps 2 in 5, keeps 3 in 5, keeps 4 in 5, keeps 7 in 5, keeps 7 in 6]{r,t,sh,ps,ls,c,p,d}	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/build:Config&	o1compiler/build:Program&	o1mut compiler/diag:Diagnostics&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/build:Config&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 2fb011ebbba93fd501b46a85516d31cf
+run compiler/cells 8909-10173 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I32
+read -ctor	I64
+read compiler/cells 10257-11693 fn	b137021d93ca246a393d80f9ce08d008
+read compiler/diag 0-0 ctor compiler/diag:Diagnostics	4e493a3366ee9c5cf50f8b639584a034
+read compiler/diag 28981-29710 fn	94801549df4c0d56fe094641ac9d7658
+read compiler/session 52495-52533 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/session 52625-52678 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/session 52760-52880 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/session 52882-52933 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/session 53011-53062 fn	753360899e792dedf06ee057d76e9c16
+read compiler/session 53502-53542 fn	6d787cc7b01b150765dce615d1f27491
+read std/os 9791-10527 fn	c3cb226dddc43c03807399a0a4a98577
+read std/prelude/text 6638-6813 fn	c32509e8a76db962290b03809b10d6a8
+hits 0
+body 1 26 30 3 | U B0 U U B1 U V2 U U U U U U U U U U U U U B4 U U B10 B10 U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b001 b000000000000000000000000000000 b00000000000000000000000000 b000000000000000000000000000000 | 0:,B0 2:,B0,B0,B0 3:,B0,B1 5:,B1,B1 7: 8: 9: 10: 11: 12: 13: 14: 15: 16: 17: 18: 21:,B0,B4 22: 25: | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/cells:8909:10173,compiler/cells:8909:10173,compiler/cells:9110:9162 t i t i i c0/i/i f0010
+hid fs1;17664:U	o0mut compiler/cells:Worker&	o0mut compiler/build:Config&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 3f8e084b50a62bb7d0dc23ce6141972b
+run compiler/cells 0-0 ctor compiler/cells:Plan	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+mark compiler/cells 0-0 ctor compiler/cells:Plan	0,1,2
+marks 3f5a7de33d19e5163f27ee36e5f0c663
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String&, Bool>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>	0310b0c06b952de221ad2256fb7a89d8
+hits 0
+body 1 3 3 1 | U U U | F F F | b1 b000 b000 b000 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/map:2600:2604 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 0190f750d3804df54c9df36d5615be54
+run compiler/cells 6353-6643 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 7666-7764 fn <std/prelude/text:String&;Bool;>	fe003e99e4cf69075d6f5a8ac912acc0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 3214-3355 fn	f31bc2073e7a5166cb23a1806dc8cfdc
+hits 0
+body 1 5 3 2 | U U U U U | F F F | b00 b000 b00000 b000 | 0:,V0,B0 1:,V0,B0 2:,V0,B0 3:,V0,B0 4:,V1,V0 | | ||
+sum r b00 b00 b10 b00 b00 b b b a,compiler/cells:6353:6643,compiler/cells:6353:6643 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0compiler/cells:Plan&
+out 4366020afbbdeb5130c59d1f7983f913
+run compiler/cells 6839-6959 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 1123-1188 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 1 0 | U U | F | b b0 b00 b0 | 0: 1: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:Char
+out 427053e9ea826c90f4011aff7783bdd6
+run compiler/cells 6706-6837 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/cells 6839-6959 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 3 2 | U | F F F | b00 b000 b0 b000 | 0: | | ||
+sum r;V0,V1,0,6819,6835,0,1,0 b00 b00 b10 b00 b00 b b b a,compiler/cells:6706:6837,compiler/cells:6706:6837 t i t i i c0/i/i f1010
+hid fs1	o0std/prelude/text:String&	o0I64
+out cbfa9bdadfc79ee77b265f25e398524d
+run compiler/cells 7020-7440 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/cells 6706-6837 fn	1eaeda0b9ca8bdee8db80b997b5215e5
+read std/prelude/array 1568-1802 fn <std/prelude/text:Char;>	b79aa6ec5c1a91330451c13ebaf035ce
+read std/prelude/map 3468-3514 fn <std/prelude/text:String&;std/prelude/text:String&;>	86f91b0f497c73631b7e92cff89727d4
+read std/prelude/map 7053-7137 fn <std/prelude/text:String&;std/prelude/text:String&;>	afab4e7cf33319d9b4752b5bbe842ce0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 7 6 3 | U U U U U U U | F F F F F F | b100 b000000 b0000000 b000000 | 0:,V2 1:,V1,B0 2:,V0,V1 3:,V0 4:,V1,V1 5:,V2,V1,V2 6:,V0,O0 | | || 4:rN38
+sum r b100 b100 b110 b000 b000 b b b a,std/prelude/vec:4512:4530,compiler/cells:7020:7440,compiler/cells:7020:7440 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0std/prelude/text:String&	o0std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o0std/prelude/text:String&	o1std/prelude/text:String&	o1I64	o0std/prelude/text:String&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1std/prelude/text:String&
+out 71b05892c9c26216f332a5ba1ba42da4
+run compiler/cells 5420-6222 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Bool
+read compiler/cells 6353-6643 fn	36e527ead88879e802b1e4e4c8f91980
+read compiler/cells 6706-6837 fn	1eaeda0b9ca8bdee8db80b997b5215e5
+read compiler/cells 7020-7440 fn	8458feda1c7b4b61516c0ea8d470b723
+read std/prelude/map 7053-7137 fn <std/prelude/text:String&;std/prelude/text:String&;>	afab4e7cf33319d9b4752b5bbe842ce0
+read std/prelude/map 7666-7764 fn <std/prelude/text:String&;Bool;>	fe003e99e4cf69075d6f5a8ac912acc0
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 10176-10230 fn	ecc907d1b80ad51f7de503ad33f4d4b6
+read std/prelude/text 10447-10795 fn	1f5be6d0ca3785e37b467f570786f397
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 18 8 3 | B0 U U U U U U U U U U U B8 B8 U U U U | F F F F F F F F | b001 b00000000 b000000000000000000 b00000000 | 0:,B0 1:,V0,V0 2:,V0,V0 3:,V0,B2 4:,V0,B2 5:,B0,B4 6:,V0,B2 7:,V0,V1 8:,V0,B2 9:,V0,V0 10:,V1,V0 11:,V1,V0,B8 14:,B0,B8 15:,B0,V0,V1 16:,B0 17:,B0,V2 | | ||
+sum r b001 b001 b10 b00 b00 b b b a,compiler/cells:5420:6222,compiler/cells:5420:6222,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0compiler/cells:Plan&	o0std/prelude/text:LineIter	o1std/prelude/text:String&	o0std/prelude/text:String&	o1mut std/prelude/text:LineIter&	o0std/prelude/text:String&	o1std/prelude/text:String&	o1I64	o0std/prelude/text:String&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1std/prelude/text:String&
+out 4cac61e5bfcd95c09c6bea93d9bb084a
+run compiler/cells 3052-4687 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+mark compiler/build 0-0 ctor compiler/build:Config	0,1
+mark compiler/build 0-0 ctor compiler/build:Program	1,2
+mark compiler/build 0-0 ctor compiler/build:Unit	2,3
+marks 9fd4ed5d8902fc5b7b9ecc595396a43f
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/build 0-0 ctor compiler/build:Program	2285f538dc4073c57c417f46cd5eef4c
+read compiler/build 0-0 ctor compiler/build:Unit	1f881d673d7675390f8a90a5c7634687
+read compiler/build 12953-13969 fn	8d66829d9d5747c65e06f0c37835e897
+read compiler/build 32448-33965 fn	0becf1734b368cafe5fc984644487211
+read compiler/build 9858-10165 fn	0601b817b42236d7bd5e463265a92f96
+read compiler/cells 4766-5189 fn	f850c8777c820f1d88c6fd7c6348892d
+read compiler/cells 5420-6222 fn	720b0774ef86fb35c13b6564c55bf670
+read compiler/diag 28187-28276 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/os 20635-21096 fn	ad919ca41158de6566af13197e4a6f4d
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <compiler/build:Unit;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 7015-7075 fn <compiler/build:Unit;>	4a4343fdf52e09081b3e1058930d60ac
+hits 0
+body 1 38 38 9 | U V8 U U U U U V8 U U U U U U B0 U U U B0 U B0 B0 B0 B0 U U U U U U U B20 B20 U U U U U | F F F F F F F F F V8 V8 F F F F F F F F F F F F F F F F F F F F F F F F F F F | b111111001 b00000000000000000000000000000000000000 b00000000000000000000000000000000000000 b00000000000000000000000000000000000000 | 0:,V8 2:,V1,V2,V3,V4,V5,V8,V8,V8 3:,V8 4:,V8 5:,V8,V8 6:,V8,V6,V8 8:,V0 9:,V0,V8,V8,V8 10:,B0 11:,B0 12:,B0,V0 13:,V0,B0 15:,B0 16:,B0,B0 17:,B0,B0 19:,B0,B0 24:,B0,B0 25:,V8 26:,V8,V8 27:,B0,V8 28:,V8 29:,V8,V8 30:,B0,V8 33:,B0,P 34:,V8,B0 35:,B0,B0 36:,B0,V7,V8 37:,B0 | | ||
+sum r;V0,V8,0,3813,3817,0,0,0;V1,V8,0,3393,3451,0,0,0;V2,V8,0,3393,3451,0,0,0;V3,V8,0,3393,3451,0,0,0;V4,V8,0,3393,3451,0,0,0;V5,V8,0,3393,3451,0,0,0 b111111001 b111111001 b111111011 b100000001 b100000001 b b b a,compiler/target:17425:17442,compiler/cells:3397:3404,compiler/cells:3397:3404,compiler/cells:3397:3404,compiler/cells:3397:3404,compiler/cells:3397:3404,compiler/cells:3052:4687,compiler/cells:3052:4687,compiler/cells:3259:3274 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/build:Config&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o0Array<std/prelude/text:String&>&	o0Array<I64>&	o0compiler/cells:Plan&	o0std/prelude/text:String&	o0mut compiler/diag:Diagnostics&	o0fn?[compiler/cells:BuildFn](std/prelude/text:String&, std/prelude/text:String&, Array<std/prelude/text:String&>&, Array<std/prelude/text:String&>&, Array<I64>&, mut compiler/build:Config&, mut compiler/build:Program&, mut compiler/diag:Diagnostics&) ? compiler/build:Failed ![keeps 0 in 5, keeps 1 in 5, keeps 2 in 5, keeps 3 in 5, keeps 4 in 5, keeps 7 in 5, keeps 7 in 6]{r,t,sh,ps,ls,c,p,d}	o0fn[compiler/cells:BuildFn](std/prelude/text:String&, std/prelude/text:String&, Array<std/prelude/text:String&>&, Array<std/prelude/text:String&>&, Array<I64>&, mut compiler/build:Config&, mut compiler/build:Program&, mut compiler/diag:Diagnostics&) ? compiler/build:Failed ![keeps 0 in 5, keeps 1 in 5, keeps 2 in 5, keeps 3 in 5, keeps 4 in 5, keeps 7 in 5, keeps 7 in 6]{r,t,sh,ps,ls,c,p,d}	o0mut compiler/build:Unit&	o1mut std/prelude/vec:Vec<compiler/build:Unit>&	o1I64	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/build:Config&	o1compiler/build:Program&	o1mut compiler/diag:Diagnostics&	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/build:Config&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 7b7eab6d2f1d7cee6665076a4837e023
+run compiler/cells 0-0 ctor compiler/cells:Outcome	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+mark compiler/cells 0-0 ctor compiler/cells:Outcome	0,1,2,3,4,5,6,7
+marks d3d213735d64ddfb581ead9faf008e33
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Bool
+hits 0
+body 1 0 8 1 | | F F F F F F F F | b0 b00000000 b b00000000 | | | ||
+sum r b0 b0 b b b b b b a,compiler/cells:0:0 t i,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out c6c465afac9584af021ef38f8a120564
+run compiler/cells 14339-14507 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/session 52882-52933 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/vec 7906-7950 fn <U8;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 4 9 1 | B1 B1 U U | F F F F F F F F F | b0 b000000000 b0000 b000000000 | 2: 3:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/cells:14339:14507 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/cells:Worker&
+out 27a732512b4e0aa3bd5b9b85b8dc3f75
+run compiler/cells 14191-14337 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/cells 14339-14507 fn	87a75508f1105277530f385e234dec15
+read compiler/session 53301-53431 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 2 2 | U U | F F | b00 b00 b00 b00 | 0:,V0 1: | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/cells:14191:14337,compiler/cells:14191:14337 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/cells:Worker&	o0mut compiler/cells:Outcome&
+out b38118d743cfe06137abb27f5e5d1ca3
+run compiler/cells 14608-15069 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/session 52882-52933 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/spin 5042-5154 fn	6d787cc7b01b150765dce615d1f27491
+read std/io 1313-1756 fn	c82576444a2182d6f718681c053a74cb
+hits 0
+body 1 5 5 1 | B0 U U U U | F F F F F | b0 b00000 b00000 b00000 | 2: 3:,B0 4: | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/cells:14608:15069 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/cells:Worker&	o0I64
+out 91324efe42deb45f9abd0c00dc4b84f0
+run compiler/cells 15243-15365 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 9 1 | | F F F F F F F F F | b0 b000000000 b b000000000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/cells:15243:15365 t i t i i c0/i/i f0010
+hid fs1	o0Array<U8>&	o0I64
+out c68ad741d8324b91739838cccf435ec7
+run compiler/cells 15071-15204 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 5133-5172 fn <U8;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <U8;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 7153-7207 fn <U8;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/prelude/vec 8115-8279 fn <U8;>	ab84cb35071ba7656290123dfae39eb5
+hits 0
+body 1 4 9 1 | U U U U | F F F F F F F F F | b0 b000000000 b0000 b000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/cells:15071:15204 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/cells:Worker&	o0I64
+out c56ad5287b4bedf08f2e34b30dda9977
+run compiler/cells 13677-14142 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+mark compiler/cells 0-0 ctor compiler/cells:Outcome	1,2,3,4,5
+marks acd4094ee20cd7e34b21701d5ea34837
+read compiler/cells 0-0 ctor compiler/cells:Outcome	a41a04ba40a56ba0a306b2d2242b4f06
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+hits 0
+body 1 4 4 3 | U U V0 V0 | F F F F | b100 b0000 b0000 b0000 | 0:,B1 1:,V1 | | ||
+sum r;V1,V0,0,13880,13893,0,0,0 b100 b100 b1010 b1000 b1000 b b b a,compiler/cells:14021:14039,compiler/cells:13677:14142,compiler/cells:13677:14142 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/cells:Outcome&	o0I64	o0std/prelude/text:String&	o0mut compiler/cells:Worker&	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64
+out 180176906d2fc3f574be924d2291a8fd
+run compiler/cells 13155-13642 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/cells 13677-14142 fn	13ecb9064cff64179e125e85eb6262f6
+read compiler/cells 14191-14337 fn	ed63f38cc1fdf160668071890209e308
+read compiler/cells 15071-15204 fn	e2cf2fba47a2505ab8c3d4c889f3e672
+read compiler/cells 15243-15365 fn	a759e19bcf17a0c988df4e8cb3f5d02c
+read std/prelude/vec 4832-5131 fn <U8;>	ad819ec2b4c05fc1146b8f127f514e13
+read std/prelude/vec 8487-8542 fn <U8;>	43ea48bc4591b58484f465d40212596c
+hits 0
+body 1 11 8 2 | B0 U U U U U U B2 V1 U U | F F F F F F F V1 | b11 b00000000 b00000000000 b00000000 | 2:,V0,V1 3:,V0,B0 4:,V0,V0 5:,V0 6:,V0 9:,V0 10:,V1,V1,V0 | | ||
+sum r b11 b11 b11 b01 b01 b b b a,std/prelude/vec:4512:4530,compiler/cells:13552:13576 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/cells:Worker&	o0mut compiler/cells:Outcome&	o0Array<U8>&	o1std/prelude/vec:Vec<U8>&
+out 1b57ac78374ee763dbaa8bc55767398d
+run compiler/cells 11988-13081 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Bool
+read compiler/cells 0-0 ctor compiler/cells:Outcome	a41a04ba40a56ba0a306b2d2242b4f06
+read compiler/cells 13155-13642 fn	b6c925d75883dda85650b6b740f60da6
+read compiler/cells 14191-14337 fn	ed63f38cc1fdf160668071890209e308
+read compiler/cells 14608-15069 fn	39a09aa91590683e9028a0db977c5a32
+read compiler/session 53724-54141 fn	9dacca0e24e4494594e03f4f142254f8
+read std/io 1313-1756 fn	c82576444a2182d6f718681c053a74cb
+hits 0
+body 1 27 7 4 | U B0 B0 U U U U B3 U U U U U U B10 B10 U B10 U B11 B11 U B11 U B0 B0 U | F F F V3 F F F | b1001 b0000000 b000000000000000000000000000 b0001000 | 0:,V3 3:,B0 4:,V0,V3 8:,B3,B3 9:,V0 10:,V0 11:,V0,V3 12: 16:,B10,B10 18:,V0 21:,B11,B11 23:,V0 | | ||
+sum r b1001 b1001 b100 b000 b000 b b b a,std/prelude/vec:4512:4530,compiler/cells:11988:13081,compiler/cells:11988:13081,compiler/cells:12061:12070 t i t i i c0/i/i f1010
+hid fs1	o0mut compiler/cells:Worker&	o0std/prelude/text:String&	o0fn?() Bool
+out 1b2701fd93066dfe5c82a89a0553b15c
+run compiler/cells 15515-16167 fn	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/cells 11727-11777 fn	34847ebd8f6f1f00742c9766ce24afb8
+read compiler/cells 14339-14507 fn	87a75508f1105277530f385e234dec15
+read compiler/cells 14608-15069 fn	39a09aa91590683e9028a0db977c5a32
+read compiler/session 52882-52933 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/session 53301-53431 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/session 53724-54141 fn	9dacca0e24e4494594e03f4f142254f8
+read std/io 1313-1756 fn	c82576444a2182d6f718681c053a74cb
+hits 0
+body 1 15 3 1 | U U U B3 B3 U U U B3 U U U U U U | F F F | b0 b000 b000000000000000 b000 | 0:,V0 1:,B0 2: 5:,B3,B3 6:,V0 7:,V0 10: 11:,V0 12:,V0 13:,V0 14: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/cells:15515:16167 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/cells:Worker&
+out 6cf9ac4df814cb25c9bcc8dd32a00839
+run compiler/cells global Builder	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7817b23dbb9f8e6f89d803d23d0dd716
+run compiler/cells global FrameShown	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3ab61b91a4686322dee74e00cfff61e3
+run compiler/cells global FrameFailure	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0895345e9c18b419d117da17cb47baaa
+run compiler/cells global FrameMime	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4b5bcf51c76ffcb3af426ee8fa52d511
+run compiler/cells global FrameData	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 54d5ee5ed5a74e64d892b4856cbdf875
+run compiler/cells global FramePid	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out be3f0f85a6158a9adee9c0cb157fe61f
+run compiler/cells global FrameDone	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c634cae6715912d221dfac6cf46ab4cb
+run compiler/cells global FrameStopped	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 34aa2604e2859b6365fccb7495813edb
+run compiler/cells global WorkerSource	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0b0297824c636bd4bed71308a833caf3
+run compiler/cells global HelperIr	
+ctx r1 g1 p0
+keys compiler/cells=7b0685524b55080c80f754dc38302806159589746a3113440f2e534da9c5aa80
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6ea37554c9fe5f07f7affaafd45f2dde
+end
+sum 30775-6762378809595061957

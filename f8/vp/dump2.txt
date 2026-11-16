@@ -1,0 +1,163 @@
+esc writeOut par 0 at /home/user/wt/freeing8/std/prelude/print.olang:25:17 inside -1
+free: 410 bodies, 26 places; must 410 bodies 0 ms; may 410 walks 411 passes 1 ms
+untracked 21 at drop2.olang:180:5
+untracked 21 at drop2.olang:188:5
+untracked 21 at drop2.olang:201:17
+place 0 drop2:person field 0 keeps (1) drop2.olang:58:1 a reference into it is stored here, in 'Baked'; store a copy, '$(...)'
+place 1 drop2:opt field 1 keeps (2) drop2.olang:126:5 its new value is existing storage: '""'; give it new storage - a constructor call, '$...', 'Copy()'
+place 2 std/prelude/vec:Vec<U64> field 0 sole
+place 3 std/prelude/vec:Vec<std/prelude/text:Char> field 0 sole
+place 4 std/prelude/vec:Vec<std/prelude/text:String&> field 0 sole
+place 5 std/prelude/vec:Vec<I64> field 0 sole
+place 6 std/prelude/vec:Vec<drop2:vwCell> field 0 sole
+place 7 std/prelude/vec:Vec<std/prelude/text:String> field 0 sole
+place 8 std/prelude/vec:Vec<mut drop2:opt&> field 0 sole
+place 9 Array<std/prelude/text:String&> field -1 keeps (2) /home/user/wt/freeing8/std/prelude/text.olang:131:33 its new value is existing storage: 't[i:i + 1]'; give it new storage - a constructor call, '$...', 'Copy()'
+place 10 Array<std/prelude/text:String> field -1 keeps (0)  
+place 11 Array<mut drop2:opt&> field -1 keeps (0)  
+place 12 std/prelude/text:StringBuilder field 0 keeps (6) /home/user/wt/freeing8/std/prelude/text.olang:1160:45 its value is changed in place, by a writable reference to it handed to a call: 'b.chars.PushAll(t)'
+place 13 std/prelude/display:badge field 0 keeps (0)  
+place 14 std/prelude/text:decimal field 0 keeps (0)  
+place 15 std/prelude/text:decimal field 1 keeps (0)  
+place 16 std/prelude/place:Place field 0 keeps (0)  
+place 17 std/prelude/text:LineIter field 0 keeps (0)  
+place 18 drop2:holder field 0 keeps (2) drop2.olang:27:46 its new value is existing storage: 't'; give it new storage - a constructor call, '$...', 'Copy()'
+place 19 drop2:opts field 0 keeps (6) drop2.olang:148:5 its value is changed in place, by a writable reference to it handed to a call: 's.setValue(fl, arg[4:])'
+place 20 drop2:opt field 0 keeps (0)  
+place 21 drop2:vwCell field 0 keeps (7) drop2.olang:180:5 a value holding it is made with no store into it, by a call's value copied: 'for c in cs {
+        vwOther(o, c.xs.Len())          # writes a Vec<String&>'s storage - no vwCell's, nothing it holds
+        t += c.xs.Len() * 10 + c.n
+    }'
+place 22 drop2:team field 0 keeps (0)  
+place 23 drop2:team field 1 keeps (6) drop2.olang:82:5 its value is changed in place, by a writable reference to it handed to a call: 'tm.members.Push($"m1")'
+place 24 Array<std/prelude/text:String, 2> field -1 sole
+place 25 Array<std/prelude/text:String, 3> field -1 sole
+free: final 1 ms, 28 let-goes, 49 stores; decide 0 ms
+place 0 person.0 sole false lets 1 stores 5 why 1 a reference into it is stored here, in 'Baked'; store a copy, '$(...)'
+place 1 opt.1 sole false lets 3 stores 2 why 2 its new value is existing storage: '""'; give it new storage - a constructor call, '$...', 'Copy()'
+place 2 Vec<U64>.0 sole true lets 1 stores 2 why 0 
+place 3 Vec<Char>.0 sole true lets 1 stores 2 why 0 
+place 4 Vec<String&>.0 sole true lets 6 stores 2 why 0 
+place 5 Vec<I64>.0 sole true lets 6 stores 2 why 0 
+place 6 Vec<vwCell>.0 sole true lets 4 stores 2 why 0 
+place 7 Vec<String>.0 sole true lets 2 stores 2 why 0 
+place 8 Vec<mut opt&>.0 sole true lets 2 stores 2 why 0 
+place 9 Array<String&>.-1 sole false lets 0 stores 7 why 2 its new value is existing storage: 't[i:i + 1]'; give it new storage - a constructor call, '$...', 'Copy()'
+place 10 Array<String>.-1 sole false lets 0 stores 2 why 0 
+place 11 Array<mut opt&>.-1 sole false lets 0 stores 2 why 0 
+place 12 StringBuilder.0 sole false lets 0 stores 1 why 6 its value is changed in place, by a writable reference to it handed to a call: 'b.chars.PushAll(t)'
+place 13 badge.0 sole false lets 0 stores 0 why 0 
+place 14 decimal.0 sole false lets 0 stores 1 why 0 
+place 15 decimal.1 sole false lets 0 stores 1 why 0 
+place 16 Place.0 sole false lets 0 stores 0 why 0 
+place 17 LineIter.0 sole false lets 0 stores 0 why 0 
+place 18 holder.0 sole false lets 0 stores 1 why 2 its new value is existing storage: 't'; give it new storage - a constructor call, '$...', 'Copy()'
+place 19 opts.0 sole false lets 0 stores 1 why 6 its value is changed in place, by a writable reference to it handed to a call: 's.setValue(fl, arg[4:])'
+place 20 opt.0 sole false lets 0 stores 1 why 0 
+place 21 vwCell.0 sole false lets 0 stores 2 why 7 a value holding it is made with no store into it, by a call's value copied: 'for c in cs {
+        vwOther(o, c.xs.Len())          # writes a Vec<String&>'s storage - no vwCell's, nothing it holds
+        t += c.xs.Len() * 10 + c.n
+    }'
+place 22 team.0 sole false lets 0 stores 1 why 0 
+place 23 team.1 sole false lets 0 stores 1 why 6 its value is changed in place, by a writable reference to it handed to a call: 'tm.members.Push($"m1")'
+place 24 Array<String>.-1 sole true lets 1 stores 3 why 0 
+place 25 Array<String>.-1 sole true lets 1 stores 4 why 0 
+store place 9 body 92 kind 3 site -1 at /home/user/wt/freeing8/std/prelude/text.olang:131:33
+store place 9 body 92 kind 3 site -1 at /home/user/wt/freeing8/std/prelude/text.olang:145:17
+store place 9 body 92 kind 3 site -1 at /home/user/wt/freeing8/std/prelude/text.olang:150:9
+store place 9 body 92 kind 3 site -1 at /home/user/wt/freeing8/std/prelude/text.olang:164:9
+store place 9 body 92 kind 3 site -1 at /home/user/wt/freeing8/std/prelude/text.olang:167:5
+store place 18 body 179 kind 3 site -1 at drop2.olang:27:46
+store place 0 body 180 kind 1 site 1 at drop2.olang:31:5
+store place 0 body 180 kind 1 site 3 at drop2.olang:34:9
+store place 0 body 182 kind 1 site 1 at drop2.olang:51:5
+store place 1 body 186 kind 1 site 0 at drop2.olang:141:5
+store place 9 body 188 kind 1 site 0 at drop2.olang:177:42
+store place 14 body 306 kind 1 site 1 at /home/user/wt/freeing8/std/prelude/text.olang:851:5
+store place 15 body 306 kind 1 site 3 at /home/user/wt/freeing8/std/prelude/text.olang:852:5
+store place 12 body 309 kind 1 site 0 at /home/user/wt/freeing8/std/prelude/text.olang:1156:5
+store place 23 body 317 kind 1 site 0 at drop2.olang:18:5
+store place 24 body 317 kind 1 site 1 at drop2.olang:19:26
+store place 24 body 317 kind 1 site 2 at drop2.olang:19:26
+store place 2 body 325 kind 0 site -1 at /home/user/wt/freeing8/std/prelude/vec.olang:42:5
+store place 6 body 364 kind 0 site -1 at /home/user/wt/freeing8/std/prelude/vec.olang:42:5
+store place 21 body 365 kind 1 site 0 at drop2.olang:174:5
+store place 21 body 366 kind 1 site 1 at /home/user/wt/freeing8/std/prelude/vec.olang:68:5
+store place 4 body 367 kind 0 site -1 at /home/user/wt/freeing8/std/prelude/vec.olang:42:5
+store place 3 body 369 kind 0 site -1 at /home/user/wt/freeing8/std/prelude/vec.olang:42:5
+store place 7 body 370 kind 0 site -1 at /home/user/wt/freeing8/std/prelude/vec.olang:42:5
+store place 2 body 372 kind 1 site 0 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5
+store place 3 body 373 kind 1 site 0 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5
+store place 9 body 375 kind 2 site -1 at /home/user/wt/freeing8/std/prelude/vec.olang:61:14
+store place 4 body 375 kind 1 site 0 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5
+store place 5 body 376 kind 1 site 0 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5
+store place 5 body 377 kind 0 site -1 at /home/user/wt/freeing8/std/prelude/vec.olang:42:5
+store place 6 body 378 kind 1 site 0 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5
+store place 25 body 385 kind 1 site 3 at drop2.olang:69:11
+store place 25 body 385 kind 1 site 4 at drop2.olang:69:11
+store place 25 body 385 kind 1 site 5 at drop2.olang:69:11
+store place 0 body 386 kind 1 site 1 at drop2.olang:77:5
+store place 22 body 386 kind 1 site 5 at drop2.olang:81:11
+store place 24 body 386 kind 1 site 9 at drop2.olang:83:5
+store place 10 body 387 kind 1 site 1 at /home/user/wt/freeing8/std/prelude/vec.olang:68:5
+store place 25 body 392 kind 1 site 4 at drop2.olang:101:25
+store place 0 body 394 kind 1 site 1 at drop2.olang:118:5
+store place 1 body 395 kind 3 site -1 at drop2.olang:126:5
+store place 19 body 396 kind 1 site 0 at drop2.olang:130:5
+store place 20 body 397 kind 1 site 1 at drop2.olang:153:16
+store place 11 body 397 kind 1 site 3 at drop2.olang:153:5
+store place 10 body 407 kind 2 site -1 at /home/user/wt/freeing8/std/prelude/vec.olang:61:14
+store place 7 body 407 kind 1 site 0 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5
+store place 8 body 408 kind 0 site -1 at /home/user/wt/freeing8/std/prelude/vec.olang:42:5
+store place 11 body 409 kind 2 site -1 at /home/user/wt/freeing8/std/prelude/vec.olang:61:14
+store place 8 body 409 kind 1 site 0 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5
+letgo place 0 body 180 kind 1 at drop2.olang:34:9 p.name
+letgo place 1 body 186 kind 1 at drop2.olang:141:5 f.t
+letgo place 1 body 187 kind 4 at drop2.olang:148:5 s.setValue(fl, arg[4:])
+letgo place 4 body 188 kind 4 at drop2.olang:177:42 o.Push("x" if k > 0 else "")
+letgo place 4 body 189 kind 4 at drop2.olang:181:9 vwOther(o, c.xs.Len())
+letgo place 5 body 190 kind 4 at drop2.olang:189:9 w.RefMut(0).xs.Push(1)
+letgo place 5 body 191 kind 4 at drop2.olang:199:32 c.xs.Push(j)
+letgo place 6 body 191 kind 4 at drop2.olang:201:9 cs.Push(c)
+letgo place 4 body 191 kind 4 at drop2.olang:204:10 vwSum(cs, o)
+letgo place 5 body 191 kind 4 at drop2.olang:205:10 vwGrowing(cs, cs)
+letgo place 2 body 372 kind 1 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5 v.data
+letgo place 3 body 373 kind 1 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5 v.data
+letgo place 4 body 375 kind 1 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5 v.data
+letgo place 5 body 376 kind 1 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5 v.data
+letgo place 6 body 378 kind 1 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5 v.data
+letgo place 7 body 386 kind 4 at drop2.olang:82:5 tm.members.Push($"m1")
+letgo place 24 body 386 kind 1 at drop2.olang:83:5 tm.tags[0]
+letgo place 25 body 392 kind 1 at drop2.olang:101:25 $w + "!"
+letgo place 8 body 397 kind 4 at drop2.olang:153:5 s.all.Push(opt($"out"))
+letgo place 1 body 397 kind 4 at drop2.olang:154:5 s.parse($"out=x.txt")
+letgo place 5 body 401 kind 4 at drop2.olang:208:18 vecWalks(1)
+letgo place 6 body 401 kind 4 at drop2.olang:208:18 vecWalks(1)
+letgo place 4 body 401 kind 4 at drop2.olang:208:18 vecWalks(1)
+letgo place 5 body 403 kind 4 at drop2.olang:212:12 vecWalks(VwOne)
+letgo place 6 body 403 kind 4 at drop2.olang:212:12 vecWalks(VwOne)
+letgo place 4 body 403 kind 4 at drop2.olang:212:12 vecWalks(VwOne)
+letgo place 7 body 407 kind 1 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5 v.data
+letgo place 8 body 409 kind 1 at /home/user/wt/freeing8/std/prelude/vec.olang:61:5 v.data
+body 75 writeOut stored Vec<I64>[] esc Vec<I64>[0] multi Vec<I64>[] whole Vec<I64>[] res Vec<I64>[]
+body 104 Lines stored Vec<I64>[17] esc Vec<I64>[] multi Vec<I64>[] whole Vec<I64>[] res Vec<I64>[]
+body 203 the function stored Vec<I64>[13] esc Vec<I64>[] multi Vec<I64>[] whole Vec<I64>[] res Vec<I64>[]
+body 281 the function stored Vec<I64>[16] esc Vec<I64>[] multi Vec<I64>[] whole Vec<I64>[] res Vec<I64>[]
+body 303 the function stored Vec<I64>[17] esc Vec<I64>[] multi Vec<I64>[] whole Vec<I64>[] res Vec<I64>[]
+body 316 the function stored Vec<I64>[0] esc Vec<I64>[] multi Vec<I64>[] whole Vec<I64>[] res Vec<I64>[]
+body 317 the function stored Vec<I64>[22] esc Vec<I64>[] multi Vec<I64>[] whole Vec<I64>[] res Vec<I64>[]
+body 318 the function stored Vec<I64>[18] esc Vec<I64>[] multi Vec<I64>[] whole Vec<I64>[] res Vec<I64>[]
+body 358 Push stored Vec<I64>[4294967305] esc Vec<I64>[] multi Vec<I64>[] whole Vec<I64>[] res Vec<I64>[]
+body 395 the function stored Vec<I64>[20] esc Vec<I64>[] multi Vec<I64>[] whole Vec<I64>[] res Vec<I64>[]
+body 398 Push stored Vec<I64>[4294967307] esc Vec<I64>[] multi Vec<I64>[] whole Vec<I64>[] res Vec<I64>[]
+tasks false hidden false
+== drop2.olang ==
+ok - payloads, literals and fills
+ok - a whole copy is its own
+use after scope closed: storage a closed scope gave back was read or written
+FAIL - a comprehension's elements are its own
+ok - a by-value parameter owns its parts
+ok - a part stored through a parameter outlives the call
+ok - a clone of an array is its own, its elements' parts too
+ok - a walk of a Vec reads elements in place only where nothing can write them
+6 passed, 1 failed

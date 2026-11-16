@@ -1,0 +1,763 @@
+olang scope record
+run <sys/mman.h> global MAP_32BIT	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1e31aefc23acd858f97ba3af10f5e7d6
+run <sys/mman.h> global MAP_ABOVE4G	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e1b858cc0e307dd7d781e57420eca712
+run <sys/mman.h> global SHADOW_STACK_SET_TOKEN	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 056773d63b921a5139117614bfa80a50
+run <sys/mman.h> global MAP_GROWSDOWN	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f0e9c7d48c148e21374037d624d11dd3
+run <sys/mman.h> global MAP_DENYWRITE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3378ceb72d39f42667e85677baf0e805
+run <sys/mman.h> global MAP_EXECUTABLE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 37b03d3b61fc606c8df67fb71f0669e6
+run <sys/mman.h> global MAP_LOCKED	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 79be4d70c82654100da682655dccf8fa
+run <sys/mman.h> global MAP_NORESERVE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f03640324401b9ff9ee820c9641b9674
+run <sys/mman.h> global MAP_POPULATE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8beddfed68d2cdcdcdc2eca6843955b3
+run <sys/mman.h> global MAP_NONBLOCK	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a7b2c8a756508e9ca7027a950c9f239f
+run <sys/mman.h> global MAP_STACK	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out be21e8eb8e02719ce0289932838c6216
+run <sys/mman.h> global MAP_HUGETLB	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 36af420dcf7175502212c19f46005174
+run <sys/mman.h> global MAP_SYNC	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 459b4c8a8da10736440061a25d120dad
+run <sys/mman.h> global MAP_FIXED_NOREPLACE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 22d5fc2aa6d8af244ed1ae7c891df228
+run <sys/mman.h> global PROT_READ	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c923ef984d254dbc884b492fa369776c
+run <sys/mman.h> global PROT_WRITE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c892c1123a63bb9223b2002a0906cc72
+run <sys/mman.h> global PROT_EXEC	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f25b8fe0a486a4ab78c880d781f051d6
+run <sys/mman.h> global PROT_NONE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c380283e7bec59b42e101b5d9f78aea8
+run <sys/mman.h> global PROT_GROWSDOWN	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 303b22c4662f3e137a660f2e942086d1
+run <sys/mman.h> global PROT_GROWSUP	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 409525380c6fcd2cc209995a031be875
+run <sys/mman.h> global MAP_SHARED	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8c82511d8c49d0da5a6bc8d699e701ed
+run <sys/mman.h> global MAP_PRIVATE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c8ab005054c7e91f846744d840212b85
+run <sys/mman.h> global MAP_SHARED_VALIDATE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c835a076160ffca08ecbcffc57047c4e
+run <sys/mman.h> global MAP_TYPE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 00449c919d536b9b23bebfb12c71f529
+run <sys/mman.h> global MAP_FIXED	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ae3758ffe66ce7e37e5b7691dabeb2a8
+run <sys/mman.h> global MAP_FILE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 241e9f6c4308fcff987ec6ace210b4b1
+run <sys/mman.h> global MAP_ANONYMOUS	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 521ba2849d2f91f603dc10ac7619002b
+run <sys/mman.h> global MAP_ANON	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 044c44670c4d03896adc8e181fca25f5
+run <sys/mman.h> global MAP_HUGE_SHIFT	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7d152ca8d51c0cc4fc621dfbc7178919
+run <sys/mman.h> global MAP_HUGE_MASK	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a67a3c315c62a8a059827831cffe1fdd
+run <sys/mman.h> global MS_ASYNC	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6c317189f7cfeac58915ce446eb8e7e1
+run <sys/mman.h> global MS_SYNC	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 11a1fd82b7512221c8843a3f9a87d6a2
+run <sys/mman.h> global MS_INVALIDATE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bdbac8618f4f0152988cf7b636974da6
+run <sys/mman.h> global MADV_NORMAL	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9c6388b4be3f6dae6bfbfaf218489720
+run <sys/mman.h> global MADV_RANDOM	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3fc93e13883b2827164015c80524bed3
+run <sys/mman.h> global MADV_SEQUENTIAL	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 487b98a62d01b5922547a2221c473061
+run <sys/mman.h> global MADV_WILLNEED	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out eaf2dcb5927bcfb1fea326a1a751632b
+run <sys/mman.h> global MADV_DONTNEED	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a24f026670c78e7b96089fb6749807b8
+run <sys/mman.h> global MADV_FREE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e1048a74034bb8c8d1a0e05059e771a4
+run <sys/mman.h> global MADV_REMOVE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bd824c325e43bccca91462796740aa50
+run <sys/mman.h> global MADV_DONTFORK	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c137122ccf1164e295cb21c1016533b7
+run <sys/mman.h> global MADV_DOFORK	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1410e1bd7440e6d199ab9fadd714ddef
+run <sys/mman.h> global MADV_MERGEABLE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 277c6073a362f59825a2cb1a01f10017
+run <sys/mman.h> global MADV_UNMERGEABLE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f3a6e758b88b9a8be72b37c059a246b5
+run <sys/mman.h> global MADV_HUGEPAGE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 79f2fd2cc36aebb857da99abd324736b
+run <sys/mman.h> global MADV_NOHUGEPAGE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 68377696432c5a194533d7b4de7ab70e
+run <sys/mman.h> global MADV_DONTDUMP	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out acbf83fed0d3921c7369d40e180cd45e
+run <sys/mman.h> global MADV_DODUMP	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a5234f5018e5ae29a3543623cee7bdb7
+run <sys/mman.h> global MADV_WIPEONFORK	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8a6d81a729b154765a2a0a1ec503f960
+run <sys/mman.h> global MADV_KEEPONFORK	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e979d6c1722df751677fab6410e22450
+run <sys/mman.h> global MADV_COLD	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 190347d1c1c4e376e23a419f15273276
+run <sys/mman.h> global MADV_PAGEOUT	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 45f72f8c31e9db203bef09db8771e1fd
+run <sys/mman.h> global MADV_POPULATE_READ	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c614cb68bd57b9d8219cae97533dbe45
+run <sys/mman.h> global MADV_POPULATE_WRITE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 700c226d0a414e69982a4e911575386d
+run <sys/mman.h> global MADV_DONTNEED_LOCKED	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f40b68cce1e1ad122bfcd80c33e12179
+run <sys/mman.h> global MADV_COLLAPSE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b788d4899482b5047001d30479202de1
+run <sys/mman.h> global MADV_HWPOISON	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 47272b077bb60988ce5f964d62cdc091
+run <sys/mman.h> global POSIX_MADV_NORMAL	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e63250e1f4d7494e8a1eb5a2193c6cd0
+run <sys/mman.h> global POSIX_MADV_RANDOM	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 62e2c15ae3ca68b396f87cfcd67612dd
+run <sys/mman.h> global POSIX_MADV_SEQUENTIAL	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 88681063087cc47003dc0edee7d9511f
+run <sys/mman.h> global POSIX_MADV_WILLNEED	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6d9dbd142eeecd8fa189e8598cb807be
+run <sys/mman.h> global POSIX_MADV_DONTNEED	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 354084d477681d44b5c9d90ec9994cb7
+run <sys/mman.h> global MCL_CURRENT	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f7a30f314a00206dab5d44fd8dcd2ba7
+run <sys/mman.h> global MCL_FUTURE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2c49f66009f4537e62e271c5846b2137
+run <sys/mman.h> global MCL_ONFAULT	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2e2d3ffb08852ce6ff1e8e7e4b868fcf
+run <sys/mman.h> global MREMAP_MAYMOVE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 384474e0ca31459a65540fb450d0ad42
+run <sys/mman.h> global MREMAP_FIXED	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8d4b08a5424ffb573b38c5a147a5dda1
+run <sys/mman.h> global MREMAP_DONTUNMAP	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3c59dd552f38424a1a78c87821948be6
+run <sys/mman.h> global MFD_CLOEXEC	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7f5923e1f9039c12ef989cb183251c26
+run <sys/mman.h> global MFD_ALLOW_SEALING	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3fcfe3eabf9a09e0ed6f037bb8e6cf2a
+run <sys/mman.h> global MFD_HUGETLB	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f3853e3cf2f98a5798090b2f2fedc1e7
+run <sys/mman.h> global MFD_NOEXEC_SEAL	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a8d227428b3c414009400431f836972a
+run <sys/mman.h> global MFD_EXEC	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 11631a6d0f3e430b933fd1a1621880fc
+run <sys/mman.h> global MLOCK_ONFAULT	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bf627cc3be9e08380ca632422c440053
+run <sys/mman.h> global PKEY_DISABLE_ACCESS	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d5cc63e41e034e039c61b3a6a418e6f2
+run <sys/mman.h> global PKEY_DISABLE_WRITE	
+ctx r1 g1 p0
+keys <sys/mman.h>=4fc0f3e7d00764187a11ffb89db39be9f344572124217b2e9b6e4e1e873c2f97
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d32e8c1fdc6848941ea3a10c75c73c56
+end
+sum 23881-16956988134073434618

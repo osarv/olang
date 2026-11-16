@@ -1,0 +1,331 @@
+olang scope record
+run <sys/resource.h> 0-0 ctor <sys/resource.h>:rlimit	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+mark <sys/resource.h> 0-0 ctor <sys/resource.h>:rlimit	0,1
+marks defe878a72762a1f93494755e2527645
+read -ctor	U64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<sys/resource.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 65bbd191aa039652499ec05c1b818d84
+run <sys/resource.h> 0-0 ctor <sys/resource.h>:rlimit64	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+mark <sys/resource.h> 0-0 ctor <sys/resource.h>:rlimit64	0,1
+marks 1a4f2d7013c66cf671532c40dcf5ec95
+read -ctor	U64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<sys/resource.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 66e30a400481051a40b926840725b96f
+run <sys/resource.h> 0-0 ctor <sys/resource.h>:timeval	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+mark <sys/resource.h> 0-0 ctor <sys/resource.h>:timeval	0,1
+marks 6bcb88e66fad0d991a80d70d89f17015
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<sys/resource.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 63a34b78ee9fb21bd2d24f6f4043497f
+run <sys/resource.h> 0-0 ctor <sys/resource.h>:rusage	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+mark <sys/resource.h> 0-0 ctor <sys/resource.h>:rusage	0
+marks 9a4a4e12d181cd89d3467e87e54ef7dd
+read -ctor	Array<I64, 18>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<sys/resource.h>:890:904 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 5b53f9e7fee8e46632c5236f0b40c30a
+run <sys/resource.h> global RLIMIT_CPU	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f217351c39faf55e5db70550451da8fa
+run <sys/resource.h> global RLIMIT_FSIZE	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7adf0bcbb14a96630adb515f84e8d2d2
+run <sys/resource.h> global RLIMIT_DATA	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0c88a97eab16caacd3b918b5aeb112fc
+run <sys/resource.h> global RLIMIT_STACK	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d1670262de38f64a5717ae80c1428730
+run <sys/resource.h> global RLIMIT_CORE	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 30c8b1111bbd75e3d634344a0e2a2d44
+run <sys/resource.h> global RLIMIT_NOFILE	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cb496494056242169df962707584f6ea
+run <sys/resource.h> global RLIMIT_AS	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d4dda647ef1c87723cf8dabeeb06bf17
+run <sys/resource.h> global RUSAGE_SELF	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b8505ef22be3f29c95e51d3e95e4b3fc
+run <sys/resource.h> global RUSAGE_CHILDREN	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c719981367a13a5118e5a69b2f3b8ab0
+run <sys/resource.h> global RUSAGE_THREAD	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 95580a6a2e063a7a53762562dbab5991
+run <sys/resource.h> global PRIO_PROCESS	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 58b2a86db1f11ad4118e169a12248719
+run <sys/resource.h> global PRIO_PGRP	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7ed6688892d6846fd3fd4309edd3c51d
+run <sys/resource.h> global PRIO_USER	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 14126e3f4f211afc68347626fca6a5e1
+run <sys/resource.h> global RLIMIT_RSS	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4acbc8f64c87c1bd22dcd15e8808a00e
+run <sys/resource.h> global RLIMIT_OFILE	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 286bc7846bf63630d4bdcc5fcd9c4f2a
+run <sys/resource.h> global RLIMIT_NPROC	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 36cc6de4c3ddf04fed2ed000542e1498
+run <sys/resource.h> global RLIMIT_MEMLOCK	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 78c4b605b1a75223e7b1e74f45d0ffb9
+run <sys/resource.h> global RLIMIT_LOCKS	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d3fac1296ab6c3428f6f9cb477ccd180
+run <sys/resource.h> global RLIMIT_SIGPENDING	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 82208964cd6cebccd121bdb86be562ae
+run <sys/resource.h> global RLIMIT_MSGQUEUE	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 96137146135f06337537304b88a7ac29
+run <sys/resource.h> global RLIMIT_NICE	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f34b2a881ba851b75c6eaa9d7b37b723
+run <sys/resource.h> global RLIMIT_RTPRIO	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5c06b6603c061a9d4ee6ccc9920956fa
+run <sys/resource.h> global RLIMIT_RTTIME	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c595e10bc3e2d7032b1e76208a6933bb
+run <sys/resource.h> global RLIMIT_NLIMITS	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 53fec0c08127f7b1ef37616592f333f1
+run <sys/resource.h> global RLIM_NLIMITS	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2de4dfc16e0b44459e6a0d2ba2a8565e
+run <sys/resource.h> global RUSAGE_LWP	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 99187cbea358accd0d46305d1f4346d2
+run <sys/resource.h> global PRIO_MIN	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c00ce67a9da6d4a5e706041b6dd57ef6
+run <sys/resource.h> global PRIO_MAX	
+ctx r1 g1 p0
+keys <sys/resource.h>=6e8031620a6c0cdc29c088889b91ebd582a02fdebffdad9914beba56ed06b847
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 253fa9ec097914270186ea059b469b9b
+end
+sum 10803-7894760358304175424

@@ -1,0 +1,199 @@
+olang scope record
+run std/cancel 961-997 fn	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0: | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3284c90867c954e52044ac5071119149
+run std/cancel 2137-2284 fn	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/cancel 961-997 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/cancel:2137:2284 t i t i i c0/i/i f0010
+hid fs1	o0std/cancel:Token&
+out 68afdc8d99c9d636f51a24422c5fb14d
+run std/cancel 1980-2038 fn	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/cancel 2137-2284 fn	cb890f6139f3caf03fe6ebfdb493e65c
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/cancel:1980:2038 t i t i i c0/i/i f0010
+hid fs1	o0std/cancel:Token&
+out 8b4f9a573f40c7306fd89e5e9a573c09
+run std/cancel 2347-2458 fn	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/cancel 2137-2284 fn	cb890f6139f3caf03fe6ebfdb493e65c
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/cancel:2347:2458 t i t i i c0/i/i f0010
+hid fs1	o0std/cancel:Token&
+out 93e8f9f215ba3ec432b670f7169056be
+run std/cancel 1097-1233 fn	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read <time.h> 0-0 ctor <time.h>:timespec	cc3bcf616d564545a9272d6ddaa4200a
+hits 0
+body 1 2 1 0 | U U | F | b b0 b00 b0 | 0:,B0 | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0I32
+out 76b99d10e57d846c5dbca8def28e3aab
+run std/cancel 0-0 ctor std/cancel:Token	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+mark std/cancel 0-0 ctor std/cancel:Token	0,1
+marks 78a45e721e291beac0279060a7bcacce
+read -ctor	I32
+read -ctor	I64
+hits 0
+body 1 0 3 1 | | F F F | b0 b000 b b000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/cancel:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64
+out 8adc98a9f002bb2f75b69258036c25e7
+run std/cancel 1688-1766 fn	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/cancel 0-0 ctor std/cancel:Token	d519a0c49d8d6f2d06b39db79c7aee90
+read std/cancel 961-997 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 3 1 1 | U U V0 | F | b1 b0 b000 b0 | 0: 1:,V0 | | ||
+sum r b1 b1 b0 b0 b0 b b b a,std/cancel:1735:1764 t,U i t i i c0/i/i f0010
+hid fs1	o0I64
+out 27b8b6d2db47da303c3906b88ab271ea
+run std/cancel 1859-1915 fn	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/cancel:1859:1915 t i t i i c0/i/i f0010
+hid fs1	o0mut std/cancel:Token&
+out da59f0088a17c0b9a963d1ebe0845840
+run std/cancel 2858-3350 fn	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/cancel 1097-1233 fn	6d787cc7b01b150765dce615d1f27491
+read std/cancel 961-997 fn	6d787cc7b01b150765dce615d1f27491
+read std/time 7110-7205 fn	6d787cc7b01b150765dce615d1f27491
+read std/time 7394-7623 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 5 6 2 | U U U U U | F F F F F F | b00 b000000 b00000 b000000 | 0: 1: 2: 3: 4: | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/cancel:2858:3350,std/cancel:2858:3350 t i t i i c0/i/i f0010
+hid fs1	o0std/cancel:Token&	o0mut Array<I64>&	o0I64
+out 0e5a45eeedec16d60c35d0ee2fe53c46
+run std/cancel 4707-4793 fn	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/cancel 1980-2038 fn	b66401efeac3e39a1178d89600f225b3
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/cancel:4707:4793,std/cancel:4707:4793 t i t i i c0/i/i f0010
+hid fs1	o0std/cancel:Token&	o0mut std/cancel:spinCount&
+out 8824a25f38fef1f9e1289d988f20a9e5
+run std/cancel 5844-5945 fn	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/cancel 1980-2038 fn	b66401efeac3e39a1178d89600f225b3
+read std/cancel 2137-2284 fn	cb890f6139f3caf03fe6ebfdb493e65c
+hits 0
+body 1 2 2 2 | U U | F F | b00 b00 b00 b00 | 0:,V0 1:,V0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/cancel:5844:5945,std/cancel:5844:5945 t i t i i c0/i/i f0010
+hid fs1	o0std/cancel:Token&	o0mut std/cancel:stopCount&
+out 344f9ba3e30f4de9d86b785612cf6637
+run std/cancel 5946-6150 fn	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/cancel 1688-1766 fn	3e2a443d2a3a2f503c8e8c005751cbb9
+read std/cancel 1859-1915 fn	dbe86241247837c12fe8409ae9ba2e8f
+read std/cancel 5844-5945 fn	b995db60474a5038adfdc13d2b87972e
+hits 0
+body 1 4 3 1 | U U U B1 | F F F | b1 b000 b0000 b000 | 0:,B0 1:,B0 2:,B0,V0 | | ||
+sum r b1 b0 b00 b00 b00 b b b a,std/cancel:6084:6094 t i t i i c0/i/i f0010
+hid fs1	o0Bool	o0mut std/cancel:stopCount&	o0mut std/cancel:Token&	o1I64
+out befc682533b4f48d95ad40ba47f8ebb6
+run std/cancel global ClockRealtime	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 916dcce09513461ac4fabf673946f3f4
+run std/cancel global ClockMonotonic	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1086b8d4ea9710f581975c039fa79684
+run std/cancel global PollNs	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 12e20ea141aa3dadcc8ec7b3b14c5c5c
+run std/cancel 0-0 ctor std/cancel:spinCount	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+mark std/cancel 0-0 ctor std/cancel:spinCount	0
+marks 8269f1f6e5af3b80de05f7102bcc0c6f
+read -ctor	I64
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b b b b b b a,std/cancel:0:0 t i,-1 t i i c0/i/i f0010
+hid fs1
+out c02e25618a590964c87a5fb37e3db1f0
+run std/cancel 0-0 ctor std/cancel:stopCount	
+ctx r1 g1 p0
+keys std/cancel=8b2505a80ed992df6a5c5162d1477ced751104df56dd999ebe69d659318be924
+in 0
+mark std/cancel 0-0 ctor std/cancel:stopCount	0,1
+marks a1869ef9479ed25adcf47e36fb8f27d5
+read -ctor	I32
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,std/cancel:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 0c64a605bdbebaf274c244d4158a07a9
+end
+sum 7481-7016459132654755678

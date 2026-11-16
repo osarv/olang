@@ -1,0 +1,56 @@
+olang front record
+body fn 2248-2355	known p
+body fn 2870-2925	known p
+body fn 2926-2962	known p
+body fn 3084-3307	known p
+body fn 3465-3560	known p
+body fn 3661-4113	known p
+body fn 4188-4221	known p
+body fn 4223-4297	known p
+body fn 4385-4488	known p
+body fn 4490-4541	known p
+body fn 4613-4768	known p
+body fn 4820-4932	known p
+body fn 5042-5154	known p
+body fn 5372-5537	known p
+body fn 5780-6454	known p
+body global Drawn	known p
+body global Frames	known p
+body global Interval	known p
+body global Lock	known p
+body global On	known p
+body global Poll	known p
+body global Quit	known p
+body global Running	known p
+body global Since	known p
+body global StartAfter	known p
+body global Title	known p
+body global Wipe	known p
+baked Drawn [8 0000000000000000] mutable
+baked Frames [64 090000000000000000000000000000000900000000000000000000000000000009000000000000000000000000000000090000000000000000000000000000000900000000000000000000000000000009000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0][8c e2a084e2a086e2a086][8c e2a086e2a084e2a086][8c e2a086e2a086e2a084][8c e2a086e2a086e2a082][8c e2a086e2a082e2a086][8c e2a082e2a086e2a086]
+baked Interval [8 5a00000000000000]
+baked Lock [8 0000000000000000] mutable
+baked On [8 0000000000000000] mutable
+baked Poll [8 1400000000000000]
+baked Quit [8 0000000000000000] mutable
+baked Running [8 0000000000000000] mutable
+baked Since [8 0000000000000000] mutable
+baked StartAfter [8 2c01000000000000]
+baked Wipe [8 04000000000000000000000000000000 @8>1+0][8c 0d1b5b4b]
+sig Arm@3465 fn&() Bool
+sig Begin@4613 fn&(String&)
+sig Draw@2248 fn&(I64, String&) String
+sig Enabled@3084 fn&() Bool
+sig End@5042 fn&()
+sig Retitle@4820 fn&(String&)
+sig Run@3661 fn&()
+sig Say@5372 fn&(I32, String&)
+sig Stop@4188 fn&()
+sig clear@4385 fn&()
+sig erase@4490 fn&()
+sig grab@2870 fn&()
+sig put@4223 fn&(I32, String&)
+sig release@2926 fn&()
+sig shown@5780 fn&(String&) String
+end
+sum fc1629f3f2f6159942cfb94e534ae88acc732501c85ce6068a4e2b9ddde384e7

@@ -1,0 +1,194 @@
+olang scope record
+run std/prelude/number 18552-18777 fn	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	U64
+hits 0
+body 1 1 2 0 | U | F F | b b00 b0 b00 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U64
+out aaf6095992ad8d29e33b8afdd377db7a
+run std/prelude/number 18991-19041 fn	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 18552-18777 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U8
+out 20d6c6759bebe7175935af9cf88be8b8
+run std/prelude/number 19042-19095 fn	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 18552-18777 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U16
+out ac5cc730d37dfdca827d44b297e0dca6
+run std/prelude/number 19096-19149 fn	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 18552-18777 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U32
+out de43b45240f479377494fbe5a0102069
+run std/prelude/number 19150-19193 fn	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 18552-18777 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U64
+out e39a741c7acd8b461266d0f0b574bc17
+run std/prelude/number 19194-19306 fn	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 18552-18777 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I8
+out c663cd442ce9254b90f07288ff8f44ee
+run std/prelude/number 19307-19422 fn	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 18552-18777 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I16
+out b5dd2e60ad87e10667352339fcc5d50c
+run std/prelude/number 19423-19538 fn	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 18552-18777 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I32
+out e719d8f975beb647405ae96171dbdcde
+run std/prelude/number 19539-19654 fn	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/number 18552-18777 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out de496c4c3de9d4511c43c4200ce8ee3a
+run std/prelude/number 20246-20538 fn	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	U128
+read std/prelude/number 18552-18777 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 3 0 | U U | F F F | b b000 b00 b000 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U128
+out c8d26fc7859ae9d8bdce1bc9711b7a93
+run std/prelude/number 15570-15822 fn <I64;>	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out d2cee2c86f2e546d8c59d8b5f81dff8f
+run std/prelude/number 15161-15491 fn <I64;>	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out d29315dd8b9450bb482464847965e524
+run std/prelude/number 14615-14884 fn <F64;>	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0F64
+out ab80d2ca8d2d4cde7fba27123d815621
+run std/prelude/number 15161-15491 fn <U32;>	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0U32	o0U32
+out 23b068afa1d2099ed6c6bf2a86d4198f
+run std/prelude/number global Pi	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6ab0872fea84e763638a8567d53ce949
+run std/prelude/number global Euler	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fa16f98f2ac389096baa93c54bd49fe5
+run std/prelude/number global Inf	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3e72add12013aaa6d2ed2d07e04aa9da
+run std/prelude/number global NaN	
+ctx r1 g1 p0
+keys std/prelude/number=c5803dfa52344e7aec0b404b42028959d6273e70cadaa332cfb9b21e43b30203
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3096aa05b3ef07491c641a8446edcc87
+end
+sum 6770-4383280879141377064

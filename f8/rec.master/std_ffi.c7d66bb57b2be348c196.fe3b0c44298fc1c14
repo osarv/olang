@@ -1,0 +1,19 @@
+olang front record
+body fn 2141-2492	known p
+body fn 2608-2655	known p
+body fn 2771-2912	known p
+body fn 3025-3123	known p
+body fn 3782-4737	known p
+body fn 4923-5143	known p
+body fn 5269-5422	known p
+body fn 5460-5513	known p
+sig ArrayOf@2608 fn&(Kind) U8
+sig Call@3782 fn&(String&, Array<U8>&, mut Array<U64>&, U8, I64) U64 ? Error
+sig Code@2141 fn&(Kind) U8
+sig Has@3025 fn&(String&) Bool
+sig Pack@4923 fn&(mut Array<U64>&, I64, Array<U8>&)
+sig Unpack@5269 fn&(Array<U64>&, I64, mut Array<U8>&)
+sig WordsFor@5460 fn&(I64) I64
+sig width@2771 fn&(U8) I64
+end
+sum 153cdd80bc87f493784430f6999f6f3c43b8651b80faf0bc736fb6c120f17534

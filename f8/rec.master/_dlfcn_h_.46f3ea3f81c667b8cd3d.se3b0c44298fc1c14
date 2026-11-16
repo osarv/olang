@@ -1,0 +1,316 @@
+olang scope record
+run <dlfcn.h> 0-0 ctor <dlfcn.h>:Dl_info	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+mark <dlfcn.h> 0-0 ctor <dlfcn.h>:Dl_info	0,1,2,3
+marks e4a7763dcc933f7a2955225367915f8b
+read -ctor	std/prelude/text:CStr
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b b b b b b a,<dlfcn.h>:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 6cf271ef3042fe39b798224481a63092
+run <dlfcn.h> 0-0 ctor <dlfcn.h>:Dl_serpath	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+mark <dlfcn.h> 0-0 ctor <dlfcn.h>:Dl_serpath	0,1
+marks f165d40c83d6d2059dd48521aae1d476
+read -ctor	U32
+read -ctor	std/prelude/text:CStr
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<dlfcn.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out d39a9aa7f81f093ea3597743ee41896a
+run <dlfcn.h> 0-0 ctor <dlfcn.h>:Dl_serinfo	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+mark <dlfcn.h> 0-0 ctor <dlfcn.h>:Dl_serinfo	0
+marks 8b9a94b546b5ad22c01b2070e5e3a66e
+read -ctor	Array<I64, 4>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<dlfcn.h>:1009:1022 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 959b76ff2e5c2119f5457efc232f1e69
+run <dlfcn.h> 0-0 ctor <dlfcn.h>:dl_find_object	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+mark <dlfcn.h> 0-0 ctor <dlfcn.h>:dl_find_object	0,1,2,3,4,5
+marks 3da77d852f6ea85e0b66a9a60c59871a
+read -ctor	<dlfcn.h>:link_map
+read -ctor	Array<U64, 7>
+read -ctor	U64
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 1 6 1 | V0 | F F F F F F | b1 b000000 b0 b000000 | | | ||
+sum r b1 b1 b b b b b b a,<dlfcn.h>:1204:1217 t i,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 568f8d3fde66e7f35a07f4e8399f3ab2
+run <dlfcn.h> global RTLD_DL_SYMENT	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5496d01fd6fc51708f83c73edc9d71e3
+run <dlfcn.h> global RTLD_DL_LINKMAP	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 23ba1bca7b1e6162b33dce93730e0926
+run <dlfcn.h> global RTLD_DI_LMID	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3b4d2934e3896190195675430cc81aae
+run <dlfcn.h> global RTLD_DI_LINKMAP	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6a1a3756ac04e142287d61ecb3d48071
+run <dlfcn.h> global RTLD_DI_CONFIGADDR	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out eb0f8ce45c2c8dea5ac684c715ffc60f
+run <dlfcn.h> global RTLD_DI_SERINFO	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d06b220b23aaa40508bed08b99270662
+run <dlfcn.h> global RTLD_DI_SERINFOSIZE	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 763cf1732083c528d4f9500358876277
+run <dlfcn.h> global RTLD_DI_ORIGIN	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ad3b5699a01571156d2fae06d80caf87
+run <dlfcn.h> global RTLD_DI_PROFILENAME	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 711c87a51580b3167e784d41a1b0554f
+run <dlfcn.h> global RTLD_DI_PROFILEOUT	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fa89aebf1ac55da34a2c4a66ddfb761c
+run <dlfcn.h> global RTLD_DI_TLS_MODID	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 308b3a02e882e312843eb25a03c24529
+run <dlfcn.h> global RTLD_DI_TLS_DATA	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e980a81281e8b4518665474a7e7d4b6f
+run <dlfcn.h> global RTLD_DI_PHDR	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b37cc4f8387e701950c358ec1109c0e0
+run <dlfcn.h> global RTLD_DI_MAX	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e6b5e6b8c130d9cffbae5f3f07267754
+run <dlfcn.h> global RTLD_LAZY	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 81ce303f9ac414649aa2348c24673312
+run <dlfcn.h> global RTLD_NOW	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 20cb7e536a8b11f8372013aa69561848
+run <dlfcn.h> global RTLD_BINDING_MASK	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 144ac60627f12d25dcbd720cf010814b
+run <dlfcn.h> global RTLD_NOLOAD	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2cf6bffb32bda2158ea4bea42e59f4d1
+run <dlfcn.h> global RTLD_DEEPBIND	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 015820796d00b005117b79905d8e9e37
+run <dlfcn.h> global RTLD_GLOBAL	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c329975ea81896cdc5cde8925aedd21f
+run <dlfcn.h> global RTLD_LOCAL	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d89f737a1f79ccad49a13c135260ca5f
+run <dlfcn.h> global RTLD_NODELETE	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ed1c24edd21c51bd2f7a4c7febdd2ab6
+run <dlfcn.h> global DLFO_STRUCT_HAS_EH_DBASE	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e65b8165d8bda858365909b8631e3b89
+run <dlfcn.h> global DLFO_STRUCT_HAS_EH_COUNT	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bebcf1f0cb343cfa3eaa2a1410dd7c0b
+run <dlfcn.h> global LM_ID_BASE	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d9961626c5761567ecc03e691ab227df
+run <dlfcn.h> global LM_ID_NEWLM	
+ctx r1 g1 p0
+keys <dlfcn.h>=46f3ea3f81c667b8cd3d146b7445c7137ad59152f4ff9eb80c928c6fe52cf976
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 86c6e42227e5d6df0eb0f892c70e9667
+end
+sum 9968-12311982775268263332

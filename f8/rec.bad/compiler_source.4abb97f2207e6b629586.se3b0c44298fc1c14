@@ -1,0 +1,168 @@
+olang scope record
+run compiler/source 2058-2334 fn	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<I32>
+read -ctor	I64
+hits 0
+body 1 1 13 2 | V1 | F F F F F F V1 F F F F F F | b01 b0000000000000 b0 b0000000000000 | | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/source:2058:2334,compiler/source:2177:2190 t i t i i c0/i/i f1010
+hid fs1	o0std/prelude/text:String&
+out ea0673e73abb7726eab170430eabd2d5
+run compiler/source 0-0 ctor compiler/source:Names	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+mark compiler/source 0-0 ctor compiler/source:Names	0,1
+marks 13376bb2b4040faaf013be911a0da218
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String&, compiler/source:NameId>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 2 2 1 | U U | F F | b1 b00 b00 b00 | 0:,V0 1:,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/vec:3184:3188 t i,0,-1 t,U i i c0/i/i f0010
+hid fs1;1280:U
+out 8721a2187fa6319f23c9b3b512d9b256
+run compiler/source 0-0 ctor compiler/source:Source	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+mark compiler/source 0-0 ctor compiler/source:Source	0,1,2
+marks 7c3aa505d2360d5e243e1d93159972a1
+read -ctor	Array<I32>
+read -ctor	Array<std/prelude/text:Char>
+read compiler/source 2058-2334 fn	fc0538ec11f191c024e95e734edbbe5b
+hits 0
+body 1 1 5 3 | U | F F F F F | b001 b00000 b0 b00000 | 0:,V1,V2 | | ||
+sum r;V0,V2,0,1614,1618,1,0,0;V1,V2,0,1623,1627,1,0,0 b001 b001 b11 b00 b00 b b b a,compiler/source:0:0,compiler/source:0:0,compiler/source:2177:2190 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&	o0Array<I32>&	o1std/prelude/text:String&
+out a1023cf2d3044c111dcd43634aafde64
+run compiler/source 1767-1961 fn	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+hits 0
+body 1 4 2 2 | U B0 B0 U | F F | b01 b00 b0000 b00 | 0:,V0,V1 3:,V0,V1,V1 | | ||
+sum r;V0,V1,0,1934,1959,3,0,0 b01 b01 b1 b0 b0 b b b a,compiler/source:1767:1961,std/os:17862:17880 t,V0,V1 i t i i c0/i/i f0010
+hid fs1;18944:V0;18945:V1	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 4617063f2794afbf585e390f20c0d6c8
+run compiler/source 0-0 ctor compiler/source:Span	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+mark compiler/source 0-0 ctor compiler/source:Span	0,1
+marks 6b728bbcacbbe90188767d31857c2d24
+read -ctor	I32
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/source:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I32	o0I32
+out e3f5b6f34af8d0f536140e650b0d6b37
+run compiler/source 1200-1361 fn	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 5979-6292 fn <std/prelude/text:String&;compiler/source:NameId;>	c091782564f784c7ee2a1f7ed72a2723
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 7 3 2 | U V0 V0 U U U U | F F F | b10 b000 b0000000 b000 | 0:,V0 3:,V0,V0 4:,V0 5:,V0,V0 6:,V0,V0 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,compiler/source:1296:1298,compiler/source:1200:1361 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/source:Names&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 300f349d6cd9488ae5f80cfdaacdf210
+run compiler/source 1061-1198 fn	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/source 1200-1361 fn	d87b8bf656a001da43cd429e0cdfc533
+read std/prelude/map 7053-7137 fn <std/prelude/text:String&;compiler/source:NameId;>	754aeb1d8fba623439d91ba7dc9137d0
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+hits 0
+body 1 4 2 2 | U U U U | F F | b10 b00 b0000 b00 | 0:,V0 1:,V0,B1 2:,V0,V1 3:,V0,V1 | | ||
+sum r b10 b10 b10 b10 b10 b b b a,compiler/source:1296:1298,compiler/source:1061:1198 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/source:Names&	o0std/prelude/text:String&
+out 552deec97c5ff4ee68e3a4a49b80cf3a
+run compiler/source 2531-2757 fn	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+mark compiler/source 0-0 ctor compiler/source:Source	2
+marks c3f0ff25a9de8380ca86be9139e37377
+read -ctor	I64
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+hits 0
+body 1 0 5 1 | | F F F F F | b0 b00000 b b00000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/source:2531:2757 t i t i i c0/i/i f0010
+hid fs1	o0compiler/source:Source&	o0I32
+out 794f489527ac89a9e981e9853c071cd8
+run compiler/source 2990-3057 fn	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+mark compiler/source 0-0 ctor compiler/source:Source	2
+marks c3f0ff25a9de8380ca86be9139e37377
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/source:2990:3057 t i t i i c0/i/i f0010
+hid fs1	o0compiler/source:Source&	o0I32
+out e03e6aa94f167352763dcad7ac5b0be5
+run compiler/source 1387-1452 fn	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V0,V1 | | ||
+sum r;V0,V1,0,1427,1450,0,0,0 b00 b00 b00 b00 b00 b b b a,compiler/source:1387:1452,compiler/source:1387:1452 t i t i i c0/i/i f0010
+hid fs1	o0compiler/source:Names&	o0compiler/source:NameId	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out d44c9aa4293285f9058f5eb831662793
+run compiler/source 3080-3153 fn	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+mark compiler/source 0-0 ctor compiler/source:Source	1
+marks 8b6a88b6821abccad04dfdc3ec1155c8
+read -ctor	Array<std/prelude/text:Char>
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+hits 0
+body 1 0 2 2 | | F F | b00 b00 b b00 | | | ||
+sum r;V0,V1,0,3121,3151,0,1,0 b00 b00 b00 b00 b00 b b b a,compiler/source:3080:3153,compiler/source:3080:3153 t i t i i c0/i/i f1010
+hid fs1	o0compiler/source:Source&	o0compiler/source:Span
+out af4a9ef5da97f1e868634d6a3114ca73
+run compiler/source 2442-2493 fn	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+mark compiler/source 0-0 ctor compiler/source:Source	2
+marks c3f0ff25a9de8380ca86be9139e37377
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/source:2442:2493 t i t i i c0/i/i f0010
+hid fs1	o0compiler/source:Source&
+out ba088add053e5c1c9881406527faf828
+run compiler/source 2836-2946 fn	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb
+in 0
+mark compiler/source 0-0 ctor compiler/source:Source	2
+marks c3f0ff25a9de8380ca86be9139e37377
+read compiler/source 0-0 ctor compiler/source:Source	081972ec2971940ec34e0d06505ff2b7
+read compiler/source 2531-2757 fn	528ef4a8a6c5ccf952a1460b61962aa5
+hits 0
+body 1 1 3 1 | U | F F F | b0 b000 b0 b000 | 0:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/source:2836:2946 t i t i i c0/i/i f0010
+hid fs1	o0compiler/source:Source&	o0I32
+out 737fb1adf36557c3efd075ba06c12f35
+end
+sum 8432-14196623660049380805

@@ -1,0 +1,71 @@
+olang front record
+body fn 10935-11015	known p
+body fn 11124-11204	known p
+body fn 12028-12435	known p
+body fn 12480-12672	known p
+body fn 1313-1756	known p
+body fn 14500-14876	known p
+body fn 15237-15391	known p
+body fn 15498-15616	known p
+body fn 15702-15814	known p
+body fn 15816-15912	known p
+body fn 18199-18313	known p
+body fn 19595-19753	known p
+body fn 19845-20085	known p
+body fn 21981-22186	known p
+body fn 2221-2380	known p,1
+body fn 22451-22632	known p
+body fn 23166-23332	known p
+body fn 24646-24887	known p
+body fn 25267-25457	known p
+body fn 26358-26641	known p
+body fn 27372-27561	known p
+body fn 27703-28024	known p
+body fn 4544-5096	known p
+body fn 676-747	known p
+body fn 6830-6909	known p
+body fn 7005-7069	known p
+body fn 749-803	known p
+body fn 7631-8162	known p
+body fn 8204-8952	known p
+body fn 9065-9738	known p
+body fn 9770-9936	known p
+body global Stderr	known p
+body global Stdin	known p
+body global Stdout	known p
+baked Stderr [8 02000000]
+baked Stdin [8 00000000]
+baked Stdout [8 01000000]
+sig All@12480 fn&(mut Reader&) String& ? Error
+sig Buffered@7005 fn&(Lines&) Bool
+sig Bytes@12028 fn&(mut Reader&, I64) Array<U8>& ? Error, Exhausted
+sig Flush@15498 fn&(mut Writer&) ? Error
+sig FormatInt@4544 fn&(I64, mut Array<U8>&) I32
+sig Line@10935 fn&(mut Reader&) String& ? Error, Exhausted
+sig Next@6830 fn&(mut Lines&) String& ? Error, Exhausted
+sig Read@2221 fn&(I32, mut Array<U8>&) Array<U8>& ? Error
+sig Word@11124 fn&(mut Reader&) String& ? Error, Exhausted
+sig Write@1313 fn&(I32, Array<U8>&) ? Error
+sig Write@14500 fn&(mut Writer&, Array<U8>&)
+sig WriteChar@15237 fn&(mut Writer&, Char)
+sig afterTheEnd@21981 fn&(I32) ? Error
+sig bracketed@19845 fn&(String&, I64) String&
+sig checkReadIsEmpty@18199 fn&(I32, mut Array<U8>&) ? Error
+sig closeFd@749 fn&(I32) I32
+sig drain@15702 fn&(mut Writer&)
+sig drained@23166 fn&(I32) String&
+sig failedFlushes@24646 fn&(I32) I64
+sig fill@7631 fn&(mut source&) ? Error, Exhausted
+sig ioChurn@22451 fn&() I64
+sig line@8204 fn&(mut source&) String& ? Error, Exhausted
+sig numbers@27703 fn&(I32) ? Error, Exhausted, ParseError
+sig openReadOnly@676 fn&(Array<U8>&) I32
+sig reading@19595 fn&(String&) I32
+sig reportTo@25267 fn&(I32, I64) ? Error
+sig send@15816 fn&(mut Writer&, Array<U8>&)
+sig sumOf@27372 fn&(I32) I64 ? Error, Exhausted, ParseError
+sig text@9770 fn&(source&, I64, I64) String&
+sig word@9065 fn&(mut source&) String& ? Error, Exhausted
+sig words@26358 fn&(String&, I64) String&
+end
+sum 0a714f1facaa07c800fd1a6d757b8f4ce507d4ac7e55dec065738d441fd4da1a

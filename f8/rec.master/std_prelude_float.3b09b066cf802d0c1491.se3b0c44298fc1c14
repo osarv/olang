@@ -1,0 +1,100 @@
+olang scope record
+run std/prelude/float 3004-3265 fn	
+ctx r1 g1 p0
+keys std/prelude/float=3b09b066cf802d0c14916a814680d36ba0de88303a46e9ddf44619178ca728fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read -ctor	U64
+hits 0
+body 1 0 11 1 | | F F F F F F F F F F F | b0 b00000000000 b b00000000000 | | | ||
+sum r b0 b0 b000 b000 b000 b b b a,std/prelude/float:3004:3265 t i t i i c0/i/i f0010
+hid fs1	o0mut Array<U64>&	o0I64	o0U64
+out 45bbad1af26f682e01984c9b8adc05de
+run std/prelude/float 3364-4428 fn	
+ctx r1 g1 p0
+keys std/prelude/float=3b09b066cf802d0c14916a814680d36ba0de88303a46e9ddf44619178ca728fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Bool
+read -ctor	I64
+read -ctor	U64
+hits 0
+body 1 0 24 1 | | F F F F F F F F F F F F F F F F F F F F F F F F | b0 b000000000000000000000000 b b000000000000000000000000 | | | ||
+sum r b0 b0 b000 b000 b000 b b b a,std/prelude/float:3364:4428 t i t i i c0/i/i f0010
+hid fs1	o0mut Array<U64>&	o0I64	o0I64
+out 775d04544f81434425a929ba7594e90b
+run std/prelude/float 4508-5266 fn	
+ctx r1 g1 p0
+keys std/prelude/float=3b09b066cf802d0c14916a814680d36ba0de88303a46e9ddf44619178ca728fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read -ctor	U64
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<U64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <U64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <U64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <U64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+hits 0
+body 1 16 27 2 | B0 U U B0 U U B0 B0 U U U U B8 U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F | b01 b000000000000000000000000000 b0000000000000000 b000000000000000000000000000 | 0:,B0 1:,B0 2:,B0 3:,B0 4:,B0 5:,B0 8:,B0,B0 9:,B0 10:,B0 11:,B0 13:,B0 14:,B0,B8 15:,B0,V1 | | ||
+sum r b01 b01 b00 b00 b00 b b b a,std/prelude/float:4508:5266,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut Array<U64>&	o0I64
+out 10aa9d69161d7056a1451066f3f74e5c
+run std/prelude/float 931-2699 fn	
+ctx r1 g1 p0
+keys std/prelude/float=3b09b066cf802d0c14916a814680d36ba0de88303a46e9ddf44619178ca728fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read -ctor	U64
+read std/prelude/float 3004-3265 fn	540cfa480b0c94c4aa2b21f4cb3a8a21
+read std/prelude/float 3364-4428 fn	0e07d2485b288bab3bcc0e2dee6936ac
+read std/prelude/float 4508-5266 fn	c65c5619d3e649371ddf5c5ac1b46801
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 17 31 1 | B0 U U U U U U B0 U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b1 b0000000000000000000000000000000 b00000000000000000 b0000000000000000000000000000000 | 1:,B0 2:,B0 3:,B0 4:,B0 5:,B0 6:,B0,B0 7:,B0 8:,B0 9:,B0,B0 10:,B0,B0 11:,B0 12:,B0,B0 13:,B0,B18 14:,B0 15:,B0,B0 16:,B0,V0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0F64	o0I64
+out 2b4ab85bc184d96343b0868d00560906
+run std/prelude/float 2771-2828 fn	
+ctx r1 g1 p0
+keys std/prelude/float=3b09b066cf802d0c14916a814680d36ba0de88303a46e9ddf44619178ca728fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/float 931-2699 fn	8bfb474905285c2fb956460cfaa491d5
+hits 0
+body 1 1 2 1 | U | F F | b1 b00 b0 b00 | 0:,V0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0F32	o0I64
+out ef38171657e3925370dd58fb8e972ab6
+run std/prelude/float 2829-2886 fn	
+ctx r1 g1 p0
+keys std/prelude/float=3b09b066cf802d0c14916a814680d36ba0de88303a46e9ddf44619178ca728fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/float 931-2699 fn	8bfb474905285c2fb956460cfaa491d5
+hits 0
+body 1 1 2 1 | U | F F | b1 b00 b0 b00 | 0:,V0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0F16	o0I64
+out 2a5894bae9907d3723a71424556aecff
+run std/prelude/float 2887-2945 fn	
+ctx r1 g1 p0
+keys std/prelude/float=3b09b066cf802d0c14916a814680d36ba0de88303a46e9ddf44619178ca728fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/float 931-2699 fn	8bfb474905285c2fb956460cfaa491d5
+hits 0
+body 1 1 2 1 | U | F F | b1 b00 b0 b00 | 0:,V0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0BF16	o0I64
+out aae68ef3c5b7d31cae078c642428e76b
+end
+sum 4894-11580623734008490483

@@ -1,0 +1,11 @@
+import "std/io"
+
+type Row struct(name String, xs Vec<I64>) { name; xs }
+
+fn main() {
+    rows := Array<Row>(10, Row($0, Vec<I64>()))
+    for i in range 1000 {
+        rows[i % 10] = Row($i, Vec<I64>[i])
+        io.PutLine(rows[3].name)!
+    }
+}

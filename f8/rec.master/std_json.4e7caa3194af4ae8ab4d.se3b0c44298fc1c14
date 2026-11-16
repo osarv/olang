@@ -1,0 +1,901 @@
+olang scope record
+run std/json 0-0 ctor std/json:reader	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0,1,2,3,4,5,6,7,8
+marks 7db22e09834484d183102d4f26314882
+read -ctor	Array<I64>
+read -ctor	Array<mut std/json:Json&>
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Array<std/prelude/text:String&>
+read -ctor	I64
+hits 0
+body 1 9 10 2 | V1 V1 V1 V1 V1 V1 V1 V1 V1 | F F F F F F F F F F | b01 b0000000000 b000000000 b0000000000 | | | ||
+sum r;V0,V1,0,14659,14662,1,0,0 b01 b01 b1 b0 b0 b b b a,std/json:0:0,std/json:14712:14743 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 3042bd8938e69a996f79c52da6fc603f
+run std/json 17552-17755 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/json:17552:17755 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out 26708c85d6e642d6d98d0f5b676f1bfe
+run std/json 17266-17331 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 17552-17755 fn	6c043c158edd069724387d9d70a2eb57
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:17266:17331 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&
+out d4bd12bad39c9c745549225905c88c3b
+run std/json 15131-15270 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read -ctor	I64
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/prelude/number 15161-15491 fn <I64;>	753360899e792dedf06ee057d76e9c16
+hits 0
+body 1 1 8 1 | U | F F F F F F F F | b0 b00000000 b0 b00000000 | 0: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:15131:15270 t i t i i c0/i/i f0010
+hid fs1	o0std/json:reader&
+out 6e62184f7eb6843fe4f07f8362804064
+run std/json 15353-15548 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read -ctor	I64
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/prelude/number 15161-15491 fn <I64;>	753360899e792dedf06ee057d76e9c16
+hits 0
+body 1 1 9 1 | U | F F F F F F F F F | b0 b000000000 b0 b000000000 | 0: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:15353:15548 t i t i i c0/i/i f0010
+hid fs1	o0std/json:reader&
+out f15a6e69c53b64411238956d7c50bb89
+run std/json 16031-16563 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	6,7
+marks 7d46d56a1f0317dc02d3de7227caa3c3
+read -ctor	I64
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 15131-15270 fn	4d839ad855a216249299317584032fab
+read std/json 15353-15548 fn	d2a085962233a8d1ce36e87ea77f5704
+hits 0
+body 1 6 10 1 | U U V0 V0 V0 V0 | F F F F F F F F F F | b1 b0000000000 b000000 b0000000000 | 0:,V0 1:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/json:16259:16282 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&	o0Bool	o0I64
+out c24aeeb50d26bd837a44508d99122717
+run std/json 15550-15783 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	2
+marks 651dd33cfd190876bff277e2c43ceadb
+read -ctor	I64
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+hits 0
+body 1 2 9 2 | V0 V0 | F F F F F F F F F | b10 b000000000 b00 b000000000 | | | ||
+sum r;V1,V0,0,15754,15770,0,0,0 b10 b10 b11 b10 b10 b b b a,std/json:15658:15692,std/json:15550:15783 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&	o0mut std/json:Json&
+out 444f83bbb04daa0e739d3a9c43c9c83b
+run std/json 9527-9667 fn <std/prelude/text:String&;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 8 1 | | F F F F F F F F | b0 b00000000 b b00000000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:9527:9667 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out c995d15f72813e2998249510e4c4d81a
+run std/json 9320-9494 fn <std/prelude/text:String&;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 8 2 | | F F F F F F F F | b00 b00000000 b b00000000 | | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/json:9320:9494,std/json:9320:9494 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&
+out f41f7c78b957715f5b3ef1426fea8e5d
+run std/json 9899-10353 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<I32>
+read -ctor	I64
+read std/json 9320-9494 fn <std/prelude/text:String&;>	1d5bcb73809a759bb7e14199c982651e
+read std/json 9527-9667 fn <std/prelude/text:String&;>	eedc09dcb41554725957e636fb24ad74
+hits 0
+body 1 6 12 2 | V1 V1 V1 V1 U U | F F F F F F F F F F F F | b01 b000000000000 b000000 b000000000000 | 4:,V0 5:,V0,V0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/json:9899:10353,std/json:9991:10004 t i t i i c0/i/i f1010
+hid fs1	o0Array<std/prelude/text:String&>&
+out d40dfdbce6306d0f3b9932625f981b8d
+run std/json 0-0 ctor std/json:Object	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:Object	0,1,2
+marks acaf952064ce5b47b358209ed359a206
+read -ctor	Array<I32>
+read -ctor	Array<std/json:Json&>
+read -ctor	Array<std/prelude/text:String&>
+read std/json 9899-10353 fn	96d88378448775a3feecc209822bb39b
+hits 0
+body 1 1 5 3 | U | F F F F F | b001 b00000 b0 b00000 | 0:,V0,V2 | | ||
+sum r;V0,V2,0,3862,3866,1,0,0;V1,V2,0,3871,3877,1,0,0 b001 b001 b11 b00 b00 b b b a,std/json:0:0,std/json:0:0,std/json:9991:10004 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0Array<std/prelude/text:String&>&	o0Array<std/json:Json&>&	o0Array<I32>&	o1Array<std/prelude/text:String&>&
+out ee8b304ca02b568e472d93c7684c8a2e
+run std/json 16657-17264 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	2,4,6,7
+marks 9e1274f9970423b9eb1f3153b9897fac
+read -ctor	Array<std/json:Json&>
+read -ctor	I64
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 15550-15783 fn	ae4d4650013a5d5e7929bf51aa184e4d
+hits 0
+body 1 10 18 1 | V0 V0 V0 U V0 V0 U V0 V0 U | F F F F F F F F F F F F F F F F F F | b1 b000000000000000000 b0000000000 b000000000000000000 | 3:,V0,V0 6:,V0,V0,V0 9:,V0,V0 | | ||
+sum r b1 b1 b1 b1 b1 b b b a,std/json:16787:16813 t i t i i c0/i/i f0010
+hid fs1;27904:V0;27905:V0	o0mut std/json:reader&
+out 9b7fb23acd321661438a6dc1c6b2c73f
+run std/json 15785-16029 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	4
+marks 6d9a9d52e5bb4ff671f01b0fc228a12d
+read -ctor	I64
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+hits 0
+body 1 2 9 2 | V0 V0 | F F F F F F F F F | b10 b000000000 b00 b000000000 | | | ||
+sum r;V1,V0,0,15996,16016,0,0,0 b10 b10 b11 b10 b10 b b b a,std/json:15901:15933,std/json:15785:16029 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&	o0std/prelude/text:String&
+out f469c4cbed61fe59d5e8f13235e65727
+run std/json 17880-18079 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/json:17880:18079 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out 5fb3f292a2c7089875af199b2c23577b
+run std/json 24231-24849 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read -ctor	I64
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 15131-15270 fn	4d839ad855a216249299317584032fab
+read std/json 15353-15548 fn	d2a085962233a8d1ce36e87ea77f5704
+hits 0
+body 1 4 11 1 | U U U U | F F F F F F F F F F F | b0 b00000000000 b0000 b00000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/json:24231:24849 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&	o0I64
+out 9fdc979914585cc23f68be4e66adbcb4
+run std/json 24946-25734 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 3 1 | | F F F | b0 b000 b b000 | | | ||
+sum r b0 b0 b000 b000 b000 b b b a,std/json:24946:25734 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0mut Array<std/prelude/text:Char>&
+out 540e6376fa92bee1697627ee57d6f5d1
+run std/json 22675-24137 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read -ctor	I64
+read -ctor	U8
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 15131-15270 fn	4d839ad855a216249299317584032fab
+read std/json 15353-15548 fn	d2a085962233a8d1ce36e87ea77f5704
+read std/json 24231-24849 fn	4b6ceb5d7729a8187ff87aa407198250
+read std/json 24946-25734 fn	10049851e3c79be7980534200777b173
+hits 0
+body 1 13 8 2 | U U U U U U U U U U U U U | F F F F F F F F | b00 b00000000 b0000000000000 b00000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0 10:,V1 11:,V0 12:,V0 | | ||
+sum r b00 b00 b000 b000 b000 b b b a,std/json:22675:24137,std/json:22675:24137 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&	o0I64	o0mut Array<std/prelude/text:Char>&
+out b1d666079177c38fbb85c412513dd3e9
+run std/json 25905-26749 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read -ctor	I64
+read -ctor	U8
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 15131-15270 fn	4d839ad855a216249299317584032fab
+read std/json 15353-15548 fn	d2a085962233a8d1ce36e87ea77f5704
+hits 0
+body 1 8 12 1 | U U U U U U U U | F F F F F F F F F F F F | b0 b000000000000 b00000000 b000000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:25905:26749 t i t i i c0/i/i f0010
+hid fs1	o0std/json:reader&
+out 8fcfa5c09dfd5c7b960ada43b857b68f
+run std/json 21255-22468 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 15131-15270 fn	4d839ad855a216249299317584032fab
+read std/json 15353-15548 fn	d2a085962233a8d1ce36e87ea77f5704
+read std/json 17880-18079 fn	1d29b43885f949f190f0662275ecc095
+read std/json 22675-24137 fn	3f2c956395e1a8a0682b175365783b0a
+read std/json 25905-26749 fn	289a06728927898f40bac1c4b56e4a54
+hits 0
+body 1 15 9 2 | U V1 V1 U U B5 B5 U U U U V1 U V1 V1 | F F F F F F V1 F F | b01 b000000000 b000000000000000 b000000000 | 0:,V0 3:,V0 4:,V0 7:,V0,B5 8:,V0 9:,V0 10:,V0 12:,V0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/json:21255:22468,std/json:21514:21537 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&
+out e83500ed137769b0cbae35bf7a46cf00
+run std/json 19852-20266 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 15131-15270 fn	4d839ad855a216249299317584032fab
+read std/json 15353-15548 fn	d2a085962233a8d1ce36e87ea77f5704
+read std/json 15785-16029 fn	f093996066802d12ed33f0fef78502da
+read std/json 17266-17331 fn	955908934fd9cc4998aa285aef9e8671
+read std/json 21255-22468 fn	cf1de2cd5a0544d3412b1ca4eb4ef949
+hits 0
+body 1 12 1 1 | U U U U U U U U U U U U | F | b1 b0 b000000000000 b0 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0,V0 6:,V0,V0 7:,V0 8:,V0 9:,V0 10:,V0 11:,V0 | | ||
+sum r b1 b1 b1 b1 b1 b b b a,std/json:21514:21537 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&	o0std/prelude/text:String&	o1mut std/json:reader&
+out 232840882b2d17e8f466bba71828b121
+run std/json 28512-28596 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | 0: | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/json:28512:28596 t i t i i c0/i/i f0010
+hid fs1	o0std/json:reader&	o0I64
+out 26af3d85fb7228dcd9e563f63190c726
+run std/json 27195-28510 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read -ctor	Bool
+read -ctor	I64
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 15131-15270 fn	4d839ad855a216249299317584032fab
+read std/json 15353-15548 fn	d2a085962233a8d1ce36e87ea77f5704
+read std/json 28512-28596 fn	f0e74630c4e4a62873f8230f522afc58
+read std/prelude/text 27911-30436 fn	7632bd5b1c790d98403b45947271c757
+hits 0
+body 1 18 7 1 | U U U U U U U U U U U U U U U U U U | F F F F F F F | b0 b0000000 b000000000000000000 b0000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0 10:,V0 11:,V0 12:,V0 13:,V0 14:,V0 15:,V0 16:,V0 17:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:27195:28510 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&
+out 4c2e66e6cd5193904294842b67bdb573
+run std/json 28819-29439 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read -ctor	I64
+read -ctor	std/json:Json
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+read std/prelude/text 20807-21010 fn	10e7d7a379257fb7931875422712e313
+hits 0
+body 1 11 10 2 | V1 V1 U U U U V1 V1 V1 V1 V1 | F F F F F F F F F F | b01 b0000000000 b00000000000 b0000000000 | 2:,B0 3:,V0 4:,B6 5:,V0 | | ||
+sum r b01 b01 b000 b000 b000 b b b a,std/json:28819:29439,std/json:28956:28967 t i t i i c0/i/i f0010
+hid fs1	o0std/json:reader&	o0I64	o0F64
+out 29497bc639345a844e8362dd91c9d260
+run std/json 20873-21128 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read -ctor	I64
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 15131-15270 fn	4d839ad855a216249299317584032fab
+read std/json 15353-15548 fn	d2a085962233a8d1ce36e87ea77f5704
+hits 0
+body 1 4 8 2 | U U U U | F F F F F F F F | b00 b00000000 b0000 b00000000 | 0:,V0 1:,V0 2:,V0 3:,V0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/json:20873:21128,std/json:20873:21128 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&	o0std/prelude/text:String&
+out e96c7b29929d7552abb20f31705ead8c
+run std/json 20322-20871 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 15131-15270 fn	4d839ad855a216249299317584032fab
+read std/json 15353-15548 fn	d2a085962233a8d1ce36e87ea77f5704
+read std/json 15550-15783 fn	ae4d4650013a5d5e7929bf51aa184e4d
+read std/json 20873-21128 fn	e6646a8d148c9704aa8cc1c0c4c27e45
+read std/json 21255-22468 fn	cf1de2cd5a0544d3412b1ca4eb4ef949
+read std/json 27195-28510 fn	4cd74d2131d2599d347701fc972641d7
+read std/json 28819-29439 fn	807a20fcb4275e7e22ac91546e07c50a
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 18 4 1 | U V0 U U U U U U V0 U U V0 U U V0 U U U | F F F F | b1 b0000 b000000000000000000 b0000 | 0:,V0,V0 2:,V0,V0 3: 4:,V0 5:,V0,V0 6:,V0,V0 7:,V0,B5 9:,V0,V0 10:,V0,B7 12:,V0,V0 13:,V0,B9 15:,V0,V0 16:,V0 17:,V0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,std/json:20399:20423 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&	o0std/prelude/text:Char	o0std/prelude/text:String&	o1mut std/json:reader&	o0mut std/json:Json&	o1mut std/json:reader&	o1I64	o1F64
+out 724e17cbc620e00c0e20dce913fd6d6a
+run std/json 18081-18153 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	7
+marks 372a917927bbc2fb4314652b4acd2801
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:18081:18153 t i t i i c0/i/i f0010
+hid fs1	o0std/json:reader&
+out 69e686f9cb8f601b62046dc0f4dbd83a
+run std/json 18305-19803 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	0
+marks a69ef59ea30335542be3740f761a042f
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 15131-15270 fn	4d839ad855a216249299317584032fab
+read std/json 15353-15548 fn	d2a085962233a8d1ce36e87ea77f5704
+read std/json 16031-16563 fn	f0bb1591423db96376b9576b697b7397
+read std/json 16657-17264 fn	d25dff1e76b681db70f5a1fbec85011a
+read std/json 17266-17331 fn	955908934fd9cc4998aa285aef9e8671
+read std/json 18081-18153 fn	c4cbadd534b84d077dca8b3f61c1b874
+read std/json 19852-20266 fn	802f7467c5512b3c2d763b45de3f80a6
+read std/json 20322-20871 fn	a6bb1eb6c8bfaa267438dcab5be39083
+hits 0
+body 1 23 3 1 | U U U U U U U U U U U U U U U U U U U U U U U | F F F | b1 b000 b00000000000000000000000 b000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0 10:,V0 11:,V0 12:,V0 13:,V0 14:,V0 15:,V0 16:,V0 17:,V0 18:,V0 19:,V0 20:,V0 21:,V0 22:,V0 | | ||
+sum r b1 b1 b1 b1 b1 b b b a,std/json:16259:16282 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:reader&
+out d3b25b3f61bfc6672e7ce5e2a8488358
+run std/json 14165-14280 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:reader	2
+marks 651dd33cfd190876bff277e2c43ceadb
+read -ctor	std/json:Json
+read std/json 0-0 ctor std/json:reader	17ce461903315d6c3c6f5676ec3ef0be
+read std/json 18305-19803 fn	4ee1951d943d6f4e78026b5d16d4dd91
+hits 0
+body 1 3 2 2 | U V1 U | F F | b01 b00 b000 b00 | 0:,V0,V1 2:,V1 | | ||
+sum r;V0,V1,0,14213,14214,3,0,0 b01 b01 b1 b0 b0 b b b a,std/json:14165:14280,std/json:14229:14241 t i t i i c0/i/i f1010
+hid fs1;28160:V0	o0std/prelude/text:String&
+out 8b2076c1c46ee3c0db20ce1330411912
+run std/json 8156-8204 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:Object	0
+marks 91c55d7b334cd25daf796dbc7911f085
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:8156:8204 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Object&
+out a6690223cea54a1a7c9890b157813d49
+run std/json 6802-7338 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:6802:7338 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&
+out e0d17a140d8668041bc55d4a0f863c61
+run std/json 6300-6449 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 6802-7338 fn	beb5494152de47c43878ea424d3382e1
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:6300:6449 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&
+out 6a501a93c58c14f2ab9648d83ceffda2
+run std/json 9320-9494 fn <std/prelude/text:String;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 8 1 | | F F F F F F F F | b0 b00000000 b b00000000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/json:9320:9494 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String
+out 396f5acddc9fd829a1c7ec3581285006
+run std/json 9527-9667 fn <std/prelude/text:String;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 8 0 | | F F F F F F F F | b b00000000 b b00000000 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String
+out f181dadb9df56e197e578a75317977e0
+run std/json 8797-9318 fn <std/prelude/text:String;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+mark std/json 0-0 ctor std/json:Object	0,2
+marks a9fe182d96260bd18a533d2cf72b59a4
+read -ctor	I64
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 9320-9494 fn <std/prelude/text:String;>	29d2e4fe2de89a51d8ffcecfecbf39ac
+read std/json 9527-9667 fn <std/prelude/text:String;>	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 3 12 1 | U U U | F F F F F F F F F F F F | b0 b000000000000 b000 b000000000000 | 0:,V0 1: 2:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/json:8797:9318 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Object&	o0std/prelude/text:String
+out 2b5cf9c6f3cd6ad35919ac56d83878b9
+run std/json 4440-5542 fn <std/prelude/text:String;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+mark std/json 0-0 ctor std/json:Object	1
+marks fa8b59f14da3d39d433f54019297fe22
+read -ctor	std/json:Json
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 8797-9318 fn <std/prelude/text:String;>	bbe420dd36e6c81367cdb997a4458da3
+hits 0
+body 1 2 3 2 | U B3 | F F F | b00 b000 b00 b000 | 0:,V0 | | ||
+sum r;V0,V1,0,4575,4642,0,0,0 b00 b00 b00 b00 b00 b b b a,std/json:4440:5542,std/json:4440:5542 t i t i i c0/i/i f1010
+hid fs1	o0std/json:Json&	o0std/prelude/text:String
+out c6a36b25dac324cf8af020c415ef52ba
+run std/json 7771-7924 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/json:Json&>
+hits 0
+body 1 0 2 2 | | F F | b00 b00 b b00 | | | ||
+sum r;V0,V1,0,7861,7873,0,0,0 b00 b00 b0 b0 b0 b b b a,std/json:7771:7924,std/json:7771:7924 t i t i i c0/i/i f1010
+hid fs1	o0std/json:Json&
+out 78f66d95720c1ed69aa8ff78eb81ecc7
+run std/json 7544-7683 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+hits 0
+body 1 0 2 2 | | F F | b00 b00 b b00 | | | ||
+sum r;V0,V1,0,7624,7632,0,0,0 b00 b00 b0 b0 b0 b b b a,std/json:7544:7683,std/json:7544:7683 t i t i i c0/i/i f1010
+hid fs1	o0std/json:Json&
+out 847405d068a0108db689cc9bcb3ba215
+run std/json 0-0 ctor std/json:writer	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:writer	0,1,2
+marks d5b94aa6c08f7cdd1f8fe22945dabc10
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	std/json:Naming
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+hits 0
+body 1 1 5 2 | U | F F F F F | b01 b00000 b0 b00000 | 0:,V1 | | ||
+sum r;V0,V1,0,41097,41103,1,0,0 b01 b01 b10 b00 b00 b b b a,std/json:0:0,std/prelude/vec:3184:3188 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/json:Naming
+out d745b65f59eed23ad89d497c0c559243
+run std/json 29645-29705 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 3 2 1 | B0 B0 U | F F | b1 b00 b000 b00 | 2:,V0,B0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0F64
+out 10051684ac4fd57d8b8528f3967ad7b9
+run std/json 47747-48495 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 12 10 2 | U U U U U U U U U U U U | F F F F F F F F F F | b10 b0000000000 b000000000000 b0000000000 | 0:,V0 1:,V0,V1 2:,V0,B4 3:,V0,B6 4:,V0,B8 5:,V0,B10 6:,V0,B12 7:,V0,B13 8:,V0 9:,V0 10:,V0,V1 11:,V0 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,std/prelude/vec:4512:4530,std/json:47747:48495 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:writer&	o0std/prelude/text:String&	o0std/prelude/text:Char	o0std/prelude/text:Char
+out 758eaeb54192113948738dace3a5560c
+run std/json 41252-41406 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:writer	0
+marks 646402663e4dbfef0fb35879f3a62fd2
+read -ctor	I64
+read std/json 0-0 ctor std/json:writer	1f61b89a6e54d2cf69a23702b7244419
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 2 8 1 | U U | F F F F F F F F | b1 b00000000 b00 b00000000 | 0:,V0 1:,V0,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:writer&	o0I64
+out 2ffb6eb3c553da3f414c46094ed07709
+run std/json 41408-43002 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:Object	0,1
+mark std/json 0-0 ctor std/json:writer	0
+marks fa54967757ab250fd915135cc5ef703a
+read -ctor	I64
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 0-0 ctor std/json:writer	1f61b89a6e54d2cf69a23702b7244419
+read std/json 29645-29705 fn	6fbff10506db1de19a4bc199611f8137
+read std/json 41252-41406 fn	6fbff10506db1de19a4bc199611f8137
+read std/json 47747-48495 fn	eef2386ffcb32578e98c0172a34f18ac
+read std/json 8156-8204 fn	d2fca66b7bdf4c6a9426bfb89cb8656d
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 30 22 2 | U U U U B6 B6 U B7 B7 U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F | b10 b0000000000000000000000 b000000000000000000000000000000 b0000000000000000000000 | 0:,V0,B1 1:,V0,B2 2:,V0,B4 3:,V0 6:,V0,B6 9:,V0,B7 10:,V0,V1 11:,V0,B10 12:,V0 13:,V0 14:,V0 15:,V0,V1 16:,V0 17:,V0 18:,V1 19:,V0,B16 20:,V0 21:,V1 22:,V0 23:,V0 24:,V0,V1 25:,V0,B18 26:,V0,V1 27:,V0 28:,V0 29:,V0,B21 | | ||
+sum r b10 b10 b100 b000 b000 b b b a,std/prelude/vec:4512:4530,std/json:41408:43002 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:writer&	o0std/json:Json&	o0I64
+out 367a9e8bd3ad366c5913ed6604350b9d
+run std/json 43046-46503 fn <std/json:Json&;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 41408-43002 fn	cb85b8022f0788ef2f20722529869a74
+hits 0
+body 1 1 3 2 | U | F F F | b10 b000 b0 b000 | 0:,V0,V1 | | ||
+sum r b10 b10 b100 b000 b000 b b b a,std/prelude/vec:4512:4530,std/json:43046:46503 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:writer&	o0std/json:Json&	o0I64
+out 16b709db841ef0be7c6188a766ca4bda
+run std/json 31581-31733 fn <std/json:Json&;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read std/json 0-0 ctor std/json:writer	1f61b89a6e54d2cf69a23702b7244419
+read std/json 43046-46503 fn <std/json:Json&;>	a573b72e39e6b7971863ccce54eb6fb4
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 4 4 3 | U U U V2 | F F F F | b001 b0000 b0000 b0000 | 0:,V1,B0 1:,B0,V0 2:,B0,V2 | | ||
+sum r b001 b001 b010 b000 b000 b b b a,std/json:31581:31733,std/json:31581:31733,std/json:31715:31731 t i t i i c0/i/i f0010
+hid fs1;28416:V1;28417:U	o0std/json:Json&	o0std/prelude/text:String&	o0std/json:Naming
+out 413133b5eb33f47db8a8fb12c0bc36d5
+run std/json 8797-9318 fn <std/prelude/text:String&;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+mark std/json 0-0 ctor std/json:Object	0,2
+marks a9fe182d96260bd18a533d2cf72b59a4
+read -ctor	I64
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 9320-9494 fn <std/prelude/text:String&;>	1d5bcb73809a759bb7e14199c982651e
+read std/json 9527-9667 fn <std/prelude/text:String&;>	eedc09dcb41554725957e636fb24ad74
+hits 0
+body 1 3 12 2 | U U U | F F F F F F F F F F F F | b00 b000000000000 b000 b000000000000 | 0:,V0,V1 1:,V1 2:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/json:8797:9318,std/json:8797:9318 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Object&	o0std/prelude/text:String&
+out 340220fd0b67f45301816ccaeed658b9
+run std/json 4440-5542 fn <std/prelude/text:String&;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+mark std/json 0-0 ctor std/json:Object	1
+marks fa8b59f14da3d39d433f54019297fe22
+read -ctor	std/json:Json
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 8797-9318 fn <std/prelude/text:String&;>	f8a9a593876fb4bd7c9df01f96b1fb97
+hits 0
+body 1 2 3 3 | U B3 | F F F | b000 b000 b00 b000 | 0:,V0,V1 | | ||
+sum r;V0,V2,0,4798,4865,0,0,0 b000 b000 b00 b00 b00 b b b a,std/json:4440:5542,std/json:4440:5542,std/json:4440:5542 t i t i i c0/i/i f1010
+hid fs1	o0std/json:Json&	o0std/prelude/text:String&
+out 4e39aadc5a36410b9c037a677cf64380
+run std/json 7340-7478 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:7340:7478 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&
+out 131190158f4167a7b584f93cf8067260
+run std/json 7989-8128 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+hits 0
+body 1 0 2 2 | | F F | b00 b00 b b00 | | | ||
+sum r;V0,V1,0,8069,8077,0,0,0 b00 b00 b0 b0 b0 b b b a,std/json:7989:8128,std/json:7989:8128 t,U,U i t i i c0/i/i f1010
+hid fs1	o0std/json:Json&
+out d2e3ed1fc7ae5cc6dfd7523012b55861
+run std/json 8480-8579 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 8797-9318 fn <std/prelude/text:String&;>	f8a9a593876fb4bd7c9df01f96b1fb97
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/json:8480:8579,std/json:8480:8579 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Object&	o0std/prelude/text:String&
+out 7f80963a3afcc08daf64159c00cbd225
+run std/json 43046-46503 fn <std/json:Json;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 41408-43002 fn	cb85b8022f0788ef2f20722529869a74
+hits 0
+body 1 1 3 2 | U | F F F | b10 b000 b0 b000 | 0:,V0,V1 | | ||
+sum r b10 b10 b100 b000 b000 b b b a,std/prelude/vec:4512:4530,std/json:43046:46503 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:writer&	o0std/json:Json	o0I64
+out 9dbc2d9395965577eef6883f723cf70f
+run std/json 31581-31733 fn <std/json:Json;>	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read std/json 0-0 ctor std/json:writer	1f61b89a6e54d2cf69a23702b7244419
+read std/json 43046-46503 fn <std/json:Json;>	a573b72e39e6b7971863ccce54eb6fb4
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 4 4 3 | U U U V2 | F F F F | b001 b0000 b0000 b0000 | 0:,V1,B0 1:,B0,V0 2:,B0,V2 | | ||
+sum r b001 b001 b010 b000 b000 b b b a,std/json:31581:31733,std/json:31581:31733,std/json:31715:31731 t i t i i c0/i/i f0010
+hid fs1;28416:V1;28417:U	o0std/json:Json	o0std/prelude/text:String&	o0std/json:Naming
+out 0b41a2420af845fb8ccefd47b238db24
+run std/json 5608-5745 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 8480-8579 fn	c465368129114998c9cea3ccfccd651a
+hits 0
+body 1 1 3 2 | U | F F F | b00 b000 b0 b000 | 0:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/json:5608:5745,std/json:5608:5745 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&	o0std/prelude/text:String&
+out f367e96648a76b0ad4ad53b8081dbe85
+run std/json 5747-5799 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:5747:5799 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&
+out ce6e85ec9ef28b8b9225a9f1d62828d6
+run std/json 5921-6143 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:5921:6143 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&
+out 95b00f77029e21368bffd27c569598f4
+run std/json 6546-6663 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 6802-7338 fn	beb5494152de47c43878ea424d3382e1
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:6546:6663 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&
+out be6001fb85885702543cd4eec83fc00c
+run std/json 8313-8433 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:Object	1
+marks fa8b59f14da3d39d433f54019297fe22
+read -ctor	std/json:Json
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 8797-9318 fn <std/prelude/text:String&;>	f8a9a593876fb4bd7c9df01f96b1fb97
+hits 0
+body 1 2 2 3 | U B1 | F F | b000 b00 b00 b00 | 0:,V0,V1 | | ||
+sum r;V0,V2,0,8364,8431,0,0,0 b000 b000 b00 b00 b00 b b b a,std/json:8313:8433,std/json:8313:8433,std/json:8313:8433 t i t i i c0/i/i f1010
+hid fs1	o0std/json:Object&	o0std/prelude/text:String&
+out 8c664e3c509d4bc3b8d50c2f88d200e1
+run std/json 12221-12668 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 6802-7338 fn	beb5494152de47c43878ea424d3382e1
+hits 0
+body 1 2 6 2 | U U | F F F F F F | b00 b000000 b00 b000000 | 0:,V0 1:,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/json:12221:12668,std/json:12221:12668 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&	o0std/json:Json&
+out 5f9dc6cdd45a00a5686927df52fac57e
+run std/json 10658-12129 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:Object	0,1
+marks bedaa41437b17f5e14ad8078b70dfb1f
+read -ctor	I64
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 12221-12668 fn	cec6f4a0792255aac0704192a1ce7eb4
+read std/json 8156-8204 fn	d2fca66b7bdf4c6a9426bfb89cb8656d
+read std/json 8797-9318 fn <std/prelude/text:String&;>	f8a9a593876fb4bd7c9df01f96b1fb97
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 9 24 2 | U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F | b00 b000000000000000000000000 b000000000 b000000000000000000000000 | 0:,V0,V1 1:,V0,V1 2:,V0,V1 3:,V0 4:,V1 5:,V0 6:,V1,V0 7:,V0,V0 8:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/json:10658:12129,std/json:10658:12129 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&	o0std/json:Json&
+out 09c1116299ae947024b9421e9ea66142
+run std/json 12786-13875 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:Object	0,1
+marks bedaa41437b17f5e14ad8078b70dfb1f
+read -ctor	I64
+read std/json 0-0 ctor std/json:Object	32ade948c9e71ccd08b6676c04d082c8
+read std/json 6802-7338 fn	beb5494152de47c43878ea424d3382e1
+read std/json 8156-8204 fn	d2fca66b7bdf4c6a9426bfb89cb8656d
+read std/json 9527-9667 fn <std/prelude/text:String&;>	eedc09dcb41554725957e636fb24ad74
+read std/prelude/text 2203-2322 fn	bfe506c36c6752c0c7d0655097a249c0
+hits 0
+body 1 8 22 1 | U B7 U U U U U U | F F F F F F F F F F F F F F F F F F F F F F | b0 b0000000000000000000000 b00000000 b0000000000000000000000 | 0:,V0 2:,B7 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/json:12786:13875 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&
+out 71bd866abf5d2de4b7adcc95fce6f22c
+run std/json 32989-33931 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 1003-1062 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 1063-1122 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 1275-1341 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 1342-1408 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 12 15 2 | U U U U U U U U U U U U | F F F F F F F F F F F F F F F | b10 b000000000000000 b000000000000 b000000000000000 | 0:,V0,V1 1: 2: 3: 4: 5: 6:,V0 7: 8: 9:,V0 10: 11:,V0 | | ||
+sum r b10 b10 b100 b000 b000 b b b a,std/prelude/vec:4512:4530,std/json:32989:33931 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/text:StringBuilder&	o0std/prelude/text:String&	o0std/json:Naming
+out 92967e1dd4823501ba5457dc6dd95b86
+run std/json 32820-32987 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 32989-33931 fn	1451d866b05cb26bb964c29d19909bbc
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 4 3 2 | V1 B0 U U | F F F | b01 b000 b0000 b000 | 1:,B0 2:,B0,V0 3:,B0,V1 | | ||
+sum r b01 b01 b00 b00 b00 b b b a,std/json:32820:32987,std/json:32902:32907 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/json:Naming
+out 212730308af1ef4bcc28330de2dc1dec
+run std/json 40995-41041 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 31581-31733 fn <std/json:Json&;>	548c94ac8687707c20e22f91c172d03d
+hits 0
+body 1 1 1 2 | U | F | b01 b0 b0 b0 | 0:,V0,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/json:40995:41041,std/json:31715:31731 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o1std/json:Naming
+out eed4cda94a3779623a2ff992eca29d7c
+run std/json 47382-47460 fn	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:writer	0
+marks 646402663e4dbfef0fb35879f3a62fd2
+read std/json 0-0 ctor std/json:writer	1f61b89a6e54d2cf69a23702b7244419
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 1 1 1 | U | F | b1 b0 b0 b0 | 0:,V0,B0 | | ||
+sum r b1 b1 b1 b0 b0 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut std/json:writer&
+out ca72b3a47f09d7a3af220c9c90150588
+run std/json global hexDigits	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a095cfb66dc7bf909df89508ab8893a7
+run std/json global MaxDepth	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3e0bc969223971580eea8fc223848fdb
+run std/json 0-0 ctor std/json:Key	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+mark std/json 0-0 ctor std/json:Key	0
+marks ca4c9f690ec30f27dad4bfaade44153f
+read -ctor	Array<std/prelude/text:Char>
+hits 0
+body 1 1 2 2 | B1 | F F | b00 b00 b0 b00 | | | ||
+sum r;V0,V1,0,32402,32406,1,0,0 b00 b00 b1 b0 b0 b b b a,std/json:0:0,std/json:0:0 t i,-1 t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out e49cd22999f0519eaa845aff03ffa51e
+run std/json 0-0 ctor std/json:Skip	
+ctx r1 g1 p0
+keys std/json=4e7caa3194af4ae8ab4d6b841a2327eb74544a982f6cf3d6027a32d396041ab5
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 1 | | | b0 b b b | | | ||
+sum r b0 b0 b b b b b b a,std/json:0:0 t i t i i c0/i/i f0010
+hid fs1
+out e7c23ea2dbd3094e8d7df9ab41b44dde
+end
+sum 43180-8054034199488133384

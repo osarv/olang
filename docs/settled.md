@@ -860,8 +860,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   element holding a Map frees it all (each live entry's key and value, then its arrays; a Map copied into an element
   split as a Put builds an entry - a removal from one had put back text that was no slot); a view read in an expression
   copies nothing (`v[i][2][0]`, gap 20), a copy it needs is the reading block's; a by-value argument's copy reads
-  nothing in use. Gap left: a program copying a Vec of text keeps the text place - building a copy's text in slots was
-  measured at +5 ns a string (+70% a copy) and left for the user.
+  nothing in use. Round 8 (wt-freeing8): a copy's text is built in slots of where the copy goes, as the place's own
+  stores build it, so a program copying a Vec of text frees it (copytext 50 MB to 12 MB) - made cheap enough first: a
+  slot scope's allocation one call (`__olang_slot_alloc`) where it was a failed bump, two calls and 128 bytes cleared a
+  string; 1,000,000 copies of 20 strings 152 ms in the arena, 156 ms in slots (238 ms in round 7).
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

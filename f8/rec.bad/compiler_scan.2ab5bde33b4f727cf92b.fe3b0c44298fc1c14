@@ -1,0 +1,85 @@
+olang front record
+body fn 11106-11889	known p grows|0|-|-|..brackets|9|0|compiler/scan|11204|11208|-1
+body fn 12072-12532	known p
+body fn 12534-12620	known p
+body fn 12621-12677	known p
+body fn 12678-12753	known p
+body fn 12754-12856	known p
+body fn 12911-13040	known p
+body fn 13111-13236	known p
+body fn 13353-13543	known p
+body fn 13755-14126	known p grows|0|-|-|..diags|6|0|compiler/scan|13852|13856|-1
+body fn 14246-14430	known p grows|0|-|-|..diags|6|0|compiler/scan|14364|14368|-1
+body fn 14432-14576	known p
+body fn 14691-14975	known p
+body fn 15091-15239	known p
+body fn 15355-18499	known p
+body fn 1780-2782	known p
+body fn 18548-18702	known p
+body fn 18947-19486	known p grows|0|-|-|..diags|6|0|compiler/scan|19343|19347|-1
+body fn 19596-19804	known p
+body fn 19915-20084	known p
+body fn 20151-21612	known p grows|0|-|-|..diags|6|0|compiler/scan|20418|20424|-1
+body fn 21705-21820	known p
+body fn 21822-22032	known p
+body fn 22189-22925	known p grows|0|-|-|..diags|6|0|compiler/scan|22410|22414|-1
+body fn 23062-23876	known p grows|0|-|-|..diags|6|0|compiler/scan|23200|23203|-1
+body fn 23960-25109	known p grows|0|-|-|..diags|6|0|compiler/scan|24075|24079|-1
+body fn 25216-26299	known p grows|0|-|-|..diags|6|0|compiler/scan|25422|25426|-1
+body fn 26344-26453	known p
+body fn 26496-26647	known p
+body fn 26710-26906	known p
+body fn 27053-27406	known p
+body fn 27620-29193	known p
+body fn 2812-5533	known p
+body fn 29224-29743	known p grows|0|-|-|.|0|0|compiler/scan|29289|29293|-1
+body fn 29833-29900	known p
+body fn 30019-30490	known p
+body fn 30529-30823	known p
+body fn 6003-6290	known p
+body fn 6396-6837	known p
+body fn 7264-7390	known p grows|0|-|-|..diags|6|0|compiler/scan|7350|7354|-1
+body fn 7392-10896	known p grows|0|-|-|..diags|6|0|compiler/scan|8191|8199|-1 grows|0|-|-|..toks|5|0|compiler/scan|9491|9495|-1 grows|0|-|-|..brackets|9|0|compiler/scan|10470|10475|-1
+sig LiteralBytes@27620 fn&(String&) Array<U8>
+sig LiteralText@29833 fn&(String&) String
+sig Match@6003 fn&(Tokens&, I32) I32
+sig Message@2812 fn&(Diag) String
+sig Rule@1780 fn&(Diag) String&
+sig Tokens.Scan@6396 fn&(String&) Tokens
+sig blankLine@26496 fn&(String&, I64, I64) Bool
+sig blockComment@13353 fn&(String&, I64) I64
+sig blockEnd@14246 fn&(mut scanner&, I64) I64
+sig canStart@14691 fn&(String&, I64) Bool
+sig char@23960 fn&(mut scanner&, I64) I64
+sig closeBeforeDecl@12072 fn&(mut scanner&, Tok, I64)
+sig diag@7264 fn&(mut scanner&, LexError, I64, I64, Char)
+sig digitOf@18548 fn&(Char, I64) Bool
+sig digits@18947 fn&(mut scanner&, I64, I64) I64, I64
+sig escape@22189 fn&(mut scanner&, I64, Char) I64
+sig escapeOk@21705 fn&(Char, Char) Bool
+sig exponentDigits@19596 fn&(String&, I64) Bool
+sig fractionAt@19915 fn&(String&, I64) Bool
+sig hasLineEnd@14432 fn&(String&, I64, I64) Bool
+sig hasPrefix@26710 fn&(String&, I64, I64, I64, I64) Bool
+sig hexDigit@21822 fn&(Char) I64
+sig isDigit@12621 fn&(Char) Bool
+sig isHexDigit@12754 fn&(Char) Bool
+sig isLetter@12534 fn&(Char) Bool
+sig isWordChar@12678 fn&(Char) Bool
+sig junk@13755 fn&(mut scanner&, Char, I64) I64
+sig junkEnd@15091 fn&(String&, I64) I64
+sig lastLineStart@26344 fn&(String&, I64) I64
+sig lineEnd@13111 fn&(String&, I64) I64
+sig matchBraces@30019 fn&(Array<Token>&, mut Array<I32>&, mut Array<I32>&)
+sig number@20151 fn&(mut scanner&, I64) Tok, I64
+sig operator@15355 fn&(String&, I64) Tok, I64
+sig pushUtf8@29224 fn&(mut Vec<U8>&, I64)
+sig raw@25216 fn&(mut scanner&, I64) I64
+sig run@7392 fn&(mut scanner&)
+sig spelled@30529 fn&(String&, Tokens&) String
+sig str@23062 fn&(mut scanner&, I64) I64
+sig track@11106 fn&(mut scanner&, Tok)
+sig unicodeEscape@27053 fn&(String&, I64) I64, I64 ? BadEscape
+sig wordEnd@12911 fn&(String&, I64) I64
+end
+sum 65c4b2b99d7fc30d397a3bdfa8a0c16fb6e66f1360c318528c8cb093d2a0a2e2

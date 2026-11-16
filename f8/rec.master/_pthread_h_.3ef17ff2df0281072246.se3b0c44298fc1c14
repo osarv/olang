@@ -1,0 +1,1509 @@
+olang scope record
+run <pthread.h> 0-0 ctor <pthread.h>:pthread_mutex_t	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:pthread_mutex_t	0
+marks 59953d6d54a7df9f8656a5d4d58fd6cd
+read -ctor	Array<I64, 5>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:13560:13573 t i,-1 t i i c0/i/i f0010
+hid fs1
+out c1c7682f3360dda7dd847c38f034a076
+run <pthread.h> 0-0 ctor <pthread.h>:pthread_cond_t	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:pthread_cond_t	0
+marks c8f25717a559b2d8be8da5ba5c4653d9
+read -ctor	Array<I64, 6>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:13621:13634 t i,-1 t i i c0/i/i f0010
+hid fs1
+out bdc1cf65aca2357bc89bd15e25b07a68
+run <pthread.h> 0-0 ctor <pthread.h>:timespec	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:timespec	0,1
+marks ae646b187efec3577ab478bae1bbc058
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<pthread.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 956595d74628e61588e1d3052f0a24f1
+run <pthread.h> 0-0 ctor <pthread.h>:sched_param	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:sched_param	0
+marks 5b82dbd65a9fac2c5ac5385a378b787e
+read -ctor	I32
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b b b b b b a,<pthread.h>:0:0 t i,-1 t i i c0/i/i f0010
+hid fs1
+out f93eb3336038758f0b02f21f36d88838
+run <pthread.h> 0-0 ctor <pthread.h>:timeval	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:timeval	0,1
+marks d6977a90738403df68d59026973a0d5b
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<pthread.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out ae4a5dc17f5237385ed7a8579592039f
+run <pthread.h> 0-0 ctor <pthread.h>:timex	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:timex	0
+marks 4a9dafeb160679ed3291843f101f3dc9
+read -ctor	Array<I64, 26>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:12832:12846 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 17a775624684af97f8caf65fa0301f6e
+run <pthread.h> 0-0 ctor <pthread.h>:itimerspec	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:itimerspec	0,1
+marks fb101e16e1b9132f7bd9353bedb938af
+read <pthread.h> 0-0 ctor <pthread.h>:timespec	d6e921ddc32abbc55d0241dc0f7fbb9c
+hits 0
+body 1 2 2 1 | U U | F F | b0 b00 b00 b00 | 0:,V0 1:,V0 | | ||
+sum r b0 b0 b b b b b b a,<pthread.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out e7f9daa299ff6097fa7a793eec184a6e
+run <pthread.h> 0-0 ctor <pthread.h>:c___locale_struct	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:c___locale_struct	0,1,2,3,4
+marks d6107deb161af40584bdf9c1cf997073
+read -ctor	Array<<pthread.h>:c___locale_data?&, 13>
+read -ctor	Array<std/prelude/text:CStr?&, 13>
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 2 5 1 | V0 V0 | F F F F F | b1 b00000 b00 b00000 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:12976:13004 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out ae54bf0750e88a840a82ea1b1f3a9310
+run <pthread.h> 0-0 ctor <pthread.h>:c___atomic_wide_counter	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:c___atomic_wide_counter	0
+marks 43f439d2c62f9459afedc803779a9516
+read -ctor	Array<I64, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:13164:13177 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 611d7fcc2cd10ced21229df82e0e629a
+run <pthread.h> 0-0 ctor <pthread.h>:c___pthread_internal_list	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:c___pthread_internal_list	0,1
+marks 1c80f966f0ab6b6a023a2bbd1dea8bab
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b b b b b b a,<pthread.h>:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out a1295d9b4b7378f0b5705932c3c12ad0
+run <pthread.h> 0-0 ctor <pthread.h>:c___pthread_internal_slist	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:c___pthread_internal_slist	0
+marks d6c4b446974041aaf0e7234e7bcacc8d
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b b b b b b a,<pthread.h>:0:0 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 4731dc10e156739747f2b5c46ea9cd48
+run <pthread.h> 0-0 ctor <pthread.h>:pthread_mutexattr_t	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:pthread_mutexattr_t	0
+marks 011958dcbab66600593c0e668812f25b
+read -ctor	Array<I32, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:13372:13385 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 99c581b16d30fb80a45fe12fc355221d
+run <pthread.h> 0-0 ctor <pthread.h>:pthread_condattr_t	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:pthread_condattr_t	0
+marks 190d0b348342d47f790a3174d6881405
+read -ctor	Array<I32, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:13437:13450 t i,-1 t i i c0/i/i f0010
+hid fs1
+out c82bb8a549156dc49c04ccfd888ec150
+run <pthread.h> 0-0 ctor <pthread.h>:pthread_attr_t	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:pthread_attr_t	0
+marks c062c8488c24947276a6a494d1846342
+read -ctor	Array<I64, 7>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:13498:13511 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 84a3ff303dc0825de97117cf1e52eb27
+run <pthread.h> 0-0 ctor <pthread.h>:pthread_rwlock_t	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:pthread_rwlock_t	0
+marks 1318c1fb825cd3fa4c4a3521b6b33a67
+read -ctor	Array<I64, 7>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:13684:13697 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 7c970a991cf31e18b99cd973f11a8cbf
+run <pthread.h> 0-0 ctor <pthread.h>:pthread_rwlockattr_t	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:pthread_rwlockattr_t	0
+marks ed2932bc610d781cb611154ace650862
+read -ctor	Array<I64, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:13751:13764 t i,-1 t i i c0/i/i f0010
+hid fs1
+out c8a1357b14860d3af1ff296572b541ea
+run <pthread.h> 0-0 ctor <pthread.h>:pthread_barrier_t	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:pthread_barrier_t	0
+marks 2ee5691db05ff8ccaf0048b129370433
+read -ctor	Array<I64, 4>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:13815:13828 t i,-1 t i i c0/i/i f0010
+hid fs1
+out 9b867b4b512efd21c86620581c22dc4a
+run <pthread.h> 0-0 ctor <pthread.h>:pthread_barrierattr_t	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:pthread_barrierattr_t	0
+marks f69dff38ad239a7830fd0634204de58d
+read -ctor	Array<I32, 1>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:13883:13896 t i,-1 t i i c0/i/i f0010
+hid fs1
+out d26e2f0b377d46bd404ef75d5460038a
+run <pthread.h> 0-0 ctor <pthread.h>:c___sigset_t	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:c___sigset_t	0
+marks 6a8c215ebceef3f537537ef57cbd9acf
+read -ctor	Array<U64, 16>
+hits 0
+body 1 1 1 1 | V0 | F | b1 b0 b0 b0 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:13940:13954 t i,-1 t i i c0/i/i f0010
+hid fs1
+out c16c138218df7b0681e6da43f8aa9ec1
+run <pthread.h> 0-0 ctor <pthread.h>:_pthread_cleanup_buffer	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:_pthread_cleanup_buffer	0,1,2,3
+marks cd2337d40f2cc3d80e6251761c17774e
+read -ctor	I32
+read -ctor	std/prelude/text:CVoid
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b b b b b b a,<pthread.h>:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out f4bfff0147cf7ddc2c8c21bef1e40c93
+run <pthread.h> 0-0 ctor <pthread.h>:c___cancel_jmp_buf_tag	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+mark <pthread.h> 0-0 ctor <pthread.h>:c___cancel_jmp_buf_tag	0,1
+marks 61238ad3ae756be57472970629af7727
+read -ctor	Array<I64, 8>
+read -ctor	I32
+hits 0
+body 1 1 2 1 | V0 | F F | b1 b00 b0 b00 | | | ||
+sum r b1 b1 b b b b b b a,<pthread.h>:14134:14147 t i,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 2f373808ef9a8a5e4fc75cf48afa1154
+run <pthread.h> global PTHREAD_CREATE_JOINABLE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a591f254e3a0b24ec3494e5c6d23c9f0
+run <pthread.h> global PTHREAD_CREATE_DETACHED	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 29135f9f04e83a86b9727741051b87ab
+run <pthread.h> global PTHREAD_MUTEX_TIMED_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c43c2e8503aef45a0b77818c96b4d0e5
+run <pthread.h> global PTHREAD_MUTEX_RECURSIVE_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d4cf7a4e9845517f4dcb9c6d1abd3e69
+run <pthread.h> global PTHREAD_MUTEX_ERRORCHECK_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1ff65d637316ec069ac839e94434463d
+run <pthread.h> global PTHREAD_MUTEX_ADAPTIVE_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 15c710f0f409031811764c86616f898f
+run <pthread.h> global PTHREAD_MUTEX_NORMAL	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 47df7e0b738b55f90ab8626fd6fcec69
+run <pthread.h> global PTHREAD_MUTEX_RECURSIVE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ff594e3356b9a667f6eb8cc21f2333f7
+run <pthread.h> global PTHREAD_MUTEX_ERRORCHECK	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e9b127a80f60143ee5034bc181d2ef6e
+run <pthread.h> global PTHREAD_MUTEX_DEFAULT	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 130ab6f16efede9af0136ef244200060
+run <pthread.h> global PTHREAD_MUTEX_FAST_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7d81a245381db5ded85db1f928cc22ea
+run <pthread.h> global PTHREAD_MUTEX_STALLED	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7ff90f9097ddd7e6bc1db730f9d0847f
+run <pthread.h> global PTHREAD_MUTEX_STALLED_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c9be165adb7bc2f8885ef39fb17a0d50
+run <pthread.h> global PTHREAD_MUTEX_ROBUST	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 167d5aae25e4086a9d5451c338fb8034
+run <pthread.h> global PTHREAD_MUTEX_ROBUST_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 863564cd54407667a2fb3ee1efdf5e54
+run <pthread.h> global PTHREAD_PRIO_NONE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 34fbb2c3a7d245528d91e025631c6cd9
+run <pthread.h> global PTHREAD_PRIO_INHERIT	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4cb2c0a5ad0b9daa90b42deb08fdafde
+run <pthread.h> global PTHREAD_PRIO_PROTECT	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1072834e5c088008b5afcacc4c615036
+run <pthread.h> global PTHREAD_RWLOCK_PREFER_READER_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 120376895101b186a0f497d2f149e5f5
+run <pthread.h> global PTHREAD_RWLOCK_PREFER_WRITER_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 29590da5b4d051e53ce52939ca9a1248
+run <pthread.h> global PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e9626b616cdcf8aca0148c47a0ac41d0
+run <pthread.h> global PTHREAD_RWLOCK_DEFAULT_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a6a6743b81ada374fb5ba9a17453bf4f
+run <pthread.h> global PTHREAD_INHERIT_SCHED	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cf6ac25a3b75469b290803f07c735e0f
+run <pthread.h> global PTHREAD_EXPLICIT_SCHED	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 24eb548ac67355ec1c576d5d47842c24
+run <pthread.h> global PTHREAD_SCOPE_SYSTEM	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f360839b12d9cafd8836a5ae543fc5da
+run <pthread.h> global PTHREAD_SCOPE_PROCESS	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b0a15efb5053de29e22fc495b34a96e6
+run <pthread.h> global PTHREAD_PROCESS_PRIVATE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 021ce3cfe0819c72a4d7fdbd12af430e
+run <pthread.h> global PTHREAD_PROCESS_SHARED	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 842d45f90a8473895b24b3378f027cd6
+run <pthread.h> global PTHREAD_CANCEL_ENABLE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c500f01332a729a1a3284703d6a800c4
+run <pthread.h> global PTHREAD_CANCEL_DISABLE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9b9f2f831ec7c4d9b3c44d719846c7a0
+run <pthread.h> global PTHREAD_CANCEL_DEFERRED	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6583ef51dde62596933970b1e816c23a
+run <pthread.h> global PTHREAD_CANCEL_ASYNCHRONOUS	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e2b3abe1d03ad59232aaf092d83f571d
+run <pthread.h> global SCHED_OTHER	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 64b8bec82fccac601973c4cfd2fbe730
+run <pthread.h> global SCHED_FIFO	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5c92f49dfffdf905586e8daaa13b2486
+run <pthread.h> global SCHED_RR	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 45e981ebdf85b23e37885506aa343e85
+run <pthread.h> global SCHED_BATCH	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 53f43f0b8957d722bbf91154761723ff
+run <pthread.h> global SCHED_ISO	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3e43f4274833a5dd9f68c51412c830db
+run <pthread.h> global SCHED_IDLE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a4b415df7ef36ddef14e4862da31c28f
+run <pthread.h> global SCHED_DEADLINE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bb23830e68846b23be5146d7de333b1f
+run <pthread.h> global SCHED_RESET_ON_FORK	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 18878f19dd7c8ebb94fbd891ce73dbc4
+run <pthread.h> global CSIGNAL	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4678b7b69b56e2be49f37ed16a174004
+run <pthread.h> global CLONE_VM	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 48f3e1159f26b38c62958f192d88843f
+run <pthread.h> global CLONE_FS	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 001ebcb2493b05c2f1e01f96628ce86f
+run <pthread.h> global CLONE_FILES	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1e12fada80979174d0b80d3f262d339d
+run <pthread.h> global CLONE_SIGHAND	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 654cb18cbd954c0173e1a6b96a5eb021
+run <pthread.h> global CLONE_PIDFD	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 11b4ebf8ff9eba350c884c87200901d5
+run <pthread.h> global CLONE_PTRACE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4217863711732e50185e1bb5b39650cb
+run <pthread.h> global CLONE_VFORK	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2f7c27505f6b9d68082a6153f8cf3d6e
+run <pthread.h> global CLONE_PARENT	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out eece2ef8aec25c94141c20a6c248bc79
+run <pthread.h> global CLONE_THREAD	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 09c021008ffc0b8beb6c313751a336cd
+run <pthread.h> global CLONE_NEWNS	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2867c60b05afe5c76d796a39d611c6d0
+run <pthread.h> global CLONE_SYSVSEM	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out bc075df52360ab1deb6b461bde4e803c
+run <pthread.h> global CLONE_SETTLS	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ec4c3578e8bcdffd4675d8c6ea27bec0
+run <pthread.h> global CLONE_PARENT_SETTID	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 275e9459fd0232c39b386457f681972a
+run <pthread.h> global CLONE_CHILD_CLEARTID	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 806b6611cfbeeb75d112a4e043cf3eba
+run <pthread.h> global CLONE_DETACHED	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 21986dce43d1508e390aae15c9d08b4f
+run <pthread.h> global CLONE_UNTRACED	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d2357745a63b870d320a6461cd0bdf41
+run <pthread.h> global CLONE_CHILD_SETTID	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5935fcaba1d154f8c30504cc7dac5775
+run <pthread.h> global CLONE_NEWCGROUP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out aefb515fe54a8feafaf1e779c381df68
+run <pthread.h> global CLONE_NEWUTS	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c8067bb5b2d92b009e2f7181f6b5cc53
+run <pthread.h> global CLONE_NEWIPC	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ae5f835634d0360149f6ad7836c13a1f
+run <pthread.h> global CLONE_NEWUSER	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f3055025db1011d9c9f4103bf36c8f4f
+run <pthread.h> global CLONE_NEWPID	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a31dd2e4168cb6c40629437ea087e1c9
+run <pthread.h> global CLONE_NEWNET	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 067af25f83da17e54656e4ddcc06c0c4
+run <pthread.h> global CLONE_IO	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6b31a8bff3aca2641f52118812c94cdd
+run <pthread.h> global CLONE_NEWTIME	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d2168862c637223b3b1660f2d92b15dc
+run <pthread.h> global CPU_SETSIZE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3b61f15f5a6919762a417536c883c3a7
+run <pthread.h> global CLOCKS_PER_SEC	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f4480bb436988f06fade272f424ff0d7
+run <pthread.h> global CLOCK_REALTIME	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 11ca88dea53e9f23e94b09ca41ea8913
+run <pthread.h> global CLOCK_MONOTONIC	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e3c63828bccdb2422d47daddf9347413
+run <pthread.h> global CLOCK_PROCESS_CPUTIME_ID	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 31f82c82184df1ee0b7eae11aefbb608
+run <pthread.h> global CLOCK_THREAD_CPUTIME_ID	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4d85ddbe1a3ef154d51212bbdb7655b1
+run <pthread.h> global CLOCK_MONOTONIC_RAW	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e7f84e56274d0e70c6214cf002315307
+run <pthread.h> global CLOCK_REALTIME_COARSE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2c9a19c02ec401ea2f014cf7e8da8304
+run <pthread.h> global CLOCK_MONOTONIC_COARSE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 86d94aac3da2ead6fa36dd6558c742bc
+run <pthread.h> global CLOCK_BOOTTIME	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 77145448ab7406217dbb60b6ce82fd0a
+run <pthread.h> global CLOCK_REALTIME_ALARM	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 57c11993f47bb49eeddd2f2d0c75400d
+run <pthread.h> global CLOCK_BOOTTIME_ALARM	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4058ec2597463f5845776ed473f7e0e5
+run <pthread.h> global CLOCK_TAI	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5ae7a3a2c5e5ee17ed25ad63633d7d16
+run <pthread.h> global TIMER_ABSTIME	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out aa6075eea6bbb5f19f591f7667d2f317
+run <pthread.h> global ADJ_OFFSET	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d7e18b61d9c6723f22a7be5e673e8e61
+run <pthread.h> global ADJ_FREQUENCY	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e662783b1c4ad8ea50900f2fd4d54fac
+run <pthread.h> global ADJ_MAXERROR	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e82ed5a1fd051fd62ade68e29c251735
+run <pthread.h> global ADJ_ESTERROR	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 74480759e3c50bab9e70ce5324f553be
+run <pthread.h> global ADJ_STATUS	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a364b7815c4e1d18179b86755ed2bec2
+run <pthread.h> global ADJ_TIMECONST	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ee7778895d976014fc18ea0f1658f6fd
+run <pthread.h> global ADJ_TAI	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c08d4d5796afa95d8f1371c2304e73b7
+run <pthread.h> global ADJ_SETOFFSET	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c4b5ca283a8d3719f52eb02391693208
+run <pthread.h> global ADJ_MICRO	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3bb3fac786ec541e337f3d3930129314
+run <pthread.h> global ADJ_NANO	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2dee8381402237fcc3ca140f37430ec5
+run <pthread.h> global ADJ_TICK	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 474cee22225067c00eadd3aa85834133
+run <pthread.h> global ADJ_OFFSET_SINGLESHOT	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out cb41451ab2b5bb59ebee4f8482d033b0
+run <pthread.h> global ADJ_OFFSET_SS_READ	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4f929c413cf109a62bb9fd5b49e90968
+run <pthread.h> global MOD_OFFSET	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1ffc39476300c01f146220b96f9f64ee
+run <pthread.h> global MOD_FREQUENCY	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b27806543d4dba21e408930438636980
+run <pthread.h> global MOD_MAXERROR	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2412a8c41ba1d61c9e665aa4849c39e0
+run <pthread.h> global MOD_ESTERROR	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 4adcebaab3c4da7ad4c26dff3753437b
+run <pthread.h> global MOD_STATUS	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c9e5e5e88f5c9069015222c8424846ed
+run <pthread.h> global MOD_TIMECONST	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 04f1690bc5da7d96a1ee7077a83fae51
+run <pthread.h> global MOD_CLKB	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a820afd0d7b42ee2052e4dcf71d4b58a
+run <pthread.h> global MOD_CLKA	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6e3b1640a1218e1d79bbc407a0dcfb40
+run <pthread.h> global MOD_TAI	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e376187f188c603d0a448e20a9f43ce4
+run <pthread.h> global MOD_MICRO	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6cb105e950b7d9bbed03ac9d65b26f7d
+run <pthread.h> global MOD_NANO	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8949bfa97fd0adf8f4bc4b5009580959
+run <pthread.h> global STA_PLL	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 41b93820ca7ff97ec04cb2b94f6cf82e
+run <pthread.h> global STA_PPSFREQ	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ca42d6c706ec2660977d4a43573576cc
+run <pthread.h> global STA_PPSTIME	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9a69fff1bfe17ea518c4209592f68ed6
+run <pthread.h> global STA_FLL	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 86ae585e8d99d508df1d78369dc6cf88
+run <pthread.h> global STA_INS	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5aadb44c8cf3d59c415b440907b19212
+run <pthread.h> global STA_DEL	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6241364c0ccdff9f3ac8cc3956bf08b2
+run <pthread.h> global STA_UNSYNC	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d6673902eae2231abdd5c0b823466721
+run <pthread.h> global STA_FREQHOLD	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ee9a9afa15d9fb2effe6471a8cb9a310
+run <pthread.h> global STA_PPSSIGNAL	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9e1a379557bc68409c9affd5b1d6b9fc
+run <pthread.h> global STA_PPSJITTER	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0dc4618e95f0124f7108d8567f108e04
+run <pthread.h> global STA_PPSWANDER	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 839a266aa74ba92ddfe04c0e0a0c38c5
+run <pthread.h> global STA_PPSERROR	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out fffe129fcb45f23159c5e1ca65c2d3c2
+run <pthread.h> global STA_CLOCKERR	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b49e2a86aa9d00b465f622b503d8d050
+run <pthread.h> global STA_NANO	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 8814d202f5acdd11f9247cef5837ca01
+run <pthread.h> global STA_MODE	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 726e9b9a726b66e7630b6cd075b35cd6
+run <pthread.h> global STA_CLK	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 346ce3af2d9ce669bfa07de5caca0476
+run <pthread.h> global STA_RONLY	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 296d5331df3759ac4d884574e7b98e75
+run <pthread.h> global TIME_UTC	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e74ca4d5a8ec2ef1d1845e7765a0411f
+run <pthread.h> global PTHREAD_ONCE_INIT	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 15b6f5bd5f5983aff928e61301f2a073
+run <pthread.h> global PTHREAD_BARRIER_SERIAL_THREAD	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f64b0af5f340980528abcdd9383b89a9
+run <pthread.h> global PTHREAD_ATTR_NO_SIGMASK_NP	
+ctx r1 g1 p0
+keys <pthread.h>=3ef17ff2df02810722466f5c51e72ae3185b67c18b9d939a4a62d57b9bdc9949
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 388cdea486ffa6d4093b49cf6e5b9dba
+end
+sum 48996-9943597038757176554

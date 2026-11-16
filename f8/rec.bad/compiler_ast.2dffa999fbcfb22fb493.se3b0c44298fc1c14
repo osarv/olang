@@ -1,0 +1,864 @@
+olang scope record
+run compiler/ast 0-0 ctor compiler/ast:Path	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Path	0,1
+marks c32963fdcc70abc23a4db6411dc3d32f
+read -ctor	Array<compiler/source:NameId>
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 4 2 | | F F F F | b00 b0000 b b0000 | | | ||
+sum r;V0,V1,0,3942,3947,1,0,0 b00 b00 b01 b00 b00 b b b a,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0Array<compiler/source:NameId>&
+out 2ecad851e8c760d578e5e7a153aceaa5
+run compiler/ast 0-0 ctor compiler/ast:VarDecl	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:VarDecl	0,1,2,3,4,5,6,7
+marks 68615fdeea1f271476739d574c5e17d2
+read -ctor	Array<compiler/ast:Attr&>
+read -ctor	Array<compiler/ast:Expr&>
+read -ctor	Array<compiler/source:NameId>
+read -ctor	Array<compiler/source:Span>
+read -ctor	Bool
+read -ctor	compiler/ast:TypeRef
+hits 0
+body 1 0 16 6 | | F F F F F F F F F F F F F F F F | b000000 b0000000000000000 b b0000000000000000 | | | ||
+sum r;V0,V5,0,10297,10302,1,0,0;V1,V5,0,10307,10314,1,0,0;V2,V5,0,10319,10321,1,0,0;V3,V5,0,10364,10370,1,0,0;V4,V5,0,10436,10441,1,0,0 b000000 b000000 b11110010 b00000000 b00000000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0Array<compiler/source:NameId>&	o0Array<compiler/source:Span>&	o0compiler/ast:TypeRef?&	o0Array<compiler/ast:Expr&>&	o0Bool	o0Bool	o0Array<compiler/ast:Attr&>&	o0Bool
+out f44db406d224aa4de79e5d3391beff3c
+run compiler/ast 19775-20558 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 9 1 | | F F F F F F F F F | b0 b000000000 b b000000000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:19775:20558 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Expr&
+out e8704f1926221d2637c99988d0da1be3
+run compiler/ast 0-0 ctor compiler/ast:Param	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Param	0,1,2,3,4
+marks 08899a981b3228691b39e12af966cbcd
+read -ctor	Array<compiler/ast:Attr&>
+read -ctor	I32
+read -ctor	compiler/ast:Expr
+read -ctor	compiler/ast:TypeRef
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 10 4 | | F F F F F F F F F F | b0000 b0000000000 b b0000000000 | | | ||
+sum r;V0,V3,0,2086,2088,1,0,0;V1,V3,0,2093,2097,1,0,0;V2,V3,0,2102,2107,1,0,0 b0000 b0000 b00111 b00000 b00000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0compiler/source:NameId	o0compiler/ast:TypeRef?&	o0compiler/ast:Expr?&	o0Array<compiler/ast:Attr&>&
+out 03a24faff3b4a2ff9c0e2f2b5882ae67
+run compiler/ast 22857-23152 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:22857:23152 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:TypeRef&
+out 2c9c688d8076351385aa8b3141181998
+run compiler/ast 0-0 ctor compiler/ast:Sig	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0,1,2,3,4,5,6,7
+marks aacaee7d83f52a57ea7ebb3ea8845508
+read -ctor	Array<compiler/ast:Param&>
+read -ctor	Array<compiler/ast:Path&>
+read -ctor	Array<compiler/ast:Promise&>
+read -ctor	Array<compiler/ast:TypeRef&>
+read -ctor	Bool
+hits 0
+body 1 0 16 5 | | F F F F F F F F F F F F F F F F | b00000 b0000000000000000 b b0000000000000000 | | | ||
+sum r;V0,V4,0,2935,2941,1,0,0;V1,V4,0,2946,2953,1,0,0;V2,V4,0,2972,2978,1,0,0;V3,V4,0,3199,3207,1,0,0 b00000 b00000 b11010001 b00000000 b00000000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0Array<compiler/ast:Param&>&	o0Array<compiler/ast:TypeRef&>&	o0Bool	o0Array<compiler/ast:Path&>&	o0Bool	o0Bool	o0Bool	o0Array<compiler/ast:Promise&>&
+out bb1f7012c7baad5a14c60c092fbbd55d
+run compiler/ast 0-0 ctor compiler/ast:Promise	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Promise	0,1,2
+marks 129d1a57971d96eabcc303b73f20e01e
+read -ctor	Array<compiler/source:NameId>
+read -ctor	compiler/token:Tok
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 6 2 | | F F F F F F | b00 b000000 b b000000 | | | ||
+sum r;V0,V1,0,3572,3577,1,0,0 b00 b00 b001 b000 b000 b b b a,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0compiler/token:Tok	o0Array<compiler/source:NameId>&
+out 2eabfccf7a45a0db2173e18f5b87f270
+run compiler/ast 0-0 ctor compiler/ast:TypeParam	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:TypeParam	0,1,2,3,4
+marks 9a28bfb1217e8460fab5dd7c5efca55a
+read -ctor	Array<compiler/ast:TypeRef&>
+read -ctor	Bool
+read -ctor	I32
+read -ctor	compiler/ast:TypeRef
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 10 3 | | F F F F F F F F F F | b000 b0000000000 b b0000000000 | | | ||
+sum r;V0,V2,0,17064,17066,1,0,0;V1,V2,0,17071,17075,1,0,0 b000 b000 b00110 b00000 b00000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0compiler/source:NameId	o0compiler/ast:TypeRef?&	o0Array<compiler/ast:TypeRef&>&	o0Bool
+out 53fe46cbc23819807409675ed5707580
+run compiler/ast 0-0 ctor compiler/ast:StructBody	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:StructBody	0,1,2,3,4,5
+marks 33e5bf0f7ce6ce28d3251113e2fbdf05
+read -ctor	Array<compiler/ast:Param&>
+read -ctor	Array<compiler/ast:Stmt&>
+read -ctor	Array<compiler/ast:TypeParam&>
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 12 6 | | F F F F F F F F F F F F | b000000 b000000000000 b b000000000000 | | | ||
+sum r;V0,V5,0,16596,16602,1,0,0;V1,V5,0,16607,16611,1,0,0;V2,V5,0,16616,16620,1,0,0;V3,V5,0,16636,16640,1,0,0;V4,V5,0,16645,16655,1,0,0 b000000 b000000 b111011 b000000 b000000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0Array<compiler/ast:Param&>&	o0compiler/ast:Sig?&	o0Array<compiler/ast:Stmt&>&	o0compiler/source:Span	o0Array<compiler/ast:Stmt&>&	o0Array<compiler/ast:TypeParam&>&
+out f12475ba9ce4cd2ae0ad786c5fbb463e
+run compiler/ast 0-0 ctor compiler/ast:CaseDecl	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:CaseDecl	0,1,2,3,4,5
+marks a25ba3baf3fe3113881ac20294719c2d
+read -ctor	Array<compiler/ast:Attr&>
+read -ctor	Array<compiler/ast:Param&>
+read -ctor	Bool
+read -ctor	I32
+read -ctor	compiler/ast:Expr
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 12 4 | | F F F F F F F F F F F F | b0000 b000000000000 b b000000000000 | | | ||
+sum r;V0,V3,0,15513,15520,1,0,0;V1,V3,0,15535,15540,1,0,0;V2,V3,0,15545,15550,1,0,0 b0000 b0000 b001011 b000000 b000000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0compiler/source:NameId	o0Array<compiler/ast:Param&>&	o0Bool	o0compiler/ast:Expr?&	o0Array<compiler/ast:Attr&>&
+out de565a4b10ee5ea19b2b131e6c6dc9ec
+run compiler/ast 0-0 ctor compiler/ast:Func	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	0,1,2,3,4,5,6,7,8,9,10
+marks cab217f6d4bf432b22cb60a7c667340f
+read -ctor	Array<compiler/ast:Attr&>
+read -ctor	Array<compiler/ast:Stmt&>
+read -ctor	Array<compiler/ast:TypeParam&>
+read -ctor	Bool
+read -ctor	I32
+read -ctor	compiler/ast:TypeRef
+read compiler/ast 0-0 ctor compiler/ast:Param	38c6ee192659779d27da07f93c82b41a
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 22 7 | | F F F F F F F F F F F F F F F F F F F F F F | b0000000 b0000000000000000000000 b b0000000000000000000000 | | | ||
+sum r;V0,V6,0,14450,14454,1,0,0;V1,V6,0,14468,14469,1,0,0;V2,V6,0,14474,14478,1,0,0;V3,V6,0,14483,14493,1,0,0;V4,V6,0,14520,14525,1,0,0;V5,V6,0,14576,14581,1,0,0 b0000000 b0000000 b01011100110 b00000000000 b00000000000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0compiler/ast:Param?&	o0compiler/source:NameId	o0compiler/ast:Sig&	o0Array<compiler/ast:Stmt&>&	o0Array<compiler/ast:TypeParam&>&	o0Bool	o0Bool	o0Array<compiler/ast:Attr&>&	o0compiler/ast:TypeRef?&	o0compiler/source:NameId
+out acf0d9a2adb73662e49074ba64dae657
+run compiler/ast 21876-22186 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+hits 0
+body 1 0 4 2 | | F F F F | b00 b0000 b b0000 | | | ||
+sum r;V0,V1,0,21958,21966,0,0,0 b00 b00 b0 b0 b0 b b b a,compiler/ast:21876:22186,compiler/ast:21876:22186 t,U,U,U,U,U,U,U,U i t i i c0/i/i f1010
+hid fs1	o0compiler/ast:TypeRef&
+out cc09c93247e8a3a45201123e34dc3bbf
+run compiler/ast 22188-22248 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/ast 21876-22186 fn	9f2fd53f68f2f40152c2ebfaa3e762b3
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:22188:22248 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:TypeRef&	o0compiler/ast:Sig?&	o1compiler/ast:TypeRef&
+out 22b15136b59c3773d365b514f29c4852
+run compiler/ast 0-0 ctor compiler/ast:Compr	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Compr	0,1,2,3,4,5,6,7
+marks 19960dd2ba9268b14ba4a6722f5709ff
+read -ctor	Bool
+read -ctor	I32
+read -ctor	I64
+read -ctor	compiler/ast:Expr
+read -ctor	compiler/ast:TypeRef
+hits 0
+body 1 0 16 5 | | F F F F F F F F F F F F F F F F | b00000 b0000000000000000 b b0000000000000000 | | | ||
+sum r;V0,V4,0,6986,6990,1,0,0;V1,V4,0,6995,7000,1,0,0;V2,V4,0,7022,7028,1,0,0;V3,V4,0,7033,7039,1,0,0 b00000 b00000 b11001100 b00000000 b00000000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/ast:TypeRef?&	o0compiler/ast:Expr&	o0compiler/source:NameId	o0compiler/source:NameId	o0compiler/ast:Expr&	o0compiler/ast:Expr?&	o0Bool	o0I64
+out 2754295a9e3383ca01635f73035a3be7
+run compiler/ast 0-0 ctor compiler/ast:Attr	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Attr	0,1,2
+marks d87aa5bcbab7a9fbba8d6af623e48c85
+read -ctor	I32
+read -ctor	compiler/ast:Expr
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 6 2 | | F F F F F F | b00 b000000 b b000000 | | | ||
+sum r;V0,V1,0,2464,2465,1,0,0 b00 b00 b010 b000 b000 b b b a,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0compiler/ast:Expr&	o0compiler/source:NameId
+out 5e6e07f54c8d4ac674d2ff6c20777895
+run compiler/ast 0-0 ctor compiler/ast:Branch	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Branch	0,1,2
+marks 05753bcd982188f736f63aec73a2fd98
+read -ctor	Array<compiler/ast:Stmt&>
+read -ctor	I64
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 6 2 | | F F F F F F | b00 b000000 b b000000 | | | ||
+sum r;V0,V1,0,11059,11063,1,0,0 b00 b00 b010 b000 b000 b b b a,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0Array<compiler/ast:Stmt&>&	o0I64
+out 41a5cdf6ad285f4c57b0a500d19780a4
+run compiler/ast 0-0 ctor compiler/ast:If	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:If	0,1,2
+marks 6d8956b0eb64ffbccda3956dcd7fe2eb
+read -ctor	compiler/ast:Expr
+read -ctor	compiler/ast:Stmt
+read compiler/ast 0-0 ctor compiler/ast:Branch	66acb0fbe745756bc22df8625c8c34e8
+hits 0
+body 1 0 6 4 | | F F F F F F | b0000 b000000 b b000000 | | | ||
+sum r;V0,V3,0,10850,10854,1,0,0;V1,V3,0,10859,10863,1,0,0;V2,V3,0,10868,10872,1,0,0 b0000 b0000 b111 b000 b000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Expr?&	o0compiler/ast:Branch?&	o0compiler/ast:Stmt?&
+out b5db9202967f4a4ff996698c828112d3
+run compiler/ast 0-0 ctor compiler/ast:ForIn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:ForIn	0,1,2,3,4,5,6
+marks 3f04dbf7abf2c59bd09e6acc6c64d058
+read -ctor	Array<compiler/ast:Catch&>
+read -ctor	Array<compiler/ast:Stmt&>
+read -ctor	Bool
+read -ctor	I32
+read -ctor	compiler/ast:Expr
+hits 0
+body 1 0 14 4 | | F F F F F F F F F F F F F F | b0000 b00000000000000 b b00000000000000 | | | ||
+sum r;V0,V3,0,11485,11491,1,0,0;V1,V3,0,11506,11510,1,0,0;V2,V3,0,11515,11522,1,0,0 b0000 b0000 b0010110 b0000000 b0000000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:NameId	o0compiler/source:NameId	o0compiler/ast:Expr&	o0Bool	o0Array<compiler/ast:Stmt&>&	o0Array<compiler/ast:Catch&>&	o0Bool
+out 29a83e75d47fef56108b0fa18866232a
+run compiler/ast 0-0 ctor compiler/ast:For3	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:For3	0,1,2,3
+marks d4ed7c95b894e8121ac8b238de32e2ff
+read -ctor	Array<compiler/ast:Stmt&>
+read -ctor	compiler/ast:Expr
+read -ctor	compiler/ast:Stmt
+hits 0
+body 1 0 8 5 | | F F F F F F F F | b00000 b00000000 b b00000000 | | | ||
+sum r;V0,V4,0,11194,11198,1,0,0;V1,V4,0,11203,11207,1,0,0;V2,V4,0,11212,11216,1,0,0;V3,V4,0,11221,11225,1,0,0 b00000 b00000 b1111 b0000 b0000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Stmt&	o0compiler/ast:Expr?&	o0compiler/ast:Stmt&	o0Array<compiler/ast:Stmt&>&
+out 03f79c8ba6c5c93d187609121414fda9
+run compiler/ast 0-0 ctor compiler/ast:Case	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Case	0,1,2,3,4,5
+marks c8eda1e401d26d6fa03a1ce1cafa72b8
+read -ctor	Array<compiler/ast:Pattern&>
+read -ctor	Array<compiler/ast:Stmt&>
+read -ctor	Array<compiler/ast:TypeRef&>
+read -ctor	compiler/ast:Expr
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 12 6 | | F F F F F F F F F F F F | b000000 b000000000000 b b000000000000 | | | ||
+sum r;V0,V5,0,8463,8467,1,0,0;V1,V5,0,8472,8477,1,0,0;V2,V5,0,8482,8487,1,0,0;V3,V5,0,8492,8496,1,0,0;V4,V5,0,8559,8564,1,0,0 b000000 b000000 b011111 b000000 b000000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0Array<compiler/ast:Pattern&>&	o0Array<compiler/ast:TypeRef&>&	o0compiler/ast:Expr?&	o0Array<compiler/ast:Stmt&>&	o0compiler/ast:Expr?&
+out 5c01f46785a5212928b5425387f5c112
+run compiler/ast 0-0 ctor compiler/ast:Match	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Match	0,1,2,3
+marks b135ae537ace7a49e298e95efd5d5299
+read -ctor	Array<compiler/ast:Case&>
+read -ctor	Bool
+read -ctor	compiler/ast:Expr
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 8 3 | | F F F F F F F F | b000 b00000000 b b00000000 | | | ||
+sum r;V0,V2,0,8104,8111,1,0,0;V1,V2,0,8127,8132,1,0,0 b000 b000 b0101 b0000 b0000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0compiler/ast:Expr&	o0Bool	o0Array<compiler/ast:Case&>&
+out 523358cd31581e761224799c53281816
+run compiler/ast 0-0 ctor compiler/ast:JoinS	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:JoinS	0,1,2
+marks bc0dce35b745e8dbf89b2448858b57d5
+read -ctor	Array<compiler/ast:Catch&>
+read -ctor	Array<compiler/ast:Stmt&>
+read -ctor	Bool
+hits 0
+body 1 0 6 3 | | F F F F F F | b000 b000000 b b000000 | | | ||
+sum r;V0,V2,0,11724,11728,1,0,0;V1,V2,0,11733,11740,1,0,0 b000 b000 b011 b000 b000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0Bool	o0Array<compiler/ast:Stmt&>&	o0Array<compiler/ast:Catch&>&
+out c4e0743f57d2f9387702a430f0d4034a
+run compiler/ast 0-0 ctor compiler/ast:Chain	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Chain	0,1
+marks b0d00b235edc250a43cf9cabe0766268
+read -ctor	Array<compiler/ast:Expr&>
+read -ctor	Array<compiler/token:Tok>
+hits 0
+body 1 0 4 3 | | F F F F | b000 b0000 b b0000 | | | ||
+sum r;V0,V2,0,6685,6688,1,0,0;V1,V2,0,6693,6695,1,0,0 b000 b000 b11 b00 b00 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0Array<compiler/token:Tok>&	o0Array<compiler/ast:Expr&>&
+out 7bdd69ffd8fee72a216893877cc8560c
+run compiler/ast 0-0 ctor compiler/ast:Multi	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Multi	0,1,2
+marks 0e595a032661cdf3906fbd02417b38e2
+read -ctor	Array<compiler/ast:Expr&>
+read -ctor	Bool
+hits 0
+body 1 0 6 3 | | F F F F F F | b000 b000000 b b000000 | | | ||
+sum r;V0,V2,0,11932,11939,1,0,0;V1,V2,0,11955,11961,1,0,0 b000 b000 b101 b000 b000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0Array<compiler/ast:Expr&>&	o0Bool	o0Array<compiler/ast:Expr&>&
+out 1c108e5a30bf9e9897c0d6570f0153aa
+run compiler/ast 0-0 ctor compiler/ast:Catch	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Catch	0,1,2,3,4,5,6
+marks e63785f4bd87ac999f9ef59fa3883335
+read -ctor	Array<compiler/ast:Expr&>
+read -ctor	Array<compiler/ast:Path&>
+read -ctor	Array<compiler/ast:Stmt&>
+read -ctor	Bool
+read -ctor	I32
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 14 4 | | F F F F F F F F F F F F F F | b0000 b00000000000000 b b00000000000000 | | | ||
+sum r;V0,V3,0,7742,7747,1,0,0;V1,V3,0,7752,7756,1,0,0;V2,V3,0,7761,7769,1,0,0 b0000 b0000 b0111000 b0000000 b0000000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0Array<compiler/ast:Path&>&	o0Array<compiler/ast:Stmt&>&	o0Array<compiler/ast:Expr&>&	o0Bool	o0compiler/source:NameId	o0compiler/source:Span
+out 968662bd6b2796827c0c1987eb5e73b1
+run compiler/ast 0-0 ctor compiler/ast:TypeDecl	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:TypeDecl	0,1,2,3,4,5,6
+marks 81bddc942796c278cf62e40d49814d0c
+read -ctor	Array<compiler/ast:Attr&>
+read -ctor	Array<compiler/ast:TypeParam&>
+read -ctor	Bool
+read -ctor	I32
+read -ctor	compiler/ast:DeclWord
+read -ctor	compiler/ast:TypeBody
+hits 0
+body 1 0 14 4 | | F F F F F F F F F F F F F F | b0000 b00000000000000 b b00000000000000 | | | ||
+sum r;V0,V3,0,17316,17322,1,0,0;V1,V3,0,17339,17343,1,0,0;V2,V3,0,17447,17452,1,0,0 b0000 b0000 b0101100 b0000000 b0000000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:NameId	o0Array<compiler/ast:TypeParam&>&	o0Bool	o0compiler/ast:TypeBody?&	o0Array<compiler/ast:Attr&>&	o0compiler/ast:DeclWord	o0Bool
+out 170d7008e3a4674cf27eef089efb18fe
+run compiler/ast 0-0 ctor compiler/ast:TopBranch	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:TopBranch	0,1,2
+marks ff1cf5729ce1e48d44eb84cefcc2c2e6
+read -ctor	Array<compiler/ast:Decl&>
+read -ctor	I64
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 6 2 | | F F F F F F | b00 b000000 b b000000 | | | ||
+sum r;V0,V1,0,18218,18223,1,0,0 b00 b00 b010 b000 b000 b b b a,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0Array<compiler/ast:Decl&>&	o0I64
+out a078cc7c6f23e788050e7421f38b5021
+run compiler/ast 0-0 ctor compiler/ast:TopIf	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:TopIf	0,1,2,3
+marks 375668ad806f0bd17981f4466d488eff
+read -ctor	compiler/ast:Expr
+read compiler/ast 0-0 ctor compiler/ast:TopBranch	efd54d4b851314812283a957ed2b88a9
+hits 0
+body 1 0 8 5 | | F F F F F F F F | b00000 b00000000 b b00000000 | | | ||
+sum r;V0,V4,0,18098,18102,1,0,0;V1,V4,0,18107,18111,1,0,0;V2,V4,0,18116,18122,1,0,0;V3,V4,0,18127,18131,1,0,0 b00000 b00000 b1111 b0000 b0000 b b b a,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Expr?&	o0compiler/ast:TopBranch?&	o0compiler/ast:TopIf?&	o0compiler/ast:TopBranch?&
+out 5802d82c4ddcc50cc6226941071b589a
+run compiler/ast 14681-14737 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	9
+marks eccc87b6323f756b57bc7c84567e6f01
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:14681:14737 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Func&
+out 22af643975d921d1d91d4e1b0e042656
+run compiler/ast 23154-23746 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 6 1 | | F F F F F F | b0 b000000 b b000000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:23154:23746 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Stmt&
+out c699372e17cd55b5127e7b72b2ca11b5
+run compiler/ast 25746-25839 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0compiler/source:Span
+out 591bbf06fca0a1038555ea5725b04628
+run compiler/ast 25841-26020 fn	compiler/ast 26168-26299 fn	compiler/ast 26022-26166 fn	compiler/ast 26301-26545 fn	compiler/ast 26547-26749 fn	compiler/ast 26820-28076 fn	compiler/ast 24339-25744 fn	compiler/ast 24133-24337 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Branch	1
+mark compiler/ast 0-0 ctor compiler/ast:Case	3,4,5
+mark compiler/ast 0-0 ctor compiler/ast:Catch	2,3
+mark compiler/ast 0-0 ctor compiler/ast:Chain	1
+mark compiler/ast 0-0 ctor compiler/ast:Compr	1,4,5
+mark compiler/ast 0-0 ctor compiler/ast:For3	0,1,2,3
+mark compiler/ast 0-0 ctor compiler/ast:ForIn	2,4,5
+mark compiler/ast 0-0 ctor compiler/ast:If	0,1,2
+mark compiler/ast 0-0 ctor compiler/ast:JoinS	1,2
+mark compiler/ast 0-0 ctor compiler/ast:Match	1,3
+mark compiler/ast 0-0 ctor compiler/ast:Multi	2
+mark compiler/ast 0-0 ctor compiler/ast:VarDecl	3
+marks 45043b096ab328a1cd581e3c4a28ce28
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Branch	66acb0fbe745756bc22df8625c8c34e8
+read compiler/ast 0-0 ctor compiler/ast:Case	a86ebe8f71b83af8c941cdff145c6e0e
+read compiler/ast 0-0 ctor compiler/ast:Catch	fb47da419c9533df2ee10e8f18ffb1c3
+read compiler/ast 0-0 ctor compiler/ast:Chain	10f71466eafe8ab253d3a873cf0af465
+read compiler/ast 0-0 ctor compiler/ast:Compr	e703d414505ee78acb118fd0a27da2d7
+read compiler/ast 0-0 ctor compiler/ast:For3	b3ff77237fd9b4448110cf44f9edbd56
+read compiler/ast 0-0 ctor compiler/ast:ForIn	c8c1d697b9b3be256675211c333ac7a3
+read compiler/ast 0-0 ctor compiler/ast:If	40671655d1fba8b621d2c508c063652f
+read compiler/ast 0-0 ctor compiler/ast:JoinS	eb974c31689742f8a47fc78037fb22c3
+read compiler/ast 0-0 ctor compiler/ast:Match	59ae547db3a3964d5cc7fa69be2e84fb
+read compiler/ast 0-0 ctor compiler/ast:Multi	0f7818ee22df4b3908ff7b752d6c47e7
+read compiler/ast 0-0 ctor compiler/ast:VarDecl	3d19a44c50c9c3e6f90fda2c40a230b5
+read compiler/ast 25746-25839 fn	753360899e792dedf06ee057d76e9c16
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 5 2 1 | U B1 U U U | F F | b0 b00 b00000 b00 | 0:,V0 2:,V0 3:,V0 4: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:25841:26020 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:If&
+body 1 5 1 1 | U U U U U | F | b0 b0 b00000 b0 | 0:,V0 1:,V0 2: 3:,V0 4: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:26168:26299 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Case&
+body 1 3 6 1 | U U U | F F F F F F | b0 b000000 b000 b000000 | 0:,V0 1:,V0 2: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:26022:26166 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Match&
+body 1 3 6 1 | U U U | F F F F F F | b0 b000000 b000 b000000 | 0:,V0 1:,V0 2: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:26301:26545 t i t i i c0/i/i f0010
+hid fs1	o0Array<compiler/ast:Catch&>&	o0compiler/source:Span	o0compiler/source:Span
+body 1 1 6 1 | U | F F F F F F | b0 b000000 b0 b000000 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:26547:26749 t i t i i c0/i/i f0010
+hid fs1	o0Array<compiler/ast:Expr&>&	o0compiler/source:Span	o0compiler/source:Span
+body 1 32 21 1 | U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F | b0 b000000000000000000000 b00000000000000000000000000000000 b000000000000000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4: 5:,V0 6:,V0 7: 8:,V0 9: 10:,V0 11:,V0 12:,V0 13: 14:,V0 15:,V0 16: 17:,V0 18: 19:,V0 20:,V0 21: 22:,V0 23:,V0 24:,V0 25: 26:,V0 27:,V0 28:,V0 29: 30:,V0 31: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:26820:28076 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Expr?&	o0compiler/source:Span	o0compiler/source:Span
+body 1 38 24 1 | U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F F F F F F F F F F F | b0 b000000000000000000000000 b00000000000000000000000000000000000000 b000000000000000000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5: 6:,V0 7:,V0 8: 9:,V0 10:,V0 11:,V0 12:,V0 13: 14:,V0 15:,V0 16: 17:,V0 18:,V0 19: 20: 21:,V0 22:,V0 23: 24:,V0 25: 26:,V0 27:,V0 28:,V0 29:,V0 30:,V0 31: 32:,V0 33:,V0 34:,V0 35:,V0 36: 37:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:24339:25744 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Stmt?&	o0compiler/source:Span	o0compiler/source:Span
+body 1 1 6 1 | U | F F F F F F | b0 b000000 b0 b000000 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:24133:24337 t i t i i c0/i/i f0010
+hid fs1	o0Array<compiler/ast:Stmt&>&	o0compiler/source:Span	o0compiler/source:Span
+out a079c6282dfcac504788c813efffc502
+run compiler/ast 21308-21462 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:21308:21462 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Expr&
+out dc363e1fda632fa78dbdf2bce40020e3
+run compiler/ast 21463-21594 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:21463:21594 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Expr&
+out 0172ea9920a9856d8c74ba33ded845c2
+run compiler/ast 21595-21727 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:21595:21727 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Expr&
+out d4b89d639c65d3489af40f1502b52d06
+run compiler/ast 0-0 ctor compiler/ast:Req	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Req	0,1,2
+marks 7a8886681621ac9d848805220bbaa33a
+read -ctor	Bool
+read -ctor	compiler/ast:Expr
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 6 2 | | F F F F F F | b00 b000000 b b000000 | | | ||
+sum r;V0,V1,0,32396,32400,1,0,0 b00 b00 b010 b000 b000 b b b a,compiler/ast:0:0,compiler/ast:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:Span	o0compiler/ast:Expr&	o0Bool
+out 9a19f0a416257f9f262db1c58706c081
+run compiler/ast 34280-34669 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Branch	1
+mark compiler/ast 0-0 ctor compiler/ast:If	0,1,2
+mark compiler/ast 0-0 ctor compiler/ast:Path	1
+marks c5ff16be16c2eb9dfc2303a9eee40e8b
+read compiler/ast 0-0 ctor compiler/ast:Branch	66acb0fbe745756bc22df8625c8c34e8
+read compiler/ast 0-0 ctor compiler/ast:If	40671655d1fba8b621d2c508c063652f
+read compiler/ast 0-0 ctor compiler/ast:Path	4516d7f29295cdd2bbc4d66121ba8267
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 6 4 2 | B0 B0 U B2 B2 U | F F F F | b00 b0000 b000000 b0000 | 2:,V1,B2 5:,B2,B2 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/ast:34280:34669,compiler/ast:34280:34669 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:If&	o0compiler/source:Names&	o0std/prelude/text:String&	o1compiler/source:Names&	o1compiler/source:NameId
+out 816d7cd4c525278b29cb29fa09c94fa4
+run compiler/ast 33300-33541 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:If	0
+marks 103c47fc8cfb3d3fdf71707ef73010f3
+read compiler/ast 0-0 ctor compiler/ast:If	40671655d1fba8b621d2c508c063652f
+read compiler/ast 0-0 ctor compiler/ast:Req	8c56847f7cd244cfbe856433c421898f
+read compiler/ast 34280-34669 fn	eb3f5e2d1e42238a6a43d5c49ef51e1d
+hits 0
+body 1 5 6 3 | U V2 U U V2 | F F F F F F | b001 b000000 b00000 b000000 | 0:,V0,V2 2:,V0,V1 3:,V0,V2 | | ||
+sum r;V0,V2,0,33358,33539,3,0,0 b001 b001 b00 b00 b00 b b b a,compiler/ast:33300:33541,compiler/ast:33300:33541,compiler/ast:33412:33429 t,U,U,U i t i i c0/i/i f0010
+hid fs1;22784:U;22785:V0;22786:U;22784:U;22785:V0;22786:U	o0compiler/ast:Stmt&	o0compiler/source:Names&
+out dd941340ce9d6883be1e0a0dc4cf60dd
+run compiler/ast 34020-34164 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 1123-1188 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 3 1 | U U | F F F | b0 b000 b00 b000 | 0: 1: | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/ast:34020:34164 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64
+out d716385f7d915f91d07f29e028005324
+run compiler/ast 33597-34018 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/ast 34020-34164 fn	48bdacb2b9f15a3dce0a645ba9d221e2
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3958-4053 fn	249b488abfd8979d5dc24c581a8aa85a
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 6 8 2 | U U U U U U | F F F F F F F F | b00 b00000000 b000000 b00000000 | 0:,V1 1:,V1,V1 2:,V1,B2 3:,V0,V1 4:,V0 5:,V0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/ast:33597:34018,compiler/ast:33597:34018 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 7ec5958e485ea579a4a512d434ef3c9e
+run compiler/ast 35513-35610 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read compiler/ast 19775-20558 fn	39242e89801de5a7849101f7c3221965
+hits 0
+body 1 4 2 3 | U B0 U B0 | F F | b000 b00 b0000 b00 | 0:,V0 2:,V0 | | ||
+sum r;V1,V2,0,35558,35608,0,1,0 b000 b000 b01 b00 b00 b b b a,compiler/ast:35513:35610,compiler/ast:35513:35610,compiler/ast:35513:35610 t i t i i c0/i/i f1010
+hid fs1	o0compiler/ast:Expr&	o0std/prelude/text:String&
+out 9e39e22dd536b48769b1a6393ff1692d
+run compiler/ast 32739-33219 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Req	1
+marks ef3484552516176bf38b59569609dad9
+read -ctor	Array<compiler/ast:Req&>
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Req	8c56847f7cd244cfbe856433c421898f
+read compiler/ast 33300-33541 fn	c3d7574e1fe7a6167b09ea27ee3c8b85
+read compiler/ast 33597-34018 fn	c7646cd81ea1f9b57aebc32a93083ee1
+read compiler/ast 35513-35610 fn	7ee2ff58eb4b0914b78a8fdd0e7c2be9
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/ast:Req&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <compiler/ast:Req&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <compiler/ast:Req&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 13 16 6 | U U U U U U V5 U U U U U U | F F F F F F F F F F F F F F F F | b000001 b0000000000000000 b0000000000000 b0000000000000000 | 0:,B0 1:,V1,V1 2:,B0,V1 3:,V1,V1 4:,B0,V1 5:,V5 7:,V0,V1,V5 8:,V5,V5 9:,V5,V2,V2 10:,V2,B0 11:,V5,V5 12:,V5,V5 | | ||
+sum r;V0,V5,0,33055,33056,3,0,0 b000001 b000001 b00100 b00000 b00000 b b b a,compiler/ast:32739:33219,compiler/ast:32739:33219,compiler/ast:32739:33219,compiler/ast:32739:33219,compiler/ast:32739:33219,compiler/ast:33014:33025 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U	o0Array<compiler/ast:Stmt&>&	o0compiler/source:Names&	o0std/prelude/text:String&	o0Array<compiler/ast:Param&>&	o0compiler/ast:Param?&	o0std/prelude/text:String&	o1compiler/source:Names&	o1compiler/source:NameId	o0std/prelude/text:String&	o1compiler/source:Names&	o1compiler/source:NameId	o0compiler/ast:Req?&	o1compiler/ast:Stmt&	o1compiler/source:Names&	o0mut Array<compiler/ast:Req&>&	o1mut std/prelude/vec:Vec<compiler/ast:Req&>&	o0std/prelude/text:String&	o1compiler/ast:Expr&	o1std/prelude/text:String&	o0mut Array<compiler/ast:Req&>&	o1mut std/prelude/vec:Vec<compiler/ast:Req&>&
+out 342dd5c6b257846768560f55300fba6d
+run compiler/ast 35388-35511 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	compiler/ast:Expr
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V0,V1 | | ||
+sum r;V0,V1,0,35495,35503,0,0,0 b00 b00 b1 b0 b0 b b b a,compiler/ast:35388:35511,compiler/ast:35388:35511 t i t i i c0/i/i f1010
+hid fs1	o0compiler/ast:Expr&	o0compiler/ast:Expr&	o1compiler/ast:Expr&
+out e8f93f7504b2f09047501575cc6863dd
+run compiler/ast 34856-35386 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Req	1
+marks ef3484552516176bf38b59569609dad9
+read compiler/ast 0-0 ctor compiler/ast:Req	8c56847f7cd244cfbe856433c421898f
+read compiler/ast 35388-35511 fn	36d5bf1d1b30226d91d2b3c2d671919b
+read compiler/ast 35513-35610 fn	7ee2ff58eb4b0914b78a8fdd0e7c2be9
+hits 0
+body 1 11 6 3 | U V2 U U V2 U V2 U V2 U V2 | F F F F F F | b001 b000000 b00000000000 b000000 | 0:,V0,V1,B1 2:,V0,V0 3:,V0,V1,B2 5:,V0,V1,B3 7:,V0,V1,B4 9:,V0,V1,B5 | | ||
+sum r b001 b001 b01 b00 b00 b b b a,compiler/ast:34856:35386,compiler/ast:34856:35386,compiler/ast:34927:34950 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Req&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1compiler/ast:Expr&	o1std/prelude/text:String&	o0compiler/ast:Expr&	o1compiler/ast:Expr&	o0std/prelude/text:String&	o1compiler/ast:Expr&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1compiler/ast:Expr&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1compiler/ast:Expr&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1compiler/ast:Expr&	o1std/prelude/text:String&
+out 8ed2edf5e7878a1d8a502d9ad513327a
+run compiler/ast 20875-21140 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/ast 19775-20558 fn	39242e89801de5a7849101f7c3221965
+hits 0
+body 1 2 3 1 | U B2 | F F F | b0 b000 b00 b000 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:20875:21140 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Expr&
+out 0b0f3ec823a1471a81ed05056bb9ba5c
+run compiler/ast 20675-20814 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/ast 20875-21140 fn	b79e27d87fd027dd268d159a235135b0
+hits 0
+body 1 1 5 1 | U | F F F F F | b0 b00000 b0 b00000 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:20675:20814 t i t i i c0/i/i f0010
+hid fs1	o0Array<compiler/ast:Expr&>&
+out 26fbb0636f4d4ba4292cd8447357eee1
+run compiler/ast 22327-22513 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 3 1 | U | F F F | b0 b000 b0 b000 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:22327:22513 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:TypeRef&
+out 91f6c9a7a12207b5030c96a58d8c96da
+run compiler/ast 28078-28395 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:28078:28395 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Pattern&
+out 1561865f32079156add67eda8aa944a7
+run compiler/ast 14857-15091 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	9
+marks eccc87b6323f756b57bc7c84567e6f01
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+hits 0
+body 1 0 3 1 | | F F F | b0 b000 b b000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/ast:14857:15091 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Func&
+out d5c2cde7afe96eb5798076da1febfb73
+run compiler/ast 31098-31434 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	5
+mark compiler/ast 0-0 ctor compiler/ast:TypeParam	2
+marks 62c4238569c627097bd2fd87713290a8
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:TypeParam	46fe115140fa05be4f5724d9ce2a3551
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+hits 0
+body 1 4 9 3 | U V2 U V2 | F F F F F F F F F | b001 b000000000 b0000 b000000000 | 0:,V1,B4 2:,V1,B0 | | ||
+sum r b001 b001 b000 b000 b000 b b b a,compiler/ast:31098:31434,compiler/ast:31098:31434,compiler/ast:31332:31367 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Func&	o0compiler/source:NameId	o0compiler/source:Names&	o0std/prelude/text:String&	o1compiler/source:Names&	o1compiler/source:NameId	o0std/prelude/text:String&	o1compiler/source:Names&	o1compiler/source:NameId
+out f64177af086b5a7959a77a3d719cc8b8
+run compiler/ast 30734-30896 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/ast 14857-15091 fn	dbbc0c94e45672df8fdcd688e5db07f4
+read compiler/ast 31098-31434 fn	122a5e723944c5519dfec3fddaaf9f60
+hits 0
+body 1 2 3 3 | U U | F F F | b001 b000 b00 b000 | 0:,V0 1:,V0,V1,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/ast:30734:30896,compiler/ast:30734:30896,compiler/ast:31332:31367 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Func&	o0compiler/source:Names&
+out fa346ae1106f7004aa03ab8382e7dd2b
+run compiler/ast 30027-30445 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Func	1
+mark compiler/ast 0-0 ctor compiler/ast:Param	2
+marks 0e95f60bea5742dfc754d8d0230f98cc
+read -ctor	compiler/ast:TypeRef
+read compiler/ast 0-0 ctor compiler/ast:Func	f6bb99f81f189ed75d8d070f58a50235
+read compiler/ast 0-0 ctor compiler/ast:Param	38c6ee192659779d27da07f93c82b41a
+read compiler/ast 31098-31434 fn	122a5e723944c5519dfec3fddaaf9f60
+hits 0
+body 1 2 6 3 | B0 U | F F F F F F | b001 b000000 b00 b000000 | 1:,V0,V1,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/ast:30027:30445,compiler/ast:30027:30445,compiler/ast:31332:31367 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Func&	o0compiler/source:Names&
+out 716b213af695fc38d800252cc89239e2
+run compiler/ast 28915-29262 fn	compiler/ast 28520-28913 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:TopBranch	1
+mark compiler/ast 0-0 ctor compiler/ast:TopIf	1,2,3
+marks 60417971700b6a3e3e9bf81122d080f1
+read -ctor	I64
+read -ctor	compiler/ast:Decl
+read compiler/ast 0-0 ctor compiler/ast:TopBranch	efd54d4b851314812283a957ed2b88a9
+read compiler/ast 0-0 ctor compiler/ast:TopIf	d061336cf87e7ba9ec024255c9394a16
+hits 0
+body 1 5 4 2 | B2 U B4 U U | F F F F | b00 b0000 b00000 b0000 | 1:,V0,V1 3:,V0,V1 4:,V0,V1 | | ||
+sum r;V0,V1,0,29038,29039,0,0,0 b00 b00 b00 b00 b00 b b b a,compiler/ast:28915:29262,compiler/ast:28915:29262 t i t i i c0/i/i f1010
+hid fs1	o0compiler/ast:TopIf?&	o0compiler/source:Span	o0compiler/ast:Decl?&	o1Array<compiler/ast:Decl&>&	o1compiler/source:Span	o0compiler/ast:Decl?&	o1Array<compiler/ast:Decl&>&	o1compiler/source:Span	o0compiler/ast:Decl?&	o1compiler/ast:TopIf?&	o1compiler/source:Span
+body 1 2 9 2 | U U | F F F F F F F F F | b00 b000000000 b00 b000000000 | 1:,V0,V1 | | ||
+sum r;V0,V1,0,28685,28693,0,0,0 b00 b00 b00 b00 b00 b b b a,compiler/ast:28520:28913,compiler/ast:28520:28913 t i t i i c0/i/i f1010
+hid fs1	o0Array<compiler/ast:Decl&>&	o0compiler/source:Span	o0compiler/ast:Decl?&	o1compiler/ast:TopIf?&	o1compiler/source:Span
+out f339b7aa766fe42ec563c69c5026469c
+run compiler/ast 29338-29738 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Path	1
+marks 17caa5cc9eb575cf5dee2ec557eddb5e
+read -ctor	I64
+read compiler/ast 0-0 ctor compiler/ast:Path	4516d7f29295cdd2bbc4d66121ba8267
+read compiler/source 1387-1452 fn	662490739f7052f807816092a0c0b67a
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 5 9 3 | B1 U U U U | F F F F F F F F F | b001 b000000000 b00000 b000000000 | 0:,B1 1:,B1 2:,V1,V1 3:,B1,V1 4:,B1,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/ast:29338:29738,compiler/ast:29338:29738,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Decl&	o0compiler/source:Names&	o0std/prelude/text:String&	o1compiler/source:Names&	o1compiler/source:NameId
+out 76f9cc321a5475ff0d1c9bb4af0e5ae1
+run compiler/ast 31484-31769 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 4 3 | V2 | F F F F | b001 b0000 b0 b0000 | | | ||
+sum r b001 b001 b01 b00 b00 b b b a,compiler/ast:31484:31769,compiler/ast:31484:31769,compiler/ast:31678:31695 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Decl&	o0std/prelude/text:String&
+out 5ac3e19b8bc6553ddf416d761e5b6636
+run compiler/ast 31851-32039 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/ast 29338-29738 fn	ff0de5d7f22c33f1a5e2ca4fed5fd67c
+read compiler/ast 31484-31769 fn	69c87dec314fc20120983555a94160bc
+hits 0
+body 1 4 4 4 | U U U V3 | F F F F | b0001 b0000 b0000 b0000 | 0:,V0,V2,B0 1:,V0,V1,V3 2:,V0,V1,B0 | | ||
+sum r b0001 b0001 b010 b000 b000 b b b a,compiler/ast:31851:32039,compiler/ast:31851:32039,compiler/ast:31851:32039,compiler/ast:31678:31695 t i t i i c0/i/i f0010
+hid fs1	o0compiler/ast:Decl&	o0std/prelude/text:String&	o0compiler/source:Names&
+out 02f5f9d97173166bde0107d6fc1a9a48
+run compiler/ast 22585-22855 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	compiler/ast:TypeRef
+hits 0
+body 1 3 8 2 | V0 U V0 | F F F F F F F F | b10 b00000000 b000 b00000000 | 1:,V0,V0 | | ||
+sum r;V0,V1,0,22625,22853,0,0,0 b10 b10 b1 b0 b0 b b b a,compiler/ast:22689:22725,compiler/ast:22585:22855 t i t i i c0/i/i f1010
+hid fs1	o0compiler/ast:TypeRef&	o0compiler/ast:TypeRef&	o1compiler/ast:TypeRef&
+out 07080429ffa3b02fc2f18e608d4e40a4
+run compiler/ast 3610-3763 fn	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+mark compiler/ast 0-0 ctor compiler/ast:Sig	0,1,2,3,4,5,6
+marks 4e314ad0e735403c3666bcd0696c2833
+read compiler/ast 0-0 ctor compiler/ast:Sig	c0fc3980890872abfbb1e79d510db668
+hits 0
+body 1 2 2 3 | U V2 | F F | b001 b00 b00 b00 | 0:,V0,V0,V0,V1,V2 | | ||
+sum r;V0,V2,0,3667,3761,3,0,0;V1,V2,0,3667,3761,3,0,0 b001 b001 b01 b00 b00 b b b a,compiler/ast:3610:3763,compiler/ast:3610:3763,compiler/ast:3674:3761 t,V0,V0,U,V0,U,U,U,V1 i t i i c0/i/i f0010
+hid fs1;20992:V0;20993:V0;20994:U;20995:V0;20996:U;20997:U;20998:U;20999:V1	o0compiler/ast:Sig&	o0Array<compiler/ast:Promise&>&
+out 69a942e49fd541b04625002224506f25
+run compiler/ast global NoYield	
+ctx r1 g1 p0
+keys compiler/ast=2dffa999fbcfb22fb4930337873290311cd16fc15ff304548c01068c8c7d3fb0
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0:,P | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6e212543433359b673156cd54470c6d0
+end
+sum 48711-3205855243295928298

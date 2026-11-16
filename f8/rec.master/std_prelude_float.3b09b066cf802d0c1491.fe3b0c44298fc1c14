@@ -1,0 +1,17 @@
+olang front record
+body fn 2771-2828	known p
+body fn 2829-2886	known p
+body fn 2887-2945	known p
+body fn 3004-3265	known p
+body fn 3364-4428	known p
+body fn 4508-5266	known p
+body fn 931-2699	known p
+sig Fixed@2771 fn&(F32, I64) String
+sig Fixed@2829 fn&(F16, I64) String
+sig Fixed@2887 fn&(BF16, I64) String
+sig Fixed@931 fn&(F64, I64) String
+sig fixedDecimal@4508 fn&(mut Array<U64>&, I64) String
+sig fixedMul@3004 fn&(mut Array<U64>&, I64, U64) I64
+sig fixedShiftRound@3364 fn&(mut Array<U64>&, I64, I64) I64
+end
+sum 6de48267330f3db0f6d592bd960089168020d304c8df9e0f6518ea1dc59f2ac9

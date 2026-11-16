@@ -1,0 +1,82 @@
+olang front record
+body fn 10050-10413	known p
+body fn 10473-10681	known p
+body fn 10745-11080	known p
+body fn 11157-11347	known p
+body fn 11375-11847	known p
+body fn 11949-13468	known p grows|1|-|-|..work.buf|9|0|compiler/jupyter|12372|12376|-1 grows|1|-|-|..snap.ids|9|0|compiler/jupyter|12372|12376|-1 grows|1|-|-|..snap.Starts|12|0|compiler/jupyter|12372|12376|-1 grows|1|-|-|..snap.Words|11|0|compiler/jupyter|12372|12376|-1 grows|1|-|-|..snap.RegTy|11|0|compiler/jupyter|12372|12376|-1 grows|1|-|-|..snap.RegAt|11|0|compiler/jupyter|12372|12376|-1 grows|1|-|-|..snap.RegOff|12|0|compiler/jupyter|12372|12376|-1
+body fn 13470-13559	known p
+body fn 13722-14025	known p
+body fn 14133-14293	known p
+body fn 14648-15687	known p
+body fn 15689-15788	known p
+body fn 15814-15915	known p
+body fn 16187-16607	known p
+body fn 16699-17023	known p
+body fn 17025-17076	known p
+body fn 17168-17556	known p
+body fn 17786-18742	known p
+body fn 2779-2891	known p
+body fn 3030-4584	known p
+body fn 4586-4698	known p
+body fn 4747-4914	known p grows|0|-|-|..Socks|6|0|compiler/jupyter|4818|4822|-1 grows|0|-|-|..Roles|6|0|compiler/jupyter|4902|4906|-1
+body fn 5029-5391	known p grows|0|-|-|..Socks[...].in|14|0|compiler/jupyter|5112|5116|-1 grows|1|-|-|..work.buf|9|0|compiler/jupyter|5363|5369|-1 grows|1|-|-|..snap.ids|9|0|compiler/jupyter|5363|5369|-1 grows|1|-|-|..snap.Starts|12|0|compiler/jupyter|5363|5369|-1 grows|1|-|-|..snap.Words|11|0|compiler/jupyter|5363|5369|-1 grows|1|-|-|..snap.RegTy|11|0|compiler/jupyter|5363|5369|-1 grows|1|-|-|..snap.RegAt|11|0|compiler/jupyter|5363|5369|-1 grows|1|-|-|..snap.RegOff|12|0|compiler/jupyter|5363|5369|-1
+body fn 5577-6323	known p grows|0|-|-|..Socks[...].in|14|0|compiler/jupyter|5810|5814|-1 grows|0|-|-|..Later|6|0|compiler/jupyter|6032|6036|-1
+body fn 6325-6458	known p
+body fn 6506-6751	known p
+body fn 6851-8575	known p grows|1|-|-|..work.buf|9|0|compiler/jupyter|7577|7584|-1 grows|1|-|-|..snap.ids|9|0|compiler/jupyter|7577|7584|-1 grows|1|-|-|..snap.Starts|12|0|compiler/jupyter|7577|7584|-1 grows|1|-|-|..snap.Words|11|0|compiler/jupyter|7577|7584|-1 grows|1|-|-|..snap.RegTy|11|0|compiler/jupyter|7577|7584|-1 grows|1|-|-|..snap.RegAt|11|0|compiler/jupyter|7577|7584|-1 grows|1|-|-|..snap.RegOff|12|0|compiler/jupyter|7577|7584|-1
+body fn 8843-9283	known p
+body fn 9356-9560	known p
+body fn 9601-9944	known p
+body global Control	known p
+body global Delimiter	known p
+body global Heartbeat	known p
+body global IOPub	known p
+body global Keywords	known p
+body global Kinds	known p
+body global PortKeys	known p
+body global Protocol	known p
+body global Shell	known p
+body global Stdin	known p
+body lambda 3955-3991	known p
+baked Control [8 0100000000000000]
+baked Delimiter [8 09000000000000000000000000000000 @8>1+0][8c 3c4944537c4d53473e]
+baked Heartbeat [8 0400000000000000]
+baked IOPub [8 0300000000000000]
+baked Keywords [64 02000000000000000000000000000000040000000000000000000000000000000600000000000000000000000000000003000000000000000000000000000000020000000000000000000000000000000200000000000000000000000000000004000000000000000000000000000000060000000000000000000000000000000500000000000000000000000000000004000000000000000000000000000000030000000000000000000000000000000300000000000000000000000000000005000000000000000000000000000000050000000000000000000000000000000300000000000000000000000000000002000000000000000000000000000000030000000000000000000000000000000400000000000000000000000000000005000000000000000000000000000000040000000000000000000000000000000600000000000000000000000000000004000000000000000000000000000000050000000000000000000000000000000500000000000000000000000000000005000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0 @88>6+0 @104>7+0 @120>8+0 @136>9+0 @152>10+0 @168>11+0 @184>12+0 @200>13+0 @216>14+0 @232>15+0 @248>16+0 @264>17+0 @280>18+0 @296>19+0 @312>20+0 @328>21+0 @344>22+0 @360>23+0 @376>24+0 @392>25+0][8c 666e][8c 74797065][8c 696d706f7274][8c 666f72][8c 696e][8c 6966][8c 656c7365][8c 72657475726e][8c 6d61746368][8c 63617365][8c 6d7574][8c 747279][8c 6361746368][8c 6572726f72][8c 616e64][8c 6f72][8c 6e6f74][8c 74727565][8c 66616c7365][8c 6e756c6c][8c 737472756374][8c 656e756d][8c 7472616974][8c 6465666572][8c 72616e6765]
+baked Kinds [64 0600000000000000000000000000000006000000000000000000000000000000060000000000000000000000000000000300000000000000000000000000000003000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0][8c 524f55544552][8c 524f55544552][8c 524f55544552][8c 505542][8c 524550]
+baked PortKeys [64 0a0000000000000000000000000000000c0000000000000000000000000000000a0000000000000000000000000000000a00000000000000000000000000000007000000000000000000000000000000 @8>1+0 @24>2+0 @40>3+0 @56>4+0 @72>5+0][8c 7368656c6c5f706f7274][8c 636f6e74726f6c5f706f7274][8c 737464696e5f706f7274][8c 696f7075625f706f7274][8c 68625f706f7274]
+baked Protocol [8 03000000000000000000000000000000 @8>1+0][8c 352e33]
+baked Shell [8 0000000000000000]
+baked Stdin [8 0200000000000000]
+sig Data@13722 fn&(Reply&) String
+sig End@16187 fn&(Capture&) String
+sig FirstLine@13470 fn&(String&) String
+sig Install@17786 fn&(String&, Config&) I32
+sig Q@15814 fn&(String&) String
+sig Serve@3030 fn&(mut Config&, String&) I32
+sig accept@4747 fn&(mut kernel&, mut Listener&, I64)
+sig civil@17168 fn&(I64) I64, I64, I64
+sig complete@14648 fn&(Session&, Json&) String
+sig execute@11949 fn&(mut kernel&, mut Session&, I64, request&, Json&)
+sig fail@4586 fn&(String&) I32
+sig frames@10050 fn&(mut kernel&, Array<String>&, String&, String&, String&) Array<String&>&
+sig handle@6851 fn&(mut kernel&, mut Session&, I64, Array<String>&)
+sig header@9601 fn&(mut kernel&, String&) String
+sig interrupted@5577 fn&(mut kernel&) Bool
+sig isComplete@14133 fn&(String&) String
+sig isoNow@16699 fn&() String
+sig kernelInfo@11375 fn&() String
+sig kindOf@6325 fn&(request&) String
+sig newId@2779 fn&() String
+sig publish@10745 fn&(mut kernel&, String&, String&, String&)
+sig read@8843 fn&(kernel&, Array<String>&) request ? Unsigned
+sig reply@10473 fn&(mut kernel&, I64, request&, String&, String&)
+sig serve@5029 fn&(mut kernel&, mut Session&, I64)
+sig sign@9356 fn&(kernel&, String&, String&, String&, String&) String
+sig str@15689 fn&(Json&, String&) String&
+sig stream@11157 fn&(mut kernel&, String&, String&, String&)
+sig sweep@6506 fn&(mut kernel&)
+sig two@17025 fn&(I64) String
+end
+sum f766c26a7753d1782c7322504cc77bf8dba2562bc5e94376ce9ed611f72058bf

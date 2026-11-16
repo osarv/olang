@@ -1,0 +1,379 @@
+olang front record
+body global CBRK	known p
+body global CDISCARD	known p
+body global CDSUSP	known p
+body global CEOF	known p
+body global CEOL	known p
+body global CEOT	known p
+body global CERASE	known p
+body global CFLUSH	known p
+body global CINTR	known p
+body global CKILL	known p
+body global CLNEXT	known p
+body global CMIN	known p
+body global CQUIT	known p
+body global CREPRINT	known p
+body global CRPRNT	known p
+body global CSTART	known p
+body global CSTATUS	known p
+body global CSTOP	known p
+body global CSUSP	known p
+body global CTIME	known p
+body global CWERASE	known p
+body global FIOASYNC	known p
+body global FIOCLEX	known p
+body global FIONBIO	known p
+body global FIONCLEX	known p
+body global FIONREAD	known p
+body global FIOQSIZE	known p
+body global IOCSIZE_MASK	known p
+body global IOCSIZE_SHIFT	known p
+body global IOC_IN	known p
+body global IOC_INOUT	known p
+body global IOC_OUT	known p
+body global NCC	known p
+body global N_6PACK	known p
+body global N_AX25	known p
+body global N_HCI	known p
+body global N_HDLC	known p
+body global N_IRDA	known p
+body global N_MASC	known p
+body global N_MOUSE	known p
+body global N_PPP	known p
+body global N_PROFIBUS_FDL	known p
+body global N_R3964	known p
+body global N_SLIP	known p
+body global N_SMSBLOCK	known p
+body global N_STRIP	known p
+body global N_SYNC_PPP	known p
+body global N_TTY	known p
+body global N_X25	known p
+body global SIOCADDDLCI	known p
+body global SIOCADDMULTI	known p
+body global SIOCADDRT	known p
+body global SIOCDARP	known p
+body global SIOCDELDLCI	known p
+body global SIOCDELMULTI	known p
+body global SIOCDELRT	known p
+body global SIOCDEVPRIVATE	known p
+body global SIOCDIFADDR	known p
+body global SIOCDRARP	known p
+body global SIOCGARP	known p
+body global SIOCGIFADDR	known p
+body global SIOCGIFBR	known p
+body global SIOCGIFBRDADDR	known p
+body global SIOCGIFCONF	known p
+body global SIOCGIFCOUNT	known p
+body global SIOCGIFDSTADDR	known p
+body global SIOCGIFENCAP	known p
+body global SIOCGIFFLAGS	known p
+body global SIOCGIFHWADDR	known p
+body global SIOCGIFINDEX	known p
+body global SIOCGIFMAP	known p
+body global SIOCGIFMEM	known p
+body global SIOCGIFMETRIC	known p
+body global SIOCGIFMTU	known p
+body global SIOCGIFNAME	known p
+body global SIOCGIFNETMASK	known p
+body global SIOCGIFPFLAGS	known p
+body global SIOCGIFSLAVE	known p
+body global SIOCGIFTXQLEN	known p
+body global SIOCGRARP	known p
+body global SIOCPROTOPRIVATE	known p
+body global SIOCRTMSG	known p
+body global SIOCSARP	known p
+body global SIOCSIFADDR	known p
+body global SIOCSIFBR	known p
+body global SIOCSIFBRDADDR	known p
+body global SIOCSIFDSTADDR	known p
+body global SIOCSIFENCAP	known p
+body global SIOCSIFFLAGS	known p
+body global SIOCSIFHWADDR	known p
+body global SIOCSIFHWBROADCAST	known p
+body global SIOCSIFLINK	known p
+body global SIOCSIFMAP	known p
+body global SIOCSIFMEM	known p
+body global SIOCSIFMETRIC	known p
+body global SIOCSIFMTU	known p
+body global SIOCSIFNAME	known p
+body global SIOCSIFNETMASK	known p
+body global SIOCSIFPFLAGS	known p
+body global SIOCSIFSLAVE	known p
+body global SIOCSIFTXQLEN	known p
+body global SIOCSRARP	known p
+body global SIOGIFINDEX	known p
+body global TCFLSH	known p
+body global TCGETA	known p
+body global TCGETS	known p
+body global TCGETX	known p
+body global TCSBRK	known p
+body global TCSBRKP	known p
+body global TCSETA	known p
+body global TCSETAF	known p
+body global TCSETAW	known p
+body global TCSETS	known p
+body global TCSETSF	known p
+body global TCSETSW	known p
+body global TCSETX	known p
+body global TCSETXF	known p
+body global TCSETXW	known p
+body global TCXONC	known p
+body global TIOCCBRK	known p
+body global TIOCCONS	known p
+body global TIOCEXCL	known p
+body global TIOCGDEV	known p
+body global TIOCGETD	known p
+body global TIOCGEXCL	known p
+body global TIOCGICOUNT	known p
+body global TIOCGLCKTRMIOS	known p
+body global TIOCGPGRP	known p
+body global TIOCGPKT	known p
+body global TIOCGPTLCK	known p
+body global TIOCGPTN	known p
+body global TIOCGPTPEER	known p
+body global TIOCGRS485	known p
+body global TIOCGSERIAL	known p
+body global TIOCGSID	known p
+body global TIOCGSOFTCAR	known p
+body global TIOCGWINSZ	known p
+body global TIOCINQ	known p
+body global TIOCLINUX	known p
+body global TIOCMBIC	known p
+body global TIOCMBIS	known p
+body global TIOCMGET	known p
+body global TIOCMIWAIT	known p
+body global TIOCMSET	known p
+body global TIOCM_CAR	known p
+body global TIOCM_CD	known p
+body global TIOCM_CTS	known p
+body global TIOCM_DSR	known p
+body global TIOCM_DTR	known p
+body global TIOCM_LE	known p
+body global TIOCM_RI	known p
+body global TIOCM_RNG	known p
+body global TIOCM_RTS	known p
+body global TIOCM_SR	known p
+body global TIOCM_ST	known p
+body global TIOCNOTTY	known p
+body global TIOCNXCL	known p
+body global TIOCOUTQ	known p
+body global TIOCPKT	known p
+body global TIOCPKT_DATA	known p
+body global TIOCPKT_DOSTOP	known p
+body global TIOCPKT_FLUSHREAD	known p
+body global TIOCPKT_FLUSHWRITE	known p
+body global TIOCPKT_IOCTL	known p
+body global TIOCPKT_NOSTOP	known p
+body global TIOCPKT_START	known p
+body global TIOCPKT_STOP	known p
+body global TIOCSBRK	known p
+body global TIOCSCTTY	known p
+body global TIOCSERCONFIG	known p
+body global TIOCSERGETLSR	known p
+body global TIOCSERGETMULTI	known p
+body global TIOCSERGSTRUCT	known p
+body global TIOCSERGWILD	known p
+body global TIOCSERSETMULTI	known p
+body global TIOCSERSWILD	known p
+body global TIOCSER_TEMT	known p
+body global TIOCSETD	known p
+body global TIOCSIG	known p
+body global TIOCSLCKTRMIOS	known p
+body global TIOCSPGRP	known p
+body global TIOCSPTLCK	known p
+body global TIOCSRS485	known p
+body global TIOCSSERIAL	known p
+body global TIOCSSOFTCAR	known p
+body global TIOCSTI	known p
+body global TIOCSWINSZ	known p
+body global TIOCVHANGUP	known p
+baked CBRK [8 00000000]
+baked CDISCARD [8 0f000000]
+baked CDSUSP [8 19000000]
+baked CEOF [8 04000000]
+baked CEOL [8 00000000]
+baked CEOT [8 04000000]
+baked CERASE [8 7f000000]
+baked CFLUSH [8 0f000000]
+baked CINTR [8 03000000]
+baked CKILL [8 15000000]
+baked CLNEXT [8 16000000]
+baked CMIN [8 01000000]
+baked CQUIT [8 1c000000]
+baked CREPRINT [8 12000000]
+baked CRPRNT [8 12000000]
+baked CSTART [8 11000000]
+baked CSTATUS [8 00000000]
+baked CSTOP [8 13000000]
+baked CSUSP [8 1a000000]
+baked CTIME [8 00000000]
+baked CWERASE [8 17000000]
+baked FIOASYNC [8 52540000]
+baked FIOCLEX [8 51540000]
+baked FIONBIO [8 21540000]
+baked FIONCLEX [8 50540000]
+baked FIONREAD [8 1b540000]
+baked FIOQSIZE [8 60540000]
+baked IOCSIZE_MASK [8 0000ff3f]
+baked IOCSIZE_SHIFT [8 10000000]
+baked IOC_IN [8 00000040]
+baked IOC_INOUT [8 000000c000000000]
+baked IOC_OUT [8 0000008000000000]
+baked NCC [8 08000000]
+baked N_6PACK [8 07000000]
+baked N_AX25 [8 05000000]
+baked N_HCI [8 0f000000]
+baked N_HDLC [8 0d000000]
+baked N_IRDA [8 0b000000]
+baked N_MASC [8 08000000]
+baked N_MOUSE [8 02000000]
+baked N_PPP [8 03000000]
+baked N_PROFIBUS_FDL [8 0a000000]
+baked N_R3964 [8 09000000]
+baked N_SLIP [8 01000000]
+baked N_SMSBLOCK [8 0c000000]
+baked N_STRIP [8 04000000]
+baked N_SYNC_PPP [8 0e000000]
+baked N_TTY [8 00000000]
+baked N_X25 [8 06000000]
+baked SIOCADDDLCI [8 80890000]
+baked SIOCADDMULTI [8 31890000]
+baked SIOCADDRT [8 0b890000]
+baked SIOCDARP [8 53890000]
+baked SIOCDELDLCI [8 81890000]
+baked SIOCDELMULTI [8 32890000]
+baked SIOCDELRT [8 0c890000]
+baked SIOCDEVPRIVATE [8 f0890000]
+baked SIOCDIFADDR [8 36890000]
+baked SIOCDRARP [8 60890000]
+baked SIOCGARP [8 54890000]
+baked SIOCGIFADDR [8 15890000]
+baked SIOCGIFBR [8 40890000]
+baked SIOCGIFBRDADDR [8 19890000]
+baked SIOCGIFCONF [8 12890000]
+baked SIOCGIFCOUNT [8 38890000]
+baked SIOCGIFDSTADDR [8 17890000]
+baked SIOCGIFENCAP [8 25890000]
+baked SIOCGIFFLAGS [8 13890000]
+baked SIOCGIFHWADDR [8 27890000]
+baked SIOCGIFINDEX [8 33890000]
+baked SIOCGIFMAP [8 70890000]
+baked SIOCGIFMEM [8 1f890000]
+baked SIOCGIFMETRIC [8 1d890000]
+baked SIOCGIFMTU [8 21890000]
+baked SIOCGIFNAME [8 10890000]
+baked SIOCGIFNETMASK [8 1b890000]
+baked SIOCGIFPFLAGS [8 35890000]
+baked SIOCGIFSLAVE [8 29890000]
+baked SIOCGIFTXQLEN [8 42890000]
+baked SIOCGRARP [8 61890000]
+baked SIOCPROTOPRIVATE [8 e0890000]
+baked SIOCRTMSG [8 0d890000]
+baked SIOCSARP [8 55890000]
+baked SIOCSIFADDR [8 16890000]
+baked SIOCSIFBR [8 41890000]
+baked SIOCSIFBRDADDR [8 1a890000]
+baked SIOCSIFDSTADDR [8 18890000]
+baked SIOCSIFENCAP [8 26890000]
+baked SIOCSIFFLAGS [8 14890000]
+baked SIOCSIFHWADDR [8 24890000]
+baked SIOCSIFHWBROADCAST [8 37890000]
+baked SIOCSIFLINK [8 11890000]
+baked SIOCSIFMAP [8 71890000]
+baked SIOCSIFMEM [8 20890000]
+baked SIOCSIFMETRIC [8 1e890000]
+baked SIOCSIFMTU [8 22890000]
+baked SIOCSIFNAME [8 23890000]
+baked SIOCSIFNETMASK [8 1c890000]
+baked SIOCSIFPFLAGS [8 34890000]
+baked SIOCSIFSLAVE [8 30890000]
+baked SIOCSIFTXQLEN [8 43890000]
+baked SIOCSRARP [8 62890000]
+baked SIOGIFINDEX [8 33890000]
+baked TCFLSH [8 0b540000]
+baked TCGETA [8 05540000]
+baked TCGETS [8 01540000]
+baked TCGETX [8 32540000]
+baked TCSBRK [8 09540000]
+baked TCSBRKP [8 25540000]
+baked TCSETA [8 06540000]
+baked TCSETAF [8 08540000]
+baked TCSETAW [8 07540000]
+baked TCSETS [8 02540000]
+baked TCSETSF [8 04540000]
+baked TCSETSW [8 03540000]
+baked TCSETX [8 33540000]
+baked TCSETXF [8 34540000]
+baked TCSETXW [8 35540000]
+baked TCXONC [8 0a540000]
+baked TIOCCBRK [8 28540000]
+baked TIOCCONS [8 1d540000]
+baked TIOCEXCL [8 0c540000]
+baked TIOCGDEV [8 3254048000000000]
+baked TIOCGETD [8 24540000]
+baked TIOCGEXCL [8 4054048000000000]
+baked TIOCGICOUNT [8 5d540000]
+baked TIOCGLCKTRMIOS [8 56540000]
+baked TIOCGPGRP [8 0f540000]
+baked TIOCGPKT [8 3854048000000000]
+baked TIOCGPTLCK [8 3954048000000000]
+baked TIOCGPTN [8 3054048000000000]
+baked TIOCGPTPEER [8 41540000]
+baked TIOCGRS485 [8 2e540000]
+baked TIOCGSERIAL [8 1e540000]
+baked TIOCGSID [8 29540000]
+baked TIOCGSOFTCAR [8 19540000]
+baked TIOCGWINSZ [8 13540000]
+baked TIOCINQ [8 1b540000]
+baked TIOCLINUX [8 1c540000]
+baked TIOCMBIC [8 17540000]
+baked TIOCMBIS [8 16540000]
+baked TIOCMGET [8 15540000]
+baked TIOCMIWAIT [8 5c540000]
+baked TIOCMSET [8 18540000]
+baked TIOCM_CAR [8 40000000]
+baked TIOCM_CD [8 40000000]
+baked TIOCM_CTS [8 20000000]
+baked TIOCM_DSR [8 00010000]
+baked TIOCM_DTR [8 02000000]
+baked TIOCM_LE [8 01000000]
+baked TIOCM_RI [8 80000000]
+baked TIOCM_RNG [8 80000000]
+baked TIOCM_RTS [8 04000000]
+baked TIOCM_SR [8 10000000]
+baked TIOCM_ST [8 08000000]
+baked TIOCNOTTY [8 22540000]
+baked TIOCNXCL [8 0d540000]
+baked TIOCOUTQ [8 11540000]
+baked TIOCPKT [8 20540000]
+baked TIOCPKT_DATA [8 00000000]
+baked TIOCPKT_DOSTOP [8 20000000]
+baked TIOCPKT_FLUSHREAD [8 01000000]
+baked TIOCPKT_FLUSHWRITE [8 02000000]
+baked TIOCPKT_IOCTL [8 40000000]
+baked TIOCPKT_NOSTOP [8 10000000]
+baked TIOCPKT_START [8 08000000]
+baked TIOCPKT_STOP [8 04000000]
+baked TIOCSBRK [8 27540000]
+baked TIOCSCTTY [8 0e540000]
+baked TIOCSERCONFIG [8 53540000]
+baked TIOCSERGETLSR [8 59540000]
+baked TIOCSERGETMULTI [8 5a540000]
+baked TIOCSERGSTRUCT [8 58540000]
+baked TIOCSERGWILD [8 54540000]
+baked TIOCSERSETMULTI [8 5b540000]
+baked TIOCSERSWILD [8 55540000]
+baked TIOCSER_TEMT [8 01000000]
+baked TIOCSETD [8 23540000]
+baked TIOCSIG [8 36540440]
+baked TIOCSLCKTRMIOS [8 57540000]
+baked TIOCSPGRP [8 10540000]
+baked TIOCSPTLCK [8 31540440]
+baked TIOCSRS485 [8 2f540000]
+baked TIOCSSERIAL [8 1f540000]
+baked TIOCSSOFTCAR [8 1a540000]
+baked TIOCSTI [8 12540000]
+baked TIOCSWINSZ [8 14540000]
+baked TIOCVHANGUP [8 37540000]
+end
+sum 9a652f110fc419505bbe69e77e6dd316f0ef8eecec92974e056bd5bda5ce98f5

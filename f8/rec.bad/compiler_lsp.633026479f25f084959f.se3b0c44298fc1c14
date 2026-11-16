@@ -1,0 +1,1863 @@
+olang scope record
+run compiler/lsp 0-0 ctor compiler/lsp:Worker	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	0,1,2,3
+marks 68db2e3f59f2920dcafbba33978c5adc
+read -ctor	I32
+read -ctor	I64
+read compiler/session 0-0 ctor compiler/session:Reader	94e75e7eca2eea8ceac865d2b43328d4
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b b b b b b a,compiler/lsp:0:0 t i,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out f11eb5674332ae490775784ceb017121
+run compiler/lsp 0-0 ctor compiler/lsp:Server	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	0,1,2,3,4,5,6,7,8
+marks ba98095af2f5f73643a4c68cecb9f4e1
+read -ctor	Bool
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<mut compiler/lsp:Doc&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 4 10 2 | U U U U | F F F F F F F F F F | b01 b0000000000 b0000 b0000000000 | 0:,V1 1:,V1 2:,V1 3:,V1 | | ||
+sum r;V0,V1,0,1896,1899,1,0,0;V1,V0,0,1896,1899,1,0,1 b01 b01 b1 b0 b0 b b b a,compiler/lsp:0:0,std/prelude/vec:3184:3188 t i,-1,0,-1,-1,1,2,-1,-1,-1 t,U,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U	o0mut compiler/build:Config&
+out 84822276875bc9b8d4022b9fe1ada11d
+run compiler/lsp 0-0 ctor compiler/lsp:Server	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 84822276875bc9b8d4022b9fe1ada11d
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	0,1,2,3,4,5,6,7,8
+marks 8aea7d5454a44cfa76a29b8557cf4402
+read -ctor	Bool
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<mut compiler/lsp:Doc&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 4 10 2 | U U U U | F F F F F F F F F F | b01 b0000000000 b0000 b0000000000 | 0:,V1 1:,V1 2:,V1 3:,V1 | | ||
+sum r;V0,V1,0,1896,1899,2,0,0 b01 b01 b1 b0 b0 b b b a,compiler/lsp:0:0,std/prelude/vec:3184:3188 t i,-1,0,-1,-1,1,2,-1,-1,-1 t,U,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U	o0mut compiler/build:Config&
+out c2ffc524260ab43e98afa7f45c8dc645
+run compiler/lsp 10350-10481 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	3
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	2
+marks cb704e8d54d2e8d24e8d5c23963e6c0a
+read compiler/lsp 0-0 ctor compiler/lsp:Server	de6b5be682ec58f2c537657752ec34b7
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read compiler/session 52882-52933 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 3 1 1 | U B0 U | F | b0 b0 b000 b0 | 0: 2: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/lsp:10350:10481 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&
+out c68f7b15d4320b8048271a70ecfb89e8
+run compiler/lsp 4089-4159 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/session 56205-56341 fn	d703dc931fdb4564d846b8a7a07ec513
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/lsp:4089:4159,compiler/lsp:4089:4159 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/prelude/text:String&
+out 1bb85332a13501bfee432f83ec7e3d2c
+run compiler/lsp 27191-27481 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 7 3 3 | B0 U U B0 B0 U U | F F F | b001 b000 b0000000 b000 | 0:,B0 1:,B0,B0 2:,B0,V0 5:,B0,B0 6:,B0,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/lsp:27191:27481,compiler/lsp:27191:27481,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&
+out b8b57910f3c8b8e1d05772ab38642c79
+run compiler/lsp 11001-11370 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 9 2 2 | B0 B0 B0 U B0 B0 U U U | F F | b01 b00 b000000000 b00 | 0:,B0 3:,B0,B0 6:,B0,B0 7:,B0,B0 8:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/lsp:11001:11370,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 313f15742abd122c1e2b3460ed1930be
+run compiler/lsp 26799-26924 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 2 3 | V2 | F F | b001 b00 b0 b00 | | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/lsp:26799:26924,compiler/lsp:26799:26924,compiler/lsp:26852:26922 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&
+out afb979481080344a091da031ae00ace0
+run compiler/lsp 10632-10999 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	0
+marks 05152b2e5ffa7fac51da79aa2900cd34
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 10350-10481 fn	9681d88001f9aa14418946fb5f92338a
+read compiler/lsp 11001-11370 fn	c2b2e412a2b8ef36840a3ddb53a8358e
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/lsp 27191-27481 fn	b7c04f133e27dc3e56d1831d6bbcc3dc
+read compiler/lsp 4089-4159 fn	fa24e7049227d8df9346a6f3bf096c77
+read compiler/session 53113-53206 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+read std/prelude/vec 7906-7950 fn <I64;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 23 8 2 | U U U U U U B3 U B4 U B4 U B4 U U U U B7 B7 U B7 U U | F F F F F F F F | b00 b00000000 b00000000000000000000000 b00000000 | 0: 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0,V0 7:,V0,V0 9:,V1,B4 11:,V0,B4,B4 13:,V0,B4 14:,V0 15:,V0 16:,V0 19:,B7,B7,B7 21:,V0,B7 22:,V0 | | ||
+sum r b00 b00 b10 b10 b00 b b b a,compiler/lsp:10632:10999,compiler/lsp:10632:10999 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64
+out fe745a3c28460ff44a359d4a76218f04
+run compiler/lsp 12858-13451 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 6300-6449 fn	b0a08e72ed90e7bfdb613ca331386fb7
+read std/json 7544-7683 fn	656b96a082399099a7567556adf274a3
+read std/json 7771-7924 fn	1f696cee56c72539dbea77f5899e25c7
+read std/prelude/vec 11638-11815 fn <I64;>	ed9e34746e970fcbb85f71f0221841bc
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+read std/prelude/vec 7906-7950 fn <I64;>	a18ca10380cf10c77190fe509fec348c
+read std/prelude/vec 7906-7950 fn <std/prelude/text:String&;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 18 15 2 | U U U U U U U U U U U U U U U V0 V0 U | F F F F F F F F F F F F F F F | b10 b000000000000000 b000000000000000000 b000000000000000 | 0:,V1,B0 1:,B0,B0 2:,B0 3:,V0 4:,V0 5:,V0,V0 6:,V0 7:,B0,B0 8:,B0,B0 9:,B0 10:,V0 11:,V0 12:,B0,B0 13:,B0,B0 14:,B0,B9 17:,V0,V0 | | ||
+sum r b10 b10 b11 b10 b00 b b b a,std/prelude/vec:4512:4530,compiler/lsp:12858:13451 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/prelude/text:String&	o0std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0Array<std/json:Json&>&	o1std/json:Json&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0Array<std/json:Json&>&	o1std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&
+out b7a7553f62082e7a6e5d1ff4573ee994
+run compiler/lsp 26683-26797 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/json 31581-31733 fn <std/json:Json&;>	548c94ac8687707c20e22f91c172d03d
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+hits 0
+body 1 2 2 2 | U U | F F | b01 b00 b00 b00 | 0:,V0,V0 1:,V0,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/lsp:26683:26797,std/json:31715:31731 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o1std/json:Naming
+out 630a57efbdfbfdce4392e77f2468a1b1
+run compiler/lsp 11801-12756 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	3
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	2
+marks cb704e8d54d2e8d24e8d5c23963e6c0a
+read -ctor	Array<std/prelude/text:Char>
+read compiler/build 72936-73446 fn	fd6fddbe18865e6553af4b2b0492fc27
+read compiler/lsp 0-0 ctor compiler/lsp:Server	de6b5be682ec58f2c537657752ec34b7
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read compiler/lsp 10350-10481 fn	9681d88001f9aa14418946fb5f92338a
+read compiler/lsp 10632-10999 fn	199e880868355c26944898750888c5f5
+read compiler/lsp 12858-13451 fn	06f26ac23eede7cd84980b70957bcba4
+read compiler/lsp 26683-26797 fn	fea87fd6dd56f96d70424c1c7147f2fe
+read compiler/lsp 4089-4159 fn	fa24e7049227d8df9346a6f3bf096c77
+read compiler/session 53301-53431 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/session 54436-54661 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/session 54794-55602 fn	2732233d74198c08c6d5fa792da5a63c
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/vec 11638-11815 fn <I64;>	ed9e34746e970fcbb85f71f0221841bc
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+hits 0
+body 1 19 6 1 | U U U U U U B2 U U U U U U U B7 U U U U | F F F F F F | b1 b000000 b0000000000000000000 b000000 | 0:,V0 1: 2:,V0 3:,V0 4:,V0 5:,B3 7:,V0,B2 8:,V0,B4 9:,B4,B4 10:,V0,B4 11:,B4,B4 12:,B4,B7 13:,B7,B7 15:,B7 16:,B7 17:,V0 18:,V0,B4 | | ||
+sum r b1 b1 b1 b1 b0 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/json:Json&	o1std/prelude/text:String&
+out 4232bead4b2d066d9e79051327321862
+run compiler/lsp 0-0 ctor compiler/lsp:worker	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1,2,3,4,5,6
+marks c60f4591d73fe94f37f9f52cc7239cc1
+read -ctor	I32
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/lsp 0-0 ctor compiler/lsp:Server	de6b5be682ec58f2c537657752ec34b7
+read compiler/session 0-0 ctor compiler/session:Analysis	f044a8b157ea6bf7a701212d50cd9496
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>	0310b0c06b952de221ad2256fb7a89d8
+hits 0
+body 1 1 11 3 | U | F F F F F F F F F F F | b001 b00000000000 b0 b00000000000 | 0:,V2 | | ||
+sum r;V0,V2,0,14133,14134,1,0,0;V2,V0,0,14133,14134,1,0,1;V1,V2,0,14139,14142,1,0,0;V2,V1,0,14139,14142,1,0,1 b001 b001 b1100 b0000 b0000 b b b a,compiler/lsp:0:0,compiler/lsp:0:0,std/prelude/map:2600:2604 t i,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/lsp:Server&	o0mut compiler/build:Config&	o0I32	o0I32
+out 90ddc4bb4d1725ffd4812a1cf3386039
+run compiler/lsp 0-0 ctor compiler/lsp:worker	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 90ddc4bb4d1725ffd4812a1cf3386039
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1,2,3,4,5,6
+marks bd30eb2b0b6fa5e1c78eea8392953275
+read -ctor	I32
+read -ctor	I64
+read compiler/build 0-0 ctor compiler/build:Config	492ccf660e1f7372a891939607205944
+read compiler/lsp 0-0 ctor compiler/lsp:Server	c51da6feb1f2f945cd71998c0c8ec995
+read compiler/session 0-0 ctor compiler/session:Analysis	f044a8b157ea6bf7a701212d50cd9496
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>	0310b0c06b952de221ad2256fb7a89d8
+hits 0
+body 1 1 11 3 | U | F F F F F F F F F F F | b001 b00000000000 b0 b00000000000 | 0:,V2 | | ||
+sum r;V0,V2,0,14133,14134,2,0,0;V1,V2,0,14139,14142,2,0,0 b001 b001 b1100 b0000 b0000 b b b a,compiler/lsp:0:0,compiler/lsp:0:0,std/prelude/map:2600:2604 t i,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/lsp:Server&	o0mut compiler/build:Config&	o0I32	o0I32
+out c735a4870611adff72d156724b9a144b
+run compiler/lsp 20185-20402 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/session 5509-5661 fn	363b62c2e6c9ae3ce7a60e139b0e082b
+read compiler/session 5686-5759 fn	da0a8c65d6caec1352304bc776bb4bf7
+read std/prelude/map 7053-7137 fn <std/prelude/text:String&;std/prelude/text:String&;>	afab4e7cf33319d9b4752b5bbe842ce0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 6 5 4 | U U V3 U U V3 | F F F F F | b0001 b00000 b000000 b00000 | 0:,V0,V2,V0 1:,V0,B0 3:,V1,V2 4:,V1,B0 | | ||
+sum r b0001 b0001 b010 b010 b000 b b b a,compiler/lsp:20185:20402,compiler/lsp:20185:20402,compiler/lsp:20185:20402,compiler/lsp:20325:20327 t i t i i c0/i/i f0010
+hid fs1	o0compiler/lsp:worker&	o0compiler/session:Analysis&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1compiler/session:Analysis&	o1I64
+out 2b43ff36d805a560b8e1fd0db4ed2bfd
+run compiler/lsp 22055-22419 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/session 24214-24464 fn	d0d24a459ea6947a72716c2bff205c7e
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+hits 0
+body 1 4 5 4 | U B0 B0 U | F F F F F | b0100 b00000 b0000 b00000 | 0:,V2,V1 3:,V1,B0 | | ||
+sum r b0100 b0100 b0100 b0000 b0000 b b b a,compiler/lsp:22055:22419,std/prelude/vec:4512:4530,compiler/lsp:22055:22419,compiler/lsp:22055:22419 t i t i i c0/i/i f0010
+hid fs1	o0compiler/lsp:worker&	o0mut std/prelude/text:StringBuilder&	o0compiler/session:Positions&	o0compiler/diag:Item&
+out 08f16cdf77472e63ce63b20b1387f239
+run compiler/lsp 20538-20610 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/diag 28525-28595 fn	1e32d643cfb909a09d0165acdd1540a0
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/lsp:20538:20610 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out c9046b30765df81490bc6148f736ddf7
+run compiler/lsp 28141-28509 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 1123-1188 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 12114-12336 fn	d69b4f8828194d2881e598b51dffe86b
+read std/prelude/text 16688-16775 fn	0ec8864eda84a3cfb62c68f9ef9d83b5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/text 7422-7555 fn	9f94567b41d3f19d82fa0b111107afaa
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 15 6 2 | B0 U U U U U U B4 U B4 U B4 B4 U U | F F F F F F | b01 b000000 b000000000000000 b000000 | 0:,B0 1:,B0,B0 2: 3: 4:,B0 5:,B4 6:,B4 8:,B4,B4 10:,B4,B4 13:,B0,B4 14:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/lsp:28141:28509,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out c4bd851098947bfb5d17f85056063915
+run compiler/lsp 19943-20096 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	0,2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0
+marks d255ea6a5c2cc30db7b0143780ab8fe6
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read compiler/lsp 28141-28509 fn	0ce9a9703e914a67d1a631057c73d772
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 5 5 3 | U U U V2 U | F F F F F | b001 b00000 b00000 b00000 | 0:,V0 1:,V0,V0 2:,V0,V1 4:,V1,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/lsp:19943:20096,compiler/lsp:19943:20096,compiler/lsp:20057:20063 t i t i i c0/i/i f0010
+hid fs1	o0compiler/lsp:worker&	o0std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64
+out 155ed2a8b442a7638120cbc6ff2afaec
+run compiler/lsp 19943-20096 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 155ed2a8b442a7638120cbc6ff2afaec
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	0,2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0
+marks 6bb405d932f14b9f3e077c6b52497bb6
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/lsp 28141-28509 fn	0ce9a9703e914a67d1a631057c73d772
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 5 5 3 | U U U V2 U | F F F F F | b001 b00000 b00000 b00000 | 0:,D0/0 1:,D0/1,D0/2 2:,D0/3,V1 4:,V1,V2 | 0,0 | || 3:rN8 4:rN10 198:rR19947,19956,20:compiler/lsp:Server&,-1(F19947,19956,20:compiler/lsp:Server&,0(D19947,19956,19:compiler/lsp:worker(R19947,19956,20:compiler/lsp:worker&,-1(V19947,19956,20:compiler/lsp:worker&,0)))) 4:rN16
+sum r b001 b001 b00 b00 b00 b b b a,compiler/lsp:19943:20096,compiler/lsp:19943:20096,compiler/lsp:20057:20063 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0compiler/lsp:worker&	o0std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	dd0:0:compiler/lsp:worker
+out d7a59a43d36dab41aa27581f34a6bcd2
+run compiler/lsp 20772-21974 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/diag 0-0 ctor compiler/diag:Item	1,6
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0
+marks 11e9cf0919455c0a390a2efe0875aa2e
+read -ctor	I64
+read compiler/diag 0-0 ctor compiler/diag:Item	b9ec7718a34968e9c1d29a8ef0b29e38
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read compiler/lsp 19943-20096 fn	d2d1e384e20d90748c504c0e621b2de7
+read compiler/lsp 20185-20402 fn	8024f5ea9e3446e7cf0a814c04f9313a
+read compiler/lsp 20538-20610 fn	297beb9f1fd35b055699c188b4e7a5b5
+read compiler/lsp 22055-22419 fn	d298b6fdfabd821b2198f13fe4ab3ffd
+read compiler/session 0-0 ctor compiler/session:Positions	d5d897f70f393ace68bd74a6bd8b68b4
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read compiler/session 5834-5971 fn	667968bd19d1616f409ceeafc77b354f
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45259-45315 fn	869f932e1932e645fe9a26d1c60dfdab
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 5133-5172 fn <compiler/diag:Item;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/diag:Item;>	f1a7450f757dacd6e3f39b1185515f34
+hits 0
+body 1 42 19 6 | U U B0 U U U U B0 B0 U U U U U U B0 U U U U U B3 U B3 U U U B3 U U U U V4 V4 U U U U B7 B7 U U | F F F F F F F F F F F F F F F F F F F | b010010 b0000000000000000000 b000000000000000000000000000000000000000000 b0000000000000000000 | 0:,V4,V4 1:,V0,V2,V5,B0 3:,B0,B0 4:,V1,B0 5:,V0,V1,B0,V4 6:,V4 9:,V1,B0 10:,V4,B0 11:,V1,B1 12:,V1,V4 13:,V1,B0 14:,V1,V4 15:,B0 16:,V4 17:,V4,V4 18:,B0 19:,B0 20:,V2,B3 22:,V0,V2,B3,B3 24:,B3,B3 25:,B0,B3 26:,V0,B3,B3 28:,B0,B3 29:,B0,B3 30:,V0,B0,B3,V4 31:,B0,B3 34:,B0,V4 35:,B0 36:,B0 37:,B0,B7 40:,V1,B7 41:,V1 | | ||
+sum r b010010 b010010 b0110000 b0010000 b0000000 b b b a,compiler/lsp:20772:21974,std/prelude/vec:4512:4530,compiler/lsp:20772:21974,compiler/lsp:20772:21974,compiler/lsp:21789:21809,compiler/lsp:20772:21974 t i t i i c0/i/i f0010
+hid fs1;51968:B0;51969:U;51968:B3;51969:U	o0mut compiler/lsp:worker&	o0mut std/prelude/text:StringBuilder&	o0compiler/session:Analysis&	o0mut compiler/diag:Diagnostics&	o0std/prelude/vec:Vec<compiler/diag:Item>&	o0I64	o0std/prelude/text:String&	o0compiler/diag:Item	o1std/prelude/vec:Vec<compiler/diag:Item>&	o1I64	o0compiler/diag:Item	o1std/prelude/vec:Vec<compiler/diag:Item>&	o1I64
+out cc320de708ed9eee7cbf0e9ad9ec96ec
+run compiler/lsp 20772-21974 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in cc320de708ed9eee7cbf0e9ad9ec96ec
+mark compiler/diag 0-0 ctor compiler/diag:Item	1,6
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0
+marks c17f0a64fd0f8895ccb8115f3836ca6b
+read -ctor	I64
+read compiler/diag 0-0 ctor compiler/diag:Item	b9ec7718a34968e9c1d29a8ef0b29e38
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/lsp 19943-20096 fn	71f6938ab8adcf23b39a5d7d5a8b5913
+read compiler/lsp 20185-20402 fn	8024f5ea9e3446e7cf0a814c04f9313a
+read compiler/lsp 20538-20610 fn	297beb9f1fd35b055699c188b4e7a5b5
+read compiler/lsp 22055-22419 fn	d298b6fdfabd821b2198f13fe4ab3ffd
+read compiler/session 0-0 ctor compiler/session:Positions	d5d897f70f393ace68bd74a6bd8b68b4
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read compiler/session 5834-5971 fn	667968bd19d1616f409ceeafc77b354f
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45259-45315 fn	869f932e1932e645fe9a26d1c60dfdab
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 5133-5172 fn <compiler/diag:Item;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/diag:Item;>	f1a7450f757dacd6e3f39b1185515f34
+hits 0
+body 1 42 19 6 | U U B0 U U U U B0 B0 U U U U U U B0 U U U U U B3 U B3 U U U B3 U U U U V4 V4 U U U U B7 B7 U U | F F F F F F F F F F F F F F F F F F F | b010010 b0000000000000000000 b000000000000000000000000000000000000000000 b0000000000000000000 | 0:,V4,V4 1:,V0,V2,V5,B0 3:,B0,B0 4:,V1,B0 5:,V0,V1,B0,V4 6:,V4 9:,V1,B0 10:,V4,B0 11:,V1,B1 12:,V1,V4 13:,V1,B0 14:,V1,V4 15:,B0 16:,V4 17:,V4,V4 18:,B0 19:,B0 20:,V2,B3 22:,V0,V2,B3,B3 24:,B3,B3 25:,B0,B3 26:,V0,B3,B3 28:,B0,B3 29:,B0,B3 30:,V0,B0,B3,V4 31:,B0,B3 34:,B0,V4 35:,B0 36:,B0 37:,B0,B7 40:,V1,B7 41:,V1 | 0,0 | 26:,0/0/D0/0 || 206:rR20776,20789,20:compiler/lsp:Server&,-1(F20776,20789,20:compiler/lsp:Server&,0(D20776,20789,19:compiler/lsp:worker(R20776,20789,24:mut compiler/lsp:worker&,-1(V20776,20789,24:mut compiler/lsp:worker&,0))))
+sum r b010010 b010010 b0110000 b0010000 b0000000 b b b a,compiler/lsp:20772:21974,std/prelude/vec:4512:4530,compiler/lsp:20772:21974,compiler/lsp:20772:21974,compiler/lsp:21789:21809,compiler/lsp:20772:21974 t i t i,0 i,0 c0/i/i f0010
+hid fs1;51968:B0;51969:U;51968:B3;51969:U	o0mut compiler/lsp:worker&	o0mut std/prelude/text:StringBuilder&	o0compiler/session:Analysis&	o0mut compiler/diag:Diagnostics&	o0std/prelude/vec:Vec<compiler/diag:Item>&	o0I64	o0std/prelude/text:String&	o0compiler/diag:Item	o1std/prelude/vec:Vec<compiler/diag:Item>&	o1I64	o0compiler/diag:Item	o1std/prelude/vec:Vec<compiler/diag:Item>&	o1I64	dd0:0:compiler/lsp:worker
+out 87f92d83095461ad383416eeeed91f83
+run compiler/lsp 18784-19625 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0
+mark compiler/session 0-0 ctor compiler/session:Use	2
+marks d3e00b819d84b988cacb7358b34fa0b4
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read compiler/lsp 20185-20402 fn	8024f5ea9e3446e7cf0a814c04f9313a
+read compiler/session 0-0 ctor compiler/session:Positions	d5d897f70f393ace68bd74a6bd8b68b4
+read compiler/session 0-0 ctor compiler/session:Use	5d34a0a66eb1459b31da76aa447583ec
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read compiler/session 24214-24464 fn	d0d24a459ea6947a72716c2bff205c7e
+read compiler/session 35280-35756 fn	08ce3ac5fe6eb9b25ce4dc8d0bc040e8
+read compiler/session 36044-37237 fn	a9968f5c5e0a774487b8628257490158
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45259-45315 fn	869f932e1932e645fe9a26d1c60dfdab
+read std/prelude/vec 5133-5172 fn <compiler/session:Use;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/session:Use;>	b51ed69aecd7674ca5263126de5a48dc
+hits 0
+body 1 25 11 4 | U B0 U U B1 U U U U U U U U U U B5 U U U U U U U U U | F F F F F F F F F F F | b0110 b00000000000 b0000000000000000000000000 b00000000000 | 0:,V0,V2,V3,B0 2:,B0,B0 3:,V2,V3,B1 5:,B1 6:,B1,B1 7:,V1 8:,V1 9:,V1,B2 10:,B0,V1 11:,V1,B2 12:,V1,B1 13:,V1 14:,V2,V3,B5 16:,B5 17:,B5,B5 18:,V1 19:,V1 20:,V1,B6 21:,B0,V1 22:,V1,B6 23:,V1,B5 24:,V1 | | ||
+sum r b0110 b0110 b0110 b0010 b0000 b b b a,compiler/lsp:18784:19625,std/prelude/vec:4512:4530,std/prelude/map:6065:6082,compiler/lsp:18784:19625 t i t i i c0/i/i f0010
+hid fs1;51968:B0;51969:U	o0compiler/lsp:worker&	o0mut std/prelude/text:StringBuilder&	o0compiler/session:Analysis&	o0std/prelude/text:String&	o0std/prelude/vec:Vec<compiler/session:Use>	o1compiler/session:Analysis&	o1std/prelude/text:String&	o0compiler/session:Use	o1std/prelude/vec:Vec<compiler/session:Use>&	o1I64	o0std/prelude/vec:Vec<compiler/session:Use>	o1compiler/session:Analysis&	o1std/prelude/text:String&	o0compiler/session:Use	o1std/prelude/vec:Vec<compiler/session:Use>&	o1I64
+out 0f01f7224a17d78b72698f6ea0e2a3e7
+run compiler/lsp 18784-19625 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0f01f7224a17d78b72698f6ea0e2a3e7
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0
+mark compiler/session 0-0 ctor compiler/session:Use	2
+marks 568a857c7d30b175b44d65be7a93eb94
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/lsp 20185-20402 fn	8024f5ea9e3446e7cf0a814c04f9313a
+read compiler/session 0-0 ctor compiler/session:Positions	d5d897f70f393ace68bd74a6bd8b68b4
+read compiler/session 0-0 ctor compiler/session:Use	5d34a0a66eb1459b31da76aa447583ec
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read compiler/session 24214-24464 fn	d0d24a459ea6947a72716c2bff205c7e
+read compiler/session 35280-35756 fn	d1fb57cad96f438d4075e5f9bbd306e8
+read compiler/session 36044-37237 fn	a9968f5c5e0a774487b8628257490158
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45259-45315 fn	869f932e1932e645fe9a26d1c60dfdab
+read std/prelude/vec 5133-5172 fn <compiler/session:Use;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/session:Use;>	b51ed69aecd7674ca5263126de5a48dc
+hits 0
+body 1 25 11 4 | U B0 U U B1 U U U U U U U U U U B5 U U U U U U U U U | F F F F F F F F F F F | b0110 b00000000000 b0000000000000000000000000 b00000000000 | 0:,V0,V2,V3,B0 2:,B0,B0 3:,V2,V3,B1 5:,B1 6:,B1,B1 7:,V1 8:,V1 9:,V1,B2 10:,B0,V1 11:,V1,B2 12:,V1,B1 13:,V1 14:,V2,V3,B5 16:,B5 17:,B5,B5 18:,V1 19:,V1 20:,V1,B6 21:,B0,V1 22:,V1,B6 23:,V1,B5 24:,V1 | | ||
+sum r b0110 b0110 b0110 b0010 b0000 b b b a,compiler/lsp:18784:19625,std/prelude/vec:4512:4530,std/prelude/map:6065:6082,compiler/lsp:18784:19625 t i t i i c0/i/i f0010
+hid fs1;51968:B0;51969:U	o0compiler/lsp:worker&	o0mut std/prelude/text:StringBuilder&	o0compiler/session:Analysis&	o0std/prelude/text:String&	o0std/prelude/vec:Vec<compiler/session:Use>	o1compiler/session:Analysis&	o1std/prelude/text:String&	o0compiler/session:Use	o1std/prelude/vec:Vec<compiler/session:Use>&	o1I64	o0std/prelude/vec:Vec<compiler/session:Use>	o1compiler/session:Analysis&	o1std/prelude/text:String&	o0compiler/session:Use	o1std/prelude/vec:Vec<compiler/session:Use>&	o1I64	dd0:0:compiler/lsp:worker
+out 85b332c83e76815165326ef82b5a2ab3
+run compiler/lsp 18784-19625 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 85b332c83e76815165326ef82b5a2ab3
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0
+mark compiler/session 0-0 ctor compiler/session:Use	2
+marks d3e00b819d84b988cacb7358b34fa0b4
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read compiler/lsp 20185-20402 fn	8024f5ea9e3446e7cf0a814c04f9313a
+read compiler/session 0-0 ctor compiler/session:Positions	d5d897f70f393ace68bd74a6bd8b68b4
+read compiler/session 0-0 ctor compiler/session:Use	5d34a0a66eb1459b31da76aa447583ec
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read compiler/session 24214-24464 fn	d0d24a459ea6947a72716c2bff205c7e
+read compiler/session 35280-35756 fn	d1fb57cad96f438d4075e5f9bbd306e8
+read compiler/session 36044-37237 fn	a9968f5c5e0a774487b8628257490158
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45259-45315 fn	869f932e1932e645fe9a26d1c60dfdab
+read std/prelude/vec 5133-5172 fn <compiler/session:Use;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/session:Use;>	b51ed69aecd7674ca5263126de5a48dc
+hits 0
+body 1 25 11 4 | U B0 U U B1 U U U U U U U U U U B5 U U U U U U U U U | F F F F F F F F F F F | b0110 b00000000000 b0000000000000000000000000 b00000000000 | 0:,V0,V2,V3,B0 2:,B0,B0 3:,V2,V3,B1 5:,B1 6:,B1,B1 7:,V1 8:,V1 9:,V1,B2 10:,B0,V1 11:,V1,B2 12:,V1,B1 13:,V1 14:,V2,V3,B5 16:,B5 17:,B5,B5 18:,V1 19:,V1 20:,V1,B6 21:,B0,V1 22:,V1,B6 23:,V1,B5 24:,V1 | | ||
+sum r b0110 b0110 b0110 b0010 b0000 b b b a,compiler/lsp:18784:19625,std/prelude/vec:4512:4530,std/prelude/map:6065:6082,compiler/lsp:18784:19625 t i t i i c0/i/i f0010
+hid fs1;51968:B0;51969:U	o0compiler/lsp:worker&	o0mut std/prelude/text:StringBuilder&	o0compiler/session:Analysis&	o0std/prelude/text:String&	o0std/prelude/vec:Vec<compiler/session:Use>	o1compiler/session:Analysis&	o1std/prelude/text:String&	o0compiler/session:Use	o1std/prelude/vec:Vec<compiler/session:Use>&	o1I64	o0std/prelude/vec:Vec<compiler/session:Use>	o1compiler/session:Analysis&	o1std/prelude/text:String&	o0compiler/session:Use	o1std/prelude/vec:Vec<compiler/session:Use>&	o1I64	dd0:0:compiler/lsp:worker
+out 984245b655f616450adab095e293a02c
+run compiler/lsp 15207-15281 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/session 56205-56341 fn	d703dc931fdb4564d846b8a7a07ec513
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/lsp:15207:15281,compiler/lsp:15207:15281 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:worker&	o0std/prelude/text:String&
+out c4f7f6d11b820b590f81ca85c64bee4d
+run compiler/lsp 19706-19857 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0
+marks 6099c7f9781eb88ed69101d8aa764973
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 5 5 2 | U U U B2 U | F F F F F | b00 b00000 b00000 b00000 | 0:,V0 1:,V0 2:,V0,V0 4:,V0,V1 | | ||
+sum r b00 b00 b10 b10 b00 b b b a,compiler/lsp:19706:19857,compiler/lsp:19706:19857 t i t i i c0/i/i f0010
+hid fs1	o0compiler/lsp:worker&	o0std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64
+out 59bf5ecdfecf2ce23079b60fa1c66d03
+run compiler/lsp 19706-19857 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 59bf5ecdfecf2ce23079b60fa1c66d03
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0
+marks 2622b98eade5a35c0bf1584050324d30
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 5 5 2 | U U U B2 U | F F F F F | b00 b00000 b00000 b00000 | 0:,D0/0 1:,D0/1 2:,D0/2,D0/3 4:,D0/4,V1 | 0,0 | || 3:rN8 4:rN10 4:rN16 198:rR19710,19719,20:compiler/lsp:Server&,-1(F19710,19719,20:compiler/lsp:Server&,0(D19710,19719,19:compiler/lsp:worker(R19710,19719,20:compiler/lsp:worker&,-1(V19710,19719,20:compiler/lsp:worker&,0)))) 4:rN13
+sum r b00 b00 b10 b10 b00 b b b a,compiler/lsp:19706:19857,compiler/lsp:19706:19857 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0compiler/lsp:worker&	o0std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	dd0:0:compiler/lsp:worker
+out 6663ea867f1eb88f94baa428e6a814ae
+run compiler/lsp 17016-18576 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	0,2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0
+marks d255ea6a5c2cc30db7b0143780ab8fe6
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/diag 27413-28148 fn	546b32c0fd4f92cf2c2d34aafa639029
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read compiler/lsp 15207-15281 fn	bb3d15467184a513bcd685e5a3660407
+read compiler/lsp 18784-19625 fn	5d1508431e778a910e7ba007a92f854e
+read compiler/lsp 19706-19857 fn	b05259d0ef9fc540d8a1bbe995613cea
+read compiler/lsp 19943-20096 fn	d2d1e384e20d90748c504c0e621b2de7
+read compiler/lsp 20772-21974 fn	3f7d8afb68e7474aa1d4483b014a1b31
+read compiler/lsp 27191-27481 fn	b7c04f133e27dc3e56d1831d6bbcc3dc
+read compiler/session 5834-5971 fn	667968bd19d1616f409ceeafc77b354f
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45259-45315 fn	869f932e1932e645fe9a26d1c60dfdab
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:StringBuilder>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11899-12021 fn <std/prelude/text:String&;>	3de578b68bbea269afe98db3cd30bd73
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 4660-4775 fn <std/prelude/text:StringBuilder;>	652312eadcb9c7b54bf0276e2dba4089
+read std/prelude/vec 5133-5172 fn <compiler/diag:Item;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/diag:Item;>	f1a7450f757dacd6e3f39b1185515f34
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 6401-6448 fn <std/prelude/text:StringBuilder;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 7015-7075 fn <std/prelude/text:StringBuilder;>	af5508e962116586d8c42f1a4465e9cf
+hits 0
+body 1 56 44 5 | U U B0 U U U U B0 U B0 U U U U U U U U U U U B0 U U U U U U U B0 B0 U B0 U U U U U U U U U B17 U B17 B17 U B17 U U U U U U B22 U | F F F F F F F F F F F F F F F F B0 F F F F F F F F F V4 F F F F F F F F F F F F V4 F F F F | b01101 b00000000000000000000000000000000000000000000 b00000000000000000000000000000000000000000000000000000000 b00000000000000000000000000100000000000000000 | 0:,V0,V0 1:,B0 2:,B0 3:,V2,B0 4:,B0 5:,B0,B0 6:,V1,B0 8:,B0,B2 10:,B0 11:,B0,B0 12:,B0,B0 13:,B0,B0 14:,B9 15:,B0,B9 16:,B0 17:,B0,B0 18:,B0 19:,B0 20:,V0,B0,V1,V2,B0,B0 21:,B0 22:,V4 23:,B0 24:,B0,B0 25:,B0,V0 26:,B0,B0 27:,V0,B0,V1,V0 28:,B0,B0 31:,V0,B0,B0 33:,V0,B0 34:,B0 35:,B0,B0 36:,B0,V0 37:,B0,B0 38:,V0,B0 39:,B0,B0 40:,V0,B0,V4 41:,B0,B0 43:,B0,B17 46:,V4,B17,B17 48:,V0,B17 49:,V4,V4 50:,V3 51:,V3,V3 52:,V4,V3 53:,V3,B22,B22 55:,V0,B22 | | ||
+sum r b01101 b01101 b10110 b10100 b00000 b b b a,compiler/lsp:17016:18576,std/prelude/map:6065:6082,std/prelude/vec:4512:4530,compiler/lsp:17016:18576,compiler/lsp:18027:18034 t,U i t i i c0/i/i f1010
+hid fs1;1280:U;1280:U;1280:U	o0mut compiler/lsp:worker&	o0I64	o0compiler/session:Analysis&	o0mut compiler/diag:Diagnostics&	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0std/prelude/vec:Vec<compiler/diag:Item>	o1mut compiler/diag:Diagnostics&	o0compiler/diag:Item	o1std/prelude/vec:Vec<compiler/diag:Item>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0mut std/prelude/text:StringBuilder&	o1mut std/prelude/vec:Vec<std/prelude/text:StringBuilder>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:StringBuilder	o1std/prelude/vec:Vec<std/prelude/text:StringBuilder>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:StringBuilder	o1std/prelude/vec:Vec<std/prelude/text:StringBuilder>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out b743be3b68b7897c85cfd8c34c8ec548
+run compiler/lsp 17016-18576 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in b743be3b68b7897c85cfd8c34c8ec548
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	0,2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0
+marks 6bb405d932f14b9f3e077c6b52497bb6
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/diag 27413-28148 fn	546b32c0fd4f92cf2c2d34aafa639029
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/lsp 15207-15281 fn	bb3d15467184a513bcd685e5a3660407
+read compiler/lsp 18784-19625 fn	5d1508431e778a910e7ba007a92f854e
+read compiler/lsp 19706-19857 fn	ebcfd9653dbbf84ac197e200d6185998
+read compiler/lsp 19943-20096 fn	71f6938ab8adcf23b39a5d7d5a8b5913
+read compiler/lsp 20772-21974 fn	020e40f44ca2bb828243708068521308
+read compiler/lsp 27191-27481 fn	b7c04f133e27dc3e56d1831d6bbcc3dc
+read compiler/session 5834-5971 fn	667968bd19d1616f409ceeafc77b354f
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45259-45315 fn	869f932e1932e645fe9a26d1c60dfdab
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:StringBuilder>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11899-12021 fn <std/prelude/text:String&;>	3de578b68bbea269afe98db3cd30bd73
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 4660-4775 fn <std/prelude/text:StringBuilder;>	652312eadcb9c7b54bf0276e2dba4089
+read std/prelude/vec 5133-5172 fn <compiler/diag:Item;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/diag:Item;>	f1a7450f757dacd6e3f39b1185515f34
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 6401-6448 fn <std/prelude/text:StringBuilder;>	122810b1295de41cd59374cf6b2b8642
+read std/prelude/vec 7015-7075 fn <std/prelude/text:StringBuilder;>	af5508e962116586d8c42f1a4465e9cf
+hits 0
+body 1 56 44 5 | U U B0 U U U U B0 U B0 U U U U U U U U U U U B0 U U U U U U U B0 B0 U B0 U U U U U U U U U B17 U B17 B17 U B17 U U U U U U B22 U | F F F F F F F F F F F F F F F F B0 F F F F F F F F F V4 F F F F F F F F F F F F V4 F F F F | b01101 b00000000000000000000000000000000000000000000 b00000000000000000000000000000000000000000000000000000000 b00000000000000000000000000100000000000000000 | 0:,D0/0,D0/1 1:,B0 2:,B0 3:,V2,B0 4:,B0 5:,B0,B0 6:,V1,B0 8:,B0,B2 10:,B0 11:,B0,B0 12:,B0,B0 13:,B0,B0 14:,B9 15:,B0,B9 16:,B0 17:,B0,B0 18:,B0 19:,B0 20:,V0,B0,V1,V2,B0,B0 21:,B0 22:,V4 23:,B0 24:,B0,B0 25:,B0,D0/3 26:,B0,B0 27:,V0,B0,V1,D0/4 28:,B0,B0 31:,D0/5,B0,B0 33:,V0,B0 34:,B0 35:,B0,B0 36:,B0,D0/6 37:,B0,B0 38:,V0,B0 39:,B0,B0 40:,V0,B0,V4 41:,B0,B0 43:,B0,B17 46:,V4,B17,B17 48:,V0,B17 49:,V4,V4 50:,V3 51:,V3,V3 52:,V4,V3 53:,V3,B22,B22 55:,V0,B22 | 0,0 | 20:,0/0/D0/2 38:,0/0/D0/7 40:,0/0/D0/8 || 3:rN1 206:rR17020,17033,20:compiler/lsp:Server&,-1(F17020,17033,20:compiler/lsp:Server&,0(D17020,17033,19:compiler/lsp:worker(R17020,17033,24:mut compiler/lsp:worker&,-1(V17020,17033,24:mut compiler/lsp:worker&,0)))) 206:rR17020,17033,20:compiler/lsp:Server&,-1(F17020,17033,20:compiler/lsp:Server&,0(D17020,17033,19:compiler/lsp:worker(R17020,17033,24:mut compiler/lsp:worker&,-1(V17020,17033,24:mut compiler/lsp:worker&,0)))) 5:rN185 5:rN197 5:rN203 5:rN248 206:rR17020,17033,20:compiler/lsp:Server&,-1(F17020,17033,20:compiler/lsp:Server&,0(D17020,17033,19:compiler/lsp:worker(R17020,17033,24:mut compiler/lsp:worker&,-1(V17020,17033,24:mut compiler/lsp:worker&,0)))) 206:rR17020,17033,20:compiler/lsp:Server&,-1(F17020,17033,20:compiler/lsp:Server&,0(D17020,17033,19:compiler/lsp:worker(R17020,17033,24:mut compiler/lsp:worker&,-1(V17020,17033,24:mut compiler/lsp:worker&,0))))
+sum r b01101 b01101 b10110 b10100 b00000 b b b a,compiler/lsp:17016:18576,std/prelude/map:6065:6082,std/prelude/vec:4512:4530,compiler/lsp:17016:18576,compiler/lsp:18027:18034 t,U i t i,0 i,0 c0/i/i f1010
+hid fs1;1280:U;1280:U;1280:U	o0mut compiler/lsp:worker&	o0I64	o0compiler/session:Analysis&	o0mut compiler/diag:Diagnostics&	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0std/prelude/vec:Vec<compiler/diag:Item>	o1mut compiler/diag:Diagnostics&	o0compiler/diag:Item	o1std/prelude/vec:Vec<compiler/diag:Item>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0mut std/prelude/text:StringBuilder&	o1mut std/prelude/vec:Vec<std/prelude/text:StringBuilder>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:StringBuilder	o1std/prelude/vec:Vec<std/prelude/text:StringBuilder>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:StringBuilder	o1std/prelude/vec:Vec<std/prelude/text:StringBuilder>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	dd0:0:compiler/lsp:worker
+out 8d1888ffe82cc59bda0bea3d56c74648
+run compiler/lsp 15467-16681 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/load 0-0 ctor compiler/load:Module	1
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	1,2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1,5
+mark compiler/session 0-0 ctor compiler/session:Analysis	0
+marks 288f9dd8dd8960dbb0a3d8b04cbfaab7
+read compiler/diag 0-0 ctor compiler/diag:Diagnostics	4e493a3366ee9c5cf50f8b639584a034
+read compiler/diag 28187-28276 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read compiler/lsp 15207-15281 fn	bb3d15467184a513bcd685e5a3660407
+read compiler/lsp 17016-18576 fn	a93829884da48420e781f82940a57101
+read compiler/session 0-0 ctor compiler/session:Analysis	f044a8b157ea6bf7a701212d50cd9496
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read compiler/session 2244-3949 fn	9c8936a9aa5b55d07b861b898b1ee20b
+read compiler/session 4058-5195 fn	5a46e66f1c876ee58c96406c370e4906
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 5133-5172 fn <mut compiler/load:Module&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 35 25 1 | U U V0 U U U U U B0 U B0 B0 B0 U U U U U B5 U B5 U U B6 B6 U U U U U U U U B0 U | F F F F F F F F F F F F F F F F F F F F F F F F F | b1 b0000000000000000000000000 b00000000000000000000000000000000000 b0000000000000000000000000 | 0:,V0,V0 1:,V0 3:,V0,V0,V0,V0,V0 4:,V0 5:,V0,V0,V0,V0,B0 6:,V0,V0 7:,V0 9:,V0,V0,V0,B0,B0 10:,B0 13:,B0,B0 14:,V0 15:,V0,V0 16:,V0 17:,V0,V0 19:,V0,V0 21:,V0,V0 22:,B0 25:,B0,B6 26:,B0,B0 27:,B0 28:,B0 29:,B0,B0 30:,B0,B0 31:,B0,B0 32:,B0,B0 34:,V0,B0 | | ||
+sum r b1 b1 b10 b10 b10 b b b a,compiler/lsp:15571:15594 t i t i i c0/i/i f0010
+hid fs1;17664:U	o0mut compiler/lsp:worker&	o0I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/session:Analysis&	o1std/prelude/text:String&	o1mut compiler/build:Config&	o1mut compiler/diag:Diagnostics&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1Bool	o1Bool	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/lsp:worker&	o1I64	o1mut compiler/session:Analysis&	o1mut compiler/diag:Diagnostics&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/lsp:worker&	o1I64	o1mut compiler/session:Analysis&	o1mut compiler/diag:Diagnostics&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out b73c38239c4be31118ac89aa3376ba83
+run compiler/lsp 15467-16681 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in b73c38239c4be31118ac89aa3376ba83
+mark compiler/load 0-0 ctor compiler/load:Module	1
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	1,2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1,5
+mark compiler/session 0-0 ctor compiler/session:Analysis	0
+marks 8b911ecd721541f7df884595b54f9e11
+read compiler/diag 0-0 ctor compiler/diag:Diagnostics	4e493a3366ee9c5cf50f8b639584a034
+read compiler/diag 28187-28276 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/lsp 15207-15281 fn	bb3d15467184a513bcd685e5a3660407
+read compiler/lsp 17016-18576 fn	181119d322888baebc827e4e1a0c97ce
+read compiler/session 0-0 ctor compiler/session:Analysis	f044a8b157ea6bf7a701212d50cd9496
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read compiler/session 2244-3949 fn	35da97197987a4ddb284b6ea8d3be154
+read compiler/session 4058-5195 fn	5a46e66f1c876ee58c96406c370e4906
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 5133-5172 fn <mut compiler/load:Module&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 35 25 1 | U U V0 U U U U U B0 U B0 B0 B0 U U U U U B5 U B5 U U B6 B6 U U U U U U U U B0 U | F F F F F F F F F F F F F F F F F F F F F F F F F | b1 b0000000000000000000000000 b00000000000000000000000000000000000 b0000000000000000000000000 | 0:,D0/0,D0/1 1:,V0 3:,D0/2,D1/3,V0,V0,V0 4:,V0 5:,V0,V0,V0,D0/4,B0 6:,V0,D1/6 7:,V0 9:,V0,V0,V0,B0,B0 10:,B0 13:,B0,B0 14:,V0 15:,V0,V0 16:,D0/8 17:,D0/9,D0/10 19:,D0/11,D0/12 21:,D0/13,V0 22:,B0 25:,B0,B6 26:,B0,B0 27:,B0 28:,B0 29:,B0,B0 30:,B0,B0 31:,B0,B0 32:,B0,B0 34:,V0,B0 | 0,0 0,1 | 5:,0/0/D0/5 9:,0/0/D0/7 || 3:rN1 206:rR15471,15484,20:compiler/lsp:Server&,-1(F15471,15484,20:compiler/lsp:Server&,0(D15471,15484,19:compiler/lsp:worker(R15471,15484,24:mut compiler/lsp:worker&,-1(V15471,15484,24:mut compiler/lsp:worker&,0)))) 4:rN11 4:rN13 4:rN26 206:rR15471,15484,20:compiler/lsp:Server&,-1(F15471,15484,20:compiler/lsp:Server&,0(D15471,15484,19:compiler/lsp:worker(R15471,15484,24:mut compiler/lsp:worker&,-1(V15471,15484,24:mut compiler/lsp:worker&,0)))) 4:rN30 206:rR15471,15484,20:compiler/lsp:Server&,-1(F15471,15484,20:compiler/lsp:Server&,0(D15471,15484,19:compiler/lsp:worker(R15471,15484,24:mut compiler/lsp:worker&,-1(V15471,15484,24:mut compiler/lsp:worker&,0)))) 4:rN69 5:rN110 206:rR15471,15484,20:compiler/lsp:Server&,-1(F15471,15484,20:compiler/lsp:Server&,0(D15471,15484,19:compiler/lsp:worker(R15471,15484,24:mut compiler/lsp:worker&,-1(V15471,15484,24:mut compiler/lsp:worker&,0)))) 5:rN119 206:rR15471,15484,20:compiler/lsp:Server&,-1(F15471,15484,20:compiler/lsp:Server&,0(D15471,15484,19:compiler/lsp:worker(R15471,15484,24:mut compiler/lsp:worker&,-1(V15471,15484,24:mut compiler/lsp:worker&,0)))) 5:rN116
+sum r;D0/1,V0,0,15759,15760,0,0,0;D0/0,V0,0,15759,15760,0,0,0 b1 b1 b10 b10 b10 b b b a,compiler/lsp:15571:15594 t i t i,0,0 i,0,1 c0/i/i f0010
+hid fs1;17664:U	o0mut compiler/lsp:worker&	o0I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/session:Analysis&	o1std/prelude/text:String&	o1mut compiler/build:Config&	o1mut compiler/diag:Diagnostics&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1Bool	o1Bool	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/lsp:worker&	o1I64	o1mut compiler/session:Analysis&	o1mut compiler/diag:Diagnostics&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/lsp:worker&	o1I64	o1mut compiler/session:Analysis&	o1mut compiler/diag:Diagnostics&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	dd0:0:compiler/lsp:worker	dd0:1:compiler/lsp:worker
+out 164dc76cb714a22840ee7829ced84f88
+run compiler/lsp 15467-16681 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 164dc76cb714a22840ee7829ced84f88
+mark compiler/load 0-0 ctor compiler/load:Module	1
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	1,2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1,5
+mark compiler/session 0-0 ctor compiler/session:Analysis	0
+marks 8b911ecd721541f7df884595b54f9e11
+read compiler/diag 0-0 ctor compiler/diag:Diagnostics	4e493a3366ee9c5cf50f8b639584a034
+read compiler/diag 28187-28276 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/lsp 15207-15281 fn	bb3d15467184a513bcd685e5a3660407
+read compiler/lsp 17016-18576 fn	181119d322888baebc827e4e1a0c97ce
+read compiler/session 0-0 ctor compiler/session:Analysis	f044a8b157ea6bf7a701212d50cd9496
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read compiler/session 2244-3949 fn	9c8936a9aa5b55d07b861b898b1ee20b
+read compiler/session 4058-5195 fn	5a46e66f1c876ee58c96406c370e4906
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 5133-5172 fn <mut compiler/load:Module&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 35 25 1 | U U V0 U U U U U B0 U B0 B0 B0 U U U U U B5 U B5 U U B6 B6 U U U U U U U U B0 U | F F F F F F F F F F F F F F F F F F F F F F F F F | b1 b0000000000000000000000000 b00000000000000000000000000000000000 b0000000000000000000000000 | 0:,D0/0,D0/1 1:,V0 3:,D0/2,D1/3,V0,V0,V0 4:,V0 5:,V0,V0,V0,D0/4,B0 6:,V0,D1/6 7:,V0 9:,V0,V0,V0,B0,B0 10:,B0 13:,B0,B0 14:,V0 15:,V0,V0 16:,D0/8 17:,D0/9,D0/10 19:,D0/11,D0/12 21:,D0/13,V0 22:,B0 25:,B0,B6 26:,B0,B0 27:,B0 28:,B0 29:,B0,B0 30:,B0,B0 31:,B0,B0 32:,B0,B0 34:,V0,B0 | 0,0 0,1 | 5:,0/0/D0/5 9:,0/0/D0/7 || 3:rN1 206:rR15471,15484,20:compiler/lsp:Server&,-1(F15471,15484,20:compiler/lsp:Server&,0(D15471,15484,19:compiler/lsp:worker(R15471,15484,24:mut compiler/lsp:worker&,-1(V15471,15484,24:mut compiler/lsp:worker&,0)))) 4:rN11 4:rN13 4:rN26 206:rR15471,15484,20:compiler/lsp:Server&,-1(F15471,15484,20:compiler/lsp:Server&,0(D15471,15484,19:compiler/lsp:worker(R15471,15484,24:mut compiler/lsp:worker&,-1(V15471,15484,24:mut compiler/lsp:worker&,0)))) 4:rN30 206:rR15471,15484,20:compiler/lsp:Server&,-1(F15471,15484,20:compiler/lsp:Server&,0(D15471,15484,19:compiler/lsp:worker(R15471,15484,24:mut compiler/lsp:worker&,-1(V15471,15484,24:mut compiler/lsp:worker&,0)))) 4:rN69 5:rN110 206:rR15471,15484,20:compiler/lsp:Server&,-1(F15471,15484,20:compiler/lsp:Server&,0(D15471,15484,19:compiler/lsp:worker(R15471,15484,24:mut compiler/lsp:worker&,-1(V15471,15484,24:mut compiler/lsp:worker&,0)))) 5:rN119 206:rR15471,15484,20:compiler/lsp:Server&,-1(F15471,15484,20:compiler/lsp:Server&,0(D15471,15484,19:compiler/lsp:worker(R15471,15484,24:mut compiler/lsp:worker&,-1(V15471,15484,24:mut compiler/lsp:worker&,0)))) 5:rN116
+sum r;D0/1,V0,0,15759,15760,0,0,0;V0,D0/1,0,15759,15760,0,0,1;D0/0,V0,0,15759,15760,0,0,0 b1 b1 b10 b10 b10 b b b a,compiler/lsp:15571:15594 t i t i,0,0 i,0,1 c0/i/i f0010
+hid fs1;17664:U	o0mut compiler/lsp:worker&	o0I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/session:Analysis&	o1std/prelude/text:String&	o1mut compiler/build:Config&	o1mut compiler/diag:Diagnostics&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1Bool	o1Bool	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/lsp:worker&	o1I64	o1mut compiler/session:Analysis&	o1mut compiler/diag:Diagnostics&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0std/prelude/vec:Vec<std/prelude/text:String&>	o1mut compiler/lsp:worker&	o1I64	o1mut compiler/session:Analysis&	o1mut compiler/diag:Diagnostics&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	dd0:0:compiler/lsp:worker	dd0:1:compiler/lsp:worker
+out d7e34d3112ae8aa9d93fcc180d513db9
+run compiler/lsp 26513-26616 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read std/json 4440-5542 fn <std/prelude/text:String&;>	29f8fa8d7f9b78812e65efb08442916c
+read std/json 7544-7683 fn	656b96a082399099a7567556adf274a3
+hits 0
+body 1 2 2 3 | U U | F F | b000 b00 b00 b00 | 0:,V0,V1,V0 1:,V0,V2 | | ||
+sum r;V0,V2,0,26561,26614,0,0,0 b000 b000 b00 b00 b00 b b b a,compiler/lsp:26513:26616,compiler/lsp:26513:26616,compiler/lsp:26513:26616 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&	o0std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&
+out 125255ada11c97a3e86df86d1ca7c5a4
+run compiler/lsp 6902-7062 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	0
+marks 05152b2e5ffa7fac51da79aa2900cd34
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 6 8 2 | U U B2 U B2 U | F F F F F F F F | b00 b00000000 b000000 b00000000 | 0:,V0 1:,V0,V0 3:,V0,V0 5:,V0,V1 | | ||
+sum r b00 b00 b10 b10 b00 b b b a,compiler/lsp:6902:7062,compiler/lsp:6902:7062 t i t i i c0/i/i f0010
+hid fs1	o0compiler/lsp:Server&	o0std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64
+out 2063bb4bdd323a21c5b5dbefd96626aa
+run compiler/lsp 25324-26428 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	1,2
+mark std/prelude/map 0-0 ctor std/prelude/map:MapEntry<std/prelude/text:String&, std/prelude/text:String&>	0,1
+marks 75044e6cf46af96ec3485c132d57b20a
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 15207-15281 fn	bb3d15467184a513bcd685e5a3660407
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/session 0-0 ctor compiler/session:Items	a489e1e1c6cddcd4d3f49b5201cba437
+read compiler/session 2244-3949 fn	9c8936a9aa5b55d07b861b898b1ee20b
+read compiler/session 30806-32147 fn	8df1c3c9ec517092ebaeb141513167e6
+read compiler/session 32473-32578 fn	4253c77f24b2020b8207ba59068fc999
+read compiler/session 33290-34589 fn	24ec780fb3beedc70713b8dab5c8c4e7
+read compiler/session 45883-46833 fn	9e9a23226fa1d89517d1fa45315da9b9
+read compiler/session 6549-6645 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:MapEntry<std/prelude/text:String&, std/prelude/text:String&>	2b395d4185b075fb2b199d340c94c285
+read std/prelude/map 12288-12727 fn <std/prelude/text:String&;std/prelude/text:String&;>	c023e4dcc4bcafc0fa1c7eaf4cab46d3
+read std/prelude/map 13020-13086 fn <std/prelude/text:String&;std/prelude/text:String&;>	bb2b52256930e0d5b3c91998b800ba25
+read std/prelude/map 5979-6292 fn <std/prelude/text:String&;std/prelude/text:String&;>	7fa25dad261edb9c8cd2ffe94a77885b
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 22 21 6 | U U U B0 U U V4 U U U U U U U U U U B0 B0 U B0 U | F F F F F F F F F F F F F F F V4 V4 F F F F | b000011 b000000000000000000000 b0000000000000000000000 b000000000000000000000 | 0: 1:,B0 2:,V3,B0 4:,B0,B0,B3 5: 7:,V4 8:,V0,V0 9:,V0,V0 10:,V4,V0,V0 11:,V4,V2,V4 12:,V2,V4,V5,V4,V4 13:,V4,B0,V2 14:,V2,V4,V5,V0,V4 15:,V4,B0,V2 16:,B0,B0 19:,V1,B0,B0 21:,V0,B0 | | ||
+sum r;V5,V4,0,26112,26113,0,0,0;V4,V5,0,26112,26113,0,0,1;V2,V4,0,26112,26113,0,0,0;V0,V4,0,26227,26228,0,0,0 b000011 b000011 b1001011 b0000000 b0000000 b b b a,compiler/lsp:25324:26428,compiler/lsp:25324:26428,compiler/lsp:25324:26428,compiler/lsp:25324:26428,compiler/lsp:25941:25966,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:worker&	o0std/prelude/text:String&	o0compiler/lsp:Doc&	o0std/prelude/text:String&	o0I64	o0mut compiler/build:Config&	o0mut compiler/diag:Diagnostics&	o0Array<std/prelude/text:String&>	o1std/prelude/text:String&	o1I64	o0I64	o0std/prelude/map:MapIter<std/prelude/text:String&, std/prelude/text:String&>	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o0std/prelude/map:MapEntry<std/prelude/text:String&, std/prelude/text:String&>	o1mut std/prelude/map:MapIter<std/prelude/text:String&, std/prelude/text:String&>&	o0mut compiler/session:Analysis&	o1std/prelude/text:String&	o1mut compiler/build:Config&	o1mut compiler/diag:Diagnostics&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1Bool	o1Bool	o0mut compiler/session:Analysis&	o1std/prelude/text:String&	o1mut compiler/build:Config&	o1mut compiler/diag:Diagnostics&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1Bool	o1Bool
+out b0e9177825b8d3df7854ff3c30c14a57
+run compiler/lsp 25324-26428 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in b0e9177825b8d3df7854ff3c30c14a57
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	1,2
+mark std/prelude/map 0-0 ctor std/prelude/map:MapEntry<std/prelude/text:String&, std/prelude/text:String&>	0,1
+marks 75044e6cf46af96ec3485c132d57b20a
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 15207-15281 fn	bb3d15467184a513bcd685e5a3660407
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/session 0-0 ctor compiler/session:Items	a489e1e1c6cddcd4d3f49b5201cba437
+read compiler/session 2244-3949 fn	35da97197987a4ddb284b6ea8d3be154
+read compiler/session 30806-32147 fn	8df1c3c9ec517092ebaeb141513167e6
+read compiler/session 32473-32578 fn	4253c77f24b2020b8207ba59068fc999
+read compiler/session 33290-34589 fn	24ec780fb3beedc70713b8dab5c8c4e7
+read compiler/session 45883-46833 fn	9e9a23226fa1d89517d1fa45315da9b9
+read compiler/session 6549-6645 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:MapEntry<std/prelude/text:String&, std/prelude/text:String&>	2b395d4185b075fb2b199d340c94c285
+read std/prelude/map 12288-12727 fn <std/prelude/text:String&;std/prelude/text:String&;>	c023e4dcc4bcafc0fa1c7eaf4cab46d3
+read std/prelude/map 13020-13086 fn <std/prelude/text:String&;std/prelude/text:String&;>	bb2b52256930e0d5b3c91998b800ba25
+read std/prelude/map 5979-6292 fn <std/prelude/text:String&;std/prelude/text:String&;>	7fa25dad261edb9c8cd2ffe94a77885b
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 22 21 6 | U U U B0 U U B0 U U U U U U U U U U B0 B0 U B0 U | F F F F F F F F F F F F F F F B0 B0 F F F F | b000001 b000000000000000000000 b0000000000000000000000 b000000000000000000000 | 0: 1:,B0 2:,V3,B0 4:,B0,B0,B3 5: 7:,B0 8:,V0,V0 9:,V0,V0 10:,B0,V0,V0 11:,B0,V2,B0 12:,V2,V4,V5,B0,B0 13:,B0,B0,V2 14:,V2,V4,V5,V0,B0 15:,B0,B0,V2 16:,B0,B0 19:,V1,B0,B0 21:,V0,B0 | | ||
+sum r b000001 b000001 b1001011 b0000000 b0000000 b b b a,compiler/lsp:25324:26428,compiler/lsp:25324:26428,compiler/lsp:25324:26428,compiler/lsp:25324:26428,compiler/lsp:25324:26428,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:worker&	o0std/prelude/text:String&	o0compiler/lsp:Doc&	o0std/prelude/text:String&	o0I64	o0mut compiler/build:Config&	o0mut compiler/diag:Diagnostics&	o0Array<std/prelude/text:String&>	o1std/prelude/text:String&	o1I64	o0I64	o0std/prelude/map:MapIter<std/prelude/text:String&, std/prelude/text:String&>	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o0std/prelude/map:MapEntry<std/prelude/text:String&, std/prelude/text:String&>	o1mut std/prelude/map:MapIter<std/prelude/text:String&, std/prelude/text:String&>&	o0mut compiler/session:Analysis&	o1std/prelude/text:String&	o1mut compiler/build:Config&	o1mut compiler/diag:Diagnostics&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1Bool	o1Bool	o0mut compiler/session:Analysis&	o1std/prelude/text:String&	o1mut compiler/build:Config&	o1mut compiler/diag:Diagnostics&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1Bool	o1Bool
+out 45bd3db49719503f26106683685c31c1
+run compiler/lsp 14508-14787 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	1
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1,5
+marks c6762ba3a2a048ebfb7aeb3e7e2e6eb6
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read compiler/session 0-0 ctor compiler/session:Analysis	f044a8b157ea6bf7a701212d50cd9496
+read compiler/session 2244-3949 fn	9c8936a9aa5b55d07b861b898b1ee20b
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 3 4 3 | U B0 U | F F F F | b011 b0000 b000 b0000 | 0:,V0,V0 2:,V0,V0,V1,V0,V2 | | ||
+sum r;V0,V2,0,14636,14650,0,0,0;V2,V0,0,14636,14650,0,0,1;V1,V2,0,14657,14658,3,0,0;V2,V1,0,14657,14658,0,0,1 b011 b011 b101 b100 b100 b b b a,compiler/lsp:14508:14787,std/prelude/vec:4512:4530,compiler/session:2441:2528 t,U i t i i c0/i/i f1010
+hid fs1	o0mut compiler/lsp:worker&	o0I64	o0mut compiler/diag:Diagnostics&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/session:Analysis&	o1std/prelude/text:String&	o1mut compiler/build:Config&	o1mut compiler/diag:Diagnostics&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1Bool	o1Bool
+out 6e1a574d41fd60d4823b08145f255ff9
+run compiler/lsp 14508-14787 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 6e1a574d41fd60d4823b08145f255ff9
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	1
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1,5
+marks e6827ab30f9910731c9891d7800f8c76
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/session 0-0 ctor compiler/session:Analysis	f044a8b157ea6bf7a701212d50cd9496
+read compiler/session 2244-3949 fn	35da97197987a4ddb284b6ea8d3be154
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 3 4 3 | U B0 U | F F F F | b011 b0000 b000 b0000 | 0:,D0/0,D0/1 2:,D0/2,D1/3,V1,V0,V2 | 0,0 0,1 | || 4:rN22 206:rR14512,14525,20:compiler/lsp:Server&,-1(F14512,14525,20:compiler/lsp:Server&,0(D14512,14525,19:compiler/lsp:worker(R14512,14525,24:mut compiler/lsp:worker&,-1(V14512,14525,24:mut compiler/lsp:worker&,0)))) 4:rN19 4:rN26
+sum r;V0,V2,0,14636,14650,0,0,0;V2,V0,0,14636,14650,0,0,1;D0/1,V2,0,14657,14658,3,0,0;V1,V2,0,14657,14658,3,0,0;D0/0,V2,0,14657,14658,0,0,0 b011 b011 b101 b100 b100 b b b a,compiler/lsp:14508:14787,std/prelude/vec:4512:4530,compiler/session:2441:2528 t,U i t i,0,0 i,0,1 c0/i/i f1010
+hid fs1	o0mut compiler/lsp:worker&	o0I64	o0mut compiler/diag:Diagnostics&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/session:Analysis&	o1std/prelude/text:String&	o1mut compiler/build:Config&	o1mut compiler/diag:Diagnostics&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1Bool	o1Bool	dd0:0:compiler/lsp:worker	dd0:1:compiler/lsp:worker
+out cb87c80bde2e74c85c8ab57a68a2aafb
+run compiler/lsp 14508-14787 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in cb87c80bde2e74c85c8ab57a68a2aafb
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	1
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1,5
+marks e6827ab30f9910731c9891d7800f8c76
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/session 0-0 ctor compiler/session:Analysis	f044a8b157ea6bf7a701212d50cd9496
+read compiler/session 2244-3949 fn	9c8936a9aa5b55d07b861b898b1ee20b
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 3 4 3 | U B0 U | F F F F | b011 b0000 b000 b0000 | 0:,D0/0,D0/1 2:,D0/2,D1/3,V1,V0,V2 | 0,0 0,1 | || 4:rN22 206:rR14512,14525,20:compiler/lsp:Server&,-1(F14512,14525,20:compiler/lsp:Server&,0(D14512,14525,19:compiler/lsp:worker(R14512,14525,24:mut compiler/lsp:worker&,-1(V14512,14525,24:mut compiler/lsp:worker&,0)))) 4:rN19 4:rN26
+sum r;V0,V2,0,14636,14650,0,0,0;V2,V0,0,14636,14650,0,0,1;D0/1,V2,0,14657,14658,3,0,0;V2,D0/1,0,14657,14658,0,0,1;V1,V2,0,14657,14658,3,0,0;V2,V1,0,14657,14658,0,0,1;D0/0,V2,0,14657,14658,0,0,0 b011 b011 b101 b100 b100 b b b a,compiler/lsp:14508:14787,std/prelude/vec:4512:4530,compiler/session:2441:2528 t,U i t i,0,0 i,0,1 c0/i/i f1010
+hid fs1	o0mut compiler/lsp:worker&	o0I64	o0mut compiler/diag:Diagnostics&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/session:Analysis&	o1std/prelude/text:String&	o1mut compiler/build:Config&	o1mut compiler/diag:Diagnostics&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1Bool	o1Bool	dd0:0:compiler/lsp:worker	dd0:1:compiler/lsp:worker
+out fede23c5697c3509a3bbe7db16278748
+run compiler/lsp 22442-25102 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/load 0-0 ctor compiler/load:Module	8
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	1,2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1
+mark compiler/session 0-0 ctor compiler/session:Analysis	0
+mark compiler/session 0-0 ctor compiler/session:Found	0,1
+marks 8864b5ff121a2a36d3fd3383f6566783
+read compiler/diag 0-0 ctor compiler/diag:Diagnostics	4e493a3366ee9c5cf50f8b639584a034
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read compiler/lsp 14508-14787 fn	10519355bd115ca4a8e1a783af5f15a6
+read compiler/lsp 15207-15281 fn	bb3d15467184a513bcd685e5a3660407
+read compiler/lsp 19943-20096 fn	d2d1e384e20d90748c504c0e621b2de7
+read compiler/lsp 20185-20402 fn	8024f5ea9e3446e7cf0a814c04f9313a
+read compiler/lsp 25324-26428 fn	830271cee7c1fe4e454cd929503e3a79
+read compiler/lsp 26513-26616 fn	d82f162cad349aefb4e09970c6e10c52
+read compiler/lsp 26683-26797 fn	fea87fd6dd56f96d70424c1c7147f2fe
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/lsp 6902-7062 fn	4798f229afe284a670dfb50cf49f91e8
+read compiler/session 0-0 ctor compiler/session:Analysis	f044a8b157ea6bf7a701212d50cd9496
+read compiler/session 0-0 ctor compiler/session:Found	b773d3f69d82a39ccc029b271803b12a
+read compiler/session 0-0 ctor compiler/session:Positions	d5d897f70f393ace68bd74a6bd8b68b4
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read compiler/session 23293-23867 fn	3c62a05089de55e779f07a4a2afca233
+read compiler/session 24214-24464 fn	d0d24a459ea6947a72716c2bff205c7e
+read compiler/session 24808-25038 fn	7676bae30e4869c47d7d2b4c56e6faba
+read compiler/session 47585-47801 fn	93a3574a4425afa26e5d0a49e2b69eff
+read compiler/session 5509-5661 fn	363b62c2e6c9ae3ce7a60e139b0e082b
+read compiler/session 6187-6517 fn	0ce963d4144345d9b258be52602b875b
+read compiler/session 7389-7687 fn	1ff2a4476d842712d027fef31c670af2
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 6300-6449 fn	b0a08e72ed90e7bfdb613ca331386fb7
+read std/prelude/map 7053-7137 fn <std/prelude/text:String&;std/prelude/text:String&;>	afab4e7cf33319d9b4752b5bbe842ce0
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 100 27 2 | U U U U U B2 U U U U U B4 U U U U U B0 U U U B0 U U U U V0 U U U B6 U U U B7 U B5 U U U U U U B5 U B5 U U U U U U U B9 U B10 U B9 U B9 U U B9 U B9 U U U B11 U U B12 U U U U B12 U B12 U U U B13 U U U U B0 U U B0 U U U U U B0 U B0 U | F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b000000000000000000000000000 b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 b000000000000000000000000000 | 0:,V1,B0 1:,B0,B0 2:,B0,B0,B0 3:,B0,B0 4:,B0,B2,B2 6:,V0,B2 7:,B0,B0 8:,B0,B0,B0 9:,V0,B0 10:,B0,B4,B4 12:,V0,B4 13:,V0,V0 14:,V0,V0,V0 15:,V0,B0 16:,B0,B0 18:,B0,B0 19:,B0 20:,B0,B0 22:,B0,B0 23:,B0 24:,B0 25:,V0 27:,B0,B0 28:,V0,V0,B5 29:,B0,B6,B6 31:,V0,B6 32:,B5,V0 33:,B0,B7,B7 35:,V0,B7 36:,B5 37:,B5,B5 38:,B0,B5 39:,B5,B5 40:,B5,B5 41:,B5,B5 42:,B5,B5 44:,B0,B5,B5 46:,V0,B5 47:,B0,B0 48:,V0,B0,V0,V0,V0,V0 49:,V0,V0,V0 50:,B0,B0 51:,V0,V0 52:,V0,V0 54:,B0,B10,B10 56:,V0,B10 57:,B9 58:,V0,V0 60:,B9,B0,V0,V0 61:,B9,B9 63:,B0,B9,B9 65:,V0,B9 66:,V0,V0,V0 67:,B0,B11,B11 69:,V0,B11 70:,B0,B0 71:,B12 72:,B12,B12 73:,B12,V0 74:,B12,B12 75:,B12,B12 77:,B0,B12,B12 79:,V0,B12 80:,V0,B0 81:,B0,B13,B13 83:,V0,B13 84:,V0,V0,V0,B0 85:,B0,B0 86:,B0 87:,B0 88:,B0,B0 89:,V0,V0,B0 91:,B0,B0 92:,B0,B0 93:,B0,B0 94:,B0 95:,B0,B0 97:,B0,B0,B0 99:,V0,B0 | | ||
+sum r b10 b10 b11 b10 b10 b b b a,compiler/lsp:23223:23246,compiler/lsp:22442:25102 t i t i i c0/i/i f0010
+hid fs1;51968:V0;51969:U;17664:U;51968:B0;51969:U	o0mut compiler/lsp:worker&	o0std/prelude/text:String&	o0std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0mut compiler/session:Analysis&	o1mut compiler/lsp:worker&	o1I64	o1mut compiler/diag:Diagnostics&	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0compiler/session:Found	o1mut compiler/session:Analysis&	o1std/prelude/text:String&	o1I64
+out f6e567f03a4507bb37ea3e059ebf6945
+run compiler/lsp 22442-25102 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in f6e567f03a4507bb37ea3e059ebf6945
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/load 0-0 ctor compiler/load:Module	8
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	1,2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1
+mark compiler/session 0-0 ctor compiler/session:Analysis	0
+mark compiler/session 0-0 ctor compiler/session:Found	0,1
+marks db282146566ca769562af28c5ea89957
+read compiler/diag 0-0 ctor compiler/diag:Diagnostics	4e493a3366ee9c5cf50f8b639584a034
+read compiler/load 0-0 ctor compiler/load:Loader	c57786966e9e41b2e6cd468b7362b539
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/lsp 14508-14787 fn	60742741c26478513bb0c9742bd2ec69
+read compiler/lsp 15207-15281 fn	bb3d15467184a513bcd685e5a3660407
+read compiler/lsp 19943-20096 fn	71f6938ab8adcf23b39a5d7d5a8b5913
+read compiler/lsp 20185-20402 fn	8024f5ea9e3446e7cf0a814c04f9313a
+read compiler/lsp 25324-26428 fn	1055eba58775a339d80f5837fbc003ce
+read compiler/lsp 26513-26616 fn	d82f162cad349aefb4e09970c6e10c52
+read compiler/lsp 26683-26797 fn	fea87fd6dd56f96d70424c1c7147f2fe
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/lsp 6902-7062 fn	4798f229afe284a670dfb50cf49f91e8
+read compiler/session 0-0 ctor compiler/session:Analysis	f044a8b157ea6bf7a701212d50cd9496
+read compiler/session 0-0 ctor compiler/session:Found	b773d3f69d82a39ccc029b271803b12a
+read compiler/session 0-0 ctor compiler/session:Positions	d5d897f70f393ace68bd74a6bd8b68b4
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read compiler/session 23293-23867 fn	3c62a05089de55e779f07a4a2afca233
+read compiler/session 24214-24464 fn	d0d24a459ea6947a72716c2bff205c7e
+read compiler/session 24808-25038 fn	7676bae30e4869c47d7d2b4c56e6faba
+read compiler/session 47585-47801 fn	93a3574a4425afa26e5d0a49e2b69eff
+read compiler/session 5509-5661 fn	363b62c2e6c9ae3ce7a60e139b0e082b
+read compiler/session 6187-6517 fn	0ce963d4144345d9b258be52602b875b
+read compiler/session 7389-7687 fn	1ff2a4476d842712d027fef31c670af2
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 6300-6449 fn	b0a08e72ed90e7bfdb613ca331386fb7
+read std/prelude/map 7053-7137 fn <std/prelude/text:String&;std/prelude/text:String&;>	afab4e7cf33319d9b4752b5bbe842ce0
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 100 27 2 | U U U U U B2 U U U U U B4 U U U U U B0 U U U B0 U U U U V0 U U U B6 U U U B7 U B5 U U U U U U B5 U B5 U U U U U U U B9 U B10 U B9 U B9 U U B9 U B9 U U U B11 U U B12 U U U U B12 U B12 U U U B13 U U U U B0 U U B0 U U U U U B0 U B0 U | F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b000000000000000000000000000 b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 b000000000000000000000000000 | 0:,V1,B0 1:,B0,B0 2:,B0,B0,B0 3:,B0,B0 4:,B0,B2,B2 6:,V0,B2 7:,B0,B0 8:,B0,B0,B0 9:,D0/0,B0 10:,B0,B4,B4 12:,V0,B4 13:,D0/1,D0/2 14:,V0,D0/3,V0 15:,V0,B0 16:,B0,B0 18:,B0,B0 19:,B0 20:,B0,B0 22:,B0,B0 23:,B0 24:,B0 25:,V0 27:,B0,B0 28:,D0/4,V0,B5 29:,B0,B6,B6 31:,V0,B6 32:,B5,V0 33:,B0,B7,B7 35:,V0,B7 36:,B5 37:,B5,B5 38:,B0,B5 39:,B5,B5 40:,B5,B5 41:,B5,B5 42:,B5,B5 44:,B0,B5,B5 46:,V0,B5 47:,B0,B0 48:,V0,B0,D0/5,V0,D1/6,V0 49:,V0,V0,V0 50:,B0,B0 51:,V0,D0/9 52:,V0,V0 54:,B0,B10,B10 56:,V0,B10 57:,B9 58:,V0,V0 60:,B9,B0,V0,V0 61:,B9,B9 63:,B0,B9,B9 65:,V0,B9 66:,V0,D0/10,V0 67:,B0,B11,B11 69:,V0,B11 70:,B0,B0 71:,B12 72:,B12,B12 73:,B12,V0 74:,B12,B12 75:,B12,B12 77:,B0,B12,B12 79:,V0,B12 80:,V0,B0 81:,B0,B13,B13 83:,V0,B13 84:,V0,V0,V0,B0 85:,B0,B0 86:,B0 87:,B0 88:,B0,B0 89:,V0,V0,B0 91:,B0,B0 92:,B0,B0 93:,B0,B0 94:,B0 95:,B0,B0 97:,B0,B0,B0 99:,V0,B0 | 0,0 0,1 | 49:,0/0/D0/7,0/1/D1/8 89:,0/0/D0/11 || 4:rN27 4:rN40 206:rR22446,22459,20:compiler/lsp:Server&,-1(F22446,22459,20:compiler/lsp:Server&,0(D22446,22459,19:compiler/lsp:worker(R22446,22459,24:mut compiler/lsp:worker&,-1(V22446,22459,24:mut compiler/lsp:worker&,0)))) 4:rN48 4:rN94 5:rN145 5:rN148 206:rR22446,22459,20:compiler/lsp:Server&,-1(F22446,22459,20:compiler/lsp:Server&,0(D22446,22459,19:compiler/lsp:worker(R22446,22459,24:mut compiler/lsp:worker&,-1(V22446,22459,24:mut compiler/lsp:worker&,0)))) 218:rR22446,22459,26:mut compiler/build:Config&,-1(F22446,22459,26:mut compiler/build:Config&,1(D22446,22459,19:compiler/lsp:worker(R22446,22459,24:mut compiler/lsp:worker&,-1(V22446,22459,24:mut compiler/lsp:worker&,0)))) 5:rN159 5:rN207 206:rR22446,22459,20:compiler/lsp:Server&,-1(F22446,22459,20:compiler/lsp:Server&,0(D22446,22459,19:compiler/lsp:worker(R22446,22459,24:mut compiler/lsp:worker&,-1(V22446,22459,24:mut compiler/lsp:worker&,0))))
+sum r;D0/1,V0,0,23883,23884,0,0,0;D0/0,V0,0,23883,23884,0,0,0 b10 b10 b11 b10 b10 b b b a,compiler/lsp:23223:23246,compiler/lsp:22442:25102 t i t i,0,0 i,0,1 c0/i/i f0010
+hid fs1;51968:V0;51969:U;17664:U;51968:B0;51969:U	o0mut compiler/lsp:worker&	o0std/prelude/text:String&	o0std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0mut compiler/session:Analysis&	o1mut compiler/lsp:worker&	o1I64	o1mut compiler/diag:Diagnostics&	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0compiler/session:Found	o1mut compiler/session:Analysis&	o1std/prelude/text:String&	o1I64	dd0:0:compiler/lsp:worker	dd0:1:compiler/lsp:worker
+out e4033d03a571d0fdf8a2d9941e7c9c72
+run compiler/lsp 22442-25102 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in e4033d03a571d0fdf8a2d9941e7c9c72
+mark compiler/load 0-0 ctor compiler/load:Loader	3
+mark compiler/load 0-0 ctor compiler/load:Module	8
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	1,2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1
+mark compiler/session 0-0 ctor compiler/session:Analysis	0
+mark compiler/session 0-0 ctor compiler/session:Found	0,1
+marks db282146566ca769562af28c5ea89957
+read compiler/diag 0-0 ctor compiler/diag:Diagnostics	4e493a3366ee9c5cf50f8b639584a034
+read compiler/load 0-0 ctor compiler/load:Loader	ec753d4b8de61f016097db8b4f9b32c0
+read compiler/load 0-0 ctor compiler/load:Module	3d843b172497e782ce076256d890ff08
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/lsp 14508-14787 fn	e194e7826d40a9f5a3fa00f74a9684ca
+read compiler/lsp 15207-15281 fn	bb3d15467184a513bcd685e5a3660407
+read compiler/lsp 19943-20096 fn	71f6938ab8adcf23b39a5d7d5a8b5913
+read compiler/lsp 20185-20402 fn	8024f5ea9e3446e7cf0a814c04f9313a
+read compiler/lsp 25324-26428 fn	830271cee7c1fe4e454cd929503e3a79
+read compiler/lsp 26513-26616 fn	d82f162cad349aefb4e09970c6e10c52
+read compiler/lsp 26683-26797 fn	fea87fd6dd56f96d70424c1c7147f2fe
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/lsp 6902-7062 fn	4798f229afe284a670dfb50cf49f91e8
+read compiler/session 0-0 ctor compiler/session:Analysis	f044a8b157ea6bf7a701212d50cd9496
+read compiler/session 0-0 ctor compiler/session:Found	b773d3f69d82a39ccc029b271803b12a
+read compiler/session 0-0 ctor compiler/session:Positions	d5d897f70f393ace68bd74a6bd8b68b4
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read compiler/session 23293-23867 fn	3c62a05089de55e779f07a4a2afca233
+read compiler/session 24214-24464 fn	d0d24a459ea6947a72716c2bff205c7e
+read compiler/session 24808-25038 fn	7676bae30e4869c47d7d2b4c56e6faba
+read compiler/session 47585-47801 fn	93a3574a4425afa26e5d0a49e2b69eff
+read compiler/session 5509-5661 fn	363b62c2e6c9ae3ce7a60e139b0e082b
+read compiler/session 6187-6517 fn	0ce963d4144345d9b258be52602b875b
+read compiler/session 7389-7687 fn	1ff2a4476d842712d027fef31c670af2
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 6300-6449 fn	b0a08e72ed90e7bfdb613ca331386fb7
+read std/prelude/map 7053-7137 fn <std/prelude/text:String&;std/prelude/text:String&;>	afab4e7cf33319d9b4752b5bbe842ce0
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 6401-6448 fn <mut compiler/load:Module&;>	6071bc2a387c0d6cf0e320460abd42ff
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 100 27 2 | U U U U U B2 U U U U U B4 U U U U U B0 U U U B0 U U U U V0 U U U B6 U U U B7 U B5 U U U U U U B5 U B5 U U U U U U U B9 U B10 U B9 U B9 U U B9 U B9 U U U B11 U U B12 U U U U B12 U B12 U U U B13 U U U U B0 U U B0 U U U U U B0 U B0 U | F F F F F F F F F F F F F F F F F F F F F F F F F F F | b10 b000000000000000000000000000 b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 b000000000000000000000000000 | 0:,V1,B0 1:,B0,B0 2:,B0,B0,B0 3:,B0,B0 4:,B0,B2,B2 6:,V0,B2 7:,B0,B0 8:,B0,B0,B0 9:,D0/0,B0 10:,B0,B4,B4 12:,V0,B4 13:,D0/1,D0/2 14:,V0,D0/3,V0 15:,V0,B0 16:,B0,B0 18:,B0,B0 19:,B0 20:,B0,B0 22:,B0,B0 23:,B0 24:,B0 25:,V0 27:,B0,B0 28:,D0/4,V0,B5 29:,B0,B6,B6 31:,V0,B6 32:,B5,V0 33:,B0,B7,B7 35:,V0,B7 36:,B5 37:,B5,B5 38:,B0,B5 39:,B5,B5 40:,B5,B5 41:,B5,B5 42:,B5,B5 44:,B0,B5,B5 46:,V0,B5 47:,B0,B0 48:,V0,B0,D0/5,V0,D1/6,V0 49:,V0,V0,V0 50:,B0,B0 51:,V0,D0/9 52:,V0,V0 54:,B0,B10,B10 56:,V0,B10 57:,B9 58:,V0,V0 60:,B9,B0,V0,V0 61:,B9,B9 63:,B0,B9,B9 65:,V0,B9 66:,V0,D0/10,V0 67:,B0,B11,B11 69:,V0,B11 70:,B0,B0 71:,B12 72:,B12,B12 73:,B12,V0 74:,B12,B12 75:,B12,B12 77:,B0,B12,B12 79:,V0,B12 80:,V0,B0 81:,B0,B13,B13 83:,V0,B13 84:,V0,V0,V0,B0 85:,B0,B0 86:,B0 87:,B0 88:,B0,B0 89:,V0,V0,B0 91:,B0,B0 92:,B0,B0 93:,B0,B0 94:,B0 95:,B0,B0 97:,B0,B0,B0 99:,V0,B0 | 0,0 0,1 | 49:,0/0/D0/7,0/1/D1/8 89:,0/0/D0/11 || 4:rN27 4:rN40 206:rR22446,22459,20:compiler/lsp:Server&,-1(F22446,22459,20:compiler/lsp:Server&,0(D22446,22459,19:compiler/lsp:worker(R22446,22459,24:mut compiler/lsp:worker&,-1(V22446,22459,24:mut compiler/lsp:worker&,0)))) 4:rN48 4:rN94 5:rN145 5:rN148 206:rR22446,22459,20:compiler/lsp:Server&,-1(F22446,22459,20:compiler/lsp:Server&,0(D22446,22459,19:compiler/lsp:worker(R22446,22459,24:mut compiler/lsp:worker&,-1(V22446,22459,24:mut compiler/lsp:worker&,0)))) 218:rR22446,22459,26:mut compiler/build:Config&,-1(F22446,22459,26:mut compiler/build:Config&,1(D22446,22459,19:compiler/lsp:worker(R22446,22459,24:mut compiler/lsp:worker&,-1(V22446,22459,24:mut compiler/lsp:worker&,0)))) 5:rN159 5:rN207 206:rR22446,22459,20:compiler/lsp:Server&,-1(F22446,22459,20:compiler/lsp:Server&,0(D22446,22459,19:compiler/lsp:worker(R22446,22459,24:mut compiler/lsp:worker&,-1(V22446,22459,24:mut compiler/lsp:worker&,0))))
+sum r;D0/0,D0/1,0,23820,23857,0,0,0;V0,D0/1,0,23820,23857,0,0,0;D0/1,V0,0,23883,23884,0,0,0 b10 b10 b11 b10 b10 b b b a,compiler/lsp:23223:23246,compiler/lsp:22442:25102 t i t i,0,0 i,0,1 c0/i/i f0010
+hid fs1;51968:V0;51969:U;17664:U;51968:B0;51969:U	o0mut compiler/lsp:worker&	o0std/prelude/text:String&	o0std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0mut compiler/session:Analysis&	o1mut compiler/lsp:worker&	o1I64	o1mut compiler/diag:Diagnostics&	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0mut compiler/load:Module&	o1std/prelude/vec:Vec<mut compiler/load:Module&>&	o1I64	o0compiler/session:Found	o1mut compiler/session:Analysis&	o1std/prelude/text:String&	o1I64	dd0:0:compiler/lsp:worker	dd0:1:compiler/lsp:worker
+out d425d535a815e7597c2a2ed7387da5bb
+run compiler/lsp 14870-15205 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,2
+marks a4da447b6314078e9c8d2b582e6e5181
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read compiler/lsp 15467-16681 fn	48f0c7235a8dcc2bf008fb5960454cbc
+read compiler/lsp 22442-25102 fn	0d8e8277f7decad238011bcaf60be430
+read compiler/session 0-0 ctor compiler/session:Reader	c77c123160feb4a0c634b298a2413fdf
+read compiler/session 54436-54661 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/session 54794-55602 fn	2732233d74198c08c6d5fa792da5a63c
+read std/prelude/map 5979-6292 fn <std/prelude/text:String&;std/prelude/text:String&;>	7fa25dad261edb9c8cd2ffe94a77885b
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 12 9 1 | U U U V0 U U U U B0 U U U | F F F F F F F F F | b1 b000000000 b000000000000 b000000000 | 0:,V0 1:,V0,V0 2:,V0,V0 4:,V0,V0,V0 5:,V0 6:,V0 7:,V0 8:,B0 9:,B0 10:,B0,B9 11:,V0,B9 | | ||
+sum r b1 b1 b1 b1 b1 b b b a,compiler/lsp:14963:14980 t i t i i c0/i/i f0010
+hid fs1;52992:U	o0mut compiler/lsp:worker&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64
+out 58baf7dc045f87af7d82644382f3d767
+run compiler/lsp 14870-15205 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 58baf7dc045f87af7d82644382f3d767
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1,2
+marks 10b1e474550e20e54af4994cac9fcd3c
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/lsp 15467-16681 fn	db8d599efbae98382177955e89b4d2c4
+read compiler/lsp 22442-25102 fn	19bc608c1d886431419f72504f002341
+read compiler/session 0-0 ctor compiler/session:Reader	c77c123160feb4a0c634b298a2413fdf
+read compiler/session 54436-54661 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/session 54794-55602 fn	2732233d74198c08c6d5fa792da5a63c
+read std/prelude/map 5979-6292 fn <std/prelude/text:String&;std/prelude/text:String&;>	7fa25dad261edb9c8cd2ffe94a77885b
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 12 9 1 | U U U V0 U U U U B0 U U U | F F F F F F F F F | b1 b000000000 b000000000000 b000000000 | 0:,D0/0 1:,D0/1,D0/2 2:,D0/3,V0 4:,V0,D0/4,V0 5:,D0/5 6:,D0/6 7:,V0 8:,B0 9:,B0 10:,B0,B9 11:,V0,B9 | 0,0 0,1 | 7:,0/0/D0/7,0/1/D1/8 11:,0/0/D0/9,0/1/D1/10 || 3:rN8 4:rN10 206:rR14874,14887,20:compiler/lsp:Server&,-1(F14874,14887,20:compiler/lsp:Server&,0(D14874,14887,19:compiler/lsp:worker(R14874,14887,24:mut compiler/lsp:worker&,-1(V14874,14887,24:mut compiler/lsp:worker&,0)))) 4:rN21 4:rN17 4:rN34 4:rN36 206:rR14874,14887,20:compiler/lsp:Server&,-1(F14874,14887,20:compiler/lsp:Server&,0(D14874,14887,19:compiler/lsp:worker(R14874,14887,24:mut compiler/lsp:worker&,-1(V14874,14887,24:mut compiler/lsp:worker&,0)))) 218:rR14874,14887,26:mut compiler/build:Config&,-1(F14874,14887,26:mut compiler/build:Config&,1(D14874,14887,19:compiler/lsp:worker(R14874,14887,24:mut compiler/lsp:worker&,-1(V14874,14887,24:mut compiler/lsp:worker&,0)))) 206:rR14874,14887,20:compiler/lsp:Server&,-1(F14874,14887,20:compiler/lsp:Server&,0(D14874,14887,19:compiler/lsp:worker(R14874,14887,24:mut compiler/lsp:worker&,-1(V14874,14887,24:mut compiler/lsp:worker&,0)))) 218:rR14874,14887,26:mut compiler/build:Config&,-1(F14874,14887,26:mut compiler/build:Config&,1(D14874,14887,19:compiler/lsp:worker(R14874,14887,24:mut compiler/lsp:worker&,-1(V14874,14887,24:mut compiler/lsp:worker&,0))))
+sum r;D0/0,V0,0,14941,14981,0,0,0;D0/1,V0,0,15017,15027,0,0,0 b1 b1 b1 b1 b1 b b b a,compiler/lsp:14963:14980 t i t i,0,0 i,0,1 c0/i/i f0010
+hid fs1;52992:U	o0mut compiler/lsp:worker&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	dd0:0:compiler/lsp:worker
+out 0d78066dcef9e5304774d4fdc2670d0f
+run compiler/lsp 14870-15205 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0d78066dcef9e5304774d4fdc2670d0f
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	2
+mark compiler/lsp 0-0 ctor compiler/lsp:worker	0,1,2
+marks 10b1e474550e20e54af4994cac9fcd3c
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	94e75e7eca2eea8ceac865d2b43328d4
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/lsp 15467-16681 fn	e095cdad0bf3c52900064074186cb276
+read compiler/lsp 22442-25102 fn	44f7cb9725b61968a7b4f732e7d79618
+read compiler/session 0-0 ctor compiler/session:Reader	c77c123160feb4a0c634b298a2413fdf
+read compiler/session 54436-54661 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/session 54794-55602 fn	2732233d74198c08c6d5fa792da5a63c
+read std/prelude/map 5979-6292 fn <std/prelude/text:String&;std/prelude/text:String&;>	7fa25dad261edb9c8cd2ffe94a77885b
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 12 9 1 | U U U V0 U U U U B0 U U U | F F F F F F F F F | b1 b000000000 b000000000000 b000000000 | 0:,D0/0 1:,D0/1,D0/2 2:,D0/3,V0 4:,V0,D0/4,V0 5:,D0/5 6:,D0/6 7:,V0 8:,B0 9:,B0 10:,B0,B9 11:,V0,B9 | 0,0 0,1 | 7:,0/0/D0/7,0/1/D1/8 11:,0/0/D0/9,0/1/D1/10 || 3:rN8 4:rN10 206:rR14874,14887,20:compiler/lsp:Server&,-1(F14874,14887,20:compiler/lsp:Server&,0(D14874,14887,19:compiler/lsp:worker(R14874,14887,24:mut compiler/lsp:worker&,-1(V14874,14887,24:mut compiler/lsp:worker&,0)))) 4:rN21 4:rN17 4:rN34 4:rN36 206:rR14874,14887,20:compiler/lsp:Server&,-1(F14874,14887,20:compiler/lsp:Server&,0(D14874,14887,19:compiler/lsp:worker(R14874,14887,24:mut compiler/lsp:worker&,-1(V14874,14887,24:mut compiler/lsp:worker&,0)))) 218:rR14874,14887,26:mut compiler/build:Config&,-1(F14874,14887,26:mut compiler/build:Config&,1(D14874,14887,19:compiler/lsp:worker(R14874,14887,24:mut compiler/lsp:worker&,-1(V14874,14887,24:mut compiler/lsp:worker&,0)))) 206:rR14874,14887,20:compiler/lsp:Server&,-1(F14874,14887,20:compiler/lsp:Server&,0(D14874,14887,19:compiler/lsp:worker(R14874,14887,24:mut compiler/lsp:worker&,-1(V14874,14887,24:mut compiler/lsp:worker&,0)))) 218:rR14874,14887,26:mut compiler/build:Config&,-1(F14874,14887,26:mut compiler/build:Config&,1(D14874,14887,19:compiler/lsp:worker(R14874,14887,24:mut compiler/lsp:worker&,-1(V14874,14887,24:mut compiler/lsp:worker&,0))))
+sum r;D0/0,V0,0,14941,14981,0,0,0;D0/1,V0,0,15017,15027,0,0,0;V0,D0/1,0,15017,15027,0,0,1 b1 b1 b1 b1 b1 b b b a,compiler/lsp:14963:14980 t i t i,0,0 i,0,1 c0/i/i f0010
+hid fs1;52992:U	o0mut compiler/lsp:worker&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	dd0:0:compiler/lsp:worker
+out fc5ebc66184e21bb81c1d4d92d087622
+run compiler/lsp 9208-10021 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	0,3
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	2
+marks 008925fca403a2b552175f8256b5d88f
+read compiler/lsp 0-0 ctor compiler/lsp:Server	de6b5be682ec58f2c537657752ec34b7
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read compiler/lsp 14870-15205 fn	816be460260aa0a7171eccf69c598346
+read compiler/session 0-0 ctor compiler/session:Reader	c77c123160feb4a0c634b298a2413fdf
+read compiler/session 52495-52533 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/session 52625-52678 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/session 52760-52880 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/session 52882-52933 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/session 53011-53062 fn	753360899e792dedf06ee057d76e9c16
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+want decl compiler/lsp:worker
+want decl compiler/lsp:worker
+hits 0
+body 1 19 9 1 | U U U U U U U U U U U V0 U U U U U V0 U | F F F F F F F F F | b1 b000000000 b0000000000000000000 b000000000 | 0: 1: 2: 3: 4: 5: 6: 7: 8: 9: 10:,V0,V0,V0 12:,V0 13: 14: 15: 16:,V0 18: | | ||
+sum r b1 b1 b1 b1 b1 b b b a,compiler/lsp:9789:9817 t i t i i c0/i/i f0010
+hid fs1;56576:V0;56577:V0;56578:U;56579:U;52992:U	o0mut compiler/lsp:Server&
+out 975941087c5a8f7f80e344a711ddd17c
+run compiler/lsp 9208-10021 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 975941087c5a8f7f80e344a711ddd17c
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	0,3
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	2
+marks 79847a674c1063e16f816fabe39cdf85
+read compiler/lsp 0-0 ctor compiler/lsp:Server	c51da6feb1f2f945cd71998c0c8ec995
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read compiler/lsp 0-0 ctor compiler/lsp:worker	c93fd69a8dbc5713f39a2b4f7cd9eb53
+read compiler/lsp 14870-15205 fn	d3c9a3edbd6aa8a7fb1167dc152d60c5
+read compiler/session 0-0 ctor compiler/session:Reader	c77c123160feb4a0c634b298a2413fdf
+read compiler/session 52495-52533 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/session 52625-52678 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/session 52760-52880 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/session 52882-52933 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/session 53011-53062 fn	753360899e792dedf06ee057d76e9c16
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 19 9 1 | U U U U U U U U U U U B4 U U U U U V0 U | F F F F F F F F F | b1 b000000000 b0000000000000000000 b000000000 | 0: 1: 2: 3: 4: 5: 6: 7: 8: 9: 10:,V0,D0/0,B4 12:,B4 13: 14: 15: 16:,V0 18: | 0,0 | 12:,0/0/V0,0/1/U || 4:rN45
+sum r b1 b1 b1 b1 b1 b b b a,compiler/lsp:9969:9990 t i t i,0 i,0 c0/i/i f0010
+hid fs1;56576:V0;56577:U;56578:U;56579:U;52992:U	o0mut compiler/lsp:Server&	dd0:0:compiler/lsp:Server
+out 57e9d888a7798ba7bb90a370a7707e13
+run compiler/lsp 9208-10021 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 999c3c2e2c9b2cc8244dc88d6c435a04
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	0,3
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	2
+marks 79847a674c1063e16f816fabe39cdf85
+read compiler/lsp 0-0 ctor compiler/lsp:Server	c51da6feb1f2f945cd71998c0c8ec995
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read compiler/lsp 0-0 ctor compiler/lsp:worker	7823fc6200a20d94e3551f69316eb478
+read compiler/lsp 14870-15205 fn	816be460260aa0a7171eccf69c598346
+read compiler/session 0-0 ctor compiler/session:Reader	c77c123160feb4a0c634b298a2413fdf
+read compiler/session 52495-52533 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/session 52625-52678 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/session 52760-52880 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/session 52882-52933 fn	f7bb736ff25cfebe533b51ea3eff8305
+read compiler/session 53011-53062 fn	753360899e792dedf06ee057d76e9c16
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+want decl compiler/lsp:worker
+want decl compiler/lsp:worker
+hits 0
+body 1 19 9 1 | U U U U U U U U U U U V0 U U U U U V0 U | F F F F F F F F F | b1 b000000000 b0000000000000000000 b000000000 | 0: 1: 2: 3: 4: 5: 6: 7: 8: 9: 10:,V0,D0/0,V0 12:,V0 13: 14: 15: 16:,V0 18: | 0,0 | || 4:rN45
+sum r;D0/0,V0,0,9770,9774,0,0,0;V0,D0/0,0,9770,9774,0,0,1 b1 b1 b1 b1 b1 b b b a,compiler/lsp:9789:9817 t i t i,0 i,0 c0/i/i f0010
+hid fs1;56576:V0;56577:U;56578:U;56579:U;52992:U	o0mut compiler/lsp:Server&	dd0:0:compiler/lsp:Server
+out 7e40151f5a850203ca4929ee10da42c7
+run compiler/lsp 13559-14028 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	3
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	2
+marks cb704e8d54d2e8d24e8d5c23963e6c0a
+read compiler/lsp 0-0 ctor compiler/lsp:Server	de6b5be682ec58f2c537657752ec34b7
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read compiler/lsp 10632-10999 fn	199e880868355c26944898750888c5f5
+read compiler/lsp 11801-12756 fn	215a8ae47937a6c607fefa55fc05eb34
+read compiler/lsp 9208-10021 fn	198b40f559b2404ec9e7df08ca37302d
+read compiler/session 53724-54141 fn	9dacca0e24e4494594e03f4f142254f8
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 11 4 1 | U U U U U U U B2 B2 U U | F F F F | b1 b0000 b00000000000 b0000 | 0:,V0 1:,V0 2: 3:,V0 4:,V0 5: 6:,V0,B3 9:,B2,B2 10:,V0 | | ||
+sum r b1 b1 b1 b1 b1 b b b a,compiler/lsp:9789:9817 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0I64
+out d44595010a32bf87c3124ecc90c79a44
+run compiler/lsp 13559-14028 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in d44595010a32bf87c3124ecc90c79a44
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	0,3
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	2
+marks 79847a674c1063e16f816fabe39cdf85
+read compiler/lsp 0-0 ctor compiler/lsp:Server	c51da6feb1f2f945cd71998c0c8ec995
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read compiler/lsp 10632-10999 fn	199e880868355c26944898750888c5f5
+read compiler/lsp 11801-12756 fn	215a8ae47937a6c607fefa55fc05eb34
+read compiler/lsp 9208-10021 fn	fe9b9f9a1526eff9d78a1ea757d8fad3
+read compiler/session 53724-54141 fn	9dacca0e24e4494594e03f4f142254f8
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 11 4 1 | U U U U U U U B2 B2 U U | F F F F | b1 b0000 b00000000000 b0000 | 0:,V0 1:,V0 2: 3:,V0 4:,V0 5: 6:,V0,B3 9:,B2,B2 10:,V0 | 0,0 | 1:,0/0/D0/0 || 218:rR13563,13576,26:mut compiler/build:Config&,-1(F13563,13576,26:mut compiler/build:Config&,0(D13563,13576,19:compiler/lsp:Server(R13563,13576,24:mut compiler/lsp:Server&,-1(V13563,13576,24:mut compiler/lsp:Server&,0))))
+sum r b1 b1 b1 b1 b1 b b b a,compiler/lsp:9969:9990 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0I64
+out fb583885ceb8837f0bb83cb80025d106
+run compiler/lsp 13559-14028 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in fb583885ceb8837f0bb83cb80025d106
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	0,3
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	2
+marks 79847a674c1063e16f816fabe39cdf85
+read compiler/lsp 0-0 ctor compiler/lsp:Server	c51da6feb1f2f945cd71998c0c8ec995
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read compiler/lsp 10632-10999 fn	199e880868355c26944898750888c5f5
+read compiler/lsp 11801-12756 fn	215a8ae47937a6c607fefa55fc05eb34
+read compiler/lsp 9208-10021 fn	ae77bf4501dd6e3a10fc075c5866b20c
+read compiler/session 53724-54141 fn	9dacca0e24e4494594e03f4f142254f8
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 11 4 1 | U U U U U U U B2 B2 U U | F F F F | b1 b0000 b00000000000 b0000 | 0:,V0 1:,V0 2: 3:,V0 4:,V0 5: 6:,V0,B3 9:,B2,B2 10:,V0 | 0,0 | 1:,0/0/D0/0 || 218:rR13563,13576,26:mut compiler/build:Config&,-1(F13563,13576,26:mut compiler/build:Config&,0(D13563,13576,19:compiler/lsp:Server(R13563,13576,24:mut compiler/lsp:Server&,-1(V13563,13576,24:mut compiler/lsp:Server&,0))))
+sum r;D0/0,V0,0,13634,13649,0,0,0;V0,D0/0,0,13634,13649,0,0,1 b1 b1 b1 b1 b1 b b b a,compiler/lsp:9789:9817 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0I64
+out 93ee848eb9716880f98604a97c64bfd9
+run compiler/lsp 26926-27189 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 7 4 3 | B0 B0 B0 U U U U | F F F F | b001 b0000 b0000000 b0000 | 0:,B0 3:,B0,B0 4:,B0,V1 5:,B0,B0 6:,B0,V2 | | ||
+sum r b001 b001 b000 b000 b000 b b b a,compiler/lsp:26926:27189,compiler/lsp:26926:27189,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64	o0std/prelude/text:String&
+out 71ef4e240d2dba1af01020ff1027239c
+run compiler/lsp 6093-6877 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/lsp 4089-4159 fn	fa24e7049227d8df9346a6f3bf096c77
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 7544-7683 fn	656b96a082399099a7567556adf274a3
+read std/json 7771-7924 fn	1f696cee56c72539dbea77f5899e25c7
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 18 9 3 | U B0 U B0 U B0 U U B0 B0 U U B0 B0 B0 U B0 U | F F F F F F F F F | b000 b000000000 b000000000000000000 b000000000 | 0:,V1,V1 2:,V1,V1 4:,V1,V1 6:,V1,B0 7:,B0,B0 10:,B0,B0 11:,B0,B3 15:,V2,B0,B0 17:,V0,B0 | | ||
+sum r b000 b000 b000 b000 b000 b b b a,compiler/lsp:6093:6877,compiler/lsp:6093:6877,compiler/lsp:6093:6877 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/json:Json&	o0std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0Array<std/json:Json&>&	o1std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&
+out adece532b8770879bf525935426576b7
+run compiler/lsp 27589-28063 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 8 5 2 | U V1 B0 U U U U U | F F F F F | b01 b00000 b00000000 b00000 | 0:,V0,B0 2:,B0 3:,B3 4:,V0 5:,B0 6:,B0 7:,B0,V1 | | ||
+sum r b01 b01 b1 b0 b0 b b b a,compiler/lsp:27589:28063,compiler/lsp:27667:27671 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 253d7406a8a738b9f78bbc2a42d0805f
+run compiler/lsp 0-0 ctor compiler/lsp:Doc	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	0,1,2,3,4,5,6
+marks 1c5f53c61f17523972b9d4d49b0f86b5
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Bool
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 3 10 4 | U U U | F F F F F F F F F F | b0001 b0000000000 b000 b0000000000 | 0:,V3 1:,V3 2:,V3 | | ||
+sum r;V0,V3,0,1511,1514,1,0,0;V1,V3,0,1519,1523,1,0,0;V2,V3,0,1528,1532,1,0,0 b0001 b0001 b111 b000 b000 b b b a,compiler/lsp:0:0,compiler/lsp:0:0,compiler/lsp:0:0,std/prelude/vec:3184:3188 t i,-1,-1,-1,-1,-1,0,1 t,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out e4e41f54ddb1cc091cf29c1940d639c6
+run compiler/lsp 10126-10348 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/lsp 10350-10481 fn	9681d88001f9aa14418946fb5f92338a
+read compiler/lsp 26926-27189 fn	506495e7e25d9546b1b33bc54ba269ef
+read compiler/lsp 4089-4159 fn	fa24e7049227d8df9346a6f3bf096c77
+read compiler/session 53113-53206 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 7906-7950 fn <I64;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 10 4 1 | U U U U B3 B3 U B3 U U | F F F F | b0 b0000 b0000000000 b0000 | 0: 1:,V0 2:,V0 3:,V0 6:,B3,B3,B3 8:,V0,B3 9:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/lsp:10126:10348 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&
+out 999c14d3f5d120db946e7f11f55db698
+run compiler/lsp 8917-9115 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/vec 10564-10861 fn <I64;>	681a76eea1cc73f47553f891ae828cb1
+read std/prelude/vec 11638-11815 fn <I64;>	ed9e34746e970fcbb85f71f0221841bc
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 3 2 1 | U U U | F F | b1 b00 b000 b00 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b1 b1 b10 b00 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0I64
+out cb4addc88e6575fa5fd13637eb48af24
+run compiler/lsp 8686-8915 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/lsp 10126-10348 fn	8780f7f5125dfe208a85eeda1140eff8
+read compiler/lsp 8917-9115 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 11899-12021 fn <I64;>	070649b6438561053a4c440dd8ca066c
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 10 9 1 | U U U U B2 U B2 U U U | F F F F F F F F F | b1 b000000000 b0000000000 b000000000 | 0:,V0 1:,V0 2:,V0 3:,V0,V0 5:,V0,V0 7:,V0 8:,V0 9: | | ||
+sum r b1 b1 b10 b10 b00 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0I64
+out eba60f020addab859d6d9b269f5007db
+run compiler/lsp 7996-8120 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/lsp 8686-8915 fn	9a478934765eb6cc016042c1952d0431
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 46054-46107 fn	e95a08b9c7892e9d2ec551e45984f8a6
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+hits 0
+body 1 4 4 2 | U U U U | F F F F | b10 b0000 b0000 b0000 | 0:,V0,V0 1:,V0 2:,V0,V1 3:,V0 | | ||
+sum r b10 b10 b100 b100 b000 b b b a,std/prelude/vec:4512:4530,compiler/lsp:7996:8120 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0I64	o0std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64
+out c5239de1f7e0fa9b2e8e4e4592f00030
+run compiler/lsp 7064-7825 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	0,1,2
+marks ad1de511ef81fd188016df377c711c1e
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	fa1439b7906b6eb88e415b1dec369715
+read compiler/lsp 27589-28063 fn	2d656ee77d12e201c88f408c24d5a053
+read compiler/lsp 6902-7062 fn	4798f229afe284a670dfb50cf49f91e8
+read compiler/lsp 7996-8120 fn	43b5ef23a00760d33698cf3bc5c3b165
+read compiler/session 1905-2023 fn	2d1a24dfc85023ed245b08daf87374ab
+read std/prelude/vec 4660-4775 fn <mut compiler/lsp:Doc&;>	6a81c920b311c70708c95dd730a2c1bc
+read std/prelude/vec 5133-5172 fn <mut compiler/lsp:Doc&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+read std/prelude/vec 7906-7950 fn <I64;>	a18ca10380cf10c77190fe509fec348c
+read std/prelude/vec 7906-7950 fn <std/prelude/text:String&;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 17 13 3 | U U U U B3 U V0 U V0 U U U U V0 U U U | F F F F V0 F F F F F F F F | b100 b0000000000000 b00000000000000000 b0000000000000 | 0:,V0,V1 1:,V1,V0 2:,V0 3:,V0,V0 5:,V0,V0 7:,V1,V0,V0,V0 9:,V0,V0 10:,V0 11:,V0,V0 12:,V0,V0 14:,V0 15:,V0 16:,V0,V2 | | ||
+sum r;V1,V0,0,7622,7633,0,0,0 b100 b100 b110 b100 b100 b b b a,compiler/lsp:7173:7184,compiler/lsp:7064:7825,compiler/lsp:7064:7825 t i t i i c0/i/i f0010
+hid fs1;163072:V1;163073:V0;163074:V0	o0mut compiler/lsp:Server&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64
+out f41ea6e35578e45e49465ce7343d5110
+run compiler/lsp 7827-7994 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/lsp 6902-7062 fn	4798f229afe284a670dfb50cf49f91e8
+read compiler/lsp 7064-7825 fn	1039befe55d6ac02fe66fb56e0f5737e
+read compiler/lsp 7996-8120 fn	43b5ef23a00760d33698cf3bc5c3b165
+hits 0
+body 1 3 4 3 | U U U | F F F F | b100 b0000 b000 b0000 | 0:,V0,V1 1:,V0,V1,V2 2:,V0,V2 | | ||
+sum r;V1,V0,0,7929,7948,0,0,0 b100 b100 b110 b100 b100 b b b a,compiler/lsp:7173:7184,compiler/lsp:7827:7994,compiler/lsp:7827:7994 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out fcd5ef3d429bea581a01ba8b867a01d6
+run compiler/lsp 8122-8531 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Doc	0
+marks 05152b2e5ffa7fac51da79aa2900cd34
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Doc	fa1439b7906b6eb88e415b1dec369715
+read compiler/lsp 10126-10348 fn	8780f7f5125dfe208a85eeda1140eff8
+read compiler/lsp 27191-27481 fn	b7c04f133e27dc3e56d1831d6bbcc3dc
+read compiler/lsp 4089-4159 fn	fa24e7049227d8df9346a6f3bf096c77
+read compiler/lsp 6902-7062 fn	4798f229afe284a670dfb50cf49f91e8
+read std/prelude/text 46054-46107 fn	e95a08b9c7892e9d2ec551e45984f8a6
+read std/prelude/vec 11638-11815 fn <I64;>	ed9e34746e970fcbb85f71f0221841bc
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <mut compiler/lsp:Doc&;>	61f1a30b35a3b9d22fe970e8d04cd074
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 15 7 2 | U U U U B0 U U U U B3 U U U U U | F F F F F F F | b00 b0000000 b000000000000000 b0000000 | 0:,V0,V1 1:,V0,V0 2:,V0 3:,V0,B0,B0 5:,V0,B0 6:,V0 7:,V0,V0 8:,V0,B3,B3 10:,V0,B3 11:,V0 12:,V0 13:,V0 14: | | ||
+sum r b00 b00 b10 b10 b00 b b b a,compiler/lsp:8122:8531,compiler/lsp:8122:8531 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/prelude/text:String&	o0mut compiler/lsp:Doc&	o1std/prelude/vec:Vec<mut compiler/lsp:Doc&>&	o1I64	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0I64
+out d41c9f13ab718c66f3194f2efc90ce71
+run compiler/lsp 11437-11699 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/lsp 4089-4159 fn	fa24e7049227d8df9346a6f3bf096c77
+read compiler/lsp 9208-10021 fn	198b40f559b2404ec9e7df08ca37302d
+read compiler/session 56205-56341 fn	d703dc931fdb4564d846b8a7a07ec513
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 8 3 3 | U U B2 U U U U U | F F F | b100 b000 b00000000 b000 | 0:,V0 1:,V2,B2,B2 3:,V0,B2 4:,B0 5:,V2 6:,V0 7:,V1 | | ||
+sum r b100 b100 b101 b100 b100 b b b a,compiler/lsp:9789:9817,compiler/lsp:11437:11699,compiler/lsp:11437:11699 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out d2ea3ee21abbc14aa0b24cb459054a19
+run compiler/lsp 11437-11699 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in d2ea3ee21abbc14aa0b24cb459054a19
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	0
+marks 4c27ccf9857b7e1cb47bd14cbf40a8c5
+read compiler/lsp 0-0 ctor compiler/lsp:Server	c51da6feb1f2f945cd71998c0c8ec995
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/lsp 4089-4159 fn	fa24e7049227d8df9346a6f3bf096c77
+read compiler/lsp 9208-10021 fn	fe9b9f9a1526eff9d78a1ea757d8fad3
+read compiler/session 56205-56341 fn	d703dc931fdb4564d846b8a7a07ec513
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 8 3 3 | U U B2 U U U U U | F F F | b100 b000 b00000000 b000 | 0:,V0 1:,V2,B2,B2 3:,V0,B2 4:,B0 5:,V2 6:,V0 7:,V1 | 0,0 | 0:,0/0/D0/0 || 218:rR11441,11454,26:mut compiler/build:Config&,-1(F11441,11454,26:mut compiler/build:Config&,0(D11441,11454,19:compiler/lsp:Server(R11441,11454,24:mut compiler/lsp:Server&,-1(V11441,11454,24:mut compiler/lsp:Server&,0))))
+sum r b100 b100 b101 b100 b100 b b b a,compiler/lsp:9969:9990,compiler/lsp:11437:11699,compiler/lsp:11437:11699 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out 8c84ea8d69a2172ab13e3776ebecf01c
+run compiler/lsp 11437-11699 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 8c84ea8d69a2172ab13e3776ebecf01c
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	0
+marks 4c27ccf9857b7e1cb47bd14cbf40a8c5
+read compiler/lsp 0-0 ctor compiler/lsp:Server	c51da6feb1f2f945cd71998c0c8ec995
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/lsp 4089-4159 fn	fa24e7049227d8df9346a6f3bf096c77
+read compiler/lsp 9208-10021 fn	ae77bf4501dd6e3a10fc075c5866b20c
+read compiler/session 56205-56341 fn	d703dc931fdb4564d846b8a7a07ec513
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+hits 0
+body 1 8 3 3 | U U B2 U U U U U | F F F | b100 b000 b00000000 b000 | 0:,V0 1:,V2,B2,B2 3:,V0,B2 4:,B0 5:,V2 6:,V0 7:,V1 | 0,0 | 0:,0/0/D0/0 || 218:rR11441,11454,26:mut compiler/build:Config&,-1(F11441,11454,26:mut compiler/build:Config&,0(D11441,11454,19:compiler/lsp:Server(R11441,11454,24:mut compiler/lsp:Server&,-1(V11441,11454,24:mut compiler/lsp:Server&,0))))
+sum r;D0/0,V0,0,11510,11525,0,0,0;V0,D0/0,0,11510,11525,0,0,1 b100 b100 b101 b100 b100 b b b a,compiler/lsp:9789:9817,compiler/lsp:11437:11699,compiler/lsp:11437:11699 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out f7c3986b325924068db602d76a82adc5
+run compiler/lsp 4191-5878 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/lsp 11437-11699 fn	10871979ae9e9f0629ddff2571f806ef
+read compiler/lsp 13559-14028 fn	198b40f559b2404ec9e7df08ca37302d
+read compiler/lsp 26513-26616 fn	d82f162cad349aefb4e09970c6e10c52
+read compiler/lsp 26683-26797 fn	fea87fd6dd56f96d70424c1c7147f2fe
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/lsp 26926-27189 fn	506495e7e25d9546b1b33bc54ba269ef
+read compiler/lsp 4089-4159 fn	fa24e7049227d8df9346a6f3bf096c77
+read compiler/lsp 6093-6877 fn	caf909ea7d10a399bcac906d3579a254
+read compiler/lsp 7064-7825 fn	1039befe55d6ac02fe66fb56e0f5737e
+read compiler/lsp 7827-7994 fn	6f6e0e3bd678067c242eb0c49e3a8dfe
+read compiler/lsp 8122-8531 fn	3ed9cb3ff13e9a7c27fb4a75955f3109
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 7771-7924 fn	1f696cee56c72539dbea77f5899e25c7
+read std/prelude/array 448-556 fn <std/prelude/text:String&;>	fbabc19bb29e6f0fb271608cf364b326
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 47 11 2 | U U B1 U U U U U U U U U U U U B4 U U U U B6 U U U U U U U U U U U U U U B13 U U U U U U B0 B0 U B0 U | F F F F F F F F F F F | b11 b00000000000 b00000000000000000000000000000000000000000000000 b00000000000 | 0:,V1,V1 1:,B1,B1,B1 3:,V0,B1 4:,V1,B0,V1 5:,V1,B0 6:,V1,B0 7:,V0,V1,B0 8:,V1,B0 9:,V1,B0 10:,V1,B0 11:,V1,B0 12:,V1,B0 13:,V0 14:,B0,B4,B4 16:,V0,B4 17:,V1,B0 18:,V1,B0 19:,V1,V1 21:,V1,V1 22:,V1,B6,V1 23:,V1,B6,V1 24:,V0,V1,V1 25:,V1,B0 26:,V1,V1 27:,V1,V1 28:,V1,B8,V1 29:,V1,V1 30:,V1,V1 31:,V1,B8,V1 32:,V0,V1,V1 33:,V1,B0 34:,V1,V1 36:,V1,V1 37:,V1,B13,V1 38:,V0,V1 39:,B0,B0 40:,P,V1 41:,V0,V1,B0 44:,B0,B0,B0 46:,V0,B0 | | ||
+sum r;V1,V0,0,4987,5028,0,0,0 b11 b11 b11 b10 b10 b b b a,compiler/lsp:9789:9817,std/json:14229:14241 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/prelude/text:String&	o0std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0Array<std/json:Json&>&	o1std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0Array<std/prelude/text:String&, 5>&
+out 8acad1eb979c97f92b4be97fe680d280
+run compiler/lsp 4191-5878 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 8acad1eb979c97f92b4be97fe680d280
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	0
+marks 4c27ccf9857b7e1cb47bd14cbf40a8c5
+read compiler/lsp 0-0 ctor compiler/lsp:Server	c51da6feb1f2f945cd71998c0c8ec995
+read compiler/lsp 11437-11699 fn	0012c54532e4c8eabfd50efcbeb7ab65
+read compiler/lsp 13559-14028 fn	fe9b9f9a1526eff9d78a1ea757d8fad3
+read compiler/lsp 26513-26616 fn	d82f162cad349aefb4e09970c6e10c52
+read compiler/lsp 26683-26797 fn	fea87fd6dd56f96d70424c1c7147f2fe
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/lsp 26926-27189 fn	506495e7e25d9546b1b33bc54ba269ef
+read compiler/lsp 4089-4159 fn	fa24e7049227d8df9346a6f3bf096c77
+read compiler/lsp 6093-6877 fn	caf909ea7d10a399bcac906d3579a254
+read compiler/lsp 7064-7825 fn	1039befe55d6ac02fe66fb56e0f5737e
+read compiler/lsp 7827-7994 fn	6f6e0e3bd678067c242eb0c49e3a8dfe
+read compiler/lsp 8122-8531 fn	3ed9cb3ff13e9a7c27fb4a75955f3109
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 7771-7924 fn	1f696cee56c72539dbea77f5899e25c7
+read std/prelude/array 448-556 fn <std/prelude/text:String&;>	fbabc19bb29e6f0fb271608cf364b326
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 47 11 2 | U U B1 U U U U U U U U U U U U B4 U U U U B6 U U U U U U U U U U U U U U B13 U U U U U U B0 B0 U B0 U | F F F F F F F F F F F | b11 b00000000000 b00000000000000000000000000000000000000000000000 b00000000000 | 0:,V1,V1 1:,B1,B1,B1 3:,V0,B1 4:,V1,B0,V1 5:,V1,B0 6:,V1,B0 7:,V0,V1,B0 8:,V1,B0 9:,V1,B0 10:,V1,B0 11:,V1,B0 12:,V1,B0 13:,V0 14:,B0,B4,B4 16:,V0,B4 17:,V1,B0 18:,V1,B0 19:,V1,V1 21:,V1,V1 22:,V1,B6,V1 23:,V1,B6,V1 24:,V0,V1,V1 25:,V1,B0 26:,V1,V1 27:,V1,V1 28:,V1,B8,V1 29:,V1,V1 30:,V1,V1 31:,V1,B8,V1 32:,V0,V1,V1 33:,V1,B0 34:,V1,V1 36:,V1,V1 37:,V1,B13,V1 38:,V0,V1 39:,B0,B0 40:,P,V1 41:,V0,V1,B0 44:,B0,B0,B0 46:,V0,B0 | 0,0 | 13:,0/0/D0/0 41:,0/0/D0/1 || 208:rR4195,4208,26:mut compiler/build:Config&,-1(F4195,4208,26:mut compiler/build:Config&,0(D4195,4208,19:compiler/lsp:Server(R4195,4208,24:mut compiler/lsp:Server&,-1(V4195,4208,24:mut compiler/lsp:Server&,0)))) 208:rR4195,4208,26:mut compiler/build:Config&,-1(F4195,4208,26:mut compiler/build:Config&,0(D4195,4208,19:compiler/lsp:Server(R4195,4208,24:mut compiler/lsp:Server&,-1(V4195,4208,24:mut compiler/lsp:Server&,0))))
+sum r;V1,V0,0,4987,5028,0,0,0 b11 b11 b11 b10 b10 b b b a,compiler/lsp:9969:9990,std/json:14229:14241 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/prelude/text:String&	o0std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0Array<std/json:Json&>&	o1std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0Array<std/prelude/text:String&, 5>&
+out 2fb2e47bf1c00179c4fb9ddb1ee0e60a
+run compiler/lsp 4191-5878 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 2fb2e47bf1c00179c4fb9ddb1ee0e60a
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	0
+marks 4c27ccf9857b7e1cb47bd14cbf40a8c5
+read compiler/lsp 0-0 ctor compiler/lsp:Server	c51da6feb1f2f945cd71998c0c8ec995
+read compiler/lsp 11437-11699 fn	e777fac8ed6e3239a80117484f7e87f2
+read compiler/lsp 13559-14028 fn	e40be97e9fa02f410c7a046d686689f5
+read compiler/lsp 26513-26616 fn	d82f162cad349aefb4e09970c6e10c52
+read compiler/lsp 26683-26797 fn	fea87fd6dd56f96d70424c1c7147f2fe
+read compiler/lsp 26799-26924 fn	a8ab7892fdcce77b33aba59756c1561f
+read compiler/lsp 26926-27189 fn	506495e7e25d9546b1b33bc54ba269ef
+read compiler/lsp 4089-4159 fn	fa24e7049227d8df9346a6f3bf096c77
+read compiler/lsp 6093-6877 fn	caf909ea7d10a399bcac906d3579a254
+read compiler/lsp 7064-7825 fn	1039befe55d6ac02fe66fb56e0f5737e
+read compiler/lsp 7827-7994 fn	6f6e0e3bd678067c242eb0c49e3a8dfe
+read compiler/lsp 8122-8531 fn	3ed9cb3ff13e9a7c27fb4a75955f3109
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 7771-7924 fn	1f696cee56c72539dbea77f5899e25c7
+read std/prelude/array 448-556 fn <std/prelude/text:String&;>	fbabc19bb29e6f0fb271608cf364b326
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 47 11 2 | U U B1 U U U U U U U U U U U U B4 U U U U B6 U U U U U U U U U U U U U U B13 U U U U U U B0 B0 U B0 U | F F F F F F F F F F F | b11 b00000000000 b00000000000000000000000000000000000000000000000 b00000000000 | 0:,V1,V1 1:,B1,B1,B1 3:,V0,B1 4:,V1,B0,V1 5:,V1,B0 6:,V1,B0 7:,V0,V1,B0 8:,V1,B0 9:,V1,B0 10:,V1,B0 11:,V1,B0 12:,V1,B0 13:,V0 14:,B0,B4,B4 16:,V0,B4 17:,V1,B0 18:,V1,B0 19:,V1,V1 21:,V1,V1 22:,V1,B6,V1 23:,V1,B6,V1 24:,V0,V1,V1 25:,V1,B0 26:,V1,V1 27:,V1,V1 28:,V1,B8,V1 29:,V1,V1 30:,V1,V1 31:,V1,B8,V1 32:,V0,V1,V1 33:,V1,B0 34:,V1,V1 36:,V1,V1 37:,V1,B13,V1 38:,V0,V1 39:,B0,B0 40:,P,V1 41:,V0,V1,B0 44:,B0,B0,B0 46:,V0,B0 | 0,0 | 13:,0/0/D0/0 41:,0/0/D0/1 || 208:rR4195,4208,26:mut compiler/build:Config&,-1(F4195,4208,26:mut compiler/build:Config&,0(D4195,4208,19:compiler/lsp:Server(R4195,4208,24:mut compiler/lsp:Server&,-1(V4195,4208,24:mut compiler/lsp:Server&,0)))) 208:rR4195,4208,26:mut compiler/build:Config&,-1(F4195,4208,26:mut compiler/build:Config&,0(D4195,4208,19:compiler/lsp:Server(R4195,4208,24:mut compiler/lsp:Server&,-1(V4195,4208,24:mut compiler/lsp:Server&,0))))
+sum r;D0/0,V0,0,4701,4710,0,0,0;V0,D0/0,0,4701,4710,0,0,1;V1,V0,0,4987,5028,0,0,0 b11 b11 b11 b10 b10 b b b a,compiler/lsp:9789:9817,std/json:14229:14241 t i t i,0 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/lsp:Server&	o0std/prelude/text:String&	o0std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0Array<std/json:Json&>&	o1std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0Array<std/prelude/text:String&, 5>&
+out 680b724922755435fc98aa51f9e9b74d
+run compiler/lsp 2676-4087 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	3
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	2
+marks cb704e8d54d2e8d24e8d5c23963e6c0a
+read -ctor	I32
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Server	de6b5be682ec58f2c537657752ec34b7
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read compiler/lsp 10126-10348 fn	8780f7f5125dfe208a85eeda1140eff8
+read compiler/lsp 10632-10999 fn	199e880868355c26944898750888c5f5
+read compiler/lsp 11801-12756 fn	215a8ae47937a6c607fefa55fc05eb34
+read compiler/lsp 13559-14028 fn	198b40f559b2404ec9e7df08ca37302d
+read compiler/lsp 4191-5878 fn	e0fe8ff99169008f3638404cfc704e1f
+read compiler/lsp 9208-10021 fn	198b40f559b2404ec9e7df08ca37302d
+read compiler/session 0-0 ctor compiler/session:Reader	c77c123160feb4a0c634b298a2413fdf
+read compiler/session 53502-53542 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/session 53724-54141 fn	9dacca0e24e4494594e03f4f142254f8
+read compiler/session 54436-54661 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/session 54794-55602 fn	2732233d74198c08c6d5fa792da5a63c
+read std/prelude/number 15570-15822 fn <I64;>	753360899e792dedf06ee057d76e9c16
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+want decl compiler/lsp:Server
+hits 0
+body 1 24 9 1 | U U V0 U B0 B1 B2 U U U U U U U U U U U U U U U U U | F F F F F F F F V0 | b1 b000000000 b000000000000000000000000 b000000000 | 0: 1:,V0,V0 3:,B0 7: 8: 9:,V0 10:,V0 11:,B1,B1 12:,V0 13:,B0 14:,V0 15:,B0,V0 16:,V0,V0 17: 18:,V0 19: 20:,V0 21:,V0 22:,V0,B11 23:,V0 | | ||
+sum r b1 b1 b1 b0 b0 b b b a,compiler/lsp:2766:2777 t i t i i c0/i/i f0010
+hid fs1;56320:V0;52992:U	o0mut compiler/build:Config&	o0I64
+out 84493782ebd82434bd63f61f028c35b8
+run compiler/lsp 2676-4087 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 84493782ebd82434bd63f61f028c35b8
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	3
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	2
+marks cb704e8d54d2e8d24e8d5c23963e6c0a
+read -ctor	I32
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Server	c51da6feb1f2f945cd71998c0c8ec995
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read compiler/lsp 10126-10348 fn	8780f7f5125dfe208a85eeda1140eff8
+read compiler/lsp 10632-10999 fn	199e880868355c26944898750888c5f5
+read compiler/lsp 11801-12756 fn	215a8ae47937a6c607fefa55fc05eb34
+read compiler/lsp 13559-14028 fn	fe9b9f9a1526eff9d78a1ea757d8fad3
+read compiler/lsp 4191-5878 fn	6c2db6f904921a77531cfdbc9d11fbb6
+read compiler/lsp 9208-10021 fn	fe9b9f9a1526eff9d78a1ea757d8fad3
+read compiler/session 0-0 ctor compiler/session:Reader	c77c123160feb4a0c634b298a2413fdf
+read compiler/session 53502-53542 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/session 53724-54141 fn	9dacca0e24e4494594e03f4f142254f8
+read compiler/session 54436-54661 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/session 54794-55602 fn	2732233d74198c08c6d5fa792da5a63c
+read std/prelude/number 15570-15822 fn <I64;>	753360899e792dedf06ee057d76e9c16
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 24 9 1 | U U B0 U B0 B1 B2 U U U U U U U U U U U U U U U U U | F F F F F F F F B0 | b0 b000000000 b000000000000000000000000 b000000000 | 0: 1:,V0,B0 3:,B0 7: 8: 9:,B0 10:,B0 11:,B1,B1 12:,B0 13:,B0 14:,B0 15:,B0,B0 16:,B0,B0 17: 18:,B0 19: 20:,B0 21:,B0 22:,B0,B11 23:,B0 | | 14:,0/0/V0 16:,0/0/V0 18:,0/0/V0 ||
+sum r b0 b0 b1 b0 b0 b b b a,compiler/lsp:2676:4087 t i t i i c0/i/i f0010
+hid fs1;56320:V0;52992:U	o0mut compiler/build:Config&	o0I64
+out 2ece96730318516a27a06ec0685ff65e
+run compiler/lsp 2676-4087 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 2ece96730318516a27a06ec0685ff65e
+mark compiler/lsp 0-0 ctor compiler/lsp:Server	3
+mark compiler/lsp 0-0 ctor compiler/lsp:Worker	2
+marks cb704e8d54d2e8d24e8d5c23963e6c0a
+read -ctor	I32
+read -ctor	I64
+read compiler/lsp 0-0 ctor compiler/lsp:Server	c51da6feb1f2f945cd71998c0c8ec995
+read compiler/lsp 0-0 ctor compiler/lsp:Worker	b4513c184d59190fc361ad6d2a21666d
+read compiler/lsp 10126-10348 fn	8780f7f5125dfe208a85eeda1140eff8
+read compiler/lsp 10632-10999 fn	199e880868355c26944898750888c5f5
+read compiler/lsp 11801-12756 fn	215a8ae47937a6c607fefa55fc05eb34
+read compiler/lsp 13559-14028 fn	e40be97e9fa02f410c7a046d686689f5
+read compiler/lsp 4191-5878 fn	7edd3aee193cbddf66e18add2c77f86e
+read compiler/lsp 9208-10021 fn	ae77bf4501dd6e3a10fc075c5866b20c
+read compiler/session 0-0 ctor compiler/session:Reader	c77c123160feb4a0c634b298a2413fdf
+read compiler/session 53502-53542 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/session 53724-54141 fn	9dacca0e24e4494594e03f4f142254f8
+read compiler/session 54436-54661 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read compiler/session 54794-55602 fn	2732233d74198c08c6d5fa792da5a63c
+read std/prelude/number 15570-15822 fn <I64;>	753360899e792dedf06ee057d76e9c16
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 24 9 1 | U U V0 U B0 B1 B2 U U U U U U U U U U U U U U U U U | F F F F F F F F V0 | b1 b000000000 b000000000000000000000000 b000000000 | 0: 1:,V0,V0 3:,B0 7: 8: 9:,V0 10:,V0 11:,B1,B1 12:,V0 13:,B0 14:,V0 15:,B0,V0 16:,V0,V0 17: 18:,V0 19: 20:,V0 21:,V0 22:,V0,B11 23:,V0 | | 14:,0/0/V0 16:,0/0/V0 18:,0/0/V0 ||
+sum r b1 b1 b1 b0 b0 b b b a,compiler/lsp:2766:2777 t i t i i c0/i/i f0010
+hid fs1;56320:V0;52992:U	o0mut compiler/build:Config&	o0I64
+out 9917db2661bc2e6fcfbcda0901dafb76
+run compiler/lsp 28859-29111 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/os 25011-25068 fn	3496805786618800af6f853bb18137c1
+read std/os 3756-3966 fn	05bb335b993dde79a14807720d8a39ef
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 4 1 1 | U U U V0 | F | b1 b0 b0000 b0 | 0:,B0,B0 1:,B0,B0 2:,B0 | | ||
+sum r b1 b1 b b b b b b a,compiler/lsp:29050:29109 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&
+out 724097a99ecd5ed842de405f8bb19bca
+run compiler/lsp 29149-29245 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 1 2 | V1 | F | b01 b0 b0 b0 | | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/lsp:29149:29245,compiler/lsp:29189:29243 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 41ed9e6c71a7d101a68c8c238f58cd8d
+run compiler/lsp 29293-29740 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read std/prelude/text 0-0 ctor std/prelude/text:Radix	6cc65f1d9cb6ba320bda6b1557975351
+read std/prelude/text 19818-20349 fn	adf6771d2e1ec63fd2dd129c023b89d7
+read std/prelude/text 3958-4053 fn	249b488abfd8979d5dc24c581a8aa85a
+read std/prelude/text 6638-6813 fn	c32509e8a76db962290b03809b10d6a8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 8 7 2 | U V1 U U U U U U | F F F F F F F | b01 b0000000 b00000000 b0000000 | 0:,V1 2:,V0,B1 3:,V0,B1 4:,V0,B1 5:,B1 6:,B1 7:,V1,V0 | | ||
+sum r;V0,V1,0,29658,29689,0,0,0 b01 b01 b1 b0 b0 b b b a,compiler/lsp:29293:29740,compiler/lsp:29358:29372 t,U i t i i c0/i/i f1010
+hid fs1;1280:U	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 1348b5b608835d1554b8af14da9ce477
+run compiler/lsp 38492-38619 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 1 2 2 | V1 | F F | b01 b00 b0 b00 | | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/lsp:38492:38619,compiler/lsp:38607:38617 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out e06c1241c37285cf1d52c725d7d74e24
+run compiler/lsp 38402-38448 lambda in compiler/lsp 36778-38490 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 9621-9684 fn	d6838a1805156f44ce16ca1acf6acece
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b00 b00 b00 a,compiler/lsp:38402:38448,compiler/lsp:38402:38448 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&
+out 2deb53e625cabc6e80b1fcab55a1a5cb
+run compiler/lsp 36778-38490 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark std/os 0-0 ctor std/os:Output	1,2
+marks dd8fdc8a390eadeefb297e087c7fa7a4
+read -ctor	I64
+read compiler/lsp 26513-26616 fn	d82f162cad349aefb4e09970c6e10c52
+read compiler/lsp 27589-28063 fn	2d656ee77d12e201c88f408c24d5a053
+read compiler/lsp 28141-28509 fn	0ce9a9703e914a67d1a631057c73d772
+read compiler/lsp 28859-29111 fn	ef5d29b8fb73843f22a7f9661ff3aa5c
+read compiler/lsp 29149-29245 fn	3033fc4ca73ce495bcd969ae09046c3e
+read compiler/lsp 29293-29740 fn	cd4259e261c6c8cb3b4bc2b69c392f57
+read compiler/lsp 38402-38448 lambda in compiler/lsp 36778-38490 fn	b4d7792a9797b9327e28803da1c58e1e
+read compiler/lsp 38492-38619 fn	307c330d6d3de3c1d8dea830074d74c3
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 6300-6449 fn	b0a08e72ed90e7bfdb613ca331386fb7
+read std/json 7771-7924 fn	1f696cee56c72539dbea77f5899e25c7
+read std/os 0-0 ctor std/os:Output	9b4d726e7e22a7e25dc12557d02f3b4f
+read std/os 25605-25855 fn	19c70e70f2d2f4ae448f9da5cbedfcb2
+read std/os 8570-8787 fn	aad366597a709c1a43fc4ae152c19621
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11088-11181 fn <std/prelude/text:String&;?;>	c22db8e7309beb50afc90ba16571f575
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 59 21 3 | U B0 U B0 U B0 U U B0 B0 U B0 U U B0 U U B0 U U U B0 U B0 B0 U B0 U U U U U U B4 B4 U U U U U B3 U U U U B9 U B9 U U U U U B0 B0 U B0 U U | F F F F F F F F F F F F F F F F F F F F F | b001 b000000000000000000000 b00000000000000000000000000000000000000000000000000000000000 b000000000000000000000 | 0:,V1,B0 1:,B0 2:,B0,P 3:,B0 4:,B0,B0 6:,B0,B0 7:,B0,B0 10:,B0,B0 12:,B0,B0 13:,B0,B0 15:,B0,B0 16:,B0,B0 18:,B0,B0 19:,V0,B0 20:,B0 22:,B0,B0 25:,B0,B0 27:,B0,B0,B0,B0 28:,B0 29:,B0,B2 30:,B2 31:,B2,B2 32:,B2,B3 35:,B3,B3,B3 36:,B3,B3 37:,B3,B3 38:,B3,B3,B3 39:,B3,B3 41:,B3,B3 42:,B3,B3 43:,B3,B3 44:,B3,B3 46:,B3,B3 48:,B3,B9 49:,B9 50:,B3,B3 51:,B3 52:,B3,B10,B10 55:,B0,B0 56: 57:,B0,B0 58:,B0,B0,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/lsp:36778:38490,compiler/lsp:36778:38490,std/prelude/text:11453:11467 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/os:Output	o1Array<std/prelude/text:String&>&	o1Array<U8>&	o1Bool	o1std/prelude/text:String&	o0std/prelude/vec:Vec<std/prelude/text:String&>&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0Array<std/json:Json&>&	o1std/json:Json&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&
+out 8bb0d44508e435bc3f8844e3f336c080
+run compiler/lsp 39343-39389 lambda in compiler/lsp 38704-39419 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 9621-9684 fn	d6838a1805156f44ce16ca1acf6acece
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b00 b00 b00 a,compiler/lsp:39343:39389,compiler/lsp:39343:39389 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&
+out 38c2f5aa04ba4f8b13e9cbd6610ae4ff
+run compiler/lsp 38704-39419 fn	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+mark std/os 0-0 ctor std/os:Output	1
+marks 726fcd57f15a8387eb63f0ba3bfdfc00
+read -ctor	Array<std/prelude/text:Char>
+read compiler/lsp 28859-29111 fn	ef5d29b8fb73843f22a7f9661ff3aa5c
+read compiler/lsp 38492-38619 fn	307c330d6d3de3c1d8dea830074d74c3
+read compiler/lsp 39343-39389 lambda in compiler/lsp 38704-39419 fn	c77a9040369c56a21867a8703315a5d8
+read std/os 0-0 ctor std/os:Output	9b4d726e7e22a7e25dc12557d02f3b4f
+read std/os 25605-25855 fn	19c70e70f2d2f4ae448f9da5cbedfcb2
+read std/os 8570-8787 fn	aad366597a709c1a43fc4ae152c19621
+read std/prelude/array 7336-7441 fn <std/prelude/text:String&;>	fce9aa8e2a689269b521221817ea5b49
+read std/prelude/text 10176-10230 fn	ecc907d1b80ad51f7de503ad33f4d4b6
+read std/prelude/text 10447-10795 fn	1f5be6d0ca3785e37b467f570786f397
+read std/prelude/text 3958-4053 fn	249b488abfd8979d5dc24c581a8aa85a
+read std/prelude/text 5222-6401 fn	ab98a5b2ea25c1706726cb198e1a4156
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11088-11181 fn <std/prelude/text:String&;?;>	c22db8e7309beb50afc90ba16571f575
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 24 11 2 | U U B0 U B0 B0 U U U U U U U U U U U U B0 B0 U B0 U U | F F F F F F F F F F F | b01 b00000000000 b000000000000000000000000 b00000000000 | 0:,V0,B0 1:,B0 3:,B0,B0 6:,B0,B0,B0,B0 7:,B0 8:,B0,B0 9:,B0,B0 10:,B0,B3 11:,B0,B3,B3 12:,B3,B3 13:,B3 14:,B3,B3 15:,B3,B3 16:,B0,B3 17:,B3,B3 20:,B0,B0 21: 22:,B0,B0 23:,B0,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/lsp:38704:39419,std/prelude/text:11453:11467 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/os:Output	o1Array<std/prelude/text:String&>&	o1Array<U8>&	o1Bool	o1std/prelude/text:String&	o0std/prelude/text:LineIter	o1std/prelude/text:String&	o0std/prelude/text:String&	o1mut std/prelude/text:LineIter&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o1std/prelude/text:String&	o0mut std/prelude/vec:Vec<std/prelude/text:String&>&	o1mut Array<std/prelude/text:String&>&	o0std/prelude/text:String&	o1mut std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/text:String&	o1mut std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 2bfc477413db5d297d6abfb94898b180
+run compiler/lsp global Requests	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 86cf20e8f79c658bad95c84772768c6d
+run compiler/lsp global SettleNs	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 64a679372951ad458b23cbff12f9c4e6
+run compiler/lsp global StuckNs	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ccf16e7c8481f8ecadec2ba38ef40d7b
+run compiler/lsp global SessionSrc	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 2 0 0 | P P | | b b b00 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2546a7b3680b1016a70739778c48bb76
+run compiler/lsp global StepMain	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 94ced7fe354b092e9087953cd1424886
+run compiler/lsp global StepLibs	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3774008156e66f65374eba7d87294827
+run compiler/lsp global ExamplesSrc	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7e190c2bb75319e443c9b7fd4040fdf7
+run compiler/lsp global DeprecatedSrc	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f36bed1353501a013e3f0acb08dc6836
+run compiler/lsp global FitsSrc	
+ctx r1 g1 p0
+keys compiler/lsp=633026479f25f084959f88c9c08e9eab0f8f725c09591d2c504972b01fa1b749
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 30605bd9e7c51c5053766041979bf46f
+end
+sum 158972-5983817609314013210

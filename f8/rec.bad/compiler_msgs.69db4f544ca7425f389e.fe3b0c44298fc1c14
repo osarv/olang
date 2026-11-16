@@ -1,0 +1,1836 @@
+olang front record
+body ctor 0-0	known p,0
+body fn 100040-100203	known p
+body fn 100204-100386	known p
+body fn 100387-100529	known p
+body fn 100530-100751	known p
+body fn 100752-100864	known p
+body fn 100865-101065	known p
+body fn 101066-101216	known p
+body fn 101217-101361	known p
+body fn 101362-101639	known p
+body fn 101640-101858	known p
+body fn 101859-101978	known p
+body fn 101979-102168	known p
+body fn 102169-102299	known p
+body fn 102300-102489	known p
+body fn 102490-102629	known p
+body fn 102630-102809	known p
+body fn 102810-103218	known p
+body fn 103219-103504	known p
+body fn 103505-103733	known p
+body fn 103734-103958	known p
+body fn 103959-104217	known p
+body fn 104218-104481	known p
+body fn 104482-104764	known p
+body fn 104765-104950	known p
+body fn 104951-105150	known p
+body fn 105151-105483	known p
+body fn 105484-105676	known p
+body fn 105677-105832	known p
+body fn 105833-106118	known p
+body fn 106119-106276	known p
+body fn 106277-106439	known p
+body fn 106440-106707	known p
+body fn 106708-107001	known p
+body fn 107002-107307	known p
+body fn 107308-107560	known p
+body fn 107561-107838	known p
+body fn 107839-107993	known p
+body fn 107994-108140	known p
+body fn 108141-108294	known p
+body fn 108295-108475	known p
+body fn 108476-108670	known p
+body fn 108671-108886	known p
+body fn 108887-109106	known p
+body fn 109107-109299	known p
+body fn 109300-109641	known p
+body fn 109642-109853	known p
+body fn 109854-110265	known p
+body fn 110266-110464	known p
+body fn 110465-110615	known p
+body fn 110616-110823	known p
+body fn 110824-111025	known p
+body fn 111026-111296	known p
+body fn 111297-111469	known p
+body fn 111470-111755	known p
+body fn 111756-111999	known p
+body fn 112000-112182	known p
+body fn 112183-112512	known p
+body fn 112513-112778	known p
+body fn 112779-113052	known p
+body fn 113053-113230	known p
+body fn 113231-113371	known p
+body fn 113372-113573	known p
+body fn 113574-113747	known p
+body fn 113748-113869	known p
+body fn 113870-114023	known p
+body fn 114024-114170	known p
+body fn 114171-114360	known p
+body fn 114361-114572	known p
+body fn 114573-114752	known p
+body fn 114753-115014	known p
+body fn 115015-115220	known p
+body fn 115221-115407	known p
+body fn 115408-115552	known p
+body fn 115553-115694	known p
+body fn 115771-115910	known p
+body fn 115912-116095	known p
+body fn 116096-116256	known p
+body fn 116257-116361	known p
+body fn 116362-116476	known p
+body fn 116477-116628	known p
+body fn 116629-116733	known p
+body fn 116734-116866	known p
+body fn 116867-117016	known p
+body fn 117017-117179	known p
+body fn 117180-117314	known p
+body fn 117315-117573	known p
+body fn 117574-117709	known p
+body fn 117710-118196	known p
+body fn 118197-118358	known p
+body fn 118359-118511	known p
+body fn 118512-118701	known p
+body fn 118702-118853	known p
+body fn 118854-119139	known p
+body fn 119140-119329	known p
+body fn 119330-119436	known p
+body fn 119437-119593	known p
+body fn 119594-119707	known p
+body fn 119708-119852	known p
+body fn 119853-119957	known p
+body fn 119958-120112	known p
+body fn 120113-120279	known p
+body fn 120280-120343	known p
+body fn 120344-120576	known p
+body fn 120577-120768	known p
+body fn 120769-120990	known p
+body fn 120991-121107	known p
+body fn 121108-121253	known p
+body fn 121254-121388	known p
+body fn 121389-121653	known p
+body fn 121654-121759	known p
+body fn 121760-121916	known p
+body fn 121917-122118	known p
+body fn 122119-122266	known p
+body fn 122267-122472	known p
+body fn 122473-122713	known p
+body fn 122714-122824	known p
+body fn 122825-123055	known p
+body fn 123056-123312	known p
+body fn 123313-123578	known p
+body fn 123579-123831	known p
+body fn 123832-123957	known p
+body fn 123958-124158	known p
+body fn 124159-124288	known p
+body fn 124289-124419	known p
+body fn 124420-124552	known p
+body fn 124553-124688	known p
+body fn 1246-1405	known p
+body fn 124689-124896	known p
+body fn 124897-125154	known p
+body fn 125155-125345	known p
+body fn 125346-125530	known p
+body fn 125531-125801	known p
+body fn 125802-126023	known p
+body fn 126024-126202	known p
+body fn 126203-126289	known p
+body fn 126290-126595	known p
+body fn 126596-126952	known p
+body fn 126953-127283	known p
+body fn 127284-127519	known p
+body fn 127520-127702	known p
+body fn 127703-127877	known p
+body fn 127878-127999	known p
+body fn 128000-128147	known p
+body fn 128148-128263	known p
+body fn 128264-128440	known p
+body fn 128441-128552	known p
+body fn 128553-128704	known p
+body fn 128705-128940	known p
+body fn 128941-129059	known p
+body fn 129060-129236	known p
+body fn 129237-129397	known p
+body fn 129398-129530	known p
+body fn 129531-129668	known p
+body fn 129669-129824	known p
+body fn 129825-129950	known p
+body fn 129951-130104	known p
+body fn 130105-130322	known p
+body fn 130323-130455	known p
+body fn 130456-130625	known p
+body fn 130626-130815	known p
+body fn 130816-131006	known p
+body fn 131007-131178	known p
+body fn 131179-131386	known p
+body fn 131387-131528	known p
+body fn 131529-131744	known p
+body fn 131745-131920	known p
+body fn 131921-132142	known p
+body fn 132143-132387	known p
+body fn 132388-132626	known p
+body fn 132627-132803	known p
+body fn 132804-132941	known p
+body fn 132942-133095	known p
+body fn 133096-133284	known p
+body fn 133285-133455	known p
+body fn 133456-133715	known p
+body fn 133716-133977	known p
+body fn 133978-134115	known p
+body fn 134116-134293	known p
+body fn 134294-134443	known p
+body fn 134444-134595	known p
+body fn 134596-134778	known p
+body fn 134779-134951	known p
+body fn 134952-135212	known p
+body fn 135213-135375	known p
+body fn 135376-135517	known p
+body fn 135518-135690	known p
+body fn 135691-135869	known p
+body fn 135870-136145	known p,3
+body fn 136146-136358	known p
+body fn 136359-136582	known p
+body fn 136583-136904	known p
+body fn 136905-137288	known p
+body fn 137289-137495	known p
+body fn 137496-137760	known p,2
+body fn 137761-137907	known p
+body fn 137908-138059	known p
+body fn 138060-138185	known p
+body fn 138186-138337	known p
+body fn 138338-138473	known p
+body fn 138474-138615	known p
+body fn 138616-138754	known p
+body fn 138755-138895	known p
+body fn 138896-139131	known p
+body fn 139132-139385	known p
+body fn 139386-139721	known p
+body fn 139722-140050	known p
+body fn 140051-140388	known p
+body fn 140389-140572	known p
+body fn 140573-140749	known p
+body fn 140750-140904	known p
+body fn 140905-141038	known p
+body fn 141039-141336	known p
+body fn 141337-141496	known p
+body fn 141497-141669	known p
+body fn 141670-141808	known p
+body fn 141809-141948	known p
+body fn 141949-142219	known p
+body fn 142220-142406	known p
+body fn 142407-142552	known p
+body fn 142553-142768	known p
+body fn 142879-143023	known p
+body fn 143107-143307	known p
+body fn 143355-143561	known p
+body fn 143587-143750	known p
+body fn 143803-144009	known p
+body fn 144066-144332	known p
+body fn 144391-144638	known p
+body fn 144684-145000	known p
+body fn 145066-145343	known p
+body fn 145448-145772	known p
+body fn 145848-146114	known p
+body fn 146216-146346	known p
+body fn 146347-146513	known p
+body fn 146635-146916	known p
+body fn 146969-147144	known p
+body fn 147192-147365	known p
+body fn 147413-147535	known p
+body fn 147606-147738	known p
+body fn 147796-147926	known p
+body fn 147974-148102	known p
+body fn 148154-148367	known p
+body fn 148424-148590	known p
+body fn 148633-148770	known p
+body fn 148825-149008	known p
+body fn 149069-149264	known p
+body fn 149320-149490	known p
+body fn 149491-149657	known p
+body fn 149658-149801	known p
+body fn 149802-149960	known p
+body fn 149961-150122	known p
+body fn 150123-150260	known p
+body fn 150261-150410	known p
+body fn 150411-150559	known p
+body fn 150560-150691	known p
+body fn 150692-150876	known p
+body fn 150877-151028	known p
+body fn 151029-151163	known p
+body fn 151164-151307	known p
+body fn 151308-151430	known p
+body fn 151433-151648	known p
+body fn 151649-151909	known p
+body fn 151910-152173	known p
+body fn 152174-152417	known p
+body fn 152418-152655	known p
+body fn 152656-152886	known p
+body fn 152887-153069	known p
+body fn 153070-153416	known p
+body fn 153417-153728	known p
+body fn 153729-153975	known p
+body fn 153976-154202	known p
+body fn 154203-154458	known p
+body fn 154459-154651	known p
+body fn 154652-154821	known p
+body fn 154822-155138	known p
+body fn 155139-155271	known p
+body fn 155272-155377	known p
+body fn 155378-155548	known p
+body fn 155549-155744	known p
+body fn 155745-155875	known p
+body fn 155876-156081	known p
+body fn 156082-156302	known p
+body fn 156303-156439	known p
+body fn 156440-156578	known p
+body fn 156579-156738	known p
+body fn 156739-156891	known p
+body fn 156892-157047	known p
+body fn 157048-157247	known p
+body fn 157248-157443	known p
+body fn 157444-157629	known p
+body fn 157630-157788	known p
+body fn 157789-157977	known p
+body fn 1579-2219	known p
+body fn 157978-158316	known p
+body fn 158317-158651	known p
+body fn 158652-158842	known p
+body fn 158843-159015	known p
+body fn 159016-159171	known p
+body fn 159172-159359	known p
+body fn 159360-159509	known p
+body fn 159510-159702	known p
+body fn 159703-159833	known p
+body fn 159834-159949	known p
+body fn 159950-160103	known p
+body fn 160104-160266	known p
+body fn 160267-160402	known p
+body fn 160403-160583	known p
+body fn 160584-160853	known p
+body fn 160854-161059	known p
+body fn 161060-161229	known p
+body fn 161230-161349	known p
+body fn 161350-161522	known p
+body fn 161523-161667	known p
+body fn 161668-161857	known p
+body fn 161858-162045	known p
+body fn 162046-162308	known p
+body fn 162309-162421	known p
+body fn 162422-162535	known p
+body fn 162536-162711	known p
+body fn 162712-162872	known p
+body fn 162873-163055	known p
+body fn 163056-163213	known p
+body fn 163214-163395	known p
+body fn 163396-163585	known p
+body fn 163586-163782	known p
+body fn 163783-163923	known p
+body fn 163924-164078	known p
+body fn 164079-164291	known p
+body fn 164292-164503	known p
+body fn 164504-164700	known p
+body fn 164872-165109	known p
+body fn 165197-165469	known p
+body fn 165584-165842	known p
+body fn 166019-166291	known p
+body fn 166438-166752	known p
+body fn 166955-167196	known p
+body fn 167198-167331	known p
+body fn 167332-167482	known p
+body fn 167483-167622	known p
+body fn 167623-167760	known p
+body fn 167761-167900	known p
+body fn 167901-168049	known p
+body fn 168050-168327	known p
+body fn 168328-168558	known p
+body fn 168559-168845	known p
+body fn 168846-169020	known p
+body fn 169021-169183	known p
+body fn 169184-169331	known p
+body fn 169332-169458	known p
+body fn 169459-169626	known p
+body fn 169627-169819	known p
+body fn 169820-169984	known p
+body fn 169985-170096	known p
+body fn 170097-170261	known p
+body fn 170262-170371	known p
+body fn 170372-170519	known p
+body fn 170520-170657	known p
+body fn 170658-170854	known p
+body fn 170855-171015	known p
+body fn 171016-171190	known p
+body fn 171191-171332	known p
+body fn 171333-171481	known p
+body fn 171482-171609	known p
+body fn 171610-171755	known p
+body fn 171756-171898	known p
+body fn 171899-172042	known p
+body fn 172043-172298	known p
+body fn 172299-172388	known p
+body fn 172389-172549	known p
+body fn 172550-172669	known p
+body fn 172670-172832	known p
+body fn 172833-173015	known p
+body fn 173016-173201	known p
+body fn 173202-173404	known p
+body fn 173405-173565	known p
+body fn 173566-173753	known p
+body fn 173754-173874	known p
+body fn 173875-174034	known p
+body fn 174035-174212	known p
+body fn 174213-174383	known p
+body fn 174384-174578	known p
+body fn 174579-174763	known p
+body fn 174764-174942	known p
+body fn 174943-175070	known p
+body fn 175071-175271	known p
+body fn 175272-175553	known p
+body fn 175554-175719	known p
+body fn 175720-175878	known p
+body fn 175879-176208	known p
+body fn 176209-176522	known p
+body fn 176523-176845	known p
+body fn 176963-177223	known p
+body fn 177343-177706	known p
+body fn 177924-178223	known p
+body fn 178224-178301	known p,0
+body fn 178302-178653	known p
+body fn 178683-178929	known p
+body fn 178930-179131	known p
+body fn 179132-179264	known p
+body fn 179265-179447	known p
+body fn 179448-179643	known p
+body fn 179644-179843	known p
+body fn 179844-180089	known p
+body fn 180090-180318	known p
+body fn 180319-180511	known p
+body fn 180512-180688	known p
+body fn 180689-180877	known p
+body fn 180878-181048	known p
+body fn 181112-181325	known p
+body fn 181401-181665	known p
+body fn 181666-182002	known p
+body fn 182003-182150	known p
+body fn 182151-182331	known p
+body fn 182332-182511	known p
+body fn 182512-182684	known p
+body fn 182685-182801	known p
+body fn 182802-182990	known p
+body fn 182991-183138	known p
+body fn 183139-183293	known p
+body fn 183294-183416	known p
+body fn 183417-183612	known p
+body fn 183613-183729	known p
+body fn 183730-183937	known p
+body fn 183938-184129	known p
+body fn 184130-184333	known p
+body fn 184334-184608	known p
+body fn 184609-184883	known p
+body fn 184884-185093	known p
+body fn 185094-185300	known p
+body fn 185301-185523	known p
+body fn 185524-185708	known p
+body fn 185709-185949	known p
+body fn 185950-186185	known p
+body fn 186186-186383	known p
+body fn 186384-186536	known p
+body fn 186537-186656	known p
+body fn 186657-186812	known p
+body fn 186813-187052	known p
+body fn 187053-187230	known p
+body fn 187231-187377	known p
+body fn 187378-187567	known p
+body fn 187568-187757	known p
+body fn 187758-187908	known p
+body fn 187909-188068	known p
+body fn 188069-188277	known p
+body fn 188278-188471	known p
+body fn 188472-188714	known p
+body fn 188715-188910	known p
+body fn 188911-189066	known p
+body fn 189067-189231	known p
+body fn 189232-189391	known p
+body fn 189392-189547	known p
+body fn 189548-189679	known p
+body fn 189680-189932	known p
+body fn 189933-190216	known p
+body fn 190217-190446	known p
+body fn 190447-190571	known p
+body fn 190572-190820	known p
+body fn 190821-191098	known p
+body fn 191099-191385	known p
+body fn 191386-191525	known p
+body fn 191526-191766	known p
+body fn 191767-191947	known p
+body fn 191948-192150	known p
+body fn 192151-192362	known p
+body fn 192363-192639	known p
+body fn 192640-192793	known p
+body fn 192794-192952	known p
+body fn 192953-193064	known p
+body fn 193065-193184	known p
+body fn 193185-193385	known p
+body fn 193386-193547	known p
+body fn 193548-193741	known p
+body fn 193817-193977	known p
+body fn 193978-194206	known p
+body fn 194207-194305	known p
+body fn 194306-194549	known p
+body fn 194550-194684	known p
+body fn 194685-194907	known p
+body fn 194908-195112	known p
+body fn 195113-195369	known p
+body fn 195370-195514	known p
+body fn 195515-195721	known p
+body fn 195722-195951	known p
+body fn 195952-196100	known p
+body fn 196101-196268	known p
+body fn 196269-196453	known p
+body fn 196454-196599	known p
+body fn 196600-196729	known p
+body fn 196730-197053	known p
+body fn 197054-197348	known p
+body fn 197349-197512	known p
+body fn 197513-197907	known p
+body fn 197908-198186	known p
+body fn 198187-198487	known p
+body fn 22489-22668	known p
+body fn 22669-22836	known p
+body fn 22837-23010	known p
+body fn 23011-23147	known p
+body fn 23179-23353	known p
+body fn 23354-23558	known p
+body fn 23596-23852	known p
+body fn 23853-24061	known p
+body fn 2386-2475	known p
+body fn 24062-24224	known p
+body fn 24225-24408	known p
+body fn 24409-24551	known p
+body fn 24552-24807	known p
+body fn 24808-24980	known p
+body fn 24981-25123	known p
+body fn 25124-25367	known p
+body fn 25368-25590	known p
+body fn 25591-25794	known p
+body fn 25795-25900	known p
+body fn 25901-26050	known p
+body fn 26051-26235	known p
+body fn 26236-26477	known p
+body fn 26609-26753	known p
+body fn 26754-26909	known p
+body fn 26910-27170	known p
+body fn 27171-27314	known p
+body fn 27381-27595	known p
+body fn 27596-27793	known p
+body fn 2761-2973	known p keeps|1|-|-|.|0|0|compiler/msgs|2787|2787|0
+body fn 27794-27983	known p
+body fn 27984-28136	known p
+body fn 28137-28440	known p
+body fn 28441-28735	known p
+body fn 28736-28878	known p
+body fn 28879-29116	known p
+body fn 29117-29317	known p
+body fn 29318-29533	known p
+body fn 29534-29693	known p
+body fn 29694-29902	known p
+body fn 29903-30044	known p
+body fn 30045-30209	known p
+body fn 30210-30393	known p
+body fn 30394-30591	known p
+body fn 30592-30787	known p
+body fn 30788-30953	known p
+body fn 30954-31233	known p
+body fn 31234-31344	known p
+body fn 31345-31449	known p
+body fn 31450-31649	known p
+body fn 31650-31823	known p
+body fn 31824-31972	known p
+body fn 31973-32116	known p
+body fn 32117-32291	known p
+body fn 32292-32424	known p
+body fn 32425-32585	known p
+body fn 32586-32722	known p
+body fn 32723-32923	known p
+body fn 32924-33124	known p
+body fn 3300-3864	known p keeps|1|-|-|.|0|0|compiler/msgs|3333|3333|0
+body fn 33125-33398	known p
+body fn 33399-33583	known p
+body fn 33584-33731	known p
+body fn 33732-33871	known p
+body fn 33872-33966	known p
+body fn 33967-34108	known p
+body fn 34109-34260	known p
+body fn 34261-34356	known p
+body fn 34357-34468	known p
+body fn 34469-34619	known p
+body fn 34620-34763	known p
+body fn 34764-34891	known p
+body fn 34892-35197	known p
+body fn 35198-35395	known p
+body fn 35396-35664	known p
+body fn 35665-35944	known p
+body fn 35945-36223	known p
+body fn 36224-36409	known p
+body fn 36410-36628	known p
+body fn 36629-36753	known p
+body fn 36754-36941	known p
+body fn 36942-37088	known p
+body fn 37089-37267	known p
+body fn 37268-37425	known p
+body fn 37426-37570	known p
+body fn 37571-37708	known p
+body fn 37709-37883	known p
+body fn 37884-38057	known p
+body fn 38058-38206	known p
+body fn 38207-38306	known p
+body fn 38307-38416	known p
+body fn 38417-38522	known p
+body fn 38523-38650	known p
+body fn 38651-38819	known p
+body fn 38820-38968	known p
+body fn 38969-39170	known p
+body fn 39171-39326	known p
+body fn 39327-39487	known p
+body fn 3933-4039	known p
+body fn 39488-39651	known p
+body fn 39652-39791	known p
+body fn 39792-39876	known p
+body fn 39877-39958	known p
+body fn 39959-40067	known p
+body fn 40068-40179	known p
+body fn 40180-40320	known p
+body fn 40321-40430	known p
+body fn 40431-40534	known p
+body fn 40535-40649	known p
+body fn 40650-40821	known p
+body fn 40822-40980	known p
+body fn 40981-41106	known p
+body fn 41107-41232	known p
+body fn 41233-41337	known p
+body fn 41338-41457	known p
+body fn 41458-41559	known p
+body fn 41560-41695	known p
+body fn 41696-41796	known p
+body fn 41797-41905	known p
+body fn 41906-41993	known p
+body fn 41994-42129	known p
+body fn 42130-42284	known p
+body fn 4223-4572	known p
+body fn 42285-42383	known p
+body fn 42384-42477	known p
+body fn 42478-42593	known p
+body fn 42594-42704	known p
+body fn 42705-42825	known p
+body fn 42826-42934	known p
+body fn 42935-43037	known p
+body fn 43038-43159	known p
+body fn 43160-43311	known p
+body fn 43312-43452	known p
+body fn 43453-43584	known p
+body fn 43585-43781	known p
+body fn 43782-43978	known p
+body fn 43979-44201	known p
+body fn 44202-44343	known p
+body fn 44344-44475	known p
+body fn 44476-44643	known p
+body fn 44644-44891	known p
+body fn 44892-45034	known p
+body fn 45035-45173	known p
+body fn 45174-45322	known p
+body fn 45323-45435	known p
+body fn 45436-45545	known p
+body fn 45546-45689	known p
+body fn 45690-45818	known p
+body fn 45819-46042	known p
+body fn 46043-46227	known p
+body fn 46228-46395	known p
+body fn 46396-46609	known p
+body fn 46610-46733	known p
+body fn 46734-46854	known p
+body fn 46855-46978	known p
+body fn 46979-47153	known p
+body fn 47154-47316	known p
+body fn 47317-47517	known p
+body fn 47518-47706	known p
+body fn 47707-47837	known p
+body fn 47838-48011	known p
+body fn 48012-48185	known p
+body fn 48186-48320	known p
+body fn 48321-48482	known p
+body fn 48483-48646	known p
+body fn 48647-48745	known p
+body fn 48746-48905	known p
+body fn 48906-49221	known p
+body fn 49222-49510	known p
+body fn 49511-49713	known p
+body fn 49714-49813	known p
+body fn 49814-49974	known p
+body fn 49975-50190	known p
+body fn 50191-50331	known p
+body fn 50332-50567	known p
+body fn 50568-50687	known p
+body fn 50688-50961	known p
+body fn 50962-51142	known p
+body fn 51143-51279	known p
+body fn 51330-51500	known p
+body fn 51501-51749	known p
+body fn 51750-51976	known p
+body fn 51977-52217	known p
+body fn 52218-52388	known p
+body fn 52389-52636	known p
+body fn 52637-52850	known p
+body fn 52851-53055	known p
+body fn 53056-53235	known p
+body fn 53236-53425	known p
+body fn 53426-53662	known p
+body fn 53663-53831	known p
+body fn 53832-54011	known p
+body fn 54012-54230	known p
+body fn 54231-54466	known p
+body fn 54467-54633	known p
+body fn 54634-54892	known p
+body fn 54893-55076	known p
+body fn 55077-55214	known p
+body fn 55215-55470	known p,2
+body fn 55471-55662	known p
+body fn 55663-55844	known p
+body fn 55845-56106	known p
+body fn 56107-56327	known p
+body fn 56328-56521	known p
+body fn 56522-56740	known p
+body fn 56741-56962	known p
+body fn 56963-57213	known p
+body fn 57214-57464	known p
+body fn 57465-57709	known p
+body fn 57710-57926	known p
+body fn 57927-58166	known p
+body fn 58167-58350	known p
+body fn 58351-58622	known p
+body fn 58623-58859	known p
+body fn 58860-59032	known p
+body fn 59033-59188	known p
+body fn 59189-59356	known p
+body fn 59357-59573	known p
+body fn 59574-59760	known p
+body fn 59761-59958	known p
+body fn 59959-60128	known p
+body fn 60129-60300	known p
+body fn 60301-60467	known p
+body fn 60468-60592	known p
+body fn 60593-60727	known p
+body fn 60728-60877	known p
+body fn 60878-61018	known p
+body fn 61019-61165	known p
+body fn 61166-61346	known p
+body fn 61347-61579	known p
+body fn 61580-61790	known p
+body fn 61791-62023	known p
+body fn 62024-62140	known p
+body fn 62141-62330	known p
+body fn 62331-62513	known p
+body fn 62514-62771	known p
+body fn 62772-63080	known p
+body fn 63081-63351	known p
+body fn 63352-63559	known p
+body fn 63560-63706	known p
+body fn 63707-63885	known p
+body fn 63886-64124	known p
+body fn 64125-64383	known p
+body fn 64384-64546	known p
+body fn 64547-64703	known p
+body fn 64704-64974	known p
+body fn 64975-65145	known p
+body fn 65146-65311	known p
+body fn 65312-65480	known p
+body fn 65481-65655	known p
+body fn 65656-65802	known p
+body fn 65803-65944	known p
+body fn 65945-66096	known p
+body fn 66097-66223	known p
+body fn 66224-66385	known p
+body fn 66386-66531	known p
+body fn 66532-66752	known p
+body fn 66753-66989	known p
+body fn 66990-67247	known p
+body fn 67248-67364	known p
+body fn 67365-67534	known p
+body fn 67535-67664	known p
+body fn 67665-67952	known p
+body fn 67953-68216	known p
+body fn 68217-68474	known p
+body fn 68475-68597	known p
+body fn 68598-68739	known p
+body fn 68740-68940	known p
+body fn 68941-69140	known p
+body fn 69141-69402	known p
+body fn 69403-69592	known p
+body fn 69593-69797	known p
+body fn 69798-69949	known p
+body fn 69950-70144	known p
+body fn 70145-70344	known p
+body fn 70345-70603	known p
+body fn 70604-70960	known p
+body fn 70961-71168	known p
+body fn 71169-71369	known p
+body fn 71370-71598	known p
+body fn 71599-71747	known p
+body fn 71748-71894	known p
+body fn 71895-72053	known p
+body fn 72054-72345	known p
+body fn 72346-72559	known p
+body fn 72560-72708	known p
+body fn 72709-72813	known p
+body fn 72814-72939	known p
+body fn 72940-73045	known p
+body fn 73046-73247	known p
+body fn 73248-73406	known p
+body fn 73407-73587	known p
+body fn 73588-73768	known p
+body fn 73769-73943	known p
+body fn 73944-74186	known p
+body fn 74187-74398	known p
+body fn 74399-74611	known p
+body fn 74612-74771	known p
+body fn 74772-75042	known p
+body fn 75043-75265	known p
+body fn 75266-75464	known p
+body fn 75465-75666	known p
+body fn 75667-75881	known p
+body fn 75882-76090	known p
+body fn 76091-76237	known p
+body fn 76238-76484	known p
+body fn 76485-76705	known p
+body fn 76706-76973	known p
+body fn 76974-77170	known p
+body fn 77171-77370	known p
+body fn 77371-77569	known p
+body fn 77570-77773	known p
+body fn 77774-77957	known p
+body fn 77958-78124	known p
+body fn 78125-78287	known p
+body fn 78288-78393	known p
+body fn 78394-78531	known p
+body fn 78532-78675	known p
+body fn 78676-78861	known p
+body fn 78862-79042	known p
+body fn 79043-79214	known p
+body fn 79215-79365	known p
+body fn 79366-79588	known p
+body fn 79589-79770	known p
+body fn 79771-79969	known p
+body fn 79970-80132	known p
+body fn 80133-80285	known p
+body fn 80286-80414	known p
+body fn 80415-80544	known p
+body fn 80545-80677	known p
+body fn 80678-80897	known p
+body fn 80898-81192	known p
+body fn 81193-81342	known p
+body fn 81343-81454	known p
+body fn 81455-81668	known p
+body fn 81669-81884	known p
+body fn 81885-82145	known p
+body fn 82146-82235	known p
+body fn 82236-82404	known p
+body fn 82405-82508	known p
+body fn 82509-82587	known p
+body fn 82588-82715	known p
+body fn 82716-82986	known p
+body fn 82987-83194	known p
+body fn 83195-83396	known p
+body fn 83397-83557	known p
+body fn 83558-83786	known p
+body fn 83787-84023	known p
+body fn 84024-84271	known p
+body fn 84272-84503	known p
+body fn 84504-84747	known p
+body fn 84748-84979	known p
+body fn 84980-85154	known p
+body fn 85155-85320	known p
+body fn 85321-85582	known p
+body fn 85583-85788	known p
+body fn 85789-86039	known p
+body fn 86040-86365	known p
+body fn 86366-86532	known p
+body fn 86533-86847	known p
+body fn 86848-86993	known p
+body fn 86994-87131	known p
+body fn 87132-87377	known p
+body fn 87378-87558	known p
+body fn 87559-87826	known p
+body fn 87827-88126	known p
+body fn 88127-88421	known p
+body fn 88422-88821	known p
+body fn 88822-89201	known p
+body fn 89202-89547	known p
+body fn 89548-89709	known p
+body fn 89710-89978	known p
+body fn 89979-90231	known p
+body fn 90298-90545	known p
+body fn 90546-90697	known p
+body fn 90698-90986	known p
+body fn 90987-91188	known p
+body fn 91189-91411	known p
+body fn 91412-91707	known p
+body fn 91708-91907	known p
+body fn 91908-92212	known p
+body fn 92213-92320	known p
+body fn 92321-92538	known p
+body fn 92539-92778	known p
+body fn 92779-92860	known p
+body fn 92861-93041	known p
+body fn 93042-93316	known p
+body fn 93317-93568	known p
+body fn 93569-93766	known p
+body fn 93767-93931	known p
+body fn 93932-94083	known p
+body fn 94084-94303	known p
+body fn 94304-94493	known p
+body fn 94572-94744	known p
+body fn 94745-94950	known p
+body fn 94951-95153	known p
+body fn 95154-95357	known p
+body fn 95358-95606	known p
+body fn 95607-95839	known p
+body fn 95840-96103	known p
+body fn 96104-96301	known p
+body fn 96302-96438	known p
+body fn 96439-96756	known p
+body fn 96757-97074	known p
+body fn 97075-97229	known p
+body fn 97230-97380	known p
+body fn 97381-97584	known p
+body fn 97585-97846	known p
+body fn 97847-98066	known p
+body fn 98067-98329	known p
+body fn 98330-98478	known p
+body fn 98479-98634	known p
+body fn 98635-98770	known p
+body fn 98771-98950	known p
+body fn 98951-99097	known p
+body fn 99098-99254	known p
+body fn 99255-99432	known p
+body fn 99433-99573	known p
+body fn 99574-99733	known p
+body fn 99734-99918	known p
+body fn 99919-100039	known p
+body global EndOfFile	known p
+body global EndOfLine	known p
+baked EndOfFile [8 0b000000000000000000000000000000 @8>1+0][8 656e64206f662066696c65]
+baked EndOfLine [8 0b000000000000000000000000000000 @8>1+0][8 656e64206f66206c696e65]
+sig AlreadyDeclared@182685 fn&(String&) Msg
+sig AltBindingType@161350 fn&(String&, String&) Msg
+sig AltBindsOtherNames@161060 fn&() Msg
+sig AnyCaseAlone@71895 fn&() Msg
+sig AnyCaseNotAny@72560 fn&(String&) Msg
+sig AnyCaseTwice@71748 fn&(String&) Msg
+sig AnyCopyOutlived@69403 fn&() Msg
+sig AnyMethodObligations@70604 fn&(String&, String&, String&) Msg
+sig AnyMethodScopes@70345 fn&(String&, String&, String&) Msg
+sig AnyNeedsMarker@68598 fn&(String&) Msg
+sig AnyNoCopy@70961 fn&(String&, String&) Msg
+sig AnyNoMethod@71169 fn&(String&, String&, String&) Msg
+sig AnyNotConverted@69593 fn&(String&, String&) Msg
+sig AnyNotMember@70145 fn&(String&, String&, String&) Msg
+sig AnyNotMemberCase@71599 fn&(String&, String&) Msg
+sig AnyNotTrait@68475 fn&(String&) Msg
+sig AnyOfBuilderTrait@98067 fn&(String&, String&) Msg
+sig AnyOpenInspected@71370 fn&(String&, String&) Msg
+sig AnySpawned@72346 fn&(String&) Msg
+sig AnySpawnedResult@72054 fn&(String&, String&, String&) Msg
+sig AnyUnmet@69798 fn&(String&, String&) Msg
+sig AnyUnmetMethod@69950 fn&(String&, String&, String&) Msg
+sig ApiNoFiles@196600 fn&(String&) Msg
+sig ApiNoSide@196454 fn&(String&) Msg
+sig ApiUsage@196269 fn&() Msg
+sig ArgCount@107994 fn&(I64, String&, I64) Msg
+sig ArgCountRange@108141 fn&(I64, I64, I64) Msg
+sig ArrayIsNull@136359 fn&(String&, String&) Msg
+sig ArrayLengthNotInt@156303 fn&(String&) Msg
+sig ArrayLengthRange@66224 fn&(I64) Msg
+sig ArrayOneAxis@151433 fn&(String&) Msg
+sig ArrayOneIndex@81193 fn&(String&) Msg
+sig ArrayRunTimeIntoFixed@101362 fn&(I64) Msg
+sig ArraySizeMismatch@101640 fn&(I64, I64) Msg
+sig ArrayTooManyArgs@66532 fn&(I64) Msg
+sig ArrayTypeHoldsItself@64704 fn&(String&, String&, String&) Msg
+sig AsCanFail@65481 fn&() Msg
+sig AsNeedsCase@137761 fn&(String&, String&) Msg
+sig AsNothing@138186 fn&(String&) Msg
+sig AssertAborts@187758 fn&(String&) Msg
+sig AssertFalse@186537 fn&() Msg
+sig AssertFalseMessage@186657 fn&(String&) Msg
+sig AssertFalseWritten@186813 fn&(String&) Msg
+sig AssertMessageNotText@187568 fn&(String&, String&) Msg
+sig AssertMsgError@187231 fn&(String&) Msg
+sig AssertMsgLoopJump@187378 fn&(String&, String&) Msg
+sig AssertMsgReturns@187053 fn&(String&) Msg
+sig AssertStale@188911 fn&(String&) Msg
+sig AssignIntoTried@117315 fn&() Msg
+sig AssignListCount@156440 fn&(I64, I64) Msg
+sig AtUndeclared@138616 fn&(String&) Msg
+sig AtomicNotInteger@149491 fn&(String&) Msg
+sig AtomicNotPlace@115408 fn&() Msg
+sig AtomicNotWritable@115553 fn&() Msg
+sig AtomicWidth@23354 fn&(String&) Msg
+sig AttrNotBuilt@29903 fn&(String&) Msg
+sig AttrPlace@27381 fn&() Msg
+sig AttrPun@27596 fn&(String&) Msg
+sig AttrRead@30045 fn&(String&) Msg
+sig AttrTwice@27984 fn&(String&) Msg
+sig AttrType@27794 fn&(String&) Msg
+sig AttrWritable@28137 fn&(String&) Msg
+sig AxisCount@151910 fn&(String&, I64, I64) Msg
+sig BadEscape@42130 fn&(Char) Msg
+sig BangNothingFails@151308 fn&() Msg
+sig BecomeBorrows@145848 fn&() Msg
+sig BecomeDestructor@145066 fn&(String&) Msg
+sig BecomeErrors@144684 fn&(String&, String&) Msg
+sig BecomeHeldParam@145448 fn&(String&) Msg
+sig BecomeInside@143355 fn&(String&) Msg
+sig BecomeMemory@144391 fn&() Msg
+sig BecomeNotCall@143803 fn&(String&) Msg
+sig BecomeOutside@143107 fn&(String&) Msg
+sig BecomeSignature@144066 fn&(String&, String&) Msg
+sig BecomeTry@143587 fn&() Msg
+sig BenchFuzz@32723 fn&() Msg
+sig BinDigit@42594 fn&(Char) Msg
+sig BinNoDigits@42384 fn&() Msg
+sig BitOpCount@147413 fn&(String&) Msg
+sig BitOpNotInteger@147192 fn&(String&, String&) Msg
+sig BlockNotClosed@43160 fn&(I64, String&) Msg
+sig BorrowSplitParam@109300 fn&(String&) Msg
+sig BorrowSplitScopes@108671 fn&() Msg
+sig BorrowSplitValue@109107 fn&() Msg
+sig BoundTwice@161230 fn&(String&) Msg
+sig BreakOutsideLoop@182991 fn&(String&) Msg
+sig BuildConstRedeclared@61019 fn&(String&) Msg
+sig BuildDefaultFit@61580 fn&(String&, String&, String&, String&) Msg
+sig BuildDefaultMut@61166 fn&(String&) Msg
+sig BuildDefaultType@61347 fn&(String&, String&) Msg
+sig BuildIntoCapture@106440 fn&() Msg
+sig BuildIntoUnknownScope@106708 fn&() Msg
+sig BuildThroughUnknownScope@107561 fn&() Msg
+sig BuilderExpected@96439 fn&(String&, String&, String&, String&) Msg
+sig BuilderForText@84272 fn&(String&) Msg
+sig BuilderNameTaken@96104 fn&(String&, String&, String&) Msg
+sig BuilderNotValue@97381 fn&(String&) Msg
+sig BuilderOwnerBare@96757 fn&(String&, String&, String&, String&) Msg
+sig BuilderOwnerElsewhere@95154 fn&(String&) Msg
+sig BuilderOwnerKind@95358 fn&(String&) Msg
+sig BuilderPrivate@97230 fn&(String&, String&) Msg
+sig BuilderResult@95607 fn&(String&, String&) Msg
+sig BuilderTakesOwner@95840 fn&(String&, String&) Msg
+sig BuilderTwice@96302 fn&(String&, String&) Msg
+sig BuiltinTypeRedeclared@60728 fn&(String&) Msg
+sig ByteSwapWidth@23179 fn&(String&, I64) Msg
+sig CFileNotFound@78288 fn&(String&) Msg
+sig CHeaderNotFound@78125 fn&(String&) Msg
+sig CImportFailed@78394 fn&(String&, String&) Msg
+sig CNoForm@78532 fn&(String&, String&) Msg
+sig CPointerReadOnly@78862 fn&(String&) Msg
+sig CPointerTemporary@79043 fn&(String&) Msg
+sig CallDoesNothing@137289 fn&(String&) Msg
+sig CallValueErrors@181401 fn&(String&, String&, String&, String&) Msg
+sig CallValueObligations@181666 fn&(String&, String&) Msg
+sig CallbackNotExport@76974 fn&() Msg
+sig CannotOpen@39792 fn&() Msg
+sig CannotRun@34357 fn&(String&) Msg
+sig CapsOneFile@195370 fn&() Msg
+sig CaptureReadOnly@118197 fn&() Msg
+sig CarriageReturn@41107 fn&() Msg
+sig CaseAfterWildcard@163924 fn&() Msg
+sig CaseIsPrivate@138060 fn&(String&) Msg
+sig CaseIsSubject@164292 fn&(String&) Msg
+sig CaseTestNotEnum@134294 fn&(String&, String&) Msg
+sig CaseTestOther@134444 fn&(String&, String&) Msg
+sig CaseTypeArgsNotInferable@141039 fn&(String&, String&) Msg
+sig CaseUnknownName@164079 fn&(String&) Msg
+sig CaseValueType@161523 fn&(String&, String&) Msg
+sig CatchAfterCatchAll@149961 fn&() Msg
+sig CatchLoneUnused@51501 fn&(String&, String&) Msg
+sig CatchMustLeave@150560 fn&() Msg
+sig CatchNameInTask@51750 fn&(String&) Msg
+sig CatchNameUnused@51330 fn&(String&) Msg
+sig CatchNotProduced@183294 fn&(String&) Msg
+sig CatchUnreachable@150123 fn&() Msg
+sig CatchWordNotProduced@171016 fn&(String&, String&) Msg
+sig CaughtAssigned@51977 fn&(String&, String&) Msg
+sig CaughtCaseForm@59033 fn&() Msg
+sig CaughtCaseNever@58860 fn&(String&) Msg
+sig CaughtCompareWhat@52389 fn&(String&) Msg
+sig CaughtComparedToCaught@52218 fn&() Msg
+sig CaughtMatchBlock@58623 fn&() Msg
+sig CaughtMatchMissing@59189 fn&(String&) Msg
+sig CaughtNeverIs@53663 fn&(String&, String&, String&) Msg
+sig CharNewline@41797 fn&() Msg
+sig CharNoPad@140389 fn&(String&, String&) Msg
+sig CharsForText@84024 fn&(String&, String&) Msg
+sig ClangFailed@40321 fn&(String&) Msg
+sig ClauseLastValue@150692 fn&(String&) Msg
+sig ColumnAssigned@197349 fn&() Msg
+sig ColumnNamedLikeMethod@197054 fn&(String&, String&, String&) Msg
+sig ColumnsNotRecord@196730 fn&(String&, String&, String&) Msg
+sig CommaEndsLine@40650 fn&() Msg
+sig CommutesClash@81885 fn&(String&, String&, String&, String&) Msg
+sig CommutesNotHere@81455 fn&(String&) Msg
+sig CommutesSameType@81669 fn&(String&, String&) Msg
+sig ComprNeedsTry@159950 fn&() Msg
+sig ComprWalkFails@154822 fn&() Msg
+sig ComprehensionReferences@152887 fn&() Msg
+sig ComptimeForElem@29318 fn&(String&) Msg
+sig ComptimeForSource@29117 fn&(String&) Msg
+sig ComptimeForTooMany@29694 fn&(I64, I64) Msg
+sig ComptimeForTry@28879 fn&() Msg
+sig ComptimeForUnknown@29534 fn&(String&) Msg
+sig ComptimeLocal@28441 fn&(String&) Msg
+sig ComptimeNotBaked@28736 fn&(String&) Msg
+sig CondBranchTypes@129060 fn&(String&, String&) Msg
+sig CondCycle@45323 fn&(String&) Msg
+sig CondDecidedNotBool@193065 fn&() Msg
+sig CondGlobalInit@45174 fn&(String&) Msg
+sig CondLentWritable@139386 fn&() Msg
+sig CondMutable@45035 fn&(String&) Msg
+sig CondName@44892 fn&(String&) Msg
+sig CondNoMeet@45546 fn&(String&) Msg
+sig CondNotBool@45690 fn&(String&) Msg
+sig CondNotBoolType@128941 fn&(String&) Msg
+sig CondTooDeep@189232 fn&(I64) Msg
+sig CondTypes@45436 fn&(String&) Msg
+sig CondUndecidable@192640 fn&(String&) Msg
+sig CondUnknownBuild@192953 fn&(String&) Msg
+sig CondUnseen@192794 fn&() Msg
+sig ConditionConstant@159510 fn&() Msg
+sig ConstToMutRef@78676 fn&(String&) Msg
+sig ConstraintClosed@63081 fn&(String&, String&, String&, String&, String&) Msg
+sig ConstraintDisagrees@62141 fn&(String&) Msg
+sig ConstraintNotTrait@66753 fn&(String&) Msg
+sig ConstraintSealed@62772 fn&(String&, String&, String&, String&, String&) Msg
+sig ConstraintUnmet@62331 fn&(String&, String&, String&) Msg
+sig ConstraintUnmetBuilder@97585 fn&(String&, String&, String&, String&) Msg
+sig ConstraintUnmetHash@64125 fn&(String&, String&, String&) Msg
+sig ConstraintUnmetMethod@62514 fn&(String&, String&, String&, String&) Msg
+sig ContractFalse@193817 fn&(String&, String&) Msg
+sig ConversionDoesNotFit@193978 fn&(String&, String&) Msg
+sig ConversionRepresentation@115912 fn&(String&, String&) Msg
+sig ConvertNotNumber@116096 fn&(String&, String&) Msg
+sig CopyDoesMore@83195 fn&(String&) Msg
+sig CopyOnWhat@82987 fn&(String&) Msg
+sig CopyShape@82716 fn&(String&) Msg
+sig CtorFieldNamesVar@112183 fn&(String&, String&, String&, String&) Msg
+sig CtorFieldNoValue@73407 fn&(String&) Msg
+sig CtorGenericInferredField@112513 fn&(String&, String&) Msg
+sig CtorTypeArgsNotInferable@111756 fn&(String&, String&) Msg
+sig CtorVarOfGeneric@112779 fn&(String&, String&, String&) Msg
+sig CtorVarsNotInferable@112000 fn&(String&) Msg
+sig DeclFromNoreturn@170097 fn&(String&) Msg
+sig DeclFromNull@106277 fn&() Msg
+sig DeclaredOverAggregate@80678 fn&(String&) Msg
+sig DeclaredTwice@72940 fn&(String&) Msg
+sig DefaultAmbiguous@155549 fn&(String&, String&) Msg
+sig DefaultArgNoDefault@113053 fn&(String&) Msg
+sig DefaultArgNotAllowed@140750 fn&() Msg
+sig DefaultCount@149658 fn&(I64, I64) Msg
+sig DefaultDead@150411 fn&() Msg
+sig DefaultInStatement@150261 fn&() Msg
+sig DefaultNeedsCatch@151029 fn&() Msg
+sig DefaultNoValue@150877 fn&() Msg
+sig DefaultNotComputable@186384 fn&(String&) Msg
+sig DefaultNotTrailing@73588 fn&(String&) Msg
+sig DefaultOutsideTrait@93767 fn&(String&) Msg
+sig DefaultScope@149802 fn&() Msg
+sig DefaultShadowsRequired@94084 fn&(String&, String&) Msg
+sig DeferErrorEscapes@140905 fn&() Msg
+sig DeferLoopJump@183139 fn&(String&) Msg
+sig DeferReturns@167198 fn&() Msg
+sig DefineBadNumber@38969 fn&(String&, String&) Msg
+sig DefineBuiltin@39652 fn&(String&) Msg
+sig DefineFloatRange@39488 fn&(String&, String&) Msg
+sig DefineIntRange@39171 fn&(String&, String&) Msg
+sig DefineMissing@38417 fn&() Msg
+sig DefineNegRange@39327 fn&(String&, String&) Msg
+sig DefineNotName@38651 fn&(String&, String&) Msg
+sig DefineShape@38523 fn&(String&) Msg
+sig DefineTwice@38820 fn&(String&, String&) Msg
+sig DestructCopiedHeld@67665 fn&(String&, String&) Msg
+sig DestructCount@156892 fn&(I64, I64) Msg
+sig DestructInBody@43782 fn&() Msg
+sig DestructNotName@156579 fn&() Msg
+sig DestructNotUnique@89979 fn&(String&) Msg
+sig DestructOneValue@156739 fn&(String&) Msg
+sig DestructTypeByValue@67953 fn&(String&, String&) Msg
+sig DigitSeparator@42705 fn&() Msg
+sig Distance@1579 fn&(String&, String&) I64
+sig DivideByZero@126203 fn&() Msg
+sig DivisorProven@127284 fn&(String&) Msg
+sig DocNoItem@37884 fn&(String&, String&) Msg
+sig DocOneName@37709 fn&(String&) Msg
+sig DoubleReferenceMarker@67535 fn&() Msg
+sig DropCycle@89202 fn&(String&, String&) Msg
+sig DropRegistered@88422 fn&(String&, String&, String&) Msg
+sig DropTempRegistered@88822 fn&(String&, String&) Msg
+sig EffectBeyond@177924 fn&(String&, String&, String&, String&) Msg
+sig ElemNotInArrayScope@157444 fn&() Msg
+sig ElemOutlived@157630 fn&() Msg
+sig ElemRefShape@101979 fn&(String&, String&) Msg
+sig ElemsNotSeq@131745 fn&(String&) Msg
+sig ElemsType@131921 fn&(String&, String&) Msg
+sig EmbedNotRead@141670 fn&(String&, String&) Msg
+sig EmbedPathUndecided@141497 fn&() Msg
+sig EmbedPathUnknown@141337 fn&() Msg
+sig EmptyChar@41906 fn&() Msg
+sig EmptyDestructor@183613 fn&() Msg
+sig EnumCaseInUse@72814 fn&(String&) Msg
+sig EqShape@82588 fn&() Msg
+sig EqStrWrites@92861 fn&(String&) Msg
+sig ErrComparedNotError@52637 fn&(String&, String&, String&) Msg
+sig ErrMatchNotError@53056 fn&(String&, String&) Msg
+sig ErrNeverNull@53236 fn&(String&) Msg
+sig ErrPatternBindAlts@56328 fn&() Msg
+sig ErrPatternBindValue@56107 fn&() Msg
+sig ErrPatternNeedsName@55845 fn&(String&) Msg
+sig ErrSetArgUnwanted@74612 fn&(String&) Msg
+sig ErrValueNoOp@52851 fn&(String&, String&) Msg
+sig ErrValueNotHeld@53426 fn&(String&, String&, String&) Msg
+sig ErrVarNotType@74399 fn&(String&, String&) Msg
+sig ErrorAfterQuestion@44476 fn&() Msg
+sig ErrorAsResult@59761 fn&(String&) Msg
+sig ErrorMethodGiven@56522 fn&(String&, String&) Msg
+sig ErrorOutsideFunction@170520 fn&() Msg
+sig ErrorSetHoldsItself@59357 fn&(String&, String&) Msg
+sig ErrorUndeclared@171333 fn&(String&) Msg
+sig ErrorWordInUse@80286 fn&(String&) Msg
+sig ErrorWordIsPrivate@171191 fn&(String&) Msg
+sig ErrorWordNotInSet@170855 fn&(String&) Msg
+sig ErrorWordOfMember@59574 fn&(String&, String&) Msg
+sig ErrorWordTooFar@170658 fn&(String&) Msg
+sig Esc@4223 fn&(Char) String
+sig Expected@43038 fn&(String&, String&) Msg
+sig ExplainNeedsName@36754 fn&(String&) Msg
+sig ExplainNeedsRule@36629 fn&() Msg
+sig ExplainNoItem@38058 fn&(String&, String&) Msg
+sig ExportGeneric@75882 fn&() Msg
+sig ExportMethod@75667 fn&() Msg
+sig ExportName@76091 fn&(String&) Msg
+sig ExportObligation@76706 fn&(String&) Msg
+sig ExportResult@76485 fn&(String&) Msg
+sig ExportType@76238 fn&(String&) Msg
+sig ExtendsNotBase@80415 fn&() Msg
+sig ExternResult@75043 fn&(String&) Msg
+sig ExternType@74772 fn&(String&) Msg
+sig FactNoFunction@195113 fn&(String&) Msg
+sig FactOfGeneric@194685 fn&(String&, String&) Msg
+sig FactUndecided@194908 fn&(String&) Msg
+sig FieldBindingUnknown@109642 fn&() Msg
+sig FieldHasParamName@73046 fn&(String&) Msg
+sig FieldOfEnum@137496 fn&(String&, String&, String&) Msg
+sig FieldSetPrecompiled@109854 fn&(String&) Msg
+sig FieldUnassigned@184609 fn&(String&, String&, String&) Msg
+sig FlagAmongResults@57710 fn&() Msg
+sig FlagWithOutParam@57927 fn&(String&) Msg
+sig FloatLiteralRange@127878 fn&(String&) Msg
+sig ForInClauseExit@160403 fn&() Msg
+sig ForInNameExists@160584 fn&(String&, String&) Msg
+sig ForInNeedsTry@160104 fn&() Msg
+sig ForInTryNothing@160267 fn&() Msg
+sig ForeignBuilt@75266 fn&(String&) Msg
+sig ForeignByValue@75465 fn&(String&) Msg
+sig FormatterBuild@34620 fn&(String&) Msg
+sig FormatterMissing@34469 fn&(String&) Msg
+sig FromBitsWidth@97847 fn&(String&, String&, String&) Msg
+sig FromCaseName@149320 fn&() Msg
+sig FromIterShape@154459 fn&(String&) Msg
+sig FromPayload@149069 fn&(String&, String&) Msg
+sig FuncDeclBare@68941 fn&(String&) Msg
+sig FuncDeclMismatch@69141 fn&(String&, String&, String&) Msg
+sig FuncTypeBare@68740 fn&(String&) Msg
+sig FuncTypeBeyond@178302 fn&(String&, String&, String&) Msg
+sig FuncTypeErrsUnwritten@60129 fn&() Msg
+sig FuncValueObligations@175879 fn&(String&, String&) Msg
+sig FuzzManyTests@33399 fn&(String&, String&) Msg
+sig FuzzNoTest@32924 fn&(String&) Msg
+sig FuzzTimeAlone@32292 fn&() Msg
+sig FuzzTimeNotNumber@32117 fn&(String&) Msg
+sig GenByValue@91708 fn&(String&) Msg
+sig GenByValueAway@91908 fn&(String&) Msg
+sig GenCopyDestruct@92539 fn&(String&) Msg
+sig GenErrorNotDeclared@141949 fn&(String&) Msg
+sig GenErrors@168846 fn&(String&) Msg
+sig GenReturnValue@167901 fn&() Msg
+sig GenUnique@92321 fn&(String&) Msg
+sig GenYieldShorter@168559 fn&(String&) Msg
+sig GenYieldsBorrow@168050 fn&(String&) Msg
+sig GenericNeeds@194306 fn&(String&, String&, String&) Msg
+sig GenericNotAValue@156082 fn&(String&) Msg
+sig GenericNotStruct@80545 fn&() Msg
+sig GlobalAborts@187909 fn&(String&) Msg
+sig GlobalHoldsShorter@158652 fn&() Msg
+sig GlobalReadsItself@193185 fn&(String&, String&) Msg
+sig GlobalStale@189067 fn&(String&) Msg
+sig GlobalsCycle@193386 fn&(String&) Msg
+sig GuardNotBool@162309 fn&(String&) Msg
+sig HelpOneMode@33872 fn&() Msg
+sig HexDigit@42478 fn&(Char) Msg
+sig HexNoDigits@42285 fn&() Msg
+sig Hint@3933 fn&(Nearest&) String
+sig ImmutCopy@84980 fn&(String&) Msg
+sig ImmutMutRef@84504 fn&(String&) Msg
+sig ImmutWrite@83397 fn&(String&) Msg
+sig Immutable@118702 fn&(String&) Msg
+sig ImportAliasConflict@47518 fn&(String&) Msg
+sig ImportAliasInvalid@47317 fn&(String&) Msg
+sig ImportFetchFailed@46228 fn&(String&) Msg
+sig ImportFileNotFound@46734 fn&(String&) Msg
+sig ImportHasExtension@46855 fn&() Msg
+sig ImportIsPrivate@48012 fn&(String&) Msg
+sig ImportLeavesRoot@46979 fn&(String&) Msg
+sig ImportLockNotACommit@46043 fn&(String&) Msg
+sig ImportLockedFetchFailed@46396 fn&(String&) Msg
+sig ImportPathTooLong@46610 fn&() Msg
+sig ImportReachedTwice@48321 fn&(String&) Msg
+sig ImportRemoteBadName@45819 fn&() Msg
+sig ImportRemoteNeedsFile@47154 fn&() Msg
+sig ImportUnused@98771 fn&(String&, String&) Msg
+sig IncdecInExpression@129669 fn&(String&) Msg
+sig IncdecNotNumber@117574 fn&(String&, String&) Msg
+sig IndexNotInt@116362 fn&(String&) Msg
+sig IndexOutOfRange@116477 fn&(I64, I64) Msg
+sig IndexProven@126290 fn&(String&, I64, I64) Msg
+sig IndexReaches@126596 fn&(String&, I64, I64) Msg
+sig InstallNoFiles@37426 fn&() Msg
+sig InstanceNotReferable@66990 fn&(String&, String&) Msg
+sig InstanceOutlivesArg@158317 fn&(String&) Msg
+sig InstanceOutlivesReferent@157978 fn&(String&) Msg
+sig IntLiteralTooLarge@123958 fn&(String&) Msg
+sig InterpLink@77371 fn&(String&, String&) Msg
+sig InvalidReferenceTarget@67365 fn&(String&) Msg
+sig IsAsNotEnum@138338 fn&(String&) Msg
+sig IsDirectory@39959 fn&() Msg
+sig JoinCannotFail@173754 fn&() Msg
+sig JoinCatchNeedsTry@173875 fn&() Msg
+sig JoinClauseMustLeave@174035 fn&() Msg
+sig JoinNotTried@173566 fn&(String&) Msg
+sig JoinWithoutSpawn@171482 fn&() Msg
+sig KeywordAsName@43453 fn&(String&) Msg
+sig KeywordFieldRead@43585 fn&(String&) Msg
+sig LambdaArity@182151 fn&(String&, I64, String&, I64) Msg
+sig LambdaCapturesItself@117710 fn&(String&) Msg
+sig LambdaKeepsOuter@177343 fn&(String&) Msg
+sig LambdaParamUntyped@182512 fn&(String&) Msg
+sig LambdaResultUninferable@182003 fn&() Msg
+sig LambdaSignature@182332 fn&(String&) Msg
+sig LambdaValueObligations@176209 fn&(String&, String&) Msg
+sig LambdaValueRelates@176523 fn&(String&) Msg
+sig LaneCompare@22837 fn&(String&, String&) Msg
+sig LaneLengths@22489 fn&(I64, I64) Msg
+sig LaneMaskBool@23011 fn&(String&, String&) Msg
+sig LaneReferences@22669 fn&() Msg
+sig LenShape@82509 fn&() Msg
+sig LengthNotInferable@111470 fn&(String&, String&) Msg
+sig LengthsNotAValue@155876 fn&(String&) Msg
+sig LessNotBool@82405 fn&() Msg
+sig LineBodyNotSimple@37089 fn&(String&) Msg
+sig LineBodyOnLine@36942 fn&() Msg
+sig LineStartsWithOperator@162046 fn&(String&, String&) Msg
+sig LinkFailed@40431 fn&(String&) Msg
+sig LinkName@77171 fn&(String&) Msg
+sig LinkOnOlangImport@77958 fn&() Msg
+sig ListingAlone@195952 fn&() Msg
+sig ListingNoFunction@195722 fn&(String&, String&) Msg
+sig ListingQuick@196101 fn&(String&) Msg
+sig ListingUsage@195515 fn&(String&) Msg
+sig LiteralCtorFails@183730 fn&(String&, String&) Msg
+sig LiteralDoesNotMeet@125802 fn&(String&, String&, String&) Msg
+sig LiteralEntries@154652 fn&(String&) Msg
+sig LiteralExprNoValue@125346 fn&() Msg
+sig LiteralExprRange@102490 fn&(String&) Msg
+sig LiteralMixed@154203 fn&(String&, String&, String&, String&, String&) Msg
+sig LiteralNeedsCtor@102630 fn&(String&, String&) Msg
+sig LiteralNoFromIter@153417 fn&(String&) Msg
+sig LiteralNoOwnType@125531 fn&(String&) Msg
+sig LiteralNoTarget@153976 fn&(String&, String&) Msg
+sig LiteralNotMade@153729 fn&(String&) Msg
+sig LiteralRange@101859 fn&(String&, String&) Msg
+sig LiteralUnique@153070 fn&(String&, String&) Msg
+sig LocalUnused@98479 fn&(String&) Msg
+sig LocalUnusedBare@98635 fn&(String&) Msg
+sig LongChar@41994 fn&() Msg
+sig MainSignature@189392 fn&() Msg
+sig MatchLengthUncovered@133716 fn&(String&, String&) Msg
+sig MatchNotExhaustive@163214 fn&(String&, String&) Msg
+sig MatchValueNone@162712 fn&() Msg
+sig MatchValueOne@163586 fn&() Msg
+sig MatchValueTypes@163056 fn&(String&, String&) Msg
+sig MatchValueUncovered@163396 fn&(String&) Msg
+sig MatmulUndeclared@128553 fn&(String&) Msg
+sig MayBeNull@134952 fn&(String&, String&, String&, String&) Msg
+sig MemberIsPrivate@117017 fn&(String&, String&) Msg
+sig MembershipNeedsTry@129531 fn&(String&) Msg
+sig MembershipNoMethod@129237 fn&(String&, String&) Msg
+sig MembershipNotBool@129398 fn&(String&) Msg
+sig MemoryGaps@33125 fn&(I64) Msg
+sig MethodAmbiguous@155378 fn&(String&) Msg
+sig MethodCalledAsFunction@100204 fn&(String&, String&) Msg
+sig MethodCannotFail@82236 fn&(String&) Msg
+sig MethodClashesInherited@94304 fn&(String&, String&) Msg
+sig MethodClashesSupplied@94745 fn&(String&, String&) Msg
+sig MethodInUse@98330 fn&(String&, String&) Msg
+sig MethodIsPrivate@155745 fn&(String&) Msg
+sig MethodNotInherited@142553 fn&(String&, String&) Msg
+sig MethodOnBuiltinType@94951 fn&(String&) Msg
+sig MethodOnForeignType@93932 fn&(String&) Msg
+sig MethodOverlap@94572 fn&(String&, String&) Msg
+sig MissingReturn@182802 fn&(String&) Msg
+sig MissingTypeArgs@64975 fn&(String&, String&) Msg
+sig ModeFirst@33732 fn&(String&) Msg
+sig ModeNeedsFile@31345 fn&(String&) Msg
+sig ModeNoFiles@37571 fn&(String&) Msg
+sig ModeOneFile@31234 fn&(String&) Msg
+sig ModuleIdentityClash@193548 fn&(String&) Msg
+sig MutOnInferredLocal@159172 fn&() Msg
+sig MutOnLocal@159016 fn&(String&) Msg
+sig MutOnValueField@79589 fn&(String&) Msg
+sig MutOnValueParam@79366 fn&(String&) Msg
+sig MutOnValueType@79215 fn&(String&) Msg
+sig NameClashesWithImport@48483 fn&(String&) Msg
+sig NameInUse@62024 fn&(String&) Msg
+sig NameIsType@60878 fn&(String&) Msg
+sig NamedArgAlsoPositional@113870 fn&(String&) Msg
+sig NamedArgNotHere@114361 fn&() Msg
+sig NamedArgRequired@113574 fn&(String&) Msg
+sig NamedArgThroughValue@114171 fn&() Msg
+sig NamedArgTwice@113748 fn&(String&) Msg
+sig NamedArgUnknown@113231 fn&(String&, String&) Msg
+sig NamedArgUnknownMeant@113372 fn&(String&, String&, String&) Msg
+sig NarrowNeedsType@65803 fn&() Msg
+sig NarrowNotNumber@65656 fn&(String&) Msg
+sig NarrowedAcrossLoop@136583 fn&(String&) Msg
+sig NarrowedWrite@136905 fn&(String&, String&) Msg
+sig Near@2386 fn&(String&, I64) Bool
+sig NeedlessGroup@43979 fn&() Msg
+sig NegLiteralTooLarge@124159 fn&(String&) Msg
+sig Nesting@43312 fn&(I64) Msg
+sig NeverNull@135518 fn&(String&, String&, String&) Msg
+sig NoAxisSlice@151649 fn&(String&) Msg
+sig NoBuilder@97075 fn&(String&, String&, String&) Msg
+sig NoClang@40180 fn&(String&) Msg
+sig NoLimit@142879 fn&(String&, String&, String&) Msg
+sig NoMain@40068 fn&() Msg
+sig NoRawValues@148825 fn&(String&, String&) Msg
+sig NoRule@38307 fn&(String&) Msg
+sig NoSpec@38207 fn&(String&) Msg
+sig NoSuchCase@128148 fn&(String&, String&) Msg
+sig NoSuchCaseMeant@128264 fn&(String&, String&, String&) Msg
+sig NoSuchErrorWord@128000 fn&(String&, String&, String&) Msg
+sig NoSuchMember@116867 fn&(String&, String&, String&) Msg
+sig NoZeroNonNull@135691 fn&(String&, String&) Msg
+sig NoZeroValue@184130 fn&(String&, String&) Msg
+sig NonAscii@40981 fn&(Char) Msg
+sig NoreturnErrors@169820 fn&() Msg
+sig NoreturnFallsOff@169627 fn&() Msg
+sig NoreturnHere@169985 fn&(String&) Msg
+sig NotAMode@30954 fn&(String&) Msg
+sig NotASource@33584 fn&(String&) Msg
+sig NotAStatement@159360 fn&() Msg
+sig NotAnEnum@155139 fn&(String&) Msg
+sig NotAnErrorType@59959 fn&(String&) Msg
+sig NotAssignable@117180 fn&() Msg
+sig NotCallable@129825 fn&(String&) Msg
+sig NotExtendedOp@128705 fn&(String&, String&, String&) Msg
+sig NotInModule@100387 fn&(String&, String&, String&) Msg
+sig NotInModulePrelude@100530 fn&(String&, String&, String&) Msg
+sig NotIndexable@116257 fn&(String&) Msg
+sig NotIterable@160854 fn&(String&) Msg
+sig NotRegular@39877 fn&() Msg
+sig NotSliceable@116629 fn&(String&) Msg
+sig NotTheOperator@80898 fn&(String&, String&, String&, String&, String&) Msg
+sig NoteAnyMethod@72709 fn&(String&) Msg
+sig NoteAssignedHere@190447 fn&(String&) Msg
+sig NoteBindingWhere@190572 fn&(String&, String&) Msg
+sig NoteCondValue@191767 fn&() Msg
+sig NoteContractCondition@194207 fn&() Msg
+sig NoteDeclareWhere@190821 fn&(String&, String&, String&) Msg
+sig NoteDeclareWritable@122825 fn&(String&, String&, String&) Msg
+sig NoteDeclaredHere@122714 fn&(String&) Msg
+sig NoteEffect@178224 fn&(String&) Msg
+sig NoteFuncTypeScopes@120344 fn&(String&) Msg
+sig NoteGenSlot@92213 fn&(String&) Msg
+sig NoteGenericNeeds@194550 fn&(String&, String&) Msg
+sig NoteGroupFunctionType@105484 fn&() Msg
+sig NoteHeldIndexWhere@191526 fn&(String&) Msg
+sig NoteHere@120280 fn&() Msg
+sig NoteInLibrary@121654 fn&() Msg
+sig NoteInstanceRef@67248 fn&() Msg
+sig NoteLiteralLocal@123056 fn&(String&, String&, String&, String&) Msg
+sig NoteLiteralRange@123313 fn&(String&, String&, String&, String&, String&) Msg
+sig NoteLiteralRangeExpr@123579 fn&(String&, String&, String&, String&) Msg
+sig NoteLoopCopy@192363 fn&(String&, String&, String&) Msg
+sig NoteLoopCopyLent@191099 fn&(String&) Msg
+sig NoteMakeWhere@189680 fn&(String&, String&, String&) Msg
+sig NoteNullableDecl@135376 fn&() Msg
+sig NoteObligationOrigin@189548 fn&() Msg
+sig NoteOtherSignature@122119 fn&(String&) Msg
+sig NoteParamCopy@190217 fn&(String&, String&) Msg
+sig NotePrivateSpelling@122267 fn&(String&, String&) Msg
+sig NoteProtocolSpelling@122473 fn&(String&, String&, String&) Msg
+sig NoteReadOnlyCopy@105677 fn&(String&) Msg
+sig NoteReadOnlyCopyOf@105833 fn&(String&, String&, String&, String&) Msg
+sig NoteReadUnassigned@120113 fn&() Msg
+sig NoteRefillKept@189933 fn&(String&, String&) Msg
+sig NoteSliceOfTemporary@191948 fn&() Msg
+sig NoteStrBuildsHere@121254 fn&() Msg
+sig NoteStrKeepCopies@121389 fn&(String&, String&) Msg
+sig NoteTextCopyWhere@192151 fn&(String&) Msg
+sig NoteUnassignedArm@119853 fn&() Msg
+sig NoteUnassignedBranch@119594 fn&() Msg
+sig NoteUnassignedClause@119958 fn&() Msg
+sig NoteUnassignedDecl@119330 fn&() Msg
+sig NoteUnassignedLoop@119708 fn&() Msg
+sig NoteUnassignedNoElse@119437 fn&() Msg
+sig NoteVecGrewHere@120577 fn&() Msg
+sig NoteVecGrowsHere@120769 fn&(String&, String&, String&) Msg
+sig NoteVecGrowsInside@120991 fn&(String&) Msg
+sig NoteVecTaskHolds@121108 fn&(String&) Msg
+sig NoteViewRefusedBy@191386 fn&() Msg
+sig NoteZeroByReference@121760 fn&(String&) Msg
+sig NoteZeroReferenceHasOne@121917 fn&(String&, String&) Msg
+sig NotebookUsage@37268 fn&() Msg
+sig NulByte@41233 fn&() Msg
+sig NullTestOfNull@134596 fn&() Msg
+sig NullTestOfValue@134779 fn&(String&) Msg
+sig NullToArray@136146 fn&(String&, String&) Msg
+sig NullToNonNull@135213 fn&(String&, String&) Msg
+sig NullableMeetsNoTrait@111026 fn&(String&, String&, String&, String&) Msg
+sig NumberDoesNotFlow@102300 fn&(String&, String&, String&) Msg
+sig NumbersDoNotMeet@127520 fn&(String&, String&) Msg
+sig Offer@2761 fn&(mut Nearest&, String&)
+sig OfferBuilder@3300 fn&(mut Nearest&, String&)
+sig OperandNotBool@124289 fn&(String&, String&) Msg
+sig OperandNotInt@124420 fn&(String&, String&) Msg
+sig OperandNotNumber@124553 fn&(String&, String&) Msg
+sig OperandsDiffer@127703 fn&(String&, String&, String&) Msg
+sig OperatorCallFails@134116 fn&(String&) Msg
+sig OperatorResult@81343 fn&(String&) Msg
+sig OptionNeedsValue@31824 fn&(String&, String&) Msg
+sig OptionNotForMode@31650 fn&(String&, String&, String&) Msg
+sig OutputCannotWrite@34261 fn&() Msg
+sig OutputIsDir@33967 fn&(String&) Msg
+sig OutputNoDir@34109 fn&(String&, String&) Msg
+sig OverrideSignature@93569 fn&(String&) Msg
+sig OwnCannotOutlive@101217 fn&() Msg
+sig PackedByValueC@87378 fn&(String&) Msg
+sig PackedDestruct@86994 fn&() Msg
+sig PackedField@86533 fn&(String&, String&) Msg
+sig PackedLend@87132 fn&(String&) Msg
+sig PackedNotStruct@86366 fn&() Msg
+sig PackedParams@86848 fn&() Msg
+sig PartKept@166955 fn&(String&, String&) Msg
+sig PatFieldBothWays@132942 fn&(String&) Msg
+sig PatFieldTwice@132804 fn&(String&) Msg
+sig PatPositionAfterName@133096 fn&() Msg
+sig PatternArity@161668 fn&(String&, I64) Msg
+sig PatternType@137908 fn&(String&, String&) Msg
+sig PayloadArgs@55471 fn&(String&, I64, I64) Msg
+sig PayloadFieldUnnarrowed@55215 fn&(String&, String&, String&) Msg
+sig PayloadHoldsRef@54634 fn&(String&, String&, String&) Msg
+sig PayloadNoField@133285 fn&(String&, String&, String&) Msg
+sig PayloadOutlived@157789 fn&() Msg
+sig PayloadScopesDisagree@157248 fn&() Msg
+sig PayloadWordBare@54893 fn&(String&, String&) Msg
+sig PlaceMember@146969 fn&(String&) Msg
+sig PlainWordCalled@55077 fn&(String&) Msg
+sig PointNoDigit@42826 fn&() Msg
+sig PositionalAfterNamed@114024 fn&() Msg
+sig PowNone@133978 fn&(String&, String&) Msg
+sig PreludeConstRedeclared@99574 fn&(String&) Msg
+sig PreludeFuncRedeclared@99734 fn&(String&) Msg
+sig PrimCtorNotPrimitive@79771 fn&() Msg
+sig PrimCtorParam@79970 fn&(String&) Msg
+sig PromiseBorrowsBoth@179844 fn&() Msg
+sig PromiseBorrowsNothing@179448 fn&(String&) Msg
+sig PromiseBorrowsValue@179644 fn&(String&) Msg
+sig PromiseKeepsField@180878 fn&(String&, String&) Msg
+sig PromiseKeepsInValue@180512 fn&(String&) Msg
+sig PromiseKeepsPath@180689 fn&(String&, String&) Msg
+sig PromiseKeepsSelf@180319 fn&(String&) Msg
+sig PromiseKeepsValue@180090 fn&(String&) Msg
+sig PromiseMisplaced@178683 fn&(String&) Msg
+sig PromiseNoParam@178930 fn&(String&) Msg
+sig PromiseReturnsNoreturn@179265 fn&() Msg
+sig PromiseTwice@179132 fn&(String&) Msg
+sig ProtocolBothSpellings@93042 fn&(String&, String&, String&, String&) Msg
+sig ProtocolPrivate@93317 fn&(String&, String&, String&, String&) Msg
+sig QuickAlone@31973 fn&(String&) Msg
+sig RaiseNearError@56963 fn&(String&, String&) Msg
+sig RaiseNeedsQuestion@57214 fn&(String&) Msg
+sig RaiseNotCaught@54467 fn&(String&) Msg
+sig RaiseWholeType@58167 fn&(String&) Msg
+sig RaisedFieldUnnamed@55663 fn&() Msg
+sig RaisedFieldsDiffer@56741 fn&(String&, String&) Msg
+sig RaisedWordOwnName@58351 fn&(String&) Msg
+sig RangeNotInt@159703 fn&(String&) Msg
+sig RangeStep@159834 fn&() Msg
+sig RawAnonymous@148633 fn&() Msg
+sig RawNoFit@147974 fn&(String&, String&) Msg
+sig RawNotLiteral@147796 fn&(String&) Msg
+sig RawRepeated@148154 fn&(String&, String&, String&) Msg
+sig RawType@147606 fn&(String&) Msg
+sig RawWithoutType@148424 fn&() Msg
+sig ReadAfterScope@166019 fn&(String&) Msg
+sig ReadMaybeNull@135870 fn&(String&, String&, String&, String&) Msg
+sig ReadOnlyCopyArg@104482 fn&(String&, String&, String&, String&) Msg
+sig ReadOnlyCopyDecl@103219 fn&(String&, String&) Msg
+sig ReadOnlyCopyGlobal@103505 fn&(String&, String&) Msg
+sig ReadOnlyCopyLent@104765 fn&(String&) Msg
+sig ReadOnlyCopyReturned@103959 fn&(String&, String&) Msg
+sig ReadOnlyCopyStored@103734 fn&(String&, String&) Msg
+sig ReadOnlyCopyWrite@104951 fn&() Msg
+sig ReadOnlyFuncValue@105151 fn&(String&, String&, String&) Msg
+sig ReadOnlyRefKept@104218 fn&(String&, String&, String&) Msg
+sig ReadOnlyRefWrite@118359 fn&() Msg
+sig ReadOnlyToWritable@102810 fn&() Msg
+sig ReadUnassigned@184334 fn&(String&, String&, String&) Msg
+sig ReexportCycle@48186 fn&(String&) Msg
+sig RefTypevarNotAggregate@110824 fn&(String&, String&) Msg
+sig ReferenceNarrowed@110465 fn&() Msg
+sig ReferenceNarrowedLocal@110616 fn&(String&) Msg
+sig ReflArgCompr@26910 fn&() Msg
+sig ReflCaseOther@26609 fn&(String&, String&) Msg
+sig ReflCaseUnreachable@26754 fn&() Msg
+sig ReflDescNoMember@26051 fn&(String&, String&, String&) Msg
+sig ReflFilterUndecided@25124 fn&() Msg
+sig ReflFnCall@30394 fn&(String&, I64, I64) Msg
+sig ReflFnList@30210 fn&(String&) Msg
+sig ReflIndexNotConst@24808 fn&() Msg
+sig ReflIndexRange@24981 fn&(I64, I64) Msg
+sig ReflListValue@24552 fn&(String&) Msg
+sig ReflMatchSubject@30592 fn&() Msg
+sig ReflNoDefault@25591 fn&(String&, String&) Msg
+sig ReflNoKind@23853 fn&(String&) Msg
+sig ReflNoLayout@24225 fn&(String&, String&) Msg
+sig ReflNoLength@24062 fn&(String&) Msg
+sig ReflNoMember@23596 fn&(String&, String&) Msg
+sig ReflNoType@27171 fn&(String&, String&, String&) Msg
+sig ReflNotList@24409 fn&(String&, String&, String&) Msg
+sig ReflOfArgs@25795 fn&(I64) Msg
+sig ReflOfType@25901 fn&(String&, String&) Msg
+sig ReflTryList@25368 fn&() Msg
+sig ReflTypeNotValue@26236 fn&(String&) Msg
+sig ReraiseUndeclared@54012 fn&(String&) Msg
+sig ReraiseWordNotInSet@54231 fn&(String&, String&) Msg
+sig RestNoSlice@131529 fn&(String&) Msg
+sig RestNotHere@131179 fn&() Msg
+sig RestTwice@131387 fn&() Msg
+sig ReturnCount@169021 fn&(I64, String&, I64) Msg
+sig ReturnInCtor@169184 fn&() Msg
+sig ReturnInNoreturn@169459 fn&() Msg
+sig ReturnInTest@169332 fn&() Msg
+sig ReturnNeedsValue@170372 fn&(String&) Msg
+sig ReturnOwnStorage@164504 fn&() Msg
+sig ReturnTypeMismatch@107839 fn&(String&, String&) Msg
+sig ReturnValueInVoid@170262 fn&() Msg
+sig RunsAlone@32586 fn&() Msg
+sig RunsNotNumber@32425 fn&(String&) Msg
+sig ScopeArgCount@128441 fn&() Msg
+sig ScopeArgsDisagree@108476 fn&() Msg
+sig ScopeMayNotOutlive@101066 fn&() Msg
+sig ScopeObligationUnmet@110266 fn&() Msg
+sig Semicolon@40822 fn&() Msg
+sig SetSliceAxis@152418 fn&(String&, I64, I64) Msg
+sig SetValueLast@152174 fn&(String&) Msg
+sig SetatResult@82146 fn&() Msg
+sig SetatUndeclared@138755 fn&(String&) Msg
+sig ShadowsBuildConst@99433 fn&(String&) Msg
+sig ShadowsFunction@99255 fn&(String&) Msg
+sig ShadowsGlobal@99098 fn&(String&) Msg
+sig ShadowsType@99919 fn&(String&) Msg
+sig ShiftOutOfRange@126024 fn&(String&, I64, I64) Msg
+sig ShiftProven@126953 fn&(String&, String&, I64, I64) Msg
+sig ShiftUnadapted@100865 fn&() Msg
+sig SliceBoundNotInt@116734 fn&(String&) Msg
+sig SliceNeedsLen@138474 fn&(String&) Msg
+sig SliceNoPlace@152656 fn&() Msg
+sig SliceSplitValue@108887 fn&() Msg
+sig SpawnArgHoldsShort@174384 fn&() Msg
+sig SpawnArgTooShort@174213 fn&() Msg
+sig SpawnAtElement@172043 fn&() Msg
+sig SpawnCaptureTooShort@174579 fn&() Msg
+sig SpawnFallible@172389 fn&() Msg
+sig SpawnFuncTooShort@174764 fn&() Msg
+sig SpawnInDefer@171756 fn&() Msg
+sig SpawnLambdaParams@171610 fn&() Msg
+sig SpawnNotCall@172299 fn&() Msg
+sig SpawnOutsideJoin@171899 fn&() Msg
+sig SpawnResultAsRef@175272 fn&(String&, String&, String&, String&) Msg
+sig SpawnResultTooShort@175554 fn&() Msg
+sig SpawnResultType@175071 fn&(String&, String&) Msg
+sig SpawnResultVoid@174943 fn&() Msg
+sig SpawnResultsDisagree@175720 fn&() Msg
+sig SpawnTryInfallible@172550 fn&() Msg
+sig SpreadAlone@130816 fn&() Msg
+sig SpreadCount@108295 fn&() Msg
+sig SpreadNotHere@130626 fn&() Msg
+sig StepNotNumber@140573 fn&(String&) Msg
+sig StoreIntoUnknownScope@107002 fn&() Msg
+sig StoredRefOutlived@157048 fn&() Msg
+sig StrOfNothing@123832 fn&() Msg
+sig StrReceiverWritable@119140 fn&() Msg
+sig StrShape@92779 fn&() Msg
+sig StrStoresInReceiver@118854 fn&() Msg
+sig StringNewline@41560 fn&() Msg
+sig StructPatNoField@132143 fn&(String&, String&, String&) Msg
+sig StructPatPositional@132388 fn&(String&) Msg
+sig StructPatType@132627 fn&(String&, String&) Msg
+sig TagUnknownScope@107308 fn&(String&, String&) Msg
+sig TakesNoArgs@155272 fn&(String&) Msg
+sig TargetForeignMode@35665 fn&(String&, String&) Msg
+sig TargetMissing@34764 fn&() Msg
+sig TargetNativeForeign@35396 fn&(String&) Msg
+sig TargetNoBackend@35945 fn&(String&) Msg
+sig TargetNoClang@36224 fn&(String&) Msg
+sig TargetNoEmulator@36410 fn&(String&) Msg
+sig TargetUnknown@34892 fn&(String&) Msg
+sig TargetUnsupported@35198 fn&(String&) Msg
+sig TaskClauseError@173016 fn&() Msg
+sig TaskClauseLoopJump@172833 fn&(String&) Msg
+sig TaskClauseNeedsDefault@173202 fn&() Msg
+sig TaskClauseReturns@172670 fn&() Msg
+sig TaskDefaultInStatement@173405 fn&() Msg
+sig TestTargetElsewhere@115015 fn&(String&) Msg
+sig TestTargetTwice@115221 fn&(String&) Msg
+sig TestTargetUnknown@114573 fn&(String&) Msg
+sig TestTargetUnknownMeant@114753 fn&(String&, String&) Msg
+sig TextForLength@83787 fn&(String&) Msg
+sig TextMutRef@84748 fn&() Msg
+sig TextPlusChars@124897 fn&(String&, String&) Msg
+sig TextPlusValue@124689 fn&(String&, String&) Msg
+sig TextWrite@83558 fn&() Msg
+sig Tok@1246 fn&(String&) String
+sig TopAssertFalse@146216 fn&() Msg
+sig TopAssertFalseMessage@146347 fn&(String&) Msg
+sig TopAssertUndecidable@146635 fn&(String&) Msg
+sig TopSetCondReads@186186 fn&(String&) Msg
+sig TopSetHasValue@185301 fn&(String&) Msg
+sig TopSetMissing@185709 fn&(String&, String&) Msg
+sig TopSetNoElse@185950 fn&(String&, String&) Msg
+sig TopSetPlace@184884 fn&() Msg
+sig TopSetTarget@185094 fn&(String&) Msg
+sig TopSetTwice@185524 fn&(String&) Msg
+sig TrailingComma@44202 fn&(String&) Msg
+sig TraitErrsUnwritten@60301 fn&() Msg
+sig TraitExtendsItself@63560 fn&(String&) Msg
+sig TraitExtendsNotTrait@63352 fn&(String&) Msg
+sig TraitMemberMissing@63886 fn&(String&, String&, String&) Msg
+sig TraitMemberOpen@63707 fn&(String&) Msg
+sig TraitMethodBeyond@198187 fn&(String&, String&, String&, String&, String&) Msg
+sig TraitMethodBeyondField@197908 fn&(String&, String&, String&, String&) Msg
+sig TraitMethodEffect@197513 fn&(String&, String&, String&, String&, String&) Msg
+sig TraitMethodGeneric@73248 fn&(String&) Msg
+sig TraitNotAType@68217 fn&(String&) Msg
+sig TryCatchOnSlice@183417 fn&() Msg
+sig TryErrorNotDeclared@142220 fn&(String&) Msg
+sig TryNeedsQuestion@57465 fn&(String&) Msg
+sig TryNothingFails@151164 fn&(String&) Msg
+sig TryNowhereToGo@141809 fn&() Msg
+sig TryOnCaught@53832 fn&(String&) Msg
+sig TryParens@65312 fn&() Msg
+sig TupleNotAValue@125155 fn&() Msg
+sig TwoPoints@42935 fn&() Msg
+sig TypeArgCount@65146 fn&(String&, I64, I64) Msg
+sig TypeArgsNotInferable@111297 fn&(String&) Msg
+sig TypeArgsOnNonGeneric@65945 fn&(String&) Msg
+sig TypeArgsSpaced@181112 fn&(String&) Msg
+sig TypeDefinedThroughItself@80133 fn&(String&) Msg
+sig TypeHasNoConstructor@100040 fn&(String&) Msg
+sig TypeHoldsItself@64547 fn&(String&) Msg
+sig TypeIsPrivate@60468 fn&(String&) Msg
+sig TypeMatchGuard@162536 fn&() Msg
+sig TypeMatchUncovered@162873 fn&(String&) Msg
+sig TypeMatchValueCase@66386 fn&(String&) Msg
+sig TypeMismatch@102169 fn&(String&, String&) Msg
+sig TypeNameInUse@60593 fn&(String&) Msg
+sig TypeNotAValue@50332 fn&(String&) Msg
+sig TypeNotInferable@106119 fn&() Msg
+sig TypeVarAsValue@66097 fn&(String&) Msg
+sig TypeVarNamesType@73769 fn&(String&) Msg
+sig TypeVarNotErrorSet@74187 fn&(String&) Msg
+sig TypeVarNotInferable@73944 fn&(String&, String&) Msg
+sig TypedHole@49975 fn&(String&, String&) Msg
+sig TypedHoleUntyped@50191 fn&() Msg
+sig UnboundedInstantiation@64384 fn&() Msg
+sig UnclosedChar@41696 fn&() Msg
+sig UnclosedComment@41338 fn&() Msg
+sig UnclosedString@41458 fn&() Msg
+sig UnderscoreDeclared@98951 fn&() Msg
+sig UnhandledFallibleCall@129951 fn&() Msg
+sig UniqueAfter@87559 fn&(String&, String&) Msg
+sig UniqueAlias@88127 fn&(String&, String&, String&) Msg
+sig UniqueByValue@85789 fn&(String&, String&) Msg
+sig UniqueCopy@85583 fn&(String&) Msg
+sig UniqueFill@86040 fn&(String&) Msg
+sig UniqueImmut@85155 fn&() Msg
+sig UniqueImmutPart@85321 fn&(String&, String&) Msg
+sig UniqueKind@89548 fn&(String&) Msg
+sig UniqueLentHere@87827 fn&(String&, String&) Msg
+sig UniqueNeedsCopy@89710 fn&(String&, String&) Msg
+sig UnknownBuildName@61791 fn&(String&, String&) Msg
+sig UnknownChar@40535 fn&(Char) Msg
+sig UnknownConstraint@49222 fn&(String&) Msg
+sig UnknownErrorType@51143 fn&(String&, String&) Msg
+sig UnknownFlag@31450 fn&(String&, String&, String&) Msg
+sig UnknownFunction@50568 fn&(String&) Msg
+sig UnknownFunctionMeant@50962 fn&(String&, String&) Msg
+sig UnknownFunctionMethod@50688 fn&(String&, String&) Msg
+sig UnknownImport@47707 fn&(String&, String&) Msg
+sig UnknownImportStd@47838 fn&(String&, String&) Msg
+sig UnknownMethod@142407 fn&(String&, String&, String&) Msg
+sig UnknownName@49714 fn&(String&) Msg
+sig UnknownNameMeant@49814 fn&(String&, String&) Msg
+sig UnknownNumberType@49511 fn&(String&, String&) Msg
+sig UnknownType@48647 fn&(String&) Msg
+sig UnknownTypeMeant@48746 fn&(String&, String&) Msg
+sig UnknownTypeStd@48906 fn&(String&, String&, String&) Msg
+sig UnknownTypeVar@162422 fn&(String&) Msg
+sig Usage@30788 fn&() Msg
+sig VacateNotPlace@115771 fn&() Msg
+sig ValueAfterEq@44644 fn&(String&, String&, String&, String&) Msg
+sig ValueBeyondType@176963 fn&(String&, String&, String&, String&) Msg
+sig ValueCaseBlock@161858 fn&() Msg
+sig ValueRefsOutlived@158843 fn&() Msg
+sig VarArgType@77570 fn&(String&) Msg
+sig VarArgWide@77774 fn&(String&) Msg
+sig VarIsPrivate@100752 fn&(String&) Msg
+sig VarListCount@44344 fn&(I64, I64) Msg
+sig VariadicArgCount@131007 fn&(I64, String&, I64) Msg
+sig VariadicDefault@130456 fn&() Msg
+sig VariadicHere@130323 fn&(String&) Msg
+sig VariadicNotLast@130105 fn&() Msg
+sig VecGrowsUnderTask@188715 fn&(String&, String&) Msg
+sig VecHiddenViewStale@188278 fn&(String&, String&) Msg
+sig VecViewGivenGrowing@188472 fn&(String&, String&, String&, String&) Msg
+sig VecViewStale@188069 fn&(String&, String&, String&) Msg
+sig VersionsDiffer@166438 fn&(String&) Msg
+sig ViewKept@164872 fn&(String&) Msg
+sig ViewKeptCopy@165584 fn&(String&) Msg
+sig ViewReturned@165197 fn&(String&) Msg
+sig WeakFresh@91189 fn&(String&) Msg
+sig WeakNotNullable@90298 fn&(String&) Msg
+sig WeakPlace@90698 fn&(String&) Msg
+sig WeakTarget@90987 fn&(String&, String&) Msg
+sig WeakUnheld@91412 fn&(String&) Msg
+sig WholeCaseNamed@133456 fn&(String&, String&) Msg
+sig WildcardNotAlone@163783 fn&() Msg
+sig WriteIntoCallValue@118512 fn&() Msg
+sig WriteThroughAtBuilds@139132 fn&() Msg
+sig WriteThroughAtCall@139722 fn&() Msg
+sig WriteThroughAtNoSetat@138896 fn&(String&) Msg
+sig WriteThroughAtOperator@140051 fn&(String&, String&) Msg
+sig YieldInDefer@167623 fn&() Msg
+sig YieldInJoin@167761 fn&() Msg
+sig YieldInLambda@167483 fn&() Msg
+sig YieldOutside@167332 fn&() Msg
+sig YieldOwnStorage@168328 fn&() Msg
+sig ZeroValueShared@183938 fn&(String&) Msg
+sig weakFix@90546 fn&(String&) String
+end
+sum 716a72fc22ca93c4670b1c72524d1bc2c95c4e60b9d4063ee4590d9987eca2a4

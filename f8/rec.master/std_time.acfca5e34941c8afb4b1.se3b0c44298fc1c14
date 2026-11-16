@@ -1,0 +1,520 @@
+olang scope record
+run std/time 695-830 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read <time.h> 0-0 ctor <time.h>:timespec	cc3bcf616d564545a9272d6ddaa4200a
+hits 0
+body 1 2 2 0 | U U | F F | b b00 b00 b00 | 0:,B0 | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I32
+out f262f22130389825fc00fbe641d3e9e0
+run std/time 1002-1147 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 695-830 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0: | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0I32
+out d0df78cb20fbf03366d69b0a84a122ba
+run std/time 1212-1252 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out 422a5d2d7badb3bb33545203a2847876
+run std/time 1429-1574 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 695-830 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0: | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0I32
+out 06a8b69803df52c6b6b90e8c2167110d
+run std/time 5003-5433 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read <time.h> 0-0 ctor <time.h>:timespec	cc3bcf616d564545a9272d6ddaa4200a
+hits 0
+body 1 3 3 0 | U U U | F F F | b b000 b000 b000 | 0:,B0 1:,B0 | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/time:Duration
+out d036a5f987c448530055eec7c88feca8
+run std/time 2655-2722 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out b95b0090249a87f81d8efa1840e09eea
+run std/time 7110-7205 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c294f060a772e9be52e3edd2e2a15b5a
+run std/time 7394-7623 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 2 0 | | F F | b b00 b b00 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64	o0mut I64&	o0mut I64&	o0mut I64&
+out ac182d7f7b28069b56d26f44abcbdbd7
+run std/time 2533-2589 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out c0eebacbe06d989b8e685b765fef35e0
+run std/time 2590-2654 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out a346ba42701d0e41cd6b13555d9f5bfd
+run std/time 2723-2794 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out 13ca78e2b7232bb75ed046051e22413a
+run std/time 2795-2867 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out ddaf117429bcc362c2348af545dcb0f2
+run std/time 2868-2940 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out 947b4e487784ee4be1fd4d0fa17724d9
+run std/time 3031-3076 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/time:Duration
+out c52e5136b2424387f91cb123cc290813
+run std/time 3077-3130 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/time:Duration
+out 2b4cf5a941d3ecfd58070dcb0e38e19a
+run std/time 3131-3187 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/time:Duration
+out 35517c94f7d1ddea284caf7973517110
+run std/time 3188-3246 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/time:Duration
+out 8972adcde15ea7fcf85822d942af76d2
+run std/time 3309-3375 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 1 1 0 | U | F | b b0 b0 b0 | 0: | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out 1222bca5c8710621de2a925ed50203e3
+run std/time 4344-4669 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	U64
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 5 6 1 | V0 B0 U U V0 | F F F F F F | b1 b000000 b00000 b000000 | 1:,B0 2:,B0 3:,B0,B0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,std/time:4451:4457 t i t i i c0/i/i f0010
+hid fs1	o0U64	o0U64
+out 4b4bc8f5a867235ec2cfd39a1ac4ed96
+run std/time 3628-4245 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 4344-4669 fn	9799e2657a2386f5f84ae2fd62978005
+hits 0
+body 1 9 7 1 | V0 U V0 U V0 U V0 V0 V0 | F F F F F F F | b1 b0000000 b000000000 b0000000 | 1:,B3 3:,B4 5:,B0 | | ||
+sum r b1 b1 b0 b0 b0 b b b a,std/time:3843:3860 t i t i i c0/i/i f0010
+hid fs1	o0std/time:Duration
+out 4decdc7152db8044ee927fa102d0bd96
+run std/time 0-0 ctor std/time:Timer	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+mark std/time 0-0 ctor std/time:Timer	0
+marks 14dcb2d6ff0bc4135c71391886c3d491
+read -ctor	I64
+hits 0
+body 1 0 2 1 | | F F | b0 b00 b b00 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/time:0:0 t i,-1 t i i c0/i/i f0010
+hid fs1	o0I64
+out 68b0ca641c361971de18d1e638be67ef
+run std/time 7974-8039 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 0-0 ctor std/time:Timer	367cf4952e27aa02ccffdfdd431fda2a
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 2 1 0 | U U | F | b b0 b00 b0 | 0: 1:,B0 | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0std/time:Duration
+out 997dce53c0908ce88f671f586c6e9544
+run std/time 8111-8222 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | 0: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/time:8111:8222 t i t i i c0/i/i f0010
+hid fs1	o0mut std/time:Timer&
+out f8249a0b45bf88874c37a524b1c117b2
+run std/time 8260-8299 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/time:8260:8299 t i t i i c0/i/i f0010
+hid fs1	o0std/time:Timer&
+out ce15365e8142be4d18b89da7ae44a970
+run std/time 11157-11468 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 9 0 | | F F F F F F F F F | b b000000000 b b000000000 | | | ||
+sum r b b b000 b000 b000 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0I64
+out 98d66644e6b3a263da08902b52d5cfa3
+run std/time 11528-11606 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 1 0 | | F | b b0 b b0 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out a5b1cbf99aabfca16089fba8229a9268
+run std/time 11607-11750 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 11528-11606 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 2 0 | U | F F | b b00 b0 b00 | 0: | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out 4a7f851882a2c95ab19e79016aa87ff1
+run std/time 0-0 ctor std/time:Date	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+mark std/time 0-0 ctor std/time:Date	0,1,2,3,4,5,6,7
+marks b44f369270a99c70a9674a8f1ad87a95
+read -ctor	I64
+hits 0
+body 1 0 16 1 | | F F F F F F F F F F F F F F F F | b0 b0000000000000000 b b0000000000000000 | | | ||
+sum r b0 b0 b00000000 b00000000 b00000000 b b b a,std/time:0:0 t i,-1,-1,-1,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64	o0I64
+out 6fb7335f75f5a527ab7319c16f55df56
+run std/time 11943-12686 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/time 0-0 ctor std/time:Date	05baddb1365edea951e5cf3aa88149e9
+hits 0
+body 1 1 15 0 | U | F F F F F F F F F F F F F F F | b b000000000000000 b0 b000000000000000 | 0:,B0 | | ||
+sum r b b b00 b00 b00 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out 4b4a4d77e55b14125f9cd68708636e05
+run std/time 12869-13068 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 11157-11468 fn	fa556e213fb660b91c7ac8f481c4140c
+hits 0
+body 1 1 3 1 | U | F F F | b0 b000 b0 b000 | 0: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/time:12869:13068 t i t i i c0/i/i f0010
+hid fs1	o0std/time:Date&
+out 27bd6aeab0cf788dd0dc66a34d0fd36f
+run std/time 13116-13269 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 11157-11468 fn	fa556e213fb660b91c7ac8f481c4140c
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | 0: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/time:13116:13269 t i t i i c0/i/i f0010
+hid fs1	o0std/time:Date&
+out 9ffb3925446c5ea0f0bea87a8d35b29f
+run std/time 13303-13412 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 11157-11468 fn	fa556e213fb660b91c7ac8f481c4140c
+hits 0
+body 1 2 1 1 | U U | F | b0 b0 b00 b0 | 0: 1: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/time:13303:13412 t i t i i c0/i/i f0010
+hid fs1	o0std/time:Date&
+out 0c8267862016c9f086ec08f8cbc6c406
+run std/time 13414-13470 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 13453-13545 fn	2d6e1e01169909c479afc3dc95979b4e
+hits 0
+body 1 1 1 1 | U | F | b1 b0 b0 b0 | 0:,V0 | | ||
+sum r b1 b1 b0 b0 b0 b b b a,std/prelude/text:13527:13529 t i t i i c0/i/i f0010
+hid fs1	o0I64
+out 7ee0771b18fe2b72e0f24e036708fa56
+run std/time 13846-14546 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 13453-13545 fn	2d6e1e01169909c479afc3dc95979b4e
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+read std/time 13414-13470 fn	bd2e54b50428bdd876c9692681f2c68d
+hits 0
+body 1 23 5 2 | B0 U B0 U U U U U U B0 B0 U U U U U U U U B4 B4 U U | F F F F F | b01 b00000 b00000000000000000000000 b00000 | 0:,B0 1:,B0 3:,B0,B0 4:,B0 5:,B0 6:,B0 7:,B0 8:,B0 11:,B0,B0 12:,B0 13:,B1 14:,B0,B1 15:,B0 16:,B0 17:,B4 18:,B4 21:,B0,B4 22:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/time:13846:14546,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/time:Date&
+out 05faef23331f447f69dc4851e266fa98
+run std/time 14652-14733 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 11943-12686 fn	753360899e792dedf06ee057d76e9c16
+read std/time 13846-14546 fn	b4b58129618de248dd60d40433dd31aa
+hits 0
+body 1 3 2 1 | U B0 U | F F | b1 b00 b000 b00 | 0: 2:,B0,V0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out 138969e73ed1d86dd5631be8ec23f121
+run std/time 14822-15109 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 11 1 | U | F F F F F F F F F F F | b0 b00000000000 b0 b00000000000 | 0: | | ||
+sum r b0 b0 b000 b000 b000 b b b a,std/time:14822:15109 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64	o0I64
+out 39535337e31016042d91a1b812a04079
+run std/time 15111-15228 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 3 1 | | F F F | b0 b000 b b000 | | | ||
+sum r b0 b0 b000 b000 b000 b b b a,std/time:15111:15228 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0I64	o0std/prelude/text:Char
+out 284b5c60d47be75da837cf6fa27a1571
+run std/time 15580-17081 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/time 0-0 ctor std/time:Date	05baddb1365edea951e5cf3aa88149e9
+read std/time 11607-11750 fn	753360899e792dedf06ee057d76e9c16
+read std/time 14822-15109 fn	4ca2423b8a73c9fa8fd3d8104b360b4c
+read std/time 15111-15228 fn	476c97184c0ef9a68dbcba7a2bf61858
+hits 0
+body 1 16 14 1 | U U U U U U U U U U U U U U U U | F F F F F F F F F F F F F F | b0 b00000000000000 b0000000000000000 b00000000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 5:,V0 6:,V0 7:,V0 8:,V0 9:,V0 10: 11:,V0 12:,V0 13:,V0 14: 15:,B0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/time:15580:17081 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 217b3536e5e41ba9fe6471f8a2d2a1a4
+run std/time 18928-19025 fn	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	struct(I32, std/time:Error$payload)
+read std/time 15580-17081 fn	2a0e4cfdf9f2da89b2229ff9724d32fb
+hits 0
+body 1 3 2 2 | U B1 V1 | F F | b01 b00 b000 b00 | 0:,V0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,std/time:18928:19025,std/time:19003:19005 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 1f34eaeedcf1205ebb2160b712f65b6d
+run std/time global clockRealtime	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 6a58ba5c4cfc61d5003d9d1c407f9909
+run std/time global clockMonotonic	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f1139b5961faf048e186ef28fe128018
+run std/time global VirtualStart	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d8697dd37c11bba03a28ecbdf12fe951
+run std/time global virtualDepth	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9bc971fae9c3c17ecd6d12fe4715ed8c
+run std/time global virtualNs	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dd5f76ccc1c43920596f4e6526eb37f3
+run std/time global EpochText	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 14652-14733 fn	8bfb474905285c2fb956460cfaa491d5
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0:,P | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 05c63b5274c5986282355fb4bc900538
+run std/time global Billion	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 14652-14733 fn	8bfb474905285c2fb956460cfaa491d5
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0:,P | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3128188f5665fe5e5ef0fd9b724ed94d
+run std/time global WhyBaked	
+ctx r1 g1 p0
+keys std/time=acfca5e34941c8afb4b186cb9013bf4e5e1aa992c75c211270984c2747aa2f7d
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/time 18928-19025 fn	9bc9d4c50643928b44ef7922f8cb3837
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0:,P,P | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f26a8d9b0cd1f0dbf974ce0e78ce2f7c
+end
+sum 19220-18100425418174256693

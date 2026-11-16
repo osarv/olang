@@ -1,0 +1,15 @@
+handle SIGSEGV stop nopass
+break __olang_slot_release
+commands
+silent
+bt 4
+cont
+end
+break __olang_gen_free
+commands
+silent
+bt 4
+cont
+end
+run
+bt 8

@@ -1,0 +1,27 @@
+olang front record
+body fn 2385-2498	known p
+body fn 2500-2599	known p
+body fn 2649-2884	known p
+body fn 2886-3032	known p
+body fn 3107-3539	known p
+body fn 3600-3811	known p,0
+body fn 3813-3923	known p
+body fn 3968-4141	known p
+body fn 4207-4466	known p,0
+body fn 4540-5671	known p grows|0|-|-|..work.buf|9|0|compiler/notebook|4679|4683|-1 grows|0|-|-|..snap.ids|9|0|compiler/notebook|4679|4683|-1 grows|0|-|-|..snap.Starts|12|0|compiler/notebook|4679|4683|-1 grows|0|-|-|..snap.Words|11|0|compiler/notebook|4679|4683|-1 grows|0|-|-|..snap.RegTy|11|0|compiler/notebook|4679|4683|-1 grows|0|-|-|..snap.RegAt|11|0|compiler/notebook|4679|4683|-1 grows|0|-|-|..snap.RegOff|12|0|compiler/notebook|4679|4683|-1
+body fn 5746-6120	known p
+body fn 840-2383	known p
+sig Run@840 fn&(mut Config&, String&, String&, Bool) I32
+sig empty@3813 fn&() Object
+sig execute@4540 fn&(mut Session&, String&, I64) Json
+sig fail@2385 fn&(String&) I32
+sig failedWith@3968 fn&(Json&) Bool
+sig joined@2886 fn&(Json&) String ? Error
+sig kernelspec@4207 fn&(Object&) Object
+sig set@3107 fn&(Object&, String&, Json&) Object
+sig source@2649 fn&(Json&) String
+sig str@2500 fn&(Json&, String&) String&
+sig stream@5746 fn&(String&, String&) String
+sig with@3600 fn&(Json&, String&, Json&, Json&) Json
+end
+sum 5f49ff467442b521aea5bf63e172e4e9925e1e983e16a6cb6ffe3f52c8df332f

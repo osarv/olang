@@ -1,0 +1,814 @@
+olang scope record
+run compiler/jupyter 4586-4698 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/io 3193-3244 fn <std/prelude/text:String;>	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 1 1 | B0 U | F | b0 b0 b00 b0 | 1: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/jupyter:4586:4698 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out d7c4fcce78a687cbaedd9edfc8740ee3
+run compiler/jupyter 15814-15915 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/session 21858-22484 fn	4aba6827aeee0a69a1d2f28821f210f8
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 3 2 2 | B0 U U | F F | b01 b00 b000 b00 | 0:,B0 1:,B0,V0 2:,B0,V1 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/jupyter:15814:15915,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out 2874c7817a7f1c979dd752eb79c64784
+run compiler/jupyter 17786-18742 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	struct(I32, std/os:Error$payload)
+read compiler/jupyter 15814-15915 fn	941ba4ec2fad30a7ae8a44409d75ba16
+read compiler/jupyter 4586-4698 fn	f1c7b8e9c94b1ee443b2a44f02763668
+read std/io 2921-2969 fn <std/prelude/text:String;>	f7bb736ff25cfebe533b51ea3eff8305
+read std/os 18300-18501 fn	c0b86f9d7e2776829d961f3e388867f7
+read std/os 20635-21096 fn	ad919ca41158de6566af13197e4a6f4d
+read std/os 3756-3966 fn	05bb335b993dde79a14807720d8a39ef
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 25 8 2 | U U U B0 B0 B0 U B0 B2 B2 B2 U B0 U B0 B0 B0 U B0 B3 B3 B3 U B0 U | F F F F F F F F | b00 b00000000 b0000000000000000000000000 b00000000 | 0:,B0,B0 1:,B0,B0 2:,B1,B1 6:,B0 11:,B2 13:,V0,B0 17:,B0,B0 22:,B3 24: | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/jupyter:17786:18742,compiler/jupyter:17786:18742 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0compiler/build:Config&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	fd1
+out 8b9f4c814289314a68ddbb33f3d0b7d7
+run compiler/jupyter 2779-2891 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/hex 310-535 fn	2191f92177036975b0816e3cbb6d999b
+read std/sha256 4689-4780 fn	324685c3253c31e55ef810248e260970
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+read std/time 1429-1574 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 9 0 1 | U U U B0 B0 U B0 U B0 | | b0 b b000000000 b | 0: 1: 5:,B0,B0 7:,B0,B0 | | ||
+sum r b0 b0 b b b b b b a,compiler/jupyter:2779:2891 t i t i i c0/i/i f0010
+hid fs1
+out dd0c3109783dab659d14ce908968c04a
+run compiler/jupyter 0-0 ctor compiler/jupyter:kernel	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+mark compiler/jupyter 0-0 ctor compiler/jupyter:kernel	0,1,2,3,4,5,6,7
+marks 03556d95c096b43bc6efd1d00d73e500
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Bool
+read -ctor	I64
+read compiler/jupyter 2779-2891 fn	6adeb1a7fcded59268aef3f56ae6472c
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I64>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<compiler/jupyter:pending>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/zmtp:Socket>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 4 9 1 | U U U U | F V0 V0 F F F F F F | b1 b000000000 b0000 b000000000 | 0:,V0 1:,V0 2:,V0 3:,V0 | | ||
+sum r b1 b1 b0 b0 b0 b b b a,compiler/jupyter:2246:2249 t i,-1,-1,-1,-1,0,1,-1,2 t,U,U,U i i c0/i/i f0010
+hid fs1;1280:U;1280:U;1280:U	o0std/prelude/text:String
+out b55e321e8cf2872c34eda17d9242a528
+run compiler/jupyter 0-0 ctor compiler/jupyter:pending	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+mark compiler/jupyter 0-0 ctor compiler/jupyter:pending	0,1
+marks 03db2a8ea1441a3eead4468caa87bf4d
+read -ctor	Array<std/prelude/text:String>
+read -ctor	I64
+hits 0
+body 1 0 4 2 | | F F F V1 | b01 b0000 b b0000 | | | ||
+sum r;V0,V1,0,2710,2716,1,0,0 b01 b01 b00 b00 b00 b b b a,compiler/jupyter:0:0,compiler/jupyter:2710:2716 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0Array<std/prelude/text:String>
+out 13ad7690304d217c06bf2cabdfa3b4f8
+run compiler/jupyter 9356-9560 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/hex 310-535 fn	2191f92177036975b0816e3cbb6d999b
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/sha256 5067-5667 fn	8633c3c88a492826710585bc7bc72cf9
+hits 0
+body 1 5 7 6 | U B0 U B0 U | F F F F F F F | b000001 b0000000 b00000 b0000000 | 0:,V0,B0 2:,V0,B0,B0 4:,B0,V5 | | ||
+sum r b000001 b000001 b10000 b00000 b00000 b b b a,compiler/jupyter:9356:9560,compiler/jupyter:9356:9560,compiler/jupyter:9356:9560,compiler/jupyter:9356:9560,compiler/jupyter:9356:9560,std/hex:357:384 t i t i i c0/i/i f0010
+hid fs1	o0compiler/jupyter:kernel&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out f77a3275248108eb975e6ba28d39e5ac
+run compiler/jupyter 0-0 ctor compiler/jupyter:request	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+mark compiler/jupyter 0-0 ctor compiler/jupyter:request	0,1,2
+marks 60fc3750b68d781dd432e9d35d91db00
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Array<std/prelude/text:String>
+hits 0
+body 1 0 6 2 | | F F F V1 V1 V1 | b01 b000000 b b000000 | | | ||
+sum r;V0,V1,0,2179,2182,1,0,0 b01 b01 b000 b000 b000 b b b a,compiler/jupyter:0:0,compiler/jupyter:2179:2182 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0Array<std/prelude/text:String>	o0std/prelude/text:String	o0std/prelude/text:String
+out 4f6760e4792c93e940a04c2821c13bfd
+run compiler/jupyter 8843-9283 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/jupyter 0-0 ctor compiler/jupyter:request	33ad10f9d9cd50b7dbb0171d3af30a7c
+read compiler/jupyter 9356-9560 fn	b7916fd9877c0ba05d03c2cb6a2deee0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 10 15 3 | U U B0 U V2 V2 V2 B0 B0 U | F F F F F F F F F F F F F F V2 | b001 b000000000000001 b0000000000 b000000000000000 | 0:,B2,P 1:,V0,V1,V1,V1,V1,B0 3:,B0,V1 9:,V2,V2 | | ||
+sum r b001 b001 b10 b00 b00 b b b a,compiler/jupyter:8843:9283,compiler/jupyter:8843:9283,compiler/jupyter:9183:9225 t,V2,U,U i t i i c0/i/i f0010
+hid fs1;163328:V2;163329:U;163330:U	o0compiler/jupyter:kernel&	o0Array<std/prelude/text:String>&	o0std/prelude/text:String&
+out 29e469f0b6cd807e09e82e19637b0e53
+run compiler/jupyter 15689-15788 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:Char>
+read std/json 4440-5542 fn <std/prelude/text:String&;>	29f8fa8d7f9b78812e65efb08442916c
+read std/json 7544-7683 fn	656b96a082399099a7567556adf274a3
+hits 0
+body 1 2 2 3 | U U | F F | b000 b00 b00 b00 | 0:,V0,V1,V0 1:,V0,V2 | | ||
+sum r;V0,V2,0,15733,15786,0,0,0 b000 b000 b00 b00 b00 b b b a,compiler/jupyter:15689:15788,compiler/jupyter:15689:15788,compiler/jupyter:15689:15788 t i t i i c0/i/i f0010
+hid fs1	o0std/json:Json&	o0std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&
+out c9a62559d3d129a235f3c28477ad8d56
+run compiler/jupyter 6325-6458 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/jupyter 15689-15788 fn	e2a24db46210e51396c90b7afd642db5
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+hits 0
+body 1 4 1 2 | U V0 U V1 | F | b11 b0 b0000 b0 | 0:,V0,V0 2:,V0,B0,B0 | | ||
+sum r b11 b11 b1 b0 b0 b b b a,std/json:14229:14241,compiler/jupyter:6368:6456 t i t i i c0/i/i f0010
+hid fs1	o0compiler/jupyter:request&	o0std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&
+out 91ebcddd2b9d864225105e22f1eceae3
+run compiler/jupyter 5577-6323 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/jupyter 0-0 ctor compiler/jupyter:pending	dd12504d3a00ec55b448c79cad23398f
+read compiler/jupyter 6325-6458 fn	063491337bec73a97199da3360a5cf9b
+read compiler/jupyter 8843-9283 fn	a344af0800fdac6933a4ea2a937fae02
+read std/net 18266-18603 fn	357dc6e4fd665fb2be31423c3303ff96
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 4660-4775 fn <compiler/jupyter:pending;>	652312eadcb9c7b54bf0276e2dba4089
+read std/prelude/vec 5133-5172 fn <compiler/jupyter:pending;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/zmtp:Socket;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 6887-6936 fn <compiler/jupyter:pending;>	8afbb2912a7fe97c6d9e2c47d9bedc45
+read std/prelude/vec 6887-6936 fn <std/zmtp:Socket;>	8afbb2912a7fe97c6d9e2c47d9bedc45
+read std/prelude/vec 7015-7075 fn <std/zmtp:Socket;>	18949962f2ca61dd4b9c6263cb0d697e
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/zmtp 2089-2135 fn	dedb713aeaca11422bf4ec97eae9356c
+read std/zmtp 3700-3895 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read std/zmtp 4074-4651 fn	286323306c28e07bdb55d6c7f40cc5df
+hits 0
+body 1 24 17 1 | U U U U U B2 B2 U B2 U U U U B5 B5 U U U U B10 B10 U U U | F F F F F F F F F F F F F F F F F | b1 b00000000000000000 b000000000000000000000000 b00000000000000000 | 0:,V0 1:,V0 2:,V0 3:,V0,V0 4:,V0 7:,B2,B2 9:,V0,V0 10:,V0 11:,V0 12:,V0,V0 13:,V0,B5 15:,B5,B5 16:,V0,B5 17:,V0 18:,V0,V0 20:,V0,V0,B10 21:,B10,B10 22:,B10,B10 23:,B10,B10 | | ||
+sum r b1 b1 b1 b1 b1 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1;218880:U;218881:B5	o0mut compiler/jupyter:kernel&	o0I64	o0std/zmtp:Socket&	o1std/prelude/vec:Vec<std/zmtp:Socket>&	o1I64	o0mut std/zmtp:Socket&	o1mut std/prelude/vec:Vec<std/zmtp:Socket>&	o1I64	o0mut std/zmtp:Socket&	o1mut std/prelude/vec:Vec<std/zmtp:Socket>&	o1I64	o0Array<std/prelude/text:String>	o1mut std/zmtp:Socket&	o0compiler/jupyter:pending&	o1std/prelude/vec:Vec<compiler/jupyter:pending>&	o1I64	o0compiler/jupyter:request	o1mut compiler/jupyter:kernel&	o1Array<std/prelude/text:String>&
+out dd4135fb46d5304d262505ab69cd3800
+run compiler/jupyter 3955-3991 lambda in compiler/jupyter 3030-4584 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/jupyter 5577-6323 fn	57bdf077e905f022ca0072b8456aba84
+hits 0
+body 1 1 1 1 | U | F | b1 b0 b0 b0 | 0:,V0 | | ||
+sum r b1 b1 b b b b1 b1 b1 a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/jupyter:kernel&
+out b86a2e9cec4b44114999d9afd79ee5a3
+run compiler/jupyter 4747-4914 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/vec 4660-4775 fn <I64;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/zmtp:Socket;>	037faee32f508921f991db6223f2f61a
+read std/zmtp 1651-1799 fn	bcffbcb3a3a9479aca96e5df26e2ee14
+hits 0
+body 1 4 3 2 | U U U U | F F F | b10 b000 b0000 b000 | 0:,V1,P,V0 2:,V0,V0 3:,V0 | | ||
+sum r b10 b10 b100 b100 b100 b b b a,std/zmtp:1733:1762,compiler/jupyter:4747:4914 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/jupyter:kernel&	o0mut std/net:Listener&	o0I64	o0std/prelude/text:String&	o0std/zmtp:Socket	o1mut std/net:Listener&	o1std/prelude/text:String&
+out d1b85c68c17049e58595a24985791b0b
+run compiler/jupyter 17168-17556 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 9 0 | | F F F F F F F F F | b b000000000 b b000000000 | | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1	o0I64
+out 7c42db68a4113d2d41efd200b599e900
+run compiler/jupyter 17025-17076 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 13453-13545 fn	2d6e1e01169909c479afc3dc95979b4e
+hits 0
+body 1 2 1 1 | U V0 | F | b1 b0 b00 b0 | 0:,B0 | | ||
+sum r b1 b1 b0 b0 b0 b b b a,compiler/jupyter:17055:17074 t i t i i c0/i/i f0010
+hid fs1	o0I64
+out 0d8090658062e77c1e7e0dc0abaf43f8
+run compiler/jupyter 16699-17023 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/jupyter 17025-17076 fn	f8991020f8e5b96e1557ff3a6a5a6833
+read compiler/jupyter 17168-17556 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 12114-12336 fn	d69b4f8828194d2881e598b51dffe86b
+read std/time 1429-1574 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 10 8 1 | U U B0 U U U U U U V0 | F F F F F F F F | b1 b00000000 b0000000000 b00000000 | 0: 1: 3:,B0 4:,B0 5:,B0 6:,B0 7:,B0 8:,B0,B0 | | ||
+sum r b1 b1 b b b b b b a,compiler/jupyter:16878:17021 t i t i i c0/i/i f0010
+hid fs1
+out 8f0a6df6f37db03204ffb3da85637225
+run compiler/jupyter 9601-9944 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/jupyter 16699-17023 fn	e7ecb56025d0cf857dc8d7480edc2e37
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 9 3 3 | B0 B0 B0 U U B0 B0 U U | F F F | b001 b000 b000000000 b000 | 0:,B0 3:,B0,B0 4:,B0 7:,B0,B0 8:,B0,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,compiler/jupyter:9601:9944,compiler/jupyter:9601:9944,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/jupyter:kernel&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out b08c2bb84c2b59434e11dbf28c385dc3
+run compiler/jupyter 10050-10413 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:String&>
+read -ctor	I64
+read compiler/jupyter 9356-9560 fn	b7916fd9877c0ba05d03c2cb6a2deee0
+read compiler/jupyter 9601-9944 fn	b6a2a3f4c81aa18d6f5e3ea52be2f743
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 12 11 6 | U U U U U V5 U U U U U U | F F F F F V5 V5 F F F V5 | b000001 b00000000000 b000000000000 b00000000000 | 0:,V0,V2,V5 1:,V5 2:,V5,V5 3:,V5,P 4:,V0,V5,V3,B0,V4,V5 6:,V5,V5 7:,V5,V5 8:,V5,V3 9:,V5,V5 10:,V5,V4 11:,V5,V5 | | ||
+sum r;V3,V5,0,10329,10345,0,0,0;V4,V5,0,10369,10386,0,0,0 b000001 b000001 b10011 b00000 b00000 b b b a,compiler/jupyter:10050:10413,compiler/jupyter:10050:10413,compiler/jupyter:10050:10413,compiler/jupyter:10050:10413,compiler/jupyter:10050:10413,compiler/jupyter:10170:10184 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/jupyter:kernel&	o0Array<std/prelude/text:String>&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&
+out 22ad72dc56311e4f077db4c376e27236
+run compiler/jupyter 10745-11080 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/jupyter 10050-10413 fn	25a40fedb01266fce114e667aa5012e8
+read std/prelude/vec 5133-5172 fn <std/zmtp:Socket;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 7015-7075 fn <std/zmtp:Socket;>	18949962f2ca61dd4b9c6263cb0d697e
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/zmtp 3439-3606 fn	847d895b31853d379cb29b7c5efbcd31
+hits 0
+body 1 9 11 4 | B0 B0 B0 U U U U U U | F F F F F F F F F F F | b0000 b00000000000 b000000000 b00000000000 | 3:,V0,B0,V1,V2,V3,B0 4:,V0 5:,V0 6:,V0,V0 7:,V0,B0 8:,V0 | | ||
+sum r b0000 b0000 b1011 b1000 b0000 b b b a,compiler/jupyter:10745:11080,compiler/jupyter:10745:11080,compiler/jupyter:10745:11080,compiler/jupyter:10745:11080 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/jupyter:kernel&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o1mut compiler/jupyter:kernel&	o1Array<std/prelude/text:String>&	o1std/prelude/text:String&	o1std/prelude/text:String&	o1std/prelude/text:String&	o0I64	o0mut std/zmtp:Socket&	o1mut std/prelude/vec:Vec<std/zmtp:Socket>&	o1I64
+out 9c0e9630896758ca364ed6318d496889
+run compiler/jupyter 10473-10681 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/jupyter 10050-10413 fn	25a40fedb01266fce114e667aa5012e8
+read std/prelude/vec 7015-7075 fn <std/zmtp:Socket;>	18949962f2ca61dd4b9c6263cb0d697e
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/zmtp 3439-3606 fn	847d895b31853d379cb29b7c5efbcd31
+hits 0
+body 1 4 6 4 | U U U U | F F F F F F | b0000 b000000 b0000 b000000 | 0:,V0,V1,V2,V1,V3,B0 1:,V0,V0 2:,V0,B0 3:,V0 | | ||
+sum r b0000 b0000 b10101 b10000 b00000 b b b a,compiler/jupyter:10473:10681,compiler/jupyter:10473:10681,compiler/jupyter:10473:10681,compiler/jupyter:10473:10681 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/jupyter:kernel&	o0I64	o0compiler/jupyter:request&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0Array<std/prelude/text:String&>&	o1mut compiler/jupyter:kernel&	o1Array<std/prelude/text:String>&	o1std/prelude/text:String&	o1std/prelude/text:String&	o1std/prelude/text:String&	o0mut std/zmtp:Socket&	o1mut std/prelude/vec:Vec<std/zmtp:Socket>&	o1I64
+out 100e3d9967281847a5d980b23ff2ace5
+run compiler/jupyter 11375-11847 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 8 1 1 | B0 B0 B0 U U U U U | F | b1 b0 b00000000 b0 | 0:,B0 3:,B0,B0 4:,B0,B0 5:,B0,B0 6:,B0,B0 7:,B0,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out e5f51ee3de39a81f76d92931c6425dbd
+run compiler/jupyter 0-0 ctor compiler/jupyter:Capture	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+mark compiler/jupyter 0-0 ctor compiler/jupyter:Capture	0,1,2
+marks d641a6814d556781d721883989b2d921
+read -ctor	I32
+hits 0
+body 1 3 4 1 | U U U | F F F F | b0 b0000 b000 b0000 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/jupyter:0:0 t i,-1,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I32
+out 03f7c65555fd7cbe1aed49f469e8efe7
+run compiler/jupyter 16187-16607 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 8 5 2 | U U U U B0 U U V1 | F F F F F | b01 b00000 b00000000 b00000 | | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/jupyter:16187:16607,compiler/jupyter:16587:16605 t i t i i c0/i/i f0010
+hid fs1	o0compiler/jupyter:Capture&
+out 8417a5e8943a2ff3e368985c4c2b3898
+run compiler/jupyter 11157-11347 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/jupyter 10745-11080 fn	9bbfc46e8dec0ca295455de7644f5650
+read compiler/jupyter 15814-15915 fn	941ba4ec2fad30a7ae8a44409d75ba16
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 5 4 4 | U U B0 B0 U | F F F F | b0000 b0000 b00000 b0000 | 0:,V3,B0 1:,V3,B0 4:,V0,B0,V1,B0 | | ||
+sum r b0000 b0000 b1100 b1000 b0000 b b b a,compiler/jupyter:11157:11347,compiler/jupyter:11157:11347,compiler/jupyter:11157:11347,compiler/jupyter:11157:11347 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/jupyter:kernel&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out 34fb0de3d1070ae329570eb3d43eee02
+run compiler/jupyter 13722-14025 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+mark compiler/prompt 0-0 ctor compiler/prompt:Reply	3,6,7
+marks 3f484d9e9b22a836e747a105fa2bda4b
+read compiler/jupyter 15814-15915 fn	941ba4ec2fad30a7ae8a44409d75ba16
+read compiler/prompt 0-0 ctor compiler/prompt:Reply	338823f3afbd299d94b072ef5821b689
+read std/base64 2810-2887 fn	7ab1392f25a4504ca5468c407f23a93c
+read std/prelude/text 0-0 ctor std/prelude/text:StringBuilder	a370f7a8cfb1347e132bd60810db8aa5
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 45066-45130 fn	9ccc8f9b2c892405a1ba73789f9f4b6a
+read std/prelude/text 45164-45226 fn	6fbff10506db1de19a4bc199611f8137
+read std/prelude/text 45463-45711 fn	2e29a4499422b9ac38bba1fcba9a1876
+hits 0
+body 1 16 3 2 | B0 U B0 B0 U U U U V0 U U B1 B1 U U U | F F F | b11 b000 b0000000000000000 b000 | 0:,B0 1:,V0,B0 4:,B0,B0 5:,V0,B0 6:,V0,B1 7:,V0,V0 9:,V0,B1 10:,V0,B1 13:,B0,B1 14:,B0 15:,B0,V1 | | ||
+sum r b11 b11 b0 b0 b0 b b b a,compiler/jupyter:13864:13885,std/prelude/text:45539:45553 t i t i i c0/i/i f0010
+hid fs1	o0compiler/prompt:Reply&
+out 37d05542eb923cc26af02d4034b08206
+run compiler/jupyter 13470-13559 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 3557-3713 fn	7a1c46ff5d748f26ddacd2a565709921
+hits 0
+body 1 2 1 2 | U V1 | F | b01 b0 b00 b0 | 0:,V0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/jupyter:13470:13559,compiler/jupyter:13510:13557 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out c9b74e9c19c4941023cafc1cd87e75fc
+run compiler/jupyter 11949-13468 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+mark compiler/prompt 0-0 ctor compiler/prompt:Reply	1,4,5
+marks 9079b9ed63e62689fdd60b273b24231c
+read compiler/jupyter 0-0 ctor compiler/jupyter:Capture	6582db4c68ebc10f8ca49764f3c1bd03
+read compiler/jupyter 10473-10681 fn	17f42c3311efefcc5137b68e366d6c3a
+read compiler/jupyter 10745-11080 fn	9bbfc46e8dec0ca295455de7644f5650
+read compiler/jupyter 11157-11347 fn	17b6d870e46dcdc99a667a4861787f4c
+read compiler/jupyter 13470-13559 fn	a1cdc39c8b1fc18e52ef369cc5cd52e7
+read compiler/jupyter 13722-14025 fn	ef69ceb04a54f45f413d9a74d2b06644
+read compiler/jupyter 15689-15788 fn	e2a24db46210e51396c90b7afd642db5
+read compiler/jupyter 15814-15915 fn	941ba4ec2fad30a7ae8a44409d75ba16
+read compiler/jupyter 16187-16607 fn	cccf85a81d49c7a2be464251362aefea
+read compiler/prompt 0-0 ctor compiler/prompt:Reply	338823f3afbd299d94b072ef5821b689
+read compiler/prompt 16957-18800 fn	90528689b6854ce0b3d31b6a677c9bb8
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 7340-7478 fn	ddabd447a553d7e6ee515698f80ab57a
+read std/prelude/text 10176-10230 fn	ecc907d1b80ad51f7de503ad33f4d4b6
+read std/prelude/text 10447-10795 fn	1f5be6d0ca3785e37b467f570786f397
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 7121-7240 fn	24ce05ea22e719b590c94d9a8cf2f626
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 44 20 4 | U U U U B2 B2 U U U B0 B0 U U U U B0 B0 U U B3 B3 U U B4 B4 U U U U U U B0 U U B0 U U B0 B0 B0 U B0 B0 U | F F F F F F F F F F F F F F F F F F F F | b0100 b00000000000000000000 b00000000000000000000000000000000000000000000 b00000000000000000000 | 0:,V3,B0,V3 1:,V3,V3 2:,V3 3:,V3,B2 6:,V0,B2,V2,B2 7:,B0 8:,B0 11:,V1,V3,B0,V1 12:,B0,B0 13:,B0,B0 14:,V0,V2,B0,B0 17:,V0,V2,B0,B0 18:,V1,B3 21:,V0,B3,V2,B3 22:,V1,B0 25:,V0,V2,B4,B4 26:,B0 27:,V1,V1 28:,V1,V1 29:,V1,V1 30:,V1,B0 32:,B0,B0 33:,V1,B0 35:,B0,B0 36:,B0,B0,B0 40:,V0,B0,V2,B0 43:,V0,V2,B0,B0 | | ||
+sum r b0100 b0100 b11010 b11000 b01000 b b b a,compiler/jupyter:11949:13468,compiler/prompt:22036:22094,compiler/jupyter:11949:13468,compiler/jupyter:11949:13468 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/jupyter:kernel&	o0mut compiler/prompt:Session&	o0I64	o0compiler/jupyter:request&	o0std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0compiler/prompt:Reply	o1mut compiler/prompt:Session&	o1std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:LineIter	o1std/prelude/text:String&	o0std/prelude/text:String&	o1mut std/prelude/text:LineIter&
+out 5fd250017c563476ff8c6e3becc1d45d
+run compiler/jupyter 11949-13468 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 5fd250017c563476ff8c6e3becc1d45d
+mark compiler/prompt 0-0 ctor compiler/prompt:Reply	1,4,5
+mark compiler/prompt 0-0 ctor compiler/prompt:Session	0
+marks 491d6fec54360e762af7c9cc1819c177
+read compiler/jupyter 0-0 ctor compiler/jupyter:Capture	6582db4c68ebc10f8ca49764f3c1bd03
+read compiler/jupyter 10473-10681 fn	17f42c3311efefcc5137b68e366d6c3a
+read compiler/jupyter 10745-11080 fn	9bbfc46e8dec0ca295455de7644f5650
+read compiler/jupyter 11157-11347 fn	17b6d870e46dcdc99a667a4861787f4c
+read compiler/jupyter 13470-13559 fn	a1cdc39c8b1fc18e52ef369cc5cd52e7
+read compiler/jupyter 13722-14025 fn	ef69ceb04a54f45f413d9a74d2b06644
+read compiler/jupyter 15689-15788 fn	e2a24db46210e51396c90b7afd642db5
+read compiler/jupyter 15814-15915 fn	941ba4ec2fad30a7ae8a44409d75ba16
+read compiler/jupyter 16187-16607 fn	cccf85a81d49c7a2be464251362aefea
+read compiler/prompt 0-0 ctor compiler/prompt:Reply	338823f3afbd299d94b072ef5821b689
+read compiler/prompt 0-0 ctor compiler/prompt:Session	6f3c4c90fcd08ff7ffec8d6bc3bf6fd5
+read compiler/prompt 16957-18800 fn	5a61aa28737d602a735224e1d8abd4ad
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 7340-7478 fn	ddabd447a553d7e6ee515698f80ab57a
+read std/prelude/text 10176-10230 fn	ecc907d1b80ad51f7de503ad33f4d4b6
+read std/prelude/text 10447-10795 fn	1f5be6d0ca3785e37b467f570786f397
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 7121-7240 fn	24ce05ea22e719b590c94d9a8cf2f626
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 44 20 4 | U U U U B2 B2 U U U B0 B0 U U U U B0 B0 U U B3 B3 U U B4 B4 U U U U U U B0 U U B0 U U B0 B0 B0 U B0 B0 U | F F F F F F F F F F F F F F F F F F F F | b0100 b00000000000000000000 b00000000000000000000000000000000000000000000 b00000000000000000000 | 0:,V3,B0,V3 1:,V3,V3 2:,V3 3:,V3,B2 6:,V0,B2,V2,B2 7:,B0 8:,B0 11:,V1,V3,B0,V1 12:,B0,B0 13:,B0,B0 14:,V0,V2,B0,B0 17:,V0,V2,B0,B0 18:,V1,B3 21:,V0,B3,V2,B3 22:,V1,B0 25:,V0,V2,B4,B4 26:,B0 27:,V1,V1 28:,V1,V1 29:,V1,V1 30:,V1,B0 32:,B0,B0 33:,V1,B0 35:,B0,B0 36:,B0,B0,B0 40:,V0,B0,V2,B0 43:,V0,V2,B0,B0 | 1,0 | 11:,0/0/D0/0 || 230:rR11976,11997,26:mut compiler/build:Config&,-1(F11976,11997,26:mut compiler/build:Config&,0(D11976,11997,23:compiler/prompt:Session(R11976,11997,28:mut compiler/prompt:Session&,-1(V11976,11997,28:mut compiler/prompt:Session&,1))))
+sum r;D1/0,V1,0,12365,12366,0,0,0 b0100 b0100 b11010 b11000 b01000 b b b a,compiler/jupyter:11949:13468,compiler/prompt:22036:22094,compiler/jupyter:11949:13468,compiler/jupyter:11949:13468 t i t i,1 i,0 c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/jupyter:kernel&	o0mut compiler/prompt:Session&	o0I64	o0compiler/jupyter:request&	o0std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0compiler/prompt:Reply	o1mut compiler/prompt:Session&	o1std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:LineIter	o1std/prelude/text:String&	o0std/prelude/text:String&	o1mut std/prelude/text:LineIter&
+out f99e25bef5e69a81f0570ed8a1b766a8
+run compiler/jupyter 14133-14293 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/prompt 12540-12873 fn	ee075370790d66a9576f5d452d42e141
+hits 0
+body 1 1 1 2 | U | F | b00 b0 b0 b0 | 0:,V0 | | ||
+sum r b00 b00 b1 b0 b0 b b b a,compiler/jupyter:14133:14293,compiler/jupyter:14133:14293 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out f5986df1814947ccd3cb4245dac2bd2f
+run compiler/jupyter 14648-15687 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+mark compiler/prompt 0-0 ctor compiler/prompt:Decl	0
+mark compiler/prompt 0-0 ctor compiler/prompt:Value	0
+marks 6d5d1e0bce38a7af6d414b5f62295b45
+read -ctor	I64
+read compiler/jupyter 15689-15788 fn	e2a24db46210e51396c90b7afd642db5
+read compiler/jupyter 15814-15915 fn	941ba4ec2fad30a7ae8a44409d75ba16
+read compiler/prompt 0-0 ctor compiler/prompt:Decl	5903e730a700a1e89d92c917f1bb98b5
+read compiler/prompt 0-0 ctor compiler/prompt:Value	36b03d49e769e19c78cd0df37787e229
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 6300-6449 fn	b0a08e72ed90e7bfdb613ca331386fb7
+read std/prelude/array 1568-1802 fn <std/prelude/text:Char;>	b79aa6ec5c1a91330451c13ebaf035ce
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String&, Bool>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 5979-6292 fn <std/prelude/text:String&;Bool;>	c091782564f784c7ee2a1f7ed72a2723
+read std/prelude/map 7666-7764 fn <std/prelude/text:String&;Bool;>	fe003e99e4cf69075d6f5a8ac912acc0
+read std/prelude/text 1123-1188 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 943-1002 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 8487-8542 fn <compiler/prompt:Decl;>	43ea48bc4591b58484f465d40212596c
+read std/prelude/vec 8487-8542 fn <compiler/prompt:Value;>	43ea48bc4591b58484f465d40212596c
+read std/prelude/vec 8487-8542 fn <std/prelude/text:String&;>	43ea48bc4591b58484f465d40212596c
+hits 0
+body 1 25 27 3 | U U U U U U U U U U U U U U U U U U U U U B0 U U V2 | F F F F F F F F F F F F F F F F F F F F F F F F F F F | b001 b000000000000000000000000000 b0000000000000000000000000 b000000000000000000000000000 | 0:,V1,B0,V1 1:,V1,V1 2:,V1 3: 4: 5:,B0 6:,V0,V0 7:,V0,B4 8:,V0,B4 9:,V0,B4 10:,B0,V0 11:,V0,V0 12:,B0,V0 13:,B0,P 14:,B0 15:,B0 16:,B0,B0 17:,B0,V1 18:,B0,B0 19:,B0,B0 20:,B0,B0 22:,B0,B0 23:,B0,B0,B0 | | ||
+sum r b001 b001 b10 b00 b00 b b b a,compiler/jupyter:14648:15687,compiler/jupyter:14648:15687,compiler/jupyter:15549:15685 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U	o0compiler/prompt:Session&	o0std/json:Json&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0Array<compiler/prompt:Decl>&	o1std/prelude/vec:Vec<compiler/prompt:Decl>&	o0Array<compiler/prompt:Value>&	o1std/prelude/vec:Vec<compiler/prompt:Value>&	o0Array<std/prelude/text:String&, 25>&	o0Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&
+out a5349cb37485af7a1bd845cd5e9b8a06
+run compiler/jupyter 6851-8575 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/jupyter 10473-10681 fn	17f42c3311efefcc5137b68e366d6c3a
+read compiler/jupyter 10745-11080 fn	9bbfc46e8dec0ca295455de7644f5650
+read compiler/jupyter 11375-11847 fn	f01cf2376be357a3fcfe65813f8714a5
+read compiler/jupyter 11949-13468 fn	49f3e03719e18a090e82aaedbf6af397
+read compiler/jupyter 14133-14293 fn	d8a1bcf217c7a8c895423afb31f790c0
+read compiler/jupyter 14648-15687 fn	eb7244e5fad718a4f89276154802cb54
+read compiler/jupyter 15689-15788 fn	e2a24db46210e51396c90b7afd642db5
+read compiler/jupyter 6325-6458 fn	063491337bec73a97199da3360a5cf9b
+read compiler/jupyter 8843-9283 fn	a344af0800fdac6933a4ea2a937fae02
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 7340-7478 fn	ddabd447a553d7e6ee515698f80ab57a
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 7015-7075 fn <std/zmtp:Socket;>	18949962f2ca61dd4b9c6263cb0d697e
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/zmtp 3439-3606 fn	847d895b31853d379cb29b7c5efbcd31
+hits 0
+body 1 42 14 3 | U U U U U U U B0 U U B0 U U U B8 U U U U U U B10 U U U B11 U U U U U U U U U U U U B16 B16 U U | F F F F F F F F F B1 F F F F | b010 b00000000000000 b000000000000000000000000000000000000000000 b00000000000000 | 0:,V0 1:,B1 2:,B1,B1 3:,V0,V0 4:,B1,B1 5:,V0,B1 6:,V0 7:,V0,V2,B0 8:,B0,B0 9:,B0,B0 11:,V0,B0,B0,B0 12:,B0,B0 13:,B8 15:,V0,B0,B8,B8 16:,B0,B0 17:,V0,V1,B0,B0 18:,B0,B0 19:,B0,B10,B0 20:,B0,B10 22:,V0,B0,B10,B10 23:,B0,B0 24:,V1,B0,B11 26:,V0,B0,B11,B11 27:,B0,B0 28:,V0,B0,B12,B12 29:,B0,B0 30:,V0,B0,B13,B13 31:,B0,B0 32:,V0,B0,B14,B14 33:,B0,B0 34:,V0,B0,B15,B15 35:,B0,B0 36:,B0,B0 37:,B0 40:,V0,B0,B16,B16 41:,V0,B0,B0,B0 | | ||
+sum r b010 b010 b1100 b1100 b0100 b b b a,compiler/jupyter:6851:8575,compiler/prompt:22036:22094,compiler/jupyter:6851:8575 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/jupyter:kernel&	o0mut compiler/prompt:Session&	o0I64	o0Array<std/prelude/text:String>&	o0I64	o0mut std/zmtp:Socket&	o1mut std/prelude/vec:Vec<std/zmtp:Socket>&	o1I64	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0I64	o0I64	o0compiler/jupyter:request	o1mut compiler/jupyter:kernel&	o1Array<std/prelude/text:String>&	o0std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String
+out d90995775f5228bc455f140817cf891d
+run compiler/jupyter 6851-8575 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in d90995775f5228bc455f140817cf891d
+mark compiler/prompt 0-0 ctor compiler/prompt:Session	0
+marks 33bca738014fba24fa970ebefdfc6e14
+read -ctor	I64
+read compiler/jupyter 10473-10681 fn	17f42c3311efefcc5137b68e366d6c3a
+read compiler/jupyter 10745-11080 fn	9bbfc46e8dec0ca295455de7644f5650
+read compiler/jupyter 11375-11847 fn	f01cf2376be357a3fcfe65813f8714a5
+read compiler/jupyter 11949-13468 fn	54dbba65bee545de5f0189759bf411eb
+read compiler/jupyter 14133-14293 fn	d8a1bcf217c7a8c895423afb31f790c0
+read compiler/jupyter 14648-15687 fn	eb7244e5fad718a4f89276154802cb54
+read compiler/jupyter 15689-15788 fn	e2a24db46210e51396c90b7afd642db5
+read compiler/jupyter 6325-6458 fn	063491337bec73a97199da3360a5cf9b
+read compiler/jupyter 8843-9283 fn	a344af0800fdac6933a4ea2a937fae02
+read compiler/prompt 0-0 ctor compiler/prompt:Session	6f3c4c90fcd08ff7ffec8d6bc3bf6fd5
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 7340-7478 fn	ddabd447a553d7e6ee515698f80ab57a
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/prelude/text:String&;>	f2813abdca2edfa3172af5db0ffb4e64
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 7015-7075 fn <std/zmtp:Socket;>	18949962f2ca61dd4b9c6263cb0d697e
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/zmtp 3439-3606 fn	847d895b31853d379cb29b7c5efbcd31
+hits 0
+body 1 42 14 3 | U U U U U U U B0 U U B0 U U U B8 U U U U U U B10 U U U B11 U U U U U U U U U U U U B16 B16 U U | F F F F F F F F F B1 F F F F | b010 b00000000000000 b000000000000000000000000000000000000000000 b00000000000000 | 0:,V0 1:,B1 2:,B1,B1 3:,V0,V0 4:,B1,B1 5:,V0,B1 6:,V0 7:,V0,V2,B0 8:,B0,B0 9:,B0,B0 11:,V0,B0,B0,B0 12:,B0,B0 13:,B8 15:,V0,B0,B8,B8 16:,B0,B0 17:,V0,V1,B0,B0 18:,B0,B0 19:,B0,B10,B0 20:,B0,B10 22:,V0,B0,B10,B10 23:,B0,B0 24:,V1,B0,B11 26:,V0,B0,B11,B11 27:,B0,B0 28:,V0,B0,B12,B12 29:,B0,B0 30:,V0,B0,B13,B13 31:,B0,B0 32:,V0,B0,B14,B14 33:,B0,B0 34:,V0,B0,B15,B15 35:,B0,B0 36:,B0,B0 37:,B0 40:,V0,B0,B16,B16 41:,V0,B0,B0,B0 | 1,0 | 17:,1/0/D0/0 || 220:rR6877,6898,26:mut compiler/build:Config&,-1(F6877,6898,26:mut compiler/build:Config&,0(D6877,6898,23:compiler/prompt:Session(R6877,6898,28:mut compiler/prompt:Session&,-1(V6877,6898,28:mut compiler/prompt:Session&,1))))
+sum r;D1/0,V1,0,7575,7603,0,0,0 b010 b010 b1100 b1100 b0100 b b b a,compiler/jupyter:6851:8575,compiler/prompt:22036:22094,compiler/jupyter:6851:8575 t i t i,1 i,0 c0/i/i f0010
+hid fs1;1280:U	o0mut compiler/jupyter:kernel&	o0mut compiler/prompt:Session&	o0I64	o0Array<std/prelude/text:String>&	o0I64	o0mut std/zmtp:Socket&	o1mut std/prelude/vec:Vec<std/zmtp:Socket>&	o1I64	o0mut Array<std/prelude/text:String&>&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o0I64	o0I64	o0compiler/jupyter:request	o1mut compiler/jupyter:kernel&	o1Array<std/prelude/text:String>&	o0std/json:Json&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String
+out b0a591c2fa121a0c068480952973913e
+run compiler/jupyter 5029-5391 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/jupyter 6851-8575 fn	0cde3364f048aa7e5e83e17ccfb15766
+read std/prelude/vec 7015-7075 fn <std/zmtp:Socket;>	18949962f2ca61dd4b9c6263cb0d697e
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/zmtp 3700-3895 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read std/zmtp 4074-4651 fn	286323306c28e07bdb55d6c7f40cc5df
+hits 0
+body 1 7 4 2 | U U U U B2 U U | F F F F | b11 b0000 b0000000 b0000 | 0:,V0,V0 1:,V0 2:,V0 3:,V0,V0 4:,V0,B2 5:,V0 6:,V0,V1,B2 | | ||
+sum r b11 b11 b110 b110 b010 b b b a,std/prelude/vec:4512:4530,compiler/prompt:22036:22094 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/jupyter:kernel&	o0mut compiler/prompt:Session&	o0I64	o0mut std/zmtp:Socket&	o1mut std/prelude/vec:Vec<std/zmtp:Socket>&	o1I64	o0mut std/zmtp:Socket&	o1mut std/prelude/vec:Vec<std/zmtp:Socket>&	o1I64	o0Array<std/prelude/text:String>	o1mut std/zmtp:Socket&
+out 7cedcbb9329db47fd2d6eae43957b6b7
+run compiler/jupyter 5029-5391 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 7cedcbb9329db47fd2d6eae43957b6b7
+mark compiler/prompt 0-0 ctor compiler/prompt:Session	0
+marks 33bca738014fba24fa970ebefdfc6e14
+read compiler/jupyter 6851-8575 fn	c141b874bc246373b999c4d5e0303831
+read compiler/prompt 0-0 ctor compiler/prompt:Session	6f3c4c90fcd08ff7ffec8d6bc3bf6fd5
+read std/prelude/vec 7015-7075 fn <std/zmtp:Socket;>	18949962f2ca61dd4b9c6263cb0d697e
+read std/prelude/vec 7153-7207 fn <I64;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/zmtp 3700-3895 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read std/zmtp 4074-4651 fn	286323306c28e07bdb55d6c7f40cc5df
+hits 0
+body 1 7 4 2 | U U U U B2 U U | F F F F | b11 b0000 b0000000 b0000 | 0:,V0,V0 1:,V0 2:,V0 3:,V0,V0 4:,V0,B2 5:,V0 6:,V0,V1,B2 | 1,0 | 6:,1/0/D0/0 || 220:rR5054,5075,26:mut compiler/build:Config&,-1(F5054,5075,26:mut compiler/build:Config&,0(D5054,5075,23:compiler/prompt:Session(R5054,5075,28:mut compiler/prompt:Session&,-1(V5054,5075,28:mut compiler/prompt:Session&,1))))
+sum r;D1/0,V1,0,5361,5383,0,0,0 b11 b11 b110 b110 b010 b b b a,std/prelude/vec:4512:4530,compiler/prompt:22036:22094 t i t i,1 i,0 c0/i/i f0010
+hid fs1	o0mut compiler/jupyter:kernel&	o0mut compiler/prompt:Session&	o0I64	o0mut std/zmtp:Socket&	o1mut std/prelude/vec:Vec<std/zmtp:Socket>&	o1I64	o0mut std/zmtp:Socket&	o1mut std/prelude/vec:Vec<std/zmtp:Socket>&	o1I64	o0Array<std/prelude/text:String>	o1mut std/zmtp:Socket&
+out cd32a91513b297fa4451d87f2b248f6b
+run compiler/jupyter 6506-6751 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 5133-5172 fn <I64;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <I64;>	5bd91eb76fbb6429a4dac6ccf2a2954a
+read std/prelude/vec 8817-9040 fn <I64;>	4bdab5647f3742fda5af27d1be552808
+read std/prelude/vec 8817-9040 fn <std/zmtp:Socket;>	d4a70b00efad58e4feafea7526c56d1f
+hits 0
+body 1 5 8 1 | U U U U U | F F F F F F F F | b0 b00000000 b00000 b00000000 | 0:,V0 1:,V0 2:,V0 3:,V0 4:,V0 | | ||
+sum r b0 b0 b1 b1 b1 b b b a,compiler/jupyter:6506:6751 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/jupyter:kernel&
+out 668a52d0d77182d683a4f7e1b9248c7c
+run compiler/jupyter 3030-4584 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+mark compiler/prompt 0-0 ctor compiler/prompt:Session	6
+marks 471097c6024125f7a1fdd685d6105a13
+read -ctor	Bool
+read -ctor	I64
+read -ctor	struct(I32, std/json:Error$payload)
+read -ctor	struct(I32, std/net:Error$payload)
+read -ctor	struct(I32, std/os:Error$payload)
+read compiler/cells 11727-11777 fn	34847ebd8f6f1f00742c9766ce24afb8
+read compiler/cells 8909-10173 fn	3f7c95da3cbf70a2e955b3e446708bfa
+read compiler/jupyter 0-0 ctor compiler/jupyter:kernel	727709290258a14f5e1b4065dd9a9e95
+read compiler/jupyter 11949-13468 fn	49f3e03719e18a090e82aaedbf6af397
+read compiler/jupyter 3955-3991 lambda in compiler/jupyter 3030-4584 fn	db513d09be3055a834413d6a5bcbdf29
+read compiler/jupyter 4586-4698 fn	f1c7b8e9c94b1ee443b2a44f02763668
+read compiler/jupyter 4747-4914 fn	23212983673d5f3912a23413f7382a81
+read compiler/jupyter 5029-5391 fn	52e2f42f894b9944f569b0a0273c96e6
+read compiler/jupyter 6506-6751 fn	ec404a6eff182268f0a36b149be58f6f
+read compiler/jupyter 6851-8575 fn	0cde3364f048aa7e5e83e17ccfb15766
+read compiler/prompt 0-0 ctor compiler/prompt:Session	fd9d122a82231fce7cca3959e8c39d21
+read compiler/prompt 16957-18800 fn	90528689b6854ce0b3d31b6a677c9bb8
+read compiler/prompt 20180-21296 fn	ba0539729c5ad5bb2bb77b25dfb9a154
+read compiler/prompt 21531-22322 fn	2b19deeb7a46b8e7fbc068080bfc84dc
+read compiler/prompt 22666-23609 fn	a31a72cec1420b9b491b495eda1f3785
+read compiler/prompt 23839-24158 fn	e12e8ca043e1ca0952b7a1281965f00c
+read compiler/prompt 26242-28259 fn	94a79eb4b32b55dcb1bfc2eaeeb1f170
+read compiler/prompt 29081-29183 fn	5848b2fb5b8d6567194a1df9f8a74bc5
+read compiler/prompt 40628-41122 fn	80722678c4ae0373afd2b81d206c8b91
+read compiler/session 53502-53542 fn	6d787cc7b01b150765dce615d1f27491
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String&;>	29f8fa8d7f9b78812e65efb08442916c
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 6300-6449 fn	b0a08e72ed90e7bfdb613ca331386fb7
+read std/json 7544-7683 fn	656b96a082399099a7567556adf274a3
+read std/net 15043-15454 fn	f012790b406f5922423a622b774574d7
+read std/net 15524-15565 fn	74216237d6cba0049715a4a5722680cd
+read std/net 18266-18603 fn	357dc6e4fd665fb2be31423c3303ff96
+read std/net 9135-9259 fn	ed09ea3b1bfb845077c50ae41751badc
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I32>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/net:Listener>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 3464-3597 dtor std/prelude/vec:Vec<std/net:Listener>	670bf617b89d382071158a7b811b297f
+read std/prelude/vec 4660-4775 fn <I32;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/net:Listener;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <compiler/jupyter:pending;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/prompt:Decl;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <compiler/prompt:Value;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/net:Listener;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <compiler/prompt:Decl;>	d04f2e5a858d17b205c489fe32a47a71
+read std/prelude/vec 6401-6448 fn <compiler/prompt:Value;>	b51ed69aecd7674ca5263126de5a48dc
+read std/prelude/vec 7015-7075 fn <std/net:Listener;>	7ca3b8703dfd59bdc609db7ca6b490cc
+read std/prelude/vec 8487-8542 fn <I32;>	43ea48bc4591b58484f465d40212596c
+read std/prelude/vec 8487-8542 fn <std/net:Listener;>	43ea48bc4591b58484f465d40212596c
+read std/prelude/vec 8487-8542 fn <std/zmtp:Socket;>	43ea48bc4591b58484f465d40212596c
+read std/prelude/vec 9295-9536 fn <compiler/jupyter:pending;>	c3855ec0ec4b15b155e99ceeb54f963e
+read std/zmtp 2089-2135 fn	dedb713aeaca11422bf4ec97eae9356c
+want decl compiler/prompt:Session
+hits 0
+body 1 66 43 2 | U U B0 B1 B1 B1 U U B0 B2 B2 B2 U U U U U B0 U V0 B0 U U B6 B7 B7 B7 U B6 B6 U B6 B8 B8 B8 U U U B6 B9 B9 B9 U U U V0 B11 U U U U U U U U U U U U U U U B26 U U U | F F F F F F F F F F F F F F F F F F F V0 F F F F F F F F F F F F F F F F F F F F F F F | b10 b0000000000000000000000000000000000000000000 b000000000000000000000000000000000000000000000000000000000000000000 b0000000000000000000000000000000000000000000 | 0: 1:,V1,B0 6:,B1 7:,B0,B0 12:,B2 13:,B0,B0 14:,B0,B0 15:,B0,B0 16:,B0,B0 18:,V0 20:,B0 21:,B0,P,B0 22:,B0 27:,B7 30:,B6 35:,B8 36:,B6 42:,B9 43:,B0 44:,V0,V0 45:,V0 46:,B11 47:,B0,B0 48:,B0 49:,B11 50:,V0,V0 51:,V0 52:,B11 53:,B11,B11 54:,B11,B11 55:,B0 56:,B0,B0 57:,V0,B0 58:,B0 59:,B0 60:,V0,V0 61:,V0 62:,V0,V0 63:,V0,V0,B26 64:,V0 65:,V0 | | ||
+sum r b10 b10 b10 b00 b00 b b b a,compiler/jupyter:3443:3505,compiler/jupyter:3030:4584 t i t i i c0/i/i f0010
+hid fs1;56832:U;1280:U;55296:V0;1280:U	o0mut compiler/build:Config&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o0Array<std/prelude/text:String&, 5>&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String&	o0Array<std/net:Listener>&	o1std/prelude/vec:Vec<std/net:Listener>&	o0Array<std/zmtp:Socket>&	o1std/prelude/vec:Vec<std/zmtp:Socket>&	o0Array<I32>&	o1std/prelude/vec:Vec<I32>&	o0mut std/net:Listener&	o1mut std/prelude/vec:Vec<std/net:Listener>&	o1I64	o0compiler/jupyter:pending	o1mut std/prelude/vec:Vec<compiler/jupyter:pending>&	o1I64
+out 767262da766670a2f071dfebf844f04d
+run compiler/jupyter 3030-4584 fn	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 767262da766670a2f071dfebf844f04d
+mark compiler/prompt 0-0 ctor compiler/prompt:Session	6
+marks 471097c6024125f7a1fdd685d6105a13
+read -ctor	Bool
+read -ctor	I64
+read -ctor	struct(I32, std/json:Error$payload)
+read -ctor	struct(I32, std/net:Error$payload)
+read -ctor	struct(I32, std/os:Error$payload)
+read compiler/jupyter 0-0 ctor compiler/jupyter:kernel	727709290258a14f5e1b4065dd9a9e95
+read compiler/jupyter 3955-3991 lambda in compiler/jupyter 3030-4584 fn	db513d09be3055a834413d6a5bcbdf29
+read compiler/jupyter 4586-4698 fn	f1c7b8e9c94b1ee443b2a44f02763668
+read compiler/jupyter 4747-4914 fn	23212983673d5f3912a23413f7382a81
+read compiler/jupyter 5029-5391 fn	48903568d13a85c9c367d0f2d62e5e31
+read compiler/jupyter 6506-6751 fn	ec404a6eff182268f0a36b149be58f6f
+read compiler/jupyter 6851-8575 fn	c141b874bc246373b999c4d5e0303831
+read compiler/prompt 0-0 ctor compiler/prompt:Session	6f3c4c90fcd08ff7ffec8d6bc3bf6fd5
+read compiler/prompt 40628-41122 fn	e5ee9171884de6ab44586a01a939498e
+read compiler/session 53502-53542 fn	6d787cc7b01b150765dce615d1f27491
+read std/json 14165-14280 fn	c406137d46011244d05a5b64b693667b
+read std/json 4440-5542 fn <std/prelude/text:String&;>	29f8fa8d7f9b78812e65efb08442916c
+read std/json 4440-5542 fn <std/prelude/text:String;>	20cdcae3146afdd3ef39b68ce61a3299
+read std/json 6300-6449 fn	b0a08e72ed90e7bfdb613ca331386fb7
+read std/json 7544-7683 fn	656b96a082399099a7567556adf274a3
+read std/net 15043-15454 fn	f012790b406f5922423a622b774574d7
+read std/net 15524-15565 fn	74216237d6cba0049715a4a5722680cd
+read std/net 18266-18603 fn	357dc6e4fd665fb2be31423c3303ff96
+read std/net 9135-9259 fn	ed09ea3b1bfb845077c50ae41751badc
+read std/os 16795-17929 fn	85411cb9fa1be3760ad2a5c16572081a
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<I32>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/net:Listener>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 3464-3597 dtor std/prelude/vec:Vec<std/net:Listener>	670bf617b89d382071158a7b811b297f
+read std/prelude/vec 4660-4775 fn <I32;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4660-4775 fn <std/net:Listener;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <compiler/jupyter:pending;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 5133-5172 fn <std/net:Listener;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 7015-7075 fn <std/net:Listener;>	7ca3b8703dfd59bdc609db7ca6b490cc
+read std/prelude/vec 8487-8542 fn <I32;>	43ea48bc4591b58484f465d40212596c
+read std/prelude/vec 8487-8542 fn <std/net:Listener;>	43ea48bc4591b58484f465d40212596c
+read std/prelude/vec 8487-8542 fn <std/zmtp:Socket;>	43ea48bc4591b58484f465d40212596c
+read std/prelude/vec 9295-9536 fn <compiler/jupyter:pending;>	c3855ec0ec4b15b155e99ceeb54f963e
+read std/zmtp 2089-2135 fn	dedb713aeaca11422bf4ec97eae9356c
+hits 0
+body 1 66 43 2 | U U B0 B1 B1 B1 U U B0 B2 B2 B2 U U U U U B0 U B0 B0 U U B6 B7 B7 B7 U B6 B6 U B6 B8 B8 B8 U U U B6 B9 B9 B9 U U U B0 B11 U U U U U U U U U U U U U U U B26 U U U | F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F F | b00 b0000000000000000000000000000000000000000000 b000000000000000000000000000000000000000000000000000000000000000000 b0000000000000000000000000000000000000000000 | 0: 1:,V1,B0 6:,B1 7:,B0,B0 12:,B2 13:,B0,B0 14:,B0,B0 15:,B0,B0 16:,B0,B0 18:,B0 20:,B0 21:,B0,P,B0 22:,B0 27:,B7 30:,B6 35:,B8 36:,B6 42:,B9 43:,B0 44:,V0,B0 45:,B0 46:,B11 47:,B0,B0 48:,B0 49:,B11 50:,B0,B0 51:,B0 52:,B11 53:,B11,B11 54:,B11,B11 55:,B0 56:,B0,B0 57:,B0,B0 58:,B0 59:,B0 60:,B0,B0 61:,B0 62:,B0,B0 63:,B0,B0,B26 64:,B0 65:,B0 | | 60:,1/0/V0 63:,1/0/V0 65:,0/0/V0 ||
+sum r b00 b00 b10 b00 b00 b b b a,compiler/jupyter:3030:4584,compiler/jupyter:3030:4584 t i t i i c0/i/i f0010
+hid fs1;56832:U;1280:U;55296:V0;1280:U	o0mut compiler/build:Config&	o0std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/json:Json&	o1std/prelude/text:String&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String	o0std/prelude/text:String&	o1std/json:Json&	o0Array<std/prelude/text:String&, 5>&	o0std/json:Json&	o1std/json:Json&	o1std/prelude/text:String&	o0Array<std/net:Listener>&	o1std/prelude/vec:Vec<std/net:Listener>&	o0Array<std/zmtp:Socket>&	o1std/prelude/vec:Vec<std/zmtp:Socket>&	o0Array<I32>&	o1std/prelude/vec:Vec<I32>&	o0mut std/net:Listener&	o1mut std/prelude/vec:Vec<std/net:Listener>&	o1I64	o0compiler/jupyter:pending	o1mut std/prelude/vec:Vec<compiler/jupyter:pending>&	o1I64
+out 07ac0d42e2a9a4b314952a6cd81e7971
+run compiler/jupyter global Shell	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out dcc7b332a6dd779304ee6da031f40aeb
+run compiler/jupyter global Control	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 7d163159aa9f98c908ce9db346ee6c27
+run compiler/jupyter global Stdin	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 5ab9fcb92986465bea9650cf05a196fa
+run compiler/jupyter global IOPub	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b99c8f8e3f736eb8afa336bbba391be5
+run compiler/jupyter global Heartbeat	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out ca855ed0d6b868c4c3a69eae240a1536
+run compiler/jupyter global PortKeys	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 1151f0385ea314f793124c588c397c2c
+run compiler/jupyter global Kinds	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e8c65abdbb77abc16932da960922fd67
+run compiler/jupyter global Delimiter	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out b3e903db96042da4b2d4405b944152fa
+run compiler/jupyter global Protocol	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out a91ae6528ffab7229b2561a67f5db148
+run compiler/jupyter global Keywords	
+ctx r1 g1 p0
+keys compiler/jupyter=c1347e8ced7a30f94f91e2885ee459091dc239969b89428568025dd4f6a87b8b
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 2431c19b901b4c8bde36f48de095d737
+end
+sum 57201-11792040150010838712

@@ -1,0 +1,101 @@
+olang front record
+body fn 10987-11029	known p
+body fn 11339-13106	known p
+body fn 13300-13525	known p
+body fn 13634-13806	known p
+body fn 14106-14967	known p
+body fn 15200-15277	known p
+body fn 15381-15798	known p
+body fn 16035-16137	known p
+body fn 16231-16646	known p
+body fn 16795-17929	known p
+body fn 18086-18193	known p
+body fn 18300-18501	known p
+body fn 18666-18786	known p
+body fn 18869-18982	known p
+body fn 19091-19151	known p
+body fn 1929-2307	known p
+body fn 19605-19890	known p
+body fn 19982-20087	known p
+body fn 20161-20281	known p
+body fn 20381-20471	known p
+body fn 20635-21096	known p
+body fn 21169-21252	known p
+body fn 21792-22090	known p
+body fn 22128-22592	known p
+body fn 23005-23464	known p
+body fn 23530-23702	known p
+body fn 23785-23892	known p
+body fn 24041-24145	known p
+body fn 24230-24660	known p
+body fn 2429-2533	known p
+body fn 24775-24946	known p
+body fn 25011-25068	known p
+body fn 25143-25543	known p
+body fn 25605-25855	known p
+body fn 2790-3134	known p
+body fn 3320-3636	known p
+body fn 35313-35492	known p
+body fn 3756-3966	known p
+body fn 42222-42301	known p
+body fn 4323-4375	known p
+body fn 5273-5345	known p
+body fn 6028-6104	known p
+body fn 6343-6403	known p
+body fn 6602-6809	known p
+body fn 8570-8787	known p
+body fn 9031-9296	known p
+body fn 9791-10527	known p
+body lambda 24864-24937	known p
+body lambda 25246-25314	known p
+body lambda 25487-25523	known p
+body lambda 3842-3912	known p
+sig Args@3320 fn&() mut Array<String&>&
+sig Close@19091 fn&(I32) ? Error
+sig Create@18666 fn&(String&) I32 ? Error
+sig Cwd@25011 fn&() String& ? Error
+sig Env@3756 fn&(String&) String& ? Error
+sig ExecInPlace@9791 fn&(String&, ...String&) ? Error
+sig Exists@19982 fn&(String&) Bool
+sig Exit@4323 fn&(I32) noreturn
+sig FileInfo.Stat@19605 fn&(String&) FileInfo ? Error
+sig IsDir@20161 fn&(String&) Bool
+sig IsTerminal@6343 fn&(I32) Bool
+sig Kill@15200 fn&(mut Process&)
+sig Link@24041 fn&(String&, String&) ? Error
+sig MkDir@20381 fn&(String&) ? Error
+sig MkDirAll@20635 fn&(String&) ? Error
+sig MkTemp@23005 fn&(String&, String&) String& ? Error
+sig OnCrash@6028 fn&(String&)
+sig Open@18869 fn&(String&) I32 ? Error
+sig Output.Exec@8570 fn&(...String&, Array<U8>&, Bool, String&) Output ? Error
+sig Output.ExecUntil@9031 fn&(Token&, ...String&, Array<U8>&, Bool, String&) Output ? Error, Stopped
+sig Output.echoed@42222 fn&(I64) Output
+sig Pid@10987 fn&(Process&) I32
+sig Process.Start@11339 fn&(...String&, Array<U8>&, Bool, String&) Process ? Error
+sig Quote@25605 fn&(String&) String&
+sig ReadDir@25143 fn&(String&) Array<String&>& ? Error
+sig ReadFile@16795 fn&(String&) String& ? Error
+sig ReadLink@24230 fn&(String&) String& ? Error
+sig RealPath@24775 fn&(String&) String& ? Error
+sig Remove@21169 fn&(String&) ? Error
+sig RemoveAll@21792 fn&(String&) ? Error
+sig Rename@23785 fn&(String&, String&) ? Error
+sig Run@6602 fn&(String&) I32
+sig RunOnStack@5273 fn&(I64, fn&())
+sig Wait@13300 fn&(mut Process&) Output ? Error
+sig WaitUntil@14106 fn&(mut Process&, Token&) Output ? Error, Stopped
+sig WriteFile@18300 fn&(String&, Array<U8>&) ? Error
+sig check@2429 fn&(I64, String&) ? Error
+sig churn@35313 fn&() I64
+sig closeAndRaise@18086 fn&(I32, I32, String&) ? Error
+sig copyOut@2790 fn&(fn&(buf mut Array<U8>&) I64, String&) String& ? Error
+sig ended@15381 fn&(mut Process&, I32) Output ? Error
+sig lost@13634 fn&(mut Process&, I32) ? Error
+sig memFile@16035 fn&() I32 ? Error
+sig raise@1929 fn&(I32, String&) ? Error
+sig readBack@16231 fn&(I32) String& ? Error
+sig removeTree@22128 fn&(String&) ? Error
+sig tempDir@23530 fn&(String&) String
+end
+sum 4f867fd035f5452de79b73b44f4deefac62224b5ed1983eb182b8019a846efc5

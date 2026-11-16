@@ -1,0 +1,218 @@
+olang front record
+body fn 11553-12459	known p
+body fn 12569-12877	known p
+body fn 12934-14172	known p grows|0|-|-|..paramAt|8|0|compiler/views|13290|13294|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|13619|13626|-1 grows|0|-|-|..reportedHolds|14|0|compiler/views|13799|13804|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|13799|13804|-1 grows|0|-|-|..reported|9|0|compiler/views|13799|13804|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|13799|13804|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|13799|13804|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|13799|13804|-1 grows|0|-|-|..nameLists|10|0|compiler/views|13799|13804|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|13799|13804|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|13799|13804|-1 grows|0|-|-|..strs|5|0|compiler/views|13799|13804|-1 grows|0|-|-|..strIds|7|0|compiler/views|13799|13804|-1 grows|0|-|-|..targets|8|0|compiler/views|13799|13804|-1 grows|0|-|-|..loops|6|0|compiler/views|13799|13804|-1
+body fn 14241-14496	known p
+body fn 14517-14716	known p grows|0|-|-|..strs|5|0|compiler/views|14641|14645|-1 grows|0|-|-|..strIds|7|0|compiler/views|14662|14665|-1 keeps|1|-|-|.|0|0|compiler/views|14540|14540|0
+body fn 14718-14797	known p
+body fn 14890-15244	known p
+body fn 15297-15702	known p
+body fn 15774-16245	known p grows|0|-|-|..nameLists|10|0|compiler/views|16000|16004|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|16080|16083|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|16149|16153|-1
+body fn 16346-16496	known p
+body fn 16498-16625	known p
+body fn 16671-16882	known p
+body fn 16986-17341	known p
+body fn 17343-17709	known p
+body fn 17711-17956	known p
+body fn 18048-18387	known p
+body fn 18559-18764	known p
+body fn 18766-19011	known p
+body fn 19032-19109	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/views|19095|19104|-1
+body fn 19111-19218	known p
+body fn 19285-19468	known p
+body fn 19470-19574	known p
+body fn 19671-19753	known p
+body fn 19858-20373	known p
+body fn 20395-20464	known p
+body fn 20466-20540	known p
+body fn 20542-20657	known p grows|0|-|-|.|0|0|compiler/views|20648|20652|-1
+body fn 20776-21369	known p grows|3|-|-|.|0|0|compiler/views|20971|20982|-1 grows|0|-|-|..nameLists|10|0|compiler/views|20971|20982|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|20971|20982|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|20971|20982|-1 grows|0|-|-|..strs|5|0|compiler/views|20971|20982|-1 grows|0|-|-|..strIds|7|0|compiler/views|20971|20982|-1
+body fn 21705-22418	known p grows|0|-|-|..strs|5|0|compiler/views|22149|22154|-1 grows|0|-|-|..strIds|7|0|compiler/views|22149|22154|-1 grows|3|-|-|.|0|0|compiler/views|22220|22228|-1 grows|0|-|-|..nameLists|10|0|compiler/views|22072|22082|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|22072|22082|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|22072|22082|-1
+body fn 22508-23839	known p grows|3|-|-|.|0|0|compiler/views|22897|22905|-1 grows|0|-|-|..nameLists|10|0|compiler/views|23498|23507|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|23498|23507|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|23498|23507|-1 grows|0|-|-|..strs|5|0|compiler/views|23686|23689|-1 grows|0|-|-|..strIds|7|0|compiler/views|23686|23689|-1
+body fn 23947-24221	known p grows|3|-|-|.|0|0|compiler/views|24141|24151|-1 grows|0|-|-|..nameLists|10|0|compiler/views|24141|24151|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|24141|24151|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|24141|24151|-1 grows|0|-|-|..strs|5|0|compiler/views|24141|24151|-1 grows|0|-|-|..strIds|7|0|compiler/views|24141|24151|-1
+body fn 24364-25203	known p grows|0|-|-|..nameLists|10|0|compiler/views|24852|24861|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|24852|24861|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|24852|24861|-1 grows|3|-|-|.|0|0|compiler/views|24909|24921|-1 grows|0|-|-|..strs|5|0|compiler/views|24909|24921|-1 grows|0|-|-|..strIds|7|0|compiler/views|24909|24921|-1
+body fn 25370-25882	known p grows|0|-|-|..nameLists|10|0|compiler/views|25718|25727|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|25718|25727|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|25718|25727|-1 grows|3|-|-|.|0|0|compiler/views|25764|25776|-1 grows|0|-|-|..strs|5|0|compiler/views|25764|25776|-1 grows|0|-|-|..strIds|7|0|compiler/views|25764|25776|-1
+body fn 26107-26613	known p grows|0|-|-|..nameLists|10|0|compiler/views|26274|26282|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|26274|26282|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|26274|26282|-1 grows|3|-|-|.|0|0|compiler/views|26274|26282|-1 grows|0|-|-|..strs|5|0|compiler/views|26274|26282|-1 grows|0|-|-|..strIds|7|0|compiler/views|26274|26282|-1
+body fn 26668-26902	known p grows|0|-|-|..strs|5|0|compiler/views|26853|26856|-1 grows|0|-|-|..strIds|7|0|compiler/views|26853|26856|-1
+body fn 26975-27155	known p
+body fn 27157-27297	known p
+body fn 27364-27611	known p
+body fn 27760-27995	known p
+body fn 28036-28608	known p,1
+body fn 28610-28816	known p,0
+body fn 28860-29044	known p,0
+body fn 29077-29312	known p grows|0|-|-|.|0|0|compiler/views|29303|29307|-1
+body fn 29314-29613	known p grows|0|-|-|..Holds|6|0|compiler/views|29592|29596|-1
+body fn 29615-29766	known p grows|0|-|-|..Names|6|0|compiler/views|29746|29750|-1
+body fn 29768-29908	known p grows|3|-|-|.|0|0|compiler/views|29881|29888|-1
+body fn 29991-31097	known p grows|0|-|-|..Holds|6|0|compiler/views|30149|30156|-1 grows|0|-|-|..Names|6|0|compiler/views|30576|30583|-1 grows|0|-|-|..Named|6|0|compiler/views|30855|30859|-1 grows|0|-|-|..Tasks|6|0|compiler/views|31080|31084|-1 keeps|1|-|-|.|0|0|compiler/views|30017|30017|0
+body fn 31196-31384	known p
+body fn 31416-31530	known p
+body fn 31532-31709	known p grows|0|-|-|..reported|9|0|compiler/views|31678|31681|-1
+body fn 31813-33122	known p grows|0|-|-|..reportedHolds|14|0|compiler/views|32157|32160|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|32458|32461|-1 grows|0|-|-|..reported|9|0|compiler/views|32485|32489|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|32702|32707|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|32702|32707|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|32702|32707|-1
+body fn 33225-34273	known p grows|0|-|-|..strs|5|0|compiler/views|33441|33448|-1 grows|0|-|-|..strIds|7|0|compiler/views|33441|33448|-1 grows|0|-|-|..reported|9|0|compiler/views|34042|34046|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|34119|34124|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|34119|34124|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|34119|34124|-1
+body fn 34394-35193	known p grows|0|-|-|..strs|5|0|compiler/views|34711|34714|-1 grows|0|-|-|..strIds|7|0|compiler/views|34711|34714|-1 grows|1|-|-|.|0|0|compiler/views|35106|35110|-1
+body fn 35219-35678	known p grows|0|-|-|..reportedHolds|14|0|compiler/views|35372|35376|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|35372|35376|-1 grows|0|-|-|..reported|9|0|compiler/views|35372|35376|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|35372|35376|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|35372|35376|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|35372|35376|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|35372|35376|-1 grows|0|-|-|..nameLists|10|0|compiler/views|35372|35376|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|35372|35376|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|35372|35376|-1 grows|0|-|-|..strs|5|0|compiler/views|35372|35376|-1 grows|0|-|-|..strIds|7|0|compiler/views|35372|35376|-1 grows|2|-|-|..Holds|6|0|compiler/views|35372|35376|-1 grows|2|-|-|..Names|6|0|compiler/views|35372|35376|-1 grows|2|-|-|..Named|6|0|compiler/views|35372|35376|-1 grows|0|-|-|..targets|8|0|compiler/views|35372|35376|-1 grows|0|-|-|..loops|6|0|compiler/views|35372|35376|-1 grows|2|-|-|..Tasks|6|0|compiler/views|35372|35376|-1
+body fn 35680-38087	known p grows|0|-|-|..reportedHolds|14|0|compiler/views|35903|35907|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|35903|35907|-1 grows|0|-|-|..reported|9|0|compiler/views|35903|35907|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|35903|35907|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|35903|35907|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|35903|35907|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|35903|35907|-1 grows|0|-|-|..nameLists|10|0|compiler/views|35903|35907|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|35903|35907|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|35903|35907|-1 grows|0|-|-|..strs|5|0|compiler/views|35903|35907|-1 grows|0|-|-|..strIds|7|0|compiler/views|35903|35907|-1 grows|2|-|-|..Holds|6|0|compiler/views|35903|35907|-1 grows|2|-|-|..Names|6|0|compiler/views|35935|35939|-1 grows|2|-|-|..Named|6|0|compiler/views|35935|35939|-1 grows|0|-|-|..targets|8|0|compiler/views|36074|36078|-1 grows|0|-|-|..loops|6|0|compiler/views|36560|36564|-1 grows|2|-|-|..Tasks|6|0|compiler/views|37998|38003|-1 keeps|1|-|-|.|0|0|compiler/views|35704|35704|0
+body fn 38217-38594	known p grows|0|-|-|..strs|5|0|compiler/views|38444|38451|-1 grows|0|-|-|..strIds|7|0|compiler/views|38444|38451|-1 grows|0|-|-|..reportedHolds|14|0|compiler/views|38323|38327|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|38323|38327|-1 grows|0|-|-|..reported|9|0|compiler/views|38323|38327|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|38323|38327|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|38323|38327|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|38323|38327|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|38323|38327|-1 grows|0|-|-|..nameLists|10|0|compiler/views|38323|38327|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|38323|38327|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|38323|38327|-1 grows|3|-|-|..Holds|6|0|compiler/views|38323|38327|-1 grows|3|-|-|..Names|6|0|compiler/views|38323|38327|-1 grows|3|-|-|..Named|6|0|compiler/views|38323|38327|-1 grows|0|-|-|..targets|8|0|compiler/views|38323|38327|-1 grows|0|-|-|..loops|6|0|compiler/views|38323|38327|-1 grows|3|-|-|..Tasks|6|0|compiler/views|38323|38327|-1
+body fn 38596-39207	known p grows|0|-|-|..loops|6|0|compiler/views|38688|38692|-1 grows|0|-|-|..reportedHolds|14|0|compiler/views|38917|38922|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|38917|38922|-1 grows|0|-|-|..reported|9|0|compiler/views|38917|38922|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|38917|38922|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|38917|38922|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|38917|38922|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|38917|38922|-1 grows|0|-|-|..nameLists|10|0|compiler/views|38917|38922|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|38917|38922|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|38917|38922|-1 grows|0|-|-|..strs|5|0|compiler/views|38917|38922|-1 grows|0|-|-|..strIds|7|0|compiler/views|38917|38922|-1 grows|0|-|-|..targets|8|0|compiler/views|38917|38922|-1
+body fn 39321-39681	known p grows|0|-|-|..reportedHolds|14|0|compiler/views|39517|39522|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|39517|39522|-1 grows|0|-|-|..reported|9|0|compiler/views|39517|39522|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|39517|39522|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|39517|39522|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|39517|39522|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|39517|39522|-1 grows|0|-|-|..nameLists|10|0|compiler/views|39517|39522|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|39517|39522|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|39517|39522|-1 grows|0|-|-|..strs|5|0|compiler/views|39517|39522|-1 grows|0|-|-|..strIds|7|0|compiler/views|39517|39522|-1 grows|0|-|-|..targets|8|0|compiler/views|39517|39522|-1 grows|0|-|-|..loops|6|0|compiler/views|39517|39522|-1 grows|3|-|-|.|0|0|compiler/views|39604|39608|-1
+body fn 39683-40401	known p grows|3|-|-|..Tasks|6|0|compiler/views|40323|40327|-1 grows|0|-|-|..reportedHolds|14|0|compiler/views|39787|39791|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|39787|39791|-1 grows|0|-|-|..reported|9|0|compiler/views|39787|39791|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|39787|39791|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|39787|39791|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|39787|39791|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|39787|39791|-1 grows|0|-|-|..nameLists|10|0|compiler/views|39787|39791|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|39787|39791|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|39787|39791|-1 grows|0|-|-|..strs|5|0|compiler/views|39787|39791|-1 grows|0|-|-|..strIds|7|0|compiler/views|39787|39791|-1 grows|3|-|-|..Holds|6|0|compiler/views|39787|39791|-1 grows|3|-|-|..Names|6|0|compiler/views|40372|40378|-1 grows|3|-|-|..Named|6|0|compiler/views|40372|40378|-1 grows|0|-|-|..targets|8|0|compiler/views|39787|39791|-1 grows|0|-|-|..loops|6|0|compiler/views|39787|39791|-1
+body fn 40502-41742	known p grows|5|-|-|..Holds|6|0|compiler/views|40981|40987|-1 grows|5|-|-|..Names|6|0|compiler/views|40981|40987|-1 grows|5|-|-|..Named|6|0|compiler/views|40981|40987|-1 grows|0|-|-|..nameLists|10|0|compiler/views|41232|41242|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|41232|41242|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|41232|41242|-1 grows|0|-|-|..strs|5|0|compiler/views|41232|41242|-1 grows|0|-|-|..strIds|7|0|compiler/views|41232|41242|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|41661|41668|-1
+body fn 41744-42858	known p grows|0|-|-|..nameLists|10|0|compiler/views|42004|42013|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|42004|42013|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|42004|42013|-1 grows|0|-|-|..strs|5|0|compiler/views|42004|42013|-1 grows|0|-|-|..strIds|7|0|compiler/views|42004|42013|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|42004|42013|-1 grows|4|-|-|..Holds|6|0|compiler/views|42004|42013|-1 grows|4|-|-|..Names|6|0|compiler/views|42004|42013|-1 grows|4|-|-|..Named|6|0|compiler/views|42004|42013|-1 grows|0|-|-|..reported|9|0|compiler/views|42788|42792|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|42788|42792|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|42788|42792|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|42788|42792|-1 grows|0|-|-|..reportedHolds|14|0|compiler/views|42434|42439|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|42434|42439|-1 grows|0|-|-|..targets|8|0|compiler/views|42434|42439|-1 grows|0|-|-|..loops|6|0|compiler/views|42434|42439|-1 grows|4|-|-|..Tasks|6|0|compiler/views|42434|42439|-1
+body fn 42940-43521	known p grows|0|-|-|..reportedHolds|14|0|compiler/views|43088|43097|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|43088|43097|-1 grows|0|-|-|..reported|9|0|compiler/views|43088|43097|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|43088|43097|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|43088|43097|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|43088|43097|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|43088|43097|-1 grows|0|-|-|..nameLists|10|0|compiler/views|43231|43235|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|43231|43235|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|43231|43235|-1 grows|0|-|-|..strs|5|0|compiler/views|43231|43235|-1 grows|0|-|-|..strIds|7|0|compiler/views|43231|43235|-1 grows|2|-|-|..Holds|6|0|compiler/views|43231|43235|-1 grows|2|-|-|..Names|6|0|compiler/views|43231|43235|-1 grows|2|-|-|..Named|6|0|compiler/views|43231|43235|-1 grows|0|-|-|..targets|8|0|compiler/views|43231|43235|-1 grows|0|-|-|..loops|6|0|compiler/views|43231|43235|-1 grows|2|-|-|..Tasks|6|0|compiler/views|43231|43235|-1
+body fn 43635-44485	known p grows|0|-|-|..nameLists|10|0|compiler/views|43777|43788|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|43777|43788|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|43777|43788|-1 grows|0|-|-|..strs|5|0|compiler/views|43777|43788|-1 grows|0|-|-|..strIds|7|0|compiler/views|43777|43788|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|44186|44192|-1 grows|3|-|-|..Holds|6|0|compiler/views|44186|44192|-1 grows|3|-|-|..Names|6|0|compiler/views|44434|44440|-1 grows|3|-|-|..Named|6|0|compiler/views|44434|44440|-1
+body fn 44677-45788	known p grows|0|-|-|..P.T.refHolds|13|0|compiler/views|44804|44811|-1 grows|4|-|-|..Holds|6|0|compiler/views|44904|44911|-1 grows|0|-|-|..nameLists|10|0|compiler/views|45032|45043|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|45032|45043|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|45032|45043|-1 grows|0|-|-|..strs|5|0|compiler/views|45032|45043|-1 grows|0|-|-|..strIds|7|0|compiler/views|45032|45043|-1
+body fn 45925-49004	known p grows|0|-|-|..reportedHolds|14|0|compiler/views|46151|46160|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|46151|46160|-1 grows|0|-|-|..reported|9|0|compiler/views|46151|46160|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|46151|46160|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|46151|46160|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|46151|46160|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|46151|46160|-1 grows|0|-|-|..nameLists|10|0|compiler/views|46436|46446|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|46436|46446|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|46436|46446|-1 grows|0|-|-|..strs|5|0|compiler/views|46436|46446|-1 grows|0|-|-|..strIds|7|0|compiler/views|46436|46446|-1 grows|2|-|-|..Holds|6|0|compiler/views|46743|46747|-1 grows|3|-|-|.|0|0|compiler/views|48979|48986|-1 grows|2|-|-|..Names|6|0|compiler/views|47018|47023|-1 grows|2|-|-|..Named|6|0|compiler/views|47018|47023|-1 grows|0|-|-|..targets|8|0|compiler/views|47018|47023|-1 grows|0|-|-|..loops|6|0|compiler/views|47018|47023|-1 grows|2|-|-|..Tasks|6|0|compiler/views|47018|47023|-1
+body fn 4713-4881	known p,0
+body fn 4883-5026	known p keeps|1|-|-|.|0|0|compiler/views|4905|4905|0
+body fn 49319-50646	known p grows|0|-|-|..reportedHolds|14|0|compiler/views|49529|49532|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|49529|49532|-1 grows|0|-|-|..reported|9|0|compiler/views|49529|49532|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|49529|49532|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|49529|49532|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|49529|49532|-1 grows|4|-|-|.|0|0|compiler/views|49564|49571|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|49815|49822|-1 grows|0|-|-|..nameLists|10|0|compiler/views|49645|49649|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|49645|49649|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|49645|49649|-1 grows|0|-|-|..strs|5|0|compiler/views|49645|49649|-1 grows|0|-|-|..strIds|7|0|compiler/views|49645|49649|-1 grows|3|-|-|..Holds|6|0|compiler/views|49645|49649|-1 grows|3|-|-|..Names|6|0|compiler/views|49645|49649|-1 grows|3|-|-|..Named|6|0|compiler/views|49645|49649|-1 grows|0|-|-|..targets|8|0|compiler/views|49645|49649|-1 grows|0|-|-|..loops|6|0|compiler/views|49645|49649|-1 grows|3|-|-|..Tasks|6|0|compiler/views|49645|49649|-1
+body fn 50648-51063	known p grows|0|-|-|..nameLists|10|0|compiler/views|50847|50850|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|50847|50850|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|50847|50850|-1 grows|0|-|-|..strs|5|0|compiler/views|50847|50850|-1 grows|0|-|-|..strIds|7|0|compiler/views|50847|50850|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|50847|50850|-1 grows|0|-|-|..reportedHolds|14|0|compiler/views|50752|50756|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|50752|50756|-1 grows|0|-|-|..reported|9|0|compiler/views|50752|50756|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|50752|50756|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|50752|50756|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|50752|50756|-1 grows|2|-|-|..Holds|6|0|compiler/views|50752|50756|-1 grows|2|-|-|..Names|6|0|compiler/views|50752|50756|-1 grows|2|-|-|..Named|6|0|compiler/views|50752|50756|-1 grows|0|-|-|..targets|8|0|compiler/views|50752|50756|-1 grows|0|-|-|..loops|6|0|compiler/views|50752|50756|-1 grows|2|-|-|..Tasks|6|0|compiler/views|50752|50756|-1 grows|3|-|-|.|0|0|compiler/views|50847|50850|-1
+body fn 5089-5245	known p grows|0|-|-|..Holds|6|0|compiler/views|5211|5215|-1 grows|0|-|-|..Names|6|0|compiler/views|5233|5239|-1 grows|0|-|-|..Named|6|0|compiler/views|5233|5239|-1
+body fn 51065-51485	known p grows|2|-|-|..Holds|6|0|compiler/views|51342|51346|-1 grows|2|-|-|..Names|6|0|compiler/views|51342|51346|-1 grows|2|-|-|..Named|6|0|compiler/views|51342|51346|-1 grows|0|-|-|..nameLists|10|0|compiler/views|51342|51346|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|51342|51346|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|51342|51346|-1 grows|0|-|-|..strs|5|0|compiler/views|51342|51346|-1 grows|0|-|-|..strIds|7|0|compiler/views|51342|51346|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|51342|51346|-1 grows|0|-|-|..reportedHolds|14|0|compiler/views|51200|51204|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|51200|51204|-1 grows|0|-|-|..reported|9|0|compiler/views|51200|51204|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|51200|51204|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|51200|51204|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|51200|51204|-1 grows|0|-|-|..targets|8|0|compiler/views|51437|51442|-1 grows|0|-|-|..loops|6|0|compiler/views|51437|51442|-1 grows|2|-|-|..Tasks|6|0|compiler/views|51437|51442|-1 grows|3|-|-|.|0|0|compiler/views|51461|51465|-1
+body fn 51678-56698	known p grows|0|-|-|..strs|5|0|compiler/views|52455|52458|-1 grows|0|-|-|..strIds|7|0|compiler/views|52455|52458|-1 grows|0|-|-|..nameLists|10|0|compiler/views|53044|53054|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|53044|53054|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|53044|53054|-1 grows|0|-|-|..reported|9|0|compiler/views|54653|54657|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|54666|54678|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|54666|54678|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|54666|54678|-1 grows|5|-|-|.|0|0|compiler/views|54940|54947|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|55534|55541|-1 grows|4|-|-|..Holds|6|0|compiler/views|56629|56635|-1 grows|0|-|-|..reportedHolds|14|0|compiler/views|52005|52009|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|52005|52009|-1 grows|4|-|-|..Names|6|0|compiler/views|52005|52009|-1 grows|4|-|-|..Named|6|0|compiler/views|52005|52009|-1 grows|0|-|-|..targets|8|0|compiler/views|52005|52009|-1 grows|0|-|-|..loops|6|0|compiler/views|52005|52009|-1 grows|4|-|-|..Tasks|6|0|compiler/views|52005|52009|-1
+body fn 5247-5487	known p grows|0|-|-|..Names|6|0|compiler/views|5369|5373|-1 grows|0|-|-|..Named|6|0|compiler/views|5470|5474|-1
+body fn 5489-5562	known p
+body fn 56872-57048	known p
+body fn 57050-57206	known p
+body fn 57291-57451	known p
+body fn 57598-57999	known p grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|57747|57752|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|57747|57752|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|57747|57752|-1
+body fn 58194-58634	known p
+body fn 58679-58907	known p
+body fn 60435-60811	known p grows|0|-|-|..Files|6|0|compiler/views|60620|60623|-1 grows|0|-|-|..Given|6|0|compiler/views|60744|60747|-1
+body fn 60911-61183	known p grows|1|-|-|..Lines|6|0|compiler/views|61153|61156|-1
+body fn 61600-62075	known p
+body fn 62077-62856	known p
+body fn 62905-63022	known p
+body fn 63096-63239	known p
+body fn 63444-63846	known p
+body fn 64164-64669	known p
+body fn 64671-65221	known p
+body fn 65223-65395	known p
+body fn 65397-65589	known p
+body fn 65699-66082	known p grows|0|-|-|..P.L.Names.texts|16|0|compiler/views|65954|65965|-1 grows|0|-|-|..P.L.Names.ids|14|0|compiler/views|65954|65965|-1 grows|0|-|-|..strs|5|0|compiler/views|65954|65965|-1 grows|0|-|-|..strIds|7|0|compiler/views|65954|65965|-1 grows|0|-|-|..given|6|0|compiler/views|66044|66047|-1
+body fn 66084-67066	known p grows|0|-|-|..P.L.Names.texts|16|0|compiler/views|66823|66831|-1 grows|0|-|-|..P.L.Names.ids|14|0|compiler/views|66823|66831|-1 grows|0|-|-|..strs|5|0|compiler/views|66823|66831|-1 grows|0|-|-|..strIds|7|0|compiler/views|66823|66831|-1
+body fn 67068-67853	known p grows|0|-|-|..P.L.Names.texts|16|0|compiler/views|67294|67300|-1 grows|0|-|-|..P.L.Names.ids|14|0|compiler/views|67294|67300|-1 grows|0|-|-|..strs|5|0|compiler/views|67376|67379|-1 grows|0|-|-|..strIds|7|0|compiler/views|67376|67379|-1
+body fn 67855-68060	known p
+body fn 68133-68718	known p grows|1|-|-|..Stale|6|0|compiler/views|68611|68615|-1
+body fn 68776-69174	known p grows|0|-|-|..edgeFrom|9|0|compiler/views|68876|68880|-1 grows|0|-|-|..edgeTo|7|0|compiler/views|68956|68961|-1 grows|0|-|-|..tIndex|7|0|compiler/views|69002|69006|-1 grows|0|-|-|..tLow|5|0|compiler/views|69026|69030|-1 grows|0|-|-|..tOn|4|0|compiler/views|69048|69052|-1 grows|0|-|-|..tStack|7|0|compiler/views|69156|69161|-1 grows|0|-|-|..compFrom|9|0|compiler/views|69156|69161|-1 grows|0|-|-|..compNodes|10|0|compiler/views|69156|69161|-1
+body fn 69176-69924	known p grows|0|-|-|..tStack|7|0|compiler/views|69287|69291|-1 grows|0|-|-|..compFrom|9|0|compiler/views|69724|69728|-1 grows|0|-|-|..compNodes|10|0|compiler/views|69867|69871|-1
+body fn 69926-70093	known p
+body fn 70130-70252	known p grows|1|-|-|.|0|0|compiler/views|70231|70240|-1
+body fn 70254-71417	known p grows|1|-|-|.|0|0|compiler/views|70483|70492|-1
+body fn 71419-71932	known p grows|1|-|-|.|0|0|compiler/views|71557|71566|-1
+body fn 71934-74284	known p grows|1|-|-|.|0|0|compiler/views|72329|72333|-1
+body fn 74286-74561	known p grows|1|-|-|.|0|0|compiler/views|74394|74403|-1
+body fn 8863-8924	known p grows|0|-|-|..texts|6|0|compiler/views|8912|8919|-1 grows|0|-|-|..library|8|0|compiler/views|8912|8919|-1 grows|0|-|-|..strs|5|0|compiler/views|8912|8919|-1 grows|0|-|-|..strIds|7|0|compiler/views|8912|8919|-1 grows|0|-|-|..sums|5|0|compiler/views|8912|8919|-1 grows|0|-|-|..P.L.Names.texts|16|0|compiler/views|8912|8919|-1 grows|0|-|-|..P.L.Names.ids|14|0|compiler/views|8912|8919|-1 grows|0|-|-|..given|6|0|compiler/views|8912|8919|-1 grows|0|-|-|..edgeFrom|9|0|compiler/views|8912|8919|-1 grows|0|-|-|..edgeTo|7|0|compiler/views|8912|8919|-1 grows|0|-|-|..tIndex|7|0|compiler/views|8912|8919|-1 grows|0|-|-|..tLow|5|0|compiler/views|8912|8919|-1 grows|0|-|-|..tOn|4|0|compiler/views|8912|8919|-1 grows|0|-|-|..tStack|7|0|compiler/views|8912|8919|-1 grows|0|-|-|..compFrom|9|0|compiler/views|8912|8919|-1 grows|0|-|-|..compNodes|10|0|compiler/views|8912|8919|-1 grows|0|-|-|..paramAt|8|0|compiler/views|8912|8919|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|8912|8919|-1 grows|0|-|-|..reportedHolds|14|0|compiler/views|8912|8919|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|8912|8919|-1 grows|0|-|-|..reported|9|0|compiler/views|8912|8919|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|8912|8919|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|8912|8919|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|8912|8919|-1 grows|0|-|-|..nameLists|10|0|compiler/views|8912|8919|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|8912|8919|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|8912|8919|-1 grows|0|-|-|..targets|8|0|compiler/views|8912|8919|-1 grows|0|-|-|..loops|6|0|compiler/views|8912|8919|-1
+body fn 9353-10807	known p grows|0|-|-|..texts|6|0|compiler/views|9491|9494|-1 grows|0|-|-|..library|8|0|compiler/views|9571|9574|-1 grows|0|-|-|..strs|5|0|compiler/views|9837|9840|-1 grows|0|-|-|..strIds|7|0|compiler/views|9837|9840|-1 grows|0|-|-|..sums|5|0|compiler/views|9999|10003|-1 grows|0|-|-|..P.L.Names.texts|16|0|compiler/views|10180|10184|-1 grows|0|-|-|..P.L.Names.ids|14|0|compiler/views|10180|10184|-1 grows|0|-|-|..given|6|0|compiler/views|10180|10184|-1 grows|0|-|-|..edgeFrom|9|0|compiler/views|10196|10206|-1 grows|0|-|-|..edgeTo|7|0|compiler/views|10196|10206|-1 grows|0|-|-|..tIndex|7|0|compiler/views|10196|10206|-1 grows|0|-|-|..tLow|5|0|compiler/views|10196|10206|-1 grows|0|-|-|..tOn|4|0|compiler/views|10196|10206|-1 grows|0|-|-|..tStack|7|0|compiler/views|10196|10206|-1 grows|0|-|-|..compFrom|9|0|compiler/views|10196|10206|-1 grows|0|-|-|..compNodes|10|0|compiler/views|10196|10206|-1 grows|0|-|-|..paramAt|8|0|compiler/views|10583|10587|-1 grows|0|-|-|..P.T.refHolds|13|0|compiler/views|10583|10587|-1 grows|0|-|-|..reportedHolds|14|0|compiler/views|10583|10587|-1 grows|0|-|-|..reportedViews|14|0|compiler/views|10583|10587|-1 grows|0|-|-|..reported|9|0|compiler/views|10583|10587|-1 grows|0|-|-|..P.L.Diags.warns|16|0|compiler/views|10583|10587|-1 grows|0|-|-|..P.L.Diags.records|18|0|compiler/views|10583|10587|-1 grows|0|-|-|..P.L.Diags.notes|16|0|compiler/views|10583|10587|-1 grows|0|-|-|..nameLists|10|0|compiler/views|10583|10587|-1 grows|0|-|-|..fieldsOf|9|0|compiler/views|10583|10587|-1 grows|0|-|-|..nameLists[...]|15|0|compiler/views|10583|10587|-1 grows|0|-|-|..targets|8|0|compiler/views|10583|10587|-1 grows|0|-|-|..loops|6|0|compiler/views|10583|10587|-1 grows|1|-|-|..Stale|6|0|compiler/views|10777|10784|-1 grows|1|-|-|..Lines|6|0|compiler/views|10796|10802|-1
+body global ElemSeg	known p
+body lambda 63782-63828	known p
+baked ElemSeg [8 05000000000000000000000000000000 @8>1+0][8 5b2e2e2e5d]
+sig BodyKeys@61600 fn&(mut Viewer&) Array<String&>&
+sig Gather@60911 fn&(mut Viewer&, mut Kept&)
+sig Run@8863 fn&(mut Viewer&)
+sig RunKept@9353 fn&(mut Viewer&, mut Kept&)
+sig Summaries@63444 fn&(mut Viewer&, I64) Vec<String&>
+sig SummaryText@64164 fn&(mut Viewer&, I64) String ? Unwritable
+sig TakeHolding@60435 fn&(mut Kept&, fn&(reads Array<String&>&) Bool)
+sig after@18048 fn&(mut Viewer&, Span, Lvalue&, Char) Span
+sig argPlace@28860 fn&(Expr&) Lvalue?&
+sig arm@51065 fn&(mut Viewer&, Arm&, mut state&, mut Vec<view>&)
+sig arrayish@19470 fn&(mut Viewer&, TypeId) Bool
+sig assign@41744 fn&(mut Viewer&, Lvalue?&, Expr?&, Vec<view>&, mut state&)
+sig at@31416 fn&(mut Viewer&, Span) Where
+sig below@26668 fn&(mut Viewer&, place, I64, I64, Bool) place
+sig bind@40502 fn&(mut Viewer&, I64, Expr?&, Vec<view>&, Bool, mut state&)
+sig block@35219 fn&(mut Viewer&, Block?&, mut state&)
+sig bodyKey@62077 fn&(mut Viewer&, I64, Array<String&>&) String
+sig bufferElem@26107 fn&(mut Viewer&, Lvalue&, state&, mut Vec<place>&) ? NotBuffer
+sig bufferField@19858 fn&(mut Viewer&, TypeId) String
+sig bufferOf@24364 fn&(mut Viewer&, Lvalue&, state&, mut Vec<place>&) ? NotBuffer
+sig call@51678 fn&(mut Viewer&, Span, TypeId, Call&, mut state&, mut Vec<view>&)
+sig callPlaces@21705 fn&(mut Viewer&, Call&, state&, mut Vec<place>&)
+sig callTok@17343 fn&(mut Viewer&, Span, Call&) Span
+sig calleeType@58679 fn&(mut Viewer&, Call&) TypeId
+sig calls@70130 fn&(Block?&, mut Vec<I64>&)
+sig callsArm@74286 fn&(Arm?&, mut Vec<I64>&)
+sig callsExpr@71934 fn&(Expr?&, mut Vec<I64>&)
+sig callsItself@69926 fn&(mut Viewer&, I64) Bool
+sig callsPlace@71419 fn&(Lvalue?&, mut Vec<I64>&)
+sig callsStmt@70254 fn&(Stmt?&, mut Vec<I64>&)
+sig carries@19032 fn&(mut Viewer&, TypeId) Bool
+sig charAt@16346 fn&(mut Viewer&, I64) Char
+sig clauses@39321 fn&(mut Viewer&, Array<Clause&>&, mut state&, mut Vec<view>&)
+sig columnOf@25370 fn&(mut Viewer&, Lvalue&, state&, mut Vec<place>&) ? NotBuffer
+sig compare@68133 fn&(mut Viewer&, mut Kept&)
+sig components@68776 fn&(mut Viewer&)
+sig copy@4713 fn&(state&) state
+sig copyHint@56872 fn&(I64, String&) String
+sig deref@19111 fn&(mut Viewer&, TypeId) TypeId
+sig expr@45925 fn&(mut Viewer&, Expr?&, mut state&, mut Vec<view>&)
+sig exprEnd@18766 fn&(Expr&) I64
+sig exprPlaces@20776 fn&(mut Viewer&, Expr?&, state&, mut Vec<place>&)
+sig factPut@34394 fn&(mut Viewer&, mut Vec<fact>&, I64, I64, NameId, place, Span)
+sig factText@64671 fn&(mut Viewer&, String&, fact) String ? Unwritable
+sig fieldName@15774 fn&(mut Viewer&, TypeId, I64) String
+sig fileWord@65397 fn&(mut Viewer&, I64) String ? Unwritable
+sig forget@5089 fn&(mut state&, I64)
+sig givenGrowing@57598 fn&(mut Viewer&, Span, place, I64, I64, I64, Span)
+sig grow@33225 fn&(mut Viewer&, place, Span, I64, I64, Span, mut state&)
+sig grownAt@57291 fn&(mut Viewer&, place, Vec<place>&) I64
+sig handOut@38217 fn&(mut Viewer&, Span, Expr?&, mut state&)
+sig holdAdd@29314 fn&(mut state&, I64, view)
+sig holdsOf@29768 fn&(mut Viewer&, state&, I64, mut Vec<view>&)
+sig isParam@20395 fn&(mut Viewer&, I64) Bool
+sig isRecord@19671 fn&(mut Viewer&, TypeId) Bool
+sig keepIn@44677 fn&(mut Viewer&, Lvalue?&, TypeId, Vec<view>&, mut state&)
+sig keyedBefore@62905 fn&(mut Viewer&, I64, I64, Array<String&>&) Bool
+sig loop@38596 fn&(mut Viewer&, Block&, Block?&, mut state&)
+sig matchOf@50648 fn&(mut Viewer&, Match&, mut state&, mut Vec<view>&)
+sig meets@27364 fn&(mut Viewer&, place, place) Bool
+sig merge@29991 fn&(mut state&, state&)
+sig moduleOf@67855 fn&(mut Viewer&, String&) I64 ? Unwritable
+sig moduleWord@65223 fn&(mut Viewer&, I64) String ? Unwritable
+sig nameAdd@29615 fn&(mut state&, I64, place)
+sig nameFrom@16671 fn&(mut Viewer&, I64) Span
+sig named@20466 fn&(mut Viewer&, state&, I64) Bool
+sig parts@42940 fn&(mut Viewer&, Lvalue&, mut state&)
+sig passes@14241 fn&(mut Viewer&, view)
+sig placeAdd@20542 fn&(mut Vec<place>&, place)
+sig placeEnd@18559 fn&(Lvalue&) I64
+sig placePlaces@22508 fn&(mut Viewer&, Lvalue?&, state&, mut Vec<place>&)
+sig placeRefs@49319 fn&(mut Viewer&, Lvalue?&, Bool, mut state&, mut Vec<view>&)
+sig placeTok@17711 fn&(mut Viewer&, Lvalue&) Span
+sig plainType@63096 fn&(mut Viewer&, TypeId) Bool
+sig prefix@26975 fn&(mut Viewer&, I64, I64) Bool
+sig quoted@14890 fn&(mut Viewer&, I64) String
+sig readFact@67068 fn&(mut Viewer&, Vec<String&>&) fact ? Unwritable
+sig readSummary@66084 fn&(mut Viewer&, I64, String&) summary ? Unwritable
+sig real@27157 fn&(Root) Bool
+sig recordPlaces@23947 fn&(mut Viewer&, Lvalue&, state&, mut Vec<place>&)
+sig rootLocal@27760 fn&(mut Viewer&, Lvalue&) I64
+sig rootPlace@28036 fn&(mut Viewer&, Lvalue&) Lvalue?&
+sig seen@31532 fn&(mut Viewer&, Span) Bool
+sig set@4883 fn&(mut state&, state&)
+sig skipSpace@16498 fn&(mut Viewer&, I64) I64
+sig spawn@39683 fn&(mut Viewer&, Span, Spawn&, mut state&)
+sig state.dead@5489 fn&() state
+sig stmt@35680 fn&(mut Viewer&, Stmt?&, mut state&)
+sig storeInto@43635 fn&(mut Viewer&, Lvalue&, Vec<view>?&, mut state&)
+sig str@14517 fn&(mut Viewer&, String&) I64
+sig structish@19285 fn&(mut Viewer&, TypeId) Bool
+sig take@65699 fn&(mut Viewer&, mut Kept&)
+sig taskCopy@57050 fn&(I64, String&) String
+sig text@14718 fn&(mut Viewer&, NameId) String&
+sig tokOf@16986 fn&(mut Viewer&, Expr&) Span
+sig unAway@28610 fn&(Expr&) Expr&
+sig unname@5247 fn&(mut state&, I64)
+sig use@31813 fn&(mut Viewer&, I64, Span, state&)
+sig viewAdd@29077 fn&(mut Vec<view>&, view)
+sig viewsHeld@11553 fn&(mut Viewer&) Bool
+sig visit@69176 fn&(mut Viewer&, I64)
+sig walk@12934 fn&(mut Viewer&, I64, Bool)
+sig walkable@12569 fn&(mut Viewer&, I64) Bool
+sig weight@31196 fn&(state&) I64
+sig where@15297 fn&(mut Viewer&, place) String
+sig writtenFn@58194 fn&(Expr&) I64
+end
+sum 48225fd14e3f047654a5c99a550a1ac0796fc0a534a2e14a603507a09907dd35

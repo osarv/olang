@@ -1,0 +1,32 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.3, round 8): a Vec of text copied - a by-value argument its callee changes, a local it is copied
+# into - has its text built in slots of where the copy goes, as the element's own stores build it, so the elements
+# replaced free their text (130 MB at 80,000 turns when a copy's text was built in no slot)
+N I64 = 80000
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 20 { w.Push($i + "-" + $j + " padded out a little") }
+    return w
+}
+
+# a by-value argument the callee changes: a copy of its own
+fn longest(v Vec<String>) I64 {
+    v.Push("one more, long enough to count")
+    n I64 = 0
+    for s in v { n = n.Max(s.Len()) }
+    return n
+}
+
+fn main() {
+    rows := Array<Vec<String>>(10)
+    t := 0
+    for i in range N {
+        rows[i % 10] = mk(i)
+        c := rows[(i + 3) % 10]
+        c.Push("x")
+        t += longest(rows[i % 10]) + c.Len()
+    }
+    io.PutLine($t + " " + $rows[3][0])!
+}

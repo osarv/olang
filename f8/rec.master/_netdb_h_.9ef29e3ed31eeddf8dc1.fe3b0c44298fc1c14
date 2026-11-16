@@ -1,0 +1,1065 @@
+olang front record
+body global AF_ALG	known p
+body global AF_APPLETALK	known p
+body global AF_ASH	known p
+body global AF_ATMPVC	known p
+body global AF_ATMSVC	known p
+body global AF_AX25	known p
+body global AF_BLUETOOTH	known p
+body global AF_BRIDGE	known p
+body global AF_CAIF	known p
+body global AF_CAN	known p
+body global AF_DECnet	known p
+body global AF_ECONET	known p
+body global AF_FILE	known p
+body global AF_IB	known p
+body global AF_IEEE802154	known p
+body global AF_INET	known p
+body global AF_INET6	known p
+body global AF_IPX	known p
+body global AF_IRDA	known p
+body global AF_ISDN	known p
+body global AF_IUCV	known p
+body global AF_KCM	known p
+body global AF_KEY	known p
+body global AF_LLC	known p
+body global AF_LOCAL	known p
+body global AF_MAX	known p
+body global AF_MCTP	known p
+body global AF_MPLS	known p
+body global AF_NETBEUI	known p
+body global AF_NETLINK	known p
+body global AF_NETROM	known p
+body global AF_NFC	known p
+body global AF_PACKET	known p
+body global AF_PHONET	known p
+body global AF_PPPOX	known p
+body global AF_QIPCRTR	known p
+body global AF_RDS	known p
+body global AF_ROSE	known p
+body global AF_ROUTE	known p
+body global AF_RXRPC	known p
+body global AF_SECURITY	known p
+body global AF_SMC	known p
+body global AF_SNA	known p
+body global AF_TIPC	known p
+body global AF_UNIX	known p
+body global AF_UNSPEC	known p
+body global AF_VSOCK	known p
+body global AF_WANPIPE	known p
+body global AF_X25	known p
+body global AF_XDP	known p
+body global AI_ADDRCONFIG	known p
+body global AI_ALL	known p
+body global AI_CANONIDN	known p
+body global AI_CANONNAME	known p
+body global AI_IDN	known p
+body global AI_NUMERICHOST	known p
+body global AI_NUMERICSERV	known p
+body global AI_PASSIVE	known p
+body global AI_V4MAPPED	known p
+body global BIG_ENDIAN	known p
+body global BYTE_ORDER	known p
+body global EAI_ADDRFAMILY	known p
+body global EAI_AGAIN	known p
+body global EAI_ALLDONE	known p
+body global EAI_BADFLAGS	known p
+body global EAI_CANCELED	known p
+body global EAI_FAIL	known p
+body global EAI_FAMILY	known p
+body global EAI_IDN_ENCODE	known p
+body global EAI_INPROGRESS	known p
+body global EAI_INTR	known p
+body global EAI_MEMORY	known p
+body global EAI_NODATA	known p
+body global EAI_NONAME	known p
+body global EAI_NOTCANCELED	known p
+body global EAI_OVERFLOW	known p
+body global EAI_SERVICE	known p
+body global EAI_SOCKTYPE	known p
+body global EAI_SYSTEM	known p
+body global FD_SETSIZE	known p
+body global FIOGETOWN	known p
+body global FIOSETOWN	known p
+body global GAI_NOWAIT	known p
+body global GAI_WAIT	known p
+body global HOST_NOT_FOUND	known p
+body global INADDR_ALLHOSTS_GROUP	known p
+body global INADDR_ALLRTRS_GROUP	known p
+body global INADDR_ALLSNOOPERS_GROUP	known p
+body global INADDR_ANY	known p
+body global INADDR_BROADCAST	known p
+body global INADDR_DUMMY	known p
+body global INADDR_LOOPBACK	known p
+body global INADDR_MAX_LOCAL_GROUP	known p
+body global INADDR_NONE	known p
+body global INADDR_UNSPEC_GROUP	known p
+body global INET6_ADDRSTRLEN	known p
+body global INET_ADDRSTRLEN	known p
+body global IN_CLASSA_HOST	known p
+body global IN_CLASSA_MAX	known p
+body global IN_CLASSA_NET	known p
+body global IN_CLASSA_NSHIFT	known p
+body global IN_CLASSB_HOST	known p
+body global IN_CLASSB_MAX	known p
+body global IN_CLASSB_NET	known p
+body global IN_CLASSB_NSHIFT	known p
+body global IN_CLASSC_HOST	known p
+body global IN_CLASSC_NET	known p
+body global IN_CLASSC_NSHIFT	known p
+body global IN_LOOPBACKNET	known p
+body global IPPORT_BIFFUDP	known p
+body global IPPORT_CMDSERVER	known p
+body global IPPORT_DAYTIME	known p
+body global IPPORT_DISCARD	known p
+body global IPPORT_ECHO	known p
+body global IPPORT_EFSSERVER	known p
+body global IPPORT_EXECSERVER	known p
+body global IPPORT_FINGER	known p
+body global IPPORT_FTP	known p
+body global IPPORT_LOGINSERVER	known p
+body global IPPORT_MTP	known p
+body global IPPORT_NAMESERVER	known p
+body global IPPORT_NETSTAT	known p
+body global IPPORT_RESERVED	known p
+body global IPPORT_RJE	known p
+body global IPPORT_ROUTESERVER	known p
+body global IPPORT_SMTP	known p
+body global IPPORT_SUPDUP	known p
+body global IPPORT_SYSTAT	known p
+body global IPPORT_TELNET	known p
+body global IPPORT_TFTP	known p
+body global IPPORT_TIMESERVER	known p
+body global IPPORT_TTYLINK	known p
+body global IPPORT_USERRESERVED	known p
+body global IPPORT_WHOIS	known p
+body global IPPORT_WHOSERVER	known p
+body global IPPROTO_AH	known p
+body global IPPROTO_BEETPH	known p
+body global IPPROTO_COMP	known p
+body global IPPROTO_DCCP	known p
+body global IPPROTO_DSTOPTS	known p
+body global IPPROTO_EGP	known p
+body global IPPROTO_ENCAP	known p
+body global IPPROTO_ESP	known p
+body global IPPROTO_ETHERNET	known p
+body global IPPROTO_FRAGMENT	known p
+body global IPPROTO_GRE	known p
+body global IPPROTO_HOPOPTS	known p
+body global IPPROTO_ICMP	known p
+body global IPPROTO_ICMPV6	known p
+body global IPPROTO_IDP	known p
+body global IPPROTO_IGMP	known p
+body global IPPROTO_IP	known p
+body global IPPROTO_IPIP	known p
+body global IPPROTO_IPV6	known p
+body global IPPROTO_L2TP	known p
+body global IPPROTO_MAX	known p
+body global IPPROTO_MH	known p
+body global IPPROTO_MPLS	known p
+body global IPPROTO_MPTCP	known p
+body global IPPROTO_MTP	known p
+body global IPPROTO_NONE	known p
+body global IPPROTO_PIM	known p
+body global IPPROTO_PUP	known p
+body global IPPROTO_RAW	known p
+body global IPPROTO_ROUTING	known p
+body global IPPROTO_RSVP	known p
+body global IPPROTO_SCTP	known p
+body global IPPROTO_TCP	known p
+body global IPPROTO_TP	known p
+body global IPPROTO_UDP	known p
+body global IPPROTO_UDPLITE	known p
+body global IPV6_2292DSTOPTS	known p
+body global IPV6_2292HOPLIMIT	known p
+body global IPV6_2292HOPOPTS	known p
+body global IPV6_2292PKTINFO	known p
+body global IPV6_2292PKTOPTIONS	known p
+body global IPV6_2292RTHDR	known p
+body global IPV6_ADDRFORM	known p
+body global IPV6_ADDR_PREFERENCES	known p
+body global IPV6_ADD_MEMBERSHIP	known p
+body global IPV6_AUTHHDR	known p
+body global IPV6_AUTOFLOWLABEL	known p
+body global IPV6_CHECKSUM	known p
+body global IPV6_DONTFRAG	known p
+body global IPV6_DROP_MEMBERSHIP	known p
+body global IPV6_DSTOPTS	known p
+body global IPV6_FREEBIND	known p
+body global IPV6_HDRINCL	known p
+body global IPV6_HOPLIMIT	known p
+body global IPV6_HOPOPTS	known p
+body global IPV6_IPSEC_POLICY	known p
+body global IPV6_JOIN_ANYCAST	known p
+body global IPV6_JOIN_GROUP	known p
+body global IPV6_LEAVE_ANYCAST	known p
+body global IPV6_LEAVE_GROUP	known p
+body global IPV6_MINHOPCOUNT	known p
+body global IPV6_MTU	known p
+body global IPV6_MTU_DISCOVER	known p
+body global IPV6_MULTICAST_ALL	known p
+body global IPV6_MULTICAST_HOPS	known p
+body global IPV6_MULTICAST_IF	known p
+body global IPV6_MULTICAST_LOOP	known p
+body global IPV6_NEXTHOP	known p
+body global IPV6_ORIGDSTADDR	known p
+body global IPV6_PATHMTU	known p
+body global IPV6_PKTINFO	known p
+body global IPV6_PMTUDISC_DO	known p
+body global IPV6_PMTUDISC_DONT	known p
+body global IPV6_PMTUDISC_INTERFACE	known p
+body global IPV6_PMTUDISC_OMIT	known p
+body global IPV6_PMTUDISC_PROBE	known p
+body global IPV6_PMTUDISC_WANT	known p
+body global IPV6_RECVDSTOPTS	known p
+body global IPV6_RECVERR	known p
+body global IPV6_RECVERR_RFC4884	known p
+body global IPV6_RECVFRAGSIZE	known p
+body global IPV6_RECVHOPLIMIT	known p
+body global IPV6_RECVHOPOPTS	known p
+body global IPV6_RECVORIGDSTADDR	known p
+body global IPV6_RECVPATHMTU	known p
+body global IPV6_RECVPKTINFO	known p
+body global IPV6_RECVRTHDR	known p
+body global IPV6_RECVTCLASS	known p
+body global IPV6_ROUTER_ALERT	known p
+body global IPV6_ROUTER_ALERT_ISOLATE	known p
+body global IPV6_RTHDR	known p
+body global IPV6_RTHDRDSTOPTS	known p
+body global IPV6_RTHDR_LOOSE	known p
+body global IPV6_RTHDR_STRICT	known p
+body global IPV6_RTHDR_TYPE_0	known p
+body global IPV6_RXDSTOPTS	known p
+body global IPV6_RXHOPOPTS	known p
+body global IPV6_TCLASS	known p
+body global IPV6_TRANSPARENT	known p
+body global IPV6_UNICAST_HOPS	known p
+body global IPV6_UNICAST_IF	known p
+body global IPV6_V6ONLY	known p
+body global IPV6_XFRM_POLICY	known p
+body global IP_ADD_MEMBERSHIP	known p
+body global IP_ADD_SOURCE_MEMBERSHIP	known p
+body global IP_BIND_ADDRESS_NO_PORT	known p
+body global IP_BLOCK_SOURCE	known p
+body global IP_CHECKSUM	known p
+body global IP_DEFAULT_MULTICAST_LOOP	known p
+body global IP_DEFAULT_MULTICAST_TTL	known p
+body global IP_DROP_MEMBERSHIP	known p
+body global IP_DROP_SOURCE_MEMBERSHIP	known p
+body global IP_FREEBIND	known p
+body global IP_HDRINCL	known p
+body global IP_IPSEC_POLICY	known p
+body global IP_LOCAL_PORT_RANGE	known p
+body global IP_MAX_MEMBERSHIPS	known p
+body global IP_MINTTL	known p
+body global IP_MSFILTER	known p
+body global IP_MTU	known p
+body global IP_MTU_DISCOVER	known p
+body global IP_MULTICAST_ALL	known p
+body global IP_MULTICAST_IF	known p
+body global IP_MULTICAST_LOOP	known p
+body global IP_MULTICAST_TTL	known p
+body global IP_NODEFRAG	known p
+body global IP_OPTIONS	known p
+body global IP_ORIGDSTADDR	known p
+body global IP_PASSSEC	known p
+body global IP_PKTINFO	known p
+body global IP_PKTOPTIONS	known p
+body global IP_PMTUDISC	known p
+body global IP_PMTUDISC_DO	known p
+body global IP_PMTUDISC_DONT	known p
+body global IP_PMTUDISC_INTERFACE	known p
+body global IP_PMTUDISC_OMIT	known p
+body global IP_PMTUDISC_PROBE	known p
+body global IP_PMTUDISC_WANT	known p
+body global IP_PROTOCOL	known p
+body global IP_RECVERR	known p
+body global IP_RECVERR_RFC4884	known p
+body global IP_RECVFRAGSIZE	known p
+body global IP_RECVOPTS	known p
+body global IP_RECVORIGDSTADDR	known p
+body global IP_RECVRETOPTS	known p
+body global IP_RECVTOS	known p
+body global IP_RECVTTL	known p
+body global IP_RETOPTS	known p
+body global IP_ROUTER_ALERT	known p
+body global IP_TOS	known p
+body global IP_TRANSPARENT	known p
+body global IP_TTL	known p
+body global IP_UNBLOCK_SOURCE	known p
+body global IP_UNICAST_IF	known p
+body global IP_XFRM_POLICY	known p
+body global LITTLE_ENDIAN	known p
+body global MCAST_BLOCK_SOURCE	known p
+body global MCAST_EXCLUDE	known p
+body global MCAST_INCLUDE	known p
+body global MCAST_JOIN_GROUP	known p
+body global MCAST_JOIN_SOURCE_GROUP	known p
+body global MCAST_LEAVE_GROUP	known p
+body global MCAST_LEAVE_SOURCE_GROUP	known p
+body global MCAST_MSFILTER	known p
+body global MCAST_UNBLOCK_SOURCE	known p
+body global MSG_BATCH	known p
+body global MSG_CMSG_CLOEXEC	known p
+body global MSG_CONFIRM	known p
+body global MSG_CTRUNC	known p
+body global MSG_DONTROUTE	known p
+body global MSG_DONTWAIT	known p
+body global MSG_EOR	known p
+body global MSG_ERRQUEUE	known p
+body global MSG_FASTOPEN	known p
+body global MSG_FIN	known p
+body global MSG_MORE	known p
+body global MSG_NOSIGNAL	known p
+body global MSG_OOB	known p
+body global MSG_PEEK	known p
+body global MSG_PROXY	known p
+body global MSG_RST	known p
+body global MSG_SYN	known p
+body global MSG_TRUNC	known p
+body global MSG_TRYHARD	known p
+body global MSG_WAITALL	known p
+body global MSG_WAITFORONE	known p
+body global MSG_ZEROCOPY	known p
+body global NETDB_INTERNAL	known p
+body global NETDB_SUCCESS	known p
+body global NFDBITS	known p
+body global NI_DGRAM	known p
+body global NI_IDN	known p
+body global NI_MAXHOST	known p
+body global NI_MAXSERV	known p
+body global NI_NAMEREQD	known p
+body global NI_NOFQDN	known p
+body global NI_NUMERICHOST	known p
+body global NI_NUMERICSERV	known p
+body global NO_ADDRESS	known p
+body global NO_DATA	known p
+body global NO_RECOVERY	known p
+body global PDP_ENDIAN	known p
+body global PF_ALG	known p
+body global PF_APPLETALK	known p
+body global PF_ASH	known p
+body global PF_ATMPVC	known p
+body global PF_ATMSVC	known p
+body global PF_AX25	known p
+body global PF_BLUETOOTH	known p
+body global PF_BRIDGE	known p
+body global PF_CAIF	known p
+body global PF_CAN	known p
+body global PF_DECnet	known p
+body global PF_ECONET	known p
+body global PF_FILE	known p
+body global PF_IB	known p
+body global PF_IEEE802154	known p
+body global PF_INET	known p
+body global PF_INET6	known p
+body global PF_IPX	known p
+body global PF_IRDA	known p
+body global PF_ISDN	known p
+body global PF_IUCV	known p
+body global PF_KCM	known p
+body global PF_KEY	known p
+body global PF_LLC	known p
+body global PF_LOCAL	known p
+body global PF_MAX	known p
+body global PF_MCTP	known p
+body global PF_MPLS	known p
+body global PF_NETBEUI	known p
+body global PF_NETLINK	known p
+body global PF_NETROM	known p
+body global PF_NFC	known p
+body global PF_PACKET	known p
+body global PF_PHONET	known p
+body global PF_PPPOX	known p
+body global PF_QIPCRTR	known p
+body global PF_RDS	known p
+body global PF_ROSE	known p
+body global PF_ROUTE	known p
+body global PF_RXRPC	known p
+body global PF_SECURITY	known p
+body global PF_SMC	known p
+body global PF_SNA	known p
+body global PF_TIPC	known p
+body global PF_UNIX	known p
+body global PF_UNSPEC	known p
+body global PF_VSOCK	known p
+body global PF_WANPIPE	known p
+body global PF_X25	known p
+body global PF_XDP	known p
+body global SCM_CREDENTIALS	known p
+body global SCM_PIDFD	known p
+body global SCM_RIGHTS	known p
+body global SCM_SECURITY	known p
+body global SCM_TIMESTAMP	known p
+body global SCM_TIMESTAMPING	known p
+body global SCM_TIMESTAMPING_OPT_STATS	known p
+body global SCM_TIMESTAMPING_PKTINFO	known p
+body global SCM_TIMESTAMPNS	known p
+body global SCM_TXTIME	known p
+body global SCM_WIFI_STATUS	known p
+body global SCOPE_DELIMITER	known p
+body global SHUT_RD	known p
+body global SHUT_RDWR	known p
+body global SHUT_WR	known p
+body global SIOCATMARK	known p
+body global SIOCGPGRP	known p
+body global SIOCGSTAMPNS_OLD	known p
+body global SIOCGSTAMP_OLD	known p
+body global SIOCSPGRP	known p
+body global SOCK_CLOEXEC	known p
+body global SOCK_DCCP	known p
+body global SOCK_DGRAM	known p
+body global SOCK_NONBLOCK	known p
+body global SOCK_PACKET	known p
+body global SOCK_RAW	known p
+body global SOCK_RDM	known p
+body global SOCK_SEQPACKET	known p
+body global SOCK_STREAM	known p
+body global SOL_AAL	known p
+body global SOL_ALG	known p
+body global SOL_ATM	known p
+body global SOL_BLUETOOTH	known p
+body global SOL_CAIF	known p
+body global SOL_DCCP	known p
+body global SOL_DECNET	known p
+body global SOL_ICMPV6	known p
+body global SOL_IP	known p
+body global SOL_IPV6	known p
+body global SOL_IRDA	known p
+body global SOL_IUCV	known p
+body global SOL_KCM	known p
+body global SOL_LLC	known p
+body global SOL_MCTP	known p
+body global SOL_MPTCP	known p
+body global SOL_NETBEUI	known p
+body global SOL_NETLINK	known p
+body global SOL_NFC	known p
+body global SOL_PACKET	known p
+body global SOL_PNPIPE	known p
+body global SOL_PPPOL2TP	known p
+body global SOL_RAW	known p
+body global SOL_RDS	known p
+body global SOL_RXRPC	known p
+body global SOL_SMC	known p
+body global SOL_SOCKET	known p
+body global SOL_TIPC	known p
+body global SOL_TLS	known p
+body global SOL_X25	known p
+body global SOL_XDP	known p
+body global SOMAXCONN	known p
+body global SO_ACCEPTCONN	known p
+body global SO_ATTACH_BPF	known p
+body global SO_ATTACH_FILTER	known p
+body global SO_ATTACH_REUSEPORT_CBPF	known p
+body global SO_ATTACH_REUSEPORT_EBPF	known p
+body global SO_BINDTODEVICE	known p
+body global SO_BINDTOIFINDEX	known p
+body global SO_BPF_EXTENSIONS	known p
+body global SO_BROADCAST	known p
+body global SO_BSDCOMPAT	known p
+body global SO_BUF_LOCK	known p
+body global SO_BUSY_POLL	known p
+body global SO_BUSY_POLL_BUDGET	known p
+body global SO_CNX_ADVICE	known p
+body global SO_COOKIE	known p
+body global SO_DEBUG	known p
+body global SO_DETACH_BPF	known p
+body global SO_DETACH_FILTER	known p
+body global SO_DETACH_REUSEPORT_BPF	known p
+body global SO_DOMAIN	known p
+body global SO_DONTROUTE	known p
+body global SO_ERROR	known p
+body global SO_GET_FILTER	known p
+body global SO_INCOMING_CPU	known p
+body global SO_INCOMING_NAPI_ID	known p
+body global SO_KEEPALIVE	known p
+body global SO_LINGER	known p
+body global SO_LOCK_FILTER	known p
+body global SO_MARK	known p
+body global SO_MAX_PACING_RATE	known p
+body global SO_MEMINFO	known p
+body global SO_NETNS_COOKIE	known p
+body global SO_NOFCS	known p
+body global SO_NO_CHECK	known p
+body global SO_OOBINLINE	known p
+body global SO_PASSCRED	known p
+body global SO_PASSPIDFD	known p
+body global SO_PASSSEC	known p
+body global SO_PEEK_OFF	known p
+body global SO_PEERCRED	known p
+body global SO_PEERGROUPS	known p
+body global SO_PEERNAME	known p
+body global SO_PEERPIDFD	known p
+body global SO_PEERSEC	known p
+body global SO_PREFER_BUSY_POLL	known p
+body global SO_PRIORITY	known p
+body global SO_PROTOCOL	known p
+body global SO_RCVBUF	known p
+body global SO_RCVBUFFORCE	known p
+body global SO_RCVLOWAT	known p
+body global SO_RCVMARK	known p
+body global SO_RCVTIMEO	known p
+body global SO_RCVTIMEO_NEW	known p
+body global SO_RCVTIMEO_OLD	known p
+body global SO_RESERVE_MEM	known p
+body global SO_REUSEADDR	known p
+body global SO_REUSEPORT	known p
+body global SO_RXQ_OVFL	known p
+body global SO_SECURITY_AUTHENTICATION	known p
+body global SO_SECURITY_ENCRYPTION_NETWORK	known p
+body global SO_SECURITY_ENCRYPTION_TRANSPORT	known p
+body global SO_SELECT_ERR_QUEUE	known p
+body global SO_SNDBUF	known p
+body global SO_SNDBUFFORCE	known p
+body global SO_SNDLOWAT	known p
+body global SO_SNDTIMEO	known p
+body global SO_SNDTIMEO_NEW	known p
+body global SO_SNDTIMEO_OLD	known p
+body global SO_TIMESTAMP	known p
+body global SO_TIMESTAMPING	known p
+body global SO_TIMESTAMPING_NEW	known p
+body global SO_TIMESTAMPING_OLD	known p
+body global SO_TIMESTAMPNS	known p
+body global SO_TIMESTAMPNS_NEW	known p
+body global SO_TIMESTAMPNS_OLD	known p
+body global SO_TIMESTAMP_NEW	known p
+body global SO_TIMESTAMP_OLD	known p
+body global SO_TXREHASH	known p
+body global SO_TXTIME	known p
+body global SO_TYPE	known p
+body global SO_WIFI_STATUS	known p
+body global SO_ZEROCOPY	known p
+body global TRY_AGAIN	known p
+baked AF_ALG [8 26000000]
+baked AF_APPLETALK [8 05000000]
+baked AF_ASH [8 12000000]
+baked AF_ATMPVC [8 08000000]
+baked AF_ATMSVC [8 14000000]
+baked AF_AX25 [8 03000000]
+baked AF_BLUETOOTH [8 1f000000]
+baked AF_BRIDGE [8 07000000]
+baked AF_CAIF [8 25000000]
+baked AF_CAN [8 1d000000]
+baked AF_DECnet [8 0c000000]
+baked AF_ECONET [8 13000000]
+baked AF_FILE [8 01000000]
+baked AF_IB [8 1b000000]
+baked AF_IEEE802154 [8 24000000]
+baked AF_INET [8 02000000]
+baked AF_INET6 [8 0a000000]
+baked AF_IPX [8 04000000]
+baked AF_IRDA [8 17000000]
+baked AF_ISDN [8 22000000]
+baked AF_IUCV [8 20000000]
+baked AF_KCM [8 29000000]
+baked AF_KEY [8 0f000000]
+baked AF_LLC [8 1a000000]
+baked AF_LOCAL [8 01000000]
+baked AF_MAX [8 2e000000]
+baked AF_MCTP [8 2d000000]
+baked AF_MPLS [8 1c000000]
+baked AF_NETBEUI [8 0d000000]
+baked AF_NETLINK [8 10000000]
+baked AF_NETROM [8 06000000]
+baked AF_NFC [8 27000000]
+baked AF_PACKET [8 11000000]
+baked AF_PHONET [8 23000000]
+baked AF_PPPOX [8 18000000]
+baked AF_QIPCRTR [8 2a000000]
+baked AF_RDS [8 15000000]
+baked AF_ROSE [8 0b000000]
+baked AF_ROUTE [8 10000000]
+baked AF_RXRPC [8 21000000]
+baked AF_SECURITY [8 0e000000]
+baked AF_SMC [8 2b000000]
+baked AF_SNA [8 16000000]
+baked AF_TIPC [8 1e000000]
+baked AF_UNIX [8 01000000]
+baked AF_UNSPEC [8 00000000]
+baked AF_VSOCK [8 28000000]
+baked AF_WANPIPE [8 19000000]
+baked AF_X25 [8 09000000]
+baked AF_XDP [8 2c000000]
+baked AI_ADDRCONFIG [8 20000000]
+baked AI_ALL [8 10000000]
+baked AI_CANONIDN [8 80000000]
+baked AI_CANONNAME [8 02000000]
+baked AI_IDN [8 40000000]
+baked AI_NUMERICHOST [8 04000000]
+baked AI_NUMERICSERV [8 00040000]
+baked AI_PASSIVE [8 01000000]
+baked AI_V4MAPPED [8 08000000]
+baked BIG_ENDIAN [8 e1100000]
+baked BYTE_ORDER [8 d2040000]
+baked EAI_ADDRFAMILY [8 f7ffffff]
+baked EAI_AGAIN [8 fdffffff]
+baked EAI_ALLDONE [8 99ffffff]
+baked EAI_BADFLAGS [8 ffffffff]
+baked EAI_CANCELED [8 9bffffff]
+baked EAI_FAIL [8 fcffffff]
+baked EAI_FAMILY [8 faffffff]
+baked EAI_IDN_ENCODE [8 97ffffff]
+baked EAI_INPROGRESS [8 9cffffff]
+baked EAI_INTR [8 98ffffff]
+baked EAI_MEMORY [8 f6ffffff]
+baked EAI_NODATA [8 fbffffff]
+baked EAI_NONAME [8 feffffff]
+baked EAI_NOTCANCELED [8 9affffff]
+baked EAI_OVERFLOW [8 f4ffffff]
+baked EAI_SERVICE [8 f8ffffff]
+baked EAI_SOCKTYPE [8 f9ffffff]
+baked EAI_SYSTEM [8 f5ffffff]
+baked FD_SETSIZE [8 00040000]
+baked FIOGETOWN [8 03890000]
+baked FIOSETOWN [8 01890000]
+baked GAI_NOWAIT [8 01000000]
+baked GAI_WAIT [8 00000000]
+baked HOST_NOT_FOUND [8 01000000]
+baked INADDR_ALLHOSTS_GROUP [8 010000e000000000]
+baked INADDR_ALLRTRS_GROUP [8 020000e000000000]
+baked INADDR_ALLSNOOPERS_GROUP [8 6a0000e000000000]
+baked INADDR_ANY [8 00000000]
+baked INADDR_BROADCAST [8 ffffffff00000000]
+baked INADDR_DUMMY [8 080000c000000000]
+baked INADDR_LOOPBACK [8 0100007f]
+baked INADDR_MAX_LOCAL_GROUP [8 ff0000e000000000]
+baked INADDR_NONE [8 ffffffff00000000]
+baked INADDR_UNSPEC_GROUP [8 000000e000000000]
+baked INET6_ADDRSTRLEN [8 2e000000]
+baked INET_ADDRSTRLEN [8 10000000]
+baked IN_CLASSA_HOST [8 ffffff00]
+baked IN_CLASSA_MAX [8 80000000]
+baked IN_CLASSA_NET [8 000000ff00000000]
+baked IN_CLASSA_NSHIFT [8 18000000]
+baked IN_CLASSB_HOST [8 ffff0000]
+baked IN_CLASSB_MAX [8 00000100]
+baked IN_CLASSB_NET [8 0000ffff00000000]
+baked IN_CLASSB_NSHIFT [8 10000000]
+baked IN_CLASSC_HOST [8 ff000000]
+baked IN_CLASSC_NET [8 00ffffff00000000]
+baked IN_CLASSC_NSHIFT [8 08000000]
+baked IN_LOOPBACKNET [8 7f000000]
+baked IPPORT_BIFFUDP [8 00020000]
+baked IPPORT_CMDSERVER [8 02020000]
+baked IPPORT_DAYTIME [8 0d000000]
+baked IPPORT_DISCARD [8 09000000]
+baked IPPORT_ECHO [8 07000000]
+baked IPPORT_EFSSERVER [8 08020000]
+baked IPPORT_EXECSERVER [8 00020000]
+baked IPPORT_FINGER [8 4f000000]
+baked IPPORT_FTP [8 15000000]
+baked IPPORT_LOGINSERVER [8 01020000]
+baked IPPORT_MTP [8 39000000]
+baked IPPORT_NAMESERVER [8 2a000000]
+baked IPPORT_NETSTAT [8 0f000000]
+baked IPPORT_RESERVED [8 00040000]
+baked IPPORT_RJE [8 4d000000]
+baked IPPORT_ROUTESERVER [8 08020000]
+baked IPPORT_SMTP [8 19000000]
+baked IPPORT_SUPDUP [8 5f000000]
+baked IPPORT_SYSTAT [8 0b000000]
+baked IPPORT_TELNET [8 17000000]
+baked IPPORT_TFTP [8 45000000]
+baked IPPORT_TIMESERVER [8 25000000]
+baked IPPORT_TTYLINK [8 57000000]
+baked IPPORT_USERRESERVED [8 88130000]
+baked IPPORT_WHOIS [8 2b000000]
+baked IPPORT_WHOSERVER [8 01020000]
+baked IPPROTO_AH [8 33000000]
+baked IPPROTO_BEETPH [8 5e000000]
+baked IPPROTO_COMP [8 6c000000]
+baked IPPROTO_DCCP [8 21000000]
+baked IPPROTO_DSTOPTS [8 3c000000]
+baked IPPROTO_EGP [8 08000000]
+baked IPPROTO_ENCAP [8 62000000]
+baked IPPROTO_ESP [8 32000000]
+baked IPPROTO_ETHERNET [8 8f000000]
+baked IPPROTO_FRAGMENT [8 2c000000]
+baked IPPROTO_GRE [8 2f000000]
+baked IPPROTO_HOPOPTS [8 00000000]
+baked IPPROTO_ICMP [8 01000000]
+baked IPPROTO_ICMPV6 [8 3a000000]
+baked IPPROTO_IDP [8 16000000]
+baked IPPROTO_IGMP [8 02000000]
+baked IPPROTO_IP [8 00000000]
+baked IPPROTO_IPIP [8 04000000]
+baked IPPROTO_IPV6 [8 29000000]
+baked IPPROTO_L2TP [8 73000000]
+baked IPPROTO_MAX [8 07010000]
+baked IPPROTO_MH [8 87000000]
+baked IPPROTO_MPLS [8 89000000]
+baked IPPROTO_MPTCP [8 06010000]
+baked IPPROTO_MTP [8 5c000000]
+baked IPPROTO_NONE [8 3b000000]
+baked IPPROTO_PIM [8 67000000]
+baked IPPROTO_PUP [8 0c000000]
+baked IPPROTO_RAW [8 ff000000]
+baked IPPROTO_ROUTING [8 2b000000]
+baked IPPROTO_RSVP [8 2e000000]
+baked IPPROTO_SCTP [8 84000000]
+baked IPPROTO_TCP [8 06000000]
+baked IPPROTO_TP [8 1d000000]
+baked IPPROTO_UDP [8 11000000]
+baked IPPROTO_UDPLITE [8 88000000]
+baked IPV6_2292DSTOPTS [8 04000000]
+baked IPV6_2292HOPLIMIT [8 08000000]
+baked IPV6_2292HOPOPTS [8 03000000]
+baked IPV6_2292PKTINFO [8 02000000]
+baked IPV6_2292PKTOPTIONS [8 06000000]
+baked IPV6_2292RTHDR [8 05000000]
+baked IPV6_ADDRFORM [8 01000000]
+baked IPV6_ADDR_PREFERENCES [8 48000000]
+baked IPV6_ADD_MEMBERSHIP [8 14000000]
+baked IPV6_AUTHHDR [8 0a000000]
+baked IPV6_AUTOFLOWLABEL [8 46000000]
+baked IPV6_CHECKSUM [8 07000000]
+baked IPV6_DONTFRAG [8 3e000000]
+baked IPV6_DROP_MEMBERSHIP [8 15000000]
+baked IPV6_DSTOPTS [8 3b000000]
+baked IPV6_FREEBIND [8 4e000000]
+baked IPV6_HDRINCL [8 24000000]
+baked IPV6_HOPLIMIT [8 34000000]
+baked IPV6_HOPOPTS [8 36000000]
+baked IPV6_IPSEC_POLICY [8 22000000]
+baked IPV6_JOIN_ANYCAST [8 1b000000]
+baked IPV6_JOIN_GROUP [8 14000000]
+baked IPV6_LEAVE_ANYCAST [8 1c000000]
+baked IPV6_LEAVE_GROUP [8 15000000]
+baked IPV6_MINHOPCOUNT [8 49000000]
+baked IPV6_MTU [8 18000000]
+baked IPV6_MTU_DISCOVER [8 17000000]
+baked IPV6_MULTICAST_ALL [8 1d000000]
+baked IPV6_MULTICAST_HOPS [8 12000000]
+baked IPV6_MULTICAST_IF [8 11000000]
+baked IPV6_MULTICAST_LOOP [8 13000000]
+baked IPV6_NEXTHOP [8 09000000]
+baked IPV6_ORIGDSTADDR [8 4a000000]
+baked IPV6_PATHMTU [8 3d000000]
+baked IPV6_PKTINFO [8 32000000]
+baked IPV6_PMTUDISC_DO [8 02000000]
+baked IPV6_PMTUDISC_DONT [8 00000000]
+baked IPV6_PMTUDISC_INTERFACE [8 04000000]
+baked IPV6_PMTUDISC_OMIT [8 05000000]
+baked IPV6_PMTUDISC_PROBE [8 03000000]
+baked IPV6_PMTUDISC_WANT [8 01000000]
+baked IPV6_RECVDSTOPTS [8 3a000000]
+baked IPV6_RECVERR [8 19000000]
+baked IPV6_RECVERR_RFC4884 [8 1f000000]
+baked IPV6_RECVFRAGSIZE [8 4d000000]
+baked IPV6_RECVHOPLIMIT [8 33000000]
+baked IPV6_RECVHOPOPTS [8 35000000]
+baked IPV6_RECVORIGDSTADDR [8 4a000000]
+baked IPV6_RECVPATHMTU [8 3c000000]
+baked IPV6_RECVPKTINFO [8 31000000]
+baked IPV6_RECVRTHDR [8 38000000]
+baked IPV6_RECVTCLASS [8 42000000]
+baked IPV6_ROUTER_ALERT [8 16000000]
+baked IPV6_ROUTER_ALERT_ISOLATE [8 1e000000]
+baked IPV6_RTHDR [8 39000000]
+baked IPV6_RTHDRDSTOPTS [8 37000000]
+baked IPV6_RTHDR_LOOSE [8 00000000]
+baked IPV6_RTHDR_STRICT [8 01000000]
+baked IPV6_RTHDR_TYPE_0 [8 00000000]
+baked IPV6_RXDSTOPTS [8 3b000000]
+baked IPV6_RXHOPOPTS [8 36000000]
+baked IPV6_TCLASS [8 43000000]
+baked IPV6_TRANSPARENT [8 4b000000]
+baked IPV6_UNICAST_HOPS [8 10000000]
+baked IPV6_UNICAST_IF [8 4c000000]
+baked IPV6_V6ONLY [8 1a000000]
+baked IPV6_XFRM_POLICY [8 23000000]
+baked IP_ADD_MEMBERSHIP [8 23000000]
+baked IP_ADD_SOURCE_MEMBERSHIP [8 27000000]
+baked IP_BIND_ADDRESS_NO_PORT [8 18000000]
+baked IP_BLOCK_SOURCE [8 26000000]
+baked IP_CHECKSUM [8 17000000]
+baked IP_DEFAULT_MULTICAST_LOOP [8 01000000]
+baked IP_DEFAULT_MULTICAST_TTL [8 01000000]
+baked IP_DROP_MEMBERSHIP [8 24000000]
+baked IP_DROP_SOURCE_MEMBERSHIP [8 28000000]
+baked IP_FREEBIND [8 0f000000]
+baked IP_HDRINCL [8 03000000]
+baked IP_IPSEC_POLICY [8 10000000]
+baked IP_LOCAL_PORT_RANGE [8 33000000]
+baked IP_MAX_MEMBERSHIPS [8 14000000]
+baked IP_MINTTL [8 15000000]
+baked IP_MSFILTER [8 29000000]
+baked IP_MTU [8 0e000000]
+baked IP_MTU_DISCOVER [8 0a000000]
+baked IP_MULTICAST_ALL [8 31000000]
+baked IP_MULTICAST_IF [8 20000000]
+baked IP_MULTICAST_LOOP [8 22000000]
+baked IP_MULTICAST_TTL [8 21000000]
+baked IP_NODEFRAG [8 16000000]
+baked IP_OPTIONS [8 04000000]
+baked IP_ORIGDSTADDR [8 14000000]
+baked IP_PASSSEC [8 12000000]
+baked IP_PKTINFO [8 08000000]
+baked IP_PKTOPTIONS [8 09000000]
+baked IP_PMTUDISC [8 0a000000]
+baked IP_PMTUDISC_DO [8 02000000]
+baked IP_PMTUDISC_DONT [8 00000000]
+baked IP_PMTUDISC_INTERFACE [8 04000000]
+baked IP_PMTUDISC_OMIT [8 05000000]
+baked IP_PMTUDISC_PROBE [8 03000000]
+baked IP_PMTUDISC_WANT [8 01000000]
+baked IP_PROTOCOL [8 34000000]
+baked IP_RECVERR [8 0b000000]
+baked IP_RECVERR_RFC4884 [8 1a000000]
+baked IP_RECVFRAGSIZE [8 19000000]
+baked IP_RECVOPTS [8 06000000]
+baked IP_RECVORIGDSTADDR [8 14000000]
+baked IP_RECVRETOPTS [8 07000000]
+baked IP_RECVTOS [8 0d000000]
+baked IP_RECVTTL [8 0c000000]
+baked IP_RETOPTS [8 07000000]
+baked IP_ROUTER_ALERT [8 05000000]
+baked IP_TOS [8 01000000]
+baked IP_TRANSPARENT [8 13000000]
+baked IP_TTL [8 02000000]
+baked IP_UNBLOCK_SOURCE [8 25000000]
+baked IP_UNICAST_IF [8 32000000]
+baked IP_XFRM_POLICY [8 11000000]
+baked LITTLE_ENDIAN [8 d2040000]
+baked MCAST_BLOCK_SOURCE [8 2b000000]
+baked MCAST_EXCLUDE [8 00000000]
+baked MCAST_INCLUDE [8 01000000]
+baked MCAST_JOIN_GROUP [8 2a000000]
+baked MCAST_JOIN_SOURCE_GROUP [8 2e000000]
+baked MCAST_LEAVE_GROUP [8 2d000000]
+baked MCAST_LEAVE_SOURCE_GROUP [8 2f000000]
+baked MCAST_MSFILTER [8 30000000]
+baked MCAST_UNBLOCK_SOURCE [8 2c000000]
+baked MSG_BATCH [8 00000400]
+baked MSG_CMSG_CLOEXEC [8 00000040]
+baked MSG_CONFIRM [8 00080000]
+baked MSG_CTRUNC [8 08000000]
+baked MSG_DONTROUTE [8 04000000]
+baked MSG_DONTWAIT [8 40000000]
+baked MSG_EOR [8 80000000]
+baked MSG_ERRQUEUE [8 00200000]
+baked MSG_FASTOPEN [8 00000020]
+baked MSG_FIN [8 00020000]
+baked MSG_MORE [8 00800000]
+baked MSG_NOSIGNAL [8 00400000]
+baked MSG_OOB [8 01000000]
+baked MSG_PEEK [8 02000000]
+baked MSG_PROXY [8 10000000]
+baked MSG_RST [8 00100000]
+baked MSG_SYN [8 00040000]
+baked MSG_TRUNC [8 20000000]
+baked MSG_TRYHARD [8 04000000]
+baked MSG_WAITALL [8 00010000]
+baked MSG_WAITFORONE [8 00000100]
+baked MSG_ZEROCOPY [8 00000004]
+baked NETDB_INTERNAL [8 ffffffff]
+baked NETDB_SUCCESS [8 00000000]
+baked NFDBITS [8 40000000]
+baked NI_DGRAM [8 10000000]
+baked NI_IDN [8 20000000]
+baked NI_MAXHOST [8 01040000]
+baked NI_MAXSERV [8 20000000]
+baked NI_NAMEREQD [8 08000000]
+baked NI_NOFQDN [8 04000000]
+baked NI_NUMERICHOST [8 01000000]
+baked NI_NUMERICSERV [8 02000000]
+baked NO_ADDRESS [8 04000000]
+baked NO_DATA [8 04000000]
+baked NO_RECOVERY [8 03000000]
+baked PDP_ENDIAN [8 540d0000]
+baked PF_ALG [8 26000000]
+baked PF_APPLETALK [8 05000000]
+baked PF_ASH [8 12000000]
+baked PF_ATMPVC [8 08000000]
+baked PF_ATMSVC [8 14000000]
+baked PF_AX25 [8 03000000]
+baked PF_BLUETOOTH [8 1f000000]
+baked PF_BRIDGE [8 07000000]
+baked PF_CAIF [8 25000000]
+baked PF_CAN [8 1d000000]
+baked PF_DECnet [8 0c000000]
+baked PF_ECONET [8 13000000]
+baked PF_FILE [8 01000000]
+baked PF_IB [8 1b000000]
+baked PF_IEEE802154 [8 24000000]
+baked PF_INET [8 02000000]
+baked PF_INET6 [8 0a000000]
+baked PF_IPX [8 04000000]
+baked PF_IRDA [8 17000000]
+baked PF_ISDN [8 22000000]
+baked PF_IUCV [8 20000000]
+baked PF_KCM [8 29000000]
+baked PF_KEY [8 0f000000]
+baked PF_LLC [8 1a000000]
+baked PF_LOCAL [8 01000000]
+baked PF_MAX [8 2e000000]
+baked PF_MCTP [8 2d000000]
+baked PF_MPLS [8 1c000000]
+baked PF_NETBEUI [8 0d000000]
+baked PF_NETLINK [8 10000000]
+baked PF_NETROM [8 06000000]
+baked PF_NFC [8 27000000]
+baked PF_PACKET [8 11000000]
+baked PF_PHONET [8 23000000]
+baked PF_PPPOX [8 18000000]
+baked PF_QIPCRTR [8 2a000000]
+baked PF_RDS [8 15000000]
+baked PF_ROSE [8 0b000000]
+baked PF_ROUTE [8 10000000]
+baked PF_RXRPC [8 21000000]
+baked PF_SECURITY [8 0e000000]
+baked PF_SMC [8 2b000000]
+baked PF_SNA [8 16000000]
+baked PF_TIPC [8 1e000000]
+baked PF_UNIX [8 01000000]
+baked PF_UNSPEC [8 00000000]
+baked PF_VSOCK [8 28000000]
+baked PF_WANPIPE [8 19000000]
+baked PF_X25 [8 09000000]
+baked PF_XDP [8 2c000000]
+baked SCM_CREDENTIALS [8 02000000]
+baked SCM_PIDFD [8 04000000]
+baked SCM_RIGHTS [8 01000000]
+baked SCM_SECURITY [8 03000000]
+baked SCM_TIMESTAMP [8 1d000000]
+baked SCM_TIMESTAMPING [8 25000000]
+baked SCM_TIMESTAMPING_OPT_STATS [8 36000000]
+baked SCM_TIMESTAMPING_PKTINFO [8 3a000000]
+baked SCM_TIMESTAMPNS [8 23000000]
+baked SCM_TXTIME [8 3d000000]
+baked SCM_WIFI_STATUS [8 29000000]
+baked SCOPE_DELIMITER [8 25000000]
+baked SHUT_RD [8 00000000]
+baked SHUT_RDWR [8 02000000]
+baked SHUT_WR [8 01000000]
+baked SIOCATMARK [8 05890000]
+baked SIOCGPGRP [8 04890000]
+baked SIOCGSTAMPNS_OLD [8 07890000]
+baked SIOCGSTAMP_OLD [8 06890000]
+baked SIOCSPGRP [8 02890000]
+baked SOCK_CLOEXEC [8 00000800]
+baked SOCK_DCCP [8 06000000]
+baked SOCK_DGRAM [8 02000000]
+baked SOCK_NONBLOCK [8 00080000]
+baked SOCK_PACKET [8 0a000000]
+baked SOCK_RAW [8 03000000]
+baked SOCK_RDM [8 04000000]
+baked SOCK_SEQPACKET [8 05000000]
+baked SOCK_STREAM [8 01000000]
+baked SOL_AAL [8 09010000]
+baked SOL_ALG [8 17010000]
+baked SOL_ATM [8 08010000]
+baked SOL_BLUETOOTH [8 12010000]
+baked SOL_CAIF [8 16010000]
+baked SOL_DCCP [8 0d010000]
+baked SOL_DECNET [8 05010000]
+baked SOL_ICMPV6 [8 3a000000]
+baked SOL_IP [8 00000000]
+baked SOL_IPV6 [8 29000000]
+baked SOL_IRDA [8 0a010000]
+baked SOL_IUCV [8 15010000]
+baked SOL_KCM [8 19010000]
+baked SOL_LLC [8 0c010000]
+baked SOL_MCTP [8 1d010000]
+baked SOL_MPTCP [8 1c010000]
+baked SOL_NETBEUI [8 0b010000]
+baked SOL_NETLINK [8 0e010000]
+baked SOL_NFC [8 18010000]
+baked SOL_PACKET [8 07010000]
+baked SOL_PNPIPE [8 13010000]
+baked SOL_PPPOL2TP [8 11010000]
+baked SOL_RAW [8 ff000000]
+baked SOL_RDS [8 14010000]
+baked SOL_RXRPC [8 10010000]
+baked SOL_SMC [8 1e010000]
+baked SOL_SOCKET [8 01000000]
+baked SOL_TIPC [8 0f010000]
+baked SOL_TLS [8 1a010000]
+baked SOL_X25 [8 06010000]
+baked SOL_XDP [8 1b010000]
+baked SOMAXCONN [8 00100000]
+baked SO_ACCEPTCONN [8 1e000000]
+baked SO_ATTACH_BPF [8 32000000]
+baked SO_ATTACH_FILTER [8 1a000000]
+baked SO_ATTACH_REUSEPORT_CBPF [8 33000000]
+baked SO_ATTACH_REUSEPORT_EBPF [8 34000000]
+baked SO_BINDTODEVICE [8 19000000]
+baked SO_BINDTOIFINDEX [8 3e000000]
+baked SO_BPF_EXTENSIONS [8 30000000]
+baked SO_BROADCAST [8 06000000]
+baked SO_BSDCOMPAT [8 0e000000]
+baked SO_BUF_LOCK [8 48000000]
+baked SO_BUSY_POLL [8 2e000000]
+baked SO_BUSY_POLL_BUDGET [8 46000000]
+baked SO_CNX_ADVICE [8 35000000]
+baked SO_COOKIE [8 39000000]
+baked SO_DEBUG [8 01000000]
+baked SO_DETACH_BPF [8 1b000000]
+baked SO_DETACH_FILTER [8 1b000000]
+baked SO_DETACH_REUSEPORT_BPF [8 44000000]
+baked SO_DOMAIN [8 27000000]
+baked SO_DONTROUTE [8 05000000]
+baked SO_ERROR [8 04000000]
+baked SO_GET_FILTER [8 1a000000]
+baked SO_INCOMING_CPU [8 31000000]
+baked SO_INCOMING_NAPI_ID [8 38000000]
+baked SO_KEEPALIVE [8 09000000]
+baked SO_LINGER [8 0d000000]
+baked SO_LOCK_FILTER [8 2c000000]
+baked SO_MARK [8 24000000]
+baked SO_MAX_PACING_RATE [8 2f000000]
+baked SO_MEMINFO [8 37000000]
+baked SO_NETNS_COOKIE [8 47000000]
+baked SO_NOFCS [8 2b000000]
+baked SO_NO_CHECK [8 0b000000]
+baked SO_OOBINLINE [8 0a000000]
+baked SO_PASSCRED [8 10000000]
+baked SO_PASSPIDFD [8 4c000000]
+baked SO_PASSSEC [8 22000000]
+baked SO_PEEK_OFF [8 2a000000]
+baked SO_PEERCRED [8 11000000]
+baked SO_PEERGROUPS [8 3b000000]
+baked SO_PEERNAME [8 1c000000]
+baked SO_PEERPIDFD [8 4d000000]
+baked SO_PEERSEC [8 1f000000]
+baked SO_PREFER_BUSY_POLL [8 45000000]
+baked SO_PRIORITY [8 0c000000]
+baked SO_PROTOCOL [8 26000000]
+baked SO_RCVBUF [8 08000000]
+baked SO_RCVBUFFORCE [8 21000000]
+baked SO_RCVLOWAT [8 12000000]
+baked SO_RCVMARK [8 4b000000]
+baked SO_RCVTIMEO [8 14000000]
+baked SO_RCVTIMEO_NEW [8 42000000]
+baked SO_RCVTIMEO_OLD [8 14000000]
+baked SO_RESERVE_MEM [8 49000000]
+baked SO_REUSEADDR [8 02000000]
+baked SO_REUSEPORT [8 0f000000]
+baked SO_RXQ_OVFL [8 28000000]
+baked SO_SECURITY_AUTHENTICATION [8 16000000]
+baked SO_SECURITY_ENCRYPTION_NETWORK [8 18000000]
+baked SO_SECURITY_ENCRYPTION_TRANSPORT [8 17000000]
+baked SO_SELECT_ERR_QUEUE [8 2d000000]
+baked SO_SNDBUF [8 07000000]
+baked SO_SNDBUFFORCE [8 20000000]
+baked SO_SNDLOWAT [8 13000000]
+baked SO_SNDTIMEO [8 15000000]
+baked SO_SNDTIMEO_NEW [8 43000000]
+baked SO_SNDTIMEO_OLD [8 15000000]
+baked SO_TIMESTAMP [8 1d000000]
+baked SO_TIMESTAMPING [8 25000000]
+baked SO_TIMESTAMPING_NEW [8 41000000]
+baked SO_TIMESTAMPING_OLD [8 25000000]
+baked SO_TIMESTAMPNS [8 23000000]
+baked SO_TIMESTAMPNS_NEW [8 40000000]
+baked SO_TIMESTAMPNS_OLD [8 23000000]
+baked SO_TIMESTAMP_NEW [8 3f000000]
+baked SO_TIMESTAMP_OLD [8 1d000000]
+baked SO_TXREHASH [8 4a000000]
+baked SO_TXTIME [8 3d000000]
+baked SO_TYPE [8 03000000]
+baked SO_WIFI_STATUS [8 29000000]
+baked SO_ZEROCOPY [8 3c000000]
+baked TRY_AGAIN [8 02000000]
+end
+sum 322443088b0779bc1f88bfa2db77b8367774ed2ba49332add822648d5f74176e

@@ -1,0 +1,310 @@
+olang scope record
+run compiler/spin 3084-3307 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/os 3756-3966 fn	05bb335b993dde79a14807720d8a39ef
+read std/os 6343-6403 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 5 0 0 | U U U U U | | b b b00000 b | 0: 1:,B0,B0 2:,B0,B0 3:,B0,B0 4:,B0,B0 | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0I32	o0std/prelude/text:String&	o1std/prelude/text:String&	o0std/prelude/text:String&	o1std/prelude/text:String&
+out 84316cc3b61c903d93af1316299a6f22
+run compiler/spin 3465-3560 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/spin 3084-3307 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0: | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0mut I64&
+out 0ee7b5c81cc8cf0f0999049863b2da23
+run compiler/spin 2870-2925 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0mut I64&
+out de6fb3968bda398cf7649248509a40ba
+run compiler/spin 4223-4297 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/io 1313-1756 fn	c82576444a2182d6f718681c053a74cb
+hits 0
+body 1 1 2 1 | U | F F | b0 b00 b0 b00 | 0:,V0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/spin:4223:4297 t i t i i c0/i/i f0010
+hid fs1	o0I32	o0std/prelude/text:String&
+out 690574199c8b7d60109bbf507fb136a7
+run compiler/spin 4385-4488 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/spin 4223-4297 fn	c4a2d37aa661ca1a2c84befef15a658b
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0:,P | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0mut I64&	o0std/prelude/text:String&	o0I32	o0mut I64&
+out 19ab3df20e7dbe57bf2c893c14da5536
+run compiler/spin 2926-2962 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0mut I64&
+out f58f188a3b3cc819b42f163f67b7774a
+run compiler/spin 5042-5154 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/spin 2870-2925 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/spin 2926-2962 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/spin 4385-4488 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 3 0 0 | U U U | | b b b000 b | 0: 1: 2: | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0mut I64&	o0mut I64&
+out c70d05975c8a772a2f8da4f075703aad
+run compiler/spin 4613-4768 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/spin 2870-2925 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/spin 2926-2962 fn	6d787cc7b01b150765dce615d1f27491
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 4 1 1 | U P U U | F | b0 b0 b0000 b0 | 0: 2: 3: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/spin:4613:4768 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0mut I64&	o0mut I64&
+out f22a295fe8a73a907f4101bf6689b377
+run compiler/spin 4820-4932 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/spin 2870-2925 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/spin 2926-2962 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 3 1 1 | U P U | F | b0 b0 b000 b0 | 0: 2: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,compiler/spin:4820:4932 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0mut I64&
+out 6a421d5e2340aa22ce22539faa2c5249
+run compiler/spin 5372-5537 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/spin 2870-2925 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/spin 2926-2962 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/spin 4223-4297 fn	c4a2d37aa661ca1a2c84befef15a658b
+read compiler/spin 4385-4488 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 5 2 1 | U U U U U | F F | b0 b00 b00000 b00 | 0:,V0 1: 2: 3:,V0 4: | | ||
+sum r b0 b0 b00 b00 b00 b b b a,compiler/spin:5372:5537 t i t i i c0/i/i f0010
+hid fs1	o0I32	o0std/prelude/text:String&	o0mut I64&
+out df3abb884d368aa596c446155691822c
+run compiler/spin 2248-2355 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 2 2 | V1 | F F | b01 b00 b0 b00 | | | ||
+sum r b01 b01 b00 b00 b00 b b b a,compiler/spin:2248:2355,compiler/spin:2294:2353 t i t i i c0/i/i f0010
+hid fs1	o0I64	o0std/prelude/text:String&	o0std/prelude/text:String&	o0Array<std/prelude/text:String&, 6>
+out 2eb0e417d5199bec69c12f1776e3e3bb
+run compiler/spin 4490-4541 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/spin 2870-2925 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/spin 2926-2962 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/spin 4385-4488 fn	6d787cc7b01b150765dce615d1f27491
+hits 0
+body 1 3 0 0 | U U U | | b b b000 b | 0: 1: 2: | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out d52c3594d6dabc41ad12ef21736ddab7
+run compiler/spin 3661-4113 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/spin 2248-2355 fn	52ba5d631623690ceee87e693eeaeef1
+read compiler/spin 2870-2925 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/spin 2926-2962 fn	6d787cc7b01b150765dce615d1f27491
+read compiler/spin 4223-4297 fn	c4a2d37aa661ca1a2c84befef15a658b
+read compiler/spin 4490-4541 fn	6d787cc7b01b150765dce615d1f27491
+read std/time 1002-1147 fn	6d787cc7b01b150765dce615d1f27491
+read std/time 2655-2722 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/time 5003-5433 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 9 3 0 | U U U U U B3 U U U | F F F | b b000 b000000000 b000 | 0: 1: 2: 3: 4:,P,B3 6:,B3 7: 8: | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0mut I64&	o0I64	o0mut I64&	o0I64	o0I64	o0I32	o0std/prelude/text:String&	o0mut I64&	o0I64
+out f4b9f9b32d7bd58536af82361d248738
+run compiler/spin 4188-4221 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1	o0mut I64&
+out 9f3ed55978be665cf4f41cd4c065807e
+run compiler/spin 5780-6454 fn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:Char>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 12786-12977 fn <std/prelude/text:Char;>	44fdd55f051af23429be98afae112cb0
+read std/prelude/vec 4660-4775 fn <std/prelude/text:Char;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 5133-5172 fn <std/prelude/text:Char;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 7153-7207 fn <std/prelude/text:Char;>	d1692f7c43989772e6fbeee7a37d64ae
+read std/prelude/vec 8115-8279 fn <std/prelude/text:Char;>	ab84cb35071ba7656290123dfae39eb5
+hits 0
+body 1 8 5 2 | B0 U U U U U U V1 | F F F F F | b01 b00000 b00000000 b00000 | 0:,B0 1:,B0 2:,B0 3:,B0 4:,B0 5:,B0 6:,B0,B0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/spin:5780:6454,compiler/spin:6430:6452 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0std/prelude/text:String&	o0mut Array<std/prelude/text:Char>&	o1std/prelude/vec:Vec<std/prelude/text:Char>&
+out a4f04ab5b6fa3392d03f4fafdeb4e5ef
+run compiler/spin global Frames	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 1 0 0 | P | | b b b0 b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f51ed4eea750283506f0266bb4f59fbc
+run compiler/spin global StartAfter	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 79915a5fbcccdcf2bd47a4334e423181
+run compiler/spin global Interval	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out be618714830830b1e17488114f180e31
+run compiler/spin global Poll	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 3e51a3bea4bdc4951eca0096be4752c1
+run compiler/spin global Wipe	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out c03f276b6a3297428cf66ac97dc7c52f
+run compiler/spin global Running	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out f21031c0348588029b54925a6087ea58
+run compiler/spin global Quit	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 918a8bc73e299182ee8bc8c41a7ba70e
+run compiler/spin global On	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 9485838134b6bc166d5e41959a8cf121
+run compiler/spin global Drawn	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 269a2f77fb4da4a20b050cce63555dac
+run compiler/spin global Since	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e633e2daf2a3e389ceb7b119964e2c12
+run compiler/spin global Title	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 0ae25d4fbeca69e054ea6d1b9334dfc4
+run compiler/spin global Lock	
+ctx r1 g1 p0
+keys compiler/spin=1e908e211e5c5bc0c07cb50390ee614ea265980640d4df5b7585bdffff6c87f6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+hits 0
+body 1 0 0 0 | | | b b b b | | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out e5d4e5a840cac56b478d8fbeded40f86
+end
+sum 12120-3938734968599234749

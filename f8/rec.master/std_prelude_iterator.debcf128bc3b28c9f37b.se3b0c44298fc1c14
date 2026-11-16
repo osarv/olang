@@ -1,0 +1,15 @@
+olang scope record
+run std/prelude/iterator 0-0 ctor std/prelude/iterator:StepSize	
+ctx r1 g1 p0
+keys std/prelude/iterator=debcf128bc3b28c9f37bd3454a1dbb0f2d1271de75317776a18049ebba6a3a90
+in 0
+mark std/prelude/iterator 0-0 ctor std/prelude/iterator:StepSize	0
+marks c2d468fe8ec4bdbc47d03929460f16ed
+read -ctor	I64
+hits 0
+body 1 0 1 1 | | F | b0 b0 b b0 | | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/prelude/iterator:0:0 t i,-1 t i i c0/i/i f0010
+hid fs1	o0I64
+out 0ac8273ec5bead33221bdc25641e69ec
+end
+sum 497-7455455425601166566

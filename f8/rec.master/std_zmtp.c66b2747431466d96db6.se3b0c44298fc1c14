@@ -1,0 +1,200 @@
+olang scope record
+run std/zmtp 2089-2135 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/net 17826-17863 fn	1a0a76ca64811edbabd13c2c8ae915d8
+hits 0
+body 1 1 1 1 | U | F | b0 b0 b0 b0 | 0:,V0 | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/zmtp:2089:2135 t i t i i c0/i/i f0010
+hid fs1	o0std/zmtp:Socket&
+out 45be4acde031cbc794b2d6aafb34c2ff
+run std/zmtp 3700-3895 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/net 16764-17085 fn	7a0a5812fc9a8872cc74afabbeae8111
+read std/prelude/vec 4832-5131 fn <U8;>	ad819ec2b4c05fc1146b8f127f514e13
+read std/prelude/vec 5133-5172 fn <U8;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 7906-7950 fn <U8;>	a18ca10380cf10c77190fe509fec348c
+hits 0
+body 1 5 3 1 | B0 U U U U | F F F | b1 b000 b00000 b000 | 1:,V0,B0,B0 2:,V0 3:,V0 4:,V0,B0 | | ||
+sum r b1 b1 b1 b0 b0 b b b a,std/prelude/vec:4512:4530 t i t i i c0/i/i f0010
+hid fs1	o0mut std/zmtp:Socket&	o0Array<U8>&	o1std/net:Conn&	o1mut Array<U8>&
+out bcaa7c18f4a58621f5e60b7b38154816
+run std/zmtp 5320-5489 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+hits 0
+body 1 0 10 1 | | F F F F F F F F F F | b0 b0000000000 b b0000000000 | | | ||
+sum r b0 b0 b000 b000 b000 b b b a,std/zmtp:5320:5489 t i t i i c0/i/i f0010
+hid fs1	o0Array<U8>&	o0I64	o0Bool
+out 658dee6285a970d1f85257bcbf0e1d11
+run std/zmtp 4825-5318 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 8487-8542 fn <U8;>	43ea48bc4591b58484f465d40212596c
+read std/zmtp 5320-5489 fn	3b87597ab8365f1c4220fd0bf315a852
+hits 0
+body 1 2 7 1 | U U | F F F F F F F | b0 b0000000 b00 b0000000 | 0:,V0,V0 1:,V0 | | ||
+sum r b0 b0 b1 b0 b0 b b b a,std/zmtp:4825:5318 t i t i i c0/i/i f0010
+hid fs1	o0std/zmtp:Socket&	o0Array<U8>&	o1std/prelude/vec:Vec<U8>&
+out b570f95b2901af3d00076d6e203c28ab
+run std/zmtp 5586-6101 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:String>
+read -ctor	I64
+read std/prelude/vec 8487-8542 fn <U8;>	43ea48bc4591b58484f465d40212596c
+read std/zmtp 5320-5489 fn	3b87597ab8365f1c4220fd0bf315a852
+hits 0
+body 1 5 18 2 | V1 U U V1 V1 | F F F V1 F F F F F F F V1 F F F F F F | b01 b000100000000000000 b00000 b000000000000000000 | 1:,V0,V0 2:,V0 | | ||
+sum r b01 b01 b100 b000 b000 b b b a,std/zmtp:5586:6101,std/zmtp:5655:5675 t i t i i c0/i/i f1010
+hid fs1	o0std/zmtp:Socket&	o0I64	o0I64	o0Array<U8>&	o1std/prelude/vec:Vec<U8>&
+out 8c2f49922b7de567fb14ca50cb3f1626
+run std/zmtp 4074-4651 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:String>
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/vec 5133-5172 fn <U8;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 8487-8542 fn <U8;>	43ea48bc4591b58484f465d40212596c
+read std/zmtp 4825-5318 fn	5b6f83c91a7f31f1714e45f739aee01b
+read std/zmtp 5586-6101 fn	718201767acd83ba062f3d235afb389b
+hits 0
+body 1 8 6 2 | U U B2 B2 B2 U U U | F F F F F V1 | b01 b000001 b00000000 b000000 | 0:,V0 1:,V0,V0 5:,B2,B2 6:,V0 7:,V0,V1 | | ||
+sum r b01 b01 b1 b0 b0 b b b a,std/zmtp:4074:4651,std/zmtp:4547:4567 t i t i i c0/i/i f1010
+hid fs1	o0mut std/zmtp:Socket&	o0Array<U8>&	o1std/prelude/vec:Vec<U8>&	o0Array<std/prelude/text:String>	o1mut std/zmtp:Socket&	o1I64	o1I64
+out 036a20cbca175db5d8adf9d8f88fe95a
+run std/zmtp 0-0 ctor std/zmtp:Socket	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+mark std/zmtp 0-0 ctor std/zmtp:Socket	0,1,2,3,4
+marks f7aac7858acb0b2aa7718ec1a0f52395
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	Bool
+read -ctor	I64
+read std/net 0-0 ctor std/net:Conn	94e75e7eca2eea8ceac865d2b43328d4
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<U8>	be882dc4175efa129ffc9638acde7fe8
+hits 0
+body 1 1 7 1 | U | F F F V0 F F F | b1 b0000000 b0 b0000000 | 0:,V0 | | ||
+sum r b1 b1 b00 b00 b00 b b b a,std/zmtp:1314:1318 t i,-1,-1,0,-1,-1 t,U i i c0/i/i f0010
+hid fs1;1280:U	o0std/net:Conn	o0std/prelude/text:String
+out 8f6a479589fbfe0b39a112bd169eb254
+run std/zmtp 2733-2932 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 4660-4775 fn <U8;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4832-5131 fn <U8;>	ad819ec2b4c05fc1146b8f127f514e13
+hits 0
+body 1 4 9 3 | U U U U | F F F F F F F F F | b100 b000000000 b0000 b000000000 | 0:,V0 1:,V0,V1 2:,V0 3:,V0,V2 | | ||
+sum r b100 b100 b100 b000 b000 b b b a,std/prelude/vec:4512:4530,std/zmtp:2733:2932,std/zmtp:2733:2932 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/vec:Vec<U8>&	o0std/prelude/text:String&	o0std/prelude/text:String&
+out e23d9dc2baf67ee30a190993bd542ffc
+run std/zmtp 3053-3400 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/vec 4660-4775 fn <U8;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4832-5131 fn <U8;>	ad819ec2b4c05fc1146b8f127f514e13
+hits 0
+body 1 4 11 2 | U U U U | F F F F F F F F F F F | b10 b00000000000 b0000 b00000000000 | 0:,V0 1:,V0 2:,V0 3:,V0,V1 | | ||
+sum r b10 b10 b1000 b0000 b0000 b b b a,std/prelude/vec:4512:4530,std/zmtp:3053:3400 t i t i i c0/i/i f0010
+hid fs1	o0mut std/prelude/vec:Vec<U8>&	o0Array<U8>&	o0Bool	o0Bool
+out 4d8b6ee1ff22322eb58a2100d80ed5d0
+run std/zmtp 2254-2656 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/net 17294-17598 fn	3065c6604ba3db696255ceadb6dc6669
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<U8>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <U8;>	6fbff10506db1de19a4bc199611f8137
+read std/prelude/vec 4832-5131 fn <U8;>	ad819ec2b4c05fc1146b8f127f514e13
+read std/prelude/vec 8487-8542 fn <U8;>	43ea48bc4591b58484f465d40212596c
+read std/zmtp 2733-2932 fn	b40bcaaf3877186254aa31e2903e6109
+read std/zmtp 3053-3400 fn	f0e7ab4be1027a0ac5dc0ef96941056f
+hits 0
+body 1 11 10 1 | B0 B0 U B0 U U U U U U U | F F F F F F F F F F | b0 b0000000000 b00000000000 b0000000000 | 1:,B0 2:,B0,B0 3:,B0 4:,B0 5:,B0,B0 6:,B0,B0,V0 7:,B0,B0 8:,B0,B0 9:,B0,B0 10:,V0,B0 | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/zmtp:2254:2656 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U	o0std/zmtp:Socket&	o0Bool	o0Array<U8>&	o1std/prelude/vec:Vec<U8>&	o0Array<U8>&	o1std/prelude/vec:Vec<U8>&
+out 537eef637e6666baaabc063f3dc5b29a
+run std/zmtp 1651-1799 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Bool
+read -dtor	std/zmtp:Socket
+read std/net 15775-16063 fn	36ca66b214e2786b11c4157b90902154
+read std/zmtp 0-0 ctor std/zmtp:Socket	f67a69ab508c6403954441235ea18f76
+read std/zmtp 2254-2656 fn	53366fa355298c1ef190c8780ef7db7a
+hits 0
+body 1 6 4 3 | U U B0 U U U | F F V2 F | b001 b0000 b000000 b0000 | 0:,V0 3:,V2 5:,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,std/zmtp:1651:1799,std/zmtp:1651:1799,std/zmtp:1733:1762 t,U,U i t i i c0/i/i f1010
+hid fs1;58624:U;58625:U	o0mut std/net:Listener&	o0std/prelude/text:String&
+out b3d009b02e83687d4035aa5cf2fd0bf3
+run std/zmtp 3439-3606 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/net 17294-17598 fn	3065c6604ba3db696255ceadb6dc6669
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<U8>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 8487-8542 fn <U8;>	43ea48bc4591b58484f465d40212596c
+read std/zmtp 3053-3400 fn	f0e7ab4be1027a0ac5dc0ef96941056f
+hits 0
+body 1 4 8 2 | B0 U U U | F F F F F F F F | b00 b00000000 b0000 b00000000 | 0:,B0 1:,B0,V1 2:,B0,B0 3:,V0,B0 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,std/zmtp:3439:3606,std/zmtp:3439:3606 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0std/zmtp:Socket&	o0Array<std/prelude/text:String&>&	o0Array<U8>&	o1std/prelude/vec:Vec<U8>&
+out 7cdda148649fe86cc98b3250ee9f3960
+run std/zmtp 1870-2015 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Bool
+read -dtor	std/zmtp:Socket
+read std/net 16182-16432 fn	4cc05219546221529e4135b56221240d
+read std/zmtp 0-0 ctor std/zmtp:Socket	f67a69ab508c6403954441235ea18f76
+read std/zmtp 2254-2656 fn	53366fa355298c1ef190c8780ef7db7a
+hits 0
+body 1 6 4 3 | U U B0 U U U | F F V2 F | b001 b0000 b000000 b0000 | 0:,V0 3:,V2 5:,V2 | | ||
+sum r b001 b001 b00 b00 b00 b b b a,std/zmtp:1870:2015,std/zmtp:1870:2015,std/zmtp:1942:1977 t,U,U i t i i c0/i/i f1010
+hid fs1;58624:U;58625:U	o0std/net:Addr&	o0std/prelude/text:String&
+out a7f63831b4af678ca0fa418ad5b425b2
+run std/zmtp 6172-6396 fn	
+ctx r1 g1 p0
+keys std/zmtp=c66b2747431466d96db61c868818f581c7f15a82e96208b28a087d22e38ea6fd
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	Array<std/prelude/text:String>
+read std/zmtp 3700-3895 fn	867dac4bd5c39a8a9f1b8e24430c5c08
+read std/zmtp 4074-4651 fn	286323306c28e07bdb55d6c7f40cc5df
+hits 0
+body 1 2 2 2 | U U | F V1 | b11 b01 b00 b00 | 0:,V0,V1 1:,V0 | | ||
+sum r b11 b11 b1 b0 b0 b b b a,std/prelude/vec:4512:4530,std/zmtp:6267:6353 t i t i i c0/i/i f1010
+hid fs1	o0mut std/zmtp:Socket&	o0Array<std/prelude/text:String>	o1mut std/zmtp:Socket&
+out 604a2e88ae13f9cf9d10427dd83c86a4
+end
+sum 9926-13622333991572529158

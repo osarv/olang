@@ -1,0 +1,33 @@
+olang front record
+body global BIG_ENDIAN	known p
+body global BYTE_ORDER	known p
+body global EXIT_FAILURE	known p
+body global EXIT_SUCCESS	known p
+body global FD_SETSIZE	known p
+body global LITTLE_ENDIAN	known p
+body global NFDBITS	known p
+body global PDP_ENDIAN	known p
+body global RAND_MAX	known p
+body global WCONTINUED	known p
+body global WEXITED	known p
+body global WNOHANG	known p
+body global WNOWAIT	known p
+body global WSTOPPED	known p
+body global WUNTRACED	known p
+baked BIG_ENDIAN [8 e1100000]
+baked BYTE_ORDER [8 d2040000]
+baked EXIT_FAILURE [8 01000000]
+baked EXIT_SUCCESS [8 00000000]
+baked FD_SETSIZE [8 00040000]
+baked LITTLE_ENDIAN [8 d2040000]
+baked NFDBITS [8 40000000]
+baked PDP_ENDIAN [8 540d0000]
+baked RAND_MAX [8 ffffff7f]
+baked WCONTINUED [8 08000000]
+baked WEXITED [8 04000000]
+baked WNOHANG [8 01000000]
+baked WNOWAIT [8 00000001]
+baked WSTOPPED [8 02000000]
+baked WUNTRACED [8 02000000]
+end
+sum fd77d8b9efe5734235837409435cca3a7fa82e9f6e2cdc6a4e5d24bcfb70bd42

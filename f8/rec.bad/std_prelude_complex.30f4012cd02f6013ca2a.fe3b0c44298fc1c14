@@ -1,0 +1,51 @@
+olang front record
+body fn 1025-1207	known p
+body fn 1208-1257	known p
+body fn 1322-1371	known p
+body fn 1415-1473	known p
+body fn 1503-1565	known p
+body fn 1622-1689	known p
+body fn 1690-1758	known p
+body fn 1759-1853	known p
+body fn 1854-2036	known p
+body fn 2037-2086	known p
+body fn 2151-2200	known p
+body fn 2244-2302	known p
+body fn 2332-2394	known p
+body fn 2451-2518	known p
+body fn 2519-2587	known p
+body fn 2588-2682	known p
+body fn 2946-3543	known p
+body fn 3544-3593	known p
+body fn 3658-3707	known p
+body fn 3751-3809	known p
+body fn 3839-3901	known p
+body fn 793-860	known p
+body fn 861-929	known p
+body fn 930-1024	known p
+sig Conj@1322 fn&(C16) C16
+sig Conj@2151 fn&(C32) C32
+sig Conj@3658 fn&(C64) C64
+sig Div@1025 fn&(C16, C16) C16
+sig Div@1854 fn&(C32, C32) C32
+sig Div@2946 fn&(C64, C64) C64
+sig Minus@1690 fn&(C32, C32) C32
+sig Minus@2519 fn&(C64, C64) C64
+sig Minus@861 fn&(C16, C16) C16
+sig Mul@1759 fn&(C32, C32) C32
+sig Mul@2588 fn&(C64, C64) C64
+sig Mul@930 fn&(C16, C16) C16
+sig Neg@1208 fn&(C16) C16
+sig Neg@2037 fn&(C32) C32
+sig Neg@3544 fn&(C64) C64
+sig Norm@1415 fn&(C16) F16
+sig Norm@2244 fn&(C32) F32
+sig Norm@3751 fn&(C64) F64
+sig Plus@1622 fn&(C32, C32) C32
+sig Plus@2451 fn&(C64, C64) C64
+sig Plus@793 fn&(C16, C16) C16
+sig Scale@1503 fn&(C16, F16) C16
+sig Scale@2332 fn&(C32, F32) C32
+sig Scale@3839 fn&(C64, F64) C64
+end
+sum 31ef95d914f394371da46c2c0082d70171a79aa1401e74debe61ecd7caabe3a9

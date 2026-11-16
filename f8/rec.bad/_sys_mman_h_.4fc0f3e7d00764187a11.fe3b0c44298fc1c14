@@ -1,0 +1,155 @@
+olang front record
+body global MADV_COLD	known p
+body global MADV_COLLAPSE	known p
+body global MADV_DODUMP	known p
+body global MADV_DOFORK	known p
+body global MADV_DONTDUMP	known p
+body global MADV_DONTFORK	known p
+body global MADV_DONTNEED	known p
+body global MADV_DONTNEED_LOCKED	known p
+body global MADV_FREE	known p
+body global MADV_HUGEPAGE	known p
+body global MADV_HWPOISON	known p
+body global MADV_KEEPONFORK	known p
+body global MADV_MERGEABLE	known p
+body global MADV_NOHUGEPAGE	known p
+body global MADV_NORMAL	known p
+body global MADV_PAGEOUT	known p
+body global MADV_POPULATE_READ	known p
+body global MADV_POPULATE_WRITE	known p
+body global MADV_RANDOM	known p
+body global MADV_REMOVE	known p
+body global MADV_SEQUENTIAL	known p
+body global MADV_UNMERGEABLE	known p
+body global MADV_WILLNEED	known p
+body global MADV_WIPEONFORK	known p
+body global MAP_32BIT	known p
+body global MAP_ABOVE4G	known p
+body global MAP_ANON	known p
+body global MAP_ANONYMOUS	known p
+body global MAP_DENYWRITE	known p
+body global MAP_EXECUTABLE	known p
+body global MAP_FILE	known p
+body global MAP_FIXED	known p
+body global MAP_FIXED_NOREPLACE	known p
+body global MAP_GROWSDOWN	known p
+body global MAP_HUGETLB	known p
+body global MAP_HUGE_MASK	known p
+body global MAP_HUGE_SHIFT	known p
+body global MAP_LOCKED	known p
+body global MAP_NONBLOCK	known p
+body global MAP_NORESERVE	known p
+body global MAP_POPULATE	known p
+body global MAP_PRIVATE	known p
+body global MAP_SHARED	known p
+body global MAP_SHARED_VALIDATE	known p
+body global MAP_STACK	known p
+body global MAP_SYNC	known p
+body global MAP_TYPE	known p
+body global MCL_CURRENT	known p
+body global MCL_FUTURE	known p
+body global MCL_ONFAULT	known p
+body global MFD_ALLOW_SEALING	known p
+body global MFD_CLOEXEC	known p
+body global MFD_EXEC	known p
+body global MFD_HUGETLB	known p
+body global MFD_NOEXEC_SEAL	known p
+body global MLOCK_ONFAULT	known p
+body global MREMAP_DONTUNMAP	known p
+body global MREMAP_FIXED	known p
+body global MREMAP_MAYMOVE	known p
+body global MS_ASYNC	known p
+body global MS_INVALIDATE	known p
+body global MS_SYNC	known p
+body global PKEY_DISABLE_ACCESS	known p
+body global PKEY_DISABLE_WRITE	known p
+body global POSIX_MADV_DONTNEED	known p
+body global POSIX_MADV_NORMAL	known p
+body global POSIX_MADV_RANDOM	known p
+body global POSIX_MADV_SEQUENTIAL	known p
+body global POSIX_MADV_WILLNEED	known p
+body global PROT_EXEC	known p
+body global PROT_GROWSDOWN	known p
+body global PROT_GROWSUP	known p
+body global PROT_NONE	known p
+body global PROT_READ	known p
+body global PROT_WRITE	known p
+body global SHADOW_STACK_SET_TOKEN	known p
+baked MADV_COLD [8 14000000]
+baked MADV_COLLAPSE [8 19000000]
+baked MADV_DODUMP [8 11000000]
+baked MADV_DOFORK [8 0b000000]
+baked MADV_DONTDUMP [8 10000000]
+baked MADV_DONTFORK [8 0a000000]
+baked MADV_DONTNEED [8 04000000]
+baked MADV_DONTNEED_LOCKED [8 18000000]
+baked MADV_FREE [8 08000000]
+baked MADV_HUGEPAGE [8 0e000000]
+baked MADV_HWPOISON [8 64000000]
+baked MADV_KEEPONFORK [8 13000000]
+baked MADV_MERGEABLE [8 0c000000]
+baked MADV_NOHUGEPAGE [8 0f000000]
+baked MADV_NORMAL [8 00000000]
+baked MADV_PAGEOUT [8 15000000]
+baked MADV_POPULATE_READ [8 16000000]
+baked MADV_POPULATE_WRITE [8 17000000]
+baked MADV_RANDOM [8 01000000]
+baked MADV_REMOVE [8 09000000]
+baked MADV_SEQUENTIAL [8 02000000]
+baked MADV_UNMERGEABLE [8 0d000000]
+baked MADV_WILLNEED [8 03000000]
+baked MADV_WIPEONFORK [8 12000000]
+baked MAP_32BIT [8 40000000]
+baked MAP_ABOVE4G [8 80000000]
+baked MAP_ANON [8 20000000]
+baked MAP_ANONYMOUS [8 20000000]
+baked MAP_DENYWRITE [8 00080000]
+baked MAP_EXECUTABLE [8 00100000]
+baked MAP_FILE [8 00000000]
+baked MAP_FIXED [8 10000000]
+baked MAP_FIXED_NOREPLACE [8 00001000]
+baked MAP_GROWSDOWN [8 00010000]
+baked MAP_HUGETLB [8 00000400]
+baked MAP_HUGE_MASK [8 3f000000]
+baked MAP_HUGE_SHIFT [8 1a000000]
+baked MAP_LOCKED [8 00200000]
+baked MAP_NONBLOCK [8 00000100]
+baked MAP_NORESERVE [8 00400000]
+baked MAP_POPULATE [8 00800000]
+baked MAP_PRIVATE [8 02000000]
+baked MAP_SHARED [8 01000000]
+baked MAP_SHARED_VALIDATE [8 03000000]
+baked MAP_STACK [8 00000200]
+baked MAP_SYNC [8 00000800]
+baked MAP_TYPE [8 0f000000]
+baked MCL_CURRENT [8 01000000]
+baked MCL_FUTURE [8 02000000]
+baked MCL_ONFAULT [8 04000000]
+baked MFD_ALLOW_SEALING [8 02000000]
+baked MFD_CLOEXEC [8 01000000]
+baked MFD_EXEC [8 10000000]
+baked MFD_HUGETLB [8 04000000]
+baked MFD_NOEXEC_SEAL [8 08000000]
+baked MLOCK_ONFAULT [8 01000000]
+baked MREMAP_DONTUNMAP [8 04000000]
+baked MREMAP_FIXED [8 02000000]
+baked MREMAP_MAYMOVE [8 01000000]
+baked MS_ASYNC [8 01000000]
+baked MS_INVALIDATE [8 02000000]
+baked MS_SYNC [8 04000000]
+baked PKEY_DISABLE_ACCESS [8 01000000]
+baked PKEY_DISABLE_WRITE [8 02000000]
+baked POSIX_MADV_DONTNEED [8 04000000]
+baked POSIX_MADV_NORMAL [8 00000000]
+baked POSIX_MADV_RANDOM [8 01000000]
+baked POSIX_MADV_SEQUENTIAL [8 02000000]
+baked POSIX_MADV_WILLNEED [8 03000000]
+baked PROT_EXEC [8 04000000]
+baked PROT_GROWSDOWN [8 00000001]
+baked PROT_GROWSUP [8 00000002]
+baked PROT_NONE [8 00000000]
+baked PROT_READ [8 01000000]
+baked PROT_WRITE [8 02000000]
+baked SHADOW_STACK_SET_TOKEN [8 01000000]
+end
+sum f401561b7e1e302ad404924f1dca2addbb7a9ea6841a0dd206cb02b94d282bce

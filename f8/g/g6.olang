@@ -1,0 +1,11 @@
+import "std/io"
+
+fn main() {
+    rows := Array<Map<String, Vec<String>>>(10)
+    for i in range 1000 {
+        rows[i % 10] = Map<String, Vec<String>>[$i: Vec<String>[$i]]
+        c := rows[(i + 3) % 10]
+        c.Put("x", Vec<String>["y"])
+        io.PutLine($c.Len())!
+    }
+}

@@ -1,0 +1,231 @@
+olang scope record
+run std/pair 0-0 ctor std/pair:Pair<compiler/source:NameId, I64>	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<compiler/source:NameId, I64>	0,1
+marks d050c145ae86372dd78df43a202924fa
+read -ctor	I32
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:NameId	o0I64
+out 6176077dd58faa6e4614cbdbb0a8f08d
+run std/pair 894-983 fn <I64;I64;>	
+ctx r1 g1 p0
+keys std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/hash 812-855 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 1 1 | U U | F | b0 b0 b00 b0 | 0: 1: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/pair:894:983 t i t i i c0/i/i f0010
+hid fs1	o0std/pair:Pair<I64, I64>&
+out 3a470fb58960c4ac89204b6d06982050
+run std/pair 0-0 ctor std/pair:Pair<I64, I64>	
+ctx r1 g1 p0
+keys std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<I64, I64>	0,1
+marks 024b9638cedcff7fedccac8e75da3edc
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I64
+out 6280290f60648b00f11fd15794114f0a
+run std/pair 0-0 ctor std/pair:Pair<I64, compiler/source:Span>	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<I64, compiler/source:Span>	0,1
+marks 2a35c2db7530a4777482237dac3c2e61
+read -ctor	I64
+read compiler/source 0-0 ctor compiler/source:Span	4d64dbf56007f58edb99348afd780bc3
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0compiler/source:Span
+out ae18cb0ec6d4374e2504772ee082712d
+run std/pair 0-0 ctor std/pair:Pair<I64, compiler/types:ListId>	
+ctx r1 g1 p0
+keys compiler/types=75fd0da4b280405f8c5b76151a6dffa8b71097f233b8727ad4466116f686fab1 std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<I64, compiler/types:ListId>	0,1
+marks c88a2250a5c2b2ad9470135e020fd9c3
+read -ctor	I32
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0compiler/types:ListId
+out 308f8aea0f0740475dcc97b63b2c1cef
+run std/pair 894-983 fn <I64;compiler/types:ListId;>	
+ctx r1 g1 p0
+keys compiler/types=75fd0da4b280405f8c5b76151a6dffa8b71097f233b8727ad4466116f686fab1 std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/hash 812-855 fn	f7bb736ff25cfebe533b51ea3eff8305
+read std/prelude/hash 856-899 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 2 1 1 | U U | F | b0 b0 b00 b0 | 0: 1: | | ||
+sum r b0 b0 b0 b0 b0 b b b a,std/pair:894:983 t i t i i c0/i/i f0010
+hid fs1	o0std/pair:Pair<I64, compiler/types:ListId>&
+out db8a5c073754df74ce2ec5fd846a4cf3
+run std/pair 0-0 ctor std/pair:Pair<compiler/generic:Origin, I64>	
+ctx r1 g1 p0
+keys compiler/generic=ef93b000696f8390aecdfa68f3ea535f1c5a1b838beb02e4dca4a9709702fece std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<compiler/generic:Origin, I64>	0,1
+marks be0509378676c2eb1cb2fd75d2fc075c
+read -ctor	I64
+read compiler/generic 0-0 ctor compiler/generic:Origin	8d617ce2134595e08ab91492df93f638
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/generic:Origin	o0I64
+out 7bcc8ece8aefcd1afd4f66a0c9e25c0a
+run std/pair 0-0 ctor std/pair:Pair<I64, compiler/typed:Expr&>	
+ctx r1 g1 p0
+keys compiler/typed=cfc06192db67948bd8071fc1eee7c5c5bb134410a6b2978811a99c61ff4e40e5 std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<I64, compiler/typed:Expr&>	0,1
+marks e950cac1bef447d6d53eea58af067d59
+read -ctor	I64
+read -ctor	compiler/typed:Expr
+hits 0
+body 1 0 4 2 | | F F F F | b00 b0000 b b0000 | | | ||
+sum r;V0,V1,0,573,579,1,0,0 b00 b00 b01 b00 b00 b b b a,std/pair:0:0,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0compiler/typed:Expr&
+out 4645181fda0de896b8e628d3c9d82ea5
+run std/pair 0-0 ctor std/pair:Pair<std/pair:Pair<I64, I64>, std/pair:Pair<I64, I64>>	
+ctx r1 g1 p0
+keys std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<std/pair:Pair<I64, I64>, std/pair:Pair<I64, I64>>	0,1
+marks ed2d0c32801e5cfdfe1a9c4f072a0990
+read std/pair 0-0 ctor std/pair:Pair<I64, I64>	8ebec52175e86c93d7580492a1ddf38b
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0std/pair:Pair<I64, I64>	o0std/pair:Pair<I64, I64>
+out 83755391dd3119c89c1d613ed6e57d20
+run std/pair 0-0 ctor std/pair:Pair<compiler/source:NameId, compiler/types:TypeId>	
+ctx r1 g1 p0
+keys compiler/source=4abb97f2207e6b6295860a2f9c2fc5eba9d502e478afd9ceb6d11031ca492cfb compiler/types=75fd0da4b280405f8c5b76151a6dffa8b71097f233b8727ad4466116f686fab1 std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<compiler/source:NameId, compiler/types:TypeId>	0,1
+marks 483ed5cb9b03bd359c8ad3ee8625b139
+read -ctor	I32
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/source:NameId	o0compiler/types:TypeId
+out 8652cb2db913b2c8c73bf086653f842f
+run std/pair 0-0 ctor std/pair:Pair<I64, I32>	
+ctx r1 g1 p0
+keys std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<I64, I32>	0,1
+marks 0c985a5c095623883646728f868fb69d
+read -ctor	I32
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0I32
+out d1faa497338cb530f6b50678fcbfda95
+run std/pair 0-0 ctor std/pair:Pair<I64, compiler/types:TypeId>	
+ctx r1 g1 p0
+keys compiler/types=75fd0da4b280405f8c5b76151a6dffa8b71097f233b8727ad4466116f686fab1 std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<I64, compiler/types:TypeId>	0,1
+marks 1e88efc36917c6eafec39d2a7b1d9211
+read -ctor	I32
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0compiler/types:TypeId
+out 7936c9b017a3d187b34f435894ae5e28
+run std/pair 0-0 ctor std/pair:Pair<compiler/mir:FnKey, I64>	
+ctx r1 g1 p0
+keys compiler/mir=f2bfaff1c62eedc3858a79c1916f27191d01386f58193cab5813a09a54ae819e std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<compiler/mir:FnKey, I64>	0,1
+marks c3f179278433a01e7444901f4944e2c0
+read -ctor	I64
+read -ctor	compiler/mir:FnKey
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0compiler/mir:FnKey	o0I64
+out 72a3a8f77ed46ff5db78e71e32a56514
+run std/pair 0-0 ctor std/pair:Pair<I64, compiler/typed:LocalId>	
+ctx r1 g1 p0
+keys compiler/typed=cfc06192db67948bd8071fc1eee7c5c5bb134410a6b2978811a99c61ff4e40e5 std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<I64, compiler/typed:LocalId>	0,1
+marks b1cd8c3bbf2f80b774a67fb709d27edf
+read -ctor	I32
+read -ctor	I64
+hits 0
+body 1 0 4 1 | | F F F F | b0 b0000 b b0000 | | | ||
+sum r b0 b0 b00 b00 b00 b b b a,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I64	o0compiler/typed:LocalId
+out 19dcf0fde02049a4061fb6bdbb3628e5
+run std/pair 0-0 ctor std/pair:Pair<I32, std/prelude/text:String&>	
+ctx r1 g1 p0
+keys std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<I32, std/prelude/text:String&>	0,1
+marks 11f948dc23dd9a03b3701869f34c8f80
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I32
+hits 0
+body 1 0 4 2 | | F F F F | b00 b0000 b b0000 | | | ||
+sum r;V0,V1,0,573,579,1,0,0 b00 b00 b01 b00 b00 b b b a,std/pair:0:0,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I32	o0std/prelude/text:String&
+out d129d14e2bbcf226d2176ce2bbdd655d
+run std/pair 0-0 ctor std/pair:Pair<I32, Array<std/prelude/text:Char>&>	
+ctx r1 g1 p0
+keys std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6 std/prelude/text=c9f07d9007b0e5bf11c3feb54d94bd3665ad77025c3a1bd6eb62f630ef9c43b9
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<I32, Array<std/prelude/text:Char>&>	0,1
+marks b5f2286aaad4cc66a73caa12f00a6d92
+read -ctor	Array<std/prelude/text:Char>
+read -ctor	I32
+hits 0
+body 1 0 4 2 | | F F F F | b00 b0000 b b0000 | | | ||
+sum r;V0,V1,0,573,579,1,0,0 b00 b00 b01 b00 b00 b b b a,std/pair:0:0,std/pair:0:0 t i,-1,-1 t i i c0/i/i f0010
+hid fs1	o0I32	o0Array<std/prelude/text:Char>&
+out 91f6f78e4546aeffb7f88dafa3578fbd
+run std/pair 1719-1960 fn	
+ctx r1 g1 p0
+keys std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+mark std/pair 0-0 ctor std/pair:Pair<I32, Array<std/prelude/text:Char>&>	1
+mark std/pair 0-0 ctor std/pair:Pair<I32, std/prelude/text:String&>	1
+marks 1179699aa5f85c1863c0086d27c9c070
+read std/pair 0-0 ctor std/pair:Pair<I32, Array<std/prelude/text:Char>&>	7bf24cb1c54466998b44e4e808d2b411
+read std/pair 0-0 ctor std/pair:Pair<I32, std/prelude/text:String&>	7bf24cb1c54466998b44e4e808d2b411
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 4 4 0 | U U U U | F F F F | b b0000 b0000 b0000 | 0:,B0,B0 1:,B0,B0 2:,B0,B0 | | ||
+sum r b b b0 b0 b0 b b b a t i t i i c0/i/i f0010
+hid fs1;25344:U;25345:B0;25344:U;25345:B0	o0I32
+out e85b692b048352d263e8d783e01c5ce8
+run std/pair global PairOfTextBaked	
+ctx r1 g1 p0
+keys std/pair=1e2dbbc1c6852e43745400c40d3a0e656fc64b4d2d565e3b39e9b7dc877eadc6
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/pair 1719-1960 fn	f7bb736ff25cfebe533b51ea3eff8305
+hits 0
+body 1 1 0 0 | U | | b b b0 b | 0: | | ||
+sum r b b b b b b b b a t i t i i c0/i/i f0010
+hid fs1
+out 57bf2ed02142729bf16ae55b46ae7e80
+end
+sum 10768-8730501869031953390

@@ -1,0 +1,60 @@
+olang front record
+read #d86452a488afb69777fcef690a6b2c7b D9h mutable globals
+body fn 10300-10472	known p
+body fn 10519-10798	known p
+body fn 10902-11338	known p
+body fn 12012-12070	known p
+body fn 12114-12178	known p
+body fn 14140-14317	known p
+body fn 19079-19209	known p
+body fn 2813-2893	known p
+body fn 2970-3066	known p
+body fn 3142-3235	known p
+body fn 3322-3436	known p
+body fn 3537-3648	known p
+body fn 3738-3979	known p
+body fn 4100-4256	known p
+body fn 4365-4412	known p
+body fn 5950-6124	known p
+body fn 7564-7799	known p
+body fn 7980-8090	known p
+body fn 9157-9244	known p
+body fn 9286-9342	known p
+body fn 9378-9451	known p
+body fn 9501-9557	known p
+body fn 9661-9878	known p
+body fn 9989-10175	known p
+body global DefaultBudget	known p
+body global DefaultRuns	known p
+body global MaxOps	known p
+body lambda 19145-19167	known p
+body lambda 7680-7710	known p
+baked DefaultBudget [8 00ca9a3b00000000]
+baked DefaultRuns [8 0700000000000000]
+baked MaxOps [8 00ca9a3b00000000]
+sig AllocsPerOp@2970 fn&(Measurement&) I64
+sig BytesPerOp@3142 fn&(Measurement&) I64
+sig Display@10519 fn&(Series&) Display
+sig Human@10902 fn&(F64, F64) String
+sig InstructionsPerOp@3322 fn&(Measurement&) I64
+sig Line@10300 fn&(Series&) String
+sig Median@7564 fn&(Array<F64>&) F64
+sig Median@9286 fn&(Series&) F64
+sig Min@9378 fn&(Series&) F64
+sig NanosPerOp@2813 fn&(Measurement&) F64
+sig On@4365 fn&() Bool
+sig PerOp@9157 fn&(Series&) Array<F64>
+sig Ratio@12012 fn&(Comparison&) F64
+sig RatioSpread@12114 fn&(Comparison&) F64
+sig Spread@7980 fn&(Array<F64>&) F64
+sig Spread@9501 fn&(Series&) F64
+sig Str@3537 fn&(Measurement&) String
+sig Str@9989 fn&(Series&) String
+sig Typical@9661 fn&(Series&) Measurement
+sig counts@3738 fn&(Measurement&) String
+sig nanos@4100 fn&(F64) String
+sig nextOps@5950 fn&(Measurement&, I64) I64
+sig running@14140 fn&() String
+sig runsOnce@19079 fn&() I64
+end
+sum cc703b123f24bc56f9c24c9f44ef5d2c53b2a420996ecb082af8eec26dc7a675

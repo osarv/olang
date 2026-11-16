@@ -1,0 +1,61 @@
+olang front record
+body fn 11330-11694	known p grows|0|-|-|..targets|8|0|compiler/definit|11582|11587|-1
+body fn 11696-12553	known p grows|0|-|-|..targets|8|0|compiler/definit|11998|12002|-1
+body fn 12624-12798	known p
+body fn 13438-13653	known p
+body fn 14055-14567	known p
+body fn 14569-14722	known p
+body fn 14724-14878	known p
+body fn 14880-15035	known p
+body fn 15037-16493	known p
+body fn 16495-16624	known p
+body fn 16626-18802	known p
+body fn 18804-19044	known p
+body fn 19046-19228	known p
+body fn 19230-19821	known p
+body fn 2116-2199	known p
+body fn 2201-2373	known p
+body fn 2540-2817	known p
+body fn 3308-3529	known p
+body fn 3747-3920	known p
+body fn 3968-4056	known p grows|0|-|-|..targets|8|0|compiler/definit|4012|4017|-1
+body fn 4058-4221	known p
+body fn 4223-4344	known p grows|0|-|-|..targets|8|0|compiler/definit|4325|4330|-1
+body fn 4346-4520	known p grows|0|-|-|..targets|8|0|compiler/definit|4488|4492|-1
+body fn 4522-4672	known p
+body fn 4674-7992	known p grows|0|-|-|..targets|8|0|compiler/definit|5088|5092|-1
+body fn 8078-8394	known p grows|0|-|-|..targets|8|0|compiler/definit|8243|8248|-1
+body fn 8396-8568	known p grows|0|-|-|..targets|8|0|compiler/definit|8537|8541|-1
+body fn 8570-8753	known p grows|0|-|-|..targets|8|0|compiler/definit|8668|8673|-1
+body fn 8755-11215	known p grows|0|-|-|..targets|8|0|compiler/definit|9526|9531|-1
+sig HeldWalk@13438 fn&(Body&, LocalId, LocalId) I64
+sig Run@3968 fn&(mut Walker&) State
+sig State.dead@2116 fn&() State
+sig Verdict.Judge@3308 fn&(Body&, LocalId, Bool) Verdict
+sig arm@11330 fn&(mut Walker&, Arm&, State, State) State
+sig arm@18804 fn&(mut heldWalker&, Arm&, Bool)
+sig block@14055 fn&(mut heldWalker&, Block?&, Bool)
+sig block@4223 fn&(mut Walker&, Block?&, State) State
+sig blockSp@4058 fn&(mut Walker&, Block&) Span
+sig clauses@19046 fn&(mut heldWalker&, Array<Clause&>&, Bool)
+sig clauses@8078 fn&(mut Walker&, Array<Clause&>&, State, State) State
+sig expr1@8755 fn&(mut Walker&, Expr&, State) State
+sig expr@16626 fn&(mut heldWalker&, Expr?&, Bool)
+sig expr@8570 fn&(mut Walker&, Expr?&, State) State
+sig exprs@16495 fn&(mut heldWalker&, Array<Expr&>&, Bool)
+sig exprs@8396 fn&(mut Walker&, Array<Expr&>&, State) State
+sig isG@14724 fn&(mut heldWalker&, Lvalue&) Bool
+sig isL@4522 fn&(mut Walker&, Lvalue&) Bool
+sig litBool@12624 fn&(Expr&) I64
+sig meet@2201 fn&(State, State) State
+sig place@11696 fn&(mut Walker&, Lvalue&, State) State
+sig place@19230 fn&(mut heldWalker&, Lvalue&, Bool)
+sig read@3747 fn&(mut Walker&, State, Span)
+sig readsG@14569 fn&(mut heldWalker&, Expr&) Bool
+sig retag@2540 fn&(State, State, State, Cause, Span) State
+sig stmt@15037 fn&(mut heldWalker&, Stmt&, Bool)
+sig stmt@4674 fn&(mut Walker&, Stmt&, State) State
+sig stmts@14880 fn&(mut heldWalker&, Array<Stmt&>&, Bool)
+sig stmts@4346 fn&(mut Walker&, Array<Stmt&>&, State) State
+end
+sum 7b63258fb990c25bc62f722e172587c4b6f99d3420657543c7c8287c9ccaf398

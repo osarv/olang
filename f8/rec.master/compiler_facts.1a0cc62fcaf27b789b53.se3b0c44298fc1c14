@@ -1,0 +1,157 @@
+olang scope record
+run compiler/facts 0-0 ctor compiler/facts:Table	
+ctx r1 g1 p0
+keys compiler/facts=1a0cc62fcaf27b789b53fb69896871141ceeb9808aa17b3046bb58b97457fda9
+in 0
+mark compiler/facts 0-0 ctor compiler/facts:Table	0,1,2,3,4
+marks a33f827849a36d54625893f51edf230c
+read -ctor	I64
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String, Bool>	0310b0c06b952de221ad2256fb7a89d8
+read std/prelude/map 0-0 ctor std/prelude/map:Map<std/prelude/text:String, std/prelude/text:String>	0310b0c06b952de221ad2256fb7a89d8
+hits 0
+body 1 3 5 1 | U U U | F F F F F | b1 b00000 b000 b00000 | 0:,V0 1:,V0 2:,V0 | | ||
+sum r b1 b1 b b b b b b a,std/prelude/map:2600:2604 t i,-1,-1,-1,-1,-1 t i i c0/i/i f0010
+hid fs1
+out 1075c728bd64ff4b7a4e49bbde463916
+run compiler/facts 2319-2359 lambda in compiler/facts 2051-2519 fn	
+ctx r1 g1 p0
+keys compiler/facts=1a0cc62fcaf27b789b53fb69896871141ceeb9808aa17b3046bb58b97457fda9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V0,V1 | | ||
+sum r b00 b00 b0 b0 b0 b00 b00 b00 a,compiler/facts:2319:2359,compiler/facts:2319:2359 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&
+out 789f6ebb1ed5352aac4a4d55fe4dd517
+run compiler/facts 2433-2479 lambda in compiler/facts 2051-2519 fn	
+ctx r1 g1 p0
+keys compiler/facts=1a0cc62fcaf27b789b53fb69896871141ceeb9808aa17b3046bb58b97457fda9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 9621-9684 fn	d6838a1805156f44ce16ca1acf6acece
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b00 b00 b00 a,compiler/facts:2433:2479,compiler/facts:2433:2479 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&
+out 4fb0200e55d1f4fadab325fb71387b47
+run compiler/facts 2051-2519 fn	
+ctx r1 g1 p0
+keys compiler/facts=1a0cc62fcaf27b789b53fb69896871141ceeb9808aa17b3046bb58b97457fda9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/facts 2319-2359 lambda in compiler/facts 2051-2519 fn	eb7715705cdacbd2ee9c0ea0175ac3d3
+read compiler/facts 2433-2479 lambda in compiler/facts 2051-2519 fn	d5bbb02aa5680a6c15e4da12572eebbb
+read std/prelude/array 2061-2203 fn <std/prelude/text:String&;?;>	418a8af5b01375a804780f40122ad44b
+read std/prelude/array 7336-7441 fn <std/prelude/text:String&;>	fce9aa8e2a689269b521221817ea5b49
+read std/prelude/map 5979-6292 fn <std/prelude/text:String;Bool;>	78142f61282099ffbd02086543bcc17c
+read std/prelude/map 5979-6292 fn <std/prelude/text:String;std/prelude/text:String;>	78142f61282099ffbd02086543bcc17c
+read std/prelude/map 7053-7137 fn <std/prelude/text:String;std/prelude/text:String;>	754aeb1d8fba623439d91ba7dc9137d0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 5222-6401 fn	ab98a5b2ea25c1706726cb198e1a4156
+read std/prelude/vec 11088-11181 fn <std/prelude/text:String&;?;>	c22db8e7309beb50afc90ba16571f575
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 14 6 3 | U U U U U F U U U U B0 U U U | F F F F F F | b100 b000000 b00000000000000 b000000 | 0:,V0 1:,V0,B0 2:,V0 3:,B0,V2 4:,B0,B0,B0 5:,V2 6:,B0,B0 7:,B0,B0,B0 8:,B0,B0 9:,B0,V2 10: 11:,B0,B0 12:,B0,B0,B0 13:,V0 | | ||
+sum r b100 b100 b1010 b1000 b1000 b b b a,std/prelude/map:6065:6082,compiler/facts:2051:2519,compiler/facts:2051:2519 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/facts:Table&	o0std/prelude/text:String&	o0std/prelude/text:String&	o0Bool	o0mut Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o1std/prelude/text:String&	o0mut Array<std/prelude/text:String&>&	o1std/prelude/text:String&	o1std/prelude/text:String&	o0mut std/prelude/vec:Vec<std/prelude/text:String&>&	o1mut Array<std/prelude/text:String&>&
+out c87576d9acbd62d1117de5338eea0682
+run compiler/facts 2633-2834 fn	
+ctx r1 g1 p0
+keys compiler/facts=1a0cc62fcaf27b789b53fb69896871141ceeb9808aa17b3046bb58b97457fda9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/map 5979-6292 fn <std/prelude/text:String;Bool;>	78142f61282099ffbd02086543bcc17c
+read std/prelude/map 7053-7137 fn <std/prelude/text:String;std/prelude/text:String;>	754aeb1d8fba623439d91ba7dc9137d0
+hits 0
+body 1 3 4 3 | U B0 U | F F F V2 | b101 b0001 b000 b0000 | 0:,V0,V2 2:,V0 | | ||
+sum r b101 b101 b100 b100 b100 b b b a,std/prelude/map:6065:6082,compiler/facts:2633:2834,compiler/facts:2712:2760 t i t i i c0/i/i f0010
+hid fs1	o0mut compiler/facts:Table&	o0I64	o0std/prelude/text:String&
+out 0abf12ede4c62f05a9d210fb61fd023b
+run compiler/facts 2949-3375 fn	
+ctx r1 g1 p0
+keys compiler/facts=1a0cc62fcaf27b789b53fb69896871141ceeb9808aa17b3046bb58b97457fda9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read std/prelude/map 13294-13366 fn <std/prelude/text:String;Bool;>	b761e15f97a7c35825fb4827b69cf868
+read std/prelude/map 13294-13366 fn <std/prelude/text:String;std/prelude/text:String;>	b761e15f97a7c35825fb4827b69cf868
+read std/prelude/map 13828-14018 fn <std/prelude/text:String;Bool;>	11f0061c69f501aa22e4cae1a2857852
+read std/prelude/map 13828-14018 fn <std/prelude/text:String;std/prelude/text:String;>	11f0061c69f501aa22e4cae1a2857852
+read std/prelude/map 8534-8667 fn <std/prelude/text:String;Bool;>	928442083f52b856403425c2dce21e9b
+read std/prelude/map 8534-8667 fn <std/prelude/text:String;std/prelude/text:String;>	928442083f52b856403425c2dce21e9b
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 3958-4053 fn	249b488abfd8979d5dc24c581a8aa85a
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+read std/prelude/vec 5133-5172 fn <std/prelude/text:String&;>	a0fc8ee0cfadb18058d87d76a49fdfcd
+read std/prelude/vec 6401-6448 fn <std/prelude/text:String&;>	122810b1295de41cd59374cf6b2b8642
+hits 0
+body 1 18 15 2 | U U U U U U U U U U U U U U U U U U | F F F F B0 F F F F F B0 F F F F | b00 b000000000000000 b000000000000000000 b000000000000000 | 0:,B0 1:,V0,V0 2:,V0,B0 3:,B0,V1 4:,B0,B0 5:,B0 6:,B0,B0 7:,V0 8:,V0 9:,B0 10:,V0,V0 11:,V0,B0 12:,B0,B0 13:,B0 14:,B0,B0 15:,B0,B10 16:,B0,V1 17:,V0 | | ||
+sum r b00 b00 b10 b00 b00 b b b a,compiler/facts:2949:3375,compiler/facts:2949:3375 t i t i i c0/i/i f0010
+hid fs1;1280:U;1280:U	o0mut compiler/facts:Table&	o0std/prelude/text:String&	o0std/prelude/map:MapKeyIter<std/prelude/text:String, std/prelude/text:String>	o1std/prelude/map:Map<std/prelude/text:String, std/prelude/text:String>&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64	o0std/prelude/map:MapKeyIter<std/prelude/text:String, Bool>	o1std/prelude/map:Map<std/prelude/text:String, Bool>&	o0std/prelude/text:String&	o1std/prelude/vec:Vec<std/prelude/text:String&>&	o1I64
+out 56b8751263895cbff3ce981830aaf541
+run compiler/facts 4712-4899 fn	
+ctx r1 g1 p0
+keys compiler/facts=1a0cc62fcaf27b789b53fb69896871141ceeb9808aa17b3046bb58b97457fda9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/array 1568-1802 fn <std/prelude/text:Char;>	b79aa6ec5c1a91330451c13ebaf035ce
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/sha256 4854-4917 fn	5e1c28e81c9e2686c3ca8f54a0ba4f85
+hits 0
+body 1 6 1 2 | U U U U B0 V1 | F | b01 b0 b000000 b0 | 0:,V0,B0 1:,V0,B0 2:,V0,B0 3:,V0,B0 | | ||
+sum r b01 b01 b0 b0 b0 b b b a,compiler/facts:4712:4899,compiler/facts:4874:4897 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&
+out f9f3ea6b84b31139c4f7bc4a23107817
+run compiler/facts 4241-4597 fn	
+ctx r1 g1 p0
+keys compiler/facts=1a0cc62fcaf27b789b53fb69896871141ceeb9808aa17b3046bb58b97457fda9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read -ctor	I64
+read compiler/facts 4712-4899 fn	e3da039d89801fbb4732955c150a0d02
+read std/prelude/map 7053-7137 fn <std/prelude/text:String;std/prelude/text:String;>	754aeb1d8fba623439d91ba7dc9137d0
+read std/prelude/text 2360-2526 fn	23ef05e9ef5216404a739957d7387ff0
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/text 3958-4053 fn	249b488abfd8979d5dc24c581a8aa85a
+hits 0
+body 1 6 9 2 | U U U U B2 U | F F F F F F F F F | b00 b000000000 b000000 b000000000 | 0:,V1,B2 1:,V1,B2 2:,V0,B2 3:,B2,B2 5:,B2,V1 | | ||
+sum r b00 b00 b00 b00 b00 b b b a,compiler/facts:4241:4597,compiler/facts:4241:4597 t i t i i c0/i/i f0010
+hid fs1	o0compiler/facts:Table&	o0Array<std/prelude/text:String&>&
+out f23b4e9fca08b51ae1c816c20b27a9a6
+run compiler/facts 3947-3993 lambda in compiler/facts 3585-4024 fn	
+ctx r1 g1 p0
+keys compiler/facts=1a0cc62fcaf27b789b53fb69896871141ceeb9808aa17b3046bb58b97457fda9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read std/prelude/text 9621-9684 fn	d6838a1805156f44ce16ca1acf6acece
+hits 0
+body 1 1 2 2 | U | F F | b00 b00 b0 b00 | 0:,V0,V1 | | ||
+sum r b00 b00 b00 b00 b00 b00 b00 b00 a,compiler/facts:3947:3993,compiler/facts:3947:3993 t i t i i c0/i/i f0010
+hid fs1	o0std/prelude/text:String&	o0std/prelude/text:String&
+out c2fd04516c7c0689a0c98405b924ecf8
+run compiler/facts 3585-4024 fn	
+ctx r1 g1 p0
+keys compiler/facts=1a0cc62fcaf27b789b53fb69896871141ceeb9808aa17b3046bb58b97457fda9
+in 0
+marks e3b0c44298fc1c149afbf4c8996fb924
+read compiler/facts 3947-3993 lambda in compiler/facts 3585-4024 fn	480a9bad3d889daf070d1b2dfd18d255
+read compiler/facts 4712-4899 fn	e3da039d89801fbb4732955c150a0d02
+read std/prelude/map 13294-13366 fn <std/prelude/text:String;Bool;>	b761e15f97a7c35825fb4827b69cf868
+read std/prelude/map 13828-14018 fn <std/prelude/text:String;Bool;>	11f0061c69f501aa22e4cae1a2857852
+read std/prelude/map 7053-7137 fn <std/prelude/text:String;std/prelude/text:String;>	754aeb1d8fba623439d91ba7dc9137d0
+read std/prelude/map 7666-7764 fn <std/prelude/text:String;Bool;>	a3df79d624c5ad6625ff228e23d69dd0
+read std/prelude/text 3079-3212 fn	8affff6878b901f513493d28e53c5066
+read std/prelude/vec 0-0 ctor std/prelude/vec:Vec<std/prelude/text:String&>	be882dc4175efa129ffc9638acde7fe8
+read std/prelude/vec 11088-11181 fn <std/prelude/text:String&;?;>	c22db8e7309beb50afc90ba16571f575
+read std/prelude/vec 12129-12208 fn	289b6de92436cffcdd46ce96711d09ac
+read std/prelude/vec 4660-4775 fn <std/prelude/text:String&;>	eda9bb0c675c9b42a7d0d5346b9a952f
+hits 0
+body 1 15 8 2 | B0 U U U U U U B2 U B0 B0 U B0 U U | F F F F F F F F | b01 b00000000 b000000000000000 b00000000 | 1:,B0 2:,V0,V0 3:,V0,B2 4:,B2,B0 5:,V0 6:,V0,B2 8:,B2,B2 11:,B0,B0 12: 13:,B0,B0 14:,B0,B0,V1 | | ||
+sum r b01 b01 b100 b000 b000 b b b a,compiler/facts:3585:4024,std/prelude/text:11453:11467 t i t i i c0/i/i f0010
+hid fs1;1280:U	o0compiler/facts:Table&	o0I64	o0Bool	o0std/prelude/map:MapKeyIter<std/prelude/text:String, Bool>	o1std/prelude/map:Map<std/prelude/text:String, Bool>&
+out 32f59c5d6667721d1989b3837b4a2e37
+end
+sum 10941-7633981599265112000

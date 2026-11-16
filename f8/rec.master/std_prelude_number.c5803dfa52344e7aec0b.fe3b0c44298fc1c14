@@ -1,0 +1,31 @@
+olang front record
+body fn 18552-18777	known p
+body fn 18991-19041	known p
+body fn 19042-19095	known p
+body fn 19096-19149	known p
+body fn 19150-19193	known p
+body fn 19194-19306	known p
+body fn 19307-19422	known p
+body fn 19423-19538	known p
+body fn 19539-19654	known p
+body fn 20246-20538	known p
+body global Euler	known p
+body global Inf	known p
+body global NaN	known p
+body global Pi	known p
+baked Euler [8 6957148b0abf0540]
+baked Inf [8 000000000000f07f]
+baked NaN [8 000000000000f87f]
+baked Pi [8 182d4454fb210940]
+sig Sqrt@18991 fn&(U8) U8
+sig Sqrt@19042 fn&(U16) U16
+sig Sqrt@19096 fn&(U32) U32
+sig Sqrt@19150 fn&(U64) U64
+sig Sqrt@19194 fn&(I8) I8 ? NumberError
+sig Sqrt@19307 fn&(I16) I16 ? NumberError
+sig Sqrt@19423 fn&(I32) I32 ? NumberError
+sig Sqrt@19539 fn&(I64) I64 ? NumberError
+sig sqrtU128@20246 fn&(U128) U128
+sig sqrtU64@18552 fn&(U64) U64
+end
+sum 0b0043f4922592969fbe7c634ba236389ca81f46b21237695582004584a0c61f
