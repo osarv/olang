@@ -175,6 +175,21 @@ fn ProgramOf(bin String&, name String&, tools String&, compiler String&, std Str
     return filepath.Join(bin, "tools_" + $name + "-" + $build.HashOf(parts)[0:16])
 }
 
+# the most the cache of the tools' programs keeps (bytes): each new compiler or tool's source names programs anew
+FixCacheCap I64 = 128 << 20
+
+# the tools' programs kept within their cap, what was used longest ago going first and never a program of this run's
+# (each marked used), nor the directory a build beside it is making one in
+fn trimBin(bin String&, programs Array<String&>&) {
+    keep Map<String&, Bool>
+    for p in programs {
+        build.Touch(p)
+        keep.Put(filepath.Base(p), true)
+    }
+    held := build.Holdings(bin, 0, true)
+    build.Trim(bin, held, keep, build.Recent(), FixCacheCap)
+}
+
 # where the tools' programs are kept: olang's cache for what it builds for itself (build.CacheDir's "fix")
 fn BinDir() String { return build.CacheDir("fix") }
 
@@ -321,6 +336,7 @@ fn run(files Array<String&>&, before Vec<String&>&, exe String&, std String&, sa
         if triggered(ToolTriggers[t], before): want.Push(t)
     }
     failed := buildAll(exe, tools, bin, want, programs)
+    trimBin(bin, programs)
     if timed: said.Write("olang fix: " + $want.Len() + " of " + $ToolNames.Len() + " tools wanted, built in " + $((time.Now() - began) / 1000000) + " ms\n")
     left I64 = 0
     driving := false

@@ -838,6 +838,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     }
     # (the reader records again: lowering read facts of its own)
     if kind != build.Kind.Module: keep(l, cfg, keys, records.ReaderRecords(l, c), e, objs, hashes)
+    records.TrimRecords(cfg, l, keys)
     # X20: each C import's own C, compiled beside the modules into the same bitcode, so the link inlines it
     for m in l.Mods {
         if m.CUnit == "": continue
@@ -922,7 +923,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.Race = cfg.Race
     # (a cell, B22, starts as a library does - its globals set by its start, which the cell worker calls)
     e.Library = (cfg.Library or cfg.Cell) and kind == build.Kind.Program
-    e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
+    e.SplitFrom = build.SplitFrom  # a large program compiles its large objects in parts
     if cfg.Quick or cfg.Debug: e.PartLimit = emit.PartSizeDev
     e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
     if tests {
@@ -1057,6 +1058,7 @@ fn takeRecord(c typecheck.Checker&, path String&, m I64, irs mut Map<String, Str
         if build.IrHash(pir) != r.Hashes[k]: error Stale
         irs.Put($m + " " + $k, pir)
     }
+    build.Touch(path)
     return r
 }
 

@@ -115,6 +115,7 @@ fn Hold(a mut Analysis&, cfg mut build.Config&) {
         sc.Run()
     }
     if rec and c!.P.L.Diags.Errors() == 0 and sc.Gaps.Len() == 0: records.KeepScope(c!, cfg, a.Keys, sc, loaded)
+    if rec: records.TrimRecords(cfg, a.L, a.Keys)
     Log($"held to section 8 in " + $(time.Since(t0) / 1000000) + " ms (" + $sc.DiskTaken + " judgings from records)")
     a.Sc = sc
     x mut interp.Exec& = interp.Exec(c!.P, c!.Bodies, eval.Mode.Compile)

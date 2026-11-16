@@ -225,7 +225,7 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
 # carries a copy of the declarations, helpers and constant data it uses. An object's text depends only on what is in
 # it: its items in the order of their symbols, its private symbols numbered in the order it names them. Compiling one
 # module (Module) gives that one object, the instances it uses in it. In a -debug build, or one whose IR is SplitFrom
-# or more (which links by ThinLTO), an object holding more than PartSize of items is cut into parts, each item in the
+# or more (a large program, build.SplitFrom), an object holding more than PartSize of items is cut into parts, each item in the
 # part its symbol's hash picks, so the parts compile side by side and an edit recompiles the part holding it
 fn (e mut Emitter&) Objects() Vec<Object> {
     e.emitAll()
