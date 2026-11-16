@@ -38561,3 +38561,6 @@ completes after '.' while the line is unfinished".
 
 Found on the way, not changed: a declared type extending an integer (`type Meters extends I64`) does not get the
 prelude's trait-bounded generic methods (`m.Abs()` is M19's error), though it gets the ones declared on I64 itself.
+
+**2026-11-16, `-define` stays the one spelling (B10).** Asked whether `-D` should replace or join `-define`, the user:
+"keep -define, we decided against build shortcuts". No single-letter aliases for build options.
