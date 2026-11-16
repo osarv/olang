@@ -2403,11 +2403,15 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
 }
 
 # a value holding owners made with no store into their places (a copy, a call's value copied, D9h): those places keep
-fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&) {
+fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made Bool = false) {
     if not w.Final or w.quiet > 0 { return }
+    # (O8f, round 8: a copy lowering makes - made: not a fill's, nor one a declared Copy makes, E31d - builds the text
+    # of a place built in slots in slots of where it goes, as the place's own stores do: lower.copySlots)
+    slots := made and not w.T().RunsCopy(ty)
     for k in w.F.heldPlaces(ty) {
         # (O8f: a part place's values a copy makes are built in no part region, which its let-go leaves where they are)
         if w.F.PartPlace(k): continue
+        if slots and w.F.SlotPlace(k): continue
         if w.F.Debug { try io.PutErr($"untracked " + $k + " at " + $w.F.P.L.Diags.Locate(w.body().File, I64(sp.Start)) + "\n") catch io.Error { } }
         w.F.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by " + $how + ": '" + $w.text(sp) + "'")
     }
@@ -2610,7 +2614,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     try w.targets.Pop() catch { }
     # (a value array stored whole from existing storage is copied there, T7b)
     if p != typed.Lvalue.Local and w.T().KindOf(w.T().Repr(p.Type())) == types.Kind.Array and copiedStore(x) {
-        w.untracked(p.Type(), sp, "a whole array of them stored")
+        w.untracked(p.Type(), sp, "a whole array of them stored", true)
     }
     match p {
         case typed.Lvalue.Local(_, _, l) {
@@ -3549,7 +3553,7 @@ fn (w mut walker&) reachTo(p typed.Lvalue&) Vec<I64> {
 # struct held in place copies with it
 fn (w mut walker&) readOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     f := w.F
-    if p == typed.Lvalue.Local and I64(p.id) != w.copyRead and w.heldCopy.Has(I64(p.id)) { w.untracked(ty, p.Span(), "a copy of a value holding it") }
+    if p == typed.Lvalue.Local and I64(p.id) != w.copyRead and w.heldCopy.Has(I64(p.id)) { w.untracked(ty, p.Span(), "a copy of a value holding it", true) }
     o := w.reach(p)
     w.elemRead(p, o)
     k := f.placeOfPlace(p)
@@ -3745,7 +3749,7 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     filled := m.Kind == typed.MakeKind.Fill and m.Items.Len() > 0
     # (gap 17: nor does a fill of a value holding no storage - `Array<Vec<String>>(10)`'s ten empty Vecs)
     if filled and w.F.emptyValue(m.Items[0], null, 0): filled = false
-    if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it") }
+    if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it", not filled) }
     w.makeStores(m, ty, sp)
     return out
 }
@@ -3886,7 +3890,9 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     if fresh and w.Final: f.freshAt.Put(pair.Pair(w.Id, I64(c.Site)), true)
     # (nor a temporary only lent for reading: what it holds is no value any store gives a place - gap 17)
     lent := I64(c.Site) == w.readArg and c.Site >= typed.SiteId(0)
-    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite and not lent { w.untracked(ty, sp, "a call's value copied") }
+    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite and not lent {
+        w.untracked(ty, sp, "a call's value copied", b2 >= 0 and not unknown)
+    }
     if b2 >= 0 and not unknown {
         if f.isCase(b2) {
             for a in args { addAllTo(out, a) }
