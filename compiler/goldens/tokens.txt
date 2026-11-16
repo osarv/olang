@@ -2021,7 +2021,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 ac0cb24df228eac5 494276e48e18f7fa checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-7f4e857ebbcefcfb 1fabc4ccbc85012b checks/checks.olang
+4d9a116f2c9d7114 f1633fec20b9e7de checks/checks.olang
 e441d89352158de4 51f391891d39e1c7 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 efb54136ad6286dc checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb 11ac830c3b4509ca checks/fixtures/agree/math.olang
@@ -2522,6 +2522,7 @@ f6b7c14441ee3dc7 4f9ec38bbb52db6a std/prelude/enums.olang
 e9c80e07245698f2 525e5eba82f7edfb std/prelude/f8.olang
 bf4439d09464a49e d3b7295c84ebe3c3 std/prelude/float.olang
 02ef8799a43cf737 848f97b80edb3d41 std/prelude/hash.olang
+5087fcf4db50e330 44cbf44ef2432b2f std/prelude/input.olang
 ab128234d334ba84 1d052d7bbf53c78b std/prelude/iterator.olang
 8d78604ee0f159ce 6f0aef1d355542e2 std/prelude/map.olang
 904cf2c65d482e5c 1346b4efdc31a77b std/prelude/number.olang

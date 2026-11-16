@@ -777,7 +777,7 @@ fn remote(r mut report&) ? Failed {
     try r.expect(os.Run("mkdir -p " + $os.Quote(repo) + " && cp -r " + $src + "mathx " + $src + "mathy " + $os.Quote(repo)) == 0
                  "copying the repository", dir)
     try r.expect(os.Run("cp " + $src + "*.olang " + $os.Quote(dir)) == 0, "copying the program", dir)
-    git String& = "git -c user.name=t -c user.email=t@t"
+    git String& = "git -c user.name=t -c user.email=t@t -c commit.gpgsign=false"
     try r.expect(sh(repo, "git init -q && git add . && " + $git + " commit -qm v1 && git tag v1") == 0, "v1", dir)
     try r.expect(sh(repo, "sed -i 's/n + 1/n + 100/' mathy/inc.olang && " + $git + " commit -qam v2") == 0, "v2", dir)
     try r.expect(sh(dir, $env + "\"$OLANG\" build remote.olang > out.txt 2>&1 && ./build/remote") == 0, "remote build", dir)
@@ -839,7 +839,7 @@ fn remotebad(r mut report&) ? Failed {
     try r.expect(sh($dir + "/lock", $env + "\"$OLANG\" build p.olang > out.txt 2>&1") != 0, "a bad lock built", $dir + "/lock")
     try r.expect(outOf($dir + "/lock").Contains("names no commit"), "bad lock", $dir + "/lock")
     try r.expect(sh(dir, "test ! -e inj/PWNED && test ! -e lock/PWNED && test ! -e PWNED") == 0, "PWNED", dir)
-    git String& = "git -c user.name=t -c user.email=t@t"
+    git String& = "git -c user.name=t -c user.email=t@t -c commit.gpgsign=false"
     try r.expect(sh(dir, "mkdir -p remote/example.com/me/tools/mathx && echo 'fn Add1(n I32) I32 { return n + 1 }' > remote/example.com/me/tools/mathx/add.olang") == 0
                  "writing the repository", dir)
     try r.expect(sh($dir + "/remote/example.com/me/tools", "git init -q && git add . && " + $git + " commit -qm v1") == 0
@@ -891,7 +891,7 @@ fn remotestale(r mut report&) ? Failed {
     try r.expect(os.Run("mkdir -p " + $os.Quote(repo) + " && cp -r " + $src + "mathx " + $src + "mathy " + $os.Quote(repo)) == 0
                  "copying the repository", dir)
     try r.expect(os.Run("cp " + $src + "printed.olang " + $os.Quote(dir)) == 0, "copying the program", dir)
-    git String& = "git -c user.name=t -c user.email=t@t"
+    git String& = "git -c user.name=t -c user.email=t@t -c commit.gpgsign=false"
     try r.expect(sh(repo, "git init -q && git add . && " + $git + " commit -qm v1") == 0, "v1", dir)
     build String& = $env + "\"$OLANG\" build printed.olang > out.txt 2>&1 && ./build/printed > out.txt"
     try r.expect(sh(dir, build) == 0, "first commit", dir)
@@ -1332,7 +1332,7 @@ fn embedded(r mut report&) ? Failed {
     # a remote repository's module: a file of its own embedded, a link to one outside refused
     repo String& = $dir + "/remote/example.com/me/tools"
     env String& = "OLANG_GIT_BASE=file://" + $dir + "/remote/ OLANG_CACHE=" + $dir + "/cache "
-    git String& = "git -c user.name=t -c user.email=t@t"
+    git String& = "git -c user.name=t -c user.email=t@t -c commit.gpgsign=false"
     try r.expect(os.Run("mkdir -p " + $os.Quote($repo + "/lib")) == 0, "making the repository", dir)
     try r.expect(sh(repo, "echo inside > lib/ok.txt && ln -s " + $os.Quote($dir + "/s/outside.txt") + " lib/data.txt && " + $
                     "echo 'Data := String(embed \"data.txt\")' > lib/peek.olang && echo 'Ok := String(embed \"ok.txt\")' > lib/good.olang && " + $
