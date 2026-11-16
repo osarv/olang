@@ -8,7 +8,7 @@ type blk struct(n I64) { n }
 G mut Vec<blk> = Vec<blk>()
 
 fn (b mut blk&) Bump() {
-    for i in range 1000 { G.Push(blk(i)) }
+    for i in range 1000: G.Push(blk(i))
     b.n = 99
 }
 

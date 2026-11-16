@@ -51,8 +51,6 @@ fn main() ? {
     }
     a := Array<I64>(100, 7)
     total I64 = 0
-    for c in range 4000000 {
-        total += window(a, c % 90)[0]
-    }
+    for c in range 4000000: total += window(a, c % 90)[0]
     try io.PutLine($sum + " " + $total)
 }

@@ -10,5 +10,5 @@ fn main() ? {
         spawn fn() { for i in range 10 { ha.f(i) } }
     }
     assert a.Len() == 10
-    for i, x in a { assert x == i }
+    for i, x in a: assert x == i
 }

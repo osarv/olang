@@ -11,7 +11,7 @@ type W struct(h H) {
 fn W.mk(n I64, s String&) W {
     e := H(s)
     for i in range 3 {
-        if i == 2 { return W(e) }
+        if i == 2: return W(e)
         e = H($n + $n)
     }
     return W(H(s))

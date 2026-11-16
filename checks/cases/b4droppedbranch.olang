@@ -2,9 +2,7 @@
 # B4: a missing main is not said where a syntax error may have hidden it - but one in a branch the build does not take
 # (S8b) hides nothing, as no such branch is checked: the port had counted it, said nothing, and failed only at the link
 fn pick() I32 {
-    if TargetOs == "no-such-os" {
-        return NoSuchType{1}.v
-    }
+    if TargetOs == "no-such-os": return NoSuchType{1}.v
     return 7
 }
 

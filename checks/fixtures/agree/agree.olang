@@ -35,7 +35,7 @@ fn classify(n I64) String {
 fn two(a String&, b String&) Bool { return a == b }
 fn sites(n I64) String {
     l := Vec<String&>()
-    for _ in range n { l.Push("hello") }
+    for _ in range n: l.Push("hello")
     return $two(l[0], l[1]) + " " + $two("hey", "hey")
 }
 
@@ -53,12 +53,12 @@ type N struct(v I32) {
     v
 }
 fn (a N) Less(b N) Bool {
-    if a.v < 50 { return a.v < b.v and chain(a.v + 100) }
+    if a.v < 50: return a.v < b.v and chain(a.v + 100)
     return a.v < b.v
 }
 fn chain(base I32) Bool { return N(base) < N(base + 10) < N(base + 20) }
 fn comprDeep(n I64) I64 {
-    if n == 0 { return 0 }
+    if n == 0: return 0
     a := Array<I64>[comprDeep(n - 1) + x for x in range 1]
     return a[0] + 1
 }

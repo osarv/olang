@@ -13,7 +13,7 @@ fn churn(n I64) I64 {
     t := 0
     for i in range n {
         v := Vec<aItem>()
-        for j in range 16 { v.Push(aItem(i * j)) }
+        for j in range 16: v.Push(aItem(i * j))
         t += v[15].v
     }
     return t

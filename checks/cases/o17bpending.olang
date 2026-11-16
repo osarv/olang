@@ -10,7 +10,7 @@ type Cell struct() {
 type Box struct() { c mut Cell& = Cell() }
 fn g(h mut Box&, m mut Map<I64, Box>&, n I64) ? {
     h.c.kept = h
-    if n > 0 { try f(m, n - 1) }
+    if n > 0: try f(m, n - 1)
 }
 fn f(m mut Map<I64, Box>&, n I64) ? {
     b := try m.Get(1)

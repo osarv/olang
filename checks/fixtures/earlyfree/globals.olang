@@ -11,19 +11,19 @@ table mut Map<I64, Vec<I64>> = Map<I64, Vec<I64>>()
 
 fn fill(n I64, k I64) {
     v := Vec<I64>()
-    for i in range n { v.Push(i + k) }
+    for i in range n: v.Push(i + k)
     cache = v
 }
 
 fn mk(n I64) Vec<I64> {
     v := Vec<I64>()
-    for i in range n { v.Push(i) }
+    for i in range n: v.Push(i)
     return v
 }
 
 fn sum(v Vec<I64>&) I64 {
     s := 0
-    for x in v { s += x }
+    for x in v: s += x
     return s
 }
 

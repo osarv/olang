@@ -10,13 +10,13 @@ fn inc(x I64) I64 { return x + 1 }
 
 fn main() {
     m := Map<I64, fn&(x I64) I64>()
-    for i in range 100 { m.Put(i, inc) }
+    for i in range 100: m.Put(i, inc)
     m.Remove(5)
     v := Vec<fn&(x I64) I64>()
-    for _ in range 100 { v.Push(inc) }
+    for _ in range 100: v.Push(inc)
     f := try v.Pop() catch default inc
     d := deque.Deque<fn&(x I64) I64>()
-    for _ in range 50 { d.PushBack(inc) }
+    for _ in range 50: d.PushBack(inc)
     g := try m.Get(5) catch default inc
     assert m.Len() == 99 and v.Len() == 99 and f(1) == 2 and g(2) == 3 and d.Len() == 50
     h Handler?& = inc

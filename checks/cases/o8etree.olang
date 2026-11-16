@@ -55,13 +55,9 @@ fn leftmost(n mut Node&) mut Node& {
 fn (t mut Tree&) replace(n mut Node&, c mut Node?&) {
     p := n.parent
     if c != null: c.parent = p
-    if p == null {
-        t.root = c
-    } else if p.left == n {
-        p.left = c
-    } else {
-        p.right = c
-    }
+    if p == null: t.root = c
+    else if p.left == n: p.left = c
+    else: p.right = c
 }
 
 fn (t mut Tree&) DeleteMin() I64 {
@@ -75,7 +71,7 @@ fn (t mut Tree&) DeleteMin() I64 {
 fn peakKb() I64 {
     status := try os.ReadFile("/proc/self/status") catch default ""
     at := try status.Find("VmHWM:") catch default -1
-    if at < 0 { return -1 }
+    if at < 0: return -1
     line := status[at + 6:]
     end := try line.FindByte('\n') catch default line.Len()
     return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1

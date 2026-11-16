@@ -13,13 +13,13 @@ type holder struct() {
 
 fn fill(h mut holder&, n I64, k I64) {
     v := Vec<I64>()
-    for i in range n { v.Push(i + k) }
+    for i in range n: v.Push(i + k)
     h.d = v
 }
 
 fn label(h mut holder&, n I64, k I64) {
     w := Vec<String>()
-    for i in range n { w.Push("name " + $(i + k)) }
+    for i in range n: w.Push("name " + $(i + k))
     h.names = w
 }
 

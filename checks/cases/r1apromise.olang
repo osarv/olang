@@ -7,10 +7,10 @@ type B error {
     Y
 }
 fn g(n I64) ? B {
-    if n < 0 { error B.Y }
+    if n < 0: error B.Y
 }
 fn f(n I64) ? A {
-    if n > 9 { error A.X }
+    if n > 9: error A.X
     try g(n)
 }
 fn main() { }

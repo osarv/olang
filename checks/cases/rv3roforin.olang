@@ -15,7 +15,7 @@ fn B.mk() B {
 }
 G B = B.mk()
 fn look(x B) {
-    for e in x.arr { e!.v += 1 }
+    for e in x.arr: e!.v += 1
 }
 fn main() ? {
     look(G)

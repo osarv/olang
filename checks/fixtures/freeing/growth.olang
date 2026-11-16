@@ -9,7 +9,7 @@ N I64 = 1000000
 
 fn mk(i I64) Vec<I64> {
     w Vec<I64>
-    for j in range 10 { w.Push(i + j) }
+    for j in range 10: w.Push(i + j)
     return w
 }
 
@@ -34,9 +34,9 @@ fn main() {
     }
     p0 := peak()
     v Vec<I64>
-    for i in range N { v.Push(i) }
+    for i in range N: v.Push(i)
     w Vec<I64>
-    for i in range N { w.Push(v[i]) }
+    for i in range N: w.Push(v[i])
     gained := (peak() - p0) / 1024
     io.PutLine($t + " " + $w[N - 1] + " " + $("three buffers" if gained < 27 else "kept, " + $gained + " MB"))!
 }

@@ -14,7 +14,7 @@ fn see(n Node&) I64 {
 }
 fn main() ? {
     b mut Bag& = Bag()
-    for i in range 4 { b.xs.Push(Node(i * 10, Array<I64>[i])) }
+    for i in range 4: b.xs.Push(Node(i * 10, Array<I64>[i]))
     out := Array<I64>(4)
     join {
         for i in range 4 {

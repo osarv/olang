@@ -6,12 +6,12 @@ type Ups struct(n I64) {
     at I64 = 0
 }
 fn (u mut Ups&) Next() I64 ? Exhausted {
-    if u.at >= u.n { error Exhausted.End }
+    if u.at >= u.n: error Exhausted.End
     u.at += 1
     return u.at
 }
 fn main() {
     it mut any Iterator<I64>& = Ups(3)
     n I64 = 0
-    for x in it.Take(2) { n += x }
+    for x in it.Take(2): n += x
 }

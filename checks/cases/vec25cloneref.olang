@@ -17,7 +17,7 @@ fn main() ? {
     w.Push($2 + "b")
     c := w
     c.Push("x")
-    for _ in range 100 { w.Push("y") }
+    for _ in range 100: w.Push("y")
     churn()
     try io.PutLine($c)
     ns := Vec<N&>()

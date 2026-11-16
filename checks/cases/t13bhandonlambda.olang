@@ -20,7 +20,7 @@ fn churn() I64 {
 }
 
 fn feed(f fn&(b Buf), n I64) {
-    for i in range n { f(Buf(i + 10)) }
+    for i in range n: f(Buf(i + 10))
 }
 
 fn keepIt(v mut Vec<Buf>&, b Buf) { v.Push(b) }
@@ -30,9 +30,9 @@ fn main() {
     vr mut Vec<Buf>& = v
     keep := fn(b Buf) { vr.Push(b) }
     feed(keep, 20)
-    for i in range 10 { keepIt(v, Buf(i)) }
+    for i in range 10: keepIt(v, Buf(i))
     churn()
     t := 0
-    for b in v { t += b.data[0] + b.data.Len() }
+    for b in v: t += b.data[0] + b.data.Len()
     io.PutLine($t + " " + $v.Len())!
 }

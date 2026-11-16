@@ -5,7 +5,7 @@
 type P struct(X I64, Y I64) { X, Y }
 
 fn grow(v mut ColumnVec<P>&) {
-    for i in range 20 { v.Push(P(i, i)) }
+    for i in range 20: v.Push(P(i, i))
 }
 
 fn main() {

@@ -16,9 +16,9 @@ type Doc struct(text String) { text }
 fn main() {
     v Vec<I64>
     v = mk(0)
-    for i in range N { v = mk(i) }
+    for i in range N: v = mk(i)
     d Doc
     d = Doc("")
-    for _ in range N { d = Doc(d.text + "x") }
+    for _ in range N: d = Doc(d.text + "x")
     io.PutLine($v[0] + " " + $d.text.Len())!
 }

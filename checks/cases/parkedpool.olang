@@ -8,7 +8,7 @@ import "std/os"
 fn rssKb() I64 {
     status := try os.ReadFile("/proc/self/status") catch default ""
     at := try status.Find("VmRSS:") catch default -1
-    if at < 0 { return -1 }
+    if at < 0: return -1
     line := status[at + 6:]
     end := try line.FindByte('\n') catch default line.Len()
     return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
@@ -18,14 +18,14 @@ fn rssKb() I64 {
 fn work(seed I64) I64 {
     a := Array<I64>(2097152, seed)
     s I64 = 0
-    for i in range 0, 2097152, 4096 { s = s + a[i] }
+    for i in range 0, 2097152, 4096: s = s + a[i]
     return s
 }
 
 fn main() ? {
     out := Array<I64>(4)
     join {
-        for t in range 4 { spawn out[t] = work(t + 1) }
+        for t in range 4: spawn out[t] = work(t + 1)
     }
     afterJoin := rssKb()
     again := work(5)

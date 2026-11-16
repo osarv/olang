@@ -18,13 +18,13 @@ fn R.keep(r Node&, i I64) R& { return R(i) }
 fn make(n Node&, fns mut Vec<fn&(i I64) I64>&) {
     fns.Push(fn(i I64) I64 {
         m := mk(n, n.v + i)
-        if i % 1000 == 0 { R.keep(n, 1) }
+        if i % 1000 == 0: R.keep(n, 1)
         return m.v
     })
 }
 fn calls(f fn&(i I64) I64, base I64) I64 {
     s I64 = 0
-    for i in range 20000 { s += f(base + i) }
+    for i in range 20000: s += f(base + i)
     return s
 }
 fn churn() I64 {
@@ -54,7 +54,7 @@ fn run() I64 {
 }
 fn main() ? {
     want I64 = 0
-    for i in range 20000 { want += 3 * (1 + i) + 300000 }
+    for i in range 20000: want += 3 * (1 + i) + 300000
     assert run() == want
     assert Dtors == 60
 }

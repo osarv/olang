@@ -14,7 +14,7 @@ fn ids(c Conn) Iterator<I64> {
 }
 fn idle(g Generator<I64>&) Bool { return g == g }
 fn main() ? {
-    for x in ids(Conn(1)) { assert x == 1 or x == 2 }
+    for x in ids(Conn(1)): assert x == 1 or x == 2
     assert Closed == 1
     for x in ids(Conn(10)) {
         assert x == 10

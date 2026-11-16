@@ -4,11 +4,11 @@ type E error {
     Bad
 }
 fn h(k I64) I64 ? E {
-    if k > 0 { error E.Bad }
+    if k > 0: error E.Bad
     return k
 }
 fn f(k I64) I64 ? E {
-    if k > 100 { unreachable $(try h(k)) }
+    if k > 100: unreachable $(try h(k))
     return 3
 }
 fn main() ? E {

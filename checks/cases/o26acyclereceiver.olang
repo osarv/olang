@@ -38,7 +38,7 @@ fn (p mut Parser&) expr(minPrec I64) mut Expr& {
     lhs := p.primary()
     for {
         op := p.toks[p.at]
-        if prec(op.kind) < minPrec { break }
+        if prec(op.kind) < minPrec: break
         p.at++
         rhs := p.expr(prec(op.kind) + 1)
         lhs = Expr.Bin(op.kind, lhs, rhs)

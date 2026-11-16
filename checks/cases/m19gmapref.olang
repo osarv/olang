@@ -9,7 +9,7 @@ fn main() {
     m := Map<I64, rec>()
     m.Put(0, rec(1))
     r := try m.RefMut(0) catch { return }
-    for i in range 1, 1000 { m.Put(i, rec(i)) }
+    for i in range 1, 1000: m.Put(i, rec(i))
     r.n = 77
     x := try m.Get(0) catch { return }
     io.PutLine("m[0].n " + $x.n + " r.n " + $r.n + " (77 77 in place)")!

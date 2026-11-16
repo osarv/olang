@@ -5,14 +5,14 @@
 # index that replaces the entry it reads (bump) reads the value the call gave, a copy of the entry as it was
 fn bump(m mut Map<I64, Vec<I64>>&) I64 {
     v := Vec<I64>()
-    for j in range 8 { v.Push(100 + j) }
+    for j in range 8: v.Push(100 + j)
     m.Put(0, v)
     return 5
 }
 
 fn first() Vec<I64> {
     v := Vec<I64>()
-    for j in range 8 { v.Push(j) }
+    for j in range 8: v.Push(j)
     return v
 }
 

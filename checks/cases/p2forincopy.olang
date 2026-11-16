@@ -13,9 +13,7 @@ fn main() ? {
     ns := Array<Node>[Node(1, Array<I64>[5]), Node(2, Array<I64>[6])]
     out := Array<I64>(2)
     join {
-        for i, n in ns {
-            spawn out[i] = see(n)
-        }
+        for i, n in ns: spawn out[i] = see(n)
     }
     try io.PutLine($out[0] + " " + $out[1])
 }

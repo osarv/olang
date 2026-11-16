@@ -4,7 +4,7 @@ type Shape enum { Dot, Ring(r I64) }
 type Box struct(s Shape) { s }
 fn touch(b Box&) I64 { return 1 }
 fn radius(b Box&) I64 {
-    if b.s != Shape.Ring { return 0 }
+    if b.s != Shape.Ring: return 0
     t := touch(b)
     return b.s.r + t
 }

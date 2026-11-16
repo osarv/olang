@@ -31,7 +31,7 @@ fn msort(a mut Array<I64>&, tmp mut Array<I64>&, lo I64, hi I64, less fn&(x I64,
         j++
         k++
     }
-    for x in range lo, hi { a[x] = tmp[x] }
+    for x in range lo, hi: a[x] = tmp[x]
 }
 
 fn main() ? {

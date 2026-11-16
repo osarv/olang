@@ -23,7 +23,7 @@ fn churn() {
 }
 fn main() {
     out := Vec<String&>()
-    for w in names(3) { out.Push(w) }
+    for w in names(3): out.Push(w)
     churn()
     io.PutLine($out)!
 }

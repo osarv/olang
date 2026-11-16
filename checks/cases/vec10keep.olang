@@ -7,12 +7,12 @@ fn main() ? {
     v := Vec<String&>()
     v.Push("a")
     s := v[0]
-    for i in range 100 { v.Push($i) }
+    for i in range 100: v.Push($i)
     v = Vec<String&>()
     w := Vec<N&>()
     w.Push(N(7))
     n := w[0]
-    for i in range 100 { w.Push(N(i)) }
+    for i in range 100: w.Push(N(i))
     w = Vec<N&>()
     try io.PutLine($s + " " + $n.v)
 }

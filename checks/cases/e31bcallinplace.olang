@@ -11,8 +11,8 @@ fn (a mut Acc&) Add(x I64) {
 }
 fn main() ? {
     accs := Vec<Acc>()
-    for _ in range 3 { accs.Push(Acc()) }
-    for i in range 30 { accs[i % 3].Add(i * 2 + 1) }
+    for _ in range 3: accs.Push(Acc())
+    for i in range 30: accs[i % 3].Add(i * 2 + 1)
     assert accs[0].n == 1 + 7 + 13 + 19 + 25 + 31 + 37 + 43 + 49 + 55
     assert accs[2].log.Len() == 10 and accs[2].log[9] == 59
     grid := Vec<Vec<Vec<I64>>>()

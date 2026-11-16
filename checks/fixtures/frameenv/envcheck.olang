@@ -41,9 +41,9 @@ fn count(text String&) pair.Pair<I64, I64> {
             sp := firstField(line)
             allocas.Put($sp, true)
         }
-        if codeHalf(line) { halves.Put($firstField(line), true) }
+        if codeHalf(line): halves.Put($firstField(line), true)
         env := environmentOf(line)
-        if env == "" { env = secondHalf(line, halves) }
+        if env == "": env = secondHalf(line, halves)
         if env != "" {
             if env in allocas { onstack++ } else { heap++ }
         }
@@ -54,9 +54,9 @@ fn count(text String&) pair.Pair<I64, I64> {
 # the line's first word, as awk's $1
 fn firstField(line String&) String& {
     i I64 = 0
-    for i < line.Len() and (line[i] == ' ' or line[i] == '\t') { i++ }
+    for i < line.Len() and (line[i] == ' ' or line[i] == '\t'): i++
     s := i
-    for i < line.Len() and line[i] != ' ' and line[i] != '\t' { i++ }
+    for i < line.Len() and line[i] != ' ' and line[i] != '\t': i++
     return line[s:i]
 }
 
@@ -65,13 +65,13 @@ fn firstField(line String&) String& {
 fn environmentOf(line String&) String {
     marker := "insertvalue { ptr, ptr } { ptr @"
     m := try line.Find(marker) catch default -1
-    if m < 0 { return "" }
+    if m < 0: return ""
     rest := line[m + marker.Len():]
     comma := try rest.FindByte(',') catch default -1
-    if comma < 0 { return "" }
+    if comma < 0: return ""
     callee := rest[0:comma]
     lam := try callee.FindLast("lambda$") catch default -1
-    if lam < 0 or not isNumber(callee[lam + 7:]) { return "" }
+    if lam < 0 or not isNumber(callee[lam + 7:]): return ""
     if not rest[comma:].StartsWith(", ptr undef }, ptr %") { return "" }
     last := try line.FindLast("ptr ") catch default -1
     v := line[last + 4:]
@@ -83,7 +83,7 @@ fn environmentOf(line String&) String {
 fn codeHalf(line String&) Bool {
     marker := "insertvalue { ptr, ptr } undef, ptr @"
     m := try line.Find(marker) catch default -1
-    if m < 0 or not line.EndsWith(", 0") { return false }
+    if m < 0 or not line.EndsWith(", 0"): return false
     callee := line[m + marker.Len():line.Len() - 3]
     lam := try callee.FindLast("lambda_") catch default -1
     return lam >= 0 and isNumber(callee[lam + 7:])
@@ -94,17 +94,17 @@ fn codeHalf(line String&) Bool {
 fn secondHalf(line String&, halves Map<String&, Bool>&) String {
     marker := "insertvalue { ptr, ptr } %"
     m := try line.Find(marker) catch default -1
-    if m < 0 or not line.EndsWith(", 1") { return "" }
+    if m < 0 or not line.EndsWith(", 1"): return ""
     rest := line[m + marker.Len() - 1:line.Len() - 3]
     comma := try rest.FindByte(',') catch default -1
-    if comma < 0 or not halves.Has(rest[0:comma]) or not rest[comma:].StartsWith(", ptr ") { return "" }
+    if comma < 0 or not halves.Has(rest[0:comma]) or not rest[comma:].StartsWith(", ptr "): return ""
     return $rest[comma + 6:]
 }
 
 fn isNumber(t String&) Bool {
-    if t.Len() == 0 { return false }
+    if t.Len() == 0: return false
     for c in t {
-        if not c.IsDigit() { return false }
+        if not c.IsDigit(): return false
     }
     return true
 }

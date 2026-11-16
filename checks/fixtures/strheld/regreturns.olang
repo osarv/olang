@@ -33,7 +33,7 @@ fn main() ? {
     {
         a := Array<Res&>(3, Res(7))
         join {
-            for i in range 3 { spawn a[i] = Res.mk(c) }
+            for i in range 3: spawn a[i] = Res.mk(c)
         }
     }
     try show(4)

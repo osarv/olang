@@ -20,7 +20,7 @@ type Pair<T> struct(A T, B T) { }
 
 # a color from "RRGGBB"
 fn Color.FromHex(t String&) Color ? ColorError {
-    if t.Len() != 6 { error ColorError.Bad }
+    if t.Len() != 6: error ColorError.Bad
     return Color(0, 0, 0)
 }
 

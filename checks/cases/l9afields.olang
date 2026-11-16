@@ -23,8 +23,8 @@ fn main() ? {
     assert s.done == 4 and s.fail == 2 and s.type == "k" and s.break == 7 and s.range.Len() == 1
     assert s.range[0] == 4
     for i in range 3 {
-        if i == 1 { continue }
-        if i == 2 { break }
+        if i == 1: continue
+        if i == 2: break
     }
     return
 }

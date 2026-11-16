@@ -32,12 +32,12 @@ fn main() {
     for i in range 1000 { v.Push(i) }               # the buffer replaced; w follows, c does not
     churn()
     t := 0
-    for x in v { t += x }
+    for x in v: t += x
     io.PutLine($v.Len() + " " + $w.Len() + " " + $c.Len() + " " + $t + " " + $c[50] + " " + $w[1050])!
     l := Lexer()
     l.run("let x = 42 + y")
     keep := l.toks[1]
-    for i in range 200 { l.toks.Push(Tok("t" + $i, i)) }
+    for i in range 200: l.toks.Push(Tok("t" + $i, i))
     churn()
     l.toks.Sort(fn(a Tok, b Tok) Bool { return a.text < b.text })
     io.PutLine($l.toks.Len() + " " + $keep.text + " " + $l.toks[0].text + " " + $l.toks[l.toks.Len() - 1].text)!
@@ -45,19 +45,19 @@ fn main() {
     for k in range 5 {
         m.Put($k, Vec<I64>())
         e := try m.RefMut($k) catch { unreachable }
-        for j in range k * 10 { e.Push(j) }
+        for j in range k * 10: e.Push(j)
     }
     churn()
     s := 0
     for e in m {
         s += e.Value.Len() * 1000
-        for x in e.Value { s += x }
+        for x in e.Value: s += x
     }
     s += v.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x })
     q := Vec<I64>()
     q.Push(1)
     for x in q {
-        if x < 1000 { q.Push(x * 2) }
+        if x < 1000: q.Push(x * 2)
     }
     io.PutLine($s + " " + $q.Len() + " " + $q + " " + $(v == w) + " " + $(c == v))!
 }

@@ -11,7 +11,7 @@ Seen mut I64 = 0
 fn (r Re&) Str() String {
     Seen++
     if r.n == 1 { Rs = Array<Re>[Re(7), Re(8)] }         # new storage, another length (T11b)
-    if r.n == 8 { Rs[1] = Re(9) }
+    if r.n == 8: Rs[1] = Re(9)
     return "r" + $r.n
 }
 fn main() ? {

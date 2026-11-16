@@ -13,7 +13,7 @@ type Box struct(value I64) { value }
 fn (b Box) Area() I64 { return b.value }
 
 fn pick(count I64) I64 ? MyErr {
-    if count < 0 { error MyErr.FIRTS }
+    if count < 0: error MyErr.FIRTS
     return cout
 }
 

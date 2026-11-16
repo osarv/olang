@@ -21,7 +21,7 @@ fn churn() I64 {
 }
 fn main() {
     kept := Vec<String&>()
-    for w in labels(3) { kept.Push(w) }
+    for w in labels(3): kept.Push(w)
     churn()
     io.PutLine($kept)!
 }

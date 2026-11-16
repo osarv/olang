@@ -10,7 +10,7 @@ type Box struct(n mut Node?&) {
     n
 }
 fn Node.make(v I64) mut Node& ? E {
-    if v < 0 { error E.Empty }
+    if v < 0: error E.Empty
     return Node(v)
 }
 fn set(b mut Box&, other mut Node&, v I64) {

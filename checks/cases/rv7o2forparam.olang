@@ -7,7 +7,7 @@ type Reg struct(l list.List<I64>) {
 }
 fn h1(it mut list.Iter<I64>&) I64 {
     n I64 = 0
-    for x in it { n += x }
+    for x in it: n += x
     return n
 }
 fn (r Reg&) Str() String {

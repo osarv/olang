@@ -14,7 +14,7 @@ type Shape enum {
 fn main() {
     k := Circle(1.0)
     s := Shape.Round(k)
-    if s == Shape.Round { s.r = 2.0 }
+    if s == Shape.Round: s.r = 2.0
     q := Shape.Sq(1.0)
     b := Shape.Boxed(Box(3))
     assert k.r == 2.0 and q == Shape.Sq and b == Shape.Boxed

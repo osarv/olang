@@ -13,7 +13,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn ca(g fn&(x mut Node&), n mut Node&, c I64) {
-    if c > 0 { cb(n, c - 1) }
+    if c > 0: cb(n, c - 1)
     g(n)
 }
 fn cb(n mut Node&, c I64) {
@@ -25,7 +25,7 @@ fn (b Bag&) Str() String {
 }
 fn churn(d I64) I64 {
     a := Array<I64>[d, d, d, d, d, d, d, d]
-    if d == 0 { return 0 }
+    if d == 0: return 0
     return churn(d - 1) + a[3] - d
 }
 fn main() ? {
@@ -33,6 +33,6 @@ fn main() ? {
     try io.PutLine($b)
     t := churn(200)
     l := Vec<Node&>()
-    for i in range 50 { l.Push(Node(i)) }
+    for i in range 50: l.Push(Node(i))
     try io.PutLine($b.head.next!.v + " " + $t)
 }

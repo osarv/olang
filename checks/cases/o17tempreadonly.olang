@@ -6,7 +6,7 @@ import "std/io"
 fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
-        if a[0] == 3 { try io.PutLine("x") }
+        if a[0] == 3: try io.PutLine("x")
     }
 }
 type Node struct(v I64, next mut Node?&) {
@@ -21,7 +21,7 @@ fn mkBox(seed mut Box&) Box { return seed }
 fn addVia(b Box&, v I64) { b.head.next = Node(v, b.head.next) }
 fn sum(b Box&) I64 {
     t I64 = 0
-    for n Node?& = b.head, n != null, n = n.next { t = t * 10 + n.v }
+    for n Node?& = b.head, n != null, n = n.next: t = t * 10 + n.v
     return t
 }
 fn main() ? {

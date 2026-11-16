@@ -20,9 +20,9 @@ type Pt struct(x I64) {
 fn spans(t String&) Iterator<String&> {
     i I64 = 0
     for i < t.Len() {
-        for i < t.Len() and t[i] == ' ' { i++ }
+        for i < t.Len() and t[i] == ' ': i++
         j := i
-        for j < t.Len() and t[j] != ' ' { j++ }
+        for j < t.Len() and t[j] != ' ': j++
         if j > i { yield t[i:j] }
         i = j
     }
@@ -63,7 +63,7 @@ fn churn() I64 {
     n I64 = 0
     for i in range 100 {
         v := Vec<String&>()
-        for k in range 3 { v.Push($i + "-churn-" + $k) }
+        for k in range 3: v.Push($i + "-churn-" + $k)
         n += v[2].Len()
     }
     return n
@@ -78,14 +78,14 @@ fn keep(t String&, out mut Vec<String&>&) {
 
 fn firstLong(t String&, n I64) String& {
     for w in spans(t) {
-        if w.Len() >= n { return $w }
+        if w.Len() >= n: return $w
     }
     return ""
 }
 
 fn sum() I64 {
     t I64 = 0
-    for x in each(Data) { t += x }
+    for x in each(Data): t += x
     return t
 }
 
@@ -94,13 +94,13 @@ fn main() {
     kept := Vec<String&>()
     keep(text, kept)
     for w in spans(text) {
-        if w == "gamma" { continue }
+        if w == "gamma": continue
         kept.Push(w)
-        if w == "delta" { break }
+        if w == "delta": break
     }
-    for h in text.Halves() { kept.Push(h) }
+    for h in text.Halves(): kept.Push(h)
     churn()
-    for w in kept { io.PutLine(w)! }
+    for w in kept: io.PutLine(w)!
     io.PutLine("count " + $spans(text).Count(fn(w) { return w.Len() > 4 }))!
     io.PutLine("first " + $firstLong(text, 5))!
     g := labels(text, 2)
@@ -116,15 +116,15 @@ fn main() {
         seen.Push(p)
     }
     churn()
-    for p in seen { io.PutLine("pt " + $p.x)! }
+    for p in seen: io.PutLine("pt " + $p.x)!
     io.PutLine("drops " + $Drops)!
     t I64 = 0
     for p in points(2) {
-        if p.x > 10 { break }
+        if p.x > 10: break
         t += p.x
     }
     io.PutLine("t " + $t + " drops " + $Drops)!
     total I64 = 0
-    for _ in range 1000 { total += sum() }
+    for _ in range 1000: total += sum()
     io.PutLine("sum " + $total + " drops " + $Drops)!
 }

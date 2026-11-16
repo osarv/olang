@@ -31,14 +31,14 @@ fn keepNames(n I64) Vec<I32> {
         keep.Push(f.name[5:9])
     }
     churn()
-    for fd in fds { assert open(fd), "a kept file's descriptor was closed at the end of its turn" }
-    for k in keep { assert k == "null" }
+    for fd in fds: assert open(fd), "a kept file's descriptor was closed at the end of its turn"
+    for k in keep: assert k == "null"
     assert fds.Len() == n and keep.Len() == n
     return fds
 }
 
 fn main() {
     fds := keepNames(4)
-    for fd in fds { assert not open(fd), "a kept file's descriptor was left open after its scope closed" }
+    for fd in fds: assert not open(fd), "a kept file's descriptor was left open after its scope closed"
     io.PutLine($fds.Len() + " files kept open for their views, then closed")!
 }

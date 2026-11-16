@@ -8,7 +8,7 @@ type M struct() {
 
 fn sum(m M&) F64 {
     t F64 = 0.0
-    for x in m.data { t = t + F64(x) }
+    for x in m.data: t = t + F64(x)
     return t
 }
 

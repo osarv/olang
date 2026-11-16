@@ -28,8 +28,8 @@ fn main() {
     kept := Vec<String&>()
     {
         h := Holder(labels(2))
-        for w in h.g { kept.Push(w) }
-        for w in h.g { kept.Push(w) }
+        for w in h.g: kept.Push(w)
+        for w in h.g: kept.Push(w)
     }
     churn()
     io.PutLine($kept)!

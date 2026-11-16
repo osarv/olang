@@ -4,7 +4,7 @@
 type N struct(v I64, next N?&) { v, next }
 fn touch(h N&) I64 { return h.v }
 fn second(h N&) I64 {
-    if h.next == null { return 0 }
+    if h.next == null: return 0
     t := touch(h)
     return h.next.v + t
 }

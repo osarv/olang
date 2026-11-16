@@ -4,9 +4,7 @@
 import "std/io"
 
 fn pick() I32 {
-    if TargetOs == "no-such-os" {
-        return NoSuchType{1}.v
-    }
+    if TargetOs == "no-such-os": return NoSuchType{1}.v
 }
 
 fn main() {

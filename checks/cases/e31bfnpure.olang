@@ -25,7 +25,7 @@ fn main() ? {
     for _ in range 3 { accs.Push(Acc(fn(x): return x * 3)) }
     g fn&(x I64) I64 pure = fn(x): return x + 1
     for i in range 30 { accs[i % 3].Add(i, fn(x): return x * 2) }
-    for i in range 30 { accs[i % 3].Add(i, g) }
+    for i in range 30: accs[i % 3].Add(i, g)
     assert churn() > 0
     assert accs[0].log.Len() == 20 and accs[0].log[1] == 9 and accs[2].log[19] == 87
     assert accs[1].n == 2 * (1 + 4 + 7 + 10 + 13 + 16 + 19 + 22 + 25 + 28) + (1 + 4 + 7 + 10 + 13 + 16 + 19 + 22 + 25 + 28) + 10

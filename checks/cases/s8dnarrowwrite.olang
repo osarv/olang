@@ -6,7 +6,7 @@ type Shape enum {
     Dot
 }
 fn grow(s Shape) Shape {
-    if s == Shape.Ring { s.c.r = 5 }
+    if s == Shape.Ring: s.c.r = 5
     return s
 }
 fn main() {

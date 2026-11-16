@@ -13,12 +13,12 @@ type R struct(Hs Array<H>&) {
 }
 fn (r R&) find(name String&) String& ? {
     for h in r.Hs {
-        if h.Name == name { return h.Value }
+        if h.Name == name: return h.Value
     }
     error Lookup.Missing
 }
 fn R.make(url String&) R ? {
-    if url.Len() == 0 { error Lookup.Missing }
+    if url.Len() == 0: error Lookup.Missing
     hs mut Array<H>& = Array<H>(1)
     hs[0] = H("a", "b")
     return R(hs)

@@ -3,5 +3,5 @@
 type E error { X }
 fn main() ? E {
     Level := 1
-    if Level > 3 { return }
+    if Level > 3: return
 }

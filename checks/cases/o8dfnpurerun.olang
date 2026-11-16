@@ -19,12 +19,12 @@ fn churn() I64 {
 }
 fn sumPure(xs Array<I64>&, f fn&(x I64) I64 pure) I64 {
     t I64 = 0
-    for x in xs { t += f(x) }
+    for x in xs: t += f(x)
     return t
 }
 fn sum(xs Array<I64>&, f fn&(x I64) I64) I64 {
     t I64 = 0
-    for x in xs { t += f(x) }
+    for x in xs: t += f(x)
     return t
 }
 fn twice(xs Array<I64>&, f fn&(x I64) I64) I64 { return sum(xs, f) + sum(xs, f) }
@@ -47,9 +47,9 @@ fn main() {
     it := Interp(fn(x): return x + 1)
     xs := Array<I64>[1, 2, 3]
     s I64 = 0
-    for i in range 300 { s += it.step(i, xs) }
+    for i in range 300: s += it.step(i, xs)
     assert churn() > 0
     assert it.frames.Len() == 300
-    for i in range 300 { assert it.frames[i].depth == i and it.frames[i].name == "frame " + $i }
+    for i in range 300: assert it.frames[i].depth == i and it.frames[i].name == "frame " + $i
     assert s == 300 * (12 + 9) + 2 * 6 * 300 + 2 * 3 * (299 * 300 / 2) + 3 * (299 * 300 / 2) + (299 * 300 / 2) + 300
 }

@@ -8,7 +8,7 @@ type V struct(x I32) {
     x
 }
 fn (a V) Mul(b V) V ? VErr {
-    if b.x == 0 { error VErr.Zero }
+    if b.x == 0: error VErr.Zero
     return V(a.x * b.x)
 }
 fn main() ? {

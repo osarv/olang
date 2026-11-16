@@ -16,7 +16,7 @@ type Holder struct() {
 }
 fn walk(hs Vec<Holder>&) I64 {
     t I64 = 0
-    for x in hs[0].ring { t += x }
+    for x in hs[0].ring: t += x
     return t
 }
 fn main() ? {

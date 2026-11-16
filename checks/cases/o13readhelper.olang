@@ -25,7 +25,7 @@ fn (r Term&) spot() Spot?& {
 fn root(p Spot&) Spot?& {
     q Spot?& = p
     for _ in range 8 {
-        if q == null { return null }
+        if q == null: return null
         match q {
             case Spot.Field(b) { q = b }
             case Spot.Deref(r) { q = r.spot() }

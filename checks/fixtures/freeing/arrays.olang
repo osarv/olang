@@ -6,7 +6,7 @@ N I64 = 20000
 
 fn mk(n I64) Array<I64> {
     a := Array<I64>(n)
-    for j in range n { a[j] = j }
+    for j in range n: a[j] = j
     return a
 }
 

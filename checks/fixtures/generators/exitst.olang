@@ -23,6 +23,6 @@ test "a check fails inside the walk" {
 
 test "the next test walks to the end" {
     t I64 = 0
-    for x in held(71, 4) { t += x }
+    for x in held(71, 4): t += x
     assert t == 6
 }

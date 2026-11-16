@@ -13,7 +13,7 @@ type Conn struct() {
 
 type Server struct(n I64) {
     conns mut Array<mut Conn&>& = Array<mut Conn&>(n, Conn())
-    for i in range 1, n { conns[i] = Conn() }
+    for i in range 1, n: conns[i] = Conn()
 }
 
 fn parseHeaders(raw String&) Map<String&, String&> {

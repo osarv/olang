@@ -13,7 +13,7 @@ fn main() {
     for i in range 3 {
         inner mut N& = N(2)
         at mut N& = outer
-        if i == 1 { at = inner }
+        if i == 1: at = inner
         at.next = N(9)
         assert at.v > 0
     }

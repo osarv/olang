@@ -14,13 +14,13 @@ table mut Map<I64, Vec<I64>> = Map<I64, Vec<I64>>()
 
 fn fill(n I64, k I64) {
     v := Vec<I64>()
-    for i in range n { v.Push(i * k) }
+    for i in range n: v.Push(i * k)
     cache = v
 }
 
 fn give(n I64) {
     v := Vec<I64>()
-    for i in range n { v.Push(i + 1) }
+    for i in range n: v.Push(i + 1)
     held = v
 }
 
@@ -72,7 +72,7 @@ fn values(n I64) I64 {
     s := 0
     for k in range n {
         v := Vec<I64>()
-        for i in range 4 { v.Push(i + k) }
+        for i in range 4: v.Push(i + k)
         table.Put(k.Mod(3), v)
         if k.Mod(3) == 2: table.Remove(0)
         churn()

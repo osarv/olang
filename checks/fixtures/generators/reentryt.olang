@@ -12,7 +12,7 @@ fn gen(c mut Cell&) Iterator<I64> {
 test "a generator resumed inside its own walk" {
     c := Cell()
     c.g = gen(c)
-    for x in c.g { assert x == 1 }
+    for x in c.g: assert x == 1
 }
 
 test "the next test runs" { assert 1 + 1 == 2 }

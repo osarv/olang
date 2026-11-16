@@ -7,5 +7,5 @@ fn walk(n I64) Iterator<I64> {
     }
 }
 fn main() {
-    for x in walk(3) { assert x >= 0 }
+    for x in walk(3): assert x >= 0
 }

@@ -4,7 +4,7 @@
 type N struct(v I64) { v }
 fn a() I64 {
     x N&
-    for i in range 3 { x = N(i) }
+    for i in range 3: x = N(i)
     return x.v
 }
 fn main() { a() }

@@ -32,7 +32,7 @@ test "fine" {
     assert pick(Array<I64>[1, 2, 3], 2) == 3 and div(7, 2) == 3 and rem(-7, 2) == -1 and shl(1, 63) == I64.Min and shr(128, 7) == 1
     xs := Array<I64>[2, 4]
     total := 0
-    for x in xs { total += x }
+    for x in xs: total += x
     assert total == 6
 }
 test "lanes unchecked" { assert lanes(Array<I64>[2, 4], Array<I64>[1, 2]) == 4 }

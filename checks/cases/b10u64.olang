@@ -8,9 +8,7 @@ if 18446744073709551615 > 5 {
     fn top() I32 { return 2 }
 }
 fn loc() I32 {
-    if X == 18446744073709551615 {
-        return 1
-    }
+    if X == 18446744073709551615: return 1
     return 2
 }
 fn main() ? {

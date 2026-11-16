@@ -11,12 +11,12 @@ type World struct() {
 fn (w mut World&) age(s I64) {
     still := Vec<I64>()
     for id in w.alive {
-        if (id + s) % 7 != 0 { still.Push(id) }
+        if (id + s) % 7 != 0: still.Push(id)
     }
     w.alive = still
 }
 fn main() ? {
     w := World()
-    for s in range 3 { w.age(s) }
+    for s in range 3: w.age(s)
     try io.PutLine($w.alive.Len())
 }

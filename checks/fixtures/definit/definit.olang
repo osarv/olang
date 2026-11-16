@@ -23,9 +23,7 @@ fn squares(n I64) Array<F32> { return Array<F32>[F32(i * i) for i in range n] }
 # Array<T>(n) filled by the loop after it: no clear (D14d)
 fn filled(n I64) Array<F32> {
     a := Array<F32>(n)
-    for i in range n {
-        a[i] = F32(i) * 0.5
-    }
+    for i in range n: a[i] = F32(i) * 0.5
     return a
 }
 
@@ -33,7 +31,7 @@ fn filled(n I64) Array<F32> {
 fn stopped(n I64) Array<F32> {
     a := Array<F32>(n)
     for i in range n {
-        if i == 3 { break }
+        if i == 3: break
         a[i] = 1.0
     }
     return a

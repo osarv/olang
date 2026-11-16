@@ -20,7 +20,7 @@ fn main() ? {
     v.Push(10)
     v.Push(20)
     d := bufFor("?", v.ViewMut())
-    for i in range 1000 { v.Push(i) }
+    for i in range 1000: v.Push(i)
     churn()
     assert d.Len() == 5 and d[0] == 2
     try io.PutLine($d[0])

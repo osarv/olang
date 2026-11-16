@@ -4,7 +4,7 @@
 # computed while compiling (K1 runs a join's tasks in order) for a global, and at run time, alike
 type H struct(f fn&(i I64)) { f }
 fn work(h H&, n I64) {
-    for i in range n { h.f(i) }
+    for i in range n: h.f(i)
 }
 fn viaTask(n I64) I64 {
     a mut Vec<I64>& = Vec<I64>()
@@ -13,7 +13,7 @@ fn viaTask(n I64) I64 {
         spawn work(h, n)
     }
     s I64 = 0
-    for x in a { s += x }
+    for x in a: s += x
     return s
 }
 Baked I64 = viaTask(10)

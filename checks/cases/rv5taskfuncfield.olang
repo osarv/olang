@@ -8,7 +8,7 @@ type N struct(v I64) {
 }
 type H struct(f fn&(i I64)) { f }
 fn work(h H&, base I64) {
-    for i in range 200000 { h.f(i + base) }
+    for i in range 200000: h.f(i + base)
 }
 fn main() ? {
     a mut Vec<N&>& = Vec<N&>()

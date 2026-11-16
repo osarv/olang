@@ -21,7 +21,7 @@ fn churn() I64 {
 
 fn main() {
     out := Vec<String&>()
-    for w in initials("ab") { out.Push(w) }
+    for w in initials("ab"): out.Push(w)
     churn()
     io.PutLine($out)!
 }

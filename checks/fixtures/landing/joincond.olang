@@ -8,12 +8,12 @@ type Big struct(n I64) {
 }
 fn (b Big&) Str() String {
     sb := StringBuilder()
-    for _ in range 100 { sb.Push("0123456789") }
+    for _ in range 100: sb.Push("0123456789")
     return sb.ToString()
 }
 fn main() ? {
     b := Big(1)
     i I64 = 0
-    for ($b + " " + $i).Len() > 0 and i < 50000 { i++ }
+    for ($b + " " + $i).Len() > 0 and i < 50000: i++
     try io.PutLine($i)
 }

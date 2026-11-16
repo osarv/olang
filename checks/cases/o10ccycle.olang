@@ -11,7 +11,7 @@ type Holder struct() {
     item mut Item?& = null
 }
 fn f(a mut Holder&, b mut Item&, n I64) {
-    if n > 0 { g(a, b, n - 1) }
+    if n > 0: g(a, b, n - 1)
     a.item = b
 }
 fn g(x mut Holder&, y mut Item&, n I64) { f(x, y, n) }

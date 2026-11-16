@@ -30,8 +30,8 @@ fn sweep<T Integer>(z T, k I64) U64 {
     vals.Push(T.Max)
     three := T(3 * k)
     five := T(5 * k)
-    if three != zero and not (T.Min < 0 and three == zero - one) { vals.Push(T.Max / three) }
-    if five != zero and not (T.Min < 0 and five == zero - one) { vals.Push(T.Min / five) }
+    if three != zero and not (T.Min < 0 and three == zero - one): vals.Push(T.Max / three)
+    if five != zero and not (T.Min < 0 and five == zero - one): vals.Push(T.Min / five)
     d U64 = 14695981039346656037
     for i in range vals.Len() {
         x := vals[i]
@@ -82,7 +82,7 @@ fn sweep<T Integer>(z T, k I64) U64 {
 # one step of the digest: x's low 64 bits, and its high ones where it has more
 fn mix<T Integer>(d U64, x T) U64 {
     r := mixU(d, U64(x))
-    if T.Size > 8 { r = mixU(r, U64(x >> 64)) }
+    if T.Size > 8: r = mixU(r, U64(x >> 64))
     return r
 }
 

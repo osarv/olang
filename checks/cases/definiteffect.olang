@@ -9,7 +9,7 @@ type Eff struct(v I64) {
 }
 fn a(c Bool) I64 {
     e Eff
-    if c { e = Eff(1) }
+    if c: e = Eff(1)
     return e.v
 }
 fn main() { a(true) }

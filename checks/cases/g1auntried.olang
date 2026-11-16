@@ -3,7 +3,7 @@
 type Bad error { Neg }
 
 fn pos(x I64) I64 ? Bad {
-    if x < 0 { error Bad.Neg }
+    if x < 0: error Bad.Neg
     return x
 }
 

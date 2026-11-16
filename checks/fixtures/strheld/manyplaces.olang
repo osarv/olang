@@ -10,7 +10,7 @@ type Big struct(n I64) {
 }
 fn (b Big&) Str() String {
     sb := StringBuilder()
-    for _ in range 10 { sb.Push("0123456789") }
+    for _ in range 10: sb.Push("0123456789")
     sb.Push("-" + $b.n)
     return sb.ToString()
 }
@@ -26,12 +26,10 @@ type Holder struct(k I64) {
 type Holder2 struct(k I64) {
     k
     t String& = "none"
-    if k > 0 {
-        t = $Big(k) + "nested"
-    }
+    if k > 0: t = $Big(k) + "nested"
 }
 fn fails(k I64) String ? {
-    if k > 0 { error Stop.Here }
+    if k > 0: error Stop.Here
     return "ok"
 }
 fn main() ? {
@@ -58,6 +56,6 @@ fn main() ? {
     join { for k in range 2 { spawn out[k] = f(10 + k) } }
     try io.PutLine($out)
     i I64 = 0
-    for ($Big(11) + " " + $i).Len() > 0 and i < 3 { i++ }
+    for ($Big(11) + " " + $i).Len() > 0 and i < 3: i++
     try io.PutLine($i)
 }
