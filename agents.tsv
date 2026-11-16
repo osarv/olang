@@ -193,4 +193,5 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	steward2	sonnet	medium	completed	122	48	64	yes		merged litcmp, osfile, buildopt
 2026-11-16	serve	opus	medium	running
 2026-11-16	extfix	opus	medium	running
-2026-11-16	oannmig2	sonnet	low	running
+2026-11-16	oannmig2	sonnet	low	completed	112	29	45	partial		fix tools misfired 5 ways
+2026-11-16	fixtools	opus	low	running
