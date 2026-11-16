@@ -443,6 +443,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   may require a builder. `T.Functions` walks them. The prelude: `String.FromC(p, max)` (X15), `F64.FromBits(u)` (E33),
   `T.Parse(t, base)` (integers), `T.Parse(t)` for every float and the F8 types (rounded to the type, `Overflow` where a finite
   number does not fit), `Bool.Parse(t)`.
+- **Type members (D4a, the user's decision 2026-11-16).** A type declared in a type's namespace, owner-qualified as a
+  builder is: `type U8.Accumulator = U64` names a type (an alias, no nominal type), `type Account.Json enum { ... }`
+  declares one in place (a struct or an enum, of one non-generic owner; named `Account.Json` everywhere - `$`, symbols,
+  reflection, doc and LSP). `Owner.Name` is usable wherever a type is written (G38). The owner is the builders': a type of
+  its module, a built-in type in the prelude, a generic owner over its variables (`type Box<T>.Item = T`), or a
+  trait-constrained variable, giving every satisfying type a default (`type T.Accumulator<T Number> = T`); the type's own
+  member overrides the default. One member per name per owner, none named like a case, builder or reflected member;
+  never inherited through `extends`; private by a lower-case name. `T.Accumulator` is the prelude's member, no table
+  in the compiler.
 - **Methods are declared with a receiver clause and called only as methods (M19, the user's call).** A method may not
   share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21).
 - **A number written as a literal is a receiver like any other value (E13c, 2026-10-18, the user: "2.0.Sqrt() should
@@ -641,8 +650,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   its by-value parameters (C11). Python's `close()` running a `finally`.
 - **Compile-time reflection (G32-G38, G13, docs/ideas.md #2, the user's decisions 2026-10-18).** A type's structure
   read through its name while compiling: `T.Name`, `T.Kind`, `T.Base`, `T.Element`, `T.Length`, `T.Target`, `T.Accumulator`
-  (G32: the type a total is worked in - itself by default, `I8`/`I16`/`I32` `I64`, `U8`/`U16`/`U32` `U64`,
-  `F16`/`BF16` `F32`; one lookup, `generic.Accumulator`),
+  (G32: the type a total is worked in - a type member the prelude declares, D4a: itself by default, `I8`/`I16`/`I32`
+  `I64`, `U8`/`U16`/`U32` `U64`, `F16`/`BF16` `F32`; a program's type declares its own),
   `T.Nullable`, `T.Size`, `T.Align`, and the lists `T.Fields`, `T.Cases`, `T.Params`, `T.Results`, `T.Errors`. A list
   is no value: a `for` over it is unrolled, `.Len()` and a constant index are constants. Elements are descriptors
   (`f.Name`, `f.Type`, `f.Offset`, `f.Of(v)`, `c(args)`). Conditions over reflected constants decide `if`s, asserts
