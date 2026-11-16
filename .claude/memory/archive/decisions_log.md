@@ -3843,3 +3843,8 @@ stood:
 ## 2026-11-16, gap 11 withdrawn (closed at no run-time cost by part regions, wt-freeing3)
 
 1. Vec growth when a Vec is held whole by an owner or copied outside a region (gap 11, docs/freeing.md 2.1; asked 2026-11-15). Peak 98 MB against 66 MB where growth frees. Closing it may need a buffer region per copy, about 400 bytes at run time per such copy. Default: kept until the scope closes, reported by -memory -check. Recommendation: accept the cost only if the design round (running) finds no zero-cost design.
+
+## 2026-11-16, prelude names: no shadowing (the user: "On the printed names, no, don't allow shadowing")
+
+1. A module's own declaration and a prelude name (asked 2026-11-16). With no shadowing, every name added to the prelude can break code already using it (prelude Scan broke oann's ad/ops Scan, renamed GatedScan; prelude InputError broke tests/worker, renamed WorkInputError). Default: a clash is an error, renamed by hand or an olang fix tool. Recommendation: a module's own top-level declaration takes precedence over a prelude name (the prelude the outermost scope), so prelude additions never break code - shadowing at exactly that one boundary.
+Answer: the default stands - a clash with a prelude name is an error, renamed by hand or an olang fix tool.

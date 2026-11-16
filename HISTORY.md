@@ -38968,3 +38968,8 @@ compiler/lsp.olang kept `PutLine`; they are renamed, and the tool now reads thos
 - **A bug found.** defer_migrate gave a deferred declaration the `:` (`defer: z := later`), which S1b refuses - a one-line
   body is one simple statement; checks/cases s19later and s19try had been migrated so and failed with S1b instead of
   their own diagnostic. A deferred declaration now goes in a block, `defer { z := later }`, as a deferred defer does.
+
+**2026-11-16, no shadowing of prelude names (the user's call).** A prelude addition can clash with a module's own
+declaration (prelude `Scan` and oann's ad/ops `Scan`; prelude `InputError` and tests/worker's). Asked whether a module's
+declaration should take precedence, the user: "don't allow shadowing". A clash stays an error; the clashing name is
+renamed, by hand or by an `olang fix` tool shipped with the prelude addition.
