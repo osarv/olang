@@ -416,6 +416,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     UnrollAsks Vec<UnrollAsk>
     unknowns I64 = 0           # the stand-ins made for what did not check: a body holding one is never evaluated (K1a)
     CondReadUnknown Bool = false   # the last condition body refused for reading what did not check, said already
+    CondMissing Vec<String&>       # B9c: the names the last expression body met that exist nowhere it is checked
+    CondOwn diag.Taken             # B9c: what checking the last expression body that did not check said, set aside
     Faulty Map<I64, Bool>       # the bodies checking met an error or a gap in (K1a: never evaluated while compiling)
     # S8c: by (body, local), a plain scalar local declared with its own value - its initializer and type; and every local
     # a body writes (stores, increments, targets, atomics). A condition or assert asked for reading such a local reads
@@ -3206,6 +3208,8 @@ fn (c mut Checker&) ExprBody(mi I64, x ast.Expr&, ty types.TypeId) I64 {
 fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals Array<types.TypeId>&, x ast.Expr&
                                ty types.TypeId) I64 {
     d := c.P.L.Diags
+    c.CondMissing.Clear()
+    c.CondOwn = diag.Taken()
     # S8c: a fixed local is read as its initializer - the body it is asked in has the locals' bindings
     c.lastFixed.Clear()
     fixed := Map<source.NameId, I64>()
@@ -3253,6 +3257,7 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     # no value to decide by, its stand-in being no value of the program's (one error, not a second false assert)
     c.CondReadUnknown = d.Count() == mark and c.Gaps.Len() == gaps and c.unknowns > unk
     if d.Count() > mark or c.Gaps.Len() > gaps or c.unknowns > unk {
+        c.CondOwn = d.Since(mark)
         d.Forget(mark)
         c.Gaps.Truncate(gaps)
         c.Bodies[id].Root = null
@@ -4910,6 +4915,55 @@ fn (c mut Checker&) topSetIf(mi I64, head ast.TopIf&, ti ast.TopIf&, inIf Bool, 
         if t == types.UnknownT or c.hasZero(mi, t): continue
         c.branchesAssign(file, head, n, t)
     }
+}
+
+# B9c: where a declaration named name is, inside a branch of a top-level if of any module - Nowhere for none
+fn (c mut Checker&) BranchDecl(name String&) diag.Where {
+    for mi in range c.P.L.Mods.Len() {
+        for d in c.P.L.Mods[mi].Decls {
+            match d {
+                case ast.Decl.If(_, ti) {
+                    at := c.chainDecl(c.P.L.Mods[mi].File, ti, name)
+                    if at != diag.Where.Nowhere: return at
+                }
+                case _ { }
+            }
+        }
+    }
+    return diag.Where.Nowhere
+}
+
+fn (c mut Checker&) chainDecl(file I64, ti ast.TopIf&, name String&) diag.Where {
+    if ti.Then != null {
+        at := c.branchDecl(file, ti.Then!.Decls, name)
+        if at != diag.Where.Nowhere: return at
+    }
+    if ti.Else != null {
+        at := c.branchDecl(file, ti.Else!.Decls, name)
+        if at != diag.Where.Nowhere: return at
+    }
+    if ti.ElseIf != null: return c.chainDecl(file, ti.ElseIf!, name)
+    return diag.Where.Nowhere
+}
+
+fn (c mut Checker&) branchDecl(file I64, ds Array<ast.Decl&>&, name String&) diag.Where {
+    for d in ds {
+        sp := source.Span(0, 0)
+        match d {
+            case ast.Decl.Fn(f) { if c.text(f.Name) == name: sp = f.Sp }
+            case ast.Decl.Type(dsp, t) { if c.text(t.Name) == name: sp = dsp }
+            case ast.Decl.Global(dsp, v) {
+                for n in v.Names { if c.text(n) == name: sp = dsp }
+            }
+            case ast.Decl.If(_, ti) {
+                at := c.chainDecl(file, ti, name)
+                if at != diag.Where.Nowhere: return at
+            }
+            case _ { }
+        }
+        if sp.End > sp.Start: return diag.Where.Span(file, I64(sp.Start), I64(sp.End))
+    }
+    return diag.Where.Nowhere
 }
 
 # every global some branch of an if's chain assigns, directly or in an if inside it
@@ -8379,6 +8433,7 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId, want types.TypeId = ty
     if ref.Kind == names.What.Build: return c.buildConst(sp, n)
     if ref.Kind == names.What.None and c.text(n) == "_": return c.typedHole(sp, want)
     if ref.Kind == names.What.None {
+        c.CondMissing.Push(c.text(n))
         # B11: said once in a body - each misspelling one error - and not at all for a type said unknown already
         if not c.unknownSaid.Has(pair.Pair(c.fr().Body, I64(n))) and not c.unknownTypes.Has(pair.Pair(c.fr().Mi, I64(n))) and
            not c.P.R.ImportSaid(n) {
@@ -12350,6 +12405,7 @@ fn (c mut Checker&) callNamed(sp source.Span, f ast.Expr&, nsp source.Span, n so
         return c.construct(sp, nsp, t, args)
     }
     if ref.Kind == names.What.None {
+        c.CondMissing.Push(c.text(n))
         # M19: a method of the first argument's, written as a function; else (B11) with the name it most likely meant - a
         # number's, said as an unknown type (T4)
         meant := c.methodMeant(n, args)

@@ -1177,3 +1177,32 @@ test "a hover on a function shows its # fits: line; a promise word is followed b
     assert session.PromiseTargets(line, line.Len()) == Array<String&>["a", "b"]
     assert session.PromiseTargets("x := 1 + ", 9).Len() == 0
 }
+
+test "lsp and explain write nothing in the directory they run in: their records go to olang's cache (B15a)" {
+    dir := try os.MkTemp(prefix = "olang-lspdir-") catch os.Error { unreachable "no temporary directory" }
+    cache := try os.MkTemp(prefix = "olang-lspcache-") catch os.Error { unreachable "no temporary directory" }
+    src := "fn main() {\n    x := 1\n    assert x == 1\n}\n"
+    try os.WriteFile($dir + "/m.olang", src) catch os.Error { unreachable "cannot write m.olang" }
+    defer try os.RemoveAll(dir) catch os.Error { }
+    defer try os.RemoveAll(cache) catch os.Error { }
+    uri := UriOf($dir + "/m.olang")
+    t := StringBuilder()
+    session.JsonStr(t, src)
+    b := StringBuilder()
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" + $uri +
+                  "\",\"languageId\":\"olang\",\"version\":1,\"text\":" + $t.ToString() + "}}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    olang := compilerUnderTest()
+    out := try os.Output.Exec("env", "XDG_CACHE_HOME=" + $cache, olang, "lsp", input = b.ToString(), dir = dir) catch os.Error {
+        unreachable "olang lsp did not run"
+    }
+    assert out.Status == 0, "olang lsp ended with " + $out.Status + ": " + $out.Stderr
+    ex := try os.Output.Exec("env", "XDG_CACHE_HOME=" + $cache, olang, "explain", "m.olang", "main", dir = dir) catch os.Error {
+        unreachable "olang explain did not run"
+    }
+    assert ex.Status == 0, ex.Stdout + ex.Stderr
+    left := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
+    assert left == Array<String&>["m.olang"], "left beside the program: " + $left.Len()
+}

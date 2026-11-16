@@ -93,7 +93,7 @@ fn Analyze(l mut load.Loader&, tests Bool, kept mut views.Kept& = views.Kept()) 
         c.Dead = dead
         c.CheckProgram()
         if decide(l, c, decided, dead, lengths, embeds, unrolls, unrollWhy, condErrs) == 0 {
-            for e in condErrs: l.Diags.Error(e.At, e.M)
+            for e in condErrs: sayCond(l.Diags, e)
             vt := time.Now()
             # (where kept is Later, its caller judges them, once the records the program's keys name are found)
             if l.Diags.Firm() - firm == 0 { if kept.Later: c.ViewsDue = true else: judgeViews(c, kept) }
@@ -192,7 +192,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         if not ok {
             # B9c: a condition that does not check here - what it uses exists only in the branches being decided - or
             # whose evaluation stops is an error at it, decided now as stage 0 decides it: its if takes no branch
-            condErrs.Push(CondErr(at, msgs.CondUnseen() if why == "" else msgs.CondUndecidable(why)))
+            condErrs.Push(CondErr.unseen(c, at) if why == "" else CondErr(at, msgs.CondUndecidable(why)))
             chosen = load.NoBranch
         }
         l.Decide(t.First, t.Second, chosen)
@@ -215,9 +215,33 @@ fn condSaid(d diag.Diagnostics&, at diag.Where) Bool {
 }
 
 # a B9c condition decided as an error: where it is, and what is said
-type CondErr struct(At diag.Where, M diagmsg.Msg) {
+type CondErr struct(At diag.Where, M diagmsg.Msg, Decl diag.Where = diag.Where.Nowhere, Own diag.Taken = diag.Taken(), Name String& = "") {
     At
     M
+    Decl
+    Name
+    Own
+}
+
+# a B9c error said: the condition's own errors where it has them, else its line, with where what it uses is declared
+fn sayCond(d mut diag.Diagnostics&, e CondErr&) {
+    if e.Own.Count() > 0 {
+        d.Error(e.At, msgs.CondOwnError())
+        d.Replay(e.Own)
+        return
+    }
+    rec := d.Error(e.At, e.M)
+    if e.Decl != diag.Where.Nowhere: d.Note(rec, e.Decl, msgs.NoteDeclaredHere("'" + $e.Name + "'"))
+}
+
+# the B9c error of a condition that did not check: one using a declaration inside a branch still being decided names it,
+# any other says its own errors
+fn CondErr.unseen(c mut typecheck.Checker&, at diag.Where) CondErr {
+    for n in c.CondMissing {
+        decl := c.BranchDecl(n)
+        if decl != diag.Where.Nowhere: return CondErr(at, msgs.CondInBranch(n), decl, Name = n)
+    }
+    return CondErr(at, msgs.CondOwnError(), Own = c.CondOwn)
 }
 
 # a pending top-level if's branch, its conditions evaluated in order (B9c): the first true one's, the else's after
