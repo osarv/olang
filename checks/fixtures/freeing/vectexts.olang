@@ -1,0 +1,26 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 17's text part): an element holding a Vec of text, given another - in an array, through a
+# Vec's SetAt, a literal or a callee's Vec - frees the text the old one held, each string's slot put back, and its
+# buffer (157 MB at 20,000 turns of 20 strings before)
+N I64 = 20000
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 20 { w.Push($i + "-" + $j + " padded out a little") }
+    return w
+}
+
+fn main() {
+    rows := Array<Vec<String>>(10)
+    v Vec<Vec<String>>
+    for _ in range 10: v.Push(Vec<String>())
+    t := 0
+    for i in range N {
+        rows[i % 10] = mk(i)
+        v[i % 10] = mk(i + 1)
+        rows[(i + 5) % 10] = Vec<String>[$i, "constant", $i + " and more"]
+        t += rows[i % 10][19].Len() + v[i % 10][0].Len() + rows[(i + 5) % 10][2].Len()
+    }
+    io.PutLine($t + " " + $rows[3][0] + " " + $v[3].Len())!
+}

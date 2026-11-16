@@ -1547,8 +1547,9 @@ fn (m mut Machine&) stepClose() {
 # data - and p left null. A read through the reference afterwards finds its allocation freed and stops (K1): the
 # evaluator's own check of an early free
 # A part release (O8f) closes only a part region, and none for an empty array: an array built anywhere else stays where
-# it was built
-fn (m mut Machine&) releaseHeld(p Ptr, ty types.TypeId, part Bool = false) {
+# it was built. A slot release closes only a slot's own region (one a slot scope gave it): text built anywhere else - in
+# a region with the buffer holding it (a Vec of text copied whole, O8f) - goes with that, as the run time's does
+fn (m mut Machine&) releaseHeld(p Ptr, ty types.TypeId, part Bool = false, slotted Bool = false) {
     empty := part and m.rd(p, 8) == 0
     region := m.regionOfObject(m.objectAt(p, ty)) if m.T.IsRef(ty) or m.T.OwnedPart(ty) else m.anchorRegion(p, ty)
     if empty: region = 0
@@ -1556,7 +1557,14 @@ fn (m mut Machine&) releaseHeld(p Ptr, ty types.TypeId, part Bool = false) {
     m.zero(p, m.size(ty))
     if region == 0 { return }
     if part and not m.scopes[region & slotMask].Part { return }
+    if slotted and not m.slotRegion(region): return
     m.closeRegion(region)
+}
+
+# whether region r is a slot's own - made inside a slot scope (allocate)
+fn (m mut Machine&) slotRegion(r I64) Bool {
+    p := m.scopes[r & slotMask].Parent
+    return p != 0 and m.live(p) and m.scopes[p & slotMask].Slots
 }
 
 # O8d: the region an owner's value at p (types.Anchors) is built in - the first live one of its anchors' - else 0
@@ -4057,7 +4065,8 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             m.atK(fk, sp)
             slot, pty := m.place(fi, p)
             n := m.closing.Len()
-            m.releaseHeld(slot, pty, m.cf[fk].Stmts[i] == mir.Stmt.ReleasePart)
+            st := m.cf[fk].Stmts[i]
+            m.releaseHeld(slot, pty, st == mir.Stmt.ReleasePart, st == mir.Stmt.ReleaseSlot)
             if m.closing.Len() > n {
                 m.fs[fi].Pending = true
                 return

@@ -885,6 +885,25 @@ fn (r mut RefsKept&) OwnSlot(t types.Table&, bodies Vec<mut Body&>&, b Body&, u 
     return r.namedOnly(t, bodies, u, l)
 }
 
+# whether value local l of body b (u its uses) may have its storage named past its block, so that the scope pass places
+# it where it is kept (O26a, O28; R3: a by-value parameter's copy) and lowering gives it storage in an arena - G42's
+# count of it (effects): a reference to its storage itself escapes (stored, captured, yielded, or so used through a
+# local aliasing it), it is handed back by a reference result, or a reference to it is given a body's call - read-only
+# or writably - that may keep it (None). A reference read out of a part of it names what that part refers to, never
+# its storage
+fn (r mut RefsKept&) Kept(t types.Table&, bodies Vec<mut Body&>&, b Body&, u LocalUses&, l I64) Bool {
+    if l < 0 or l >= b.Locals.Len() or t.IsRef(b.Locals[l].Ty): return false
+    if u.EscSelf[l]: return true
+    if u.Ret[l] and t.KindOf(b.Ty) == types.Kind.Func and t.IsRef(t.Result(b.Ty)): return true
+    for j in range u.RefAt.Len() {
+        if u.RefAt[j] == l and not u.RefPart[j] and not r.None(t, bodies, u.RefBody[j], u.RefParam[j]): return true
+    }
+    for j in range u.LendAt.Len() {
+        if u.LendAt[j] == l and not r.None(t, bodies, u.LendBody[j], u.LendParam[j]): return true
+    }
+    return false
+}
+
 # whether a local's value x is a reference read out of a part of what another names (`old := v.data`): it names what
 # that part refers to, never the storage it was read from
 fn RefReadOut(t types.Table&, x Expr?&) Bool {
@@ -1708,7 +1727,12 @@ type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span
     # B1.1: the loops of a for-in over an array or a range, by their body block - each runs at most a count known
     # before it starts (check.counted), which Terminates (compiler/effects.olang) takes as bounded
     Bounded Vec<BlockId>
+    # C11: the stores occupy makes, by their span's start - into room holding no value, so letting go of nothing (O8f)
+    Rooms Vec<I32>
 }
+
+# whether the store at sp is one occupy makes (Rooms)
+fn (b Body&) Room(sp source.Span) Bool { return I32(sp.Start) in b.Rooms }
 
 fn (b mut Body&) AddLocal(l Local) LocalId {
     b.Locals.Push(l)

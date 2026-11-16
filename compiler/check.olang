@@ -12461,7 +12461,8 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
     items := gather(c.exprs, from)
     # its length checked once (D14b)
     lchk := typed.Check.Abort
-    nc := c.noClear and args.Len() == 1 and c.P.T.KindOf(c.P.T.Repr(elem)) != types.Kind.Array
+    # (SPEC D14d: never for an element that is an array or owns one - a store into it lets go of what it replaces, O8f)
+    nc := c.noClear and args.Len() == 1 and c.P.T.KindOf(c.P.T.Repr(elem)) != types.Kind.Array and not c.P.T.OwnsParts(elem)
     c.noClear = false
     return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Fill, 0, items, n0
                                               c.site(typed.SiteKind.Make, sp), lchk, nc))
@@ -14849,6 +14850,8 @@ fn (c mut Checker&) suppliedOccupy(sp source.Span, nsp source.Span, x ast.Expr&,
     }
     from := c.stmts.Len()
     c.storeInto(sp, p, args[0], args[0].Span(), null, true)
+    # (O8f: no let-go - early freeing releases nothing there)
+    c.cur().Rooms.Push(I32(sp.Start))
     return typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
 }
 

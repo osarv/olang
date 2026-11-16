@@ -1,0 +1,32 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 17): an element holding a Vec of Vecs, given another - in an array, and through a Vec's SetAt,
+# the copy SetAt makes split so that each buffer is in a part region of its own - frees every buffer the old one held,
+# each live inner Vec's first; an inner Vec replaced through RefMut frees its own (376 MB at 80,000 turns before)
+N I64 = 20000
+
+fn inner(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 30 { w.Push(i + j) }
+    return w
+}
+
+fn outer(i I64) Vec<Vec<I64>> {
+    o Vec<Vec<I64>>
+    for j in range 5 { o.Push(inner(i + j)) }
+    return o
+}
+
+fn main() {
+    rows := Array<Vec<Vec<I64>>>(10)
+    v Vec<Vec<Vec<I64>>>
+    for _ in range 10: v.Push(Vec<Vec<I64>>())
+    t := 0
+    for i in range N {
+        rows[i % 10] = outer(i)
+        v[i % 10] = outer(i + 1)
+        v.RefMut(i % 10)[2] = inner(i * 2)
+        t += rows[i % 10].Ref(4)[29] + v.Ref(i % 10).Ref(2)[0]
+    }
+    io.PutLine($t + " " + $rows[3].Len() + " " + $v.Ref(3).Ref(2).Len())!
+}

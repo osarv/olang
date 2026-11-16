@@ -1077,11 +1077,28 @@ done:
 
 ; O8d: the text a sole text place let go of (built through a slot scope, mir.Rvalue.Slots) put back on its slot's class
 ; list - nothing for null, constant data or one past 2,032 bytes (a zero word before it). The early-free analysis proved
-; nothing still uses it, so no view is compared
+; nothing still uses it, so no view is compared. Nothing either for text in a region (O8f: a Vec of text copied with its
+; buffer into a part region, whose release reclaims it; a slot built in a region): the word before such text names its
+; region, no slot's class - read only once the chunk it is in is found to be no region's
 define void @__olang_slot_release(ptr %buf) noinline {
 entry:
   %none = icmp eq ptr %buf, null
-  br i1 %none, label %done, label %head
+  br i1 %none, label %done, label %find
+find:
+  %c = call ptr @__olang_chunk_of(ptr %buf)
+  %noc = icmp eq ptr %c, null
+  br i1 %noc, label %done, label %owner
+owner:
+  %op = getelementptr %olang.chunk, ptr %c, i32 0, i32 6
+  %o = load ptr, ptr %op
+  %noo = icmp eq ptr %o, null
+  br i1 %noo, label %done, label %kind
+kind:
+  %oh = load ptr, ptr %o
+  %isreg = icmp eq ptr %oh, @__olang_region_chunk
+  %isfwd = icmp eq ptr %oh, @__olang_fwd_chunk
+  %odd = or i1 %isreg, %isfwd
+  br i1 %odd, label %done, label %head
 head:
   %hp = getelementptr i8, ptr %buf, i64 -8
   %hw = load i64, ptr %hp

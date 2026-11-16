@@ -38195,3 +38195,56 @@ the program at path; `__olang_spawn` calls it with null), measure's `Sample.Of` 
 from argv, and the evaluator calls it as it calls `__olang_spawn`. Not added: the name to effects.olang's process list
 (another agent's file tonight; the compiler's own module only). The evaluator disagreement on `-runs`'s parse (the
 timeit agent's note) does not reproduce: the two command-line tests pass under `OLANG_EVALUATE=1`.
+
+## 2026-11-15: gap 17 closed for Vecs of text and of Vecs, kept locals in G42, two use-after-frees (wt-freeing6)
+
+**Gap 17's text part (O8f).** wt-freeing5 had built the release walk over an old element's live strings and taken it out:
+under `-sanitize` and in the evaluator it met text whose slot, it concluded, was in a scope already closed - the slots of
+a Vec of text built in a callee living in the loop turn's scope while its buffer was settled into the element's region.
+Read again, the MIR said otherwise: `SetAt`'s store copies its by-value argument (D9h), and the Copy helper builds every
+part of the copy in the one scope it is given - here the element's part region - so the strings were not slots at all
+but region allocations beside the buffer. The evaluator's slot release closed the object's region, which was that
+whole part region, so the walk's next read hit freed storage; the sanitizer's slot release read the region's address
+before the text as a slot's class and poisoned a garbage size. Nothing a sole place holds lives in a scope shorter than
+the element - a value moved into a longer-lived place without a copy would dangle in any build - so no re-homing walk
+per store was needed, and none was built. What was built, no cost per operation:
+- the walk (`lower.textWalk`, `free.VecWalks`): an element's let-go of a value owning storage only in part places, a
+  Vec's buffer of text or of such values (PartsOnly, extended) puts back each live string's slot, or releases each live
+  element's parts, before the buffer goes - the Vec's count says which are live;
+- a slot release - the runtime's `__olang_slot_release` and the evaluator's - puts back only a slot: text in a region
+  (the chunk's owner a region) is left to that region;
+- a part region holds the one array made for it: a copy made in one (`lower.partCopy`, `free.PartSplit`) is split - the
+  array in the region, text elements in slots of its parent where the text place is sole, a Vec's elements' arrays in
+  part regions of their own (`lower.elemCopy`, settled where empty), room past the count left empty. Without this, a
+  string moved out of the element (`v.RefMut(i).Pop()`) was freed with the buffer's region (v6, a segfault on the way);
+- `free.PartsLet`: the element's let-go lets go of every place it reaches, the text place as an assignment's (the
+  prelude's struct-leaf exception left to leaves), so a view of any of them in use across it keeps them.
+Peaks: checks' freeing vectexts 150 MB to 13 MB (20,000 turns of 20 strings, through an array store, `SetAt`, a literal);
+vecvecs, a Vec of Vecs replaced in an array, through `SetAt` and an inner one through `RefMut`, 376 MB to 13 MB at 80,000
+turns. gaps.olang, B18a's failing fixture, is now an element given a `Map` - the one element kind left.
+
+**Bugs found on the way.** (1) Round 3's part release was a use-after-free for a Vec of Vecs copied whole into a part
+region: the inner buffers lived in the outer's region, and replacing an inner element (`h.RefMut(0)[1] = inner(i)`)
+released the outer's region - `-sanitize` aborted, the evaluator stopped; the split copy closes it. (2) D14d left an
+`Array<Vec<I64>>(10)` filled by the next loop uncleared, against SPEC D14d ("an element type that ... owns what it holds
+keeps the clear"): the checker excluded only arrays. The loop's store released the garbage it replaced - a fill loop of
+`Vec<I64>`s printed 2241717261 for 2241716100 on master. (3) An occupy's store (Push into room) was a let-go in early
+freeing: pushing a local Vec, `o.Push(w)`, kept the Vec's buffer place for the whole program ("a value of it read in
+this statement is in use when 'o.Push(w)' lets go of it"); the stores occupy makes are now listed (`typed.Body.Rooms`)
+and neither judged nor lowered as let-goes. (4) Found, left open as gap 20: reading `v[i][2][0]` out of a
+`Vec<Vec<Vec<I64>>>` in a loop copies what `At` hands back into the collection's scope every turn (+0.7 KB a turn, the
+same on master).
+
+**Left.** An element owning a `Map` (its entries' live slots are read by their states, a walk of its own); a program
+copying a Vec of text - a by-value argument copied, a copy read out of a collection - keeps the text place (RCopied:
+a copy's text is no slot; building every copy's text in slots would lift it, a slot allocation per copied string).
+
+**G42 and kept locals.** `fn keptLocal(n I64, k Sh&) Sh& { s := Sh.Make(n); return s }` allocates - the scope pass
+places `s` where the result goes (O26a, O28), lowering gives it storage there - but the facts said not: effects runs in
+the checker, before placement. `typed.RefsKept.Kept` judges, from a body's local uses alone, whether a value local or
+parameter's storage may be named past its block - a reference result handing it back, a reference to it escaping
+(stored, captured, yielded, through an alias), a lend to a body that may keep it (RefsKept.None) - and effects counts an
+allocation at its declaration (a parameter's copy and a match binding's as the body is entered). It over-estimates
+where the keeper is itself local (`b := Box(s)` read in the block); it never under-estimates what the scope pass can
+place. It mattered beyond the report: P2 gives a task whose callee `Allocates` nothing no scopes to build in. Tests in
+tests/slotfacts.olang (keptLocal, `Box.Of`, and a value returned whole or only read staying in the frame).

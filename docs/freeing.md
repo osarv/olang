@@ -90,9 +90,10 @@ Measured 2026-11-15 on master e6232af1 (peak resident memory, KB; baseline ~13 M
 | 11 | a `Vec` local growing | 2x its final size | old buffer freed at each growth | an array place only for a Vec held in a sole place | **fixed** (round 3, 2.1): 130 MB to 97 MB for two Vecs of 4,000,000 grown one after the other in a program with an owner holding a `Vec<I64>` whole, or a copy of one - the program alone's 97 MB - with no cost per operation or per copy: a part place's values are built in part regions, released through their addresses |
 | 15 | a `Map` entry's text key beside a `Vec` value, at a removal (earlyfree's mapkeys) | the key's text kept | freed with the entry | a split entry's key is built where the map lives, not in a slot | **fixed** with 10 - the split copy builds the key in a slot of the region's parent (free.SlotParts, lower.splitCopy); mapkeys passes `-memory -check` |
 | 16 | a local declared with no value (D13d) given new text in a loop | kept | one text | an unset local is no place (its storage holds nothing written before its first assignment) | **fixed**: 274 MB to 13 MB (a Vec and a struct) - lowering writes zero bits for a local place declared with no value, its first release a no-op |
-| 17 | an element owning storage that is not text, `rows[i] = mk(i)` (`Array<Vec<I64>>`) | kept | one Vec per element | only text elements are a place (a region per Vec element would cost ~400 bytes each) | **fixed** for an element owning storage only as part places' arrays of plain values (a `Vec<I64>`, through `SetAt` too): 106 MB to 3 MB at 50,000 turns - its parts released, no region per element; open for one owning more (`Array<Vec<String>>`: the buffer is freed, the text it held kept - the `-memory -check` fixture, checks' gaps.olang) |
+| 17 | an element owning storage that is not text, `rows[i] = mk(i)` (`Array<Vec<I64>>`) | kept | one Vec per element | only text elements are a place (a region per Vec element would cost ~400 bytes each) | **fixed** for an element owning storage only as part places' arrays of plain values (a `Vec<I64>`, through `SetAt` too): 106 MB to 3 MB at 50,000 turns - its parts released, no region per element; round 6 (2.2): for a Vec of text (150 MB to 13 MB at 20,000 turns of 20 strings) and a Vec of Vecs (376 MB to 13 MB at 80,000 turns) - each live element's slot or parts released first; open for an element owning a `Map` (the `-memory -check` fixture, checks' gaps.olang) |
 | 18 | a `Map` value copied out and changed, `u := m.Get(k); u.Push(x)`, beside `m.Put(k, ...)` replacing values | 230 MB at 200,000 turns | one value per key | the copy keeps the entry's value place: its origins are those of the view `Get` hands back (RInPlace), though D9h copies it where it is kept | **fixed**: 24.5 MB to 1.9 MB at 20,000 turns - a local lowering surely copies a view call's value into (written, assigned, stored, or lent to a body changing its parts: never a view local, `lower.viewCand`) owns its parts anew (`free.olang` copiedView, copiedLocals, the lowering's Preserves) |
 | 19 | a call's value local landing in a long-lived place, `rows[i % 10] = mk(i)` | +32 bytes a call | nothing kept | the returned local (`w Vec<I64>`) is allocated where the result goes (O26a) - the array's scope - and copied out by value | **fixed**: 26 MB to 1.6 MB at 1,000,000 calls, 90 MB to 1.6 MB at 4,000,000 - the scope pass records O26a's reason alone (`Plan.RetFrame`: returned only whole, by value, nothing else carrying it there), and lowering keeps such a local's slot in the frame where nothing names its storage past the body (`lower.olang` retFrames, namesKept), its parts still built where the result goes; checks' freeing returned |
+| 20 | a copy of a view read out of a collection in an expression, `t += v[i][2][0]` (`Vec<Vec<Vec<I64>>>`) | +0.7 KB a turn | nothing kept | the copy D9h makes of what `At` hands back lands in the collection's scope, not the statement's - not a let-go, a temporary placed too long-lived | **open** (found by round 6; the same in master) |
 | 12 | oann's tempref: a temporary given to a `&` parameter whose callee copies it into a struct holding a reference | +5,580 kB over 100,000 calls | nothing kept | a scope variable no argument and no obligation determines was bound where the call's result lands (`scope.olang` bindRest): `View.Make(o.mem, Dims(4))`'s `Dims` built in the result's scope, which `read(o.View())` lands in o's | **fixed**: +72 kB (bound to the block where the callee builds nothing into it, names it in no relation, and its result views no parameter of it - onlyForCall) |
 | 13 | oann's joinleak: a `join` with spawns | +110 B per join | nothing kept | every task given a stand-in per scope variable, made in the spawner's caller's scope (56 B each) - for a callee building nothing | **fixed**: flat (98 pages at 200,000 and 800,000 joins) |
 | 14 | text a task builds into a loop turn's local (g09) | +8 KB per turn | nothing kept | the task's chunks are folded into the joiner's pool (O8b), workers ask the OS for new ones | **fixed**: the joiner shares its pool beyond a batch at each join, 160 MB to 13 MB |
@@ -166,10 +167,10 @@ text or part places' arrays of plain values - gaps 8, 16, 17); a
 `SetAt` giving an element owning storage (gap 9); a B18 place kept for a copy of its holder or a change in place
 (RCopied, RInPlace - gaps 6, 7); a program's call - a removal, `Put`, `SetAt` - whose library place keeps for a reason in
 the library's code (gaps 10, 15). Every earlyfree fixture passes; `checks/fixtures/freeing/gaps.olang` fails naming its
-element (an `Array<Vec<String>>`'s, gap 17's open part). A text element place is reported where the program's own code gives an element
+element (an `Array<Map<String, I64>>`'s, gap 17's open part). A text element place is reported where the program's own code gives an element
 another value; its removals are the collection's.
 
-### 2.2 Gap 17's text part, analysed 2026-11-15 (wt-sect8), not built
+### 2.2 Gap 17's text part, analysed 2026-11-15 (wt-sect8), built in round 6 (wt-freeing6)
 
 `rows[i % 10] = Vec<String>[$i]`: the old element's buffer is a part place and is freed (round 3); the text its elements
 held is not. What freeing it needs, and what stands in the way:
@@ -202,6 +203,33 @@ turn's), while its buffer is settled into the element's region - a slot put back
 reclaimed scope part's free list (`-sanitize` and the evaluator both stop there). Next: the value built where the
 element lives (the callee's result landing in the place's scope when the callee stores its by-value argument into a
 place), or a settle re-homing the slots; then the walk. Peak at 20,000 turns of 20 strings: 169 MB before, 157 MB now.
+
+**2026-11-15, wt-freeing6: step 2 built, at no cost per operation or per store.** The slot homes were not the cause. The
+text the walk met in a closed or foreign place was text `SetAt`'s copy had built in its part region together with the
+buffer (the Copy helper builds every part in one scope): the evaluator's slot release closed that whole region at the
+first string, and the sanitizer read the region's address before the text as a slot's class. Nothing the place holds is
+in a scope shorter than the element: a value moved into a longer-lived place without a copy would be a dangling
+reference in any build. So, the zero-cost fix of the brief, made precise:
+- **A part region holds the one array it is made for** (`lower.partCopy`, `free.PartSplit`): a copy made in a part region
+  whose value owns more - a Vec of text's strings, a Vec of Vecs' buffers - is split: the array in the region, each text
+  element in a slot of the region's parent (`mir.Rvalue.Slots`) where the text place is decided sole, each PartsOnly
+  element's arrays in part regions of their own (settled at once where empty), anything else in the parent; a Vec's
+  room past its count left empty, as the Vec keeps it. This also closed a use-after-free of round 3: a `Vec<Vec<I64>>`
+  copied whole into a part region held its inner buffers there, and replacing an inner element released the outer's
+  region (`h.RefMut(0)[1] = ...` read freed storage under `-sanitize` and in the evaluator).
+- **The walk** (`lower.textWalk`, `free.VecWalks`): an element's let-go of a PartsOnly value releases each Vec's live
+  elements - below its count - before the buffer: a text one's slot put back (`ReleaseSlot`), a PartsOnly one's parts
+  in turn (a Vec of Vecs). The runtime's slot release, and the evaluator's, put back only a slot - text in a region is
+  left to the region (`__olang_slot_release` reads the chunk's owner first). The element's let-go lets go of every place
+  it reaches (`free.PartsLet`), so a view in use across it keeps them.
+- **An occupy lets go of nothing** (`typed.Body.Rooms`, C11): Push's store into room was judged a let-go, so pushing a
+  local Vec (`o.Push(w)`) kept the Vec's buffer place program-wide (a value of it read in the statement).
+- **D14d as SPEC says**: an `Array<T>(n)` of elements owning storage is cleared even before a filling loop - the store
+  in the loop released what was never there (a wrong sum, 2241717261 for 2241716100, in a fill loop of `Vec<I64>`s).
+Peaks: 150 MB to 13 MB (checks' freeing vectexts, the baseline), a Vec of Vecs 376 MB to 13 MB at 80,000 turns
+(vecvecs). Left: an element owning a `Map` (its entries' live slots are read by state, not a count), and a program
+copying a Vec of text (a by-value argument copied, a copy read out of a collection) keeps the text place - a copy's text
+is no slot (building every copy's text in slots would lift it, at a slot allocation per copied string).
 
 ## PROGRESS
 
@@ -237,6 +265,10 @@ place), or a settle re-homing the slots; then the walk. Peak at 20,000 turns of 
   gaps.olang moved to an `Array<Vec<String>>`; the regions scenario's C driver gained part regions.
 - 2026-11-15, round 3 follow-up (wt-freeing4): gap 18 closed (a copied view local owns its parts); fixture checks'
   freeing mapcopy.
+- 2026-11-15, wt-freeing6: gap 17 closed for Vecs of text and Vecs of Vecs (2.2); a round-3 use-after-free (a Vec of
+  Vecs' copy in one part region) and a D14d fill releasing uncleared elements fixed; occupy no let-go; gap 20 found.
+  G42 counts a value local placed where it is kept (keptLocal). Fixtures: checks' freeing vectexts, vecvecs; gaps.olang
+  an `Array<Map<String, I64>>`.
 - 2026-11-15, wt-sect8: gap 19 closed (`Plan.RetFrame`, lowering's retFrames: a returned value local's slot in the
   frame, its parts where the result goes - 90 MB to 1.6 MB at 4,000,000 calls; checks' freeing returned). Gap 17's text
   part analysed (2.2) and left: a release walk over the old buffer's live elements and a fill exemption are the next

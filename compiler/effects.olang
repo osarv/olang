@@ -370,6 +370,7 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     taskCall Bool = false                # whether the call walked next is a task's (spawn): its arguments read beside it
     refsKept typed.RefsKept              # what bodies keep of what a parameter names (onStack)
     slotted Map<I64, Bool>               # by reference local of the body walked: whether it has a slot of its own
+    kept Vec<Bool>                       # by value local of the body walked: whether its storage may be kept past its block
 }
 
 type pair struct(A I64, B I64) {
@@ -1325,9 +1326,24 @@ fn (e mut Effects&) walkBody(b I64) {
             case _ { e.cur.Unchecked = true }
         }
     } else {
+        e.keptLocals(body)
         e.block(body.Root)
     }
     e.finish()
+}
+
+# O26a, O28, R3: the body's value locals whose storage may be kept past their block (typed.RefsKept.Kept) - each given
+# storage in an arena where it is kept, which G42 counts: a parameter's copy or a match binding's as the body is
+# entered, a declared local's where it is declared ("s := Sh.Make(n); return s" with a reference result)
+fn (e mut Effects&) keptLocals(body typed.Body&) {
+    u := typed.LocalUses.Uses(e.P.T, body)
+    e.kept.Clear()
+    for l in range body.Locals.Len() {
+        e.kept.Push(e.refsKept.Kept(e.P.T, e.Bodies, body, u, l))
+        if not e.kept[l]: continue
+        k := body.Locals[l].Kind
+        if k == typed.LocalKind.Param or k == typed.LocalKind.Binding: e.cur.Allocates = true
+    }
 }
 
 # the walk's end, every value its locals are given seen: the function values given and called through classified,
@@ -1578,6 +1594,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
         case typed.Stmt.Let(_, id, x) {
             e.expr(x)
             e.define(I64(id), x)
+            if I64(id) < e.kept.Len() and e.kept[I64(id)]: e.cur.Allocates = true
         }
         case typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { e.expr(x) }
         case typed.Stmt.Assign(_, t, v) {

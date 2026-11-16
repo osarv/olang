@@ -6961,7 +6961,8 @@ cannot be known: a call through a function value none of whose bodies is followe
 (T22a). A module compiled on its own is no exception (it frees as the program decides, O8d), nor a function value
 followed. A let-go the implementation does not follow - kept for none of these - is a **gap**: `-memory` names each,
 and `-memory -check` fails the build on one (B18a), so a program building under it frees at every let-go this rule
-names. Reclaiming is unobservable but in memory, as O8d says.
+names. An element's let-go reclaims what the old value owns at every depth a Vec holds it - each live element of a
+Vec of text, of a Vec of Vecs, in turn, then the buffer. Reclaiming is unobservable but in memory, as O8d says.
 
 **O8a (allocation alignment).** Storage a scope hands out for an array's elements is aligned by its own size: 8 bytes
 below 32, 32 bytes from 32 up to 64, and 64 bytes at 64 and above - and at least as its element type is, where that is
@@ -10302,7 +10303,7 @@ none at its end, while one an error may leave with before the hand-on does):
 
 | fact | holds where it may |
 |---|---|
-| `Allocates` | ask the runtime for storage in any scope, its frame's included, on a way that runs on: a text, an array, a comprehension, a temporary given storage, a lambda's environment (a value in place, a fixed array in place - `Array<F32>(8)` held by value, but for a fill's own copies of what owns storage - does not count, nor does a temporary held in a stack slot of the frame - a struct's or an enum's value with no destructor and no storage of its own lent to a read-only reference parameter of a call that keeps nothing of it and hands back nothing holding a reference (`Sh.Make(n).Count()`), or a value given storage for a reference local that is the slot's one name, a struct of numbers, Bools and references to arrays (`u = u.Inner()`) - nor a failing way's, below) |
+| `Allocates` | ask the runtime for storage in any scope, its frame's included, on a way that runs on: a text, an array, a comprehension, a temporary given storage, a lambda's environment (a value in place, a fixed array in place - `Array<F32>(8)` held by value, but for a fill's own copies of what owns storage - does not count, nor does a temporary held in a stack slot of the frame - a struct's or an enum's value with no destructor and no storage of its own lent to a read-only reference parameter of a call that keeps nothing of it and hands back nothing holding a reference (`Sh.Make(n).Count()`), or a value given storage for a reference local that is the slot's one name, a struct of numbers, Bools and references to arrays (`u = u.Inner()`) - nor a failing way's, below); a value local or parameter whose storage may be named past its block - handed back by a reference result, a reference to it stored, captured or yielded, or lent to a body that may keep it - is given storage where it is kept (O26a, O28, R3) and counts |
 | `Blocks` | wait: a join, a lock, a channel, a sleep, a C function not known to return at once |
 | `WritesGlobals` | store into a global's storage, or through a reference a global holds - itself, or by a callee lent it (`G.Push(x)`) |
 | `CallsC` | call an extern or a C import's function, C's math functions (X8) and the runtime's own aside |
