@@ -38390,5 +38390,10 @@ keptDeep, keptCopy, `mt.Over`). **Found, not fixed:** a copy of an array of run-
 allocates and no fact counts it - before wt-freeing6 nothing did, and its Kept counted it by accident where the copy
 was lent writably; queued.
 
+Also found: oann's nn/quant.olang resident-memory test ("grows by no more than two pages over 400 calls", 8 kB) reads
+16-28 kB under master's code generation against 8 kB under the freeing5-era compiler - the same 16 kB over 4,000 calls
+as over 400, so a one-off growth in the first measured phase (pages first touched), not an allocation per call; the
+facts change no code. Left to the slot-scope work (wt-freeing8) and oann's test tolerance; queued.
+
 Tests: tests/keptfacts.olang (the reduced cases, kept and not, and their runs). oann's `make test` passes with this
-compiler.
+compiler but for that quant check; every `Allocates` assert and `noalloc` promise in it holds.
