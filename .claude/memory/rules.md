@@ -74,6 +74,7 @@ slimming of 2026-11-08").
   restart or a stale lock. `/home/user/wipsnap.sh` (run by wiploop.sh) saves worktrees to `refs/wip/<name>` and pushes
   `backup/<name>` branches every 10 minutes (review notes as `backup/review`); recover with `git fetch origin
   backup/<name>`; delete a backup branch once its work is merged. (why: archive/rules_log.md)
+- **oann beside olang's verify (the user, 2026-11-16: "You can run OANN work at the same time as the verify, as long as they don't collide in terms of memory usage, as they are separate repositories")**: oann agents run while olang's full verify or olang agents run; only memory (and the verify slots) limit it. Benchmarks under load use alternated runs or counters.
 - **Distribute the load**: 4 cores, ~15GB RAM. At most ~2 agents needing a full verify at once (`/home/user/vlock CMD`,
   two slots); fill the rest with light work; agents run targeted tests and one full verify at the end; touches-everything
   changes run alone; look at `pgrep -af "flock /home/user/verify.lock"` and the load before starting; logs inside the
