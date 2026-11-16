@@ -533,6 +533,11 @@ fn waits(cl CommandLine&) Bool {
     return not (cl.Mode == Test and cl.Files.Len() > 1)
 }
 
+# whether the mode only analyzes - builds nothing the user asked for (B15)
+fn analyzes(cl CommandLine&) Bool {
+    return cl.Mode == Lsp or cl.Mode == Mcp or cl.Mode == Explain or cl.Mode == Doc or cl.Mode == Api
+}
+
 fn runWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     d := diag.Diagnostics(diag.ColorWanted())
     c := build.Config()
@@ -544,6 +549,8 @@ fn runWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         return write(text)
     }
     if waits(cl): spin.Begin("running tools" if cl.Mode == Fix else "compiling")
+    # B15: the tools that only analyze write nothing beside the program - their records go to olang's cache
+    if analyzes(cl): c.Dir = build.AnalysisDir(cl.Files[0] if cl.Files.Len() > 0 else "")
     if cl.Mode == Explain and cl.Caps: return session.CapsMode(cl.Files[0], c)
     if cl.Mode == Explain and cl.Listing != "": return listing.Run(fe, c, cl.Files[0], cl.Word, cl.Listing == "-ir", d)
     if cl.Mode == Explain {

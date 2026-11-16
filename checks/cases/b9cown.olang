@@ -1,0 +1,9 @@
+# check: fail error[B9c]: this top-level condition has an error of its own
+# B9c: a top-level condition that does not check for a reason of its own - here a Bool compared with a number - says
+# that, and its own errors after it, never that it uses what only a branch declares
+type E error { X }
+fn f() Bool { return true }
+if f() == 3 {
+    fn g() { }
+}
+fn main() ? E { }
