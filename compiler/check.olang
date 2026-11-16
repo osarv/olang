@@ -13229,13 +13229,22 @@ fn (c mut Checker&) defaultTypes(nsp source.Span, f I64, owner I64, b mut generi
         for j in range b.N { part[j] = b.Vals[j] if b.Vals[j] != types.UnknownT else c.P.T.Var(owner, j, types.ReadOnly) }
         t := c.P.Subst(dt, owner, c.P.T.List(part))
         if t == types.UnknownT or not c.P.T.Closed(t): continue
-        if not c.P.MeetsBound(owner, i, c.P.T.List(b.Vals), t) {
+        # a variable bound before it that fails its own constraint is G19's error, said by bound
+        if not c.P.MeetsBound(owner, i, c.P.T.List(b.Vals), t) and c.boundsMet(owner, b) {
             c.err(nsp, msgs.TypeDefaultUnmet(c.text(c.P.VarAt(owner, i).Name), c.text(c.P.FnDecl(f).Name), c.ty(t)))
             error DefaultUnmet.Said
         }
         b.Vals[i] = t
         c.P.InferThroughBounds(b)
     }
+}
+
+# whether every variable a binding has bound meets its constraint (G19)
+fn (c mut Checker&) boundsMet(owner I64, b generic.Binding&) Bool {
+    for j in range b.N {
+        if b.Vals[j] != types.UnknownT and not c.P.ErrVarAt(owner, j) and not c.P.MeetsBound(owner, j, c.P.T.List(b.Vals), b.Vals[j]) { return false }
+    }
+    return true
 }
 
 # invoke's argument i as written, for inference (G9): a literal binds its parameter as a literal does, a lambda or a

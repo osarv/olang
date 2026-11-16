@@ -2080,8 +2080,8 @@ keeps a copy of the iterator it is made from (`Take`, `Skip`, `Enumerate`, `Zip`
 holds its elements behind its reference to its state, or a function value giving it (`fn&() G`) - has no copy to keep of an
 `any`, whose instance is of a type not known there: calling one through an `any` is a compile-time error at the call,
 naming the instance's own type as where to call it. A default the table holds is instantiated for `T` only where some call
-through an `any` of `R` in the program reaches it: so a type a default does not fit - its constraint (`Sum`'s `T
-Number`) or its body (`Min`'s `<`) - is an instance for every other method, and where a call does reach that default
+through an `any` of `R` in the program reaches it: so a type a default does not fit - its constraint (a `T
+Number` in its list) or its body (`Min`'s `<`) - is an instance for every other method, and where a call does reach that default
 it is a compile-time error at the conversion, with a note at the call. Which defaults some call reaches is a fact
 about the whole program, so a table's functions are defined with the instantiations, in the root's object (B3d): an
 object of another module, reused by a later program that reaches another default (B3i), never holds one of them.

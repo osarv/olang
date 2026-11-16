@@ -39080,3 +39080,11 @@ the call whose type changed (`totalSites`: a variable defaulting to `X.Accumulat
 generic body whose instances differ is listed for a person. It is not in `olang fix`: on code written since, it would
 undo what the code means. oann has no use whose meaning changes: its prelude totals are over `F64`, and its `Tensor`
 and kernel `Sum`s are its own methods.
+
+An effect found by the suite: a default that introduces a variable of its own is no slot of an `any`'s table (T35), so
+`Sum` and `Product`, which now have `A`, are reached through an `any Iterator<T>` as T32c says - instantiated at the
+call - and no longer through the table. checks/cases/t32anydefaultunmet.olang, which used `Sum` as its default whose
+constraint the instance's type fails, now declares a trait and a default of its own (`Twice<S Source<T>, T Number>`)
+to keep testing T32a; SPEC's example there no longer names `Sum`. A default whose own constraint refuses it while a
+variable bound earlier already fails its constraint is left to G19's error for that variable (`boundsMet`), the first
+cause.
