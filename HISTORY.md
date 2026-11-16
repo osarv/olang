@@ -39023,3 +39023,60 @@ vpdpwssd again, so 256 is the block. Measured with the repro rewritten to `Sum<I
 Floats: E39's `Sum` adds in order, and nothing in SPEC lets a widened float sum be reassociated, so `Sum<F32>` over
 BF16 or F16 is the sequential sum of the F32 products. vdpbf16ps (pairs of BF16 products summed into F32 lanes) would
 change the order, so it is not used; it waits for a form whose order is free.
+
+## 2026-11-16: default type arguments and T.Accumulator (G4a, G4b, G32; the user's call; wt-sumnarrow)
+
+The user, after E39's `Sum<A>` landed: "the default T.Accumulator is the type itself, and then we just apply it for the
+default types, and then we use type generic defaults". An `Array<U8>`'s `Sum()` wrapped at 255; a total of small
+integers is almost never meant to wrap, and the fix was to be general - a type parameter's default - not a rule of
+`Sum`'s own. Three pieces:
+
+1. **Default type arguments (G4a).** `type-param ::= IDEN [ type-expr ] [ "=" type-expr ]` in every type-parameter
+   list. Defaults are trailing, as D8b's are for values (an error-set parameter closing the list is no exception). A
+   default is resolved where the list is, over the earlier variables and the receiver's and owner's (names.olang reads
+   it after the receiver's introductions, so `Cumsum<A = T.Accumulator>` on `Array<T>` finds `T`); it is kept per variable
+   in `varRow.Dflt` and substituted per call (`generic.Subst`, the `T.Accumulator` of an unbound `T` being a reflected-type
+   pattern resolved per instance, as `T.Base` already was). The binding order is: written type arguments, the
+   arguments (G9-G9e), the wanted type (G4b), the default. Written arguments may stop before the defaulted ones
+   (`total<U8>(b)`). Generic types were included at the user's word (the coordinator, the same day): `Apply` fills the
+   parameters left off from their defaults, `ArgsFit` and the G7 count take anything from `MinArity` to the full count.
+   A constructor's own list (G10d) takes no default - its variables are inferred from its arguments, so a default
+   there is an error naming the type's own parameter instead (mine). A default the variable's constraint refuses, at a
+   call that left the variable to it, is an error at the call naming the variable and the default and saying to write
+   the type arguments or where the value goes (`TypeDefaultUnmet`).
+2. **The wanted type (G4b).** A variable the arguments leave unbound that is the call's whole result takes the type
+   the call is wanted as - `c.call` records its `want` with the call's span (`callWant`/`callWantAt`), read only by
+   the invoke or lane total of that very span (`wantedAt`), so a receiver's or an argument's own calls never see it.
+   A wanted type the constraint refuses is passed over to the default. For E39's lane `Sum` the wanted type is taken
+   only where it is a plain number (a declared type's own `Sum` stays in its own type); one the elements do not widen
+   to is `Sum<A>`'s narrowing error (`t U8 = i64s.Sum()`), which says what to write.
+3. **`T.Accumulator` (G32; built first as `T.Total`, renamed by the user the same day).** A reflected type, read as `T.Base` is (G38), in `generic.Project`, its one lookup
+   `generic.Accumulator`: `I8`/`I16`/`I32` (and any built-in integer narrower than 64 bits) total as `I64`, the unsigned ones
+   as `U64`, `F16`/`BF16` as `F32`, everything else as itself - `Meters`, `Percent extends U8`, a user's struct. The
+   prelude's F8 formats (`F8E4M3`, `F8E5M2`) are structs with their own `+` and no widening to `F32`, so a sum of them
+   stays in its own type (mine: `Sum<F32>` over them would need a conversion the language does not make implicitly).
+   A type declaring its own Accumulator was decided by the user later the same day (`type Percent.Accumulator = U64`); it is
+   built after this, in the same lookup.
+
+Applied: E39's lane `Sum()` is `Sum<A Number = T.Accumulator>()` (the lanes' type `T`; where `A` is `T` the old loop, else
+`laneSumIn`), the iterator defaults `Sum` and `Product` are `<I Iterator<T ? E>, T Number, A Number = T.Accumulator ? E>() A ?
+E`, and the array's `Cumsum` is `Cumsum<A = T.Accumulator>() Array<A>` (no constraint: a `C64`'s running total is its own).
+No `Mean` or `Dot` exists in the prelude (std/stats' are over F64 already); `Min`/`Max` are no totals.
+
+Explicit type arguments of a method: G12 counted every variable its receiver's type does not name, so the iterator
+`Sum` would have taken `<T, A>` - `it.Sum<I32>()` binding `T`. A variable the constraint of a receiver-named variable
+names is the receiver's too (G9c binds it from the receiver), so `OwnVarIndexes` leaves it out (`recvBinds`): the
+iterator `Sum` takes `A` alone. No written call in the corpus named such a variable.
+
+Lane products of mixed bytes: `(u8s * i8s).Sum()` is still an error (U8 and I8 do not meet, T6b) - the lanes have no
+type for a default to start from - and `.Sum<I32>()` remains the byte dot product, still vpdpbusd (a check in the
+`listing` scenario where the machine has AVX-512 VNNI).
+
+Migration: the corpus relied on wrapping in two places, both tests of the wrapping itself (tests/lanes.olang:
+`Array<U8>[200, 100].Sum()` and an `I8` total), now written `Sum<U8>()` and `Sum<I8>()`. For other code,
+`tools/total_migrate.olang` compiles each file with `OLANG_TOTALS=1`, under which the checker lists each total left to
+the call whose type changed (`totalSites`: a variable defaulting to `X.Accumulator` bound to another type than `X`, or a lane
+`Sum` not worked in its lanes' type) with the old type, and writes it in (`b.Sum()` -> `b.Sum<U8>()`); a site in a
+generic body whose instances differ is listed for a person. It is not in `olang fix`: on code written since, it would
+undo what the code means. oann has no use whose meaning changes: its prelude totals are over `F64`, and its `Tensor`
+and kernel `Sum`s are its own methods.

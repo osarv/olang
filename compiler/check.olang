@@ -265,6 +265,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     laneAccept Bool = false                # E39: the expression checked next may be left as lanes for its taker
     callWant types.TypeId = types.UnknownT  # G4b: the type the call at callWantAt is wanted as, for a variable only its result names
     callWantAt source.Span = source.Span(0, 0)
+    totals Map<String, String>              # OLANG_TOTALS: each total worked in a type other than its values' (totalSite)
     spawning I64 = 0                       # E31b: inside a spawn's task, where no call through x[i] is made in place
     lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
     tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
@@ -733,6 +734,7 @@ fn (c mut Checker&) CheckProgram() {
             c.settleWeak()
             c.P.L.MutStorage = c.mutStorage()
             if (try os.Env("OLANG_HANDLES") catch default "") != "": c.handleReport()
+            if (try os.Env("OLANG_TOTALS") catch default "") != "": c.totalsReport()
             return
         }
         c.P.L.Diags.Forget(mark)
@@ -13141,6 +13143,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     # G4b: a variable only the result names takes the type the call is wanted as; G4a: then its default
     c.resultBinds(sig, owner, b, c.wantedAt(sp))
     try c.defaultTypes(nsp, f, owner, b) catch { return c.unknown(sp) }
+    c.totalSites(nsp, f, owner, b, explicit)
     # QAH: an error-set variable nothing fallible bound is the empty set - its instance cannot fail by it
     for i in range nv {
         if b.Vals[i] == types.UnknownT and c.P.ErrVarAt(owner, i): b.Vals[i] = c.P.ErrSetOf(types.ListId(0))
@@ -22174,11 +22177,14 @@ fn (c mut Checker&) laneTotal(sp source.Span, nsp source.Span, name String&, k I
     n := c.laneNodes[k]
     e := n.Elem
     if e == types.UnknownT: return c.laneSay(sp, k)
-    # Sum<A Number = T.Total> (E39, G4a, G4b): A the number the call is wanted as, else the lanes' total type
+    # Sum<A Number = T.Accumulator> (E39, G4a, G4b): A the number the call is wanted as, else the lanes' total type
     if name == "Sum" {
         a := c.wantedAt(sp)
-        if a == types.UnknownT or c.isRef(a) or c.isNamed(a) or not c.isNumber(a): a = c.P.Total(c.deref(e))
-        if not c.P.T.Same(a, e): return c.laneSumIn(sp, nsp, k, a, nsp)
+        if a == types.UnknownT or c.isRef(a) or c.isNamed(a) or not c.isNumber(a): a = c.P.Accumulator(c.deref(e))
+        if not c.P.T.Same(a, e) {
+            c.totalSite(nsp, c.deref(e))
+            return c.laneSumIn(sp, nsp, k, a, nsp)
+        }
     }
     if (name == "Some" or name == "Every") and e != types.BoolT {
         c.err(nsp, msgs.LaneMaskBool("'" + $name + "()'", c.ty(e)))
@@ -28291,6 +28297,49 @@ fn (c mut Checker&) lentAt(u typed.LocalUses&, i I64) Bool {
         if k == i: return true
     }
     return false
+}
+
+# OLANG_TOTALS (tools/total_migrate.olang): a call whose total, left to the call (G4a, G4b), is worked in a type other
+# than the one named before ".Accumulator" - the variable whose default is "X.Accumulator" bound to another type than X - noted with
+# X, the type it was worked in before totals were. Calls in the prelude, and written type arguments, are not noted
+fn (c mut Checker&) totalSites(nsp source.Span, f I64, owner I64, b generic.Binding&, explicit Array<types.TypeId>&) {
+    if c.P.L.Mods[c.fr().Mi].Prelude or (try os.Env("OLANG_TOTALS") catch default "") == "": return
+    tps := c.P.FnDecl(f).TypeParams
+    for tp in tps {
+        if tp.Dflt == null: continue
+        match tp.Dflt! {
+            case ast.TypeRef.Named(_, path, _) if path.Len() == 2 and c.text(path[1]) == "Accumulator" {
+                i, j := c.varIndex(owner, tp.Name), c.varIndex(owner, path[0])
+                if i < 0 or j < 0 or i < explicit.Len() and explicit[i] != types.UnknownT: continue
+                if not c.P.T.Same(b.Vals[i], b.Vals[j]): c.totalSite(nsp, b.Vals[j])
+            }
+            case _ { }
+        }
+    }
+}
+
+# the index of owner's variable named n; -1 for none
+fn (c mut Checker&) varIndex(owner I64, n source.NameId) I64 {
+    for i in range c.P.VarCount(owner) {
+        if c.P.VarAt(owner, i).Name == n: return i
+    }
+    return -1
+}
+
+# a total at nsp worked, before totals were, in t (totalSites); a site two instances note differently is noted "?"
+fn (c mut Checker&) totalSite(nsp source.Span, t types.TypeId) {
+    mi := c.fr().Mi
+    if c.P.L.Mods[mi].Prelude or (try os.Env("OLANG_TOTALS") catch default "") == "": return
+    at := c.P.L.Diags.Locate(c.fr().File, I64(nsp.Start))
+    c.spellMod = mi
+    ty := c.ty(t)
+    c.spellMod = -1
+    was := try c.totals.Get(at) catch default ty
+    c.totals.Put(at, ty if was == ty else "?")
+}
+
+fn (c mut Checker&) totalsReport() {
+    for e in c.totals: try io.PutErrLn("totals: " + $e.Key + ": " + $e.Value) catch io.Error { }
 }
 
 fn (c mut Checker&) handleLine(b typed.Body&, l typed.Local&, mi I64, kind String&, root String&) {

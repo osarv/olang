@@ -655,9 +655,9 @@ fn (a Array<T>&) Argsort() Array<I64> {
     return order
 }
 
-# the running totals, in A - T.Total unless the call says another (G4a, G4b): element i the sum of a[0] through a[i]
+# the running totals, in A - T.Accumulator unless the call says another (G4a, G4b): element i the sum of a[0] through a[i]
 # (numpy's cumsum)
-fn (a Array<T>&) Cumsum<A = T.Total>() Array<A> {
+fn (a Array<T>&) Cumsum<A = T.Accumulator>() Array<A> {
     if a.Len() == 0: return Array<A>(0)
     first A = a[0]
     out := Array<A>(a.Len(), first)

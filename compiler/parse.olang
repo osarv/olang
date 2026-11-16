@@ -2608,7 +2608,7 @@ fn (p mut Parser&) matchBody(value Bool) ast.Match& ? Fail {
         steps := 0
         for ok and p.ts.Toks[i].Kind == token.Tok.Dot and p.ts.Toks[i + 1].Kind == token.Tok.Iden {
             w := p.text(p.ts.Toks[i + 1])
-            if w != "Type" and w != "Base" and w != "Element" and w != "Target" and w != "Total": ok = false
+            if w != "Type" and w != "Base" and w != "Element" and w != "Target" and w != "Accumulator": ok = false
             i += 2
             steps++
         }

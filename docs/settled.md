@@ -346,7 +346,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   compiling or once per operation. `x op= v` is in place. Not for text; `a < b` on arrays is an error naming
   `LanesLess`. `Sum<A>` (the user's call, 2026-11-16) computes every lane in `A`, the operands widened first, and adds
   in `A`: `(x * w).Sum<I32>()` is the byte dot product (vpdpbusd), `(a * b).Sum<F32>()` over BF16/F16; `A` must be a
-  number every element type widens to. An integer total in any order; a float one in order (no vdpbf16ps).
+  number every element type widens to. An integer total in any order; a float one in order (no vdpbf16ps). `Sum()`
+  is `Sum<A Number = T.Accumulator>()` (G4a, G4b, the user's call 2026-11-16): the type the call is wanted as, else
+  `T.Accumulator` - an `Array<U8>` sums to a `U64`, an `Array<I32>` to an `I64`; wrapping in the elements' type is
+  `Sum<U8>()`.
 - **Equality (E10, E10a, E10b, the user's decision 2026-10-24).** `==` compares what is stored, never following a
   reference: values structurally, a reference by identity - unless its type declares `Eq`, which `==` calls at every
   depth. The prelude declares `Eq`/`Hash` by contents on arrays, `String`, `List`, `Map`, `Vec`. A type declaring `Eq`
@@ -602,6 +605,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   2026-10-31).** What a body asks of a type variable's binding (a method, operator, index, slice, walk, membership,
   field) is its need; no constraint is required, and a call whose type lacks one is an error at the program's own
   call (`Max needs Less ('<'), and Point has none`), with a note where the body asks.
+- **Default type arguments (G4a, G4b, the user's call 2026-11-16: "the default T.Accumulator is the type itself, and then we
+  just apply it for the default types, and then we use type generic defaults").** A function's, method's, builder's or
+  generic type's type parameter may declare `= Type`, trailing (as D8b's values), naming earlier parameters and their
+  reflected types (`<A Number = T.Accumulator>`). A variable is bound by the written arguments, then the arguments, then the
+  type the call is wanted as (only a variable that is the whole result: `t U64 = x.Sum()`, `f(x.Sum())`), then the
+  default; written arguments may stop before the defaulted ones, and a type written short takes the defaults
+  (`Box<U8>`). A default its constraint refuses is an error at the call. A constructor's own list takes none. The
+  prelude's `Sum`, `Product` (iterators) and `Cumsum` (arrays) and E39's lane `Sum` take `<A = T.Accumulator>`; a variable a
+  receiver-named variable's constraint names is the receiver's (G12), so `it.Sum<I32>()` writes `A` alone.
+  `tools/total_migrate.olang` (not in `olang fix`) gives code written before its old types, from `OLANG_TOTALS=1`.
 - **Inference (G9a-G9d).** Literals adapt after other arguments bind; text binds `String`; `null` takes no part; a
   value of a destructor type binds the reference; reference arguments of differing permission meet read-only.
 - **Constructors infer type arguments (G10c)** and a plain type's constructor may introduce variables its fields do
@@ -627,7 +640,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   walk's end), holders' and by-value parameters' destructors - where its storage is let go; one never started ends
   its by-value parameters (C11). Python's `close()` running a `finally`.
 - **Compile-time reflection (G32-G38, G13, docs/ideas.md #2, the user's decisions 2026-10-18).** A type's structure
-  read through its name while compiling: `T.Name`, `T.Kind`, `T.Base`, `T.Element`, `T.Length`, `T.Target`,
+  read through its name while compiling: `T.Name`, `T.Kind`, `T.Base`, `T.Element`, `T.Length`, `T.Target`, `T.Accumulator`
+  (G32: the type a total is worked in - itself by default, `I8`/`I16`/`I32` `I64`, `U8`/`U16`/`U32` `U64`,
+  `F16`/`BF16` `F32`; one lookup, `generic.Accumulator`),
   `T.Nullable`, `T.Size`, `T.Align`, and the lists `T.Fields`, `T.Cases`, `T.Params`, `T.Results`, `T.Errors`. A list
   is no value: a `for` over it is unrolled, `.Len()` and a constant index are constants. Elements are descriptors
   (`f.Name`, `f.Type`, `f.Offset`, `f.Of(v)`, `c(args)`). Conditions over reflected constants decide `if`s, asserts

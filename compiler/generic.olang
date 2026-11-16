@@ -5487,7 +5487,7 @@ fn (p mut Program&) Project(t types.TypeId, name String&) types.TypeId, String {
         if p.T.KindOf(t) == types.Kind.Named and p.Body(t) and p.T.DeclKindOf(p.T.DeclOf(t)) == types.DeclKind.Over { return p.T.Base(t), "" }
         return t, ""
     }
-    if name == "Total": return p.Total(t), ""
+    if name == "Accumulator": return p.Accumulator(t), ""
     if name == "Element" {
         r := p.ReflUnder(t)
         if p.T.KindOf(r) == types.Kind.Array: return p.T.Elem(r), ""
@@ -5504,12 +5504,12 @@ fn (p mut Program&) Project(t types.TypeId, name String&) types.TypeId, String {
         if fd.K == DescFunc: return p.ErrSetOf(p.T.Errors(fd.Of)), ""
         return types.UnknownT, "only a function type has Errors"
     }
-    return types.UnknownT, "a type's reflected types are Base, Element, Target and Total, a field's, a parameter's and a result's Type"
+    return types.UnknownT, "a type's reflected types are Base, Element, Target and Accumulator, a field's, a parameter's and a result's Type"
 }
 
-# T.Total (G32): the type a total of T's values is worked in - the type itself, but for a built-in integer narrower
+# T.Accumulator (G32): the type a total of T's values is worked in - the type itself, but for a built-in integer narrower
 # than 64 bits (I64, or U64 where it is unsigned) and F16 and BF16 (F32). The one place it is looked up
-fn (p mut Program&) Total(t types.TypeId) types.TypeId {
+fn (p mut Program&) Accumulator(t types.TypeId) types.TypeId {
     if p.T.KindOf(t) == types.Kind.Named: return t
     if p.T.IsInt(t) and p.T.Bits(t) < 64: return p.T.Prim("U64") if p.T.IsUnsigned(t) else p.T.Prim("I64")
     if t == p.T.Prim("F16") or t == p.T.Prim("BF16"): return p.T.Prim("F32")
@@ -5517,7 +5517,7 @@ fn (p mut Program&) Total(t types.TypeId) types.TypeId {
 }
 
 # whether a reflected member's name is one Project reads
-fn ProjectsType(name String&) Bool { return name == "Type" or name == "Base" or name == "Element" or name == "Target" or name == "Total" }
+fn ProjectsType(name String&) Bool { return name == "Type" or name == "Base" or name == "Element" or name == "Target" or name == "Accumulator" }
 
 # what a path's first name stands for as a type to project from (G38): a type variable bound to a type, or a name a
 # body holds a descriptor in; -1 for neither

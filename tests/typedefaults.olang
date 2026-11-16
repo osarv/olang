@@ -1,24 +1,24 @@
 # G4a, G4b, G32: default type arguments - a variable's default bound where nothing else binds it, the type a call is
-# wanted as before it, written arguments before both - and T.Total, the type a total is worked in. Each test holds the
+# wanted as before it, written arguments before both - and T.Accumulator, the type a total is worked in. Each test holds the
 # run time to what the compile-time evaluator bakes (K2) and decides (S18c)
 
 type Meters extends F64
 type Percent extends U8
 
 # a default naming an earlier variable's reflected type
-fn total<T Number, A Number = T.Total>(xs Array<T>&) A {
+fn total<T Number, A Number = T.Accumulator>(xs Array<T>&) A {
     s A = 0
     for x in xs: s += x
     return s
 }
 
-fn widest<T, A = T.Total>(x T) A { return x }
+fn widest<T, A = T.Accumulator>(x T) A { return x }
 
 fn asF64(x F64) F64 { return x }
 fn asU32(x U32) U32 { return x }
 
 # a generic type's default, read where the type is written
-type Acc<T Number, A Number = T.Total> struct(v T) {
+type Acc<T Number, A Number = T.Accumulator> struct(v T) {
     V T = v
     S A = v
 }
@@ -47,17 +47,17 @@ fn defaults() Bool {
 }
 
 fn totals() Bool {
-    i8 I8.Total = 0
-    u16 U16.Total = 0
-    i32 I32.Total = 0
-    h F16.Total = 0.0
-    bf BF16.Total = 0.0
-    f F64.Total = 0.0
-    m Meters.Total = Meters(1.0)
-    p Percent.Total = Percent(3)
-    return I8.Total.Name == "I64" and U16.Total.Name == "U64" and U32.Total.Name == "U64" and I32.Total.Name == "I64" and
-        F16.Total.Name == "F32" and BF16.Total.Name == "F32" and F32.Total.Name == "F32" and F64.Total.Name == "F64" and
-        I64.Total.Name == "I64" and U64.Total.Name == "U64" and Meters.Total.Name == "Meters" and Percent.Total.Name == "Percent" and
+    i8 I8.Accumulator = 0
+    u16 U16.Accumulator = 0
+    i32 I32.Accumulator = 0
+    h F16.Accumulator = 0.0
+    bf BF16.Accumulator = 0.0
+    f F64.Accumulator = 0.0
+    m Meters.Accumulator = Meters(1.0)
+    p Percent.Accumulator = Percent(3)
+    return I8.Accumulator.Name == "I64" and U16.Accumulator.Name == "U64" and U32.Accumulator.Name == "U64" and I32.Accumulator.Name == "I64" and
+        F16.Accumulator.Name == "F32" and BF16.Accumulator.Name == "F32" and F32.Accumulator.Name == "F32" and F64.Accumulator.Name == "F64" and
+        I64.Accumulator.Name == "I64" and U64.Accumulator.Name == "U64" and Meters.Accumulator.Name == "Meters" and Percent.Accumulator.Name == "Percent" and
         i8 + i32 == 0 and u16 == 0 and h + bf == 0.0 and f == 0.0 and m == Meters(1.0) and p == Percent(3)
 }
 
@@ -71,7 +71,7 @@ test "G4a, G4b: a default type argument where nothing else gives one, the wanted
     assert DefaultsBaked
 }
 
-test "G32: T.Total - the narrow built-in numbers total wider, every other type as itself" {
+test "G32: T.Accumulator - the narrow built-in numbers total wider, every other type as itself" {
     assert Run and totals()
     assert totals() # S18c: decided while compiling
     assert TotalsBaked

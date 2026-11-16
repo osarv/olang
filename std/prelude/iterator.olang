@@ -324,10 +324,10 @@ fn (it mut I&) Chain<I Iterator<T ? E>, T, J Iterator<T ? E> ? E>(other J) Chain
     return ChainIter<I, J, T ? E>(it, other)
 }
 
-# every value added up in A, from 0 - T.Total unless the call says another (G4a, G4b), so a narrow integer's sum is
+# every value added up in A, from 0 - T.Accumulator unless the call says another (G4a, G4b), so a narrow integer's sum is
 # worked in a 64-bit one; in A, "+" wraps as it does for integers (E6c); a sum of none is 0. Through Fold, so an
 # adapter that folds faster than its Next walks (Take's, Skip's) sums as fast
-fn (it mut I&) Sum<I Iterator<T ? E>, T Number, A Number = T.Total ? E>() A ? E {
+fn (it mut I&) Sum<I Iterator<T ? E>, T Number, A Number = T.Accumulator ? E>() A ? E {
     return try it.Fold(A(0), fn(acc A, x T) A { return acc + x })
 }
 
@@ -601,9 +601,9 @@ fn (it mut I&) Unzip<I Iterator<Zipped<A, B> ? E>, A, B ? E>() Vec<A>&, Vec<B>& 
     return firsts, seconds
 }
 
-# every value multiplied together in A, from 1 - T.Total unless the call says another (G4a, G4b); in A, "*" wraps as
+# every value multiplied together in A, from 1 - T.Accumulator unless the call says another (G4a, G4b); in A, "*" wraps as
 # it does for integers (E6c); a product of none is 1
-fn (it mut I&) Product<I Iterator<T ? E>, T Number, A Number = T.Total ? E>() A ? E {
+fn (it mut I&) Product<I Iterator<T ? E>, T Number, A Number = T.Accumulator ? E>() A ? E {
     acc A = 1
     for x in try it: acc = acc * x
     return acc
