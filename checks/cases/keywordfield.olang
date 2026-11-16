@@ -6,7 +6,7 @@ type Record struct(n I64) {
     returns I64 = n * 2
     keeps := n + 1
     pure Bool = true
-    any_ I64 = n
+    any I64 = n
 }
 
 fn (r Record&) borrows() I64 { return r.returns + r.keeps }

@@ -65,7 +65,7 @@ fn renamed(text String&, i I64, j I64) Bool {
     ls := lineStart(text, i)
     before := text[ls:i]
     if methodNamePlace(before): return false
-    if w == "any" or w == "weak": return not anyPlace(text, j)
+    if w == "any" or w == "weak": return not anyPlace(text, j) and not fieldAt(text, w, before)
     if w in DeclWords: return not declPlace(before)
     if w == "commutes": return not commutesPlace(text, before, j)
     if fnTypeBefore(before) or promisePlace(text, before, j): return false
@@ -200,6 +200,8 @@ test migrate "promise words after a function type stay; a field read after a dot
     fnt := "onClick fn&(e Event&) noalloc noblock pure\n"
     assert migrate(fnt) == fnt
     assert migrate("type H fn(a mut N&, b N&) keeps b in a\n") == "type H fn(a mut N&, b N&) keeps b in a\n"
+    anyField := "type R struct(n I64) {\n    any I64 = n\n}\nfn f(r R&) I64 { return r.any }\n"
+    assert migrate(anyField) == anyField
     field := "type S struct {\n    returns Vec<I64>\n}\nfn f(s S&) I64 { return s.returns.Len() }\n"
     assert migrate(field) == field
     assert migrate("    returns := 1\n") == "    returns_ := 1\n"
