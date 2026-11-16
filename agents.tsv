@@ -168,7 +168,7 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	oneline2	sonnet	low	completed	110	22	45	yes		13007 blocks; catch NAME e: rejected (parser bug)
 2026-11-16	predverify	opus	medium	completed	159	77	14	yes		catch e: parse; target scenario; race fixture overlap
 2026-11-16	agentdyn	opus	medium	completed	329	116	39			round 1: modules on dyn, bandit paired match
-2026-11-16	verifyfix	opus	medium	running
+2026-11-16	verifyfix	opus	medium	completed	301	167	222	yes		explain expectation, mir Holds, race via 4096 counters
 2026-11-16	agentdyn2	opus	medium	completed	154	41	26	yes		all examples match; legacy removed; consolidator 33-40% slower on ad/graph
 2026-11-16	adperf	opus	medium	completed	293	146	47	yes		ad/graph small 2.5x; silent empty Value sent back; ThinLTO gap found
 2026-11-16	rangeargs	opus	low	completed	108	38	6	yes		S9b fourth arg refused
