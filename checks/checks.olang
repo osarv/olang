@@ -1644,6 +1644,8 @@ fn scanln(r mut report&) ? Failed {
         """
     try os.WriteFile($dir + "/big.olang", big) catch os.Error { try r.failed("big.olang", dir) }
     try r.expect(sh(dir, "\"$OLANG\" build big.olang > out.txt 2>&1 && seq 1 300000 | ./build/big > out.txt 2>&1") == 0 and outOf(dir) == "45000150000\n", "scan of a large input", dir)
+}
+
 # B4a, B10, B10c (the user's calls): options before the file, everything after it the program's; an olang option after
 # the file an error; -define one word, a bare name true
 test "options go before the file, -define is one word" { assert passed("cmdline") }
