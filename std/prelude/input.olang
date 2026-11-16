@@ -1,0 +1,196 @@
+# reading standard input with nothing to import, part of the prelude and the opposite of printing (M19d): "Scanln(prompt)"
+# writes the prompt, if any, with no newline, and gives the next line without its line end; "Scan<T>(prompt)" - the prompt optional too - gives the next
+# whitespace-separated word parsed as a T, as io.Reader's Next<T> does. At the end of the input both fail with Exhausted.
+# A read the system refuses ends the program like a failed Print does (E35), at the caller's place; a program that
+# handles it reads through std/io.
+# They read through one buffer, the one the input of descriptor 0 goes through: io.Reader(io.Stdin) and
+# io.Lines(io.Stdin) use it too, so a program mixing Scan, Scanln and those sees every byte once, in order. The buffer
+# starts at 4 KiB, doubling while reads fill it up to 64 KiB, so piped input costs a call per 64 KiB.
+
+import unistd "unistd.h"
+
+# what a read of the input fails with: the system refused it
+type InputError error {
+    Failed
+}
+
+# the buffer under Scanln, Scan, io.Reader and io.Lines: what has been read from "fd" and not yet taken, in
+# buf[start:end]. The buffer starts at "size" bytes (one at least) and doubles whenever what is waiting fills it; an
+# "adapt" buffer also doubles, up to 64 KiB, whenever a read fills all the room it had, so an idle reader holds its
+# 4 KiB and a large file is read in 64 KiB pieces after a few refills.
+type InputBuffer struct(fd I32, size I64, adapt Bool = false) {
+    fd
+    adapt
+    buf := Array<U8>(size if size > 0 else 1)
+    start I64 = 0
+    end I64 = 0
+}
+
+# the buffer of standard input, shared by everything that reads it, reached through the Stdin functions below
+stdinBuffer mut InputBuffer = InputBuffer(0, 4096, true)
+
+# more read after what waits, the waiting bytes moved to the front first and the buffer doubled if they fill it; fails
+# with Exhausted at the end of the input - as it is now, so calling again reads again - and with InputError.Failed
+fn (s mut InputBuffer&) Fill() ? InputError, Exhausted {
+    waiting := s.end - s.start
+    if s.start > 0 {
+        for k in range waiting: s.buf[k] = s.buf[s.start + k]
+        s.start = 0
+        s.end = waiting
+    }
+    if s.end == s.buf.Len() {
+        old := s.buf
+        s.buf = String(Array<U8>(old.Len() * 2))
+        for k in range s.end: s.buf[k] = old[k]
+    }
+    got := unistd.read(s.fd, s.buf[s.end:], U64(s.buf.Len() - s.end))
+    if got < 0: error InputError.Failed
+    if got == 0: error Exhausted.End
+    s.end += got
+    if s.adapt and s.end == s.buf.Len() and s.buf.Len() < 65536 {
+        old := s.buf
+        s.buf = String(Array<U8>(old.Len() * 2))
+        for k in range s.end: s.buf[k] = old[k]
+    }
+}
+
+# whether what was read holds more, not yet taken
+fn (s InputBuffer&) Buffered() Bool { return s.end > s.start }
+
+# the next line, a carriage return before its line end dropped; the last line needs no line end
+fn (s mut InputBuffer&) Line() String& ? InputError, Exhausted {
+    from I64 = 0 # buf[start:start + from] holds no newline
+    for {
+        for i in range s.start + from, s.end {
+            if s.buf[i] == '\n' {
+                first := s.start
+                s.start = i + 1
+                return s.Text(first, i - (1 if i > first and s.buf[i - 1] == '\r' else 0))
+            }
+        }
+        from = s.end - s.start
+        try s.Fill() catch Exhausted { # the end of the input, as it is now: what is left is its last line
+            if s.start == s.end: error Exhausted.End
+            first := s.start
+            s.start = s.end
+            return s.Text(first, s.end - (1 if s.buf[s.end - 1] == '\r' else 0))
+        }
+    }
+    unreachable
+}
+
+# the next run of bytes that are not whitespace, whitespace before it skipped; the whitespace after it is left
+fn (s mut InputBuffer&) Word() String& ? InputError, Exhausted {
+    for {
+        for s.start < s.end and Char(s.buf[s.start]).IsSpace(): s.start++
+        if s.start < s.end: break
+        try s.Fill()
+    }
+    from I64 = 0 # buf[start:start + from] holds no whitespace
+    for {
+        for i in range s.start + from, s.end {
+            if not Char(s.buf[i]).IsSpace(): continue
+            first := s.start
+            s.start = i
+            return s.Text(first, i)
+        }
+        from = s.end - s.start
+        try s.Fill() catch Exhausted {
+            first := s.start
+            s.start = s.end
+            return s.Text(first, s.end)
+        }
+    }
+    unreachable
+}
+
+# exactly n bytes; if the input ends first, Exhausted, the bytes read before it dropped
+fn (s mut InputBuffer&) Bytes(n I64) Array<U8>& ? InputError, Exhausted {
+    out := Array<U8>(n if n > 0 else 0)
+    got I64 = 0
+    for got < out.Len() {
+        if s.start == s.end: try s.Fill()
+        take := (s.end - s.start).Min(out.Len() - got)
+        for k in range take: out[got + k] = s.buf[s.start + k]
+        s.start += take
+        got += take
+    }
+    return out
+}
+
+# everything left, to the end of the input
+fn (s mut InputBuffer&) All() String& ? InputError {
+    for { try s.Fill() catch Exhausted { break } }
+    first := s.start
+    s.start = s.end
+    return s.Text(first, s.end)
+}
+
+# where the complete UTF-8 characters waiting end: end, or the start of a character whose last bytes have not come yet
+fn (s InputBuffer&) completeEnd() I64 {
+    i := s.end - 1
+    for i > s.start and s.end - i < 4 and (I64(s.buf[i]) & 0xC0) == 0x80: i--
+    lead := I64(s.buf[i])
+    need I64 = 1
+    if (lead & 0xE0) == 0xC0: need = 2
+    if (lead & 0xF0) == 0xE0: need = 3
+    if (lead & 0xF8) == 0xF0: need = 4
+    return i if s.end - i < need else s.end
+}
+
+# everything waiting, without reading; with nothing waiting, what one read brings (it blocks until a byte comes). The
+# bytes of a character that has not come whole stay for the next call, so no character is split - unless the input ends
+# in them, then they are given as they are
+fn (s mut InputBuffer&) Available() String& ? InputError, Exhausted {
+    for {
+        if s.start == s.end: try s.Fill()
+        cut := s.completeEnd()
+        if cut > s.start {
+            first := s.start
+            s.start = cut
+            return s.Text(first, cut)
+        }
+        try s.Fill() catch Exhausted {
+            first := s.start
+            s.start = s.end
+            return s.Text(first, s.end)
+        }
+    }
+    unreachable
+}
+
+# buf[first:last] as new text
+fn (s InputBuffer&) Text(first I64, last I64) String& {
+    t := Array<U8>(last - first)
+    for k in range last - first: t[k] = s.buf[first + k]
+    return String(t)
+}
+
+# the prompt, if any, then the next line of standard input without its line end. Fails with Exhausted at the end of the input
+fn Scanln(prompt String& = "", at Place = Place.Here) String& ? Exhausted {
+    if prompt.Len() > 0: Print(prompt, at)
+    return try StdinLine() catch InputError {
+        assert false, $at + ": the read of standard input failed"
+        unreachable
+    }
+}
+
+# the prompt, if any, as Scanln writes it, then the next whitespace-separated word of standard input, line ends included, as a T as io.Reader's Next<T> parses it.
+# Fails with Exhausted at the end of the input and ParseError on a word that is no T, the word taken all the same
+fn Scan<T>(prompt String& = "", at Place = Place.Here) T ? Exhausted, ParseError {
+    if prompt.Len() > 0: Print(prompt, at)
+    w := try StdinWord() catch InputError {
+        assert false, $at + ": the read of standard input failed"
+        unreachable
+    }
+    return try T.Parse(w)
+}
+
+# the shared buffer of standard input read as io.Reader and io.Lines read their own: the next line, the next word,
+# exactly n bytes, everything left, and whether more waits unread
+fn StdinLine() String& ? InputError, Exhausted { return try stdinBuffer.Line() }
+fn StdinWord() String& ? InputError, Exhausted { return try stdinBuffer.Word() }
+fn StdinBytes(n I64) Array<U8>& ? InputError, Exhausted { return try stdinBuffer.Bytes(n) }
+fn StdinAvailable() String& ? InputError, Exhausted { return try stdinBuffer.Available() }
+fn StdinAll() String& ? InputError { return try stdinBuffer.All() }
+fn StdinBuffered() Bool { return stdinBuffer.Buffered() }

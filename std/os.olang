@@ -1,7 +1,7 @@
 # Os - the program's command line and environment, running programs (Run through a shell, Exec without one), and files
 # and directories. Ordinary olang over the C library's headers imported (§11 X17), like std/io, and the runtime's
 # functions (X6) where C would hand back a pointer, a structure or errno. A path is
-# text; the C library wants it NUL-terminated, so each call here passes "$path "\0"".
+# text; the C library wants it NUL-terminated, so each call here passes $path + "\0".
 
 import "io"
 import "cancel"
@@ -676,7 +676,7 @@ test "io.Lines follows a file another descriptor is still writing" {
     assert w >= 0
     try io.Write(w, "first\n")
     r := try Open("build/os_files/follow") catch default -1
-    lines := io.Lines(r, 4)
+    lines := io.Lines(r)
     assert (try lines.Next() catch default "?") == "first"
     assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"
     assert (try lines.Next() catch Exhausted default "end" catch default "?") == "end"

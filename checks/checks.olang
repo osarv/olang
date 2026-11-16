@@ -41,7 +41,7 @@ fn workers() I64 {
 # a failure, never skipped.
 Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "bench", "benchrun", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
                      "scopesan", "frameenv", "crash", "interp", "interpbuilt", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
-                     "chunkpool", "capscope", "reuse", "reusefact", "incremental", "records", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
+                     "chunkpool", "capscope", "reuse", "reusefact", "incremental", "records", "updir", "stale", "osargs", "scanln", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
@@ -446,6 +446,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "jupyter" { try jupyter(r) }
         case "notebook" { try notebook(r) }
         case "osargs" { try osargs(r) }
+        case "scanln" { try scanln(r) }
         case "osexit" { try osexit(r) }
         case "assertloc" { try assertloc(r) }
         case "testfuzz" { try testfuzz(r) }
@@ -1589,6 +1590,57 @@ fn osargs(r mut report&) ? Failed {
     try r.expect(sh(dir, "rm -rf work && ./build/osargs > out.txt 2>&1") == 0, "osargs with no arguments", dir)
     try r.expect(outOf(dir).Contains("0 arguments, 0 seen by a global\nvalue: unset\n")
                  "osargs output with no arguments", dir)
+}
+
+# Scanln and Scan (M19d, the user's call: the opposite of Println) read standard input through the one buffer io.Reader and
+# io.Lines of descriptor 0 read through, so a program mixing them sees every byte once, in order - built and interpreted
+test "Scanln and Scan share standard input with io.Reader and io.Lines" { assert passed("scanln") }
+
+fn scanln(r mut report&) ? Failed {
+    dir := fresh("scanln")
+    prog := """
+        import "std/io"
+
+        fn show(t String&) { Println("[" + t + "]") }
+
+        fn main() ? io.Error {
+            show(try Scanln("name? ") catch default "-")
+            show(try Scanln() catch default "-")
+            n := try Scan<I64>() catch default -1
+            Println(n * 2)
+            rd := io.Reader(io.Stdin)
+            show(try rd.Line() catch default "-")
+            Println(try rd.Next<I64>() catch default -1)
+            Println(try Scan<I64>("age? ") catch default -1)
+            show(try Scanln() catch default "-")
+            lines := io.Lines(io.Stdin)
+            show(try lines.Next() catch default "-")
+            show(try Scanln() catch default "-")
+            show(try lines.Next() catch default "-")
+            show(try Scanln() catch default "-")
+            Println(try Scan<I64>() catch ParseError default -2 catch Exhausted default -3)
+            Println(try Scan<I64>() catch ParseError default -2 catch Exhausted default -3)
+            Println(try Scan<I64>() catch ParseError default -2 catch Exhausted default -3)
+            show(try Scanln() catch Exhausted default "end")
+            show(try rd.Line() catch Exhausted default "end")
+        }
+        """
+    try os.WriteFile($dir + "/prog.olang", prog) catch os.Error { try r.failed("prog.olang", dir) }
+    want := "name? [ann]\n[bob]\n42\n[ rest]\n7\nage? 8\n[]\n[]\n[x y]\n[from lines]\n[last]\n-2\n5\n-3\n[end]\n[end]\n"
+    feed := "printf 'ann\\r\\nbob\\n21 rest\\n7 8\\n\\nx y\\nfrom lines\\nlast\\nzz 5' | "
+    try r.expect(sh(dir, "\"$OLANG\" build prog.olang > out.txt 2>&1") == 0, "scanln build", dir)
+    try r.expect(sh(dir, feed + "./build/prog > out.txt 2>&1") == 0 and outOf(dir) == want, "scanln built", dir)
+    try r.expect(sh(dir, feed + "env OLANG_EVALUATE=1 \"$OLANG\" prog.olang > out.txt 2>&1") == 0 and outOf(dir) == want, "scanln interpreted", dir)
+    # a large piped input is read in 64 KiB pieces and summed whole
+    big := """
+        fn main() {
+            total I64 = 0
+            for { total += try Scan<I64>() catch Exhausted { break } catch default 0 }
+            Println(total)
+        }
+        """
+    try os.WriteFile($dir + "/big.olang", big) catch os.Error { try r.failed("big.olang", dir) }
+    try r.expect(sh(dir, "\"$OLANG\" build big.olang > out.txt 2>&1 && seq 1 300000 | ./build/big > out.txt 2>&1") == 0 and outOf(dir) == "45000150000\n", "scan of a large input", dir)
 }
 
 # B5b: os.Exit ends the process with the status it is given, built and interpreted alike, after what was written

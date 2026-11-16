@@ -115,7 +115,7 @@ stays in.
   `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,
   `axis` (`Axis`, one item of a subscript by axes, `m[0:2, :]`, `m[..., 1]`, handed to a type's `Slice`, E16f),
   `argument` (`ArgumentError`, what a function's check raises where a requirement is false, D17), `enums`
-  (`CaseError`, what an enum's `From` and an `as` of another case fail with, T17e, E32), `print` (`Print(x)` and
+  (`CaseError`, what an enum's `From` and an `as` of another case fail with, T17e, E32), `input` (`Scanln` and `Scan`, the buffer under them and `io.Reader` of descriptor 0), `print` (`Print(x)` and
   `Println(x)`, the two functions reached bare, writing `$x` and ending the program where a write fails, M19d), `display`
   (`Display`, a value's rich rendering - HTML, Markdown, LaTeX, SVG, PNG - and `Displayable`, met by a type declaring
   `Display()`, which the Jupyter kernel shows, B23). Only the prelude may give methods to built-in types (M19d).
