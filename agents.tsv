@@ -208,4 +208,5 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	sumtotal	opus	medium	running						default type args + expected-type pick + T.Total
 2026-11-16	attrsurvey	sonnet	low	done						read-only: can attributes be dropped
 2026-11-16	oannprune2	opus	medium	done						XOR skip bug, cubic prune schedule, Tiles/LowRank prune, compaction, MNIST prune
-2026-11-16	oannmnist	sonnet	medium	running						fetch MNIST+shakespeare, measure, prune mnist_learn
+2026-11-16	oannmnist	sonnet	medium	done						fetch MNIST+shakespeare, measure, prune mnist_learn
+2026-11-16	oannvnni	opus	medium	running						packed INT8 GEMM via vpdpbusd (k-quad packing)
