@@ -4774,8 +4774,7 @@ fn (fe mut fnEm&) directText(into mir.ScopeRef) String {
         }
         total = $ns[i] if i == 0 else fe.let("add i64 " + $total + ", " + $ns[i])
     }
-    fe.E.runtime("__olang_scope_alloc")
-    out := fe.let("call ptr @__olang_scope_alloc(ptr " + $fe.scope(into) + ", i64 " + $total + ")")
+    out := fe.textStorage(into, total)
     at := out
     for i in range k {
         match fe.pieceKinds[i] {
@@ -4944,12 +4943,7 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         }
         case mir.Rvalue.Slots(s) {
             # a slot scope building into s (as a copy's arrays are made, slotCopy): its allocations slots of s's lists
-            ss := fe.alloca("%olang.slotscope")
-            fe.w("store %olang.slotscope zeroinitializer, ptr " + $ss)
-            fe.w("store ptr @__olang_slot_chunk, ptr " + $ss)
-            fe.w("store ptr " + $fe.scope(s) + ", ptr " + $fe.let("getelementptr %olang.scope, ptr " + $ss + ", i32 0, i32 2"))
-            fe.E.runtime("__olang_slot_chunk")
-            return fe.let("ptrtoint ptr " + $ss + " to i64")
+            return fe.let("ptrtoint ptr " + $fe.slotScope(fe.scope(s)) + " to i64")
         }
         case mir.Rvalue.RegionOr(x, s) {
             fe.E.runtime("__olang_region_or")
@@ -4992,14 +4986,33 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
     }
 }
 
+# a slot scope building into the scope whose header is sc (runtime.ll's %olang.slotscope): its scope header cleared but
+# for its head, @__olang_slot_chunk, and its tail, sc, and no allocation recorded - the records past the count are
+# never read, so left as they are (round 8: a copy of text made one per copy, no longer 128 bytes cleared each)
+fn (fe mut fnEm&) slotScope(sc String&) String {
+    fe.E.runtime("__olang_slot_chunk")
+    ss := fe.alloca("%olang.slotscope")
+    fe.w("store %olang.scope zeroinitializer, ptr " + $ss)
+    fe.w("store ptr @__olang_slot_chunk, ptr " + $ss)
+    fe.w("store ptr " + $sc + ", ptr " + $fe.let("getelementptr %olang.scope, ptr " + $ss + ", i32 0, i32 2"))
+    fe.w("store i64 0, ptr " + $fe.let("getelementptr %olang.slotscope, ptr " + $ss + ", i32 0, i32 1"))
+    return ss
+}
+
+# n bytes of text storage in scope into - through __olang_held_alloc where a local holds the scope (arrayStorage)
+fn (fe mut fnEm&) textStorage(into mir.ScopeRef, n String&) String {
+    f := "__olang_held_alloc" if into == mir.ScopeRef.Held else "__olang_scope_alloc"
+    fe.E.runtime(f)
+    return fe.let("call ptr @" + $f + "(ptr " + $fe.scope(into) + ", i64 " + $n + ")")
+}
+
 # rvalue's text a builder b holds, copied into storage of into (E11b)
 fn (fe mut fnEm&) builtText(b mir.ScopeRef, into mir.ScopeRef) String {
     if fe.directRef(b) { return fe.directText(into) }
     bp := fe.scope(b)
     data := fe.load("ptr", bp)
     n := fe.load("i64", fe.let("getelementptr %olang.builder, ptr " + $bp + ", i32 0, i32 1"))
-    fe.E.runtime("__olang_scope_alloc")
-    out := fe.let("call ptr @__olang_scope_alloc(ptr " + $fe.scope(into) + ", i64 " + $n + ")")
+    out := fe.textStorage(into, n)
     fe.E.textCopy()
     fe.w("call void @olang_textcopy(ptr " + $out + ", ptr " + $data + ", i64 " + $n + ")")
     return fe.pair(n, out)
@@ -5073,15 +5086,17 @@ fn (fe mut fnEm&) objectPtr(v String&, ty types.TypeId) String {
 
 # storage for an array of el elements, bytes long, in the scope whose header is sc: the size class an array takes, and
 # at least an element's own alignment where that is more than 8 (I65 to I128, T4a - LLVM holds an i128 16-aligned);
-# zero-filled where zeroed
-fn (fe mut fnEm&) arrayStorage(sc String&, bytes String&, el types.TypeId, zeroed Bool) String {
+# zero-filled where zeroed. O8f round 8: in a scope a local holds (held), which may be a slot scope, through
+# __olang_held_alloc, whose slot allocation is inline - only such sites test for one
+fn (fe mut fnEm&) arrayStorage(sc String&, bytes String&, el types.TypeId, zeroed Bool, held Bool = false) String {
     a := fe.align(el)
+    pre := "__olang_held_alloc" if held and not zeroed else "__olang_scope_alloc"
     if a > 8 {
-        f := "__olang_scope_alloc_zeroed_min" if zeroed else "__olang_scope_alloc_min"
+        f := "__olang_scope_alloc_zeroed_min" if zeroed else $pre + "_min"
         fe.E.runtime(f)
         return fe.let("call ptr @" + $f + "(ptr " + $sc + ", i64 " + $bytes + ", i64 " + $a + ")")
     }
-    f := "__olang_scope_alloc_zeroed" if zeroed else "__olang_scope_alloc"
+    f := "__olang_scope_alloc_zeroed" if zeroed else pre
     fe.E.runtime(f)
     return fe.let("call ptr @" + $f + "(ptr " + $sc + ", i64 " + $bytes + ")")
 }
@@ -5108,16 +5123,18 @@ fn (fe mut fnEm&) bufferCopy(ty types.TypeId) Bool {
 }
 
 # a run-time-length array value given storage of its own in scope s: its elements copied there
-fn (fe mut fnEm&) copyArray(s mir.ScopeRef, v String&, ty types.TypeId) String { return fe.copyArrayIn(fe.scope(s), v, ty) }
+fn (fe mut fnEm&) copyArray(s mir.ScopeRef, v String&, ty types.TypeId) String {
+    return fe.copyArrayIn(fe.scope(s), v, ty, s == mir.ScopeRef.Held)
+}
 
-# ... in the scope whose header is hdr
-fn (fe mut fnEm&) copyArrayIn(hdr String&, v String&, ty types.TypeId) String {
+# ... in the scope whose header is hdr (held: one a local holds, which may be a slot scope - arrayStorage)
+fn (fe mut fnEm&) copyArrayIn(hdr String&, v String&, ty types.TypeId, held Bool = false) String {
     t := fe.E.T
     el := t.Elem(fe.arrayOf(ty))
     n := fe.let("extractvalue { i64, ptr } " + $v + ", 0")
     data := fe.let("extractvalue { i64, ptr } " + $v + ", 1")
     bytes := fe.let("mul i64 " + $n + ", " + $fe.size(el))
-    p := fe.arrayStorage(hdr, bytes, el, false)
+    p := fe.arrayStorage(hdr, bytes, el, false, held)
     fe.E.declare("llvm.memcpy.p0.p0.i64", "void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)")
     fe.w("call void @llvm.memcpy.p0.p0.i64(ptr " + $p + ", ptr " + $data + ", i64 " + $bytes + ", i1 false)")
     return fe.pair(n, p)
@@ -5169,7 +5186,7 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     }
     if fill == mir.Operand.None and not fe.E.San {
         # E39: no fill - each element written before anything reads it
-        return fe.pair(cnt, fe.arrayStorage(sc, bytes, el, false))
+        return fe.pair(cnt, fe.arrayStorage(sc, bytes, el, false, s == mir.ScopeRef.Held))
     }
     if fill == mir.Operand.None { zero = true }
     if fe.E.San and (fe.E.retires(fe.F.File) or fe.bufferCopy(ty)) {
@@ -5183,7 +5200,7 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
         p = fe.arrayStorage(sc, bytes, el, true)
     }
     if not zero {
-        if p == "": p = fe.arrayStorage(sc, bytes, el, false)
+        if p == "": p = fe.arrayStorage(sc, bytes, el, false, s == mir.ScopeRef.Held)
         big := fe.viaMem(el)
         v := "" if big else fe.val(fill, el)
         elt := fe.ty(el)
@@ -6737,11 +6754,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
         sc := fe.scope(fe.F.Refs[I64(c.Scopes.At) + i])
         if sl >= 0 {
             # genrefs round 5: the copy's arrays made through a slot scope building into sc
-            ss := fe.alloca("%olang.slotscope")
-            fe.w("store %olang.slotscope zeroinitializer, ptr " + $ss)
-            fe.w("store ptr @__olang_slot_chunk, ptr " + $ss)
-            fe.w("store ptr " + $sc + ", ptr " + $fe.let("getelementptr %olang.scope, ptr " + $ss + ", i32 0, i32 2"))
-            fe.E.runtime("__olang_slot_chunk")
+            ss := fe.slotScope(sc)
             fe.slotOf.Put(sl, ss)
             sc = ss
         }
