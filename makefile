@@ -638,7 +638,7 @@ install-editors:
 			> "$$v/ftdetect/olang.vim" && \
 		echo "install: Vim syntax and :compiler olang into $$v"; \
 	else echo "install: no Vim here - its syntax is editors/nvim/syntax/olang.vim"; fi; \
-	echo "install: Helix and other LSP clients: run 'olang lsp' for .olang files (editors/README.md, Other editors)"
+	echo "install: Helix and other LSP clients: run 'olang serve lsp' for .olang files (editors/README.md, Other editors)"
 
 # uninstall: what install made, and nothing else - PREFIX/lib/olang, the PREFIX/bin/olang link where it points into it,
 # the PATH line install added to PATHFILE (with its comment), and the editor packages (pack/olang, Neovim's and Vim's;

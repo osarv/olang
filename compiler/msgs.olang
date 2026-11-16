@@ -147,6 +147,7 @@ type Diag enum {
     ModeNoFiles
     InstallNoFiles
     NotebookUsage
+    ServeUsage
     DocOneName
     DocNoItem
     LineBodyOnLine
@@ -1079,7 +1080,7 @@ fn ReflFnList(what String&) r.Msg { return r.Msg(Diag.ReflFnList, "G41", $what, 
 fn ReflFnCall(name String&, want I64, have I64) r.Msg { return r.Msg(Diag.ReflFnCall, "G41", $"'" + $name + "' is called with " + $want + " arguments (a method's receiver first), found " + $have) }
 fn ReflMatchSubject() r.Msg { return r.Msg(Diag.ReflMatchSubject, "G13", "'match' on a type takes a type known while compiling", "", "match a type variable, or a type a reflected member names") }
 fn Usage() r.Msg { return r.Msg(Diag.Usage, "B1", "nothing to do", "", "write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") }
-fn NotAMode(text String&) r.Msg { return r.Msg(Diag.NotAMode, "B1", "'" + $text + "' is not a mode", "the modes are build, compile, test, run, format, explain, help, doc, lsp, mcp, fix, bindgen, profile, api, jupyter and notebook, and a file ending in .olang is built and run") }
+fn NotAMode(text String&) r.Msg { return r.Msg(Diag.NotAMode, "B1", "'" + $text + "' is not a mode", "the modes are build, compile, test, run, format, explain, help, doc, fix, bindgen, profile, api and serve lsp, mcp or jupyter; a file ending in .olang is built and run, a notebook ending in .ipynb run") }
 fn ModeOneFile(text String&) r.Msg { return r.Msg(Diag.ModeOneFile, "B1", $text + " takes exactly one file") }
 fn ModeNeedsFile(text String&) r.Msg { return r.Msg(Diag.ModeNeedsFile, "B1", $text + " needs a file") }
 fn UnknownFlag(text1 String&, text2 String&, hint String&) r.Msg { return r.Msg(Diag.UnknownFlag, "B1", "unknown option '" + $text1 + "'" + $hint + " - 'olang help' lists the options of " + $text2) }
@@ -1118,8 +1119,9 @@ fn NoLineBody() r.Msg { return r.Msg(Diag.NoLineBody, "S1b", "this takes a block
 fn DoLineFor() r.Msg { return r.Msg(Diag.DoLineFor, "S1b", "a do loop's one-line body ends at its 'for', on the same line", "", "write 'do: n++ for n < 3', or a block") }
 fn LineBodyOnLine() r.Msg { return r.Msg(Diag.LineBodyOnLine, "S1b", "a one-line body stands on the line of its ':' - write a block, '{ ... }'") }
 fn LineBodyNotSimple(what String&) r.Msg { return r.Msg(Diag.LineBodyNotSimple, "S1b", $"a one-line body is one simple statement, not " + $what + " - write a block, '{ ... }'") }
-fn NotebookUsage() r.Msg { return r.Msg(Diag.NotebookUsage, "B24", "notebook takes the word run and one notebook", "write 'olang notebook run FILE.ipynb'") }
-fn InstallNoFiles() r.Msg { return r.Msg(Diag.InstallNoFiles, "B23", "jupyter -install takes no files - it writes the kernel's spec and ends") }
+fn NotebookUsage() r.Msg { return r.Msg(Diag.NotebookUsage, "B24", "a notebook runs alone - nothing follows it but options", "write 'olang run FILE.ipynb', or 'olang FILE.ipynb'") }
+fn ServeUsage() r.Msg { return r.Msg(Diag.ServeUsage, "B1", "serve takes the protocol it serves", "write 'olang serve lsp', 'olang serve mcp' or 'olang serve jupyter CONNECTION_FILE'") }
+fn InstallNoFiles() r.Msg { return r.Msg(Diag.InstallNoFiles, "B23", "serve jupyter -install takes no files - it writes the kernel's spec and ends") }
 fn ModeNoFiles(mode String&) r.Msg { return r.Msg(Diag.ModeNoFiles, "B1", $mode + " takes no files - its client names them as it goes") }
 fn DocOneName(file String&) r.Msg { return r.Msg(Diag.DocOneName, "B14", $"doc " + $file + " takes at most the name of one of its items, as 'olang doc " + $file + " main'") }
 fn DocNoItem(name String&, file String&) r.Msg { return r.Msg(Diag.DocNoItem, "B14", $"'" + $name + "' is no item of " + $file + " - 'olang doc " + $file + "' lists them") }

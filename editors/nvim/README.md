@@ -8,7 +8,7 @@ A plugin directory: put it on the runtime path and `.olang` files (and scripts b
   diagnostics, `path:line:col: error[RULE]: headline`, with their `note:` and `help:` rows), so `:copen` lists them;
 - `K` on a rule name in a diagnostic or a comment (`T6b`) shows that rule of the specification (`olang explain`);
 - format on save - through the language server when it runs, else `olang format` on a copy of the buffer;
-- the language server, `olang lsp`: diagnostics as you type, hover (`K`), go to definition (`gd` / `CTRL-]`), document
+- the language server, `olang serve lsp`: diagnostics as you type, hover (`K`), go to definition (`gd` / `CTRL-]`), document
   symbols, completion, formatting (`vim.lsp.buf.format()`). Completion is Neovim's own (0.11+,
   `vim.lsp.completion`): the menu opens by itself after `.` (`io.`, `p.`, `a.b.`) with the import's exports or the
   value's fields and methods, and `CTRL-X CTRL-O` asks anywhere; `setup({ completion = false })` turns it off. With
@@ -89,7 +89,7 @@ or by hand, in `init.lua`:
 ```lua
 vim.opt.runtimepath:append("/path/to/olang/editors/nvim")
 require("olang").setup({
-  cmd = { "olang", "lsp" },   -- nil: no language server
+  cmd = { "olang", "serve", "lsp" },   -- nil: no language server
   format_on_save = true,
 })
 ```
@@ -102,7 +102,7 @@ local configs = require("lspconfig.configs")
 if not configs.olang then
   configs.olang = {
     default_config = {
-      cmd = { "olang", "lsp" },
+      cmd = { "olang", "serve", "lsp" },
       filetypes = { "olang" },
       root_dir = require("lspconfig.util").root_pattern("olang.lock", ".git"),
       single_file_support = true,
@@ -112,5 +112,5 @@ end
 require("lspconfig").olang.setup({})
 ```
 
-Neovim 0.11 and later need neither: `vim.lsp.config("olang", { cmd = { "olang", "lsp" }, filetypes = { "olang" },
+Neovim 0.11 and later need neither: `vim.lsp.config("olang", { cmd = { "olang", "serve", "lsp" }, filetypes = { "olang" },
 root_markers = { "olang.lock", ".git" } })` and `vim.lsp.enable("olang")`.

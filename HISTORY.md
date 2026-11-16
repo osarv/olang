@@ -38882,3 +38882,30 @@ carrying the caller's place as text (a payload holds values, T19b, so not the `P
 with 1 too, since it already ends a `!` so. Scanln and Scan's refused read did the same through `assert` and now end
 with `input.Refused` the same way. The `print` scenario checks status 1 on `./bare >&-`, built and under
 `OLANG_EVALUATE=1`.
+
+## 2026-11-16: `olang serve lsp|mcp|jupyter`, and notebooks run by `run` (B1, B15, B16, B23, B24; the user's call; wt-serve)
+
+The user, 2026-11-16 (dictated, heard as "serverless DMCP Jupyter"): "Yes, I want a serve LSP, MCP, Jupyter with
+notebooks run by run". The three long-running servers had each been a mode of its own word - `lsp`, `mcp`, `jupyter` -
+beside the one-shot modes, and running a notebook was a mode of two words, `notebook run FILE.ipynb`, the only mode
+whose first file was a fixed word. Grouping the servers under `serve` says what they are (a process a client starts and
+talks to on its standard input or its ports) and keeps the list of modes to what a person runs by hand; a notebook is
+a file to run, so it is run as one: `olang run X.ipynb`, and in scripting mode `olang X.ipynb`.
+
+What was decided, beyond the user's words:
+- A server's mode is two words in the mode table itself (`ModeWords` holds "serve lsp", "serve mcp", "serve jupyter"),
+  so the option table, the not-for-this-mode diagnostics and `help` name them as they are written; the parser reads
+  `serve` and the word after it. `serve` alone (or followed by an option) is the new B1 diagnostic `ServeUsage`, which
+  names the three; `serve WORD` naming none is the usual "is not a mode", which lists the modes. `help serve` lists the
+  three servers, `help serve lsp` one's options.
+- A notebook is a run of `.ipynb`: `CommandLine.Notebook`, set when the file `run` or scripting mode takes ends in
+  `.ipynb`. It takes no arguments after it (`NotebookUsage`, B24, reworded: "a notebook runs alone"); options may stand
+  on either side as before. `-continue` now applies to scripting mode and `run`, and given with a `.olang` file is the
+  usual "applies to a notebook" error. `-output` stays `run`'s (scripting mode writes the notebook back in place), and
+  `-quick`/`-checked` are the run modes' own; the notebook's bit left every option's mask.
+- The old spellings are simply gone (principle 4): no alias, no diagnostic of their own - `olang lsp` is "'lsp' is not
+  a mode". Editors and agents that start the server change their command: editors/nvim's `cmd = { "olang", "serve",
+  "lsp" }`, Helix's `args = ["serve", "lsp"]`, `claude mcp add olang -- olang serve mcp`; a kernel spec written before
+  must be written again with `olang serve jupyter -install` (the user's oinit install.sh changed with it).
+- The consistency tool reads two-word modes from `help` and from SPEC B1's grammar (`"serve" server`, `server ::=
+  "lsp" | "mcp" | "jupyter"`), and checks `olang serve lsp -option` written in the docs against the server's options.

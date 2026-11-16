@@ -71,15 +71,16 @@ fn roomFor(bytes I64) Bool {
 
 # ---- the command line ----
 
-# the modes, by number: scripting mode (no word - a file ending in .olang written first, B3g), then each mode's word
-ModeWords Array<String&> = Array<String&>["", "build", "compile", "test", "run", "format", "explain", "help", "doc", "lsp"
-    "mcp"
+# the modes, by number: scripting mode (no word - a file ending in .olang or .ipynb written first, B3g), then each mode's
+# words: a server's two, serve and the protocol (B15, B16, B23)
+ModeWords Array<String&> = Array<String&>["", "build", "compile", "test", "run", "format", "explain", "help", "doc"
+    "serve lsp"
+    "serve mcp"
     "fix"
     "bindgen"
     "profile"
     "api"
-    "jupyter"
-    "notebook"]
+    "serve jupyter"]
 Run I64 = 0
 Build I64 = 1
 Compile I64 = 2
@@ -96,34 +97,32 @@ Bindgen I64 = 12
 Profile I64 = 13
 Api I64 = 14
 Jupyter I64 = 15
-Notebook I64 = 16
 
 # what each mode is, for help
 ModeUsage Array<String&> = Array<String&>[
-    "olang [OPTION...] FILE.olang [ARGUMENT...]"
+    "olang [OPTION...] FILE.olang [ARGUMENT...] | [OPTION...] FILE.ipynb"
     "olang build [OPTION...] FILE.olang"
     "olang compile [OPTION...] FILE.olang"
     "olang test [OPTION...] FILE.olang..."
-    "olang run [OPTION...] FILE.olang [ARGUMENT...]"
+    "olang run [OPTION...] FILE.olang [ARGUMENT...] | [OPTION...] FILE.ipynb"
     "olang format [OPTION...] FILE.olang..."
     "olang explain RULE | FILE.olang NAME | -caps FILE.olang | -asm|-ir FILE.olang NAME"
     "olang help [MODE]"
     "olang doc [OPTION...] FILE.olang [NAME] | -html DIR [FILE.olang...]"
-    "olang lsp [OPTION...]"
-    "olang mcp [OPTION...]"
+    "olang serve lsp [OPTION...]"
+    "olang serve mcp [OPTION...]"
     "olang fix [OPTION...] FILE.olang|DIR..."
     "olang bindgen [OPTION...] HEADER.h"
     "olang profile [OPTION...] FILE.olang [ARGUMENT...]"
     "olang api OLD NEW FILE.olang|DIR"
-    "olang jupyter [OPTION...] CONNECTION_FILE | -install"
-    "olang notebook run [OPTION...] FILE.ipynb"
+    "olang serve jupyter [OPTION...] CONNECTION_FILE | -install"
 ]
 ModeWhat Array<String&> = Array<String&>[
-    "scripting mode: builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file, options before it (B3g)"
+    "scripting mode: builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file, options before it (B3g); a notebook FILE.ipynb has its code cells run in order and their outputs written back (B24)"
     "builds one program, FILE.olang its root module, into build/ (B3)"
     "compiles one module to an object, linking nothing (B2)"
     "runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked, the tests that start a task under the race detector (B3a, E16g, P7a)"
-    "builds the program as build does, into build/ (B3), and runs it with the arguments after the file (B3e)"
+    "builds the program as build does, into build/ (B3), and runs it with the arguments after the file (B3e); a notebook FILE.ipynb has its code cells run in order and their outputs written back (B24)"
     "rewrites each file in olang's one layout (B13)"
     "prints a rule of the specification (B11a), a top-level item as the compiler sees it (B11b), or a function's code as build compiles it (B11d)"
     "lists the modes, or a mode's options"
@@ -135,7 +134,6 @@ ModeWhat Array<String&> = Array<String&>[
     "builds the program with a sampling profiler, runs it with the arguments after the file, and reports where its time went, with a flame graph (B20)"
     "lists what a module's exported interface gained, lost and changed between two versions - commits or directories - each change marked as breaking importers or not (B21)"
     "serves a Jupyter kernel on the ports CONNECTION_FILE names, each notebook cell run as the prompt runs one (B23)"
-    "runs the code cells of a Jupyter notebook in order, as the prompt runs cells, and writes the notebook back with their outputs as Jupyter stores them (B24)"
 ]
 
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
@@ -148,9 +146,9 @@ OptValues Array<String&> = Array<String&>["PATH", "", "", "", "NAME", "Name=valu
     ""
     ""
     "COUNT"]
-OptModes Array<I64> = Array<I64>[77846, 31, 31, 31, 1887, 108383, 108383, 2107, 106591, 256, 2, 27, 8, 8, 64, 64, 64, 25, 32768, 65536, 98335, 17]
+OptModes Array<I64> = Array<I64>[12310, 31, 31, 31, 1887, 42847, 42847, 2107, 41055, 256, 2, 27, 8, 8, 64, 64, 64, 25, 32768, 17, 32799, 17]
 OptWhat Array<String&> = Array<String&>[
-    "writes the executable, the object, bindgen's declarations, profile's flame graph or the run notebook to PATH (B3h, X16, B20, B24)"
+    "writes the executable, the object, bindgen's declarations, profile's flame graph or run's notebook to PATH (B3h, X16, B20, B24)"
     "builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)"
     "builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)"
     "builds with the scope sanitizer (B2f)"
@@ -169,7 +167,7 @@ OptWhat Array<String&> = Array<String&>[
     "prints a function's optimized LLVM IR as build compiles it, its source lines and LLVM's optimization remarks beside it (B11d)"
     "measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; in scripting mode, its build and run time, user and system time and peak memory (B19b)"
     "writes the kernel's spec into the user's Jupyter kernels, so a notebook offers olang (B23)"
-    "with notebook run: goes on past a cell that failed, running the cells after it (B24)"
+    "with a notebook: goes on past a cell that failed, running the cells after it (B24)"
     "builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)"
     "with -bench: runs the program N times, the later runs' output discarded, and gives the run time as the median with its spread (B19b)"
 ]
@@ -192,6 +190,8 @@ fn modesOf(modes I64) String {
 }
 
 fn endsWithOlang(a String&) Bool { return a.Len() > 6 and a.EndsWith(".olang") }
+
+fn endsWithIpynb(a String&) Bool { return a.Len() > 6 and a.EndsWith(".ipynb") }
 
 fn modeNumber(word String&) I64 {
     for m in range 1, ModeWords.Len() {
@@ -217,8 +217,9 @@ type CommandLine struct() {
     Caps Bool = false
     Listing String& = ""   # B11d: "-asm" or "-ir", explain showing a function's code
     Prompt Bool = false    # B22: nothing after "olang" - the prompt, its cells built and run as a file run is
-    Install Bool = false   # B23: jupyter -install
-    Continue Bool = false  # B24: notebook run -continue
+    Install Bool = false   # B23: serve jupyter -install
+    Continue Bool = false  # B24: a notebook's -continue
+    Notebook Bool = false  # B24: the file run is a notebook, FILE.ipynb
 }
 
 # a mistake in the command line: reported to the diagnostics already
@@ -240,11 +241,19 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
         return cl
     }
     i I64 = 1
-    if not args[1].StartsWith("-") and not endsWithOlang(args[1]) {
+    if not args[1].StartsWith("-") and not endsWithOlang(args[1]) and not endsWithIpynb(args[1]) {
         m := modeNumber(args[1])
-        if m < 0: try usage(d, msgs.NotAMode(args[1]))
+        # B15, B16, B23: a server is two words, serve and its protocol
+        if args[1] == "serve" {
+            if args.Len() < 3 or args[2].StartsWith("-"): try usage(d, msgs.ServeUsage())
+            m = modeNumber($"serve " + $args[2])
+            if m < 0: try usage(d, msgs.NotAMode($"serve " + $args[2]))
+            i = 3
+        } else {
+            if m < 0: try usage(d, msgs.NotAMode(args[1]))
+            i = 2
+        }
         cl.Mode = m
-        i = 2
     }
     for i < args.Len() {
         a := args[i]
@@ -339,6 +348,11 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
                 cl.Word = a
                 continue
             }
+            # help serve lsp: a server's mode is two words
+            if cl.Mode == Help and cl.HasWord and cl.Word == "serve" {
+                cl.Word = $"serve " + $a
+                continue
+            }
             if cl.HasWord { try usage(d, msgs.ExplainNeedsRule() if cl.Mode == Explain else msgs.HelpOneMode()) }
             cl.Word = a
             cl.HasWord = true
@@ -347,7 +361,7 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
         # running a file, the file is what tells it from a mode: a mode's word after the options belongs before them,
         # and any other word is no file to run. A mode's own files are taken as named, so a missing file or a directory
         # is reported as it is (B3a, M1)
-        if cl.Mode == Run and not endsWithOlang(a) {
+        if cl.Mode == Run and not endsWithOlang(a) and not endsWithIpynb(a) {
             if modeNumber(a) > 0: try usage(d, msgs.ModeFirst(a))
             try usage(d, msgs.NotASource(a))
         }
@@ -357,6 +371,11 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
             continue
         }
         cl.Files.Push(a)
+        # B24: a notebook run takes nothing after it
+        if (cl.Mode == Run or cl.Mode == RunBuilt) and cl.Files.Len() == 1 and endsWithIpynb(a) {
+            cl.Notebook = true
+            continue
+        }
         if cl.Mode == Run or cl.Mode == RunBuilt or cl.Mode == Profile {
             # B4a: "--" right after the file gives the program the rest unchecked; else none of it may be olang's option
             open := i < args.Len() and args[i] == "--"
@@ -454,7 +473,9 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     # B23: the kernel's connection file, or -install and nothing
     if cl.Mode == Jupyter and cl.Install and cl.Files.Len() > 0: try usage(d, msgs.InstallNoFiles())
     if cl.Mode == Jupyter and cl.Files.Len() > 1: try usage(d, msgs.ModeOneFile(modeName(cl.Mode)))
-    if cl.Mode == Notebook and (cl.Files.Len() != 2 or cl.Files[0] != "run"): try usage(d, msgs.NotebookUsage())
+    # B24: a notebook runs alone; -continue is a notebook's
+    if cl.Notebook and cl.Files.Len() > 1: try usage(d, msgs.NotebookUsage())
+    if cl.Continue and not cl.Notebook: try usage(d, msgs.OptionNotForMode("-continue", "a notebook", modeName(cl.Mode)))
     # B22: options and no file - -checked, -quick - are the prompt's
     if cl.Mode == Run and cl.Files.Len() == 0 and (c.Checked or c.Quick) and not c.Debug and not c.Race {
         cl.Prompt = true
@@ -484,12 +505,12 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     # the evaluator is reached by the testing tools alone (docs/testing.md): OLANG_EVALUATE=1 runs a file's program, or test's
     # tests, through it instead of building them (B3e)
     c.Evaluated = (cl.Mode == Run or cl.Mode == Test) and not cl.Prompt and (try os.Env("OLANG_EVALUATE") catch os.Error default "") != ""
-    interpreting := cl.Mode == Run or c.Evaluated or cl.Mode == Jupyter or cl.Mode == Notebook
+    interpreting := cl.Mode == Run or c.Evaluated or cl.Mode == Jupyter or cl.Notebook
     # B12a: another architecture is compiled, built and linked for with its C library, and its programs and tests run
     # through an emulator; what runs in this process - interpret, the tools - is for this machine only, said before
     # whether this clang can build for it
-    foreignOk := cl.Mode == Compile or cl.Mode == Build or (cl.Mode == Test and not c.Evaluated) or cl.Mode == RunBuilt or
-        cl.Listing != ""
+    foreignOk := cl.Mode == Compile or cl.Mode == Build or (cl.Mode == Test and not c.Evaluated) or
+        (cl.Mode == RunBuilt and not cl.Notebook) or cl.Listing != ""
     here := modeName(cl.Mode) if not foreignOk and not interpreting else ""
     c.Target = try target.Target.Resolve(cl.Spec, c.Clang, interpreting or (tool and c.Clang == ""), d, here = here)
         catch target.Bad { error Bad.Usage }
@@ -506,8 +527,8 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
     b := StringBuilder()
     if not cl.HasWord {
         b.Push("usage: olang MODE [OPTION...] FILE...   or   olang [OPTION...] FILE.olang [ARGUMENT...]\n\nmodes:\n")
-        b.Push($"  " + $"FILE.olang".PadEnd(11) + " " + $ModeWhat[Run] + "\n")
-        for m in range 1, ModeWords.Len(): b.Push($"  " + $ModeWords[m].PadEnd(11) + " " + $ModeWhat[m] + "\n")
+        b.Push($"  " + $"FILE.olang".PadEnd(13) + " " + $ModeWhat[Run] + "\n")
+        for m in range 1, ModeWords.Len(): b.Push($"  " + $ModeWords[m].PadEnd(13) + " " + $ModeWhat[m] + "\n")
         b.Push("\n'olang help MODE' lists a mode's options; 'olang help file' those of scripting mode.\n")
         b.Push("'olang' with nothing after it opens the prompt, which builds and runs what is typed as it is typed (B22).\n")
         b.Push("\nenvironment:\n")
@@ -518,6 +539,12 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
         b.Push("  OLANG_OBJECTS=DIR  a directory of objects builds share (B3j)\n")
         b.Push("  OLANG_CELLS=interpret  the prompt's and notebooks' cells interpreted, not compiled (B22)\n")
         b.Push("  OLANG_AUTORACE=0   test builds no race-detector build of the tests that start a task (P7a)\n")
+        return b.ToString()
+    }
+    if cl.Word == "serve" {
+        # the servers, each with its own options under help serve PROTOCOL
+        for m in Array<I64>[Lsp, Mcp, Jupyter]: b.Push($"usage: " + $ModeUsage[m] + "\n  " + $ModeWhat[m] + "\n")
+        b.Push("\n'olang help serve lsp' (or mcp, jupyter) lists a server's options.\n")
         return b.ToString()
     }
     m := Run if cl.Word == "file" else modeNumber(cl.Word)
@@ -562,7 +589,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
 # whether the mode waits on something a spinner may show (B25): not the servers, the prompt, a kernel, help, nor a test of
 # several files (each file's own process shows its own)
 fn waits(cl CommandLine&) Bool {
-    if cl.Prompt or cl.Mode == Help or cl.Mode == Lsp or cl.Mode == Mcp or cl.Mode == Jupyter or cl.Mode == Notebook: return false
+    if cl.Prompt or cl.Mode == Help or cl.Mode == Lsp or cl.Mode == Mcp or cl.Mode == Jupyter or cl.Notebook: return false
     return not (cl.Mode == Test and cl.Files.Len() > 1)
 }
 
@@ -576,7 +603,7 @@ fn runWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     c := build.Config()
     c.Color = d.Color
     cl := try CommandLine.Prepare(args, c, d) catch Bad { return said(d) }
-    d.Lenient = cl.Mode == Run or cl.Mode == Jupyter or cl.Mode == Notebook
+    d.Lenient = cl.Mode == Run or cl.Mode == Jupyter or cl.Notebook
     if cl.Mode == Help {
         text := try help(cl, d) catch Bad { return said(d) }
         return write(text)
@@ -602,15 +629,15 @@ fn runWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     if cl.Mode == Lsp: return lsp.Serve(c)
     if cl.Mode == Mcp { return mcp.Serve(c, try os.ReadLink("/proc/self/exe") catch os.Error default $args[0]) }
     files := cl.Files.ToArray()
+    cells.Builder = buildCell
+    if cl.Notebook: return notebook.Run(c, files[0], cl.Output, cl.Continue)
     if cl.Mode == Compile: return build.Compile(fe, c, files[0], d)
     if cl.Mode == Build: return build.BuildProgram(fe, c, files[0], d)
     if cl.Mode == RunBuilt: return build.RunProgram(fe, c, files[0], cl.Args.ToArray(), d)
     if cl.Mode == Profile: return profile.Run(fe, c, files[0], cl.Args.ToArray(), d)
-    cells.Builder = buildCell
     if cl.Prompt: return prompt.Run(c)
     if cl.Mode == Jupyter and cl.Install: return jupyter.Install(try os.ReadLink("/proc/self/exe") catch os.Error default $args[0], c)
     if cl.Mode == Jupyter: return jupyter.Serve(c, files[0])
-    if cl.Mode == Notebook: return notebook.Run(c, files[1], cl.Output, cl.Continue)
     if cl.Mode == Run {
         # the program's command line is the file, then what follows it (B3f)
         pargs Vec<String&>
@@ -1553,17 +1580,22 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(Array<String&>["build", "-b", "m.olang"]) ==
         "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
     assert mistake(Array<String&>["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode\n" + $
-            "olang: note: the modes are build, compile, test, run, format, explain, help, doc, lsp, mcp, fix, bindgen, " + $
-            "profile, api, jupyter and notebook, and a file ending in .olang is built and run\n")
+            "olang: note: the modes are build, compile, test, run, format, explain, help, doc, fix, bindgen, profile, api " + $
+            "and serve lsp, mcp or jupyter; a file ending in .olang is built and run, a notebook ending in .ipynb run\n")
+    # B24: a notebook is run by run and by scripting mode, alone; -continue is a notebook's
+    assert mistake(Array<String&>["a.ipynb", "-continue"]) == "no mistake: scripting mode"
+    assert mistake(Array<String&>["run", "a.ipynb", "-output", "b.ipynb"]) == "no mistake: run"
+    assert prepared(Array<String&>["run", "-continue", "a.olang"]) == "olang: error[B1]: -continue applies to a notebook, not to run\n"
+    assert prepared(Array<String&>["run", "a.ipynb", "b.ipynb"]).Contains("error[B24]: a notebook runs alone")
     assert mistake(Array<String&>["build", "m.olang", "-target"]) ==
         "olang: error[B1]: -target needs a value after it: NAME\n"
     assert mistake(Array<String&>["test", "-output", "x", "m.olang"]) ==
-        "olang: error[B1]: -output applies to build, compile, run, bindgen, profile and notebook, not to test\n"
+        "olang: error[B1]: -output applies to build, compile, run, bindgen and profile, not to test\n"
     # B20: profile takes -quick, not the builds of other programs, nor another machine's
     assert mistake(Array<String&>["profile", "-race", "m.olang"]) ==
         "olang: error[B1]: -race applies to scripting mode, build, compile, test and run, not to profile\n"
     assert mistake(Array<String&>["profile", "-target", "aarch64", "m.olang"]) ==
-        "olang: error[B1]: -target applies to scripting mode, build, compile, test, run, explain, doc, lsp and mcp, not to profile\n"
+        "olang: error[B1]: -target applies to scripting mode, build, compile, test, run, explain, doc, serve lsp and serve mcp, not to profile\n"
     assert mistake(Array<String&>["format", "-debug", "m.olang"]) ==
         "olang: error[B1]: -debug applies to scripting mode, build, compile, test and run, not to format\n"
     assert mistake(Array<String&>["build", "-define", "X", "m.olang"]) == "no mistake: build"
@@ -1596,8 +1628,8 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(Array<String&>["-quick", "-checked", "m.olang"]) == "no mistake: scripting mode"
     assert mistake(Array<String&>["build", "-checked", "-debug", "m.olang"]) == "no mistake: build"
     assert mistake(Array<String&>["build", "-checked", "m.olang"]) == "no mistake: build"
-    assert mistake(Array<String&>["lsp", "-checked"]) ==
-        "olang: error[B1]: -checked applies to scripting mode, build, compile, test, run, jupyter and notebook, not to lsp\n"
+    assert mistake(Array<String&>["serve", "lsp", "-checked"]) ==
+        "olang: error[B1]: -checked applies to scripting mode, build, compile, test, run and serve jupyter, not to serve lsp\n"
     assert mistake(Array<String&>["build", "-quick", "m.olang"]) == "no mistake: build"
     # B19b: -bench measures a run, a file's or a test's; -runs says how many times, with it
     assert mistake(Array<String&>["-bench", "m.olang"]) == "no mistake: scripting mode"
@@ -1735,20 +1767,25 @@ fn explained(name String&) String {
     return text
 }
 
-test "doc, lsp and mcp: their files, names and options (B14-B16)" {
+test "doc, serve lsp and serve mcp: their files, names and options (B14-B16)" {
     assert prepared(Array<String&>["doc"]) == "olang: error[B1]: doc needs a file\n"
     assert prepared(Array<String&>["doc", "a.olang", "b.olang"]) == "olang: error[B1]: doc takes exactly one file\n"
     assert mistake(Array<String&>["doc", "a.olang", "Item", "More"]) ==
         "olang: error[B14]: doc a.olang takes at most the name of one of its items, as 'olang doc a.olang main'\n"
-    assert prepared(Array<String&>["lsp", "a.olang"]) == "olang: error[B1]: lsp takes no files - its client names them as it goes\n"
-    assert mistake(Array<String&>["mcp", "-quick"]) ==
-        "olang: error[B1]: -quick applies to scripting mode, build, compile, test, run, explain, profile, jupyter and notebook, not to mcp\n"
+    assert prepared(Array<String&>["serve", "lsp", "a.olang"]) == "olang: error[B1]: serve lsp takes no files - its client names them as it goes\n"
+    assert mistake(Array<String&>["serve", "mcp", "-quick"]) ==
+        "olang: error[B1]: -quick applies to scripting mode, build, compile, test, run, explain, profile and serve jupyter, not to serve mcp\n"
+    # the old single words are no modes; serve needs its protocol
+    assert mistake(Array<String&>["lsp"]).Contains("error[B1]: 'lsp' is not a mode")
+    assert mistake(Array<String&>["notebook", "run", "a.ipynb"]).Contains("error[B1]: 'notebook' is not a mode")
+    assert mistake(Array<String&>["serve"]).Contains("error[B1]: serve takes the protocol it serves")
+    assert mistake(Array<String&>["serve", "http"]).Contains("error[B1]: 'serve http' is not a mode")
     assert mistake(Array<String&>["build", "-html", "d", "a.olang"]) == "olang: error[B1]: -html applies to doc, not to build\n"
     if target.FindClang() == "": return
     assert prepared(Array<String&>["doc", "-html", "out"]) == "no mistake: doc"
     assert prepared(Array<String&>["doc", "a.olang", "Item"]) == "no mistake: doc"
-    assert prepared(Array<String&>["lsp"]) == "no mistake: lsp"
-    assert prepared(Array<String&>["mcp", "-define", "X=1"]) == "no mistake: mcp"
+    assert prepared(Array<String&>["serve", "lsp"]) == "no mistake: serve lsp"
+    assert prepared(Array<String&>["serve", "mcp", "-define", "X=1"]) == "no mistake: serve mcp"
 }
 
 test "explain FILE NAME prints an item as the compiler sees it: inferred errors, obligations, instances, members, a baked value (B11b)" {
@@ -1789,12 +1826,19 @@ test "help lists the modes, and a mode's options, as stage 0 does" {
     d := diag.Diagnostics(false)
     cl := CommandLine()
     all := try help(cl, d) catch Bad { unreachable }
-    assert all.StartsWith("usage: olang MODE [OPTION...] FILE...") and all.Contains("\n  build       builds one program")
+    assert all.StartsWith("usage: olang MODE [OPTION...] FILE...") and all.Contains("\n  build         builds one program")
+    assert all.Contains("\n  serve lsp     serves the Language Server Protocol")
     cl.Word = "build"
     cl.HasWord = true
     b := try help(cl, d) catch Bad { unreachable }
     assert b.Contains("\n  -define Name=value defines a build constant, one word with no spaces; Name alone is true (B10)\n")
     assert b.Contains("\n  -output PATH       writes the executable")
+    cl.Word = "serve jupyter"
+    j := try help(cl, d) catch Bad { unreachable }
+    assert j.StartsWith("usage: olang serve jupyter") and j.Contains("\n  -install ")
+    cl.Word = "serve"
+    sv := try help(cl, d) catch Bad { unreachable }
+    assert sv.Contains("usage: olang serve lsp") and sv.Contains("usage: olang serve mcp")
     cl.Word = "nope"
     try help(cl, d) catch Bad { return }
     unreachable

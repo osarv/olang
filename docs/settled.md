@@ -78,7 +78,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   comment and kind of surrounding tools thing. It should not break the compiler", 2026-11-07; built 2026-11-07).** A
   doc-comment paragraph beginning `Deprecated:` is marked by `olang doc`, the language server and `olang api` (a
   non-breaking row); the compiler gives it no meaning. Removing between versions stays the main way.
-- **`olang lsp` (B15) and `olang mcp` (B16), 2026-10-24 (the user: "we need this, both for MCP and neovim
+- **`olang serve lsp|mcp|jupyter`, notebooks run by `run` (B1, B15, B16, B23, B24; the user's call, 2026-11-16: "Yes, I
+  want a serve LSP, MCP, Jupyter with notebooks run by run").** The three servers are one mode word, `serve`, and the
+  protocol: `olang serve lsp`, `olang serve mcp`, `olang serve jupyter CONNECTION_FILE` (`-install` writes a kernel spec
+  running `serve jupyter {connection_file}`). A notebook runs as a file does: `olang run X.ipynb` (`-output`, `-continue`)
+  or scripting mode's `olang X.ipynb`, written back in place. The modes `lsp`, `mcp`, `jupyter` and `notebook` are gone
+  with no alias (principle 4); `help serve` lists the servers, `help serve lsp` one server's options.
+- **`olang lsp` (B15) and `olang mcp` (B16) - now `serve lsp`/`serve mcp`, 2026-10-24 (the user: "we need this, both for MCP and neovim
   integration").** LSP over stdio (diagnostics, hover, definition, symbols, completion, formatting); MCP over stdio
   (`check`, `explain`, `doc`, `format`, `test`). Unused names (D3b, M5a) are sent as warnings (severity 2), every other rule as an error (2026-11-15). Completion after `x.` works on an unfinished line, through field chains, with supplied methods and trait defaults; the Neovim plugin turns on Neovim 0.11's own completion (`vim.lsp.completion`, autotrigger on `.`) unless nvim-cmp or blink.cmp is loaded (2026-11-16). The Neovim plugin and notes are `editors/`.
 - **A file is built and run (B3g; merged with `interpret`, the user 2026-11-15: "merge them. we dont need to reach the
@@ -1108,7 +1114,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   compiler's own scanner (compiler/paint.olang), 16 ANSI colours, off for `NO_COLOR` and non-terminals. Mine: the
   editor lives in compiler/, not std (its one user is the prompt and it colours with the scanner); it is a state
   machine fed bytes, tested without a terminal, and a pty scenario (promptkeys) runs it whole.
-- **`olang jupyter` and rich display (B23, QCX 6, plan.md's "rich-display convention beside the notebook", 2026-11-13;
+- **`olang jupyter` (now `serve jupyter`) and rich display (B23, QCX 6, plan.md's "rich-display convention beside the notebook", 2026-11-13;
   built 2026-11-14).** A Jupyter kernel (messaging protocol 5.3) over std/zmtp - ZeroMQ's wire protocol written in
   olang, no libzmq - signed with HMAC-SHA256; cells run as the prompt runs them (compiled), output relayed from the
   worker and streamed, the shown value an execute_result, errors with a traceback, interrupts on the control channel
@@ -1116,7 +1122,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   shutdown; `olang jupyter -install` writes the kernel spec. Rich display is a prelude convention, no language rule:
   `Display` (Html, Markdown, Latex, Svg, Png) and the trait `Displayable`; a type declaring `Display()` is shown by it
   beside its `$` text.
-- **`olang notebook run FILE.ipynb` (B24, the user's approval 2026-11-14; built 2026-11-14).** Runs a notebook's code
+- **Running a notebook - `olang notebook run FILE.ipynb` until 2026-11-16, now `olang run FILE.ipynb` (B24, the user's approval 2026-11-14; built 2026-11-14).** Runs a notebook's code
   cells in one session as the kernel runs them and writes the notebook back (or to `-output`) with each code cell's
   outputs as Jupyter stores them - `stream`, `execute_result` (text/plain plus the Display's MIME type), `error` - and
   `execution_count` 1..n; the rest of the notebook is kept, `kernelspec` set to olang if absent. Stops at the first

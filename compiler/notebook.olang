@@ -1,4 +1,4 @@
-# notebook - "olang notebook run FILE.ipynb" (B24): a Jupyter notebook run without Jupyter or Python. The code cells of
+# notebook - "olang run FILE.ipynb" and "olang FILE.ipynb" (B24): a Jupyter notebook run without Jupyter or Python. The code cells of
 # the notebook (nbformat 4, std/json) run in order in one prompt session (prompt.olang, B22), each as the kernel runs a
 # cell (jupyter.olang, B23): its standard output and error captured, its shown value in the MIME types its type
 # renders itself in. Each code cell's outputs are replaced by what Jupyter stores for it and its execution_count set;
@@ -44,7 +44,7 @@ fn Run(cfg mut build.Config&, path String&, out String&, all Bool) I32 {
 }
 
 fn fail(why String&) I32 {
-    try io.PutErr($"olang notebook: " + $why + "\n") catch io.Error { }
+    try io.PutErr($"olang: " + $why + "\n") catch io.Error { }
     return 2
 }
 

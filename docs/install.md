@@ -9,7 +9,7 @@ A release of the olang compiler for Linux. It is the README of the release's tar
 | `bin/olang` | the compiler, built for the architecture's baseline CPU, so it runs on every machine of that architecture |
 | `std/` | the standard library and the prelude, found beside the compiler |
 | `SPEC.md` | the specification, which `olang explain RULE` reads |
-| `editors/` | the Neovim plugin and editor notes (`olang lsp`, `olang mcp`) |
+| `editors/` | the Neovim plugin and editor notes (`olang serve lsp`, `olang serve mcp`) |
 | `tools/` | the migration tools `olang fix` runs |
 | `llvm/` | clang (and LLVM's libraries) the compiler builds with: found before any clang on `PATH` |
 

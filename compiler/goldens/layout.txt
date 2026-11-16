@@ -8713,7 +8713,7 @@ std/prelude/map:MapIter<I64, compiler/typed:Expr&>	16 8	%"std/prelude/map:MapIte
 == compiler/olang.olang
 Array<compiler/emit:Object>&	16 8	{ i64, ptr }	-	-
 compiler/olang:Bad	4 4	i32	-	-
-compiler/olang:CommandLine	248 8	%"compiler/olang:CommandLine"	{ i64, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, { i64, ptr }, i1, { i64, ptr }, i1, { i64, ptr }, i1, i1, i1 }	fields 0,8,40,72,88,96,128,160,176,192,200,216,224,240,241,242
+compiler/olang:CommandLine	248 8	%"compiler/olang:CommandLine"	{ i64, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, { i64, ptr }, i1, { i64, ptr }, i1, { i64, ptr }, i1, i1, i1, i1 }	fields 0,8,40,72,88,96,128,160,176,192,200,216,224,240,241,242,243
 compiler/olang:CommandLine&	8 8	ptr	-	-
 compiler/olang:Passes	72 8	%"compiler/olang:Passes"	{ i64, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr } }	fields 0,8,24,40,56
 fn() compiler/olang:CommandLine	16 8	{ ptr, ptr }	-	ret void pass 
