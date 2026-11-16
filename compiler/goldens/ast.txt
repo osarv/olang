@@ -893,6 +893,7 @@ a2bb974ca9ffa4d7 8c9ddf7de7e20e94 checks/cases/narrowimplicit.olang
 2a823c14d5b0540f 0df15747afda2f3f checks/cases/nllkeepsunion1.olang
 433a36a88e5be262 0df15747afda2f3f checks/cases/nllkeepsunion2.olang
 1ec900fb3c565646 2734eeb22f45ee96 checks/cases/nllmerge.olang
+282cbf7752cf0c81 3bafcfd8d42282f2 checks/cases/noextendsabs.olang
 7079c0f4ed282570 98b2a945f2ba3322 checks/cases/noextendsmethod.olang
 319d100dda7a2c94 6f46ddd469197ac4 checks/cases/noextendsneg.olang
 518de2461c31f65a d3785ca30d403608 checks/cases/noextendsop.olang
@@ -2033,7 +2034,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-1c8db102a061d942 0619f7e6d71f8aa1 checks/checks.olang
+0fe749a53d9b8404 f3a440ed7c005e08 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2360,7 +2361,7 @@ e20178f94e07dfed ff5ec0fbe401eade compiler/bindgen.olang
 c006cf58ed636e73 ac07568c0a6424d9 compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 9a7dcbad366aff43 3d76960f315bd24b compiler/cells.olang
-9c8907ba40e719d0 ebc789d3ecc8eb29 compiler/check.olang
+f5ae98b2d195f50c ba71ad4cadc6be33 compiler/check.olang
 da018e972c2ecc90 402dd6cf0de7cca1 compiler/cond.olang
 2ab98962469bc960 f235e148eac3e4ba compiler/definit.olang
 db407b9ec2aacf25 d850fbb42d0e8294 compiler/diag.olang
@@ -2537,12 +2538,12 @@ f6b7c14441ee3dc7 92ad7832bcd57247 std/prelude/enums.olang
 e9c80e07245698f2 461c7dc2ced14570 std/prelude/f8.olang
 bf4439d09464a49e f8d08b6c61aa7d29 std/prelude/float.olang
 02ef8799a43cf737 56fa318f40e95e05 std/prelude/hash.olang
-d71fff98d898614e 85596e7890602b6d std/prelude/input.olang
+e2c6c18786ba2b7d 17147bd6a7fe3034 std/prelude/input.olang
 ab128234d334ba84 b4f6a974fcfe5794 std/prelude/iterator.olang
 8d78604ee0f159ce f1bcd19e9bde020b std/prelude/map.olang
 904cf2c65d482e5c 4b0044d1625f9d0a std/prelude/number.olang
 73d1c1d2113c8ce4 958fc93c373bfda0 std/prelude/place.olang
-a2a7f2cb81b423fa 515f54a6faeca634 std/prelude/print.olang
+7367a130692c3681 dd1b94718041afe6 std/prelude/print.olang
 58a87f07ff6919f2 30a1bde190a33d38 std/prelude/reflect.olang
 135e8e85bd3cf445 e07dd5fc28880dcb std/prelude/tests/array.olang
 8a38dfb38c216f7a ea745085b2c7c29f std/prelude/tests/columns.olang
@@ -2634,7 +2635,7 @@ c64c65fc4111932d 2186a3e9ec61071a tests/reads.olang
 b5ef26df71c5e9d8 7d463a2ea7512fb5 tests/reflect.olang
 5075b8937e6628c4 d03918c8432a449e tests/reflmod.olang
 835ba0f57f4caddd ecb456b1ad53bae7 tests/runner.olang
-5f875bc98c40a58d 099a309fd8a71f44 tests/shared.olang
+d79526027467c0de 2fc2e30685336851 tests/shared.olang
 307585c2d6e47496 63a9fb9b67c9368a tests/slotfacts.olang
 c452c9cb509c23e1 76ad53a3573a5846 tests/structpat.olang
 0d4b3ba0fcda27dc 9f05e76fef4e032b tests/textplus.olang
