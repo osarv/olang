@@ -38,11 +38,11 @@ fn migrate(text String&) String {
         if k >= text.Len() or text[k] == '{' or text[k] == ':' or text[k] == '\n': continue
         b.Push(text[from:j])
         from = j
-        if word(text, mask, k) == 0 {
+        if word(text, mask, k) == 0 and not declaration(text, mask, k) {
             b.Push(":")
             continue
         }
-        # a deferral of a deferral: no one-line body holds a defer (S1b), so the inner one goes in a block
+        # a deferral of a deferral or of a declaration: a one-line body holds neither (S1b), so it goes in a block
         e := k
         for e < text.Len() and text[e] != '\n' and mask[e] == 'c': e++
         for e > k and text[e - 1] == ' ': e--
@@ -65,6 +65,27 @@ fn word(text String&, mask String&, i I64) I64 {
     return 0
 }
 
+# whether the statement at k declares a name: "name :=" or "name Type =", the name and type standing whole in code
+fn declaration(text String&, mask String&, k I64) Bool {
+    e := k
+    for e < text.Len() and mask[e] == 'c' and srcmask.IsWord(text[e]): e++
+    if e == k or e >= text.Len() or text[e] != ' ': return false
+    for e < text.Len() and text[e] == ' ': e++
+    if text[e:].StartsWith(":="): return true
+    return e < text.Len() and text[e] >= 'A' and text[e] <= 'Z' and mask[e] == 'c' and lineHasAssign(text, e)
+}
+
+# whether a lone "=" stands in code on the line from i, before any "("
+fn lineHasAssign(text String&, i I64) Bool {
+    for e in range i, text.Len() {
+        c := text[e]
+        if c == '\n' or c == '(': return false
+        if c != '=' or (e + 1 < text.Len() and text[e + 1] == '='): continue
+        if text[e - 1] not in "=!<>": return true
+    }
+    return false
+}
+
 # whether a statement starts at i: only spaces before it on its line, or a one-line body's ": " or a block's "{ "
 fn statementStart(text String&, i I64) Bool {
     k := i
@@ -76,6 +97,8 @@ test migrate "a bare deferral gains its ':'; a block, a one-line body, comments 
     assert migrate("    defer f.Close()\n    errdefer n--\n") == "    defer: f.Close()\n    errdefer: n--\n"
     assert migrate("    defer defer n = 5    # inner\n") == "    defer { defer: n = 5 }    # inner\n"
     assert migrate("fn f() { defer x = 1 }\n") == "fn f() { defer: x = 1 }\n"
+    assert migrate("    defer z := later\n    defer n I32 = 3\n") == "    defer { z := later }\n    defer { n I32 = 3 }\n"
+    assert migrate("    defer Log(n == 2)\n") == "    defer: Log(n == 2)\n"
     kept := "    defer { a() }\n    defer: b()\n    # defer c()\n    s := \"defer d()\"\n    deferred := 1\n"
     assert migrate(kept) == kept
     once := migrate("    defer try os.RemoveAll(t) catch os.Error { }\n")
