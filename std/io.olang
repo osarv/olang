@@ -22,6 +22,13 @@ fn closeFd(fd I32) I32 {
     return unistd.close(fd)
 }
 
+# what io.Reader, io.Writer and io.Lines read or write through: anything giving a descriptor's number - an os.File,
+# which closes its descriptor itself, and a bare I32 (io.Stdin, Stdout and Stderr, a pipe's end), which nothing here
+# closes. Taken as an "any" once, at construction (T32a), and held as the number
+type Descriptor trait {
+    Fd() I32
+}
+
 Stdin I32 = 0
 Stdout I32 = 1
 Stderr I32 = 2
@@ -58,20 +65,20 @@ fn Read(fd I32, buf mut Array<U8>&) Array<U8>& ? Error {
 
 # Printing: the one way a program writes text to its standard output and error (M19f). Each call writes at once, nothing
 # held back, and a line and its end go as one write, so lines from tasks running at once are not cut into each other. A
-# failed write is an error (Error), written with "try" like any other; one writing a lot uses a Writer. Put, PutLine,
-# PutErr and PutErrLine take any value and write it as $ renders it: "try io.PutLine(n)", "try io.PutLine("n is " + $n)".
+# failed write is an error (Error), written with "try" like any other; one writing a lot uses a Writer. Put, PutLn,
+# PutErr and PutErrLn take any value and write it as $ renders it: "try io.PutLn(n)", "try io.PutLn("n is " + $n)".
 
 # x as $ renders it, then nothing - to the standard output
 fn Put<T>(x T) ? Error { try Write(Stdout, $x) }
 
 # x as $ renders it and a line end - to the standard output; with nothing given, a line end alone
-fn PutLine<T>(x T = "") ? Error { try Write(Stdout, $x + "\n") }
+fn PutLn<T>(x T = "") ? Error { try Write(Stdout, $x + "\n") }
 
 # x as $ renders it, then nothing - to the standard error
 fn PutErr<T>(x T) ? Error { try Write(Stderr, $x) }
 
 # x as $ renders it and a line end - to the standard error
-fn PutErrLine<T>(x T = "") ? Error { try Write(Stderr, $x + "\n") }
+fn PutErrLn<T>(x T = "") ? Error { try Write(Stderr, $x + "\n") }
 
 # v written to the standard error with the place of the call, "FILE:LINE:COLUMN: $v", and given back - a look at a
 # value in passing, wherever it stands: "y := io.Show(f(x)) + 1". A failed write is ignored, the one call of std that
@@ -135,8 +142,8 @@ fn FormatInt(n I64, buf mut Array<U8>&) I32 {
 #     }
 # The end of the file ends the line before it, as above, so a writer that writes a line in pieces
 # can be read between them as two lines; one that writes each line whole, its newline included, is read line by line.
-type Lines struct(fd I32) {
-    fd
+type Lines struct(from any Descriptor&) {
+    fd := from.Fd()
     src := InputBuffer(fd, 4096, true)
 }
 
@@ -168,8 +175,8 @@ fn (l Lines&) Buffered() Bool { return StdinBuffered() if l.fd == 0 else l.src.B
 # Reading descriptor 0 goes through the buffer the prelude's Scanln and Scan and Lines read, so mixing them loses nothing.
 # Line, Word and All give new text, built where the caller puts it, as Lines.Next does. Mixing the methods is fine:
 # each takes what comes next, so Word then Line gives the rest of the line the word was on.
-type Reader struct(fd I32) {
-    fd
+type Reader struct(from any Descriptor&) {
+    fd := from.Fd()
     src := InputBuffer(fd, 4096, true)
 }
 
@@ -226,15 +233,15 @@ fn (r mut Reader&) All() String& ? Error {
 }
 
 # text and bytes gathered and written to a descriptor in large pieces - the way to write a lot (a compiler's output, a
-# report, a table), where Put and PutLine make one write per call, so the system is entered once for every line:
+# report, a table), where Put and PutLn make one write per call, so the system is entered once for every line:
 #
 #     out := io.Writer(io.Stdout)
-#     for r in rows: out.PutLine($r.Name + ": " + $r.Count)
+#     for r in rows: out.PutLn($r.Name + ": " + $r.Count)
 #     try out.Flush()
 #
 # What is written waits in a buffer of "size" bytes and goes to the descriptor when the buffer is full, and whatever is
 # left when Flush is called; something larger than the buffer goes straight through. So nothing reaches the
-# descriptor until a Flush or a full buffer - what a program prints with PutLine meanwhile comes before it.
+# descriptor until a Flush or a full buffer - what a program prints with PutLn meanwhile comes before it.
 # Writing never fails where it is written: a write the system refuses is remembered, everything after it is dropped,
 # and Flush fails with it - Error.Failed, or Partial (with how much it took) for a descriptor taking nothing more -
 # then and every time after, since the output is incomplete whatever comes later (C's stdio and Go's bufio keep the
@@ -242,9 +249,9 @@ fn (r mut Reader&) All() String& ? Error {
 # Flush where the output is complete, so a failure is the caller's to handle; to have it written however a function is
 # left, an error included, defer it - "defer out.Flush()!", deferred code having no caller to pass a
 # failure on to (S19b). The descriptor is the caller's to close. A pipe whose reader has gone ends the program on
-# the write, as it ends one writing with PutLine - the system's default for a pipe, which "prog | head" relies on.
-type Writer struct(fd I32, size I64 = 65536) {
-    fd
+# the write, as it ends one writing with PutLn - the system's default for a pipe, which "prog | head" relies on.
+type Writer struct(to any Descriptor&, size I64 = 65536) {
+    fd := to.Fd()
     buf mut Array<U8>& = Array<U8>(size if size > 0 else 1)
     used I64 = 0         # buf[:used] waits to be written
     refused Error = null # the first write the system refused, null while every write has gone through
@@ -270,7 +277,7 @@ fn (w mut Writer&) Write(t Array<U8>&) {
 fn (w mut Writer&) Put<T>(x T) { w.Write($x) }
 
 # x as $ renders it and a line end, after what is written already; with nothing given, a line end alone
-fn (w mut Writer&) PutLine<T>(x T = "") {
+fn (w mut Writer&) PutLn<T>(x T = "") {
     w.Write($x)
     w.WriteChar('\n')
 }
@@ -316,30 +323,30 @@ test "Write succeeds on a real descriptor" {
     assert ok
 }
 
-test "Put and PutLine write text, PutLine with its line end" {
+test "Put and PutLn write text, PutLn with its line end" {
     try Put("io.olang: Put ") catch Error { }
-    try PutLine("and PutLine") catch Error { }
-    try PutLine() catch Error { }
+    try PutLn("and PutLn") catch Error { }
+    try PutLn() catch Error { }
     try PutErr("") catch Error { }
     n := 42
-    try PutLine("io.olang: n is " + $n) catch Error { }
+    try PutLn("io.olang: n is " + $n) catch Error { }
 }
 
-test PutLine "writes any value as $ renders it" {
-    try PutLine(5)
+test PutLn "writes any value as $ renders it" {
+    try PutLn(5)
     try Put(2.5)
-    try PutLine()
-    try PutErrLine(true)
-    try PutLine(Array<I64>[1, 2])
+    try PutLn()
+    try PutErrLn(true)
+    try PutLn(Array<I64>[1, 2])
 }
 
-test Writer.PutLine "writes any value as $ renders it, with a line end" {
+test Writer.PutLn "writes any value as $ renders it, with a line end" {
     w := Writer(Stdout)
     w.Put(5)
-    w.PutLine()
-    w.PutLine(2.5)
-    w.PutLine(Array<I64>[1, 2])
-    w.PutLine("text")
+    w.PutLn()
+    w.PutLn(2.5)
+    w.PutLn(Array<I64>[1, 2])
+    w.PutLn("text")
     try w.Flush()
 }
 
@@ -466,7 +473,7 @@ test "Lines reads lines longer than its buffer" {
 test "Lines reports a read that fails, and ends the loop with it" {
     failed := false
     n I64 = 0
-    for _ in try Lines(-1) {
+    for _ in try Lines(I32(-1)) {
         n++
     } catch Error { failed = true }
     assert failed and n == 0
@@ -745,7 +752,7 @@ test Reader.Available "gives what a read brought, keeps a split character whole,
 }
 
 test Reader "reports a read that fails" {
-    r := Reader(-1)
+    r := Reader(I32(-1))
     n I64 = 0
     try r.Line() catch Error { n++ }
     try r.Word() catch Error { n++ }
