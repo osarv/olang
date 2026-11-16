@@ -2021,7 +2021,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-ea751d2eb5c87946 fd630aed79095304 checks/checks.olang
+7f4e857ebbcefcfb 636a1df30f71f259 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2493,7 +2493,7 @@ db8945d61d1da622 b2d60f953289a9f3 fuzz/repro/trygenericindex.olang
 eebb4b50f43e655e b73227e348dfecd7 std/cancel.olang
 a13cf4e296235013 5716a35c82760c12 std/chan.olang
 5fa0fda963ee765a d034ab98bdcba40b std/crc32.olang
-87a8a3c253895af0 6aa4014a6702cb42 std/csv.olang
+a01e5db007cf3c41 6aa4014a6702cb42 std/csv.olang
 794dc209a5c10699 605422102d6e2079 std/deque.olang
 c9a567592977f803 0a646b74729b6735 std/ffi.olang
 eae29e622e0002e5 6f01034b9249d4f9 std/filepath.olang
@@ -2503,12 +2503,12 @@ a0d4713dd77b1c94 25aca506a0d5724b std/flags.olang
 c75dacbbaf48a1e2 681a1f1802c71248 std/heap.olang
 b93a943edf2e8c97 381931e954cbfbd5 std/hex.olang
 2afff50178db96d3 8587a7e81150a452 std/http.olang
-0becd683fa120463 35de570e4ccb6942 std/io.olang
+139f28a4d7f2b3b8 dba7bb515ced211e std/io.olang
 2388b3c31f421b09 57f2f9d24614596b std/json.olang
 b55e49533472817d 0a80787714e4a849 std/list.olang
 e2af3c272668511f 5f2fe5aba3f7cb8c std/net.olang
 e9aa94e405345e7a f136bf23c1f483ab std/order.olang
-5921f6f50b983d03 7f838f8729b17110 std/os.olang
+7779240b1ca5771e 646cb1608b83eaa1 std/os.olang
 17c08f79ab55afc4 b4a22233d00c7e49 std/pair.olang
 6d63e48e89ab2815 27472a692fbe2416 std/plot.olang
 3ea631f369fef41e 930ead3ce67343d4 std/pool.olang
@@ -2525,7 +2525,7 @@ bf4439d09464a49e f8d08b6c61aa7d29 std/prelude/float.olang
 ab128234d334ba84 b4f6a974fcfe5794 std/prelude/iterator.olang
 8d78604ee0f159ce f1bcd19e9bde020b std/prelude/map.olang
 904cf2c65d482e5c 4b0044d1625f9d0a std/prelude/number.olang
-0733978a483ed252 958fc93c373bfda0 std/prelude/place.olang
+956410c738eff5dc 958fc93c373bfda0 std/prelude/place.olang
 ad69883ff88970c2 515f54a6faeca634 std/prelude/print.olang
 58a87f07ff6919f2 30a1bde190a33d38 std/prelude/reflect.olang
 135e8e85bd3cf445 e07dd5fc28880dcb std/prelude/tests/array.olang

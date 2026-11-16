@@ -12,6 +12,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -38,6 +40,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -66,6 +70,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -96,6 +102,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -148,6 +156,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -177,6 +187,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -204,6 +216,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -234,6 +248,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -260,6 +276,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -292,6 +310,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -327,6 +347,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -356,6 +378,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -389,6 +413,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -424,6 +450,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -451,6 +479,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -477,6 +507,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -507,6 +539,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -534,6 +568,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -560,6 +596,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -587,6 +625,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -614,6 +654,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -640,6 +682,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -666,6 +710,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -718,6 +764,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -773,6 +821,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -828,6 +878,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -863,6 +915,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -890,6 +944,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -916,6 +972,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -942,6 +1000,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -968,6 +1028,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -994,6 +1056,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1020,6 +1084,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1046,6 +1112,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1072,6 +1140,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1098,6 +1168,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1124,6 +1196,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1150,6 +1224,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1176,6 +1252,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1202,6 +1280,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1228,6 +1308,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1255,6 +1337,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1282,6 +1366,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1294,6 +1380,34 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module tests/kept
+===  tests/keptfacts.olang
+| module <math.h>
+| module <string.h>
+| module <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/display
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/keptfacts
 ===  tests/keptparams.olang
 | module <math.h>
 | module <string.h>
@@ -1308,6 +1422,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1334,6 +1450,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1363,6 +1481,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1394,6 +1514,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1420,6 +1542,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1446,6 +1570,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1472,6 +1598,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1501,6 +1629,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1532,6 +1662,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1560,6 +1692,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1587,6 +1721,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1613,6 +1749,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1639,6 +1777,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1667,6 +1807,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1693,6 +1835,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1719,6 +1863,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1745,6 +1891,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1771,6 +1919,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1823,6 +1973,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1854,6 +2006,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1882,6 +2036,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1926,6 +2082,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1940,6 +2098,34 @@
 | module tests/shared
 |   arith std/arith
 |   pair std/pair
+===  tests/slotfacts.olang
+| module <math.h>
+| module <string.h>
+| module <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/display
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/slotfacts
 ===  tests/structpat.olang
 | module <math.h>
 | module <string.h>
@@ -1954,6 +2140,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -1980,6 +2168,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2006,6 +2196,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2036,6 +2228,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2063,6 +2257,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2093,6 +2289,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2120,6 +2318,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2146,6 +2346,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2172,6 +2374,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2198,6 +2402,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2226,6 +2432,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2268,6 +2476,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2297,6 +2507,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2327,6 +2539,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2353,6 +2567,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2386,6 +2602,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2414,6 +2632,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2443,6 +2663,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2480,6 +2702,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2508,6 +2732,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2534,6 +2760,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2560,6 +2788,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2586,6 +2816,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2612,6 +2844,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2638,6 +2872,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2671,6 +2907,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2728,6 +2966,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2756,6 +2996,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2782,6 +3024,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2835,6 +3079,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2866,6 +3112,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2894,6 +3142,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2920,6 +3170,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2956,6 +3208,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -2984,6 +3238,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3035,6 +3291,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3063,6 +3321,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3116,6 +3376,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3144,6 +3406,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3200,6 +3464,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3237,6 +3503,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3263,6 +3531,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3291,6 +3561,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3318,6 +3590,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3345,6 +3619,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3372,6 +3648,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3400,6 +3678,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3427,6 +3707,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3464,6 +3746,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3871,6 +4155,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3932,6 +4218,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -3996,6 +4284,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -4117,6 +4407,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -4177,6 +4469,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -4583,6 +4877,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -4781,6 +5077,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -4861,6 +5159,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -4925,6 +5225,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -4989,6 +5291,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -5020,6 +5324,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -5324,6 +5630,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -5498,6 +5806,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -5771,6 +6081,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -5848,6 +6160,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -6145,6 +6459,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -6177,6 +6493,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -6238,6 +6556,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -6365,6 +6685,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -6462,6 +6784,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -6654,6 +6978,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -6820,6 +7146,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -7099,6 +7427,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -7570,6 +7900,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -7644,6 +7976,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -7816,6 +8150,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -7950,6 +8286,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -8190,6 +8528,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -8594,6 +8934,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -9000,6 +9342,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -9065,6 +9409,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -9129,6 +9475,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -9160,6 +9508,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -9305,6 +9655,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -9511,6 +9863,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -9989,6 +10343,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -10590,6 +10946,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -10654,6 +11012,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -10733,6 +11093,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -10869,6 +11231,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -11313,6 +11677,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -11585,6 +11951,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -11723,6 +12091,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -11755,6 +12125,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -11931,6 +12303,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -12328,6 +12702,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -12385,6 +12761,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -12442,6 +12820,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -12514,6 +12894,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -12542,6 +12924,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -12600,6 +12984,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -12657,6 +13043,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -12730,6 +13118,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -12904,6 +13294,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -12965,6 +13357,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -13180,6 +13574,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -13241,6 +13637,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -13311,6 +13709,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -13372,6 +13772,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -13431,6 +13833,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -13618,6 +14022,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -13679,6 +14085,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -13995,6 +14403,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -14058,6 +14468,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -14164,6 +14576,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -14223,6 +14637,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -14281,6 +14697,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -14533,6 +14951,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -14593,6 +15013,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -14652,6 +15074,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -14713,6 +15137,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -14769,6 +15195,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -14830,6 +15258,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -15051,6 +15481,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -15656,6 +16088,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -15719,6 +16153,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -15775,6 +16211,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -15839,6 +16277,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -15896,6 +16336,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -15968,6 +16410,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16023,6 +16467,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16051,6 +16497,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16105,6 +16553,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16161,6 +16611,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16217,6 +16669,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16273,6 +16727,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16329,6 +16785,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16388,6 +16846,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16444,6 +16904,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16500,6 +16962,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16556,6 +17020,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16612,6 +17078,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16668,6 +17136,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16724,6 +17194,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16781,6 +17253,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16844,6 +17318,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16903,6 +17379,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -16961,6 +17439,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17019,6 +17499,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17075,6 +17557,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17133,6 +17617,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17160,6 +17646,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17186,6 +17674,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17214,6 +17704,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17244,6 +17736,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17296,6 +17790,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17325,6 +17821,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17352,6 +17850,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17382,6 +17882,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17408,6 +17910,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17440,6 +17944,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17475,6 +17981,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17504,6 +18012,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17537,6 +18047,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17572,6 +18084,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17599,6 +18113,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17625,6 +18141,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17655,6 +18173,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17682,6 +18202,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17708,6 +18230,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17735,6 +18259,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17762,6 +18288,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17788,6 +18316,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17814,6 +18344,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17866,6 +18398,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17921,6 +18455,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -17976,6 +18512,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18011,6 +18549,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18038,6 +18578,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18064,6 +18606,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18090,6 +18634,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18116,6 +18662,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18142,6 +18690,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18168,6 +18718,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18194,6 +18746,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18220,6 +18774,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18246,6 +18802,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18272,6 +18830,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18298,6 +18858,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18324,6 +18886,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18350,6 +18914,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18376,6 +18942,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18403,6 +18971,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18430,6 +19000,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18442,6 +19014,34 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module tests/kept
+=== -t tests/keptfacts.olang
+| module <math.h>
+| module <string.h>
+| module <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/display
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/keptfacts
 === -t tests/keptparams.olang
 | module <math.h>
 | module <string.h>
@@ -18456,6 +19056,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18482,6 +19084,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18513,6 +19117,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18544,6 +19150,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18570,6 +19178,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18596,6 +19206,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18622,6 +19234,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18680,6 +19294,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18713,6 +19329,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18741,6 +19359,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18768,6 +19388,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18794,6 +19416,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18820,6 +19444,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18848,6 +19474,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18874,6 +19502,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18900,6 +19530,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18926,6 +19558,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -18952,6 +19586,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19004,6 +19640,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19035,6 +19673,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19064,6 +19704,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19111,6 +19753,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19125,6 +19769,34 @@
 | module tests/shared
 |   arith std/arith
 |   pair std/pair
+=== -t tests/slotfacts.olang
+| module <math.h>
+| module <string.h>
+| module <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/display
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/slotfacts
 === -t tests/structpat.olang
 | module <math.h>
 | module <string.h>
@@ -19139,6 +19811,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19165,6 +19839,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19191,6 +19867,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19221,6 +19899,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19248,6 +19928,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19278,6 +19960,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19305,6 +19989,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19331,6 +20017,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19357,6 +20045,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19383,6 +20073,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19412,6 +20104,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19457,6 +20151,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19486,6 +20182,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19516,6 +20214,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19542,6 +20242,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19575,6 +20277,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19603,6 +20307,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19632,6 +20338,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19669,6 +20377,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19697,6 +20407,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19723,6 +20435,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19749,6 +20463,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19775,6 +20491,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19801,6 +20519,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19827,6 +20547,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19889,6 +20611,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19948,6 +20672,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -19976,6 +20702,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20002,6 +20730,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20062,6 +20792,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20093,6 +20825,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20150,6 +20884,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20180,6 +20916,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20216,6 +20954,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20244,6 +20984,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20295,6 +21037,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20323,6 +21067,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20376,6 +21122,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20404,6 +21152,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20460,6 +21210,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20497,6 +21249,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20523,6 +21277,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20551,6 +21307,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20578,6 +21336,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20605,6 +21365,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20632,6 +21394,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20660,6 +21424,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20687,6 +21453,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -20724,6 +21492,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -21145,6 +21915,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -21206,6 +21978,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -21273,6 +22047,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -21394,6 +22170,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -21454,6 +22232,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -21874,6 +22654,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -22074,6 +22856,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -22154,6 +22938,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -22218,6 +23004,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -22282,6 +23070,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -22313,6 +23103,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -22631,6 +23423,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -22807,6 +23601,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -23088,6 +23884,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -23165,6 +23963,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -23476,6 +24276,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -23508,6 +24310,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -23569,6 +24373,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -23696,6 +24502,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -23793,6 +24601,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -24022,6 +24832,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -24190,6 +25002,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -24483,6 +25297,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -24968,6 +25784,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -25042,6 +25860,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -25216,6 +26036,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -25352,6 +26174,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -25600,6 +26424,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -26018,6 +26844,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -26438,6 +27266,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -26503,6 +27333,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -26567,6 +27399,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -26598,6 +27432,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -26745,6 +27581,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -26953,6 +27791,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -27445,6 +28285,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -28060,6 +28902,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -28124,6 +28968,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -28203,6 +29049,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -28339,6 +29187,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -28797,6 +29647,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -29083,6 +29935,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -29223,6 +30077,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -29255,6 +30111,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -29468,6 +30326,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -29879,6 +30739,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -29936,6 +30798,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -29993,6 +30857,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -30065,6 +30931,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -30093,6 +30961,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -30151,6 +31021,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -30208,6 +31080,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -30281,6 +31155,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -30492,6 +31368,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -30553,6 +31431,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -30776,6 +31656,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -30837,6 +31719,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -30907,6 +31791,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -30968,6 +31854,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -31027,6 +31915,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -31216,6 +32106,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -31277,6 +32169,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -31607,6 +32501,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -31670,6 +32566,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -31776,6 +32674,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -31835,6 +32735,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -31893,6 +32795,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -32153,6 +33057,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -32213,6 +33119,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -32272,6 +33180,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -32333,6 +33243,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -32389,6 +33301,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -32450,6 +33364,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -32679,6 +33595,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33298,6 +34216,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33361,6 +34281,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33417,6 +34339,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33481,6 +34405,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33538,6 +34464,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33610,6 +34538,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33665,6 +34595,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33693,6 +34625,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33747,6 +34681,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33803,6 +34739,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33859,6 +34797,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33915,6 +34855,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -33971,6 +34913,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34030,6 +34974,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34086,6 +35032,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34142,6 +35090,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34198,6 +35148,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34254,6 +35206,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34310,6 +35264,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34366,6 +35322,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34423,6 +35381,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34486,6 +35446,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34545,6 +35507,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34603,6 +35567,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34663,6 +35629,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34719,6 +35687,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34779,6 +35749,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number
@@ -34812,6 +35784,8 @@
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
 | module std/prelude/iterator
 | module std/prelude/map
 | module std/prelude/number

@@ -3143,7 +3143,13 @@ with no import, and no module may declare a type, a global, a function, a local 
 other prelude name (M6) and reserved the same way: each writes `$x` (E11a) - `Println` with a line end after it, a line end alone
 with nothing - to the standard output in one write, and a write the system refuses ends the program as `!` does (E35, reported at the
 caller's place, the trailing parameter `at Place = Place.Here`, E40; in a test, the test fails), so neither is fallible and no `try` is written. A program that handles a failed write uses
-`std/io`'s `Put` and `PutLine` (M19f), which fail with `io.Error`. They are the only modules that may declare methods on a built-in type, which is how the built-in
+`std/io`'s `Put` and `PutLine` (M19f), which fail with `io.Error`. Their reading counterparts are `Scanln(prompt = "")`
+(the prompt, if any, written with no line end, then the next line of the standard input without its line end and without a
+carriage return before it) and `Scan<T>(prompt = "")` (the prompt likewise, then the next whitespace-separated word as a `T`,
+as `io.Reader`'s `Next<T>` parses it); both fail with `Exhausted` at the end of the input (`Scan` also with `ParseError`, the word
+taken all the same), and a read the system refuses ends the program as a failed write does. They and `io.Reader(io.Stdin)`
+and `io.Lines(io.Stdin)` read through one buffer, so a program mixing them sees every byte once, in order. The evaluator
+refuses them while compiling, as it refuses any extern call (K1); under `interpret` they read for real. They are the only modules that may declare methods on a built-in type, which is how the built-in
 types get their methods; those methods are visible in every module. So with builders (D19): the prelude declares those
 of the built-in types and of its own - `String.FromC(p, max)` (X15), the floats' `FromBits` (E33), every integer type's
 `Parse` (`I64.Parse(t)`, `U8.Parse(t, 16)`), every float's and the F8 types' (`F32.Parse(t)`, as `ParseFloat` reads, rounded to the type, `Overflow` where a finite number does not fit) and `Bool.Parse(t)` ("true" or "false" exactly) - visible in every module. The prelude's traits are `Iterator` and `Indexable`
@@ -3474,11 +3480,11 @@ and the value rendered (E11a) - and its line end to the standard error, then giv
 where it stands: `y := io.Show(f(x)) + 1`. A failed write is ignored, the one call of std that does not report one:
 a look that could fail would need a `try` at every use, and a lost look changes nothing the program computes.
 
-The read counterpart of `Writer` is `io.Reader(fd, size = 65536)`, a buffered input also behind `Lines`: `Line()` (the next
+The read counterpart of `Writer` is `io.Reader(fd)`, a buffered input (4 KiB at first, doubling while a read fills it up to 64 KiB, and for a longer line; a reader's size changes nothing a program can see, so it is not a parameter) also behind `io.Lines(fd)`: `Line()` (the next
 line, as `Lines.Next` gives it), `Word()` (the next run of non-whitespace, line ends skipped), `Next<T>()` (the next word as
 a `T`: an integer by `T.Parse`, a float by `ParseFloat`, a `Bool` from `true`/`false`; failing with `io.Error`, `Exhausted`
 or the prelude's `ParseError`), `Bytes(n)` (exactly `n` bytes; `Exhausted` if the input ends first, the bytes read
-dropped) and `All()` (everything left). A read that fails is `io.Error.Failed`; the end of the input is `Exhausted`, as it
+dropped), `Available()` (for streams - a terminal gives a line for each Enter, a pipe or socket what came in one piece: what the buffer holds, else what one read brings, blocking until a byte comes; the bytes of a UTF-8 character not yet whole stay for the next call; `Exhausted` at the end) and `All()` (everything left). A read that fails is `io.Error.Failed`; the end of the input is `Exhausted`, as it
 is now, so a later call reads again.
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so

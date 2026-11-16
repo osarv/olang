@@ -38512,3 +38512,31 @@ three. The checker now refuses a fourth argument at its span (RangeArgs: "a rang
 "write 'range END', 'range START, END' or 'range START, END, STEP'"); the evaluator and interpret run the checked tree,
 so they need nothing. `range` with no argument was already refused by the parser ("expected an expression"). Cases:
 checks/cases/rangefourargs.olang, rangenoargs.olang.
+
+### Scanln and Scan, and Reader/Lines without a size (2026-11-16, wt-readln)
+
+The user asked for the opposite of `Println` ("read is opposite to write, put to get"); first named Readln, then Scanln
+(after Go's Scan/Scanln). The prelude gets `Scanln(prompt = "")` (the next line) and `Scan<T>(prompt = "")` (the next word as
+a T, as `io.Reader.Next<T>`), `? Exhausted` (and `ParseError`); a failed read ends the program as Print's failed write does.
+Mixing must lose no input, so the choice was one shared buffer, not "buffer nothing past the line" (impossible on a pipe
+without a call per byte): `source` moved from std/io to `std/prelude/input.olang` as `InputBuffer` (Fill, Line, Word, Bytes,
+All, Text, Buffered), with a private mutable global `stdinBuffer` that io's Reader and Lines use whenever fd is 0, reached through
+exported functions `StdinLine/Word/Bytes/All/Buffered` (a mutable global is not reached bare, names.olang). A read failure is the
+prelude's `InputError`, which io maps to `io.Error.Failed`. Piped input is read 64 KiB at a time. The evaluator refuses both as
+any extern call while compiling; under interpret they read for real. Reader and Lines lost their public `size`: a reader's
+size changes nothing the program sees (the buffer doubles, a read returns what is there), unlike Writer's; 64 KiB inside, and the
+tests of growth use the module-private `Reader.sized` and `Lines.sized`. std/os's follow test uses `io.Lines(r)`. oann has no use
+of a size. Test: checks/checks.olang `scanln` (lines, prompts, CRLF, Exhausted, ParseError, mixing, built and interpreted, large input).
+
+`Reader.Available() String& ? Error, Exhausted` (the user's request, same day, for streams): the buffer's contents without a read,
+else one read (it blocks for at least a byte) and all it brought; bytes of a UTF-8 character that has not come whole stay
+for the next call (`InputBuffer.completeEnd`), and where the input ends inside one they are given as they are. It is
+`InputBuffer.Available` in the shared buffer, so it mixes with Line, Word, Next, Bytes and All, and reaches fd 0's shared buffer
+through `StdinAvailable`. Reader only: Lines gives lines, and a line-wise Available would be Next. Test: Reader.Available in
+std/io.olang (a pipe written in pieces, a split character, the mix with Line).
+
+The buffer is adaptive (the user's approval, same day): it starts at 4 KiB (so an idle reader, one of many connections, costs
+4 KiB) and doubles whenever a read fills all the room it had, up to 64 KiB; a longer line still grows it beyond, as before. No
+public knob; `Reader.sized`/`Lines.sized` build fixed tiny buffers for the tests. Measured on a 200 MB file of 82-byte lines,
+read from stdin, three runs each: `Lines` 0.147-0.164 s with a fixed 64 KiB buffer, 0.146-0.161 s adaptive; `Reader.All`
+0.587-0.593 s fixed, 0.538-0.597 s adaptive - throughput unchanged.

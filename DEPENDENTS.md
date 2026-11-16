@@ -213,7 +213,7 @@ compiler/check.olang generic.olang explain.olang bindgen.olang` and `c.P.Prelude
 compiler calls prelude functions by name: `caseIndex`, `attrGot`, `Generator`, `Place`; generic.olang's `viewNext` and
 `viewGenTy` know `ViewGenerator` and `HoldingGenerator`'s `Next`, explain.olang writes their results as `Iterator<...>`); `eval.olang` for an
 intrinsic; `std/README.md` if a file is added; `SPEC.md` (M19d) when the method set is a rule. An exported function of the prelude (`Print`,
-`Println`, M19d) is reached bare by M6 alone: `compiler/names.olang` reserves every exported prelude name (D3a) and the
+`Println`, `Scanln`, `Scan`, M19d) is reached bare by M6 alone: `compiler/names.olang` reserves every exported prelude name (D3a) and the
 language server's completion (`session.olang` `moduleNames`) lists it with the other exports.
 
 A diagnostic is a headline row, then a `note:` row (its reason) and a `help:` row (what to write instead), both with no

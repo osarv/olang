@@ -59,7 +59,7 @@ fn Read(fd I32, buf mut Array<U8>&) Array<U8>& ? Error {
 # Printing: the one way a program writes text to its standard output and error (M19f). Each call writes at once, nothing
 # held back, and a line and its end go as one write, so lines from tasks running at once are not cut into each other. A
 # failed write is an error (Error), written with "try" like any other; one writing a lot uses a Writer. Put, PutLine,
-# PutErr and PutErrLine take any value and write it as $ renders it: "try io.PutLine(n)", "try io.PutLine("n is " $n)".
+# PutErr and PutErrLine take any value and write it as $ renders it: "try io.PutLine(n)", "try io.PutLine("n is " + $n)".
 
 # x as $ renders it, then nothing - to the standard output
 fn Put<T>(x T) ? Error { try Write(Stdout, $x) }
@@ -116,7 +116,8 @@ fn FormatInt(n I64, buf mut Array<U8>&) I32 {
 
 # a file's lines, one at a time: "for line in try io.Lines(fd) { ... } catch Error { ... }". The file is read through a
 # buffer a piece at a time, so reading one of any size takes the memory of its longest line, never of the whole of it -
-# the buffer starts at "size" bytes and doubles whenever a single line fills it.
+# the buffer starts at 4 KiB, doubles while reads fill it up to 64 KiB, and doubles whenever a single line fills it. Lines of standard input share its buffer
+# with the prelude's Scanln and Scan and with Reader, so what one reads is not seen by another.
 # A line is what comes before a newline, without it, and one carriage return just before the newline goes with it, so
 # "a\r\nb\n" is "a" and "b" as "a\nb\n" is. The last line needs no newline after it: "a\nb" is "a" and "b", "a\n" is
 # just "a", and "a\n\n" is "a" and "" - an empty file has no lines at all.
@@ -134,98 +135,25 @@ fn FormatInt(n I64, buf mut Array<U8>&) I32 {
 #     }
 # The end of the file ends the line before it, as above, so a writer that writes a line in pieces
 # can be read between them as two lines; one that writes each line whole, its newline included, is read line by line.
-type Lines struct(fd I32, size I64 = 65536) {
+type Lines struct(fd I32) {
     fd
-    src := source(fd, size)
+    src := InputBuffer(fd, 4096, true)
 }
 
-fn (l mut Lines&) Next() String& ? Error, Exhausted { return try l.src.line() }
+# a Lines whose buffer starts at "size" bytes, for the tests of growth
+fn Lines.sized(fd I32, size I64) Lines {
+    l := Lines(fd)
+    l.src = InputBuffer(fd, size)
+    return l
+}
+
+fn (l mut Lines&) Next() String& ? Error, Exhausted {
+    if l.fd == 0: return try StdinLine() catch InputError { error Error.Failed }
+    return try l.src.Line() catch InputError { error Error.Failed }
+}
 
 # whether what was read holds more not yet given as a line - which Next gives without reading
-fn (l Lines&) Buffered() Bool { return l.src.end > l.src.start }
-
-# the buffer under Lines and Reader: what has been read from "fd" and not yet taken, in buf[start:end]. The buffer starts
-# at "size" bytes (one at least) and doubles whenever what is waiting fills it.
-type source struct(fd I32, size I64) {
-    fd
-    buf := Array<U8>(size if size > 0 else 1)
-    start I64 = 0
-    end I64 = 0
-}
-
-# more read after what waits, the waiting bytes moved to the front first and the buffer doubled if they fill it; fails
-# with Exhausted at the end of the input - as it is now, so calling again reads again - and with Error.Failed
-fn (s mut source&) fill() ? Error, Exhausted {
-    waiting := s.end - s.start
-    if s.start > 0 {
-        for k in range waiting: s.buf[k] = s.buf[s.start + k]
-        s.start = 0
-        s.end = waiting
-    }
-    if s.end == s.buf.Len() {
-        old := s.buf
-        s.buf = String(Array<U8>(old.Len() * 2))
-        for k in range s.end: s.buf[k] = old[k]
-    }
-    got := unistd.read(s.fd, s.buf[s.end:], U64(s.buf.Len() - s.end))
-    if got < 0: error Error.Failed
-    if got == 0: error Exhausted.End
-    s.end += got
-}
-
-# the next line, as Lines.Next gives it
-fn (s mut source&) line() String& ? Error, Exhausted {
-    from I64 = 0 # buf[start:start + from] holds no newline
-    for {
-        for i in range s.start + from, s.end {
-            if s.buf[i] == '\n' {
-                first := s.start
-                s.start = i + 1
-                return s.text(first, i - (1 if i > first and s.buf[i - 1] == '\r' else 0))
-            }
-        }
-        from = s.end - s.start
-        try s.fill() catch Exhausted { # the end of the input, as it is now: what is left is its last line
-            if s.start == s.end: error Exhausted.End
-            first := s.start
-            s.start = s.end
-            return s.text(first, s.end - (1 if s.buf[s.end - 1] == '\r' else 0))
-        }
-    }
-    unreachable
-}
-
-# the next run of bytes that are not whitespace, whitespace before it skipped; the whitespace after it is left
-fn (s mut source&) word() String& ? Error, Exhausted {
-    for {
-        for s.start < s.end and Char(s.buf[s.start]).IsSpace(): s.start++
-        if s.start < s.end: break
-        try s.fill()
-    }
-    from I64 = 0 # buf[start:start + from] holds no whitespace
-    for {
-        for i in range s.start + from, s.end {
-            if not Char(s.buf[i]).IsSpace(): continue
-            first := s.start
-            s.start = i
-            return s.text(first, i)
-        }
-        from = s.end - s.start
-        try s.fill() catch Exhausted {
-            first := s.start
-            s.start = s.end
-            return s.text(first, s.end)
-        }
-    }
-    unreachable
-}
-
-# buf[first:last] as new text
-fn (s source&) text(first I64, last I64) String& {
-    t := Array<U8>(last - first)
-    for k in range last - first: t[k] = s.buf[first + k]
-    return String(t)
-}
+fn (l Lines&) Buffered() Bool { return StdinBuffered() if l.fd == 0 else l.src.Buffered() }
 
 # input read through a buffer, taken as lines, words, numbers, bytes or all at once: the read counterpart of Writer.
 # Every method fails with Error.Failed where the read under it does, and with Exhausted at the end of the input - as it
@@ -236,57 +164,72 @@ fn (s source&) text(first I64, last I64) String& {
 #     total I64 = 0
 #     for _ in range n: total += try in.Next<I64>()
 #
-# The buffer starts at "size" bytes and doubles when one line or word fills it, so memory is that of the longest piece.
+# The buffer starts at 4 KiB, doubles while reads fill it up to 64 KiB, and doubles when one line or word fills it, so memory is that of the longest piece.
+# Reading descriptor 0 goes through the buffer the prelude's Scanln and Scan and Lines read, so mixing them loses nothing.
 # Line, Word and All give new text, built where the caller puts it, as Lines.Next does. Mixing the methods is fine:
 # each takes what comes next, so Word then Line gives the rest of the line the word was on.
-type Reader struct(fd I32, size I64 = 65536) {
+type Reader struct(fd I32) {
     fd
-    src := source(fd, size)
+    src := InputBuffer(fd, 4096, true)
+}
+
+# a Reader whose buffer starts at "size" bytes, for the tests of growth
+fn Reader.sized(fd I32, size I64) Reader {
+    r := Reader(fd)
+    r.src = InputBuffer(fd, size)
+    return r
 }
 
 # the next line without its line end, a carriage return before it dropped, as Lines.Next gives it
-fn (r mut Reader&) Line() String& ? Error, Exhausted { return try r.src.line() }
+fn (r mut Reader&) Line() String& ? Error, Exhausted {
+    if r.fd == 0: return try StdinLine() catch InputError { error Error.Failed }
+    return try r.src.Line() catch InputError { error Error.Failed }
+}
 
 # the next run of non-whitespace (space, tab, line ends), whitespace before it skipped, line ends included
-fn (r mut Reader&) Word() String& ? Error, Exhausted { return try r.src.word() }
+fn (r mut Reader&) Word() String& ? Error, Exhausted {
+    if r.fd == 0: return try StdinWord() catch InputError { error Error.Failed }
+    return try r.src.Word() catch InputError { error Error.Failed }
+}
 
 # the next word as a T: an integer type as T.Parse reads it in base 10, a float as ParseFloat does, a Bool from "true" or
 # "false". The word's own failures are the prelude's ParseError (Empty never: a word is not empty; Invalid, Overflow),
 # so Next's set is Error, Exhausted and ParseError whatever T is. A word that fails to parse is taken all the same, so the
 # next call reads the one after it. Any other T is an error at the call, naming the builder it lacks (G18a).
 fn (r mut Reader&) Next<T>() T ? Error, Exhausted, ParseError {
-    w := try r.src.word()
+    w := try r.Word()
     return try T.Parse(w)
 }
 
 # exactly n bytes. If the input ends first, Exhausted - and the bytes read before it are gone, taken from the input and
 # dropped, so a caller wanting them back reads in pieces; n of zero or less is an empty array without reading
 fn (r mut Reader&) Bytes(n I64) Array<U8>& ? Error, Exhausted {
-    out := Array<U8>(n if n > 0 else 0)
-    got I64 = 0
-    for got < out.Len() {
-        if r.src.start == r.src.end: try r.src.fill()
-        take := (r.src.end - r.src.start).Min(out.Len() - got)
-        for k in range take: out[got + k] = r.src.buf[r.src.start + k]
-        r.src.start += take
-        got += take
-    }
-    return out
+    if r.fd == 0: return try StdinBytes(n) catch InputError { error Error.Failed }
+    return try r.src.Bytes(n) catch InputError { error Error.Failed }
+}
+
+# what is there to read now, for streams: all the buffer holds, without reading; with nothing in it, one read, which
+# waits until at least one byte has come, and everything it brought. On a terminal that is a line for each Enter, on a pipe
+# what the writer wrote in one piece, on a socket what the peer sent; a program answers as the input arrives instead of
+# waiting for a line or for the end. If a read stops partway through a UTF-8 character the bytes of it stay in the buffer
+# for the next call, so no character is split (a read that gives nothing else reads again). Exhausted at the end of the
+# input. It takes from the buffer Line, Word, Next, Bytes and All take from, so mixing them loses nothing.
+fn (r mut Reader&) Available() String& ? Error, Exhausted {
+    if r.fd == 0: return try StdinAvailable() catch InputError { error Error.Failed }
+    return try r.src.Available() catch InputError { error Error.Failed }
 }
 
 # everything left, to the end of the input
 fn (r mut Reader&) All() String& ? Error {
-    for { try r.src.fill() catch Exhausted { break } }
-    first := r.src.start
-    r.src.start = r.src.end
-    return r.src.text(first, r.src.end)
+    if r.fd == 0: return try StdinAll() catch InputError { error Error.Failed }
+    return try r.src.All() catch InputError { error Error.Failed }
 }
 
 # text and bytes gathered and written to a descriptor in large pieces - the way to write a lot (a compiler's output, a
 # report, a table), where Put and PutLine make one write per call, so the system is entered once for every line:
 #
 #     out := io.Writer(io.Stdout)
-#     for r in rows: out.PutLine($r.Name ": " $r.Count)
+#     for r in rows: out.PutLine($r.Name + ": " + $r.Count)
 #     try out.Flush()
 #
 # What is written waits in a buffer of "size" bytes and goes to the descriptor when the buffer is full, and whatever is
@@ -476,7 +419,7 @@ fn reading(text String&) I32 {
 fn bracketed(text String&, size I64) String& {
     fd := reading(text)
     out String& = ""
-    for line in try Lines(fd, size) {
+    for line in try Lines.sized(fd, size) {
         out = $out + "[" + $line + "]"
     } catch Error { unreachable }
     unistd.close(fd)
@@ -531,7 +474,7 @@ test "Lines reports a read that fails, and ends the loop with it" {
 
 # Exhausted again for every call once the lines have run out
 fn afterTheEnd(fd I32) ? Error {
-    l := Lines(fd, 2)
+    l := Lines.sized(fd, 2)
     first := l.Next()!
     assert first == "only"
     for _ in range 3 {
@@ -560,7 +503,7 @@ fn ioChurn() I64 {
 test "a line kept is built where it is kept" {
     fd := reading("alpha\nbeta\ngamma\n")
     kept := Vec<String&>()
-    for line in try Lines(fd, 3) {
+    for line in try Lines.sized(fd, 3) {
         assert ioChurn() > 0
         kept.Push($line)
     }
@@ -663,7 +606,7 @@ test "a deferred Flush writes what was written however the function is left" {
 
 test Reader.Line "gives lines as Lines does, and Exhausted at the end, each time" {
     fd := reading("a\r\nb\n\nlast")
-    r := Reader(fd, 2)
+    r := Reader.sized(fd, 2)
     assert try r.Line() == "a"
     assert try r.Line() == "b"
     assert try r.Line() == ""
@@ -678,7 +621,7 @@ test Reader.Line "gives lines as Lines does, and Exhausted at the end, each time
 # every word of "text", through a buffer of "size" bytes, each in brackets
 fn words(text String&, size I64) String& {
     fd := reading(text)
-    r := Reader(fd, size)
+    r := Reader.sized(fd, size)
     out String& = ""
     for {
         w := try r.Word() catch Exhausted { break } catch Error { unreachable }
@@ -701,7 +644,7 @@ test Reader.Word "skips whitespace, line ends included, across buffer refills" {
 
 test Reader.Word "leaves what follows the word, so Line takes the rest of its line" {
     fd := reading("ab cd ef\ngh\n")
-    r := Reader(fd, 2)
+    r := Reader.sized(fd, 2)
     assert try r.Word() == "ab"
     assert try r.Line() == " cd ef"
     assert try r.Word() == "gh"
@@ -710,7 +653,7 @@ test Reader.Word "leaves what follows the word, so Line takes the rest of its li
 
 # the sample of the doc comment: n, then n numbers
 fn sumOf(fd I32) I64 ? Error, Exhausted, ParseError {
-    r := Reader(fd, 2)
+    r := Reader.sized(fd, 2)
     n := try r.Next<I64>()
     total I64 = 0
     for _ in range n: total += try r.Next<I64>()
@@ -724,7 +667,7 @@ test Reader.Next "reads a count and that many numbers" {
 }
 
 fn numbers(fd I32) ? Error, Exhausted, ParseError {
-    r := Reader(fd, 4)
+    r := Reader.sized(fd, 4)
     assert try r.Next<U8>() == 255
     assert try r.Next<I32>() == -17
     assert try r.Next<I128>() == -5
@@ -759,7 +702,7 @@ test Reader.Next "fails with ParseError on a bad word, taking it, and with Exhau
 
 test Reader.Bytes "gives exactly n bytes, across refills, and Exhausted when the input ends first" {
     fd := reading("abcdefghij")
-    r := Reader(fd, 3)
+    r := Reader.sized(fd, 3)
     assert String(try r.Bytes(4)) == "abcd"
     assert (try r.Bytes(0)).Len() == 0
     assert String(try r.Bytes(5)) == "efghi"
@@ -771,11 +714,34 @@ test Reader.Bytes "gives exactly n bytes, across refills, and Exhausted when the
 
 test Reader.All "gives everything left, and the empty text at the end" {
     fd := reading("one two\nthree\n")
-    r := Reader(fd, 2)
+    r := Reader.sized(fd, 2)
     assert try r.Word() == "one"
     assert try r.All() == " two\nthree\n"
     assert try r.All() == ""
     unistd.close(fd)
+}
+
+# the pieces of "pieces" written one at a time to a pipe, each read as Available gives it, in brackets, after Line took the first
+test Reader.Available "gives what a read brought, keeps a split character whole, and mixes with Line" {
+    fds := Array<I32>(2)
+    assert unistd.pipe(fds) == 0
+    r := Reader(fds[0])
+    Write(fds[1], "first\nsec")!
+    assert (try r.Line() catch default "?") == "first" # the read brought more than the line: "sec" waits
+    assert (try r.Available() catch default "?") == "sec"
+    Write(fds[1], "ab\xC3")! # half of a two-byte character: held back
+    assert (try r.Available() catch default "?") == "ab"
+    Write(fds[1], "\xA9cd\n")!
+    assert (try r.Available() catch default "?") == "\xC3\xA9cd\n" # the character whole, with what came after it
+    Write(fds[1], "x\ny\n")!
+    assert (try r.Line() catch default "?") == "x"
+    assert (try r.Available() catch default "?") == "y\n" # the rest of what the read brought, without reading
+    Write(fds[1], "end\xE2\x82")! # two of three bytes, then the input ends
+    unistd.close(fds[1])
+    assert (try r.Available() catch default "?") == "end"
+    assert (try r.Available() catch default "?") == "\xE2\x82" # the end of the input: what is left as it is
+    assert (try r.Available() catch Exhausted default "end" catch default "?") == "end"
+    unistd.close(fds[0])
 }
 
 test Reader "reports a read that fails" {
