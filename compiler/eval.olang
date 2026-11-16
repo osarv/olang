@@ -3052,6 +3052,7 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
     at := m.opType(fi, x)
     match op {
         case typed.PrimOp.Len { return m.lenOf(fi, x, at) }
+        case typed.PrimOp.LaneDot { return m.laneDot(fi, args, ty) }
         case typed.PrimOp.Same {
             p := m.addr(fi, x, 1)
             q := m.addr(fi, m.arg(fi, args, 1), 2)
@@ -3384,6 +3385,25 @@ fn (m mut Machine&) bitcast(bits I64, from types.TypeId) I64 {
         }
     }
     return bits
+}
+
+# E39's Sum<A> over a block of byte products (LaneDot): each pair of elements widened by its own signedness, multiplied
+# and added - exact, as any order of an integer sum is - the total as ty's bits
+fn (m mut Machine&) laneDot(fi I64, args mir.Range, ty types.TypeId) I64 {
+    x, y := m.arg(fi, args, 0), m.arg(fi, args, 1)
+    p := m.rdPtr(m.addr(fi, x, 1))
+    q := m.rdPtr(m.addr(fi, y, 2))
+    n := m.scalar(fi, m.arg(fi, args, 2))
+    et := m.T.Repr(m.T.Referent(m.T.Repr(m.opType(fi, x))))
+    ft := m.T.Repr(m.T.Referent(m.T.Repr(m.opType(fi, y))))
+    s I64 = 0
+    for j in range n {
+        a := m.intValue(m.rd(Ptr(p.Id, p.Off + j), 1), et)
+        b := m.intValue(m.rd(Ptr(q.Id, q.Off + j), 1), ft)
+        if m.halted: return 0
+        s = s + a * b
+    }
+    return s & bmask(m.ibits(ty))
 }
 
 # an atomic operation, evaluated as the plain one on its place (K1, P9)

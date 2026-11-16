@@ -1901,7 +1901,7 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
         case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Convert, typed.PrimOp.Bitcast: 1
         case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire, typed.PrimOp.AnyInstance: 1
         case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap: 1
-        case typed.PrimOp.AtomicCompareSwap, typed.PrimOp.Repack: 3
+        case typed.PrimOp.AtomicCompareSwap, typed.PrimOp.Repack, typed.PrimOp.LaneDot: 3
         case _: 2
     }
     if n != want {
@@ -1969,6 +1969,13 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
         case typed.PrimOp.RotateLeft, typed.PrimOp.RotateRight, typed.PrimOp.SatShl {
             if not t.IsInt(ra) or t.Repr(v.operandType(v.arg(r, 1))) != I64T { v.bad($short($op) + " of a " + $v.canon(a)) }
             if not v.fits(a, ty): v.bad($short($op) + " of a " + $v.canon(a) + " typed " + $v.canon(ty))
+        }
+        case typed.PrimOp.LaneDot {
+            b := t.Repr(v.operandType(v.arg(r, 1)))
+            if not t.IsRef(ra) or not t.IsRef(b) or not t.IsInt(t.Repr(t.Referent(ra))) or not t.IsInt(t.Repr(t.Referent(b))) {
+                v.bad("LaneDot of a " + $v.canon(a))
+            }
+            if not t.IsInt(t.Repr(ty)): v.bad("LaneDot typed " + $v.canon(ty))
         }
         case typed.PrimOp.Retire {
             x := t.Referent(ra) if t.IsRef(ra) else a

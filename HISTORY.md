@@ -38999,3 +38999,27 @@ test that silently ended its own process.
   it already did for a signal. The "x_kill.olang: the compiler ended (Killed)" line is that test's own fake compiler
   killing itself on purpose, not a memory kill; the "libclang_rt.tsan-.a not installed" note came from the same test's
   bare Config (no clang, no architecture) - TestFiles no longer says it where no clang is known.
+
+**2026-11-16, Sum<A>: the type a lane total works in (E39, the user's call).** oann's INT8 matrix-vector product could
+not reach vpdpbusd (u8 x s8, 64 products an instruction on avx512vnni/avxvnni): olang's plain loop `s += I32(a[p]) *
+I32(b[p])` vectorizes to vpmaddwd/vpdpwssd, 16 products an instruction, and LLVM 18 forms vpdpbusd only from a vector
+`reduce.add` of `mul(zext, sext)` of bytes, which no loop leaves (oann repro/vnnidot.olang). Asked for a named lane
+operation for the widening byte dot product, the user chose no new operator: "the lane method Sum takes the type it
+works in", `(x * w).Sum<I32>()`. The rule: every lane computed in A - each operand's elements widened to A before the
+lane's operation - and the lanes added in A from its zero; A a number every operand's element type widens to with
+nothing lost (T6b), anything else an error naming the rule (`lanesumnarrows`, `lanesumnotnumber`). A mask's Bools take
+no part. Plain `Sum()` is unchanged.
+
+Built: the checker's `laneSumIn` builds the loop with each number leaf widened (`laneWiden`), so the evaluator runs it
+unchanged. Where the lanes are a product of two arrays of 8-bit integers summed into an integer of 16 to 64 bits, whole
+blocks of 256 lanes go through a new primitive, `LaneDot` (args: references to the two blocks' first elements and the
+block's length), and the rest lane by lane. emit lowers `LaneDot` to `<256 x i8>` loads, zext/sext to `<256 x A>`, a
+`mul` and `llvm.vector.reduce.add` - four vpdpbusd and one horizontal reduction per block on this Zen 4, ordinary
+vector code on a target without VNNI; the evaluator multiplies and adds the block's elements. A block of 64 lanes also
+gives vpdpbusd but pays the horizontal reduction every 64 products; a vector accumulator carried across blocks gives
+vpdpwssd again, so 256 is the block. Measured with the repro rewritten to `Sum<I32>` (same results as the plain loop):
+3.1x the plain loop at 1024 elements, 3.9x at 4096, 2.5x at 65536 (L2-bound).
+
+Floats: E39's `Sum` adds in order, and nothing in SPEC lets a widened float sum be reassociated, so `Sum<F32>` over
+BF16 or F16 is the sequential sum of the F32 products. vdpbf16ps (pairs of BF16 products summed into F32 lanes) would
+change the order, so it is not used; it waits for a form whose order is free.

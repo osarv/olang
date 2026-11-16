@@ -1963,6 +1963,10 @@ type PrimOp enum {
     # E39: args [n], a length: nothing, once it is above zero - a total that needs an element (Min, Max), checked Try:
     # ArrayError.Empty
     NonEmpty
+    # E39's Sum<A>: args [p, q, n] - p and q references to two arrays' elements of 8-bit integers, n a constant: the
+    # products of the n lanes from them, each element widened to ty (an integer) first, added in ty - in any order, an
+    # integer sum's being exact. The target's dot instructions where it has them (vpdpbusd)
+    LaneDot
     # T13c: args [x, k] - field k (a constant) of the packed value x, its bits read out as the field's type ty
     Unpack
     # T13c: args [x, k, v] - the packed value x, of type ty, with field k's bits replaced by v's
