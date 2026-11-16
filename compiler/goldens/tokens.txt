@@ -2342,13 +2342,13 @@ e6de7b7311f59884 24f4ca642bb69364 compiler/api.olang
 a1a4d39f827e4986 a941da3248a4dfd8 compiler/build.olang
 aa9cd72468522acd 9410604d5599411a compiler/cabi.olang
 86d62fb0c42ac8b1 4c97eaf489c61861 compiler/cells.olang
-94c8000386ee9033 f560e1a4e330b5a3 compiler/check.olang
+942286f7cef8cea7 780554936fda902e compiler/check.olang
 9bfde7101377f290 0547374433d854b9 compiler/cond.olang
 23397e0e6b6e5b92 e8de207d3d679c4c compiler/definit.olang
 75b4a7ebeb624f5c 699a1be48dd42e60 compiler/diag.olang
 8eecc7e6e624f53a 744bfcc1480f0aa4 compiler/diagmsg.olang
 ef46370b593dedc1 be723f6cb4f85f47 compiler/doc.olang
-90454feb409f9bd3 de29a5041c28fbc2 compiler/effects.olang
+11d9712c82bc54c2 755d8459f826eb5b compiler/effects.olang
 4b0ffb9612dec3ba 8cce4c28d27fca39 compiler/emit.olang
 c69f3d3b68996dfe 6201b6fa07256589 compiler/eval.olang
 915265e3f3ca2672 180ec42a5f54b452 compiler/explain.olang
@@ -2363,7 +2363,7 @@ b372bade41105b4d 2d511578a5f4e96d compiler/generic.olang
 b0231f57ee965ec6 86894f1336fb6e15 compiler/lineedit.olang
 05cc4dd238ce9baa bf43f5ab4690cb1a compiler/listing.olang
 38cf2eef6ce2bab7 e7fdd02fb6b00575 compiler/load.olang
-c18c736a9f5aa3bb 33b1797b90c0573e compiler/lower.olang
+e8019671d4efe687 482c60d37b3197b3 compiler/lower.olang
 ee9859766b9d5817 ff6c9a764e7f3f1d compiler/lsp.olang
 bcee8f3442f5e28b f0af21ece4cd548e compiler/mcp.olang
 1d03d8a7a1b103a4 e992ca9a4e59d559 compiler/measure.olang
@@ -2424,7 +2424,7 @@ c33a998ee0a9a8ab ac54beb0bb87c852 compiler/tools/scopedump.olang
 e4503bc11d688442 797671334c042c15 compiler/tools/seed.olang
 de8f44f2efb8185b 3e81d521ca35f8aa compiler/tools/tokdiff.olang
 1b2522e00e51396d 29132bc2239a9dd2 compiler/tools/toolkit.olang
-8c14b5c7a46cbf73 f2ca771f2b72a51e compiler/typed.olang
+5e01d3813a711261 cfceee3a02f305fa compiler/typed.olang
 dd09d2f6b8939ebb 76c2d467366bc428 compiler/types.olang
 90f9cb09ca64ef52 085fb55d901192e5 compiler/unparse.olang
 0588cc1c800e97e3 edcc9ef4d7ca4fde compiler/views.olang
@@ -2592,7 +2592,7 @@ b177c6f5742efe8b 83dae0bbfe0f91b8 tests/inplace.olang
 8462a4d37509c4bd 5861f011e35adf7c tests/intsweep.olang
 b0130331a3b9cadb 7d7dc7211c93f8e5 tests/intwidths.olang
 bd01bb86f2a34a7e 31637e6b5ed37382 tests/kept.olang
-0fc169151560aa47 17eb5c2f365ca18b tests/keptfacts.olang
+1e48b6ce34b3d2d0 4f8a94ece21941e0 tests/keptfacts.olang
 57db244dae63be6f 89cc69b16b7ae401 tests/keptparams.olang
 ef7f5868a9702366 d6d7e4d692ba0d97 tests/lanes.olang
 2fa6f0a876be8784 f46383a6ca70ac7b tests/literals.olang

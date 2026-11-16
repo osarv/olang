@@ -371,6 +371,7 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     refsKept typed.RefsKept              # what bodies keep of what a parameter names (onStack)
     slotted Map<I64, Bool>               # by reference local of the body walked: whether it has a slot of its own
     kept Vec<Bool>                       # by value local of the body walked: whether its storage may be kept past its block
+    readsHere Map<I64, Bool>             # by call site: a view call read where it stands, uncopied (readOut)
 }
 
 type pair struct(A I64, B I64) {
@@ -1595,12 +1596,14 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
             e.expr(x)
             e.define(I64(id), x)
             if I64(id) < e.kept.Len() and e.kept[I64(id)]: e.cur.Allocates = true
+            if e.copyBuilds(x, e.Bodies[e.curBody].Locals[I64(id)].Ty): e.cur.Allocates = true
         }
         case typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { e.expr(x) }
         case typed.Stmt.Assign(_, t, v) {
             e.place(t, true)
             # (a reference local's own stack slot, lowering's slotted: its value's making counted, no storage)
             if t == typed.Lvalue.Local and v == typed.Expr.Promote and e.ownSlot(I64(t.id)) { e.expr(v.pr.X) } else { e.expr(v) }
+            if e.copyBuilds(v, t.Type()): e.cur.Allocates = true
             # (a reference's slots read off its declaration's value alone, as before; every value where Pure is asked)
             if t == typed.Lvalue.Local and (e.WantPure or e.isFn(t.ty) or e.instType(t.ty)): e.define(I64(t.id), v)
         }
@@ -1616,6 +1619,7 @@ fn (e mut Effects&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Return(_, v) {
             e.expr(v)
+            if v != null and e.retBuilds(v): e.cur.Allocates = true
             if (e.retFn or e.retInst) and v != null: e.curRets.Push(v)
         }
         case typed.Stmt.Suspend(_, v) { e.expr(v) }
@@ -1686,7 +1690,11 @@ fn (e mut Effects&) expr(x typed.Expr?&) {
     if x == null { return }
     match x {
         case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { e.place(p, false) }
+        case typed.Expr.Read(_, ty, p, _) {
+            e.readOut(p, ty)
+            e.place(p, false)
+        }
+        case typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { e.place(p, false) }
         case typed.Expr.Promote(_, ty, pr) {
             e.cur.Allocates = true
             # a value of a type with a destructor given storage of its own registers it there (O16)
@@ -1706,6 +1714,7 @@ fn (e mut Effects&) expr(x typed.Expr?&) {
         }
         case typed.Expr.Call(_, ty, cl) {
             if ty == types.NoreturnT: e.cur.Ends = true
+            if e.viewCall(cl, ty) and not e.readsHere.Has(I64(cl.Site)): e.cur.Allocates = true
             e.call(cl)
         }
         case typed.Expr.Make(_, ty, m) {
@@ -1792,6 +1801,109 @@ fn (e mut Effects&) fnVal(f typed.FnVal&) {
             e.curCalls.Push(I64(call))
         }
     }
+}
+
+# ---- copies an array value takes (T7b, T7c, D9h) ----
+
+# whether ty is an array of a run-time length held by value: storage of its own wherever it is kept (T7b)
+fn (e Effects&) valueArray(ty types.TypeId) Bool {
+    r := e.P.T.Repr(ty)
+    return e.P.T.KindOf(r) == types.Kind.Array and e.P.T.Length(r) == types.TypeId(0)
+}
+
+# whether x's type is a fixed array of ty's element, which kept as ty is widened into storage of its own (T7c)
+fn (e Effects&) widened(x typed.Expr&, ty types.TypeId) Bool {
+    from := e.P.T.Repr(x.Type())
+    return e.P.T.KindOf(from) == types.Kind.Array and e.P.T.Length(from) != types.TypeId(0) and e.valueArray(ty)
+}
+
+# whether x, an array value, names existing storage - a place read, through the conversions, choices and sequences
+# that hand it on - which a value array kept from it copies (lowering's copiesValue)
+fn (e mut Effects&) existing(x typed.Expr?&) Bool {
+    if x == null: return false
+    return match x {
+        case typed.Expr.Read(_, _, _, _): true
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and e.existing(args[0])
+        case typed.Expr.Away(_, _, y): e.existing(y)
+        case typed.Expr.Seq(_, _, q): e.existing(q.X)
+        case typed.Expr.Cond(_, _, c): e.existing(c.A) or e.existing(c.B)
+        case typed.Expr.Match(_, _, m): e.armsExisting(m)
+        case typed.Expr.Try(_, _, t): e.existing(t.X) or e.defaultsExisting(t)
+        case _: false
+    }
+}
+
+fn (e mut Effects&) armsExisting(m typed.Match&) Bool {
+    for a in m.Arms {
+        if e.existing(a.Value): return true
+    }
+    return m.NoMatch != null and e.existing(m.NoMatch!.Value)
+}
+
+fn (e mut Effects&) defaultsExisting(t typed.Try&) Bool {
+    for c in t.Clauses {
+        for d in c.Defaults {
+            if e.existing(d): return true
+        }
+    }
+    return false
+}
+
+# G42: whether x kept where a value of type ty is held - a local declared, a place assigned - builds storage: an
+# array of a run-time length held by value copied out of existing storage, or a fixed array widened to one (T7b,
+# T7c). Counted wherever it is written: lowering leaves the copy out where the local only views stable storage
+# (viewLocals), which nothing here proves
+fn (e mut Effects&) copyBuilds(x typed.Expr?&, ty types.TypeId) Bool {
+    if x == null or not e.valueArray(ty): return false
+    return e.widened(x, ty) or e.existing(x)
+}
+
+# whether a return builds the copy of an array value in the result's scope (lowering's retArrays): a fixed array
+# widened, or existing storage but a local's own - one the body built, counted where it was - where the body hands
+# back no view its callers copy (D9h)
+fn (e mut Effects&) retBuilds(v typed.Expr&) Bool {
+    res := e.P.T.Result(e.Bodies[e.curBody].Ty)
+    if not e.valueArray(res): return false
+    if e.widened(v, res): return true
+    if not e.existing(v) or e.viewsOf(e.curBody) > 0: return false
+    return match v {
+        case typed.Expr.Read(_, _, p, _): p != typed.Lvalue.Local or e.Bodies[e.curBody].Locals[I64(p.id)].Kind == typed.LocalKind.Param
+        case _: true
+    }
+}
+
+# the parameters a body's result may be a view of (D9h: load.ViewResults, a constructor's CtorViews), 0 for none
+fn (e mut Effects&) viewsOf(id I64) I64 {
+    if id < 0 or id >= e.Bodies.Len(): return 0
+    return match e.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): try e.P.L.ViewResults.Get(inst) catch default I64(0)
+        case typed.BodyOf.Ctor(t, twin): (try e.P.L.CtorViews.Get(I64(t)) catch default I64(0)) if twin == types.ListId(0) else 0
+        case _: 0
+    }
+}
+
+# D9h by evaluation order: a value owning nothing read out of a view call's temporary with nothing run between
+# (typed.Call.QuietRead) - the view read where it stands, as lowering's readOut, windowQuiet and stableViews read it: every
+# argument it may view rooted in a place of this function, no declared Copy run
+fn (e mut Effects&) readOut(p typed.Lvalue&, ty types.TypeId) {
+    if not e.P.T.IsRef(ty) and typed.HoldsOwned(e.P.T, ty): return
+    c := typed.Call.QuietRead(p)
+    if c == null: return
+    id := typed.CalleeBody(c)
+    v := e.viewsOf(id)
+    if v <= 0 or (v & typed.ViewOther) != 0 or e.P.T.RunsCopy(e.P.T.Result(e.Bodies[id].Ty)): return
+    for k in range c.Args.Len().Min(typed.ViewBits) {
+        if (v & (I64(1) << k)) != 0 and not typed.PlaceRooted(c.Args[k]): return
+    }
+    e.readsHere.Put(I64(c.Site), true)
+}
+
+# D9h: a call of a body handing back a view of what it is given, its value holding storage of its own - copied where
+# its caller keeps it (lowering's viewCall); counted at every call, lowering reading some where they stand
+fn (e mut Effects&) viewCall(cl typed.Call&, ty types.TypeId) Bool {
+    id := typed.CalleeBody(cl)
+    if id < 0 or e.P.T.IsRef(ty) or not typed.HoldsOwned(e.P.T, ty): return false
+    return e.viewsOf(id) > 0
 }
 
 fn (e mut Effects&) prim(op typed.PrimOp, args Array<typed.Expr&>&) {

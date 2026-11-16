@@ -103,6 +103,38 @@ fn mt.Over(x F32) mt {
 
 assert keptDeep.Allocates and keptCopy.Allocates and mt.Over.Allocates, "a local a kept value is built of is given storage"
 
+# an array of a run-time length held by value copied out of existing storage (T7b) - declared, assigned - or widened
+# from a fixed one (T7c), and a view handed back copied where its caller keeps it (D9h): each builds storage
+type held struct(S Array<F32>) {
+    S
+}
+
+fn copiedOut(h held&) F32 {
+    pre := h.S
+    pre[0] = 5.0
+    return pre[0] + h.S[0]
+}
+
+fn widenedThenAssigned(h held&) F32 {
+    q := Array<F32>(4)
+    q = h.S
+    q[0] = 1.0
+    return q[0] + h.S[0]
+}
+
+fn storedInto(h held&, into mut held&) { into.S = h.S }
+
+fn handedBack(h held&) Array<F32> { return h.S }
+
+fn keptView(h held&) F32 {
+    x := handedBack(h)
+    x[0] = 1.0
+    return x[0] + h.S[0]
+}
+
+assert copiedOut.Allocates and widenedThenAssigned.Allocates and storedInto.Allocates and keptView.Allocates, "an array value's copy builds storage"
+assert not handedBack.Allocates, "a view handed back is copied by its caller"
+
 test lent "a local kept by nothing is the frame's, and reads back what was written" {
     assert lent(3) == 1.0 and converted() == 28.0 and viewed(2.5) == 2.5
     d := Array<F32>(4)
@@ -115,4 +147,10 @@ test lent "a local kept by nothing is the frame's, and reads back what was writt
     keptDeep(h)
     keptCopy(h)
     assert h.d.Len() == 8 and mt.Over(1.5).Data[0] == 1.5
+    hs := held(Array<F32>(4))
+    assert copiedOut(hs) == 5.0 and widenedThenAssigned(hs) == 1.0 and keptView(hs) == 1.0 and hs.S[0] == 0.0
+    into := held(Array<F32>(2))
+    storedInto(hs, into)
+    into.S[0] = 7.0
+    assert into.S.Len() == 4 and hs.S[0] == 0.0 and handedBack(hs).Len() == 4
 }

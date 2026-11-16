@@ -720,11 +720,11 @@ fn (c mut Checker&) CheckProgram() {
             if inPlaceMoved { c.inPlaceUndecided() }
             c.settleFixed()
             c.settleDropOrder()
+            c.viewsForFacts()
             c.copyEffects()
             c.judgeEffects()
             c.judgeTables()
             c.orderGlobals()
-            c.settleAllViews()
             c.settleWeak()
             c.P.L.MutStorage = c.mutStorage()
             if (try os.Env("OLANG_HANDLES") catch default "") != "": c.handleReport()
@@ -23133,6 +23133,15 @@ fn (c mut Checker&) settleAllViews() {
     }
 }
 
+# D9h's views settled afresh for this attempt's bodies, before G42's facts are summarized - a call copying a view where
+# it is kept, a return handing one back uncopied (effects.viewCall, retBuilds) - and so before any summary is made
+fn (c mut Checker&) viewsForFacts() {
+    c.P.L.ViewResults.Clear()
+    c.P.L.CtorViews.Clear()
+    c.settleAllViews()
+    c.fx = null
+}
+
 # a checked body whose views settleAllViews settles, with its file
 fn (c mut Checker&) viewBody() {
     b := c.cur()
@@ -27157,8 +27166,7 @@ fn (c mut Checker&) builderFactInst(x ast.Expr&, f I64) I64 {
 # are its own: nothing is settled)
 fn (c mut Checker&) settleFacts() Bool {
     if c.factReads.Len() == 0 or c.P.L.Diags.Errors() > 0 { return false }
-    # (summaries made while the attempt ran, for an extern's facts, may not have followed what Pure needs)
-    if c.fx != null and not c.fx!.WantPure and c.pureAsked(): c.fx = null
+    c.viewsForFacts()
     moved := false
     for r in c.factReads {
         found := c.factFound(r)
