@@ -51,7 +51,6 @@ import typecheck "check"
 import "std/pair"
 import sha "std/sha256"
 import res "sys/resource.h"
-import cstdlib "stdlib.h"
 
 fn main() ? {
     os.OnCrash("olang: internal compiler error: the compiler crashed - a bug in the compiler, not in the program\n")
@@ -1369,13 +1368,9 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
         for a in args { x.M.Args.Push(a) }      # the file first (build.Interpret's)
         status = x.RunMain(d)
     }
-    # a failed check, or a "!", ends interpret as it ends the built program: by SIGABRT, after what it wrote - so a
-    # shell sees the same signal as stage 0's abort gives it - the crash message emptied first, so the compiler's own
-    # handler adds nothing
-    if status == 134 {
-        os.OnCrash("")
-        cstdlib.abort()
-    }
+    # a failed check, or a "!", ends interpret as it ends the built program (S18, E35): status 2 or 1, by SIGABRT under
+    # OLANG_CORE=1
+    if x.Failed: interp.FailureEnd(status)
     return status
 }
 

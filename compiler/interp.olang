@@ -29,6 +29,7 @@ import "views"
 import "lower"
 import "eval"
 import dlfcn "dlfcn.h"
+import cstdlib "stdlib.h"
 
 # ---- the libraries a program links (X9), for interpret ----
 
@@ -902,6 +903,7 @@ type Exec struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&, When eval
     Faulty Map<I64, Bool>
     ReadsBuild Map<I64, Bool>       # S8a: the bodies reading a build constant (check's)
     TestWords Vec<String&>          # B7a: each test's target and description, for a run whose words name none
+    Failed Bool = false             # S18, E35: RunMain ended by a failed check or a "!" (FailureEnd)
     started Bool = false
 }
 
@@ -1240,8 +1242,9 @@ fn (x mut Exec&) RunTests(d mut diag.Diagnostics&, words Array<String&>& = Array
 
 # the program's main run, its globals set first (B5a, B3e): the status 0 for its return, 1 for an error leaving it
 # ("unhandled error: T.W" on standard error, its trace after it, S18d), 1 for what interpret stops at - undefined
-# behaviour, what it cannot run ("olang interpret: FILE:LINE: why") - 134 for a failed check (its "FILE:LINE: text"),
-# what it asks for with os.Exit (the process ends there); 1 for no main
+# behaviour, what it cannot run ("olang interpret: FILE:LINE: why") - 2 for a failed check (its "FILE:LINE: text") and 1
+# for an error a "!" took (E35), each with Failed set (OLANG_CORE then aborts, as the built program does), what it asks
+# for with os.Exit (the process ends there); 1 for no main
 fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
     _, entry := x.Entries()
     if entry < 0 {
@@ -1276,11 +1279,14 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
             sayErr($x.StopText(s, entry, d) + "\n")
             # E35, S18d: where the error a "!" took came from, as a debug build prints it
             if kind == mir.ExitKind.Error or kind == mir.ExitKind.Unhandled: sayErr(x.TraceText(d))
-            return 1 if kind == mir.ExitKind.Unhandled else 134   # T19b: main's escaping error, its payload said
+            if kind == mir.ExitKind.Unhandled: return 1     # T19b: main's escaping error, its payload said
+            x.Failed = true
+            return 1 if kind == mir.ExitKind.Error else 2   # S18, E35: a bug 2, an error a "!" took 1
         }
         case _ {
             sayErr($x.StopText(s, entry, d) + "\n")
-            return 134
+            x.Failed = true
+            return 2
         }
     }
 }
@@ -1327,10 +1333,22 @@ fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
     return $load.ErrQualifier(x.P.L.Mods[dm].Identity, dm == x.P.L.Root) + $x.P.ErrorWordName(dl, code & 0xFFFF)   # B5
 }
 
-# a detached test's child stopped (B19): what stopped it said, then the process ends as an abort does
+# a detached test's child stopped (B19): what stopped it said, then the process ends as the built child's failure does
+# (status 2, or abort under OLANG_CORE=1)
 fn detachedEnd(text String&) noreturn {
     if text != "": sayErr($text + "\n")
-    os.Exit(134)
+    FailureEnd(2)
+}
+
+# S18, E35: interpret ending as a built program's failure ends (__olang_failure_end): status (2 a bug, 1 an error a
+# "!" took), or under OLANG_CORE=1 by SIGABRT - the compiler's own crash message emptied first, so its handler adds
+# nothing
+fn FailureEnd(status I32) noreturn {
+    if (try os.Env("OLANG_CORE") catch default "").StartsWith("1") {
+        os.OnCrash("")
+        cstdlib.abort()
+    }
+    os.Exit(status)
 }
 
 fn say(t String&) { try io.Put(t) catch io.Error { } }

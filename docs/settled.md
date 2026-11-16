@@ -126,7 +126,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   last 32 places an error went; printed after an error ends a test, escapes `main`, or reaches a `!`. Other builds
   print `(build with -debug to see where it came from)`.
 - **`assert cond[, message]` is a statement (S17/S18, the user's call for the message).** Outside `test` a failure
-  aborts; in a test it fails that test. Every failed check prints `FILE:LINE:` and what failed (S18a).
+  ends the program; in a test it fails that test. Every failed check prints `FILE:LINE:` and what failed (S18a).
+- **No core dump by default (S18, E35, B6, 2026-11-16, the user's call: "there is gonna be a lot of failing with !
+  whilst developing"; "Exclamation mark doesn't necessarily mean that something broke").** A failure ending the
+  program never calls abort(): it prints its message and trace, os.OnCrash's message, then `_exit` - status 2 for a bug
+  (failed assert, `unreachable`, a null reached, a guaranteed check), status 1 for an error a `!` took, as one escaping
+  `main`; a task ending the program by what ended it. `OLANG_CORE=1` at startup restores SIGABRT and a core; the end is
+  the runtime's `__olang_failure_end`. Interpret ends alike. Real crashes keep their signals. And the O29 slot range is
+  `MADV_DONTDUMP`, each slot `MADV_DODUMP` as it is carved, so a core holds only what is used.
 - **A top-level `assert cond[, message]` (S17a, docs/survey2.md 2.6, the user's "Yes" 2026-10-26).** A declaration
   decided while compiling and never run: false, aborting or undecidable is a compile error, true emits nothing.
 - **`Place.Here` (E40, D8a, docs/survey2.md 2.2, the user's "Yes do that" 2026-10-26).** The prelude's `Place(File
@@ -672,7 +679,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`CaseError.WrongCase`), and `std/arith`. Plain `/ %`, indexing and conversions stay unchecked. `for x in try c` and
   `try join` stay; no `try { block }`.
 - **`!` ends the program on what fails as written (E35, the user's decision QV).** `f(x)!`, `(f(x) + g(y))!` - `try`'s
-  reach, no checks; a failure fails the running test, else prints `FILE:LINE: io.Error.W` and aborts; needs no `?`.
+  reach, no checks; a failure fails the running test, else prints `FILE:LINE: io.Error.W` and ends with status 1
+  (no core, S18); needs no `?`.
   While compiling it is an abort. `spawn f(x)!` ends the program from the task's thread.
 - **Operators may fail (E31, E31a, the user's calls).** A plain operator method (all but `Len`, `Eq`, `Str`) may
   declare errors, making the operator fallible as written (`try a - b`, `try x[i]`).

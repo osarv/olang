@@ -5098,7 +5098,9 @@ what can fail in the postfix expression before it **as written**, exactly what a
 fallible call and operator in it, arguments and every link of a chain included), by **ending the program**: an error
 reaching it ends it as a failed `assert` does (S18) - while a test runs it fails that test, and otherwise the program
 writes `FILE:LINE: ` and the error - its type, named as the program writes it, an imported module's by the base name
-of its path (`io.Error.Failed`), and its word - to standard error and aborts. Its trace follows (S18d). Its value is the expression's on
+of its path (`io.Error.Failed`), and its word - to standard error and ends. Its trace follows (S18d). It ends with
+**status `1`**, as an error escaping `main` does (B5), not a failed assert's `2`: an error ending the program is often
+meant - bad input to a script - where a failed assert is a bug (B6). Its value is the expression's on
 success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; a check is a call
 that can fail, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
 `fn main() { io.PutLine("Hello World!")! }` is a program. On a value of a nullable reference type (T2c) - an array's
@@ -5112,7 +5114,7 @@ While compiling, an error reaching `!` is in K1's abort class: where a value is 
 and elsewhere evaluation stops there.
 
 On a spawned call (P4) `spawn f(x)!` and `spawn n = f(x)!` end the program from the task's thread when the
-call fails, as a failed `assert` there does (P6); no error reaches the join.
+call fails, as a `!` there does (P6, status `1`); no error reaches the join.
 
 ### 5.24 The source place
 
@@ -5745,8 +5747,7 @@ returning from `main` (or letting an error escape it, §10 B5), by calling a `no
 
 **S16d.** `unreachable-stmnt ::= "unreachable" [ expr ] STMNT_END` states that control was never expected to
 arrive. Reaching it is a failure and behaves in every respect as a failed `assert` does (S18), with a message saying
-so: it fails the running test, and otherwise aborts the process - no cleanup, the OS's abort status, a core dump where
-the platform produces one. The optional `expr` says why, as an assert's message does (S17): text, evaluated **only where
+so: it fails the running test, and otherwise ends the process as S18 says - no cleanup, status `2` (B6). The optional `expr` says why, as an assert's message does (S17): text, evaluated **only where
 the `unreachable` is reached**, under S17's rules for what may stand in it, and printed after `: ` - `unreachable "the
 parser takes every token"` prints `FILE:LINE: unreachable reached: the parser takes every token` (S18a). It is **checked, never assumed**: the compiler draws no conclusion from it and generates no
 code that relies on the claim, so a wrong `unreachable` is a diagnosed abort rather than undefined behaviour.
@@ -5806,9 +5807,14 @@ if TargetOs == "linux" {
 - **while a test is running** (§10.4): that one test is recorded as failed, and execution resumes with
   the next test — a recoverable failure specific to the test harness. This is decided at run time, so it
   applies inside a function called from a test just as much as inside the `test { }` block itself;
-- otherwise: the process aborts immediately (an unrecoverable failure), the same way a failed assertion
-  aborts in C — leaving a core dump and skipping the normal exit path, which is what distinguishes a
-  broken guarantee from an orderly `os.Exit` (B5b).
+- otherwise: the process ends immediately (an unrecoverable failure) with **status `2`** (B6), after its message
+  and the message `os.OnCrash` set (std/os), if any - skipping the normal exit path (no deferred code, destructors or
+  flushing beyond what a print already did), which is what distinguishes a broken guarantee from an orderly
+  `os.Exit` (B5b). It does **not** abort: no `SIGABRT`, no core dump (the user's call) - a program in development
+  ends this way often, and a core of its reserved address space can take long to write. With `OLANG_CORE=1` in the
+  environment when the program starts, it aborts instead (`SIGABRT`, a core where the system writes one), for a
+  debugger; the end is the runtime's `__olang_failure_end`, where a debugger can stop. Throughout this document,
+  a check that **aborts** the program ends it this way.
 
 **S18a.** A failed assert, and each check the language guarantees - an out-of-range slice bound (§5.5 E16b), an
 array length out of range (§3.5 D14b), lanes of different lengths (E39), an `as` that does not hold (E32) - prints a message naming what failed, and **where** it is written, as `FILE:LINE: ` before it - to standard
@@ -6047,7 +6053,8 @@ number of tasks that allocate. A worker does not exit (P1e), so that leak is gon
 cleanup, and what waiting workers retain is bounded by their number times that small part rather than by the number
 of tasks or the size of what they did.
 
-**P6.** A failing `assert` (§6.7 S18) on a task's thread always aborts the process; it is never the
+**P6.** A failing `assert` (§6.7 S18) on a task's thread always ends the process (status `2`, an error a `!` took
+there status `1`); it is never the
 recoverable, per-test failure S18 describes, even under `test`. A test's recovery point belongs to the
 spawner's stack, which the spawner is still parked on at the join, so there is nothing on a task's thread
 to recover to. An error a task lets through is different: it is a value the task hands to its join (P4b), not a jump.
@@ -8590,9 +8597,12 @@ the same cycle has no defined value to read and must not be written. Compile-tim
 global's value as this order sets it, so whether a global is computed while compiling never changes what another
 reads.
 
-**B6.** An abort from a failed runtime check (S18), or `unreachable` reached outside a test (S16d), reports the OS's
-abort status, which is distinct from what `os.Exit(1)` reports (B5b): one is a broken guarantee, the other a
-decision.
+**B6.** A failed runtime check (S18) - a failed `assert`, `unreachable` reached (S16d), a null reached by `x!` (E35),
+a guaranteed check (S18a) - outside a test ends the process with **status `2`**: a broken guarantee, apart from an
+error ending it, which is status `1` - one escaping `main` (B5) or one a `!` took (E35) - and from what `os.Exit`
+reports (B5b), a decision. A task ending the program ends it with the status of what ended the task (P6). Neither
+raises `SIGABRT` or leaves a core dump unless `OLANG_CORE=1` was in the environment as the program started (S18); a
+real crash - a segmentation fault and the like - ends by its signal as before (`os.OnCrash`, std/os).
 
 ### 10.4 Test blocks
 
@@ -9396,7 +9406,7 @@ must state exactly the prototype below (X1a).
 | `__olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32` | starts the program the first of the `count` zero-terminated entries of `args` names - looked up through `PATH` unless it holds a `/` - with all of them as its command line and no shell between, and the descriptors `stdin`, `stdout` and `stderr` (each `-1` for this process's own) as its standard input, output and error, in the zero-terminated directory `dir` (empty: this process's own; a relative program path is found from it); returns its process id, or `-1` when it cannot be started (`__olang_err` says why). The caller waits for it (`waitpid`, an ordinary C function). Where the C library cannot change a spawned program's directory itself, the program is run through `/bin/sh` with the directory and the arguments as the shell's arguments, never its script |
 | `__olang_mkdtemp(template Array<U8>) I32` | makes a new directory, readable, writable and enterable by this user alone, named by the zero-terminated `template` with its last six characters - six `X`s - replaced by ones that make the name unused, written over the template's; returns `0`, or `-1` when it fails (`__olang_err` says why) |
 | `__olang_run_on_stack(bytes I64, f fn&())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, `unreachable` or a failing `!` inside `f` ends the test as it would have had `f` been called directly (S16, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under the evaluator (B3e) as the call `f()`, the evaluator's own limits on depth standing for the stack |
-| `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it. The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under the evaluator (B3e) the message is written first when the interpreter's process crashes |
+| `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it, and when a failed check or a `!` ends the program (S18, E35). The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under the evaluator (B3e) the message is written first when the interpreter's process crashes |
 | `__olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32` | whether the function the zero-terminated `name` names - in what the process has loaded, or in the C math library - can be called as `kinds` and `ret` describe: `0` it can, `1` there is no such function, `2` a kind is one that cannot be passed. `kinds` holds a byte per argument and a `0` after the last: a number type's code - `I8` 1, `I16` 2, `I32` 3, `I64` 4, `U8` 5, `U16` 6, `U32` 7, `U64` 8, `F16` 9, `BF16` 10, `F32` 11, `F64` 12 - with `0x80` added for an array of that type; `ret` is the result's code, `0` for none. A 16-bit float is passed only in an array, and an array is never a result |
 | `__olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64` | calls that function with the arguments `words` holds, in order: a number is one word, its bits from the lowest; an array is one word holding its length, then its elements' bytes packed into as many words as they fill, the function handed a pointer to those bytes, so what it writes there is in `words` after the call. Returns the result's bits, an integer extended to 64 bits as its type extends. A call `__olang_dyncall_check` would refuse stops the program as a failed check does. The runtime's part over the C library's `dlsym` and `libffi` that these two are is in a program, and linked, only when a module of it declares one of them |
 

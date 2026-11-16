@@ -87,6 +87,8 @@ copy:
   %failed = icmp eq ptr %buf, inttoptr (i64 -1 to ptr)
   br i1 %failed, label %off, label %mapped
 mapped:
+  ; left out of a core dump (MADV_DONTDUMP): 256MB of untouched pages written as zeros otherwise
+  %dd = call i32 @madvise(ptr %buf, i64 268435456, i32 16) ; MADV_DONTDUMP
   store ptr %buf, ptr @__olang_prof_buf
   store i64 33554432, ptr @__olang_prof_cap
   call void @llvm.memset.p0.i64(ptr %sa, i8 0, i64 @@SIGACTION_BYTES@@, i1 false)
