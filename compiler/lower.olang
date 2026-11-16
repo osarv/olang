@@ -4817,6 +4817,11 @@ fn (ln mut lowering&) mutStorage() Bool {
 fn (ln mut lowering&) windowQuiet(c typed.Call&, k typed.Call?&, p typed.Lvalue?&) Bool {
     v := ln.L.ViewsOf(typed.BodyId(I32(typed.CalleeBody(c))))
     if v <= 0 or (v & typed.ViewOther) != 0: return false
+    # (a read out of the call's temporary with nothing run between - typed.Call.QuietRead, which G42's facts read too)
+    if k == null and p != null {
+        q := typed.Call.QuietRead(p)
+        if q != null and q.Site == c.Site: return true
+    }
     ln.qSelf = I64(c.Site)
     defer ln.qSelf = -1
     for j in range c.Args.Len().Min(typed.ViewBits) {
@@ -4880,26 +4885,7 @@ fn (ln mut lowering&) stableRef(r typed.Expr&) Bool {
 
 # whether a reference is read out of, or borrows, a place of this function: a local's or a parameter's, or a part of
 # one, or what one reaches
-fn (ln mut lowering&) placeRooted(r typed.Expr&) Bool {
-    return match r {
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): ln.localRooted(p)
-        case typed.Expr.Slice(_, _, sl): ln.localRooted(sl.Base)
-        case typed.Expr.Prim(_, _, op, _, args): typed.PassesRefs(op) and args.Len() > 0 and ln.placeRooted(args[0])
-        case typed.Expr.Away(_, _, y): ln.placeRooted(y)
-        case _: false
-    }
-}
-
-fn (ln mut lowering&) localRooted(p typed.Lvalue&) Bool {
-    return match p {
-        case typed.Lvalue.Local(_, _, _): true
-        case typed.Lvalue.Field(_, _, base, _): ln.localRooted(base)
-        case typed.Lvalue.Elem(_, _, e): ln.localRooted(e.Base)
-        case typed.Lvalue.Payload(_, _, py): ln.localRooted(py.Base)
-        case typed.Lvalue.Deref(_, _, x): ln.placeRooted(x)
-        case _: false
-    }
-}
+fn (ln mut lowering&) placeRooted(r typed.Expr&) Bool { return typed.PlaceRooted(r) }
 
 # whether the statement being lowered writes nothing a view read in it could view before it ends: no call in what it
 # evaluates gives a writable reference, calls through a function value or an "any", or runs statements of its own (a
