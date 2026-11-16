@@ -155,6 +155,8 @@ type Diag enum {
     NoRule
     DefineMissing
     DefineShape
+    DefineSpaced
+    OptionAfterFile
     DefineNotName
     DefineTwice
     DefineBadNumber
@@ -249,6 +251,7 @@ type Diag enum {
     BuildDefaultMut
     BuildDefaultType
     BuildDefaultFit
+    BuildDefaultBare
     UnknownBuildName
     NameInUse
     ConstraintDisagrees
@@ -1117,6 +1120,12 @@ fn ExplainNoItem(name String&, file String&) r.Msg { return r.Msg(Diag.ExplainNo
 fn NoSpec(text String&) r.Msg { return r.Msg(Diag.NoSpec, "B11a", "no specification at " + $text) }
 fn NoRule(text String&) r.Msg { return r.Msg(Diag.NoRule, "B11a", "the specification has no rule " + $text) }
 fn DefineMissing() r.Msg { return r.Msg(Diag.DefineMissing, "B10", "-define needs Name=value after it") }
+fn DefineSpaced(text String&, hint String&) r.Msg {
+    return r.Msg(Diag.DefineSpaced, "B10", "-define takes one word Name=value, found '" + $text + "' - write -define " + $hint + ", with no spaces")
+}
+fn OptionAfterFile(line String&) r.Msg {
+    return r.Msg(Diag.OptionAfterFile, "B4a", "options go before the file: " + $line + " (an argument for the program spelled like an option goes after --)")
+}
 fn DefineShape(text String&) r.Msg { return r.Msg(Diag.DefineShape, "B10", "-define takes Name=value, found '" + $text + "'") }
 fn DefineNotName(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.DefineNotName, "B10", "-define " + $text1 + "=" + $text2 + ": the name is not an identifier") }
 fn DefineTwice(text1 String&, text2 String&) r.Msg { return r.Msg(Diag.DefineTwice, "B10", "-define " + $text1 + "=" + $text2 + ": defined twice") }
@@ -1256,6 +1265,7 @@ fn NameIsType(tok String&) r.Msg { return r.Msg(Diag.NameIsType, "D2", $tok + " 
 fn BuildConstRedeclared(tok String&) r.Msg { return r.Msg(Diag.BuildConstRedeclared, "B10", $tok + " is a build constant - choose another name") }
 fn BuildDefaultMut(tok String&) r.Msg { return r.Msg(Diag.BuildDefaultMut, "B10c", $tok + " is a build constant, and a declaration giving it a default is immutable - drop 'mut'") }
 fn BuildDefaultType(tok String&, ty String&) r.Msg { return r.Msg(Diag.BuildDefaultType, "B10c", $tok + " is a build constant, and its default is a " + $ty, "a default for a build constant is a Bool, I32, I64, U64, F64 or String") }
+fn BuildDefaultBare(name String&, tok String&, ty String&) r.Msg { return r.Msg(Diag.BuildDefaultBare, "B10c", "-define " + $name + " gives it no value, and " + $tok + " is " + $ty + " - only a Bool is true by its name alone", "give it a value: -define " + $name + "=" + ("443" if ty != "String" else "text")) }
 fn BuildDefaultFit(text1 String&, text2 String&, tok String&, ty String&) r.Msg { return r.Msg(Diag.BuildDefaultFit, "B10c", "-define " + $text1 + "=" + $text2 + " does not fit " + $tok + ", which is " + $ty) }
 fn UnknownBuildName(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownBuildName, "B10", "unknown name " + $tok, "", "if it is a build constant, define it with '-define " + $text + "=VALUE', or declare it with a default") }
 fn NameInUse(tok String&) r.Msg { return r.Msg(Diag.NameInUse, "D2", $tok + " is already declared in this module") }

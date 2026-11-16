@@ -38648,3 +38648,27 @@ checking, scope pass, lowering and emission still being built (M5b-M9), that it 
 `stage0-final`; `git checkout stage0-final -- bootstrap`), and that its acceptance tools compared passes with what stage 0 gave
 (the goldens are that captured output). `bench/README.md`'s Vec sections were "round 1" and "round 2" of docs/memory.md (before: the
 Vec that held its own storage, build 61739c9; round 1's compiler aa372d1).
+## The command line: options before the file, `-define` one word (B4a, B10, B10c; 2026-11-16, the user's calls)
+
+The user's makefile ran `olang main.olang -define IO=true`. Everything after the file was the program's command line
+(B4a), so the program got `-define IO=true` as arguments, never read them, and IO silently stayed false.
+
+Tried on the way, in one session, each replaced by the user before it landed:
+- refusing to run a program that provably reads no arguments when some were given (worked out from G42's facts) -
+  dropped;
+- accepting `-define IO = true` as three words - dropped ("spaces around = must not work");
+- options anywhere on the command line, the program's arguments only after `--` ("flags can come at any point in the
+  command ... even after the program") - replaced by "then do defines first".
+
+What holds: options come before the file. Every word after the file is the program's, as before (`olang s.olang data.csv
+-v` needs no `--`), except a word spelled as one of olang's options (matched by name: `-define`, `-debug`, `-quick`,
+...), which is an error naming the command line with the option moved before the file: "options go before the file:
+olang -define IO=true main.olang (an argument for the program spelled like an option goes after --)". A `--` right
+after the file is dropped and everything after it is the program's, unchecked. The same holds for `run` and `profile`;
+`test`'s words still select tests (B7a).
+
+`-define` takes one word. `-define Name` with no `=` defines Name as `true` (a Bool); followed by a word that is `=` or
+begins with `=` it is an error, "write -define IO=true, with no spaces" - the `=` is never taken as the file. A bare
+name given to a B10c default of another type (`Port I64 = 8080`) is an error asking for a value (`-define Port=443`):
+cond.Consts records the bare names, names.olang checks them where it fits a default. Tests: compiler/olang.olang's
+command-line tests, the checks scenario `cmdline`.

@@ -8206,7 +8206,9 @@ beginning with `-` that is no option is an error:
 `build`, `compile`, `run`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
 file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 `-html`) any number, `lsp` and `mcp` none; for running a file, for `run` and for `profile`
-every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
+every argument after the file belongs to the program (B3f, B4a), one beginning with `-` included - except one of olang's
+own options by name (`-define`, `-debug`, `-quick`, ...), which is an error: options go before the file. `--` right
+after the file gives the program everything after it unchecked (`olang s.olang -- -debug`). There are no other
 spellings: a flag of one character is an unknown option.
 
 **B1a (where the standard library is).** The compiler reads the standard library at `OLANG_STD` where that is set;
@@ -8564,7 +8566,10 @@ other valid `main` signature; in particular, there is no "return an int/bool sta
 The runtime keeps them from the moment the process starts — before any global is initialized (B5a), so a global's
 initializer may read them — and a program reaches them through the runtime's functions (§11 X6). The command line is
 the program's own name first, as the operating system gave it (running a file or `run`, B3f, the file as written), then
-each argument in order. A test binary's command line is its own name alone.
+each argument in order. A test binary's command line is its own name alone. Running a file, `run` and `profile` give the
+program every word after the file (B1); a word there spelled as one of olang's options is an error saying to put options
+before the file, never the program's argument (the user's call) - the program gets it only after a `--` written right
+after the file, which is not passed on.
 
 ### 10.3 Process exit
 
@@ -8684,7 +8689,9 @@ always a number and must be a valid one (`-define X=0x` is an error), and a numb
 decimal integer at most `U64`'s largest - above `I64`'s maximum it is a `U64`, as its literal would be, so
 `-define X=18446744073709551615` is a `U64` - or, negated, at least `I64`'s most negative value; a `0x`/`0b` one a bit pattern of
 at most 64 bits; and a float that is not an infinity. A malformed or out-of-range value is an error naming the `-define`
-flag that gave it.
+flag that gave it. `-define Name` with no `=` defines `Name` as `true`, a `Bool`. The flag is one word: `-define` followed by
+a word that is `=` or begins with `=` (`-define IO = true`) is an error saying to write `-define IO=true`, with no spaces
+(the user's call).
 A build constant is an ordinary immutable global in every other respect: it may be read, borrowed and
 passed, and never assigned. A module declaring a top-level name equal to a build constant's is a
 compile-time error, unless the declaration gives it a default (B10c), as is defining one name twice.
@@ -8693,7 +8700,8 @@ compile-time error, unless the declaration gives it a default (B10c), as is defi
 library, whose type is one a `-define` value can have - `Bool`, `I32`, `I64`, `U64`, `F64` or `String` - is a **build
 constant with a default**: `-define` of its name replaces its initializer, the value read as B10 reads it and fitted to the
 declared type as a literal written there would be (`-define Port=443` for `Port I64 = 8080` is an `I64`); a value that does
-not fit is an error naming the flag. Without `-define`, the declaration's own value stands. The declaration stays its
+not fit is an error naming the flag, and a bare `-define Port` (B10's `true`) for a default of any type but `Bool` is an
+error saying it needs a value (`-define Port=443`). Without `-define`, the declaration's own value stands. The declaration stays its
 module's global - its bare name in the module, `m.Name` from an importer - while `-define Name=value` still defines the
 build constant `Name` every module sees (B10), the two holding one value; every such declaration of the name takes it.
 Whether `-define` names it or not, it is configuration as a build constant is: a condition reading it depends on the build

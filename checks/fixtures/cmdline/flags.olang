@@ -1,0 +1,11 @@
+# B4a/B10/B10c: build constants given before the file, a bare -define true, and the program's own arguments after it
+import "std/os"
+
+IO Bool = false
+Port I64 = 8080
+
+fn main() {
+    Println("IO " + $IO + " port " + $Port)
+    args := os.Args()
+    for i in range 1, args.Len(): Println("arg " + $args[i])
+}

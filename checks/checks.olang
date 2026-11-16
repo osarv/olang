@@ -41,7 +41,7 @@ fn workers() I64 {
 # a failure, never skipped.
 Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "bench", "benchrun", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
                      "scopesan", "frameenv", "crash", "interp", "interpbuilt", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
-                     "chunkpool", "capscope", "reuse", "reusefact", "incremental", "records", "updir", "stale", "osargs", "scanln", "print", "inferfield", "tbaa", "pkg"
+                     "chunkpool", "capscope", "reuse", "reusefact", "incremental", "records", "updir", "stale", "osargs", "scanln", "cmdline", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
@@ -448,6 +448,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "notebook" { try notebook(r) }
         case "osargs" { try osargs(r) }
         case "scanln" { try scanln(r) }
+        case "cmdline" { try cmdline(r) }
         case "osexit" { try osexit(r) }
         case "assertloc" { try assertloc(r) }
         case "testfuzz" { try testfuzz(r) }
@@ -1643,6 +1644,26 @@ fn scanln(r mut report&) ? Failed {
         """
     try os.WriteFile($dir + "/big.olang", big) catch os.Error { try r.failed("big.olang", dir) }
     try r.expect(sh(dir, "\"$OLANG\" build big.olang > out.txt 2>&1 && seq 1 300000 | ./build/big > out.txt 2>&1") == 0 and outOf(dir) == "45000150000\n", "scan of a large input", dir)
+# B4a, B10, B10c (the user's calls): options before the file, everything after it the program's; an olang option after
+# the file an error; -define one word, a bare name true
+test "options go before the file, -define is one word" { assert passed("cmdline") }
+
+fn cmdline(r mut report&) ? Failed {
+    dir := fresh("cmdline")
+    os.Run("cp checks/fixtures/cmdline/* " + $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" -define IO=true -define Port=443 flags.olang data.csv -v > out.txt 2>&1") == 0, "options first", dir)
+    try r.expect(outOf(dir) == "IO true port 443\narg data.csv\narg -v\n", "options first: IO, Port and the arguments", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -define IO flags.olang > out.txt 2>&1") == 0, "a bare -define", dir)
+    try r.expect(outOf(dir) == "IO true port 8080\n", "a bare -define: IO true", dir)
+    try r.expect(sh(dir, "\"$OLANG\" flags.olang -- -debug > out.txt 2>&1") == 0, "-- after the file", dir)
+    try r.expect(outOf(dir) == "IO false port 8080\narg -debug\n", "-- after the file: -debug the program's", dir)
+    try r.expect(sh(dir, "\"$OLANG\" flags.olang -define IO=true > out.txt 2>&1") != 0, "an option after the file ran", dir)
+    try r.expect(outOf(dir).Contains("options go before the file: olang -define IO=true flags.olang")
+                 "an option after the file: expected 'options go before the file'", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -define IO = true flags.olang > out.txt 2>&1") != 0, "a spaced -define ran", dir)
+    try r.expect(outOf(dir).Contains("write -define IO=true, with no spaces"), "a spaced -define: expected 'with no spaces'", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -define Port flags.olang > out.txt 2>&1") != 0, "a bare -define of an I64 ran", dir)
+    try r.expect(outOf(dir).Contains("-define Port=443"), "a bare -define of an I64: expected '-define Port=443'", dir)
 }
 
 # B5b: os.Exit ends the process with the status it is given, built and interpreted alike, after what was written
