@@ -120,7 +120,7 @@ ModeUsage Array<String&> = Array<String&>[
     "olang notebook run [OPTION...] FILE.ipynb"
 ]
 ModeWhat Array<String&> = Array<String&>[
-    "builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file (B3g)"
+    "builds the program FILE.olang is the root of as build does, into olang's cache - nothing is written beside you - and runs it with the arguments after the file, options before it (B3g)"
     "builds one program, FILE.olang its root module, into build/ (B3)"
     "compiles one module to an object, linking nothing (B2)"
     "runs each file's test blocks, each file built on its own, indexes, divisions and shifts checked, the tests that start a task under the race detector (B3a, E16g, P7a)"
@@ -156,7 +156,7 @@ OptWhat Array<String&> = Array<String&>[
     "builds with the data race detector (B2b); test runs every test under it, not only those that start a task (P7a)"
     "builds with the scope sanitizer (B2f)"
     "builds for another machine (B12)"
-    "defines a build constant (B10)"
+    "defines a build constant, one word with no spaces; Name alone is true (B10)"
     "moves the remote repositories the build reaches to their refs' current commits (M23c)"
     "rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17); in a build, fails where early freeing does not follow a let-go (B18a)"
     "builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)"
@@ -276,6 +276,14 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
             if o == 2: c.Race = true
             if o == 3: c.San = true
             if o == 4: cl.Spec = $v
+            # B10: a name alone is true; "=" in a word of its own after it is the flag written with spaces
+            if o == 5 and not v.Contains("=") and i < args.Len() and args[i].StartsWith("=") {
+                try usage(d, msgs.DefineSpaced(v, spacedHint(v, args, i)))
+            }
+            if o == 5 and not v.Contains("=") {
+                c.Consts.Bare.Push(v)
+                v = $v + "=true"
+            }
             if o == 5 { try c.Consts.Define(v, d) catch cond.Bad { error Bad.Usage } }
             if o == 6: c.Update = true
             if o == 7 {
@@ -351,13 +359,39 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
         }
         cl.Files.Push(a)
         if cl.Mode == Run or cl.Mode == RunBuilt or cl.Mode == Profile {
+            # B4a: "--" right after the file gives the program the rest unchecked; else none of it may be olang's option
+            open := i < args.Len() and args[i] == "--"
+            if open: i++
             for i < args.Len() {
+                if not open and OptWords.Some(fn(w String&) Bool { return w == args[i] }) {
+                    try usage(d, msgs.OptionAfterFile(movedLine(args, i, cl.Files[0], cl.Passed)))
+                }
                 cl.Args.Push($args[i])
                 i++
             }
         }
     }
     return cl
+}
+
+# B10: what a -define written with spaces around its = means as one word - "IO=true" for "-define IO = true"
+fn spacedHint(name String&, args Array<String&>&, i I64) String {
+    if args[i] == "=" and i + 1 < args.Len(): return $name + "=" + $args[i + 1]
+    if args[i] == "=": return $name + "=value"
+    return $name + $args[i]
+}
+
+# B4a: the command line with the option at args[i], written after the file, moved before it - its value with it
+fn movedLine(args Array<String&>&, i I64, file String&, passed Vec<String&>&) String {
+    b := StringBuilder()
+    b.Push("olang")
+    if args[1] == ModeWords[RunBuilt] or args[1] == ModeWords[Profile]: b.Push($" " + $args[1])
+    for w in passed: b.Push($" " + $w)
+    b.Push($" " + $args[i])
+    takes := OptValues[try OptWords.FindIndex(fn(w String&) Bool { return w == args[i] }) catch default 0] != ""
+    if takes and i + 1 < args.Len(): b.Push($" " + $args[i + 1])
+    b.Push($" " + $file)
+    return b.ToString()
 }
 
 # the option that says how to build which test -evaluate is given with, "" for none (B3e)
@@ -1528,7 +1562,11 @@ test "a command line's mistakes are said as stage 0 says them" {
         "olang: error[B1]: -target applies to running a file, build, compile, test, run, explain, doc, lsp and mcp, not to profile\n"
     assert mistake(Array<String&>["format", "-debug", "m.olang"]) ==
         "olang: error[B1]: -debug applies to running a file, build, compile, test and run, not to format\n"
-    assert mistake(Array<String&>["build", "-define", "X"]) == "olang: error[B10]: -define takes Name=value, found 'X'\n"
+    assert mistake(Array<String&>["build", "-define", "X", "m.olang"]) == "no mistake: build"
+    assert mistake(Array<String&>["build", "-define", "IO", "=true", "m.olang"]) ==
+        "olang: error[B10]: -define takes one word Name=value, found 'IO' - write -define IO=true, with no spaces\n"
+    assert mistake(Array<String&>["build", "-define", "IO", "=", "true", "m.olang"]) ==
+        "olang: error[B10]: -define takes one word Name=value, found 'IO' - write -define IO=true, with no spaces\n"
     assert mistake(Array<String&>["build", "-define", "X=1", "-define", "X=2"]) ==
         "olang: error[B10]: -define X=2: defined twice\n"
     assert mistake(Array<String&>["explain", "B1", "B2"]) ==
@@ -1539,8 +1577,12 @@ test "a command line's mistakes are said as stage 0 says them" {
         "olang: error[B1]: 'x.txt' is no olang file to run - a file's name ends in .olang\n"
     # the first mistake is the one said, and what follows a run's or interpret's file is the program's
     assert mistake(Array<String&>["-x", "-y"]) == mistake(Array<String&>["-x"])
-    assert mistake(Array<String&>["run", "p.olang", "-x", "-define"]) == "no mistake: run"
-    assert mistake(Array<String&>["-debug", "p.olang", "-race", "x"]) == "no mistake: running a file"
+    assert mistake(Array<String&>["run", "p.olang", "-x", "x"]) == "no mistake: run"
+    assert mistake(Array<String&>["run", "p.olang", "--", "-x", "-define"]) == "no mistake: run"
+    assert mistake(Array<String&>["-debug", "p.olang", "--", "-race", "x"]) == "no mistake: running a file"
+    # B4a: an olang option after the file is an error, never the program's
+    assert mistake(Array<String&>["main.olang", "-define", "IO=true"]) == "olang: error[B4a]: options go before the file: olang -define IO=true main.olang (an argument for the program spelled like an option goes after --)\n"
+    assert mistake(Array<String&>["run", "-quick", "p.olang", "x", "-race"]) == "olang: error[B4a]: options go before the file: olang run -quick -race p.olang (an argument for the program spelled like an option goes after --)\n"
     # B2g: -quick is an optimization level of its own
     assert mistake(Array<String&>["build", "-quick", "-debug", "m.olang"]) ==
         "olang: error[B2g]: -quick and -debug each say how much to optimize - give one\n"
@@ -1599,11 +1641,11 @@ test "the options are recorded wherever they stand, and passed on as written" {
     assert p.Len() == 6 and p[0] == "-race" and p[1] == "-define" and p[2] == "N=3" and p[3] == "-target"
     assert p[4] == "x86-64" and p[5] == "-debug"
     c2 := build.Config()
-    i := try CommandLine.Parse(Array<String&>["olang", "run", "-update", "p.olang", "-sanitize", "x"], c2, d) catch Bad { unreachable }
+    i := try CommandLine.Parse(Array<String&>["olang", "run", "-update", "p.olang", "--", "-sanitize", "x"], c2, d) catch Bad { unreachable }
     assert i.Mode == RunBuilt and i.Files.Len() == 1 and i.Args.Len() == 2 and i.Args[0] == "-sanitize" and c2.Update and not c2.San
     # B20: profile's arguments after the file are the program's, -output its flame graph's path
     c3 := build.Config()
-    pr := try CommandLine.Parse(Array<String&>["olang", "profile", "-quick", "-output", "f.html", "p.olang", "-quick", "7"], c3, d) catch Bad { unreachable }
+    pr := try CommandLine.Parse(Array<String&>["olang", "profile", "-quick", "-output", "f.html", "p.olang", "--", "-quick", "7"], c3, d) catch Bad { unreachable }
     assert pr.Mode == Profile and pr.Files.Len() == 1 and pr.Args.Len() == 2 and pr.Args[0] == "-quick" and c3.Quick
     assert pr.Output == "f.html"
 }
@@ -1747,7 +1789,7 @@ test "help lists the modes, and a mode's options, as stage 0 does" {
     cl.Word = "build"
     cl.HasWord = true
     b := try help(cl, d) catch Bad { unreachable }
-    assert b.Contains("\n  -define Name=value defines a build constant (B10)\n")
+    assert b.Contains("\n  -define Name=value defines a build constant, one word with no spaces; Name alone is true (B10)\n")
     assert b.Contains("\n  -output PATH       writes the executable")
     cl.Word = "nope"
     try help(cl, d) catch Bad { return }

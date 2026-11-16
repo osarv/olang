@@ -59,6 +59,7 @@ type Consts struct() {
     known Vec<Bool>
     raws Vec<String&>
     Texts Vec<String&>
+    Bare Vec<String&>      # B10: the names a -define gave with no value, true
 }
 
 fn (c mut Consts&) add(name String&, v Value, builtin Bool, big Bool, known Bool) {

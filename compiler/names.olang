@@ -629,6 +629,10 @@ fn (r mut Resolver&) buildDefault(mi I64, n source.NameId, sp source.Span, v ast
         return
     }
     name := r.text(n)
+    if ty != "Bool" and r.L.Consts.Bare.ToArray().Some(fn(b String&) Bool { return b == name }) {
+        r.L.Diags.Error(r.at(mi, sp), msgs.BuildDefaultBare(name, r.tok(n), ty))
+        return
+    }
     if not r.L.Consts.Fits(name, ty) {
         r.L.Diags.Error(r.at(mi, sp), msgs.BuildDefaultFit(name, r.L.Consts.Raw(name), r.tok(n), ty))
     }
