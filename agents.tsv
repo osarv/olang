@@ -185,7 +185,7 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	litcmp2	opus	medium	running
 2026-11-16	lspimport2	opus	low	completed	108	23	9	partial		disk full, shared/goldens not run
 2026-11-16	osfile2	opus	medium	completed	143	142	24	no		found field-destructor leak (compiler)
-2026-11-16	steward	sonnet	medium	running
+2026-11-16	steward	sonnet	medium	completed	105	21	23	yes		merged lspimport, disk, scanln ok
 2026-11-16	nvimsigns	sonnet	low	completed	93	11	1	yes
 2026-11-16	buildopt	opus	medium	running
 2026-11-16	oannkern2	opus	medium	running
