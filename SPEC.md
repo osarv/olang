@@ -2461,7 +2461,8 @@ a parameter's referent lives is its own scope variable (§8 O4b); what the body 
 function's value result holding storage of its own by value - an array (text included), a struct or an enum holding
 such arrays as parts (T7a), a constructor's instance - is, or holds in its parts, views of what its arguments reach,
 the views may be handed back with no copy and the caller copies them where it keeps them - unless it reads the result
-where it stands (an argument for a read-only parameter, a text piece, a discarded value) and nothing the statement does
+where it stands (an argument for a read-only parameter of a call whose result holds no reference, or of a call itself
+read where it stands - `v[i][2][0]` - a text piece, a discarded value) and nothing the statement does
 can change what it views - no call in it given a writable reference, a value or a read-only reference holding one at any
 depth of its fields (judged by the type of the storage viewed where a local holds the views), or a value reaching a
 function value or an `any` - a function value whose type promises `pure` (T21c) aside, which writes only through the
@@ -2476,8 +2477,10 @@ the copies a function makes itself where nothing could tell: a value local made 
 element, a temporary lent whole to such a body, and the part stores and fields of a value the function hands back made
 of its parameters' views. A function value, an `any`'s table and an operator's adapter copy at the call, since their
 caller cannot know. A value result owning parts that is no such view - existing storage of another's, a global's - is
-copied by the function itself where it hands it back. Unobservable in what a program computes: the compile-time
-evaluator copies every time and agrees.
+copied by the function itself where it hands it back. A result read where it stands that is copied, since something
+the statement does could change what it views, is copied into the innermost block the statement stands in: it is dead
+by the statement's end (O8f). Unobservable in what a program computes: the compile-time evaluator copies every time and
+agrees.
 
 *Reads by evaluation order.* Whether something can change what such a view names is judged over what is evaluated while
 the view is alive, not over its whole statement: a view read where it stands by a call given it read-only whose result
@@ -6961,8 +6964,9 @@ cannot be known: a call through a function value none of whose bodies is followe
 (T22a). A module compiled on its own is no exception (it frees as the program decides, O8d), nor a function value
 followed. A let-go the implementation does not follow - kept for none of these - is a **gap**: `-memory` names each,
 and `-memory -check` fails the build on one (B18a), so a program building under it frees at every let-go this rule
-names. An element's let-go reclaims what the old value owns at every depth a Vec holds it - each live element of a
-Vec of text, of a Vec of Vecs, in turn, then the buffer. Reclaiming is unobservable but in memory, as O8d says.
+names. An element's let-go reclaims what the old value owns at every depth a Vec or a Map holds it - each live element
+of a Vec of text, of a Vec of Vecs, in turn, each live entry of a Map (its key and value), then the buffer. Reclaiming is
+unobservable but in memory, as O8d says.
 
 **O8a (allocation alignment).** Storage a scope hands out for an array's elements is aligned by its own size: 8 bytes
 below 32, 32 bytes from 32 up to 64, and 64 bytes at 64 and above - and at least as its element type is, where that is

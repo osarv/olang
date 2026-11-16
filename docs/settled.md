@@ -856,8 +856,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (wt-freeing6): an element holding a Vec of text or a Vec of Vecs frees it all where it is given another - each live
   element's slot or parts released (a walk at the let-go, none per operation), a copy built in a part region split so
   the region holds its one array (its elements' storage in slots or part regions of their own), an occupy letting go of
-  nothing (gap 17: 150 MB to 13 MB, 376 MB to 13 MB at 80,000 turns). Gap left (docs/freeing.md section 2): an element
-  owning a Map; a program copying a Vec of text keeps the text place.
+  nothing (gap 17: 150 MB to 13 MB, 376 MB to 13 MB at 80,000 turns). Round 7 (wt-freeing7, docs/freeing.md 2.3): an
+  element holding a Map frees it all (each live entry's key and value, then its arrays; a Map copied into an element
+  split as a Put builds an entry - a removal from one had put back text that was no slot); a view read in an expression
+  copies nothing (`v[i][2][0]`, gap 20), a copy it needs is the reading block's; a by-value argument's copy reads
+  nothing in use. Gap left: a program copying a Vec of text keeps the text place - building a copy's text in slots was
+  measured at +5 ns a string (+70% a copy) and left for the user.
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

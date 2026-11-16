@@ -1091,6 +1091,11 @@ fn (ln mut lowering&) partCopy(site I64, v mir.Operand, ty types.TypeId, at mir.
 fn (ln mut lowering&) partSplit(p pl, ty types.TypeId, path Array<I64>&, depth I64, at mir.ScopeRef, rest mir.ScopeRef
                                 sp source.Span) {
     if depth == path.Len() {
+        # (an array of plain elements - a Map's buckets, the region's - copied whole)
+        if not ln.ownsStorage(ln.T.Elem(ln.T.Repr(ty))) {
+            ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(ln.copyAt(p, ty, at, sp))))
+            return
+        }
         ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(ln.splitArray(p, ty, at, rest, mir.Operand.None, sp, p, false))))
         return
     }
