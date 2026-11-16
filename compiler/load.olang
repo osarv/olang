@@ -215,11 +215,26 @@ fn typeNames(text String&, ts scan.Tokens&) Vec<String&>& {
     out mut Vec<String&>& = Vec<String&>()
     toks := ts.Toks
     for i in range toks.Len() - 2 {
-        k := toks[i].Kind
-        if toks[i + 1].Kind != token.Tok.Iden: continue
-        if k == token.Tok.Type: out.Push(text[toks[i + 1].Start:toks[i + 1].End])
+        if toks[i].Kind != token.Tok.Type or toks[i + 1].Kind != token.Tok.Iden: continue
+        # D4a: a member, "type U8.Accumulator = U64", "type Box<T>.Item = T", is no name of the module's
+        if toks[i + 2].Kind == token.Tok.Dot or toks[i + 2].Kind == token.Tok.Lt and memberAhead(toks, i + 2): continue
+        out.Push(text[toks[i + 1].Start:toks[i + 1].End])
     }
     return out
+}
+
+# D4a: whether a generic owner's arguments, "<" at i, close and a "." follows - "type Box<T>.Item = T"
+fn memberAhead(toks Array<token.Token>&, i I64) Bool {
+    depth := 0
+    for j in range i, toks.Len() - 1 {
+        k := toks[j].Kind
+        if k == token.Tok.Lt: depth++
+        else if k == token.Tok.Gt: depth--
+        else if k == token.Tok.Shr: depth -= 2
+        else if k == token.Tok.StmtEnd or k == token.Tok.LBrace or k == token.Tok.Assign: return false
+        if depth <= 0: return depth == 0 and toks[j + 1].Kind == token.Tok.Dot
+    }
+    return false
 }
 
 # the module at path, loaded once, its imports with it: its index, or -1 where it cannot be read

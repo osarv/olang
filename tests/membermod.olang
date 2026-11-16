@@ -1,0 +1,32 @@
+# type members (D4a) declared beside their owners, read by tests/members.olang through this module's alias: a type's own
+# Accumulator overriding the prelude's default, an extends type left with the default, a member declared in place, a
+# generic type's member, and a private one
+
+type Percent extends U8
+type Percent.Accumulator = U64
+
+# no member of its own: T.Accumulator's default for every Number, Small itself - never I8's (T29f)
+type Small extends I8
+
+type Account struct(UserID I64, Name String&) { UserID, Name }
+
+# a member declared in place: a nominal enum named Account.Json, its cases' text values the JSON keys
+type Account.Json enum String {
+    UserID = "id"
+    Name
+}
+
+type Box<T> struct(V T) { V }
+
+# every Box's, each instance reading it with its own T
+type Box<T>.Item = T
+
+type Secret struct(V I64) { V }
+
+# private (M6): this module's alone
+type Secret.inner = I32
+
+fn SecretBytes() I64 {
+    x Secret.inner = 7
+    return Secret.inner.Size + I64(x) - 7
+}

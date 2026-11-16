@@ -1,0 +1,7 @@
+# check: fail error[G38]: 'Grid.Cell' is a type, not a value
+type Grid struct(W I64) { W }
+type Grid.Cell = F32
+fn main() {
+    x := Grid.Cell
+    assert x == x
+}

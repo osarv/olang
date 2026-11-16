@@ -316,8 +316,28 @@ fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi 
         it.Target = $ReceiverName(c, f) + "." + $name
         md.Items.Push(it)
     }
+    members(c, mi, md, all)
     for i in range md.Items.Len(): md.Items[i] = attached(c, mi, md.Items[i], "")
     return md
+}
+
+# D4a: the type members module mi declares naming a type, each an item of its own as its declaration writes it ("type
+# U8.Accumulator = U64"); one declared in place is a type of the module's, listed as any other
+fn members(c mut typecheck.Checker&, mi I64, md mut Module&, all Bool) {
+    m := c.P.L.Mods[mi]
+    text := m.Src!.Text
+    for k in range c.P.MemberCount() {
+        if c.P.MemberModule(k) != mi or c.P.MemberInPlace(k): continue
+        name := $c.P.L.Names.Text(c.P.MemberName(k))
+        if not all and not Exported(name): continue
+        sp := c.P.MemberSpan(k)
+        osp := c.P.MemberOwnerRef(k).Span()
+        it := Entry($text[I64(sp.Start):I64(sp.End)], Above(text, I64(sp.Start)), name)
+        it.File = m.File
+        it.At = I64(sp.Start)
+        it.Target = $text[I64(osp.Start):I64(osp.End)] + "." + name
+        md.Items.Push(it)
+    }
 }
 
 # the name a test gives a method's receiver type: its declared name, else as the checker spells it
@@ -565,8 +585,9 @@ fn declAt(c mut typecheck.Checker&, mi I64, name String&) I64 {
         member := c.P.L.Names.Intern(name[dot + 1:])
         f := c.P.MethodOf(c.P.SelfType(d), member)
         if f < 0: f = c.P.BuilderOf(c.P.SelfType(d), member, true)   # D19: a builder, "Color.FromHex"
-        return -1 if f < 0 else I64(c.P.FnDecl(f).Sp.Start)
+        if f >= 0: return I64(c.P.FnDecl(f).Sp.Start)
     }
+    # a type's own name, or one declared in place under its owner's (D4a, "Account.Json")
     id := c.P.L.Names.Intern(name)
     for e in c.P.R.Tables[mi].Entries {
         if e.Name == id: return I64(e.Sp.Start)

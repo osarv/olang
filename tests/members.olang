@@ -1,0 +1,92 @@
+# D4a: type members - types declared in a type's namespace, read as Owner.Name wherever a type is written (G38): the
+# prelude's T.Accumulator default and its overrides, a program's own override in its owner's module, an extends type
+# with and without one, a generic type's member, a member declared in place read by reflection (G32-G35). Each test holds
+# the run time to what the compile-time evaluator bakes (K2) and decides (S18c)
+import mm "membermod"
+
+type Meters extends F64
+
+# a member declared here, of a type declared here
+type Grid struct(W I64) { W }
+type Grid.Cell = F32
+
+# a member declared in place, a struct, with a method
+type Grid.Point struct(X I64, Y I64) { X, Y }
+fn (p Grid.Point) Sum() I64 { return p.X + p.Y }
+
+fn prelude() Bool {
+    narrow := I8.Accumulator.Name == "I64" and I32.Accumulator.Name == "I64" and U8.Accumulator.Name == "U64" and
+        U16.Accumulator.Name == "U64" and U32.Accumulator.Name == "U64" and I12.Accumulator.Name == "I64" and
+        U7.Accumulator.Name == "U64" and F16.Accumulator.Name == "F32" and BF16.Accumulator.Name == "F32"
+    own := I64.Accumulator.Name == "I64" and U64.Accumulator.Name == "U64" and F32.Accumulator.Name == "F32" and
+        F64.Accumulator.Name == "F64" and F8E4M3.Accumulator.Name == "F8E4M3" and F8E5M2.Accumulator.Name == "F8E5M2" and
+        Meters.Accumulator.Name == "Meters"
+    return narrow and own
+}
+
+# T.Accumulator through a type variable: each instance reads its own type's member
+fn accName<T>(x T) String { return $T.Accumulator.Name }
+
+fn generic() Bool {
+    return accName(I8(1)) == "I64" and accName(F16(1.0)) == "F32" and accName(F64(1.0)) == "F64" and
+        accName(mm.Percent(1)) == "U64" and accName(mm.Small(1)) == "Small"
+}
+
+# a generic owner's member through a type variable bound to one of its instances
+fn itemName<B>(b B) String { return B.Item.Name }
+
+fn programs() Bool {
+    p mm.Percent.Accumulator = 300
+    s mm.Small.Accumulator = mm.Small(3)
+    c Grid.Cell = 1.5
+    names := mm.Percent.Accumulator.Name == "U64" and mm.Small.Accumulator.Name == "Small" and Grid.Cell.Name == "F32" and
+        mm.Box<I64>.Item.Name == "I64"
+    return names and p == 300 and s == mm.Small(3) and itemName(mm.Box<String&>("box")) == "String&" and c == 1.5 and mm.SecretBytes() == 4
+}
+
+fn inPlace() Bool {
+    j := mm.Account.Json.UserID
+    cases := mm.Account.Json.Cases.Len() == 2 and mm.Account.Json.Cases[0].Name == "UserID" and
+        mm.Account.Json.Cases[1].Name == "Name"
+    values := j.Value() == "id" and mm.Account.Json.Name.Value() == "Name" and
+        (try mm.Account.Json.From("id") catch default mm.Account.Json.Name) == j
+    p := Grid.Point(2, 3)
+    point := p.Sum() == 5 and Grid.Point.Fields.Len() == 2 and Grid.Point.Fields[1].Name == "Y" and $p != ""
+    return cases and values and point
+}
+
+PreludeBaked := prelude()
+GenericBaked := generic()
+ProgramsBaked := programs()
+InPlaceBaked := inPlace()
+Run mut Bool = true # read at run time, so the functions run as the program as well as in the evaluator
+
+test "D4a: the prelude's T.Accumulator - a default for every Number, overridden by each narrow built-in number" {
+    assert Run and prelude()
+    assert prelude() # S18c: decided while compiling
+    assert PreludeBaked
+}
+
+test "D4a: a member read through a type variable, each instance its type's own" {
+    assert Run and generic()
+    assert generic()
+    assert GenericBaked
+}
+
+test "D4a: a program's members - an override in the owner's module, an extends type left with the default, a generic owner's" {
+    assert Run and programs()
+    assert programs()
+    assert ProgramsBaked
+}
+
+test "D4a: a type declared in place - an enum read by reflection with its text values, a struct with a method" {
+    assert Run and inPlace()
+    assert inPlace()
+    assert InPlaceBaked
+}
+
+test "D4a: a sum totals in the type's own Accumulator" {
+    p := Array<mm.Percent>[mm.Percent(200), mm.Percent(100)]
+    s := Array<mm.Small>[mm.Small(100), mm.Small(100)]
+    assert p.Sum() == 300 and s.Sum() == mm.Small(-56)
+}

@@ -48,6 +48,10 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   arrays that may be null (`String?&`, T2c), baked and decided while compiling beside the run time.
 - `attrs.olang`, `attrmod.olang` - typed attributes (G39, G40) on every declaration they take and functions reflected
   (G41): a router and a command table collected while compiling from `attrmod`'s handlers, baked beside the run time.
+- `members.olang`, `membermod.olang` - type members (D4a): the prelude's `T.Accumulator` default and its overrides, a
+  program's own override, an extends type with and without one, a generic owner's member, members declared in place (an
+  enum read by reflection with its text values, a struct with a method); baked and decided while compiling beside the
+  run time.
 - `valueparts.olang` - QCE: arrays of a run-time length held by value inside values (fields, elements, payloads, type
   arguments, a constructor's by-value parameter) - stores copy in, a copy of the whole copies them, a by-value argument
   is the callee's own copy; `Map<String, V>` owns its keys. Baked and decided while compiling beside the run time.

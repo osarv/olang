@@ -663,6 +663,7 @@ KindVariable I64 = 13
 KindEnumMember I64 = 22
 KindStruct I64 = 23
 KindClass I64 = 5
+KindTypeParameter I64 = 26
 
 # the declarations of a parsed file as LSP's DocumentSymbol array, written to b; nm holds the names its tree interns
 fn Symbols(b mut StringBuilder&, p Positions&, decls Array<ast.Decl&>&, nm source.Names&) {
@@ -733,6 +734,12 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             inner := symWriter(w.p)
             if td.Body != null: inner.members(b, td.Body!, nm)
             b.Push("]}")
+        }
+        case ast.Decl.Member(sp, md) {
+            # D4a: a type member naming a type, named after its owner's "."; its owner the detail, as a builder's is
+            name := nm.Text(md.Name)
+            s := nameIn(t, I64(md.Owner.Span().End), name)
+            w.leaf(b, name, KindTypeParameter, I64(sp.Start), I64(sp.End), s, s + name.Len(), $t[I64(md.Owner.Span().Start):I64(md.Owner.Span().End)])
         }
         case ast.Decl.Global(sp, v) {
             if v.Hidden { return }          # an attribute's (G39), shown with what it is written on

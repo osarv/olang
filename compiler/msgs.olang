@@ -432,6 +432,13 @@ type Diag enum {
     NoBuilder
     BuilderPrivate
     BuilderNotValue
+    MemberOwnerKind
+    MemberOwnerElsewhere
+    MemberOwnerArgs
+    MemberInPlaceKind
+    MemberNameTaken
+    MemberTwice
+    MemberPrivate
     AnyOfBuilderTrait
     FromBitsWidth
     ConstraintUnmetBuilder
@@ -1047,7 +1054,7 @@ fn ByteSwapWidth(ty String&, bits I64) r.Msg { return r.Msg(Diag.ByteSwapWidth, 
 fn AtomicWidth(ty String&) r.Msg { return r.Msg(Diag.AtomicWidth, "P9, T4a", $ty + " is no atomic width", "the atomic operations take integers of 8, 16, 32 or 64 bits", "hold the value as one of those") }
 
 # compile-time reflection (G32-G38)
-fn ReflNoMember(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoMember, "G32", $ty + " has no reflected member '" + $name + "'", "a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Accumulator, Nullable, Size and Align") }
+fn ReflNoMember(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoMember, "G32", $ty + " has no reflected member '" + $name + "'", "a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align, and the type members its declarations give it (D4a)") }
 fn ReflNoKind(ty String&) r.Msg { return r.Msg(Diag.ReflNoKind, "G32", $ty + " has no TypeKind", "only a struct, an enum, a number, Bool, an array, a reference, a function type and an error value have one") }
 fn ReflNoLength(ty String&) r.Msg { return r.Msg(Diag.ReflNoLength, "G32", $ty + " has no Length - only an array whose length is known while compiling has one") }
 fn ReflNoLayout(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoLayout, "G32", $ty + " has no " + $name + " - it is not laid out (a trait, an error type, an extern type)") }
@@ -1465,6 +1472,13 @@ fn BuilderExpected(tok String&, ty String&, owner String&, name String&) r.Msg {
 fn BuilderOwnerBare(ty String&, every String&, one String&, name String&) r.Msg { return r.Msg(Diag.BuilderOwnerBare, "D19", $ty + " is generic, and a builder's owner is written with its arguments", "", "write 'fn " + $every + "." + $name + "(...)' for every instance, 'fn " + $one + "." + $name + "(...)' for one") }
 fn NoBuilder(ty String&, tok String&, hint String&) r.Msg { return r.Msg(Diag.NoBuilder, "D19", $ty + " has no builder, case or member " + $tok + $hint) }
 fn BuilderPrivate(ty String&, tok String&) r.Msg { return r.Msg(Diag.BuilderPrivate, "M6", $ty + "'s builder " + $tok + " is private to its module") }
+fn MemberOwnerKind(ty String&) r.Msg { return r.Msg(Diag.MemberOwnerKind, "D4a", $ty + " is no type a member is declared on", "a member's owner is a struct, an enum, a type declared over another, an extern type, or a type variable a trait constrains") }
+fn MemberOwnerElsewhere(ty String&) r.Msg { return r.Msg(Diag.MemberOwnerElsewhere, "D4a", "a type member is declared in its owner's module, and " + $ty + " is not this module's", "a trait's default is declared in the trait's module", "declare it there") }
+fn MemberOwnerArgs(ty String&) r.Msg { return r.Msg(Diag.MemberOwnerArgs, "D4a", "a member of the generic " + $ty + " is written over its variables", "it is every instance's, each reading it with its own arguments", "write each of the owner's arguments as a name, 'type Box<T>.Item = T'") }
+fn MemberInPlaceKind(why String&) r.Msg { return r.Msg(Diag.MemberInPlaceKind, "D4a", "a type declared in place " + $why, "a member declared in place is one type, a struct or an enum, of one owner that is no generic and no type variable", "declare the type apart and name it, 'type Owner.Name = Type'") }
+fn MemberNameTaken(owner String&, tok String&, what String&) r.Msg { return r.Msg(Diag.MemberNameTaken, "D4a", $tok + " is already " + $what + " of " + $owner, "", "name the member otherwise") }
+fn MemberTwice(owner String&, tok String&) r.Msg { return r.Msg(Diag.MemberTwice, "D4a", $owner + " has two members named " + $tok, "a type has one member of a name; its own overrides a trait's default", "remove one") }
+fn MemberPrivate(ty String&, tok String&) r.Msg { return r.Msg(Diag.MemberPrivate, "M6", $ty + "'s member " + $tok + " is private to its module") }
 fn BuilderNotValue(tok String&) r.Msg { return r.Msg(Diag.BuilderNotValue, "T21", "the builder " + $tok + " is generic, so it is no value by its name alone", "", "call it, or pass a lambda calling it") }
 fn ConstraintUnmetBuilder(ty String&, text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.ConstraintUnmetBuilder, "T30b", $ty + " does not satisfy the constraint " + $text1 + " on " + $text2 + ": it has no builder " + $text3 + " that fits") }
 fn FromBitsWidth(ty String&, u String&, got String&) r.Msg { return r.Msg(Diag.FromBitsWidth, "E33", $ty + ".FromBits takes the " + $u + " of its width, and this is a " + $got, "", "convert it first: '" + $u + "(x)'") }

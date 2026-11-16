@@ -851,7 +851,16 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
             }
             case ast.Decl.Type(_, t) {
                 r.startItem(mi)
+                if t.Owner != null: r.typeRef(t.Owner)    # D4a: a type declared in place, its owner's name a use
                 r.typeDecl(t)
+            }
+            case ast.Decl.Member(_, md) {
+                # D4a: its own variables (a trait's default), then the owner introducing its type's, as a builder's does
+                r.startItem(mi)
+                r.typeParams(md.Params)
+                r.receiverVars(md.Owner, false)
+                r.typeRef(md.Owner)
+                r.typeRef(md.Ty)
             }
             case ast.Decl.Global(_, v) {
                 r.startItem(mi)
@@ -1769,7 +1778,32 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
         ref := r.memberOf(t, last)
         r.notPrivate(t, ref, last, source.Span(sp.End - I32(r.text(last).Len()), sp.End))
         r.record(sp, ref)
+        return
     }
+    r.aliasedMember(sp, path)
+}
+
+# G38, D4a: a type reached through an alias chain and a member after it - "lib.Account.Json", "lib.Meters.Base": the
+# type recorded where its name ends, as a head type's is
+fn (r mut Resolver&) aliasedMember(sp source.Span, path Array<source.NameId>&) {
+    m := r.mi
+    k := 0
+    end := sp.Start
+    for k < path.Len() - 1 {
+        next := try r.Tables[m].aliases.Get(path[k]) catch default -1
+        if next < 0: break
+        if k > 0 and not load.Public(r.text(path[k])): return
+        end += I32(r.text(path[k]).Len()) + 1
+        m = next
+        k++
+    }
+    if k == 0 or k >= path.Len() - 1: return
+    r.aliasUsed.Put(key(r.mi, I32(path[0])), true)   # M5a
+    ref := r.memberOf(m, path[k])
+    if ref.Kind != What.Type: return
+    end += I32(r.text(path[k]).Len())
+    r.notPrivate(m, ref, path[k], source.Span(end - I32(r.text(path[k]).Len()), end))
+    r.members.Put(key(r.L.Mods[r.mi].File, end), ref)
 }
 
 # M6: a name another module declares, reached through an alias, is visible only where it is public - its first letter

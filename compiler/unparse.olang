@@ -81,6 +81,16 @@ fn (w mut writer&) decl(d ast.Decl&) {
         }
         case ast.Decl.ExternBlock(_, link, ds) { w.externBlock(link, ds) }
         case ast.Decl.Type(_, t) { w.typeDecl(t) }
+        case ast.Decl.Member(_, m) {
+            # D4a: "type Owner.Name<T Trait> = Type"
+            w.put("type ")
+            w.ty(m.Owner)
+            w.put(".")
+            w.name(m.Name)
+            w.typeParams(m.Params)
+            w.put(" = ")
+            w.ty(m.Ty)
+        }
         case ast.Decl.Global(_, v) {
             if not v.Hidden: w.varDecl(v)
         }

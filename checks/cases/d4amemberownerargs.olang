@@ -1,0 +1,4 @@
+# check: fail error[D4a]: a member of the generic Box is written over its variables
+type Box<T> struct(V T) { V }
+type Box<I64>.Item = I64
+fn main() { assert Box<I64>(1).V == 1 }
