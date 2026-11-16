@@ -1229,9 +1229,24 @@ fn (ln mut lowering&) entryCopy(src pl, el types.TypeId, rest mir.ScopeRef, sp s
     return mir.Operand.Copy(mir.Lvalue.L(d))
 }
 
-# the text at q, of type ty, copied into a slot of rest where text place k is decided sole, else into rest - empty text
-# made zero bits (a slot for it would be put back by no walk, and the source's storage is never the copy's)
+# the text at q, of type ty, copied into a slot of rest where text place k is decided sole, else into rest
 fn (ln mut lowering&) textSlotCopy(q pl, ty types.TypeId, k I64, rest mir.ScopeRef, sp source.Span) {
+    ln.textInto(q, ty, ln.slotsOf(k, rest, sp), sp)
+}
+
+# the scope a text of place k is built in: a slot scope of rest where k is decided sole, else rest - made once, before
+# a loop copying many (copyAt), as splitArray does
+fn (ln mut lowering&) slotsOf(k I64, rest mir.ScopeRef, sp source.Span) mir.ScopeRef {
+    g := ln.guardOf(k)
+    if g == free.NotSole: return rest
+    h := ln.temp(mir.I64T, sp)
+    ln.guarded(h, g, mir.Rvalue.Slots(rest), rest, sp)
+    return mir.ScopeRef.Held(h)
+}
+
+# the text at q, of type ty, copied into into (slotsOf's) - empty text made zero bits (a slot for it would be put back
+# by no walk, and the source's storage is never the copy's)
+fn (ln mut lowering&) textInto(q pl, ty types.TypeId, into mir.ScopeRef, sp source.Span) {
     some, empty, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
     n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(q))], sp)
     ln.end(mir.Term.Branch(ln.prim(typed.PrimOp.Gt, types.BoolT, Array<mir.Operand>[n, ln.constI64(0)], sp), some, empty))
@@ -1239,13 +1254,6 @@ fn (ln mut lowering&) textSlotCopy(q pl, ty types.TypeId, k I64, rest mir.ScopeR
     ln.emit(mir.Stmt.Assign(sp, ln.mk(q), mir.Rvalue.Use(mir.Operand.Const(ty, 0))))
     ln.goto(after)
     ln.start(some)
-    into := rest
-    g := ln.guardOf(k)
-    if g != free.NotSole {
-        h := ln.temp(mir.I64T, sp)
-        ln.guarded(h, g, mir.Rvalue.Slots(rest), rest, sp)
-        into = mir.ScopeRef.Held(h)
-    }
     ln.copyPart(q, ty, into, sp)
     ln.joinAt(after)
 }
@@ -7056,9 +7064,18 @@ fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
         n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(a))], sp)
         buf := ln.temp(ty, sp)
         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
+        # (O8f: text elements of a place built in slots copied into slots of at too - copySlots)
+        k := ln.copySlots(ty, -1)
+        into := ln.slotsOf(k, at, sp) if k >= 0 else at
         ln.eachIndex(n, sp, fn(i mir.LocalId) {
-            e := ln.copyAt(ln.with(a, mir.Proj.Index(i)), el, at, sp)
-            ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(pl(mir.Base.Local(buf)), mir.Proj.Index(i))), mir.Rvalue.Use(e)))
+            src := ln.with(a, mir.Proj.Index(i))
+            dst := ln.with(pl(mir.Base.Local(buf)), mir.Proj.Index(i))
+            if k < 0 {
+                ln.emit(mir.Stmt.Assign(sp, ln.mk(dst), mir.Rvalue.Use(ln.copyAt(src, el, at, sp))))
+                return
+            }
+            ln.emit(mir.Stmt.Assign(sp, ln.mk(dst), mir.Rvalue.Use(mir.Operand.Copy(ln.mk(src)))))
+            ln.textInto(dst, el, into, sp)
         })
         return mir.Operand.Copy(mir.Lvalue.L(buf))
     }
@@ -7068,7 +7085,12 @@ fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
     dp := pl(mir.Base.Local(d))
     if mir.HasFields(ln.T, ty) {
         parts := ln.partsOf(ty)
-        for i in range parts.Len() { ln.copyPart(ln.with(dp, mir.Proj.Field(i)), parts[i], at, sp) }
+        for i in range parts.Len() {
+            q := ln.with(dp, mir.Proj.Field(i))
+            k := ln.copySlots(ty, i)
+            if k >= 0: ln.textSlotCopy(q, parts[i], k, at, sp)
+            else: ln.copyPart(q, parts[i], at, sp)
+        }
     } else if mir.HasCases(ln.T, ty) {
         tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(dp)), sp)
         ln.payloads(ln.casesOf(ty), tag, sp, fn(c I64, rec types.TypeId) {
@@ -7082,6 +7104,18 @@ fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
         ln.gap(sp, "a Copy helper for a type with no parts")
     }
     return mir.Operand.Copy(mir.Lvalue.L(d))
+}
+
+# O8f (round 7's item 3, round 8): the text place a copy's text parts belong to - the elements of an array of text
+# (field -1) or a struct's text field i - where it is one built in slots (free.SlotPlace), so that the copy builds them
+# in slots of where it goes, guarded by the place's decision as every site is: a copy then makes values as the place's
+# own stores do, and no copy keeps the place (free.untracked); -1 for none, or where nothing frees early
+fn (ln mut lowering&) copySlots(ty types.TypeId, i I64) I64 {
+    if ln.L.Free == null or not ln.L.Free!.Done: return -1
+    fr := ln.L.Free!
+    k := fr.ElemPlace(ty) if i < 0 else fr.FieldPlace(ty, i)
+    if not fr.SlotPlace(k): return -1
+    return k
 }
 
 # E31d: the copy of what place a holds, of a type declaring its own Copy, made in scope at - its Copy called on it, the
