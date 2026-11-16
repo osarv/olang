@@ -330,15 +330,19 @@ boot:
 	fi
 
 # fixedpoint: the installed compiler builds itself again, into build/olang.3, which must equal it byte for byte - a
-# compiler built from the current source writes the same compiler as the one that built it. Checked once per boot cache
-# entry: the entry whose compiler passed is marked, and a later fixedpoint of the same inputs and compiler says so
+# compiler built from the current source writes the same compiler as the one that built it - and then once more, warm,
+# into build/olang.4, taking every record (B3i) the first build left, which must give the same compiler too. Checked
+# once per boot cache entry: the entry whose compiler passed is marked, and a later fixedpoint of the same inputs and compiler says so
 fixedpoint: $(OLANG)
 	@key=$$( $(BOOT_KEY) ); d=$(BOOT_CACHE)/$$key; \
 	if [ -f $$d/fixed ] && cmp -s $$d/olang build/olang; then \
 		echo "fixedpoint: build/olang built itself identically before ($$d)"; exit 0; fi; \
 	t=$$(date +%s); echo "fixedpoint: build/olang builds itself into build/olang.3 ..."; \
 	OLANG_TIMES=1 build/olang build $(SELF_STD) -output build/olang.3 compiler/olang.olang || exit 1; \
-	cmp build/olang build/olang.3 || exit 1; e=$$(( $$(date +%s) - t )); \
+	cmp build/olang build/olang.3 || exit 1; \
+	echo "fixedpoint: and again, warm, taking the records that build left in build/rec ..."; \
+	build/olang build $(SELF_STD) -output build/olang.4 compiler/olang.olang || exit 1; \
+	cmp build/olang build/olang.4 || exit 1; e=$$(( $$(date +%s) - t )); \
 	if [ -x $$d/olang ] && cmp -s $$d/olang build/olang; then touch $$d/fixed; fi; \
 	echo "fixedpoint: build/olang and build/olang.3 are byte for byte equal - done in $$((e / 60))m$$((e % 60))s"
 

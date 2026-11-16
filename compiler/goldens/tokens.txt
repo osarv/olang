@@ -2380,7 +2380,7 @@ badf8b8af57292a3 bbc2deac8e0e7d1c compiler/prompt.olang
 b8b45d6feff4f9c2 470bd0499e7a11b1 compiler/records.olang
 430598142b4ff9b6 87bb9baf9da28f04 compiler/runtime.olang
 f2d5eb4002eddc63 c08c2b68e330a203 compiler/scan.olang
-b491ea15d8e881d7 34c3a6a503488ee7 compiler/scope.olang
+8c63327ac97d0c4c e0a8898bdf6d2d54 compiler/scope.olang
 cd2e70c5908a6a58 72e742f106d65904 compiler/session.olang
 186d262b4355b0fe 278731174650ad10 compiler/source.olang
 9bee4e94ca053127 882c3c1eac35e714 compiler/spin.olang
