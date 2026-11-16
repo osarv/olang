@@ -191,7 +191,7 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	oannkern2	opus	medium	completed	278	150	70	yes		BF16 GEMV 0.19->0.65x, int8 baseline via quant split, VNNI not expressible
 2026-11-16	fielddrop	opus	medium	completed	191	92	29	yes		check order: := field types before NeedsDrop
 2026-11-16	steward2	sonnet	medium	completed	122	48	64	yes		merged litcmp, osfile, buildopt
-2026-11-16	serve	opus	medium	completed				yes		serve lsp/mcp/jupyter, notebooks via run
+2026-11-16	serve	opus	medium	completed	200	78	92	yes		serve lsp/mcp/jupyter, notebooks via run
 2026-11-16	extfix	opus	medium	completed	203	103	74	yes		extends generic methods, print exit 1
 2026-11-16	oannmig2	sonnet	low	completed	112	29	45	partial		fix tools misfired 5 ways
 2026-11-16	fixtools	opus	low	running
