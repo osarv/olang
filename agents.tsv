@@ -170,4 +170,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	agentdyn	opus	medium	completed	329	116	39			round 1: modules on dyn, bandit paired match
 2026-11-16	verifyfix	opus	medium	running
 2026-11-16	agentdyn2	opus	medium	completed	154	41	26	yes		all examples match; legacy removed; consolidator 33-40% slower on ad/graph
-2026-11-16	adperf	opus	medium	running
+2026-11-16	adperf	opus	medium	completed	293	146	47	yes		ad/graph small 2.5x; silent empty Value sent back; ThinLTO gap found
