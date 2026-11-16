@@ -19,7 +19,7 @@ table Array<U32> = makeTable()
 # "c := crc32.Update(0, a)" then "c = crc32.Update(c, b)"
 fn Update(crc U32, data Array<U8>&) U32 {
     c := ~crc
-    for b in data { c = table[(c ^ U32(b)) & 0xFF] ^ (c >> 8) }
+    for b in data: c = table[(c ^ U32(b)) & 0xFF] ^ (c >> 8)
     return ~c
 }
 

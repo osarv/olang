@@ -15,12 +15,12 @@ fn (x F64) Fixed(n I64) String {
     ex I64 = I64((bits >> 52) & 0x7FF)
     frac U64 = bits & 0xFFFFFFFFFFFFF
     if ex == 0x7FF {
-        if frac != 0 { return "nan" }
-        if neg { return "-inf" }
+        if frac != 0: return "nan"
+        if neg: return "-inf"
         return "inf"
     }
     digits I64 = n
-    if digits < 0 { digits = 0 }
+    if digits < 0: digits = 0
     m U64 = frac
     e2 I64 = -1074                                   # a subnormal (or zero): no implied leading one
     if ex != 0 {
@@ -30,7 +30,7 @@ fn (x F64) Fixed(n I64) String {
     # room for m * 10^digits * 2^e2 with e2 >= 0, or for m * 10^digits before the shift right: 53 bits, a little over
     # 3.33 bits a decimal digit, and the shift
     up I64 = e2
-    if up < 0 { up = 0 }
+    if up < 0: up = 0
     room I64 = (53 + digits * 4 + up) / 32 + 3
     big := Array<U64>(room)
     big[0] = m & 0xFFFFFFFF
@@ -42,7 +42,7 @@ fn (x F64) Fixed(n I64) String {
         left -= 9
     }
     p10 U64 = 1
-    for _ in range left { p10 = p10 * 10 }
+    for _ in range left: p10 = p10 * 10
     len = fixedMul(big, len, p10)
     if e2 >= 0 {
         s I64 = e2
@@ -56,7 +56,7 @@ fn (x F64) Fixed(n I64) String {
     }
     text := fixedDecimal(big, len)
     out := StringBuilder()
-    if neg { out.PushChar('-') }
+    if neg: out.PushChar('-')
     whole I64 = text.Len() - digits
     if digits == 0 {
         out.Push(text)
@@ -66,7 +66,7 @@ fn (x F64) Fixed(n I64) String {
         out.Push(text[whole:])
     } else {
         out.Push("0.")
-        for _ in range -whole { out.PushChar('0') }
+        for _ in range -whole: out.PushChar('0')
         out.Push(text)
     }
     return out.ToString()
@@ -85,7 +85,7 @@ fn fixedMul(a mut Array<U64>&, len I64, k U64) I64 {
         a[i] = t & 0xFFFFFFFF
         carry = t >> 32
     }
-    if carry == 0 { return len }
+    if carry == 0: return len
     a[len] = carry
     return len + 1
 }
@@ -97,7 +97,7 @@ fn fixedShiftRound(a mut Array<U64>&, len I64, k I64) I64 {
     half Bool = hl < len and ((a[hl] >> hb) & 1) == 1
     below Bool = hl < len and (a[hl] & ((U64(1) << hb) - 1)) != 0
     for i in range hl {
-        if i < len and a[i] != 0 { below = true }
+        if i < len and a[i] != 0: below = true
     }
     ls I64 = k / 32
     bs U64 = U64(k % 32)
@@ -107,7 +107,7 @@ fn fixedShiftRound(a mut Array<U64>&, len I64, k I64) I64 {
     } else {
         for i in range n {
             v U64 = a[i + ls] >> bs
-            if bs > 0 and i + ls + 1 < len { v = v | ((a[i + ls + 1] << (32 - bs)) & 0xFFFFFFFF) }
+            if bs > 0 and i + ls + 1 < len: v = v | ((a[i + ls + 1] << (32 - bs)) & 0xFFFFFFFF)
             a[i] = v
         }
     }
@@ -120,12 +120,12 @@ fn fixedShiftRound(a mut Array<U64>&, len I64, k I64) I64 {
                 break
             }
             a[i] = a[i] + 1
-            if a[i] <= 0xFFFFFFFF { break }
+            if a[i] <= 0xFFFFFFFF: break
             a[i] = 0
             i++
         }
     }
-    for n > 0 and a[n - 1] == 0 { n-- }
+    for n > 0 and a[n - 1] == 0: n--
     return n
 }
 
@@ -142,14 +142,14 @@ fn fixedDecimal(a mut Array<U64>&, len I64) String {
             rem = cur % 1000000000
         }
         pieces.Push(rem)
-        for n > 0 and a[n - 1] == 0 { n-- }
+        for n > 0 and a[n - 1] == 0: n--
     }
-    if pieces.Len() == 0 { return "0" }
+    if pieces.Len() == 0: return "0"
     out := StringBuilder()
     out.Push($pieces[pieces.Len() - 1])
     for j in range pieces.Len() - 1 {
         piece := $pieces[pieces.Len() - 2 - j]
-        for _ in range 9 - piece.Len() { out.PushChar('0') }
+        for _ in range 9 - piece.Len(): out.PushChar('0')
         out.Push(piece)
     }
     return out.ToString()

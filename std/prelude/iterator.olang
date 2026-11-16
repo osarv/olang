@@ -52,7 +52,7 @@ fn (g mut HoldingGenerator<T ? E>&) Next() T ? E, Exhausted { return try g.next(
 # true when keep holds for at least one value
 fn (it mut I&) Some<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) Bool ? E {
     for x in try it {
-        if try keep(x) { return true }
+        if try keep(x): return true
     }
     return false
 }
@@ -60,7 +60,7 @@ fn (it mut I&) Some<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) Bool ? E {
 # true when keep holds for every value - so for none, when there are none
 fn (it mut I&) Every<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) Bool ? E {
     for x in try it {
-        if not try keep(x) { return false }
+        if not try keep(x): return false
     }
     return true
 }
@@ -91,7 +91,7 @@ fn (it mut I&) Map<I Iterator<T ? E>, T, U ? E>(f fn&(x T) U ? E) mut Vec<U>& ? 
 fn (it mut I&) Filter<I Iterator<T ? E>, T ? E>(keep fn&(x T) Bool ? E) mut Vec<T>& ? E {
     out mut Vec<T>& = Vec<T>()
     for x in try it {
-        if try keep(x) { out.Push(x) }
+        if try keep(x): out.Push(x)
     }
     return out
 }
@@ -117,7 +117,7 @@ type IndexIter<T, C Indexable<T>> struct(of C&) {
 }
 
 fn (it mut IndexIter<T, C>&) Next() T ? Exhausted {
-    if it.i >= it.c.Len() { error Exhausted.End }
+    if it.i >= it.c.Len(): error Exhausted.End
     it.i++
     return it.c.At(it.i - 1)
 }
@@ -139,7 +139,7 @@ type TakeIter<I, T ? E> struct(of I, n I64) {
 }
 
 fn (t mut TakeIter<I, T ? E>&) Next() T ? E, Exhausted {
-    if t.left <= 0 { error Exhausted.End }
+    if t.left <= 0: error Exhausted.End
     t.left--
     return try t.it.Next()
 }
@@ -168,7 +168,7 @@ fn (t mut TakeIter<I, T ? E>&) Fold<U ? F>(init U, f fn&(acc U, x T) U ? F) U ? 
         case _ { }
     }
     acc U = init
-    for x in try t { acc = try f(acc, x) }
+    for x in try t: acc = try f(acc, x)
     return acc
 }
 
@@ -255,7 +255,7 @@ fn (s mut SkipIter<I, T ? E>&) Fold<U ? F>(init U, f fn&(acc U, x T) U ? F) U ? 
         case _ { }
     }
     acc U = init
-    for x in try s { acc = try f(acc, x) }
+    for x in try s: acc = try f(acc, x)
     return acc
 }
 
@@ -383,7 +383,7 @@ type TakeWhileIter<I, T ? E> struct(of I, keep fn&(x T) Bool ? E) {
 }
 
 fn (t mut TakeWhileIter<I, T ? E>&) Next() T ? E, Exhausted {
-    if t.done { error Exhausted.End }
+    if t.done: error Exhausted.End
     x := try t.it.Next()
     if not try t.pred(x) {
         t.done = true
@@ -428,7 +428,7 @@ type StepError error {
 # error, T29d); a step computed while the program runs is made one with StepSize(n), which fails with
 # StepError.BadStep below one - as ChunkSize is for Chunks and Windows
 type StepSize I64(v I64) ? StepError.BadStep {
-    if v < 1 { error StepError.BadStep }
+    if v < 1: error StepError.BadStep
 }
 
 # the first value, then every n-th after it: values 0, n, 2n ... of the walk; "range s, e, step" is the same for numbers
@@ -440,7 +440,7 @@ type StepByIter<I, T ? E> struct(of I, n I64) {
 
 fn (s mut StepByIter<I, T ? E>&) Next() T ? E, Exhausted {
     if s.started {
-        for _ in range s.step - 1 { try s.it.Next() }
+        for _ in range s.step - 1: try s.it.Next()
     }
     s.started = true
     return try s.it.Next()
@@ -497,7 +497,7 @@ type ReversedIndexIter<T, C Indexable<T>> struct(of C&) {
 }
 
 fn (it mut ReversedIndexIter<T, C>&) Next() T ? Exhausted {
-    if it.i <= 0 { error Exhausted.End }
+    if it.i <= 0: error Exhausted.End
     it.i--
     return it.c.At(it.i)
 }
@@ -603,14 +603,14 @@ fn (it mut I&) Unzip<I Iterator<Zipped<A, B> ? E>, A, B ? E>() Vec<A>&, Vec<B>& 
 # every value multiplied together, from 1 - wrapping as "*" does for integers (E6c); a product of none is 1
 fn (it mut I&) Product<I Iterator<T ? E>, T Number ? E>() T ? E {
     acc T = 1
-    for x in try it { acc = acc * x }
+    for x in try it: acc = acc * x
     return acc
 }
 
 # the last value, the walk run to its end - failing with Exhausted when there is none
 fn (it mut I&) Last<I Iterator<T ? E>, T ? E>() T ? E, Exhausted {
     last := try it.Next()
-    for x in try it { last = x }
+    for x in try it: last = x
     return last
 }
 
@@ -618,7 +618,7 @@ fn (it mut I&) Last<I Iterator<T ? E>, T ? E>() T ? E, Exhausted {
 # has no more than n values, and for a negative n
 fn (it mut I&) Nth<I Iterator<T ? E>, T ? E>(n I64) T ? E, Exhausted {
     if n < 0: error Exhausted.End
-    for _ in range n { try it.Next() }
+    for _ in range n: try it.Next()
     return try it.Next()
 }
 
@@ -679,7 +679,7 @@ if TestBuild {
     }
 
     fn walkOdd(x I64) Bool ? walkBad {
-        if x == 4 { error walkBad.No }
+        if x == 4: error walkBad.No
         return x % 2 == 1
     }
 
@@ -720,7 +720,7 @@ if TestBuild {
         for run in Array<I64>[1, 2, 3, 7, 8, 4].Iter().ChunkBy(fn(a, b): return b == a + 1) { sums.Push(run.Len() * 100 + run.View().Sum()) }
         assert sums.ToArray() == Array<I64>[306, 215, 104]
         n := 0
-        for _ in Array<I64>[].Iter().ChunkBy(fn(a, b): return a == b) { n++ }
+        for _ in Array<I64>[].Iter().ChunkBy(fn(a, b): return a == b): n++
         assert n == 0
     }
     test Iterator.Dedup "each run of equal values once" {
@@ -743,7 +743,7 @@ if TestBuild {
     }
     test Indexable.BinarySearch "the position of an element of a sorted Vec" {
         v := Vec<I64>()
-        for x in Array<I64>[1, 3, 3, 5, 8] { v.Push(x) }
+        for x in Array<I64>[1, 3, 3, 5, 8]: v.Push(x)
         assert (try v.BinarySearch(3) catch default -1) == 1 and (try v.BinarySearch(4) catch default -1) == -1
         assert v.LowerBound(4) == 3 and v.LowerBound(9) == 5
     }
@@ -755,9 +755,9 @@ if TestBuild {
     }
     test Indexable.Reversed "a Vec from its last element to its first" {
         v := Vec<I64>()
-        for i in range 4 { v.Push(i) }
+        for i in range 4: v.Push(i)
         s := 0
-        for x in v.Reversed() { s = s * 10 + x }
+        for x in v.Reversed(): s = s * 10 + x
         assert s == 3210 and Vec<I64>().Reversed().ToVec().Len() == 0
     }
 }

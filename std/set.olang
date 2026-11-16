@@ -13,7 +13,7 @@ type Set<T Hashable<T>> struct() {
 # a Set holding every element of a, each once
 fn Set<T>.Of<T Hashable<T>>(a Array<T>&) Set<T> {
     s := Set<T>()
-    for x in a { s.m.Put(x, true) }
+    for x in a: s.m.Put(x, true)
     return s
 }
 
@@ -21,20 +21,20 @@ fn Set<T>.Of<T Hashable<T>>(a Array<T>&) Set<T> {
 # "set.Set<I64>[1, 2, 2]". Fails with what the iterator fails with
 fn Set<T>.FromIter<T Hashable<T>, I Iterator<T ? E> ? E>(it mut I&) Set<T> ? E {
     s := Set<T>()
-    for x in try it { s.m.Put(x, true) }
+    for x in try it: s.m.Put(x, true)
     return s
 }
 
 # adds x, and says whether it was not there before
 fn (s mut Set<T>&) Add(x T) Bool {
-    if s.m.Has(x) { return false }
+    if s.m.Has(x): return false
     s.m.Put(x, true)
     return true
 }
 
 # every element of a added
 fn (s mut Set<T>&) AddAll(a Array<T>&) {
-    for x in a { s.m.Put(x, true) }
+    for x in a: s.m.Put(x, true)
 }
 
 # removes x, and says whether it was there
@@ -54,7 +54,7 @@ fn (s Set<T>&) Iter() MapKeyIter<T, Bool> { return s.m.Keys() }
 # the elements in s or in o
 fn (s Set<T>&) Union(o Set<T>&) Set<T> {
     c Set<T> = s                                           # a copy, the elements of o added
-    for x in o.m.Keys() { c.m.Put(x, true) }
+    for x in o.m.Keys(): c.m.Put(x, true)
     return c
 }
 
@@ -78,7 +78,7 @@ fn (s Set<T>&) Difference(o Set<T>&) Set<T> {
 
 # whether every element of s is in o
 fn (s Set<T>&) IsSubset(o Set<T>&) Bool {
-    if s.Len() > o.Len() { return false }
+    if s.Len() > o.Len(): return false
     for x in s.m.Keys() {
         if not o.m.Has(x): return false
     }
@@ -96,7 +96,7 @@ fn (s Set<T>&) Eq(o Set<T>&) Bool { return s.Len() == o.Len() and s.IsSubset(o) 
 # the elements' hashes summed, so equal Sets hash alike whatever order they were added in
 fn (s Set<T>&) Hash() I64 {
     h I64 = 0
-    for x in s.m.Keys() { h += x.Hash() }
+    for x in s.m.Keys(): h += x.Hash()
     return h
 }
 
@@ -128,7 +128,7 @@ test "a Set holds each value once" {
     t := Set.Of(Array<I64>[1, 2, 2, 3])
     assert t.Len() == 3
     sum := 0
-    for x in t { sum += x }
+    for x in t: sum += x
     assert sum == 6
     t.Clear()
     assert t.Len() == 0 and 1 not in t
@@ -153,7 +153,7 @@ test "Set algebra" {
 test "a Set of text" {
     w := Set<String&>()
     line := "the cat and the hat"
-    for word in line.Split(" ") { w.Add(word) }
+    for word in line.Split(" "): w.Add(word)
     assert w.Len() == 4 and "cat" in w and "dog" not in w
     assert $Set.Of(Array<String&>["x"]) == "Set<String&>[\"x\"]" and $Set.Of(Array<I64>[7]) == "Set<I64>[7]"
 }

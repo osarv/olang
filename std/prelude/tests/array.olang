@@ -73,9 +73,9 @@ type sortRec struct(key I64, at I64, name String&) {
 # whether a is in order by less and, for equal keys, in the order "first" gives
 fn sortedStably(a Array<sortRec>&) Bool {
     for i in range 1, a.Len() {
-        if a[i].key < a[i - 1].key { return false }
-        if a[i].key == a[i - 1].key and a[i].at < a[i - 1].at { return false }
-        if a[i].name != $a[i].at { return false }
+        if a[i].key < a[i - 1].key: return false
+        if a[i].key == a[i - 1].key and a[i].at < a[i - 1].at: return false
+        if a[i].name != $a[i].at: return false
     }
     return true
 }
@@ -94,19 +94,19 @@ fn sortRecs(n I64, k I64) Array<sortRec> {
 test "Sort is O(n log n) and stable on numbers, merging through a scratch array" {
     for n in Array<I64>[2, 23, 24, 25, 100, 12287, 12288, 12289, 30001] {
         a := Array<I64>(n)
-        for i in range n { a[i] = (i * 7919 + 13) % 1000 }
+        for i in range n: a[i] = (i * 7919 + 13) % 1000
         a.Sort(fn(x, y) { return x < y })
         ok := true
         for i in range 1, n {
-            if a[i] < a[i - 1] { ok = false }
+            if a[i] < a[i - 1]: ok = false
         }
         assert ok, "numbers out of order at " + $n
         # stability on numbers: order by the hundreds only, the rest kept in the order it came
         b := Array<I32>(n)
-        for i in range n { b[i] = I32(i) }
+        for i in range n: b[i] = I32(i)
         b.Sort(fn(x, y) { return x / 100 % 7 < y / 100 % 7 })
         for i in range 1, n {
-            if b[i] / 100 % 7 == b[i - 1] / 100 % 7 and b[i] < b[i - 1] { ok = false }
+            if b[i] / 100 % 7 == b[i - 1] / 100 % 7 and b[i] < b[i - 1]: ok = false
         }
         assert ok, "numbers unstable at " + $n
     }
@@ -132,7 +132,7 @@ test "Sort orders elements holding references through positions, in blocks, stab
 # the same sorts, while compiling (K2) - numbers through the scratch, records through positions
 fn sortBakedSum() I64 {
     a := Array<I64>(100)
-    for i in range 100 { a[i] = (i * 37) % 100 }
+    for i in range 100: a[i] = (i * 37) % 100
     a.Sort(fn(x, y) { return x > y })
     r := sortRecs(60, 5)
     r.Sort(fn(x, y) { return x.key < y.key })
@@ -147,13 +147,13 @@ test "Sort evaluated while compiling as at run time" {
 # Chunks: consecutive pieces of at most n, each a writable view of the array's own storage
 fn chunkLens(a mut Array<I64>&, size ChunkSize) String {
     b := StringBuilder()
-    for part in a.Chunks(size) { b.Push($part.Len() + " ") }
+    for part in a.Chunks(size): b.Push($part.Len() + " ")
     return b.ToString()
 }
 
 test "Chunks cuts an array into consecutive pieces, the last holding what is left" {
     a := Array<I64>(10)
-    for i in range a.Len() { a[i] = i }
+    for i in range a.Len(): a[i] = i
     assert chunkLens(a, 4) == "4 4 2 " and chunkLens(a, 5) == "5 5 " and chunkLens(a, 1) == "1 1 1 1 1 1 1 1 1 1 "
     assert chunkLens(a, 10) == "10 " and chunkLens(a, 99) == "10 "
     e := Array<I64>(0)
@@ -182,12 +182,12 @@ test "a size computed while running is a ChunkSize, refused below one" {
 # every task writes its own piece: nothing two tasks share, so no race (P8b) - and what they wrote is read back after
 # the join and after other storage was made and dropped (an arena churn)
 fn chunkWork(part mut Array<I64>&, k I64) {
-    for i in range part.Len() { part[i] = part[i] * 100 + k }
+    for i in range part.Len(): part[i] = part[i] * 100 + k
 }
 
 fn chunkedSum(n I64) I64 {
     a := Array<I64>(n)
-    for i in range n { a[i] = i }
+    for i in range n: a[i] = i
     join {
         k I64 = 0
         for part in a.Chunks(3) {
@@ -200,7 +200,7 @@ fn chunkedSum(n I64) I64 {
         assert junk[63] == j
     }
     s I64 = 0
-    for x in a { s += x }
+    for x in a: s += x
     assert a[0] == 0 and a[3] == 301 and a[n - 1] == (n - 1) * 100 + (n - 1) / 3
     return s
 }

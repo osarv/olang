@@ -8,7 +8,7 @@ import "std/list"
 Run I64 = Count(1)                                      # a run-time 1: computations given it are not folded
 fn Count(k I64) I64 {
     c := 0
-    for _ in range k { c++ }
+    for _ in range k: c++
     return c
 }
 # churn the arena: a block that allocates and closes, many times, so storage freed early would be reused
@@ -21,7 +21,7 @@ fn churn() {
 
 fn vecWork(k I64) I64 {
     v := Vec<I64>()
-    for i in range 100 { v.Push(i * k) }
+    for i in range 100: v.Push(i * k)
     t := v.Len() + v[99]
     try v.Insert(0, 7) catch { unreachable }
     t += (try v.TakeAt(50) catch { unreachable }) + (try v.SwapTake(1) catch { unreachable }) + v[1]
@@ -37,7 +37,7 @@ fn vecWork(k I64) I64 {
     w := v                                              # a copy
     w.Push(5)
     t += w.Len() * 1000 + v.Len()
-    for x in v { t += x }
+    for x in v: t += x
     t += v.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x * 2 })
     a := v.ToArray()
     t += a.Len() + a[3]
@@ -54,9 +54,9 @@ test "Vec: Push, indexing, Insert, TakeAt, RemoveAt, SwapTake, SwapRemove, Sort,
 
 fn vecText(k I64) I64 {
     v := Vec<String&>()
-    for i in range 30 { v.Push($(i * k % 17)) }
+    for i in range 30: v.Push($(i * k % 17))
     s := v[3]                                           # kept across the growth below
-    for i in range 30 { v.Push("x" + $i) }
+    for i in range 30: v.Push("x" + $i)
     v.Sort(fn(a String&, b String&) Bool { return a < b })
     d := v.View()                                       # used before the next Push
     t := d.Len() * 100 + d[0].Len() + d[59].Len() + s.Len()
@@ -80,10 +80,10 @@ test "Vec: an empty one fails First, Last, Pop and IndexOf with the default erro
 
 test "Vec: growth keeps every element, the buffer doubling from 8" {
     v := Vec<I32>()
-    for i in range I32(1000) { v.Push(i) }
+    for i in range I32(1000): v.Push(i)
     churn()
     t := 0
-    for x in v { t += x }
+    for x in v: t += x
     assert v.Len() == 1000 and t == 499500 and v[999] == 999 and v[0] == 0
     v.PushAll(Array<I32>[1, 2, 3])
     assert v.Len() == 1003 and v[1002] == 3
@@ -103,10 +103,10 @@ test "Vec: text kept in one, an element kept while it grows, read back after a c
 
 test "Vec: View lends the elements as an array, and for-in walks them by position" {
     v := Vec<F64>()
-    for i in range 10 { v.Push(F64(i) * 0.5) }
+    for i in range 10: v.Push(F64(i) * 0.5)
     d := v.View()
     s := 0.0
-    for x in d { s += x }
+    for x in d: s += x
     assert d.Len() == 10 and s == 22.5
     m := v.ViewMut()
     m[0] = 9.0
@@ -122,7 +122,7 @@ test "Vec: a for-in that pushes sees what it pushed - a work list" {
     seen := 0
     for x in q {
         seen++
-        if x < 100 { q.Push(x * 3) }
+        if x < 100: q.Push(x * 3)
     }
     churn()
     assert seen == 6 and q.Len() == 6 and q[5] == 243
@@ -131,8 +131,8 @@ test "Vec: a for-in that pushes sees what it pushed - a work list" {
 test "Vec: equal Vecs compare and hash alike, and render as their elements" {
     a := Vec<I64>()
     b := Vec<I64>()
-    for i in range 5 { a.Push(i) }
-    for i in range 5 { b.Push(i) }
+    for i in range 5: a.Push(i)
+    for i in range 5: b.Push(i)
     b.Push(9)
     assert a != b
     try b.Pop() catch { unreachable }
@@ -142,7 +142,7 @@ test "Vec: equal Vecs compare and hash alike, and render as their elements" {
 
 test "Vec: a copy is a Vec of its own, a second name is written &" {
     a := Vec<I64>()
-    for i in range 3 { a.Push(i + 1) }
+    for i in range 3: a.Push(i + 1)
     b := a                                              # a value: b holds a's elements, in a buffer of its own
     b.Push(4)
     assert a.Len() == 3 and b.Len() == 4 and b != a
@@ -161,7 +161,7 @@ fn vecPushed(v Vec<I64>, x I64) I64 {                 # one passed by value is t
 }
 test "Vec: one lent writably is pushed to, one passed by value is the callee's copy" {
     v := Vec<I64>()
-    for i in range 20 { vecPushTo(v, i) }
+    for i in range 20: vecPushTo(v, i)
     churn()
     assert v.Len() == 20 and v[19] == 19 and vecPushed(v, 5) == 21 and v.Len() == 20
 }
@@ -191,7 +191,7 @@ test "Vec: a lambda capturing one holds it as it was when made, one capturing a 
     n := fn() I64 { return v.Len() }                    # a capture of a value is a copy (D16c)
     r Vec<I64>& = v
     m := fn() I64 { return r.Len() }                    # ...of a reference, the same Vec
-    for i in range 30 { v.Push(i) }
+    for i in range 30: v.Push(i)
     churn()
     assert n() == 1 and m() == 31
 }
@@ -211,7 +211,7 @@ test "Vec: filled by tasks, one each, read after the join" {
 fn vecFillPart(part mut Array<I64>&, k I64) { for i in range part.Len() { part[i] = k } }
 test "Vec: its view cut into Chunks, each piece written by a task of its own" {
     v := Vec<I64>()
-    for i in range 10 { v.Push(i) }
+    for i in range 10: v.Push(i)
     k I64 = 0
     join {
         for part in v.ViewMut().Chunks(4) {
@@ -228,12 +228,12 @@ type vecNode struct(name String&, n I64) {
 }
 test "Vec: references kept in one, read back after a churn and after the Vec is replaced" {
     v := Vec<vecNode&>()
-    for i in range 30 { v.Push(vecNode($i, i)) }
+    for i in range 30: v.Push(vecNode($i, i))
     first := v[0]
     v = Vec<vecNode&>()                                 # another Vec; the nodes, and the old one, live where v does
     churn()
     assert first.name == "0" and first.n == 0 and v.Len() == 0
-    for i in range 3 { v.Push(vecNode("n" + $i, i * 10)) }
+    for i in range 3: v.Push(vecNode("n" + $i, i * 10))
     churn()
     assert v[2].name == "n2" and v[2].n == 20
 }
@@ -241,7 +241,7 @@ test "Vec: references kept in one, read back after a churn and after the Vec is 
 test "Vec: room made up front, Reserve, Cap, Remove and Join" {
     v := Vec<I64>(100)
     assert v.Len() == 0 and v.Cap() == 100
-    for i in range 100 { v.Push(i) }
+    for i in range 100: v.Push(i)
     assert v.Cap() == 100                               # no buffer replaced while there was room
     v.Push(100)
     assert v.Cap() == 200
@@ -256,13 +256,13 @@ test "Vec: room made up front, Reserve, Cap, Remove and Join" {
     t.Push("c")
     assert t.Join(", ") == "a, b, c" and Vec<String&>().Join("-") == ""
     o := Vec<String>()
-    for i in range 3 { o.Push($i) }
+    for i in range 3: o.Push($i)
     assert o.Join("+") == "0+1+2" and Vec<String>().Join("-") == "" and Array<String>["x", "y"].Join("") == "xy"
 }
 
 fn vecJoined(n I64) String {
     o := Vec<String>()
-    for i in range n { o.Push($"w" + $i) }
+    for i in range n: o.Push($"w" + $i)
     return o.Join(" ")
 }
 VecJoinedBaked String = vecJoined(3)            # K2: computed while compiling
@@ -294,7 +294,7 @@ fn vecLexer.vecLex(src String&) vecLexer {               # a result holding a Ve
 }
 fn vecLexWork(k I64) I64 {
     l := vecLexer.vecLex("let x = 42 + y")
-    for i in range 30 { l.toks.Push(vecTok("t" + $(i * k), i)) }
+    for i in range 30: l.toks.Push(vecTok("t" + $(i * k), i))
     first := l.toks[0]                          # a value element holding text, kept across the growth below
     l.toks.Sort(fn(a vecTok, b vecTok) Bool { return a.text < b.text })
     t := l.toks.Len() * 100 + l.toks[0].text.Len() + first.text.Len()
@@ -345,12 +345,12 @@ VecG mut Vec<I64> = Vec<I64>()                  # a Vec global - the program's
 VecGC Vec<I64> = vecSquares(5)                  # ...an immutable one, baked (K2)
 fn vecSquares(n I64) Vec<I64> {
     v := Vec<I64>()
-    for i in range n { v.Push(i * i) }
+    for i in range n: v.Push(i * i)
     return v
 }
 fn vecGPush(x I64) { VecG.Push(x) }
 test "Vec: a global Vec, pushed to from functions, copied and replaced" {
-    for i in range 20 { vecGPush(i) }
+    for i in range 20: vecGPush(i)
     churn()
     assert VecG.Len() == 20 and VecG[19] == 19 and VecGC.Len() == 5 and VecGC[4] == 16
     t := VecG                                   # a copy of the global's Vec
@@ -363,9 +363,9 @@ test "Vec: a global Vec, pushed to from functions, copied and replaced" {
 
 test "Vec: elements that are values holding references, kept across growth and read back after the arena churns" {
     v := Vec<vecTok>()
-    for i in range 10 { v.Push(vecTok("e" + $i, i)) }
+    for i in range 10: v.Push(vecTok("e" + $i, i))
     e := v[3]                                   # a copy, holding text where v keeps it
-    for i in range 100 { v.Push(vecTok("f" + $i, i)) }
+    for i in range 100: v.Push(vecTok("f" + $i, i))
     churn()
     assert e.text == "e3" and v[3].text == "e3" and v[109].text == "f99"
     v.Reverse()
@@ -379,7 +379,7 @@ test "Vec: elements that are values holding references, kept across growth and r
 # immut, when the write showed through it)
 fn vecViewNamed(n I64) I64 {
     v := Vec<Char>()
-    for _ in range n { v.Push('a') }
+    for _ in range n: v.Push('a')
     w String& = String(v.View())
     v[0] = 'z'
     return 1 if w[0] == 'a' and w.Len() == n and v[0] == 'z' else 0
@@ -407,14 +407,14 @@ test "Vec: a Vec local that is returned, its text read back after the arena chur
 # compiling as at run time
 fn vecVacated() I64 {
     v := Vec<String&>()
-    for i in range 20 { v.Push($i) }
+    for i in range 20: v.Push($i)
     a := try v.SwapTake(19) catch default ""                 # the last: nothing moves into the gap
     b := try v.SwapTake(0) catch default ""                  # the last moved into position 0
     try v.Insert(3, "in") catch { unreachable }
     c := try v.TakeAt(10) catch default ""
     assert v[0] == "18" and v[3] == "in" and v[4] == "3" and v[10] == "10" and v.Len() == 18
     v.Truncate(12)
-    for i in range 3 { v.Push("t" + $i) }
+    for i in range 3: v.Push("t" + $i)
     assert v[11] == "11" and v[12] == "t0" and v.Len() == 15
     v.Clear()
     v.Push("z")
@@ -435,10 +435,10 @@ fn emptyEqual(k I64) I64 {
     s Vec<String&>
     t := s
     n := 0
-    if a == b and b == a and a.View() == b.View() and s == t { n++ }
-    if a.Hash() == b.Hash() and s.Hash() == t.Hash() { n++ }
+    if a == b and b == a and a.View() == b.View() and s == t: n++
+    if a.Hash() == b.Hash() and s.Hash() == t.Hash(): n++
     a.Push(k)
-    if a != b { n++ }
+    if a != b: n++
     return n
 }
 EmptyEqual I64 = emptyEqual(4)                          # K2: the evaluator agrees

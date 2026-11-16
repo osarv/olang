@@ -80,7 +80,7 @@ fn (h mut Hasher&) Push(data Array<U8>&) {
             h.used++
             i++
         }
-        if h.used < 64 { return }
+        if h.used < 64: return
         h.block(h.buf, 0)
         h.used = 0
     }
@@ -102,9 +102,9 @@ fn (h Hasher&) Sum() Array<U8> {
     pad := Array<U8>(1, 0x80)
     c.Push(pad)
     zero := Array<U8>(1)
-    for c.used != 56 { c.Push(zero) }
+    for c.used != 56: c.Push(zero)
     tail := Array<U8>(8)
-    for i in range 8 { tail[i] = U8((bits >> U64(56 - 8 * i)) & 0xFF) }
+    for i in range 8: tail[i] = U8((bits >> U64(56 - 8 * i)) & 0xFF)
     c.Push(tail)
     out := Array<U8>(32)
     for i in range 8 {

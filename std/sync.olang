@@ -131,7 +131,7 @@ type onceState struct() {
 
 fn (o mut Once&) Do(f fn&()) {
     s := o.s
-    if s.done.AtomicLoad() == 1 { return }
+    if s.done.AtomicLoad() == 1: return
     pthread.pthread_mutex_lock(s.lock)
     if s.done.AtomicLoad() == 0 {
         f()
@@ -154,7 +154,7 @@ fn bump(m mut Mutex<I64>&, n I64) {
 test "a Mutex keeps every task's increments" {
     m mut Mutex<I64>& = Mutex(I64(0))
     join {
-        for _ in range 4 { spawn bump(m, 2000) }
+        for _ in range 4: spawn bump(m, 2000)
     }
     assert m.Get() == 8000
     m.Set(5)
@@ -180,7 +180,7 @@ fn countTo(m mut Mutex<counter>&, k I64) {
 test "With hands the guarded struct over by reference" {
     m mut Mutex<counter>& = Mutex(counter())
     join {
-        for _ in range 3 { spawn countTo(m, 1000) }
+        for _ in range 3: spawn countTo(m, 1000)
     }
     seen mut Box& = Box()
     m.With(fn(c mut counter&) { seen.n = c.n })
@@ -239,7 +239,7 @@ test "Once runs its callback once, whoever asks first" {
     count mut Box& = Box()
     assert not o.Done()
     join {
-        for _ in range 8 { spawn initOnce(o, count) }
+        for _ in range 8: spawn initOnce(o, count)
     }
     assert count.n == 1 and o.Done()
     o.Do(fn() { count.n = 100 })

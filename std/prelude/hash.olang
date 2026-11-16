@@ -27,7 +27,7 @@ fn (n U64) Hash() I64 { return mixHash(I64(n)) }
 
 # a Bool's hash, so a struct or enum with a Bool part is a key too (E10b)
 fn (b Bool) Hash() I64 {
-    if b { return mixHash(1) }
+    if b: return mixHash(1)
     return mixHash(0)
 }
 

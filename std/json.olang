@@ -59,7 +59,7 @@ type Json enum {
 # each other: Json.Obj(Object(String&["a", "b"], Json&[Json.Num(1.0), Json.Null])). Objects with more than
 # eight members are indexed by a hash of their names when built, so asking costs the same whatever their size.
 type Object struct(Keys Array<String&>&, Values Array<Json&>&) ? Error {
-    if Keys.Len() != Values.Len() { error Error.Uneven }
+    if Keys.Len() != Values.Len(): error Error.Uneven
     Keys
     Values
     index Array<I32>& = nameIndex(Keys)         # empty, or slots of member position + 1 (0 an empty slot)
@@ -88,7 +88,7 @@ fn (j Json&) At<K>(key K) Json& ? Error {
         case I32 {
             match j {
                 case Json.Arr(items) {
-                    if key < 0 or I64(key) >= items.Len() { error Error.Missing($key) }
+                    if key < 0 or I64(key) >= items.Len(): error Error.Missing($key)
                     return items[I64(key)]
                 }
                 case _ { error Error.WrongKind }
@@ -97,7 +97,7 @@ fn (j Json&) At<K>(key K) Json& ? Error {
         case I64 {
             match j {
                 case Json.Arr(items) {
-                    if key < 0 or key >= items.Len() { error Error.Missing($key) }
+                    if key < 0 or key >= items.Len(): error Error.Missing($key)
                     return items[key]
                 }
                 case _ { error Error.WrongKind }
@@ -130,14 +130,14 @@ fn (j Json&) AsNum() F64 ? Error {
 # read is exact (an Int beyond 2^53)
 fn (j Json&) AsInt() I64 ? Error {
     w := try j.whole()
-    if w < I128(I64.Min) or w > I128(I64.Max) { error Error.WrongKind }
+    if w < I128(I64.Min) or w > I128(I64.Max): error Error.WrongKind
     return I64(w)
 }
 
 # the number j holds, when it is a whole number a U64 holds - failing with WrongKind otherwise
 fn (j Json&) AsUint() U64 ? Error {
     w := try j.whole()
-    if w < 0 { error Error.WrongKind }
+    if w < 0: error Error.WrongKind
     return U64(w)
 }
 
@@ -148,7 +148,7 @@ fn (j Json&) whole() I128 ? Error {
         case Json.Num(v) {
             if v != v or v - v != 0.0 or v >= 18446744073709551616.0 or v < -9223372036854775808.0 { error Error.WrongKind }
             if v >= 9223372036854775808.0 { return I128(U64(v)) }     # every F64 there is whole
-            if F64(I64(v)) != v { error Error.WrongKind }
+            if F64(I64(v)) != v: error Error.WrongKind
             return I128(I64(v))
         }
         case Json.Int(v) { return I128(v) }
@@ -208,7 +208,7 @@ fn (o Object&) find<K>(key K) I64 ? noMember {
     if o.index.Len() == 0 {
         i I64 = o.Keys.Len() - 1
         for i >= 0 {
-            if sameName(o.Keys[i], key) { return i }
+            if sameName(o.Keys[i], key): return i
             i--
         }
         error noMember
@@ -217,17 +217,17 @@ fn (o Object&) find<K>(key K) I64 ? noMember {
     s I64 = nameHash(key) & mask
     for _ in range o.index.Len() {
         at I64 = I64(o.index[s])
-        if at == 0 { error noMember }
-        if sameName(o.Keys[at - 1], key) { return at - 1 }
+        if at == 0: error noMember
+        if sameName(o.Keys[at - 1], key): return at - 1
         s = (s + 1) & mask
     }
     error noMember
 }
 
 fn sameName<K>(a String&, b K) Bool {
-    if a.Len() != b.Len() { return false }
+    if a.Len() != b.Len(): return false
     for i in range a.Len() {
-        if a[i] != b[i] { return false }
+        if a[i] != b[i]: return false
     }
     return true
 }
@@ -235,7 +235,7 @@ fn sameName<K>(a String&, b K) Bool {
 # FNV-1a over the name's bytes
 fn nameHash<K>(t K) I64 {
     h I64 = -3750763034362895579
-    for i in range t.Len() { h = (h ^ I64(t[i])) * 1099511628211 }
+    for i in range t.Len(): h = (h ^ I64(t[i])) * 1099511628211
     return h
 }
 
@@ -243,14 +243,14 @@ fn nameHash<K>(t K) I64 {
 # open-addressed table twice their number or more, each later member of a name taking the slot of an earlier one
 fn nameIndex(keys Array<String&>&) Array<I32>& {
     n := keys.Len()
-    if n <= 8 { return Array<I32>(0) }
+    if n <= 8: return Array<I32>(0)
     size I64 = 16
-    for size < 2 * n { size = size * 2 }
+    for size < 2 * n: size = size * 2
     slots mut Array<I32>& = Array<I32>(size)
     mask I64 = size - 1
     for i in range n {
         s I64 = nameHash(keys[i]) & mask
-        for slots[s] != 0 and not sameName(keys[I64(slots[s]) - 1], keys[i]) { s = (s + 1) & mask }
+        for slots[s] != 0 and not sameName(keys[I64(slots[s]) - 1], keys[i]): s = (s + 1) & mask
         slots[s] = I32(i + 1)
     }
     return slots
@@ -280,9 +280,9 @@ fn (a Json&) Eq(b Json&) Bool {
         case Json.Arr(x) {
             match b {
                 case Json.Arr(y) {
-                    if x.Len() != y.Len() { return false }
+                    if x.Len() != y.Len(): return false
                     for i in range x.Len() {
-                        if x[i] != y[i] { return false }
+                        if x[i] != y[i]: return false
                     }
                     return true
                 }
@@ -292,11 +292,11 @@ fn (a Json&) Eq(b Json&) Bool {
         case Json.Obj(x) {
             match b {
                 case Json.Obj(y) {
-                    if x.Len() != y.Len() { return false }
+                    if x.Len() != y.Len(): return false
                     for i in range x.Len() {
                         at := try y.find(x.Keys[i]) catch { return false }
                         mine := try x.find(x.Keys[i]) catch { return false }
-                        if x.Values[mine] != y.Values[at] { return false }
+                        if x.Values[mine] != y.Values[at]: return false
                     }
                     return true
                 }
@@ -333,7 +333,7 @@ fn (j Json&) Hash() I64 {
         case Json.Null { return 1 }
         case Json.Bool(v) { return 2 if v else 3 }
         case Json.Num(v) {
-            if v == 0.0 { return 4 }
+            if v == 0.0: return 4
             return I64(v.Bits()) * 1099511628211
         }
         case Json.Int(_), Json.Uint(_) {
@@ -348,12 +348,12 @@ fn (j Json&) Hash() I64 {
         case Json.Str(s) { return s.Hash() }
         case Json.Arr(items) {
             h I64 = 5
-            for x in items { h = h * 31 + x.Hash() }
+            for x in items: h = h * 31 + x.Hash()
             return h
         }
         case Json.Obj(o) {
             h I64 = 6
-            for i in range o.Len() { h = h + (nameHash(o.Keys[i]) ^ o.Values[i].Hash()) * 1099511628211 }
+            for i in range o.Len(): h = h + (nameHash(o.Keys[i]) ^ o.Values[i].Hash()) * 1099511628211
             return h
         }
         case _ { return 0 }
@@ -410,7 +410,7 @@ fn (r mut reader&) push(v mut Json&) {
     if r.nv == r.vals.Len() {
         old := r.vals
         r.vals = Array<mut Json&>(r.nv * 2, old[0])
-        for i in range r.nv { r.vals[i] = old[i] }
+        for i in range r.nv: r.vals[i] = old[i]
     }
     r.vals[r.nv] = v
     r.nv++
@@ -420,14 +420,14 @@ fn (r mut reader&) pushName(name String&) {
     if r.nn == r.names.Len() {
         old := r.names
         r.names = Array<String&>(r.nn * 2, old[0])
-        for i in range r.nn { r.names[i] = old[i] }
+        for i in range r.nn: r.names[i] = old[i]
     }
     r.names[r.nn] = name
     r.nn++
 }
 
 fn (r mut reader&) open(isObject Bool) ? Error {
-    if r.depth == MaxDepth { error Error.Depth(r.line(), r.col()) }
+    if r.depth == MaxDepth: error Error.Depth(r.line(), r.col())
     if r.depth == r.starts.Len() {
         old := r.starts
         oldNames := r.nameStarts
@@ -450,14 +450,14 @@ fn (r mut reader&) close() {
     from I64 = r.starts[r.depth]
     n I64 = r.nv - from
     items mut Array<Json&>& = Array<Json&>(n, r.vals[0])     # each written below
-    for i in range n { items[i] = r.vals[from + i] }
+    for i in range n: items[i] = r.vals[from + i]
     r.nv = from
     namesFrom I64 = r.nameStarts[r.depth]
     if namesFrom < 0 {
         r.push(Json.Arr(items))
     } else {
         names mut Array<String&>& = Array<String&>(n, r.names[0])
-        for i in range n { names[i] = r.names[namesFrom + i] }
+        for i in range n: names[i] = r.names[namesFrom + i]
         r.nn = namesFrom
         r.push(Json.Obj(try Object(names, items) catch { unreachable }))
     }
@@ -472,7 +472,7 @@ fn spaceEnd(s String&, from I64) I64 {
     i I64 = from
     for i < s.Len() {
         c := s[i]
-        if c != ' ' and c != '\n' and c != '\r' and c != '\t' { return i }
+        if c != ' ' and c != '\n' and c != '\r' and c != '\t': return i
         i++
     }
     return i
@@ -483,7 +483,7 @@ fn plainEnd(s String&, from I64) I64 {
     i I64 = from
     for i < s.Len() {
         c := s[i]
-        if c == '"' or c == '\\' or c < 0x20 or c >= 0x80 { return i }
+        if c == '"' or c == '\\' or c < 0x20 or c >= 0x80: return i
         i++
     }
     return i
@@ -494,11 +494,11 @@ fn (r reader&) inObject() Bool { return r.nameStarts[r.depth - 1] >= 0 }
 # reads the whole text: values one after another, each array or object opened on the stacks and gathered once closed,
 # so nesting costs no recursion
 fn (r mut reader&) run() ? Error {
-    if r.src.Len() >= 3 and r.src[0] == 0xEF and r.src[1] == 0xBB and r.src[2] == 0xBF { r.pos = 3 }
+    if r.src.Len() >= 3 and r.src[0] == 0xEF and r.src[1] == 0xBB and r.src[2] == 0xBF: r.pos = 3
     for {
         # a value is next
         r.skipSpace()
-        if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
+        if r.pos == r.src.Len(): error Error.Unterminated(r.line(), r.col())
         c := r.src[r.pos]
         if c == '[' {
             try r.open(false)
@@ -521,15 +521,15 @@ fn (r mut reader&) run() ? Error {
         for {
             if r.depth == 0 {
                 r.skipSpace()
-                if r.pos < r.src.Len() { error Error.Trailing(r.line(), r.col()) }
+                if r.pos < r.src.Len(): error Error.Trailing(r.line(), r.col())
                 return
             }
             r.skipSpace()
-            if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
+            if r.pos == r.src.Len(): error Error.Unterminated(r.line(), r.col())
             d := r.src[r.pos]
             if d == ',' {
                 r.pos++
-                if r.inObject() { try r.name() }
+                if r.inObject(): try r.name()
                 break
             }
             if d == ('}' if r.inObject() else ']'): r.close()
@@ -541,12 +541,12 @@ fn (r mut reader&) run() ? Error {
 # an object member's name and the ':' after it
 fn (r mut reader&) name() ? Error {
     r.skipSpace()
-    if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
-    if r.src[r.pos] != '"' { error Error.Unexpected(r.line(), r.col()) }
+    if r.pos == r.src.Len(): error Error.Unterminated(r.line(), r.col())
+    if r.src[r.pos] != '"': error Error.Unexpected(r.line(), r.col())
     r.pushName(try r.string())
     r.skipSpace()
-    if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
-    if r.src[r.pos] != ':' { error Error.Unexpected(r.line(), r.col()) }
+    if r.pos == r.src.Len(): error Error.Unterminated(r.line(), r.col())
+    if r.src[r.pos] != ':': error Error.Unexpected(r.line(), r.col())
     r.pos++
 }
 
@@ -574,8 +574,8 @@ fn (r mut reader&) scalar(c Char) ? Error {
 
 fn (r mut reader&) word(w String&) ? Error {
     for i in range w.Len() {
-        if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
-        if r.src[r.pos] != w[i] { error Error.Unexpected(r.line(), r.col()) }
+        if r.pos == r.src.Len(): error Error.Unterminated(r.line(), r.col())
+        if r.src[r.pos] != w[i]: error Error.Unexpected(r.line(), r.col())
         r.pos++
     }
 }
@@ -593,9 +593,9 @@ fn (r mut reader&) string() String& ? Error {
     # the rest: checked, and measured, then decoded into text of exactly that length
     size I64 = r.pos - start
     for {
-        if r.pos == r.src.Len() { error Error.Unterminated(r.line(), r.col()) }
+        if r.pos == r.src.Len(): error Error.Unterminated(r.line(), r.col())
         c := r.src[r.pos]
-        if c == '"' { break }
+        if c == '"': break
         if c == '\\' {
             size += try r.escape(start, Array<Char>(0))
         } else if c < 0x20 {
@@ -673,7 +673,7 @@ fn (r mut reader&) escape(w I64, out mut Array<Char>&) I64 ? Error {
     } else {
         error Error.BadEscape(r.line(), r.col())
     }
-    if out.Len() > 0 { out[w] = b }
+    if out.Len() > 0: out[w] = b
     r.pos += 2
     return 1
 }
@@ -706,7 +706,7 @@ fn (r mut reader&) hex4(i I64) I64 ? Error {
 # code point cp's UTF-8 bytes, written into out at w when out is given, and how many there are
 fn putUtf8(cp I64, w I64, out mut Array<Char>&) I64 {
     if cp < 0x80 {
-        if out.Len() > 0 { out[w] = Char(cp) }
+        if out.Len() > 0: out[w] = Char(cp)
         return 1
     }
     if cp < 0x800 {
@@ -744,20 +744,20 @@ fn (r reader&) utf8() I64 ? Error {
         n = 2
     } else if c >= 0xE0 and c <= 0xEF {
         n = 3
-        if c == 0xE0 { lo = 0xA0 }
-        if c == 0xED { hi = 0x9F }
+        if c == 0xE0: lo = 0xA0
+        if c == 0xED: hi = 0x9F
     } else if c >= 0xF0 and c <= 0xF4 {
         n = 4
-        if c == 0xF0 { lo = 0x90 }
-        if c == 0xF4 { hi = 0x8F }
+        if c == 0xF0: lo = 0x90
+        if c == 0xF4: hi = 0x8F
     } else {
         error Error.BadUtf8(r.line(), r.col())
     }
-    if r.pos + n > r.src.Len() { error Error.BadUtf8(r.line(), r.col()) }
+    if r.pos + n > r.src.Len(): error Error.BadUtf8(r.line(), r.col())
     b := r.src[r.pos + 1]
-    if b < lo or b > hi { error Error.BadUtf8(r.line(), r.col()) }
+    if b < lo or b > hi: error Error.BadUtf8(r.line(), r.col())
     for k in range 2, n {
-        if (r.src[r.pos + k] & 0xC0) != 0x80 { error Error.BadUtf8(r.line(), r.col()) }
+        if (r.src[r.pos + k] & 0xC0) != 0x80: error Error.BadUtf8(r.line(), r.col())
     }
     return n
 }
@@ -771,8 +771,8 @@ fn (r reader&) utf8() I64 ? Error {
 fn (r mut reader&) number() F64 ? Error {
     start I64 = r.pos
     neg Bool = r.src[r.pos] == '-'
-    if neg { r.pos++ }
-    if not r.digitAt(r.pos) { error Error.BadNumber(r.line(), r.col()) }
+    if neg: r.pos++
+    if not r.digitAt(r.pos): error Error.BadNumber(r.line(), r.col())
     whole I64 = 0
     digits I64 = 0
     if r.src[r.pos] == '0' {
@@ -789,15 +789,15 @@ fn (r mut reader&) number() F64 ? Error {
     if r.pos < r.src.Len() and r.src[r.pos] == '.' {
         simple = false
         r.pos++
-        if not r.digitAt(r.pos) { error Error.BadNumber(r.line(), r.col()) }
-        for r.digitAt(r.pos) { r.pos++ }
+        if not r.digitAt(r.pos): error Error.BadNumber(r.line(), r.col())
+        for r.digitAt(r.pos): r.pos++
     }
     if r.pos < r.src.Len() and (r.src[r.pos] == 'e' or r.src[r.pos] == 'E') {
         simple = false
         r.pos++
-        if r.pos < r.src.Len() and (r.src[r.pos] == '+' or r.src[r.pos] == '-') { r.pos++ }
-        if not r.digitAt(r.pos) { error Error.BadNumber(r.line(), r.col()) }
-        for r.digitAt(r.pos) { r.pos++ }
+        if r.pos < r.src.Len() and (r.src[r.pos] == '+' or r.src[r.pos] == '-'): r.pos++
+        if not r.digitAt(r.pos): error Error.BadNumber(r.line(), r.col())
+        for r.digitAt(r.pos): r.pos++
     }
     if simple { return -F64(whole) if neg else F64(whole) }
     v := try r.src[start:r.pos].ParseFloat() catch {
@@ -815,14 +815,14 @@ fn (r reader&) exact(start I64, v F64) mut Json& {
     t := r.src[start:r.pos]
     if t.Len() - (1 if t[0] == '-' else 0) <= 15 { return Json.Num(v) }      # 15 digits or fewer: v is exact
     for ch in t {
-        if ch == '.' or ch == 'e' or ch == 'E' { return Json.Num(v) }
+        if ch == '.' or ch == 'e' or ch == 'E': return Json.Num(v)
     }
     n := try t.ParseInt(10) catch {
         u := try t.ParseUint(10) catch { return Json.Num(v) }
-        if v < 18446744073709551616.0 and U64(v) == u { return Json.Num(v) }
+        if v < 18446744073709551616.0 and U64(v) == u: return Json.Num(v)
         return Json.Uint(u)
     }
-    if v >= -9223372036854775808.0 and v < 9223372036854775808.0 and I64(v) == n { return Json.Num(v) }
+    if v >= -9223372036854775808.0 and v < 9223372036854775808.0 and I64(v) == n: return Json.Num(v)
     return Json.Int(n)
 }
 
@@ -886,7 +886,7 @@ fn policy<T>(given Naming) Naming { return try T.Attr<Naming>() catch default gi
 
 # a name as a policy writes it
 fn KeyOf(name String&, keys Naming) String {
-    if keys == Naming.Exact { return $name }
+    if keys == Naming.Exact: return $name
     b := StringBuilder()
     keyInto(b, name, keys)
     return b.ToString()
@@ -909,10 +909,10 @@ fn keyInto(b mut StringBuilder&, name String&, keys Naming) {
         if at > 0 and ch.IsUpper() {
             prev := name[i - 1]
             next := name[i + 1] if i + 1 < name.Len() else ' '
-            if prev.IsLower() or prev.IsDigit() or (prev.IsUpper() and next.IsLower()) { at = 0 }
+            if prev.IsLower() or prev.IsDigit() or (prev.IsUpper() and next.IsLower()): at = 0
         }
         if at == 0 {
-            if word > 0 and keys != Naming.Camel { b.PushChar(sep) }
+            if word > 0 and keys != Naming.Camel: b.PushChar(sep)
             b.PushChar(ch.ToUpper() if keys == Naming.Camel and word > 0 else ch.ToLower())
             word++
         } else {
@@ -924,7 +924,7 @@ fn keyInto(b mut StringBuilder&, name String&, keys Naming) {
 
 # the key of a field or a parameter: its own "@json.Key", else its name by the policy
 fn keyFor<F>(f F, keys Naming) String& {
-    if f.HasAttr<Key>() { return (f.Attr<Key>()!).Name }
+    if f.HasAttr<Key>(): return (f.Attr<Key>()!).Name
     return keyText(f, keys)
 }
 
@@ -962,24 +962,24 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
         case String& { return $(try j.AsStr()) }
         case Char {
             t := try j.AsStr()
-            if t.Len() != 1 { error Error.WrongKind }
+            if t.Len() != 1: error Error.WrongKind
             return t[0]
         }
         case Bool { return try j.AsBool() }
         case list.List<E> {
             l := list.List<E>()
-            for x in try j.AsArr() { l.Push(try From<E>(x, keys)) }
+            for x in try j.AsArr(): l.Push(try From<E>(x, keys))
             return l
         }
         case Vec<E> {
             l := Vec<E>()
-            for x in try j.AsArr() { l.Push(try From<E>(x, keys)) }
+            for x in try j.AsArr(): l.Push(try From<E>(x, keys))
             return l
         }
         case Map<K, V> {
             m := Map<K, V>()
             o := try j.AsObj()
-            for i in range o.Len() { m.Put(try From<K>(Json.Str(o.Keys[i]), keys), try From<V>(o.Values[i], keys)) }
+            for i in range o.Len(): m.Put(try From<K>(Json.Str(o.Keys[i]), keys), try From<V>(o.Values[i], keys))
             return m
         }
         case _ {
@@ -995,7 +995,7 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
                 return T(T.Base(try j.AsNum()))
             } else if T.Kind == TypeKind.Array {
                 l := Vec<T.Element>()
-                for x in try j.AsArr() { l.Push(try From<T.Element>(x, keys)) }
+                for x in try j.AsArr(): l.Push(try From<T.Element>(x, keys))
                 return l.ToArray()
             } else if T.Kind == TypeKind.Reference {
                 v := try From<T.Target>(j, keys)
@@ -1010,7 +1010,7 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
                     case Json.Null { return null }
                     case Json.Str(name) {
                         for c in T.Cases {
-                            if name == c.Name { return c() }
+                            if name == c.Name: return c()
                         }
                     }
                     case _ { }
@@ -1023,7 +1023,7 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
                     case Json.Str(name) {
                         for c in T.Cases {
                             if c.Fields.Len() == 0 {
-                                if name == keyFor(c, k) { return c() }
+                                if name == keyFor(c, k): return c()
                             }
                         }
                     }
@@ -1057,7 +1057,7 @@ fn member<P>(o Object&, p P, k Naming, keys Naming) P.Type ? {
     } else {
         name := keyFor(p, k)
         if p.HasDefault {
-            if not o.Has(name) { return p.Default }
+            if not o.Has(name): return p.Default
         }
         if P.Type.Kind == TypeKind.Reference {
             # a reference's referent read as a value and moved where the argument lands (O26a): a call's result of a
@@ -1091,9 +1091,9 @@ type writer struct(indent String&, keys Naming) {
 }
 
 fn (w mut writer&) newline(depth I64) {
-    if w.indent.Len() == 0 { return }
+    if w.indent.Len() == 0: return
     w.out.PushChar('\n')
-    for _ in range depth { w.out.Push(w.indent) }
+    for _ in range depth: w.out.Push(w.indent)
 }
 
 fn (w mut writer&) value(j Json&, depth I64) {
@@ -1117,7 +1117,7 @@ fn (w mut writer&) value(j Json&, depth I64) {
             }
             w.out.PushChar('[')
             for i in range items.Len() {
-                if i > 0 { w.out.PushChar(',') }
+                if i > 0: w.out.PushChar(',')
                 w.newline(depth + 1)
                 w.value(items[i], depth + 1)
             }
@@ -1131,7 +1131,7 @@ fn (w mut writer&) value(j Json&, depth I64) {
             }
             w.out.PushChar('{')
             for i in range o.Len() {
-                if i > 0 { w.out.PushChar(',') }
+                if i > 0: w.out.PushChar(',')
                 w.newline(depth + 1)
                 w.text(o.Keys[i])
                 w.out.Push(": " if w.indent.Len() > 0 else ":")
@@ -1154,24 +1154,24 @@ fn (w mut writer&) any<T>(v T, depth I64) {
         case list.List<E>, Vec<E> {
             w.out.PushChar('[')
             for i, x in v {
-                if i > 0 { w.out.PushChar(',') }
+                if i > 0: w.out.PushChar(',')
                 w.newline(depth + 1)
                 w.any(x, depth + 1)
             }
-            if v.Len() > 0 { w.newline(depth) }
+            if v.Len() > 0: w.newline(depth)
             w.out.PushChar(']')
         }
         case Map<K, V> {
             w.out.PushChar('{')
             first := true
             for e in v {
-                if not first { w.out.PushChar(',') }
+                if not first: w.out.PushChar(',')
                 first = false
                 w.newline(depth + 1)
                 w.key(e.Key)
                 w.any(e.Value, depth + 1)
             }
-            if not first { w.newline(depth) }
+            if not first: w.newline(depth)
             w.out.PushChar('}')
         }
         case _ {
@@ -1183,11 +1183,11 @@ fn (w mut writer&) any<T>(v T, depth I64) {
             } else if T.Kind == TypeKind.Array {
                 w.out.PushChar('[')
                 for i, x in v {
-                    if i > 0 { w.out.PushChar(',') }
+                    if i > 0: w.out.PushChar(',')
                     w.newline(depth + 1)
                     w.any(x, depth + 1)
                 }
-                if v.Len() > 0 { w.newline(depth) }
+                if v.Len() > 0: w.newline(depth)
                 w.out.PushChar(']')
             } else if T.Kind == TypeKind.Reference {
                 t T.Target = v
@@ -1211,7 +1211,7 @@ fn (w mut writer&) any<T>(v T, depth I64) {
                             w.colon()
                             w.out.PushChar('{')
                             for i, f in c.Fields {
-                                if i > 0 { w.out.PushChar(',') }
+                                if i > 0: w.out.PushChar(',')
                                 w.newline(depth + 2)
                                 w.named(f, k)
                                 w.colon()
@@ -1238,7 +1238,7 @@ fn (w mut writer&) fields<T>(v T, n I64, depth I64) {
     first := true
     for f in T.Fields {
         if not f.HasAttr<Skip>() {
-            if not first { w.out.PushChar(',') }
+            if not first: w.out.PushChar(',')
             first = false
             w.newline(depth + 1)
             w.named(f, k)
@@ -1246,7 +1246,7 @@ fn (w mut writer&) fields<T>(v T, n I64, depth I64) {
             w.any(f.Of(v), depth + 1)
         }
     }
-    if not first { w.newline(depth) }
+    if not first: w.newline(depth)
     w.out.PushChar('}')
 }
 
@@ -1277,7 +1277,7 @@ fn (w mut writer&) text(s String&) {
     from I64 = 0
     for i in range s.Len() {
         c := s[i]
-        if c >= 0x20 and c != '"' and c != '\\' { continue }
+        if c >= 0x20 and c != '"' and c != '\\': continue
         w.out.Push(s[from:i])
         from = i + 1
         if c == '"' {
@@ -1477,7 +1477,7 @@ if TestBuild {
         big := StringBuilder()
         big.PushChar('{')
         for i in range 500 {
-            if i > 0 { big.PushChar(',') }
+            if i > 0: big.PushChar(',')
             big.Push("\"key" + $i + "\": " + $(i * i))
         }
         big.Push(", \"key7\": -1}")
@@ -1509,7 +1509,7 @@ if TestBuild {
         assert Encode(doc) == "{\"name\":\"olang\",\"tags\":[1,null],\"ok\":true}"
         assert doc == (try Json.Parse("{\"ok\": true, \"tags\": [1, null], \"name\": \"olang\"}"))
         items := Vec<Json&>()
-        for i in range 3 { items.Push(Json.Num(F64(i))) }
+        for i in range 3: items.Push(Json.Num(F64(i)))
         assert Encode(Json.Arr(items.ToArray())) == "[0,1,2]"
     }
 
@@ -1531,7 +1531,7 @@ if TestBuild {
     test "a tree lives where its caller puts it, and no longer needs the text" {
         doc := Json.parsed(7)
         kept := Vec<Json&>()
-        for i in range 5 { kept.Push(Json.parsed(i)) }
+        for i in range 5: kept.Push(Json.parsed(i))
         assert churn() > 0
         assert Encode(doc) == "{\"n\":7,\"s\":\"value 7\",\"a\":[7,{\"deep\":\"x\\ty\"}]}"
         for i, k in kept {
@@ -1548,7 +1548,7 @@ if TestBuild {
         assert (try (try doc["limits"]["neg"]).AsNum()).Bits() == U64(0x8000000000000000)
         assert (try (try doc["text"]).AsStr()) == "line one\nline \"two\"\ttabbed é 中 😀 \\ /"
         n I64 = 0
-        for tag in try (try doc["tags"]).AsArr() { n += (try tag.AsStr()).Len() }
+        for tag in try (try doc["tags"]).AsArr(): n += (try tag.AsStr()).Len()
         assert n == 13
         assert (try (try doc["empty"]).AsObj()).Len() == 3
     }
