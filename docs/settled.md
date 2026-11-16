@@ -634,7 +634,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   local or parameter whose storage may be named past its block - handed back by a reference result (`s :=
   Sh.Make(n); return s`), a reference to it escaping, lent to a body that may keep it - is placed where it is kept
   (O26a, O28) and allocates (typed.RefsKept.Kept); before, G42 said it did not, and a task calling such a function was
-  given no scopes to build in (P2's stand-ins read `Allocates`). An over-estimate where the keeper is itself local.
+  given no scopes to build in (P2's stand-ins read `Allocates`). **Kept, followed (2026-11-16, wt-factsreg; mine)**: a
+  callee keeps what it is given only where it stores it, hands it back by reference, or gives it on to a keeper - not
+  by writing through it, aliasing it, or handing a view of it back in a value; a value made of a reference to a local
+  (a constructor's, `Mat(acc, 0)`, nested or not) keeps it exactly where that value goes; a fixed array converted, a part
+  sliced, a parameter or an outer local given a joined task (P1a), an extern's argument and one a function value's
+  type writes no `keeps` for (O17) are followed the same way - so oann's kernels and settle read allocation-free again.
 
 ### Errors
 

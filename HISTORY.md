@@ -38348,3 +38348,47 @@ places: two rows). SPEC is unchanged: O8f already says such a let-go frees; it n
 point; the scenarios freeing, earlyfree, memoryplaced, regions, landing, chunkpool, scopefind, fieldset and twins;
 tests/*.olang under `-debug -sanitize`; scopefuzz seed 7, 150 programs, 0 findings; evaldiff (846 files, none differing
 unlisted); tokdiff, astdiff, namesdiff, layoutdiff, consistency.
+
+## 2026-11-16: G42's kept locals followed, not guessed (wt-factsreg)
+
+**The regression.** oann passed `make test` under the compiler of the freeing5 era; under master many top-level
+`assert not X.Allocates` failed (S17a) - gemm's products, attention, the scans, ad's Forward/Backward, the settle - and
+T30c said custom models' `noalloc` methods might allocate. The cause was wt-freeing6's `typed.RefsKept.Kept` (G42's kept
+locals): judging from a body's local uses whether a value local's storage may be named past its block, it took every
+doubt for a yes. Nothing in the code generated changed - the scope pass lifted none of these locals
+(`OLANG_SCOPESTATS`: 0 lifted), and the IR of the reduced programs was master's and the old compiler's alike.
+
+**What it took for keeping, and why it is none.** Reduced: `acc := lanes(); step(acc, n)` where `step` writes
+`acc.v[j]` (a callee writing through what it is lent - `None`'s WrOther, there for lowering's stack slots, not for
+keeping); `total8(acc)` with `acc` a fixed array (the conversion to `Array<F32>&` went to the walk's escape, as did a
+slice `v[0:4]` a lane operator reads); `spawn gemmRows(sa, ..., bk, ...)` (every use in a spawn escapes - but P1a puts
+the join in the same body, so a parameter or a local declared outside the join is never named past its block by the
+task); `from := Mat(s, 0); Gemm(ws, to, from, ...)` (a constructor's fields are what it hands back, which made its
+parameters escape); `t.Mat()!.Data` handed back by `storageOf` (a reference read out of a part counted as the local's
+return); `ctime.clock_gettime(clock, ts)` in `time.Now` (an extern's argument escaped; O17: an extern keeps nothing);
+and `d.Relax(drive, ...)` through an `any` (O17, T30c: a call through a table keeps nothing its type's `keeps` does
+not say).
+
+**The rule now (RefsKept.Kept/NoneKept).** A callee keeps what it is given only where it stores it (EscOwn), stores a
+reference read out of a part of it (EscPart) or a value holding its references (EscRefs), or gives it on to a body that
+keeps it - deep, so that a value holding a reference to a local is judged by what the callee does with that value's
+references too. A value made of a reference to a local - by a call whose result may hold references (types.HoldsRefs,
+read-only: `mayHold`), a constructor among them, or by a copy of a value read out of the local - is a **Link**: what
+the callee's result carries of the parameter (`carries`: nothing, references, or the storage, read off its body's
+returns and links, recursively) times where the value goes (a Let's local, handed back, anywhere else - a call's value
+given straight to another call is a temporary of its own, so `deltaJob(deltaArgs(q, k, ...), ...)` is followed through
+both). Handing a view back in a value result is no keeping for a parameter (the caller follows it) and is keeping for a
+local (it lives where the result goes, O26a). Recursion takes a call being answered to keep nothing - a cycle stores
+nothing of its own - and keeps a yes found on that assumption only once the assumption's own call is answered
+(`product` calls itself on the wide path). Everything new is RefsKept's own record (EscOwn, EscPart, EscRefs, RetView,
+RetRefs, RetWhole, GiveAt, Link*): the shared uses lowering, the scope pass and free.olang read (EscSelf, RefAt, LendAt,
+None, OwnSlot) are as before, so no code generated changes.
+
+**Still counted:** `keptLocal` (a local handed back by reference), `Box.Of` (a value handed back holding a view of a
+local), a local whose `Mat` view a callee stores the part reference of, or stores a copy of (tests/keptfacts.olang's
+keptDeep, keptCopy, `mt.Over`). **Found, not fixed:** a copy of an array of run-time length (`pre := h.S; pre[0] = 5.0`)
+allocates and no fact counts it - before wt-freeing6 nothing did, and its Kept counted it by accident where the copy
+was lent writably; queued.
+
+Tests: tests/keptfacts.olang (the reduced cases, kept and not, and their runs). oann's `make test` passes with this
+compiler.
