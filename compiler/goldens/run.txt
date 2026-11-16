@@ -395,6 +395,7 @@
 | ok - E39, E31b: an in-place lane store through x[i] is written back, or goes where a reference read out of it points
 | ok - E39: an in-place operand overlapping its target reads the lanes already stored
 | ok - E39: Max runs the operation once a lane
+| ok - E39: Sum<A> works every lane in A - byte products into I32, I8 past its range, BF16 and F16 into F32
 === test tests/literals.olang
 | status 0
 | ok - literals make the type before their bracket
