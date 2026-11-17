@@ -95,6 +95,7 @@ fn dotsGeneric(x Array<U8>&, b Array<I8>&, t mut accOf<I32>&) { t.v[0:16] += (x 
 fn dotsNested(x Array<U8>&, b Array<I8>&, t mut nest&) { t.in.v[0:16] += (x * b).Sum<I32>(4) }
 fn dotsArray(x Array<U8>&, b Array<I8>&, v mut Array<I32>&) { v[0:16] += (x * b).Sum<I32>(4) }
 fn bumped(t mut acc32&) { t.n[1].AtomicAdd(3) }
+fn loaded(t mut acc32&) I64 { return t.n[1].AtomicLoad() }
 
 fn dotsInto(x Array<U8>&, b Array<I8>&) I64 {
     t := acc32()
@@ -106,7 +107,7 @@ fn dotsInto(x Array<U8>&, b Array<I8>&) I64 {
     a := Array<I32>(16)
     dotsArray(x[0:4], b, a)
     bumped(t)
-    return I64(t.v[17]) + I64(g.v[0]) + I64(w.in.v[15]) + I64(a[3]) + t.n[1]
+    return I64(t.v[17]) + I64(g.v[0]) + I64(w.in.v[15]) + I64(a[3]) + loaded(t)
 }
 
 fn dotsAll(x Array<U8>&, b Array<I8>&) I64 {
@@ -179,6 +180,56 @@ fn keptView(h held&) F32 {
 assert copiedOut.Allocates and widenedThenAssigned.Allocates and storedInto.Allocates and keptView.Allocates, "an array value's copy builds storage"
 assert not handedBack.Allocates, "a view handed back is copied by its caller"
 
+# a reference local naming either of two places (a conditional's arms): what it does afterwards reaches both - kept, each
+# is given storage, whichever arm names it; named by one place alone and only written through, neither is
+type rholder struct(d Array<F32>&) {
+    d
+}
+
+fn keepW(h mut holder&, x mut Array<F32>&) { h.d = x }
+fn keepR(h mut rholder&, x Array<F32>&) { h.d = x }
+
+fn condAlias(h mut holder&, x mut Array<F32>&, c Bool) F32 {
+    a := Array<F32>(8)
+    r mut Array<F32>& = a if c else x
+    r[0] = 7.0
+    keepW(h, r)
+    return a[0]
+}
+
+fn condAliasLast(h mut holder&, x mut Array<F32>&, c Bool) F32 {
+    a := Array<F32>(8)
+    r mut Array<F32>& = x if c else a
+    r[0] = 7.0
+    keepW(h, r)
+    return a[0]
+}
+
+fn condRead(h mut rholder&, x Array<F32>&, c Bool) F32 {
+    a := Array<F32>(8)
+    a[0] = 7.0
+    r Array<F32>& = a if c else x
+    keepR(h, r)
+    return a[0]
+}
+
+fn aliasWritten(c Bool) F32 {
+    a := Array<F32>(8)
+    r mut Array<F32>& = a
+    r[0] = 7.0 if c else 1.0
+    return a[0]
+}
+
+fn aliasRead(c Bool) F32 {
+    a := Array<F32>(8)
+    a[1] = 2.0
+    r Array<F32>& = a
+    return r[1] if c else r[0]
+}
+
+assert condAlias.Allocates and condAliasLast.Allocates and condRead.Allocates, "a kept reference local naming either of two locals"
+assert not aliasWritten.Allocates and not aliasRead.Allocates, "a reference local naming one local, written or read"
+
 test lent "a local kept by nothing is the frame's, and reads back what was written" {
     assert lent(3) == 1.0 and converted() == 28.0 and viewed(2.5) == 2.5
     # each group 2 * (1 + 2 + 3 + 4) = 20 - four bytes shared by every group, or all 128 bytes - and the atomic 3
@@ -201,4 +252,10 @@ test lent "a local kept by nothing is the frame's, and reads back what was writt
     storedInto(hs, into)
     into.S[0] = 7.0
     assert into.S.Len() == 4 and hs.S[0] == 0.0 and handedBack(hs).Len() == 4
+    y := Array<F32>(8)
+    hw := holder(y)
+    hr := rholder(y)
+    assert condAlias(hw, y, true) == 7.0 and hw.d[0] == 7.0 and condAliasLast(hw, y, false) == 7.0
+    assert condRead(hr, y, true) == 7.0 and hr.d[0] == 7.0 and condRead(hr, y, false) == 7.0 and hr.d.Len() == 8
+    assert aliasWritten(true) == 7.0 and aliasRead(true) == 2.0
 }

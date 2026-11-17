@@ -713,7 +713,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   sliced, a parameter or an outer local given a joined task (P1a), an extern's argument and one a function value's
   type writes no `keeps` for (O17) are followed the same way - so oann's kernels and settle read allocation-free again.
   An atomic's or E39's LaneDots's written place is lent for that operation alone, as a call's writable argument, and a
-  writable borrow a reference local holds (a lane `x op= v`'s target) is that local's alias (2026-11-17, wt-lanedst).
+  writable borrow a reference local holds (a lane `x op= v`'s target) is that local's alias (2026-11-17, wt-lanedst);
+  an atomic load's operand likewise. A reference local whose value names two locals (`r mut T& = a if c else x`, a
+  default, a match's arms) escapes both - its later uses may reach either (2026-11-17, wt-g42fix, found by the G42 review).
   **Copies counted (2026-11-16, wt-facts3; mine)**: an array of a run-time length held by value copied out of existing
   storage (`pre := h.S`, `into.S = h.S`) or widened from a fixed one (T7b, T7c), a return copying one into its result's
   scope, and a call of a function handing back a view kept by its caller (D9h) allocate - each counted wherever written,

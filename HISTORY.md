@@ -39413,6 +39413,26 @@ so the reference local's own uses decide. tests/keptfacts.olang: each destinatio
 and an atomic through a mut parameter, `assert not ... Allocates` on the callers, the values checked at run time and
 decided while compiling.
 
+## 2026-11-17: a reference local naming two locals escapes both (G42's facts; a fix, mine; wt-g42fix)
+
+The soundness review of wt-lanedst (cee8842f1) found `assert not condAlias.Allocates` accepted while condAlias's IR
+placed its local `a` in its caller's scope: `r mut Array<F32>& = a if c else x; keep(h, r)`. `LocalUses.use` records a
+reference local's one source in AliasOf, and closeAliases later does to that source what the local does (escapes,
+lends, gives, stores). A Let whose value names two roots (a conditional's arms, a `try ... default`, a match's arm
+values) escaped the second and made it the source - the first was neither escaped nor the alias's source any more, so
+what the local did afterwards never reached it. The read-only form (`r Array<F32>& = a if c else x; keepR(h, r)`) had
+the hole all along; wt-lanedst made every writable reference local go the same way. The callee form reached further:
+RefsKept.NoneKept said a parameter named by such a local was kept by nothing, so a caller's local lent to it was
+counted unkept too. Recording every root instead would keep the precision, but AliasOf is read as one source by nine
+readers (lowering's namesKept, retFrame, keepsNoLend, the evaluator's standInAway, free.olang, the scope pass), each of
+which would need the list; a two-root reference local is rare in kernels, so the earlier root now escapes as the later
+one does (`escapeAny`: its storage and its parts, whichever the use was). Writes need nothing more: a writable borrow
+is recorded as a write of each root where it is taken. Beside it, a precision fix the review noted: AtomicLoad's
+operand is a writable borrow too (P9) and was walked as an escape, so an atomic load through a `mut` parameter
+counted the caller's local as allocating; it now goes with the other atomics (`writesFirst`). tests/keptfacts.olang:
+both arms' orders and the read-only form counted, a one-local reference written or read still allocation-free, the
+values read back.
+
 ## 2026-11-17: a constructor's text field keeps its literal (C2a, C2g; a fix, mine; wt-strdefault)
 
 `type Cfg struct() { path String = "data/x.csv" }` read `c.path` back as ten zero bytes (or a closed frame's bytes):

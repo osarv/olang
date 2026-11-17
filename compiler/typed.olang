@@ -663,10 +663,10 @@ fn allInert(xs Array<Expr&>&) Bool {
     return true
 }
 
-# a prim writing through the place its first argument borrows: an atomic's integer, LaneDots's first lane
+# a prim whose first argument borrows a place writably for the operation alone: an atomic's integer (a load's too, P9), LaneDots's first lane
 fn writesFirst(op PrimOp) Bool {
     return match op {
-        case PrimOp.AtomicStore, PrimOp.AtomicAdd, PrimOp.AtomicSwap, PrimOp.AtomicCompareSwap, PrimOp.LaneDots: true
+        case PrimOp.AtomicLoad, PrimOp.AtomicStore, PrimOp.AtomicAdd, PrimOp.AtomicSwap, PrimOp.AtomicCompareSwap, PrimOp.LaneDots: true
         case _: false
     }
 }
@@ -1532,7 +1532,11 @@ fn (u mut LocalUses&) use(p Lvalue&, ctx Ctx, ref Bool) {
             if held: u.RetRefs[root] = true
         }
         case Ctx.Alias(of) {
-            if u.AliasOf[I64(of)] >= 0 and u.AliasOf[I64(of)] != root: u.escape(root)
+            # (one value naming two roots - a conditional's arms, a default, a match's arm values: what the alias does
+            # afterwards may reach either, and AliasOf names one, so both escape)
+            was := u.AliasOf[I64(of)]
+            if was >= 0 and was != root: u.escapeAny(was)
+            if was >= 0 and was != root: u.escape(root)
             u.AliasOf[I64(of)] = root
         }
         case Ctx.Esc { u.escape(root) }
@@ -1546,6 +1550,16 @@ fn (u mut LocalUses&) escape(root I64) {
     if u.quiet: return
     if u.partRef: u.EscPart[root] = true
     if not u.partRef: u.EscOwn[root] = true
+}
+
+# an escape of local root's storage or of a reference read out of a part of it, whichever the use was (an earlier
+# root of a two-root alias, whose use is no longer the one walked)
+fn (u mut LocalUses&) escapeAny(root I64) {
+    was := u.partRef
+    u.partRef = false
+    u.escape(root)
+    u.partRef = was
+    if not u.quiet: u.EscPart[root] = true
 }
 
 # a value holding references read out of local root's storage stored: into the local its Let declares, a copy linked
