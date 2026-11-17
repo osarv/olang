@@ -3173,8 +3173,9 @@ entry:
   %none = icmp eq ptr %s, null
   br i1 %none, label %plain, label %look
 look:
+  ; atomic: on a scope that is no stand-in this word is its parts list, which other threads push onto (__olang_scope_part)
   %mp = getelementptr %olang.scope, ptr %s, i32 0, i32 4
-  %m = load ptr, ptr %mp
+  %m = load atomic ptr, ptr %mp monotonic, align 8
   %fresh = icmp eq ptr %m, @__olang_standin_mark
   br i1 %fresh, label %make, label %kept
 kept:
