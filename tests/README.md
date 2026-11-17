@@ -67,6 +67,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `drops.olang` - destructors run where the holder lets go (O15): a by-value variable's as its block is left, a
   parameter's at the callee's end unless handed on, a holder's parts, a store over a place; the
   whole order decided while compiling beside the run time.
+- `textfields.olang` - a constructor's fields given text or an array by default (C2a, C2g): a literal, a joined text, a
+  parameter's default punned, an array, a nested instance's text - each read back after an arena churn, baked and decided
+  while compiling beside the run time.
 - `heldfields.olang` - a `:=` field made by a builder's, a fallible call's `!` or a `catch default`'s value (D15, C11):
   its destructor runs once wherever its holder is held - a variable, a store, a Vec, a Map, an array.
 - `kept.olang` - a local kept past its block or loop turn is built where it is kept (O28, O17, D9i): each turn's value its

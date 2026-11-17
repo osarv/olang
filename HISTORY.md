@@ -39412,3 +39412,17 @@ recorded as an alias. A writable borrow a reference local holds is now that loca
 so the reference local's own uses decide. tests/keptfacts.olang: each destination
 and an atomic through a mut parameter, `assert not ... Allocates` on the callers, the values checked at run time and
 decided while compiling.
+
+## 2026-11-17: a constructor's text field keeps its literal (C2a, C2g; a fix, mine; wt-strdefault)
+
+`type Cfg struct() { path String = "data/x.csv" }` read `c.path` back as ten zero bytes (or a closed frame's bytes):
+the length right, the elements gone. Optimization 9 (`lower.slotLen`/`slotCopy`) copies a text local initialized from a
+literal of at most 256 bytes into a hidden stack slot of the frame, asked only whether the local's home is the frame. A
+constructor's field (`run` keeps its slot in the frame and records where its elements go in `fieldStor`, the instance's
+scope, C2g) passed that test, so the copy went into the constructor's frame and the instance kept a pair naming it after
+the return. Every text or array field given a literal by default was hit - in the body, by `:=`, nested in another
+instance - and the compile-time evaluator, running the same lowering, refused it ("it uses storage after the scope it
+was made in closed"). The fix: `slotLen` gives no slot to a field or to any local `fieldStor` homes elsewhere (O26a's
+returned locals, R3's kept parameters), so `arrayCopy` builds the copy where `storageOf` says - the instance. A
+parameter's default punned into a field, an array literal and a joined text were never slot-copied and stay as they
+were. tests/textfields.olang reads each back after an arena churn, at run time, baked (K2) and decided (S18c).

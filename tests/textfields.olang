@@ -1,0 +1,71 @@
+# C2a, C2g: a constructor's field given text or an array by default - a literal copied into the field lives with the
+# instance, never in the constructor's frame (it read back as zero bytes, or bytes of a closed frame, once). Each test
+# holds the run time to what the compile-time evaluator bakes (K2) and decides (S18c)
+
+type Cfg struct() {
+    path String = "data/x.csv"
+    n I64 = 7
+    name := "cfg"
+}
+
+# a default in the parenthesised list, punned into the field
+type Named struct(label String = "plain") {
+    label
+    tag String = "t"
+}
+
+type Held struct(n I64) {
+    xs Array<I64> = [1, 2, 3]
+    note String = "n=" + $n
+    big String = "a text longer than most, still a literal copied in: 0123456789"
+}
+
+type Outer struct() {
+    inner Cfg = Cfg()
+    own String = "outer"
+}
+
+fn churn() I64 {
+    s := 0
+    for i in range 64 {
+        a := Array<I64>(32, i)
+        s += a[31]
+    }
+    return s
+}
+
+fn defaults() Bool {
+    c := Cfg()
+    p := Named()
+    q := Named("given")
+    h := Held(4)
+    o := Outer()
+    churn()
+    cfg := c.path == "data/x.csv" and c.path.Len() == 10 and c.n == 7 and c.name == "cfg"
+    named := p.label == "plain" and p.tag == "t" and q.label == "given"
+    held := h.xs == Array<I64>[1, 2, 3] and h.note == "n=4" and h.big.Len() == 62 and h.big.EndsWith("0123456789")
+    nested := o.inner.path == "data/x.csv" and o.inner.name == "cfg" and o.own == "outer"
+    return cfg and named and held and nested
+}
+
+fn joined() String {
+    c := Cfg()
+    return "[" + c.path + "] " + $c.n
+}
+
+DefaultsBaked := defaults()
+JoinedBaked := joined()
+PathBaked := comptime Outer().inner.path
+Run mut Bool = true # read at run time, so the functions run as the program as well as in the evaluator
+
+test "C2a: text and array defaults of a constructor's fields read back as written" {
+    assert Run and defaults()
+    assert defaults() # S18c: decided while compiling
+    assert DefaultsBaked
+}
+
+test "C2g: a field's text default joined into other text, at run time and baked" {
+    assert Run and joined() == "[data/x.csv] 7"
+    assert JoinedBaked == "[data/x.csv] 7"
+    assert PathBaked == "data/x.csv"
+}

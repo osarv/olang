@@ -1992,6 +1992,9 @@ fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span, 
 # enough for a frame, else -1. A slot nothing writes is the constant itself once LLVM sees it only ever copied from one
 fn (ln mut lowering&) slotLen(l typed.LocalId, init typed.Expr&) I64 {
     if not ln.planned or ln.F.Locals[I64(l)].Home != mir.ScopeRef.Frame: return -1
+    # (a local whose elements go elsewhere though its slot stays in the frame - a constructor's field, whose elements
+    # live with the instance, O26a's returned local, a kept by-value parameter: fieldStor - takes no frame copy, C2g)
+    if ln.fieldStor.Has(I64(l)) or ln.B.Locals[I64(l)].Kind == typed.LocalKind.Field: return -1
     r := derefOf(ln.unconvert(init))
     if r == null: return -1
     match r {

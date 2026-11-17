@@ -2397,7 +2397,7 @@ c8dc3e7fdc0da30f 145e7a723ef69716 compiler/fmt.olang
 8299f0d6f657ceae 5fcac26072ce57dd compiler/lineedit.olang
 211de0b5ecb13aac 9a12ce3d06dabd21 compiler/listing.olang
 b2d4381417237511 3fc569ee40128d3e compiler/load.olang
-e2c9566f37e63ad7 fc3d4e91503b7010 compiler/lower.olang
+a240e7d607b45c39 52914e36e55b5100 compiler/lower.olang
 0a6ba37a53fb9662 36e2d7fb1015a7d2 compiler/lsp.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
@@ -2657,6 +2657,7 @@ b5ef26df71c5e9d8 7d463a2ea7512fb5 tests/reflect.olang
 0c4c3adea751bf6a 77a0fb797b355ed7 tests/shared.olang
 307585c2d6e47496 63a9fb9b67c9368a tests/slotfacts.olang
 c452c9cb509c23e1 76ad53a3573a5846 tests/structpat.olang
+b043808fc75ce994 719c84153e3808ff tests/textfields.olang
 0d4b3ba0fcda27dc 9f05e76fef4e032b tests/textplus.olang
 2fb13fa3e9f7127c 83979588bf3c969f tests/textslot.olang
 306278cf38ee3057 a890abeac25f11d9 tests/topassert.olang
