@@ -1648,10 +1648,10 @@ e14bunknown.olang:4:31: error[E14b]: 'timout' names no parameter of 'connect' - 
       |                               ^~~~~~
 compilation failed with 1 error
 === e14bvalue.olang
-e14bvalue.olang:6:17: error[E14b]: a call through a function value takes its arguments by position
+e14bvalue.olang:6:17: error[E14b]: a call through this function value takes its arguments by position
     6 |     x := f("h", port = 2)
       |                 ^~~~~~~~
-e14bvalue.olang:6:17: note: a function type names no parameters
+e14bvalue.olang:6:17: note: only a parameter its function type gives a default is named (T21d), and this type gives none
 compilation failed with 1 error
 === e14once.olang
 e14once.olang:9:10: error[E14]: expected 3 arguments, found 0
@@ -6366,6 +6366,33 @@ t21ctwice.olang:4:13: error[D8c]: '_' discards a value and names nothing, so it 
     4 | fn main() { _ := use(fn(x I64) I64 { return x }) }
       |             ^
 compilation failed with 2 errors
+=== t21ddefaultconflict.olang
+t21ddefaultconflict.olang:7:37: error[T21d]: parameter 'k' defaults to 2.0 here, but to 1.0 in fn&(x F64, k F64 = 1.0) F64
+    7 |     f fn&(x F64, k F64 = 1.0) F64 = scale
+      |                                     ^~~~~
+t21ddefaultconflict.olang:7:37: note: a call through the value takes the function type's default
+t21ddefaultconflict.olang:7:37: help: give 'k' the default '= 1.0', or none
+compilation failed with 1 error
+=== t21dlambdaconflict.olang
+t21dlambdaconflict.olang:4:35: error[T21d]: parameter 'b' defaults to 1 here, but to 0 in fn&(x I64, b I64 = 0) I64
+    4 |     f fn&(x I64, b I64 = 0) I64 = fn(x I64, b I64 = 1) I64 { return x + b }
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+t21dlambdaconflict.olang:4:35: note: a call through the value takes the function type's default
+t21dlambdaconflict.olang:4:35: help: give 'b' the default '= 0', or none
+compilation failed with 1 error
+=== t21dlocaldefault.olang
+t21dlocaldefault.olang:7:26: error[D8a]: this default cannot be computed while compiling
+    7 |     f fn&(x I64, k I64 = n) I64 = sc
+      |                          ^
+t21dlocaldefault.olang:7:26: note: it reads the local 'n', which the calls it stands in do not see
+compilation failed with 1 error
+=== t21dnottrailing.olang
+t21dnottrailing.olang:6:24: error[D8b]: 'k' has no default, but a parameter before it does
+    6 |     f fn&(x F64 = 1.0, k F64) F64 = twice
+      |                        ^~~~~
+t21dnottrailing.olang:6:24: note: defaulted parameters come last
+t21dnottrailing.olang:6:24: help: give 'k' a default, or move it before the defaulted ones
+compilation failed with 1 error
 === t21isnullnever.olang
 t21isnullnever.olang:5:19: error[T2c]: 'f' is a fn&(x I64) I64, never null, so this is always false
     5 |     assert not (f == null)

@@ -427,9 +427,9 @@ test "what the declarations do not allow fails, with a message" {
 }
 
 # flags declared by a struct (G39)
-type options struct(@Help("how many") @Short('n') Count I64 = 10, @Help("say more") Verbose Bool = false
-                    MaxLen U8 = 8, Out String&) {
-    Count, Verbose, MaxLen, Out
+type options struct(Out String&, @Help("how many") @Short('n') Count I64 = 10, @Help("say more") Verbose Bool = false
+                    MaxLen U8 = 8) {
+    Out, Count, Verbose, MaxLen
 }
 
 test Flags.Read "a struct's parameters are flags, its attributes their help" {
@@ -437,10 +437,10 @@ test Flags.Read "a struct's parameters are flags, its attributes their help" {
     o := p.Read<options>(Array<String&>["tool", "-n", "3", "--out", "x", "--max-len=9", "rest"])!
     assert o.Count == 3 and not o.Verbose and o.MaxLen == 9 and o.Out == "x" and p.Args()[0] == "rest"
     assert p.Help() == ("usage: tool [flags] [arguments]\ndoes things\n\nflags:\n" +
+        "      --out TEXT\n" +
         "  -n, --count INT    how many (default 10)\n" +
         "      --verbose      say more\n" +
         "      --max-len INT  (default 8)\n" +
-        "      --out TEXT\n" +
         "  -h, --help         show this help\n")
     q := Flags("tool")
     try q.Read<options>(Array<String&>["tool"]) catch Error.Required { } catch { unreachable }
