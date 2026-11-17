@@ -817,6 +817,8 @@ b4e59fd214d872bd fde096bc773ffabc checks/cases/l9keywordname.olang
 a9db92842a6aba1c a775d0b4fc518d05 checks/cases/lambdaselfcapture.olang
 2bb094fe0852ad21 cb85f2e6a6d39e5f checks/cases/lambdaselfholder.olang
 7f0d80946d9d9b2a 2ec48aded2af690e checks/cases/lanecompare.olang
+0af064e8b20c48cc 64a4673b0860d7d8 checks/cases/lanegrouplengths.olang
+43d10d0df4e1943f c82264ed2a1cc016 checks/cases/lanegroupsize.olang
 9bfd70cb1e8473b5 51ff8f7e430e4754 checks/cases/laneinplacerefs.olang
 edb53cccf5efa486 fa62ca8ca33b5b81 checks/cases/lanelengths.olang
 f16e8c3965e84276 9b23d168e3c2b265 checks/cases/lanemaxtry.olang
@@ -2370,15 +2372,15 @@ e20178f94e07dfed ff5ec0fbe401eade compiler/bindgen.olang
 90881337ba685229 3e0cfd8336125a80 compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 a63bb2cbd4c666c1 32f8e5565363d2f2 compiler/cells.olang
-b81ca15a37263fa5 d3f9ad985baf9985 compiler/check.olang
+31d1409d2277a515 3fd2e04c1532ec04 compiler/check.olang
 da018e972c2ecc90 402dd6cf0de7cca1 compiler/cond.olang
 2ab98962469bc960 f235e148eac3e4ba compiler/definit.olang
 db407b9ec2aacf25 d850fbb42d0e8294 compiler/diag.olang
 8eecc7e6e624f53a d60fad56d190f340 compiler/diagmsg.olang
 b02b474ae1593a73 a4a8294e6adfbb54 compiler/doc.olang
-ffdfae4680125f72 0c54a7a6467edf56 compiler/effects.olang
-b023c7e5448f953b be914a00be0c9117 compiler/emit.olang
-2c3bf6bb250faaaf bf9883605a7d79eb compiler/eval.olang
+c54000895b98b726 ac44ff8988bd9454 compiler/effects.olang
+3ffd1cfa42a16f45 7e594e52feb9317b compiler/emit.olang
+773cd6c8d047c2e1 f0b8479e97ee01bd compiler/eval.olang
 eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
 f8904f06be8de907 9c47d36eb9c4740f compiler/facts.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
@@ -2395,8 +2397,8 @@ e2c9566f37e63ad7 fc3d4e91503b7010 compiler/lower.olang
 0a6ba37a53fb9662 36e2d7fb1015a7d2 compiler/lsp.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
-8e44204979bbc706 7b111f4af5b2b6d6 compiler/mir.olang
-5e25cf0101bf2e6a ab23be702cd414b4 compiler/msgs.olang
+c604663be63ce664 c091dc9bcd4babc4 compiler/mir.olang
+af237d057f4897af 74dbdaf08aab0163 compiler/msgs.olang
 15958712814bbd0b 2521f39009387efc compiler/names.olang
 3f072b84e716c304 202ed56cc066d701 compiler/needs.olang
 79acbc010c9bf08a a1be4111ef62bcb1 compiler/notebook.olang
@@ -2452,7 +2454,7 @@ bff38ad021d5542d 9c6cd315934193ff compiler/tools/rungold.olang
 67f2c232d9fc22f4 b75c2640c0dbc727 compiler/tools/seed.olang
 d60c568945ef50db bb36039f15d76915 compiler/tools/tokdiff.olang
 b5d5a7ffc3c55aed 778196a5417df71d compiler/tools/toolkit.olang
-4c9ba95963c44d55 7ded29c3b72414ac compiler/typed.olang
+b8437f1d100e8c07 2f2b108195d16dd1 compiler/typed.olang
 12634a6da2bd8d2f 185c680f0fad72ab compiler/types.olang
 ac9569bf452c8a83 6ed8536abd31d32d compiler/unparse.olang
 e2ea203aa101b68f 55a0a86245b469ff compiler/views.olang
@@ -2624,7 +2626,7 @@ ef74496ac1efc479 2597c26849901793 tests/inplace.olang
 32026d6663c936db d92efb1f91d9f2dd tests/keptparams.olang
 4c4d9485d7579430 23bce712b3e98630 tests/keyenummod.olang
 3253d9e1f272b7f0 71d68e12eec68060 tests/keyenums.olang
-aeda1ee7f21454a4 da935013d9ece52f tests/lanes.olang
+bcc9ef5a3b4134de 3d9949edfee60676 tests/lanes.olang
 01ffe7335fe6ab32 5ca34c7fbd5883d8 tests/literals.olang
 cb1a5845ede026cf 0791c61597117220 tests/match.olang
 bd604793a79e1dd0 03c02f86e953d049 tests/membermod.olang

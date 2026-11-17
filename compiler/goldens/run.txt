@@ -397,6 +397,7 @@
 | ok - E39: Max runs the operation once a lane
 | ok - E39: Sum<A> works every lane in A - byte products into I32, I8 past its range, BF16 and F16 into F32
 | ok - E39: Sum<A> of byte products at odd depths, every pairing of signedness, agrees with the loop written by hand
+| ok - E39: Sum<A>(n), the grouped total, agrees with the loop written by hand - vpdpbusd's groups of four bytes
 === test tests/literals.olang
 | status 0
 | ok - literals make the type before their bracket
