@@ -14251,7 +14251,7 @@ fn (c mut Checker&) typeParams(sp source.Span, t types.TypeId) Array<ast.Param&>
         row := c.P.T.DefaultAt(t, i)
         x ast.Expr?& = null
         if row != 0: x = (try c.P.FnDefaultOf(row) catch { continue }).X
-        out.Push(ast.Param(sp, source.NameId(I32(ns[i])), null, x, Array<ast.Attr&>(0)))
+        out.Push(ast.Param(sp, source.NameId(I32(ns[i])), null, x))
     }
     return out.ToArray()
 }
