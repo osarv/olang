@@ -17,4 +17,3 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 | local (WSL, GPU) | oagent wt-ebr2 | e2 (EBR) rounds 2-3, held until the GPU route merges | 2026-11-17 |
 | cloud (OLang Cloud) | olang wt-noalias | `noalias` for `mut` references where scopes prove no alias | 2026-11-17 |
 | cloud (OLang Cloud) | olang wt-netos | TLS in std/net; append in std/os | 2026-11-17 |
-| cloud (OLang Cloud) | olang review | the opus-high bulk soundness review of G42 facts (cee8842f1) | 2026-11-17 |
