@@ -220,6 +220,7 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	oannsettle	opus	medium	done						Anderson, Gauss-Seidel, Contraction()
 2026-11-16	lanesum	opus	medium	done	194	72	41						LaneDot vector accumulator
 2026-11-16	merge-members	sonnet	low	stopped	98	11	31			quick failed: real bugs in members
-2026-11-17	oanncert	opus	medium	running						certify by spectral norm
+2026-11-17	oanncert	opus	medium	done						certify by spectral norm
 2026-11-17	membersfix	opus	medium	running						fix quick failures
 2026-11-17	merge-lanesum	sonnet	low	running
+2026-11-17	oanncert2	opus	medium	running						L2 stop test + nudged certificate
