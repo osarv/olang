@@ -39426,3 +39426,18 @@ was made in closed"). The fix: `slotLen` gives no slot to a field or to any loca
 returned locals, R3's kept parameters), so `arrayCopy` builds the copy where `storageOf` says - the instance. A
 parameter's default punned into a field, an array literal and a joined text were never slot-copied and stay as they
 were. tests/textfields.olang reads each back after an arena churn, at run time, baked (K2) and decided (S18c).
+
+## 2026-11-17: the growth and chunkpool checks measure what is freed, not where huge pages land (O8b, O8f; mine; wt-growth)
+
+checks' freeing check read growth.olang's resident peak (VmHWM) as 27 MB against a limit of 27 in about a third of
+runs on a loaded machine, master's compiler as well. The cause is transparent huge pages (`always` here): a 10 MB chunk
+holding an 8 MB buffer has a tail the program never touches, resident or not as the kernel finds a huge page free, so
+the same run read 24 to 28 MB. The fixture now reads its peak address space (VmPeak), which only a mapping moves: every
+chunk from 128KB up is mapped for itself, and one let go of stays mapped in the pool until taken again. The limit is
+derived from the buffer size in the fixture's comment - three chunks of the last class (10 MB) against four, the limit
+midway at 35 MB; measured 29.9 MB, deterministic. With `__olang_region_release_part` made to keep the buffer (a
+temporary break) it read 39 MB ("kept, 39 MB"), so the check still fails a compiler keeping the fourth buffer. The same
+weakness failed chunkpool's budget in about a fifth of runs under load (the tasks' resident growth 2.7 MB against a 2 MB
+bound, 0.8 MB without huge pages); its preloaded sysconf.c now turns them off for the process (PR_SET_THP_DISABLE), so
+the resident set counts the pages touched: 0 of 300 runs over. The other resident-memory readers (joins, tempref,
+texts, the earlyfree split's 1 MB tolerance) were measured under the same load and keep wide margins; unchanged.

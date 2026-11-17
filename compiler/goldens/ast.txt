@@ -2048,7 +2048,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-ce8c44007b844f64 d3b95740f35fb852 checks/checks.olang
+25f26746f88aded1 b809c917d84fa0ac checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2157,7 +2157,7 @@ ed65e1c871a90895 f027d66ab67504be checks/fixtures/freeing/elements.olang
 4bb628e5df1ebbeb 32972159450570f4 checks/fixtures/freeing/fields.olang
 d18097214e652a69 7b0777b61ce1e0fd checks/fixtures/freeing/gaps.olang
 217397296d19aecc 54f099facf748fa7 checks/fixtures/freeing/global.olang
-1f2ff55aad643cf0 458e29a72ba57847 checks/fixtures/freeing/growth.olang
+88e2dd045d130dae 81d938e106e4ff99 checks/fixtures/freeing/growth.olang
 8d3c4aca81f9cb85 28d51ed34ad59b92 checks/fixtures/freeing/joins.olang
 c63fbdfdcd4f61e6 9c1b655af8a433f2 checks/fixtures/freeing/mapcopy.olang
 d4da91f96eb62c2e d5e16ea922b532f1 checks/fixtures/freeing/mapelems.olang

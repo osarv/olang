@@ -617,7 +617,8 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(outOf(dir).EndsWith("flat flat 0\n"), "tempref kept its calls' temporaries", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=100 tempref.olang > out.txt 2>&1") == 0, "tempref interpreted", dir)
     try r.expect(outOf(dir) == "flat flat 0\n", "tempref interpreted output", dir)
-    # (growth, gap 11: a Vec's growth frees in a program with an owner holding a Vec whole and a copy of one - its peak)
+    # (growth, gap 11: a Vec's growth frees in a program with an owner holding a Vec whole and a copy of one - its peak
+    # address space, which transparent huge pages do not move as they do its resident peak)
     try r.expect(sh(dir, "\"$OLANG\" -check growth.olang > out.txt 2>&1") == 0, "growth", dir)
     try r.expect(outOf(dir).EndsWith(" three buffers\n"), "growth kept the buffers its Vecs grew out of", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=1000 growth.olang > out.txt 2>&1") == 0, "growth interpreted", dir)
@@ -2660,7 +2661,8 @@ fn latermodule(r mut report&) ? Failed {
 }
 
 # O8b: the arena's pool is bounded, and gives the least recently given back chunks to the system beyond the bound -
-# run with sysconf answering a machine of 8MB (a preloaded sysconf.c), so the bound is 1MB and a 16MB phase is far past
+# run with sysconf answering a machine of 8MB (a preloaded sysconf.c, which also turns transparent huge pages off so the
+# resident set counts only the pages touched), so the bound is 1MB and a 16MB phase is far past
 # it; so is the pool every thread shares, which parked workers fill. (That the pool finds any chunk big enough is a
 # case, checks/cases/chunkpool.olang, and that a parked worker's chunks reach another thread checks/cases/parkedpool)
 test "the arena's chunk pool gives memory back beyond its bound" { assert passed("chunkpool") }
