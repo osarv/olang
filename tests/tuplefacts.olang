@@ -1,0 +1,48 @@
+# G42's facts of a tuple binding agree with the same names bound one to a line (oann's dyn/settle): references to a
+# structure of arrays bound together allocate nothing, as bound apart; a column bound by value is its copy (T7b) and
+# counts as storage built in either form - lowering may still view it in place (viewLocals), which the facts do not prove
+
+type cell struct(U F32, S F32) { U, S }
+
+type pop struct(n I64) {
+    a := Columns<cell>(n)
+    b := Columns<cell>(n)
+}
+
+fn (p mut pop&) rate(k I64) mut Columns<cell>& { return p.a if k == 0 else p.b }
+
+fn sum(u Array<F32>&, v Array<F32>&) F32 { return u[0] + v[0] }
+
+fn refsPaired(p mut pop&, c I64) F32 {
+    x, y := p.rate(c), p.rate(1 - c)
+    return sum(x.U, y.U)
+}
+
+fn refsApart(p mut pop&, c I64) F32 {
+    x := p.rate(c)
+    y := p.rate(1 - c)
+    return sum(x.U, y.U)
+}
+
+fn copiesPaired(p mut pop&) F32 {
+    x, y := p.rate(0).U, p.rate(1).U
+    return sum(x, y)
+}
+
+fn copiesApart(p mut pop&) F32 {
+    x := p.rate(0).U
+    y := p.rate(1).U
+    return sum(x, y)
+}
+
+assert not refsApart.Allocates, "two references bound on two lines allocate"
+assert not refsPaired.Allocates, "two references bound in one statement allocate"
+assert copiesApart.Allocates and copiesPaired.Allocates, "a column bound by value is no copy"
+
+test refsPaired "a tuple binding reads what each name is given, as bindings apart do" {
+    p := pop(4)
+    p.a.U[0] = 1.5
+    p.b.U[0] = 2.0
+    assert refsPaired(p, 0) == 3.5 and refsApart(p, 1) == 3.5
+    assert copiesPaired(p) == 3.5 and copiesApart(p) == 3.5
+}
