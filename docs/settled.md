@@ -1237,7 +1237,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   checked build (E16g: test, -debug, interpret) checks indexes, divisions and shifts the program wrote, where speed does
   not matter.
 - **Optimizations are mine to decide (the user, 2026-10-27).** Those that change no meaning are never a question
-  (docs/optsurvey.md lists what was built). Benchmarks against C are in `bench/` (not in verify).
+  (docs/optsurvey.md lists what was built). Benchmarks against C are in `bench/` (not in verify). E39's byte dot
+  product (`(x * w).Sum<I32>()` over `U8` x `I8`, `LaneDot`) is one helper over every lane: vectors of `I32` lanes
+  carried to the end and reduced once, four steps a turn, the short last step masked (AVX-512BW) or byte by byte; a step
+  is vpdpbusd, called by name where the target has avx512vnni or avxvnni, else a widening multiply-add; an `I64` total
+  reduces every 8192 steps so no lane overflows (2026-11-17).
 - **Testing.** `make verify` runs the corpus, std's tests, `checks/` (must-fail cases and whole-build scenarios) and the
   port's diffs; `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the
   user's rule). The suite runs side by side, at most a job per core, each test build, interpreted run and heavy tool

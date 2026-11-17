@@ -22052,18 +22052,18 @@ fn (c mut Checker&) laneCount(sp source.Span, k I64, lv laneVals&) typed.Expr& {
 
 # a loop over the lanes: a counter i from start (0, or 1 where lane 0 is built before it), the loop leaving where it reaches n - its counter, block, outer block, undo
 # mark and statements' start, for laneLoopClose
-fn (c mut Checker&) laneLoopOpen(sp source.Span, n typed.Expr&, start I64 = 0, first typed.Expr?& = null) I64, I64, I64, I64, I64 {
+fn (c mut Checker&) laneLoopOpen(sp source.Span, n typed.Expr&, start I64 = 0) I64, I64, I64, I64, I64 {
     i := c.hidden(sp, c.i64())
-    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(i)), first if first != null else c.lit(sp, c.i64(), start)))
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(i)), c.lit(sp, c.i64(), start)))
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.emit(c.breakUnless(sp, c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, i), n), id))
     return i, id, outer, mark, from
 }
 
-fn (c mut Checker&) laneLoopClose(sp source.Span, i I64, id I64, outer I64, mark I64, from I64, step I64 = 1) {
+fn (c mut Checker&) laneLoopClose(sp source.Span, i I64, id I64, outer I64, mark I64, from I64) {
     b := c.close(id, outer, mark, from)
-    c.emit(typed.Stmt.Loop(sp, b, c.countPost(sp, i, step)))
+    c.emit(typed.Stmt.Loop(sp, b, c.countPost(sp, i)))
 }
 
 # node k's element at lane i, in the loop
@@ -22257,19 +22257,18 @@ fn (c mut Checker&) laneTotal(sp source.Span, nsp source.Span, name String&, k I
 }
 
 # Sum<A> (E39): every lane computed in A - each operand's elements widened to A before the lane's operation (T6b) - and
-# the lanes added in A from its zero. An integer total is exact in any order: a product of two byte arrays is summed a
-# block of LaneDotBlock lanes at a time (LaneDot, the target's dot instructions where it has them), the rest one by one
+# the lanes added in A from its zero. An integer total is exact in any order: a product of two byte arrays is summed
+# whole by one LaneDot (the target's dot instructions where it has them, one vector total reduced once at the end)
 fn (c mut Checker&) laneSumIn(sp source.Span, nsp source.Span, k I64, w types.TypeId, wsp source.Span) typed.Expr& {
     if not c.laneWorksIn(k, w, wsp): return c.unknown(sp)
     from := c.stmts.Len()
     lv := c.laneSetup(sp, k)
     lv.W = w
     cnt := c.laneCount(sp, k, lv)
+    if c.laneDotShape(k, w): return typed.Expr.Seq(sp, w, typed.Seq(gather(c.stmts, from), c.laneDot(sp, k, lv, w, cnt)))
     acc := c.hidden(sp, w)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(acc)), c.zero(sp, w)))
-    first typed.Expr?& = null
-    if c.laneDotShape(k, w): first = c.laneDots(sp, k, lv, w, cnt, acc)
-    i, id, outer, mark, lfrom := c.laneLoopOpen(sp, cnt, 0, first)
+    i, id, outer, mark, lfrom := c.laneLoopOpen(sp, cnt)
     s := c.opValues(sp, nsp, token.Tok.Plus, c.readLocal(sp, acc), c.laneElem(sp, k, lv, c.readLocal(sp, i)), sp, sp)
     c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, w, typed.LocalId(I32(acc))), c.fit(s, w, sp)))
     c.laneLoopClose(sp, i, id, outer, mark, lfrom)
@@ -22295,8 +22294,6 @@ fn (c mut Checker&) laneWorksIn(k I64, w types.TypeId, wsp source.Span) Bool {
     return true
 }
 
-LaneDotBlock I64 = 256
-
 # whether node k is a product of two arrays of bytes summed in a wider integer: LaneDot's shape
 fn (c mut Checker&) laneDotShape(k I64, w types.TypeId) Bool {
     n := c.laneNodes[k]
@@ -22309,19 +22306,18 @@ fn (c mut Checker&) laneDotShape(k I64, w types.TypeId) Bool {
     return true
 }
 
-# the whole blocks of a byte product's lanes added into acc, LaneDotBlock lanes a LaneDot - the lane the rest start at
-fn (c mut Checker&) laneDots(sp source.Span, k I64, lv laneVals&, w types.TypeId, cnt typed.Expr&, acc I64) typed.Expr& {
+# the total of a byte product's cnt lanes: one LaneDot over all of them from lane 0, w's zero where there are none (an
+# empty array has no lane 0 to refer to; z: a constant index into a fixed array of none is an error)
+fn (c mut Checker&) laneDot(sp source.Span, k I64, lv laneVals&, w types.TypeId, cnt typed.Expr&) typed.Expr& {
     n := c.laneNodes[k]
-    nb := c.hidden(sp, c.i64())
-    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(nb)), c.prim(sp, c.i64(), typed.PrimOp.BitAnd, cnt, c.lit(sp, c.i64(), -LaneDotBlock))))
-    i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.readLocal(sp, nb))
+    z := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(z)), c.lit(sp, c.i64(), 0)))
     from := c.exprs.Len()
-    for x in Array<I64>[n.A, n.B]: c.exprs.Push(c.laneAt(sp, x, lv, c.readLocal(sp, i)))
-    c.exprs.Push(c.lit(sp, c.i64(), LaneDotBlock))
+    for x in Array<I64>[n.A, n.B]: c.exprs.Push(c.laneAt(sp, x, lv, c.readLocal(sp, z)))
+    c.exprs.Push(cnt)
     dot := typed.Expr.Prim(sp, w, typed.PrimOp.LaneDot, typed.Check.None, gather(c.exprs, from))
-    c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, w, typed.LocalId(I32(acc))), c.prim(sp, w, typed.PrimOp.Add, c.readLocal(sp, acc), dot)))
-    c.laneLoopClose(sp, i, id, outer, mark, lfrom, LaneDotBlock)
-    return c.readLocal(sp, nb)
+    some := c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, z), cnt)
+    return typed.Expr.Cond(sp, w, typed.Cond(some, dot, c.zero(sp, w)))
 }
 
 # a reference to leaf x's element at lane i - an array leaf's, held in lv

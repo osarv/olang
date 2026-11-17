@@ -5942,31 +5942,190 @@ fn (fe mut fnEm&) bf16Bits(v String&, opaque Bool) String {
 }
 
 # a BF16 widened to wide ("float", "double"): its bits are an F32's top half, exactly
-# E39's Sum<A> over a block of byte products (LaneDot): its n lanes loaded from p and q as vectors, each element widened
-# to A by its own signedness, multiplied and added by LLVM's reduce.add - which, of mul(zext, sext) of bytes into i32,
-# is vpdpbusd on avx512vnni and avxvnni, and ordinary vector code elsewhere
+# E39's Sum<A> over a byte product (LaneDot): its n lanes from p and q added by a helper (laneDotFn), the total as ty -
+# the unsigned operand first, as vpdpbusd takes it
 fn (fe mut fnEm&) laneDot(p String&, pt types.TypeId, args mir.Range, ty types.TypeId) String {
+    t := fe.E.T
     q := fe.arg(args, 1)
     qt := fe.otype(q)
-    n := match fe.arg(args, 2) {
-        case mir.Operand.Const(_, v): v
-        case _: 0
-    }
-    at := fe.ty(fe.E.T.Repr(ty))
-    vt := "<" + $n + " x " + $at + ">"
-    m := fe.let("mul " + $vt + " " + $fe.laneLoad(p, pt, n, at) + ", " + $fe.laneLoad(fe.val(q, qt), qt, n, at))
-    intr := "llvm.vector.reduce.add.v" + $n + $at
-    fe.E.declare(intr, $at + " @" + $intr + "(" + $vt + ")")
-    return fe.let("call " + $at + " @" + $intr + "(" + $vt + " " + $m + ")")
+    nx := fe.arg(args, 2)
+    n := fe.val(nx, fe.otype(nx))
+    ux := t.IsUnsigned(t.Repr(t.Referent(t.Repr(pt))))
+    uy := t.IsUnsigned(t.Repr(t.Referent(t.Repr(qt))))
+    v := fe.val(q, qt)
+    swap := uy and not ux
+    x := v if swap else $p
+    y := $p if swap else v
+    bits := t.Bits(t.Repr(ty))
+    rt := "i64" if bits > 32 else "i32"
+    f := fe.E.laneDotFn(uy if swap else ux, ux if swap else uy, bits > 32)
+    r := fe.let("call " + $rt + " @" + $f + "(ptr " + $x + ", ptr " + $y + ", i64 " + $n + ")")
+    if bits >= 32: return r
+    return fe.let("trunc i32 " + $r + " to " + $fe.ty(t.Repr(ty)))
 }
 
-# n elements from p, a reference to an integer element, as a vector widened to the integer type at
-fn (fe mut fnEm&) laneLoad(p String&, pt types.TypeId, n I64, at String&) String {
-    t := fe.E.T
-    et := t.Repr(t.Referent(t.Repr(pt)))
-    el := fe.ty(et)
-    v := fe.let("load <" + $n + " x " + $el + ">, ptr " + $p + ", align 1")
-    return fe.let($("zext <" if t.IsUnsigned(et) else "sext <") + $n + " x " + $el + "> " + $v + " to <" + $n + " x " + $at + ">")
+# how a LaneDot helper adds: V bytes a step into L lanes of i32, by vpdpbusd of Dp bits (0 for none: a widening
+# multiply and add), the bytes of p unsigned where Ux and of q where Uy, the short last step masked or one by one, its
+# result Rt
+type laneDotForm struct() {
+    V I64 = 16
+    L I64 = 16
+    Dp I64 = 0
+    Ux Bool = false
+    Uy Bool = false
+    Masked Bool = false
+    Rt String& = "i32"
+}
+
+# whether the target has feature f (its attributes' "+f")
+fn (e Emitter&) feature(f String&) Bool { return e.Attrs.Contains($"+" + $f + ",") or e.Attrs.Contains($"+" + $f + "\"") }
+
+# E39's LaneDot: the helper adding n products of bytes from p and q - p's unsigned where ux, q's where uy - into i32,
+# i64 where wide; its name. The products go into vectors of i32 lanes a vector of bytes a step - LaneDotTurn steps a
+# turn, each into a vector of its own, while they fit, then one at a time - and are reduced to one number once, at the
+# end. A step is vpdpbusd (four adjacent products into each lane) where p's bytes are unsigned and q's signed on a
+# target with avx512vnni or avxvnni, else a widening multiply and add (one product a lane); the last, short step loads
+# its bytes masked on AVX-512BW, else goes byte by byte. A wide total adds chunks of 8192 steps, each reduced in i64:
+# no lane's i32 overflows in one (4 x 8192 products under 2^15, or 8192 under 2^16)
+fn (e mut Emitter&) laneDotFn(ux Bool, uy Bool, wide Bool) String {
+    width := 512 if e.Attrs.Contains("\"prefer-vector-width\"=\"512\"") else
+        (256 if e.Attrs.Contains("\"prefer-vector-width\"=\"256\"") else 128)
+    d := laneDotForm()
+    d.Ux = ux
+    d.Uy = uy
+    if ux and not uy and width == 512 and e.feature("avx512vnni"): d.Dp = 512
+    else if ux and not uy and width >= 256 and (e.feature("avxvnni") or e.feature("avx512vnni") and e.feature("avx512vl")): d.Dp = 256
+    d.V = d.Dp / 8 if d.Dp > 0 else width / 8
+    d.L = d.V / 4 if d.Dp > 0 else d.V
+    d.Masked = e.feature("avx512bw") and (d.V == 64 or e.feature("avx512vl"))
+    d.Rt = "i64" if wide else "i32"
+    name := $"olang_lanedot." + $("dp" if d.Dp > 0 else "w") + $d.V + "." + $("u" if ux else "s") + $("u" if uy else "s") +
+        $(".m" if d.Masked else "") + "." + $d.Rt
+    if e.has(name): return name
+    e.laneDotDecls(d)
+    if not wide {
+        e.item(name, HomeShared, laneDotBody(name, d))
+        return name
+    }
+    part := $name + ".part"
+    e.item(part, HomeShared, laneDotBody(part, d))
+    chunk := 8192 * d.V
+    b := StringBuilder()
+    b.Push($"define linkonce_odr hidden i64 @" + $name + "(ptr %p, ptr %q, i64 %n) alwaysinline #0 {\nentry:\n  br label %h\n")
+    b.Push("h:\n  %b = phi i64 [ 0, %entry ], [ %b1, %c ]\n  %s = phi i64 [ 0, %entry ], [ %s1, %c ]\n")
+    b.Push("  %left = sub i64 %n, %b\n  %more = icmp sgt i64 %left, 0\n  br i1 %more, label %c, label %done\n")
+    b.Push($"c:\n  %big = icmp sgt i64 %left, " + $chunk + "\n  %cn = select i1 %big, i64 " + $chunk + ", i64 %left\n")
+    b.Push("  %pc = getelementptr i8, ptr %p, i64 %b\n  %qc = getelementptr i8, ptr %q, i64 %b\n")
+    b.Push($"  %part = call i64 @" + $part + "(ptr %pc, ptr %qc, i64 %cn)\n")
+    b.Push("  %s1 = add i64 %s, %part\n  %b1 = add i64 %b, %cn\n  br label %h\ndone:\n  ret i64 %s\n}\n")
+    e.item(name, HomeShared, b.ToString())
+    return name
+}
+
+# the intrinsics a LaneDot helper of form d calls
+fn (e mut Emitter&) laneDotDecls(d laneDotForm&) {
+    vt := $"<" + $d.L + " x i32>"
+    bt := $"<" + $d.V + " x i8>"
+    if d.Dp > 0 {
+        dp := $"llvm.x86.avx512.vpdpbusd." + $d.Dp
+        e.declare(dp, $vt + " @" + $dp + "(" + $vt + ", " + $vt + ", " + $vt + ")")
+    }
+    if d.Masked {
+        ml := $"llvm.masked.load.v" + $d.V + "i8.p0"
+        e.declare(ml, $bt + " @" + $ml + "(ptr, i32 immarg, <" + $d.V + " x i1>, " + $bt + ")")
+    }
+    rd := $"llvm.vector.reduce.add.v" + $d.L + $d.Rt
+    e.declare(rd, $d.Rt + " @" + $rd + "(<" + $d.L + " x " + $d.Rt + ">)")
+}
+
+LaneDotTurn I64 = 4
+
+# the text of LaneDot helper name of form d: LaneDotTurn steps a turn while they fit, then one at a time, the rest
+# masked or byte by byte, the vector reduced once
+fn laneDotBody(name String&, d laneDotForm&) String {
+    vt := $"<" + $d.L + " x i32>"
+    b := StringBuilder()
+    b.Push($"define linkonce_odr hidden " + $d.Rt + " @" + $name + "(ptr %p, ptr %q, i64 %n) alwaysinline #0 {\nentry:\n")
+    # LaneDotTurn steps a turn, each into a vector of its own
+    b.Push("  br label %h\nh:\n  %i = phi i64 [ 0, %entry ], [ %e, %u ]\n")
+    for k in range LaneDotTurn: b.Push($"  %a" + $k + " = phi " + $vt + " [ zeroinitializer, %entry ], [ %a" + $k + "n, %u ]\n")
+    b.Push($"  %e = add i64 %i, " + $(LaneDotTurn * d.V) + "\n  %ce = icmp sle i64 %e, %n\n  br i1 %ce, label %u, label %x\nu:\n")
+    for k in range LaneDotTurn {
+        b.Push($"  %i" + $k + " = add i64 %i, " + $(k * d.V) + "\n")
+        laneDotStep(b, d, $"a" + $k + "n", $"%a" + $k, $"%i" + $k, "")
+    }
+    b.Push("  br label %h\nx:\n")
+    for k in range 1, LaneDotTurn {
+        prev := "%a0" if k == 1 else $"%s" + $(k - 1)
+        b.Push($"  %s" + $k + " = add " + $vt + " " + $prev + ", %a" + $k + "\n")
+    }
+    # then one step at a time while one fits
+    last := $"%s" + $(LaneDotTurn - 1)
+    b.Push($"  br label %g\ng:\n  %j = phi i64 [ %i, %x ], [ %j1, %o ]\n  %acc = phi " + $vt + " [ " + $last + ", %x ], [ %c, %o ]\n")
+    b.Push($"  %j1 = add i64 %j, " + $d.V + "\n  %cj = icmp sle i64 %j1, %n\n  br i1 %cj, label %o, label %t\no:\n")
+    laneDotStep(b, d, "c", "%acc", "%j", "")
+    b.Push("  br label %g\nt:\n")
+    if d.Masked {
+        # the bytes left, fewer than V (where there are any): a mask of that many low bits
+        mt := $"i" + $d.V
+        b.Push("  %none = icmp eq i64 %j, %n\n  br i1 %none, label %fin, label %m\nm:\n  %rem = sub i64 %n, %j\n")
+        rem := "%rem"
+        if d.V < 64 {
+            b.Push($"  %remv = trunc i64 %rem to " + $mt + "\n")
+            rem = "%remv"
+        }
+        b.Push($"  %bit = shl " + $mt + " 1, " + $rem + "\n  %low = sub " + $mt + " %bit, 1\n")
+        b.Push($"  %mask = bitcast " + $mt + " %low to <" + $d.V + " x i1>\n")
+        laneDotStep(b, d, "f", "%acc", "%j", "%mask")
+        b.Push($"  br label %fin\nfin:\n  %all = phi " + $vt + " [ %acc, %t ], [ %f, %m ]\n")
+        laneDotReduce(b, d, "%all", "r")
+        b.Push($"  ret " + $d.Rt + " %r\n}\n")
+        return b.ToString()
+    }
+    laneDotReduce(b, d, "%acc", "r")
+    b.Push($"  br label %sh\nsh:\n  %k = phi i64 [ %j, %t ], [ %k1, %sb ]\n  %z = phi " + $d.Rt + " [ %r, %t ], [ %z1, %sb ]\n")
+    b.Push("  %ck = icmp slt i64 %k, %n\n  br i1 %ck, label %sb, label %done\nsb:\n")
+    b.Push("  %pk = getelementptr i8, ptr %p, i64 %k\n  %xk = load i8, ptr %pk\n")
+    b.Push("  %qk = getelementptr i8, ptr %q, i64 %k\n  %yk = load i8, ptr %qk\n")
+    b.Push($"  %xw = " + $("zext" if d.Ux else "sext") + " i8 %xk to " + $d.Rt + "\n")
+    b.Push($"  %yw = " + $("zext" if d.Uy else "sext") + " i8 %yk to " + $d.Rt + "\n")
+    b.Push($"  %mk = mul " + $d.Rt + " %xw, %yw\n  %z1 = add " + $d.Rt + " %z, %mk\n  %k1 = add i64 %k, 1\n")
+    b.Push($"  br label %sh\ndone:\n  ret " + $d.Rt + " %z\n}\n")
+    return b.ToString()
+}
+
+# one step into %r: V bytes of p and q from byte at (masked by mask where it is not "") added into the vector acc
+fn laneDotStep(b mut StringBuilder&, d laneDotForm&, r String&, acc String&, at String&, mask String&) {
+    vt := $"<" + $d.L + " x i32>"
+    bt := $"<" + $d.V + " x i8>"
+    for side in Array<String&>["x", "y"] {
+        o := $"%" + $r + "." + $side
+        b.Push($"  " + $o + "p = getelementptr i8, ptr %" + $("p" if side == "x" else "q") + ", i64 " + $at + "\n")
+        if mask == "": b.Push($"  " + $o + " = load " + $bt + ", ptr " + $o + "p, align 1\n")
+        else {
+            b.Push($"  " + $o + " = call " + $bt + " @llvm.masked.load.v" + $d.V + "i8.p0(ptr " + $o + "p, i32 1, <" + $d.V +
+                   " x i1> " + $mask + ", " + $bt + " zeroinitializer)\n")
+        }
+        un := d.Ux if side == "x" else d.Uy
+        how := "bitcast" if d.Dp > 0 else ("zext" if un else "sext")
+        b.Push($"  " + $o + "w = " + $how + " " + $bt + " " + $o + " to " + $vt + "\n")
+    }
+    if d.Dp > 0 {
+        b.Push($"  %" + $r + " = call " + $vt + " @llvm.x86.avx512.vpdpbusd." + $d.Dp + "(" + $vt + " " + $acc + ", " + $vt + " %" +
+               $r + ".xw, " + $vt + " %" + $r + ".yw)\n")
+        return
+    }
+    b.Push($"  %" + $r + ".m = mul " + $vt + " %" + $r + ".xw, %" + $r + ".yw\n  %" + $r + " = add " + $vt + " " + $acc + ", %" + $r + ".m\n")
+}
+
+# the vector v's lanes added into %r, of d's result type (each lane widened first where it is i64)
+fn laneDotReduce(b mut StringBuilder&, d laneDotForm&, v String&, r String&) {
+    x := $v
+    if d.Rt == "i64" {
+        b.Push($"  %" + $r + ".w = sext <" + $d.L + " x i32> " + $v + " to <" + $d.L + " x i64>\n")
+        x = $"%" + $r + ".w"
+    }
+    b.Push($"  %" + $r + " = call " + $d.Rt + " @llvm.vector.reduce.add.v" + $d.L + $d.Rt + "(<" + $d.L + " x " + $d.Rt + "> " + $x + ")\n")
 }
 
 fn (fe mut fnEm&) widenBF16(v String&, wide String&) String {

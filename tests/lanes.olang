@@ -190,7 +190,7 @@ test "E39: Max runs the operation once a lane" {
 }
 
 # Sum<A> (E39): every lane computed in A - the operands widened before the lane's operation - and added in A. A byte
-# product into I32 goes a block of 256 lanes at a time (vpdpbusd where the target has it), the rest lane by lane
+# product into I32 is one LaneDot over every lane (vpdpbusd where the target has it, into a vector reduced once)
 fn plainDot(a Array<U8>&, b Array<I8>&) I32 {
     s I32 = 0
     for p in range a.Len(): s += I32(a[p]) * I32(b[p])
@@ -228,4 +228,46 @@ test "E39: Sum<A> works every lane in A - byte products into I32, I8 past its ra
     assert bytesAll() and bytesAgree(Lanes300) and wide()
     assert BytesBaked and WideBaked
     assert bytesAgree(300) and wide() # S18c: decided while compiling
+}
+
+# every pairing of signedness and every total type at odd depths - shorter than a vector step, one short of and one past
+# a block - against the loop written by hand
+fn bytesPairs(n I64) Bool {
+    a := Array<U8>[U8((p * 37 + 11) % 256) for p in range n]
+    b := Array<I8>[I8(p % 256 - 128) for p in range n]
+    u := Array<U8>[U8((p * 91) % 256) for p in range n]
+    c := Array<I8>[I8((p * 13) % 256 - 128) for p in range n]
+    ab, au, bc I64 = 0, 0, 0
+    ab16 I16 = 0
+    ab32, bc32 I32 = 0, 0
+    au32 U32 = 0
+    for p in range n {
+        ab += I64(a[p]) * I64(b[p])
+        au += I64(a[p]) * I64(u[p])
+        bc += I64(b[p]) * I64(c[p])
+        ab16 += I16(a[p]) * I16(b[p])
+        ab32 += I32(a[p]) * I32(b[p])
+        bc32 += I32(b[p]) * I32(c[p])
+        au32 += U32(a[p]) * U32(u[p])
+    }
+    return (a * b).Sum<I32>() == ab32 and (b * a).Sum<I64>() == ab and (a * b).Sum<I16>() == ab16 and
+        (a * u).Sum<U32>() == au32 and (u * a).Sum<I64>() == au and (b * c).Sum<I32>() == bc32 and (c * b).Sum<I64>() == bc
+}
+
+fn bytesOdd() Bool {
+    for n in [1, 3, 255, 257] {
+        if not bytesPairs(n): return false
+    }
+    return true
+}
+
+Lanes257 mut I64 = 257 # read at run time
+OddBaked := bytesOdd()
+
+test "E39: Sum<A> of byte products at odd depths, every pairing of signedness, agrees with the loop written by hand" {
+    assert bytesOdd() and bytesPairs(Lanes257) and OddBaked
+    assert bytesOdd() # S18c: decided while compiling
+    # an I64 total past a chunk of the vector's own I32 lanes (8192 steps)
+    n := 1100000
+    assert (Array<U8>(n, 255) * Array<I8>(n, -128)).Sum<I64>() == I64(n) * -32640
 }
