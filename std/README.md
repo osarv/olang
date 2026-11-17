@@ -31,6 +31,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `json.olang` | JSON parse into an immutable tree, and encode; `Encode`/`Decode<T>` of any value by reflection, keys by a `Naming` policy, `@json.Key`, `@json.Skip` |
 | `csv.olang` | RFC 4180 records, read and written; structs as records (`Encode`, `Decode<T>`, `@csv.Column`, `@csv.Skip`) |
 | `net.olang` | blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`) and UDP sockets, IPv4 and IPv6 addresses, names resolved (`Lookup`, `Resolve`), `net.Error`; `Readable` waits on several descriptors at once |
+| `tls.olang` | a verified TLS client session over a TCP one (`tls.Conn.Dial(host, port)`, `Read`, `Write`, `SetTimeout`), through OpenSSL; opt-in - only a program importing it links libssl and libcrypto; `tls.Error` |
 | `zmtp.olang` | ZeroMQ's wire protocol (ZMTP 3.0, NULL mechanism) over TCP, no libzmq: a `Socket` per connection (`Accept`, `Dial`, `Send`, `Recv`) - what the Jupyter kernel speaks (B23) |
 | `http.olang` | requests by running `curl` |
 | `chan.olang`, `cancel.olang` | bounded blocking channel, `Select` over two to four channels, sends (`SendOf`) and timers, cancellation tokens and deadlines |

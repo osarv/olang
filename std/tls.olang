@@ -1,0 +1,194 @@
+# tls - a TLS client connection over a TCP one, through OpenSSL's header imported (§11 X17) with the library linked
+# (X9). Opt-in: only a program importing "std/tls" links libssl; net and the rest of std do not.
+#
+# A Conn is verified: the server's certificate chain must lead to a certificate the system trusts (OpenSSL's default
+# store, or the one file given as "ca") and must name the host dialed, or the dial fails with Verify. There is no way to
+# turn the checks off. A Conn shuts down its TLS session and closes its socket where its holder lets go (a destructor,
+# C9, O15), as net.Conn does.
+#
+# Imported with `import "std/tls"`.
+
+import "net"
+import "os"
+import "time"
+
+import unistd "unistd.h"
+import sock "sys/socket.h"
+import ssl "openssl/ssl.h" link "ssl"
+import ossl "openssl/x509_vfy.h" link "crypto"
+
+sslCtrlSetTlsextHostname I32 = 55
+solSocket I32 = 1
+soRcvtimeo I32 = 20
+soSndtimeo I32 = 21
+sslErrorSsl I32 = 1
+sslErrorWantRead I32 = 2
+sslErrorWantWrite I32 = 3
+sslErrorSyscall I32 = 5
+sslErrorZeroReturn I32 = 6
+
+# why a TLS call failed (a dial's TCP failures are net.Error's). Verify: the server's certificate is not one to trust - the text says why OpenSSL refused it (an untrusted issuer, a
+# name that is not the host dialed, an expired date); Handshake: the server did not speak TLS, or no protocol and cipher
+# both sides accept; Closed: the other side ended the session, so there is nothing more to read (a clean close_notify,
+# or a connection cut off); Timeout: a timeout set by SetTimeout passed; Failed: any other reason, or an unreadable "ca"
+type Error error {
+    Verify(why String)
+    Handshake
+    Closed
+    Timeout
+    Failed
+}
+
+# a TLS session as a stream of bytes, to the server dialed, until it is destroyed (where its holder lets go)
+type Conn unique struct(fd I32, session ssl.SSL&, ctx ssl.SSL_CTX&) {
+    fd, session, ctx
+} destruct {
+    ssl.SSL_shutdown(session)
+    ssl.SSL_free(session)
+    ssl.SSL_CTX_free(ctx)
+    unistd.close(fd)
+}
+
+# the text OpenSSL gives for the verification failure of "session", "" when the certificate passed
+fn verifyFailure(session ssl.SSL&) String {
+    code := ssl.SSL_get_verify_result(session)
+    if code == 0: return ""
+    return String.FromC(ossl.X509_verify_cert_error_string(code)!, 128)
+}
+
+# a context trusting "ca" where that names a file and the system's store where it is empty
+fn newContext(ca String&) ssl.SSL_CTX& ? Error {
+    ctx := ssl.SSL_CTX_new(ssl.TLS_client_method())
+    if ctx == null: error Error.Failed
+    ok := ssl.SSL_CTX_load_verify_file(ctx, ca.ToC()) if ca != "" else ssl.SSL_CTX_set_default_verify_paths(ctx)
+    if ok != 1 {
+        ssl.SSL_CTX_free(ctx)
+        error Error.Failed
+    }
+    return ctx
+}
+
+# the handshake over the socket "fd" to "host" - the name sent for the server to choose its certificate by, and the
+# name that certificate must carry - and the session it made; "ctx" and "fd" are let go of here when the session does not come
+fn newSession(ctx ssl.SSL_CTX&, fd I32, host String&) ssl.SSL& ? Error {
+    session := ssl.SSL_new(ctx)
+    if session == null {
+        ssl.SSL_CTX_free(ctx)
+        unistd.close(fd)
+        error Error.Failed
+    }
+    ssl.SSL_set_fd(session, fd)
+    ssl.SSL_ctrl(session, sslCtrlSetTlsextHostname, 0, host.ToC())
+    connected := ssl.SSL_set1_host(session, host.ToC()) == 1 and ssl.SSL_connect(session) == 1
+    why := verifyFailure(session)
+    if connected and why == "": return session
+    ssl.SSL_free(session)
+    ssl.SSL_CTX_free(ctx)
+    unistd.close(fd)
+    if why != "": error Error.Verify(why)
+    error Error.Handshake
+}
+
+# a TLS session to "host" at "port", the server's certificate checked against the system's trusted ones - or the file
+# "ca", a PEM bundle, where one is named - and against the name "host"; fails with Verify where it does not pass
+fn Conn.Dial(host String&, port U16, ca String& = "") Conn ? Error, net.Error {
+    tcp := try net.Conn.Dial(try net.Addr.Resolve($host + ":" + $port))
+    ctx := try newContext(ca)
+    fd := unistd.dup(tcp.Fd())
+    session := try newSession(ctx, fd, host)
+    return Conn(fd, session, ctx)
+}
+
+# the Error for a read or write that returned "n" <= 0: what SSL_get_error says of it. A close_notify, and a connection
+# cut off without one, are the end of the stream; "waiting" for more on a socket with a timeout is the timeout passing
+fn failure(session ssl.SSL&, n I32) ? Error {
+    match ssl.SSL_get_error(session, n) {
+        case sslErrorZeroReturn { error Error.Closed }
+        case sslErrorSyscall {
+            if n == 0: error Error.Closed
+            error Error.Failed
+        }
+        case sslErrorWantRead, sslErrorWantWrite { error Error.Timeout }
+        case _ { error Error.Failed }
+    }
+}
+
+# what arrives next, up to buf's length, read into the front of buf and handed back as that front - a borrow of buf -
+# waiting until something does. Fails with Closed once the other side has ended the session and everything it sent
+# has been read, Timeout when a timeout set by SetTimeout passes first
+fn (c Conn&) Read(buf mut Array<U8>&) Array<U8>& ? Error {
+    if buf.Len() == 0: return buf[:0]
+    n := ssl.SSL_read(c.session, buf, I32(buf.Len().Min(0x7FFFFFFF)))
+    if n <= 0: try failure(c.session, n)
+    return buf[:I64(n)]
+}
+
+# all of data written, however many records it takes - failing with Closed when the other side has gone, Timeout when
+# a timeout set by SetTimeout passes
+fn (c Conn&) Write(data Array<U8>&) ? Error {
+    sent I64 = 0
+    for sent < data.Len() {
+        n := ssl.SSL_write(c.session, data[sent:], I32((data.Len() - sent).Min(0x7FFFFFFF)))
+        if n <= 0: try failure(c.session, n)
+        sent += I64(n)
+    }
+}
+
+# a Read or Write waiting longer than d fails with Timeout from now on; 0 waits for ever (the default)
+fn (c Conn&) SetTimeout(d time.Duration) {
+    tv := Array<U8>(16)
+    sec := I64(d) / 1000000000
+    usec := I64(d) % 1000000000 / 1000
+    for i in range 8 {
+        tv[i] = U8((sec >> (8 * i)) & 0xFF)
+        tv[8 + i] = U8((usec >> (8 * i)) & 0xFF)
+    }
+    sock.setsockopt(c.fd, solSocket, soRcvtimeo, tv, 16)
+    sock.setsockopt(c.fd, solSocket, soSndtimeo, tv, 16)
+}
+
+# the descriptor of the socket under the session
+fn (c Conn&) Fd() I32 { return c.fd }
+
+# --- tests: a local server, openssl's own s_server, with a certificate for "localhost" made for the test ---
+
+# a port nothing listens on: the system's choice, let go of again
+fn freePort() I64 ? net.Error {
+    l := try net.Listener.Listen(try net.Addr.Parse("127.0.0.1:0"))
+    return I64((try l.Addr()).Port)
+}
+
+# the first line the server answers a GET with, as seen by a session dialed to "host" - or what the dial failed with
+fn firstLine(host String&, port I64, ca String&) String {
+    for _ in range 100 {
+        c := try Conn.Dial(host, U16(port), ca) catch net.Error.Refused {
+            time.Sleep(time.Duration(100000000))
+            continue
+        } catch Error.Verify { return "verify" } catch Error.Handshake { return "handshake" } catch { return "failed" }
+        try c.Write("GET / HTTP/1.0\r\n\r\n") catch { return "write failed" }
+        buf := Array<U8>(4096)
+        got := try c.Read(buf) catch { return "read failed" }
+        return String(got[:12])
+    }
+    return "never up"
+}
+
+test "a session to a server whose certificate is trusted and names the host carries bytes both ways" {
+    dir := try os.MkTemp("build", "tls")
+    assert os.Run("openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=localhost -addext subjectAltName=DNS:localhost -keyout " + dir + "/k.pem -out " + dir + "/c.pem 2>/dev/null") == 0
+    port := try freePort()
+    srv := try os.Process.Start("openssl", "s_server", "-www", "-accept", $port, "-cert", dir + "/c.pem", "-key", dir + "/k.pem")
+    first := firstLine("localhost", port, dir + "/c.pem")
+    assert first == "HTTP/1.0 200"
+    assert firstLine("localhost", port, "") == "verify"                    # a certificate nothing trusts
+    assert firstLine("127.0.0.1", port, dir + "/c.pem") == "verify"        # trusted, but not for this name
+    srv.Kill()
+    try srv.Wait()
+    try os.RemoveAll(dir)
+}
+
+test "a session to a port nothing listens at fails with the TCP error" {
+    refused := false
+    try Conn.Dial("127.0.0.1", U16(try freePort()), "") catch net.Error.Refused { refused = true } catch { }
+    assert refused
+}

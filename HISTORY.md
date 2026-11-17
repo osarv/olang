@@ -39441,3 +39441,15 @@ weakness failed chunkpool's budget in about a fifth of runs under load (the task
 bound, 0.8 MB without huge pages); its preloaded sysconf.c now turns them off for the process (PR_SET_THP_DISABLE), so
 the resident set counts the pages touched: 0 of 300 runs over. The other resident-memory readers (joins, tempref,
 texts, the earlyfree split's 1 MB tolerance) were measured under the same load and keep wide margins; unchanged.
+
+## File.Append and std/tls (2026-11-17)
+
+`os.File.Append(path)` is the builder beside `Create`/`Open` (flags 0x441, mode 0666), with a test appending in three
+opens. `std/tls` is a TLS client over OpenSSL imported by header with `link "ssl"` (and `"crypto"` for the verify error
+text) - opt-in by being a separate module, so no other program links libssl. Findings: the context's default client mode
+verifies nothing, and `SSL_CTX_set_verify` wants a callback olang cannot pass as null, so the chain and the name
+(`SSL_set1_host`) are checked after the handshake from `SSL_get_verify_result` - the same outcome, never skippable. A
+`unique` local cannot be returned (T13b), so `Conn` holds a dup of the dialed `net.Conn`'s descriptor (the `net.Conn` local
+closes its own) and is built fresh at the return; the helpers free the context and descriptor on their failure paths.
+Tests run `openssl s_server -www` locally with a certificate made for `localhost`: trusted + named host passes, an
+untrusted one and a trusted one for another name (127.0.0.1) fail with Verify.
