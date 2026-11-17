@@ -59,6 +59,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     Plans Vec<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
     fx mut effects.Effects?& = null    # P2: what a task's callee may do (buildsFact), made when first asked
     buildsDecided Map<I64, Bool>       # ...the bodies whose fact is decided
+    Exclusive Map<I64, I64>            # O43: by body, its exclusive parameters (effects.Exclusive), where its type allows any
     # T22c: by twin (scope.twinTab), its plan, and whether it has code of its own (else a call of it reaches the body's)
     TwinPlans Vec<typed.Plan>
     TwinOwn Vec<Bool>
@@ -339,6 +340,37 @@ fn (lw mut Lowerer&) DecideDerived() {
         name := lw.derivedFact(id)
         if name != "": lw.P.Facts.Decide(name, $lw.Plans[id].DerivedP.Len(), false)
     }
+}
+
+# O43, B3i: the fact naming which parameters of body id are exclusive (effects.Exclusive) - a whole-program fact, what
+# the body may call deciding it, so the module holding its code reads it through the table. "" for a body whose type
+# makes none exclusive, which needs no fact
+fn (lw Lowerer&) exclusiveFact(id I64) String {
+    if not lw.Exclusive.Has(id): return ""
+    return match lw.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): $"O43 " + $lw.P.InstanceName(inst)
+        case _: ""
+    }
+}
+
+# ...decided for every body, before any module's code is reused
+fn (lw mut Lowerer&) DecideExclusive() {
+    for id in range lw.Bodies.Len() {
+        if lw.Bodies[id].Of != typed.BodyOf.Fn: continue
+        if lw.fx == null: lw.fx = effects.Effects(lw.P, lw.Bodies)
+        if lw.fx!.ExclusiveShapes(id) == 0: continue
+        lw.Exclusive.Put(id, lw.fx!.Exclusive(id))
+        lw.P.Facts.Decide(lw.exclusiveFact(id), $(try lw.Exclusive.Get(id) catch default 0), false)
+    }
+}
+
+# ...read by the module of file, whose object holds body id's code; the parameters, 0 for none
+fn (lw mut Lowerer&) ReadExclusive(file I64, id I64) I64 {
+    name := lw.exclusiveFact(id)
+    if name == "" or file < 0: return 0
+    v := try lw.P.Facts.Read(file, name) catch { return 0 }
+    if v == "0": return 0
+    return try lw.Exclusive.Get(id) catch default 0
 }
 
 # ...read by the module of file, its code calling or holding the code of key
@@ -648,6 +680,10 @@ fn (ln mut lowering&) run() {
     # O23a, C1: its derived scopes, passed after its type's (a body with any has no captures)
     if ln.planned { for k in range ln.plan.DerivedP.Len() { ln.F.Vars.Push(mir.VarKind.Derived(k)) } }
     ln.L.ReadDerived(b.File, ln.F.Of)
+    match ln.F.Of {
+        case mir.FnKey.Body(id) { ln.F.Exclusive = ln.L.ReadExclusive(b.File, I64(id)) }
+        case _ { }
+    }
     if ln.gapped {
         ln.L.Gaps.Push(Gap(ln.file, b.Sp, "an unknown type (a check error or gap): a local"))
         return

@@ -2502,7 +2502,7 @@ fn (e mut Emitter&) signature(ty types.TypeId) {
 # the function's LLVM header: linkage, result, name and parameters
 # a function's first line: "define LINK RET @SYM(PARAMS) #0 {" - or, with link "declare", how another object declares it
 fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, link String& = "internal"
-        inline String& = "") String {
+        inline String& = "", excl I64 = 0) String {
     t := e.T
     e.signature(ty)
     b := StringBuilder()
@@ -2531,11 +2531,22 @@ fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed 
         match pass[i] {
             case 'm' { b.Push("ptr %a" + $i) }
             case 's' { b.Push("ptr %a" + $i + "c, ptr %a" + $i + "e") }
-            case _ { b.Push($e.ty(ps[i]) + " %a" + $i) }
+            case _ { b.Push($e.ty(ps[i]) + $e.exclusive(ps[i], excl, i) + " %a" + $i) }
         }
     }
     b.Push(")\n" if link == "declare" else $")" + $(inline if inline != "" else e.inlining(k)) + " #0 {\n")
     return b.ToString()
+}
+
+# O43: what an exclusive parameter's pointer says (effects.Exclusive): that nothing else the call reaches reaches its
+# referent, which is there, aligned as its type is (no reference names a packed field, T13c), the whole call - "" for any
+# other
+fn (e mut Emitter&) exclusive(p types.TypeId, excl I64, i I64) String {
+    if i >= 62 or excl & (I64(1) << i) == 0 or e.ty(p) != "ptr": return ""
+    r := e.T.Repr(e.T.Referent(p))
+    n, a := e.T.Size(r), e.T.Align(r)
+    if n <= 0: return " noalias"
+    return $" noalias dereferenceable" + $("_or_null" if e.T.IsNullable(p) else "") + "(" + $n + ")" + $(" align " + $a if a > 1 else "")
 }
 
 # what a definition says of its inlining: a collection's growth (typed.Body.Cold) never inlined and cold
@@ -2639,7 +2650,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     symbol := e.sym(k)
     env := e.hasEnv(k)
     passed := e.passedOf(k, f.Ty)
-    hdr := e.header(k, f.Ty, symbol, passed, env, linkFor(e.homeOf(k)))
+    hdr := e.header(k, f.Ty, symbol, passed, env, linkFor(e.homeOf(k)), excl = f.Exclusive)
     bad := "" if e.Lw.Gapped or not e.VerifyMir else f.Verify(e.T)
     if e.Lw.Gapped or bad != "" {
         e.gap($"not lowered: " + $symbol + $(" (" + $bad.Trim() + ")" if bad != "" else ""))
@@ -5986,7 +5997,10 @@ fn (fe mut fnEm&) laneDots(a String&, args mir.Range) {
     g := fe.val(fe.arg(args, 3), fe.otype(fe.arg(args, 3)))
     sp, sq := fe.val(fe.arg(args, 4), fe.otype(fe.arg(args, 4))), fe.val(fe.arg(args, 5), fe.otype(fe.arg(args, 5)))
     swap := uy and not ux
-    f := fe.E.laneDotsFn(uy if swap else ux, ux if swap else uy)
+    # T36: the lanes' and the bytes' access tags - x's elements, p's and q's
+    ta := fe.E.tbaa(t.Referent(t.Repr(fe.otype(fe.arg(args, 0)))), true)
+    tp, tq := fe.E.tbaa(t.Referent(t.Repr(pt)), true), fe.E.tbaa(t.Referent(t.Repr(qt)), true)
+    f := fe.E.laneDotsFn(uy if swap else ux, ux if swap else uy, laneTags(ta, tq if swap else tp, tp if swap else tq))
     x, y := (q if swap else p), (p if swap else q)
     xs, ys := (sq if swap else sp), (sp if swap else sq)
     fe.w("call void @" + $f + "(ptr " + $a + ", ptr " + $x + ", ptr " + $y + ", i64 " + $g + ", i64 " + $xs + ", i64 " + $ys + ")")
@@ -5997,7 +6011,7 @@ fn (fe mut fnEm&) laneDots(a String&, args mir.Range) {
 # unsigned and q's signed on a target with avx512vnni or avxvnni, a step is vpdpbusd on L lanes (16 at 512 bits, 8 at
 # 256) - the lanes loaded, added into and stored - the groups left one by one; else every group one by one, which LLVM
 # vectorizes as it can
-fn (e mut Emitter&) laneDotsFn(ux Bool, uy Bool) String {
+fn (e mut Emitter&) laneDotsFn(ux Bool, uy Bool, tags laneTags) String {
     width := 512 if e.Attrs.Contains("\"prefer-vector-width\"=\"512\"") else
         (256 if e.Attrs.Contains("\"prefer-vector-width\"=\"256\"") else 128)
     d := laneDotForm()
@@ -6006,7 +6020,9 @@ fn (e mut Emitter&) laneDotsFn(ux Bool, uy Bool) String {
     if ux and not uy and width == 512 and e.feature("avx512vnni"): d.Dp = 512
     else if ux and not uy and width >= 256 and (e.feature("avxvnni") or e.feature("avx512vnni") and e.feature("avx512vl")): d.Dp = 256
     d.L = d.Dp / 32
-    name := $"olang_lanedots." + $("dp" if d.Dp > 0 else "w") + $d.Dp + "." + $("u" if ux else "s") + $("u" if uy else "s")
+    d.Tags = tags
+    name := $"olang_lanedots." + $("dp" if d.Dp > 0 else "w") + $d.Dp + "." + $("u" if ux else "s") + $("u" if uy else "s") +
+        $tags.Suffix()
     if e.has(name): return name
     if d.Dp > 0 {
         vt := $"<" + $d.L + " x i32>"
@@ -6027,34 +6043,35 @@ fn laneDotsBody(name String&, d laneDotForm&) String {
         b.Push("  br label %h\nh:\n  %j = phi i64 [ 0, %entry ], [ %j1, %pq ]\n")
         b.Push($"  %j1 = add i64 %j, " + $d.L + "\n  %cj = icmp sle i64 %j1, %g\n  br i1 %cj, label %v, label %t\nv:\n")
         b.Push("  %ap = getelementptr i32, ptr %a, i64 %j\n")
-        b.Push($"  %av = load " + $vt + ", ptr %ap, align 4\n  br label %p0\n")
+        b.Push($"  %av = load " + $vt + ", ptr %ap, align 4" + $d.Tags.A + "\n  br label %p0\n")
         for side in Array<String&>["p", "q"] {
             o := $"%" + $side
+            tag := d.Tags.P if side == "p" else d.Tags.Q
             b.Push($side + "0:\n  " + $o + "o = mul i64 %j, %" + $side + "s\n  " + $o + "a = getelementptr i8, ptr " + $o + ", i64 " + $o + "o\n")
             b.Push($"  " + $o + "one = icmp eq i64 %" + $side + "s, 0\n  br i1 " + $o + "one, label %" + $side + "b, label %" + $side + "l\n")
-            b.Push($side + "b:\n  " + $o + "w = load i32, ptr " + $o + "a, align 1\n")
+            b.Push($side + "b:\n  " + $o + "w = load i32, ptr " + $o + "a, align 1" + $tag + "\n")
             b.Push($"  " + $o + "i = insertelement " + $vt + " poison, i32 " + $o + "w, i64 0\n")
             b.Push($"  " + $o + "s1 = shufflevector " + $vt + " " + $o + "i, " + $vt + " poison, " + $vt + " zeroinitializer\n  br label %" + $side + "j\n")
-            b.Push($side + "l:\n  " + $o + "v1 = load " + $vt + ", ptr " + $o + "a, align 1\n  br label %" + $side + "j\n")
+            b.Push($side + "l:\n  " + $o + "v1 = load " + $vt + ", ptr " + $o + "a, align 1" + $tag + "\n  br label %" + $side + "j\n")
             b.Push($side + "j:\n  " + $o + "x = phi " + $vt + " [ " + $o + "s1, %" + $side + "b ], [ " + $o + "v1, %" + $side + "l ]\n")
             b.Push($"  br label %" + $("q0" if side == "p" else "pq") + "\n")
         }
         b.Push($"pq:\n  %r = call " + $vt + " @llvm.x86.avx512.vpdpbusd." + $d.Dp + "(" + $vt + " %av, " + $vt + " %px, " + $vt + " %qx)\n")
-        b.Push($"  store " + $vt + " %r, ptr %ap, align 4\n  br label %h\nt:\n  br label %sh\n")
+        b.Push($"  store " + $vt + " %r, ptr %ap, align 4" + $d.Tags.A + "\n  br label %h\nt:\n  br label %sh\n")
     }
     # the groups left, one by one
     from := "0" if d.Dp == 0 else "%j"
     b.Push($"sh:\n  %k = phi i64 [ " + $from + ", %t ], [ %k1, %sb ]\n  %ck = icmp slt i64 %k, %g\n  br i1 %ck, label %sb, label %done\nsb:\n")
-    b.Push("  %akp = getelementptr i32, ptr %a, i64 %k\n  %s0 = load i32, ptr %akp, align 4\n")
+    b.Push($"  %akp = getelementptr i32, ptr %a, i64 %k\n  %s0 = load i32, ptr %akp, align 4" + $d.Tags.A + "\n")
     b.Push("  %pko = mul i64 %k, %ps\n  %qko = mul i64 %k, %qs\n")
     for i in range 4 {
         b.Push($"  %pi" + $i + " = add i64 %pko, " + $i + "\n  %pp" + $i + " = getelementptr i8, ptr %p, i64 %pi" + $i + "\n")
-        b.Push($"  %pb" + $i + " = load i8, ptr %pp" + $i + "\n  %pw" + $i + " = " + $("zext" if d.Ux else "sext") + " i8 %pb" + $i + " to i32\n")
+        b.Push($"  %pb" + $i + " = load i8, ptr %pp" + $i + $d.Tags.P + "\n  %pw" + $i + " = " + $("zext" if d.Ux else "sext") + " i8 %pb" + $i + " to i32\n")
         b.Push($"  %qi" + $i + " = add i64 %qko, " + $i + "\n  %qp" + $i + " = getelementptr i8, ptr %q, i64 %qi" + $i + "\n")
-        b.Push($"  %qb" + $i + " = load i8, ptr %qp" + $i + "\n  %qw" + $i + " = " + $("zext" if d.Uy else "sext") + " i8 %qb" + $i + " to i32\n")
+        b.Push($"  %qb" + $i + " = load i8, ptr %qp" + $i + $d.Tags.Q + "\n  %qw" + $i + " = " + $("zext" if d.Uy else "sext") + " i8 %qb" + $i + " to i32\n")
         b.Push($"  %m" + $i + " = mul i32 %pw" + $i + ", %qw" + $i + "\n  %s" + $(i + 1) + " = add i32 %s" + $i + ", %m" + $i + "\n")
     }
-    b.Push("  store i32 %s4, ptr %akp, align 4\n  %k1 = add i64 %k, 1\n  br label %sh\ndone:\n  ret void\n}\n")
+    b.Push($"  store i32 %s4, ptr %akp, align 4" + $d.Tags.A + "\n  %k1 = add i64 %k, 1\n  br label %sh\ndone:\n  ret void\n}\n")
     return b.ToString()
 }
 
@@ -6069,6 +6086,27 @@ type laneDotForm struct() {
     Uy Bool = false
     Masked Bool = false
     Rt String& = "i32"
+    Tags laneTags = laneTags("", "", "")
+}
+
+# T36: a LaneDots helper's access tags (", !tbaa !N", "" untagged): the lanes added into (A), p's and q's bytes - so its
+# loads and stores are told apart from what else a loop around it reads and writes
+type laneTags struct(A String&, P String&, Q String&) {
+    A
+    P
+    Q
+}
+
+# ...as its name ends: ".tA.P.Q" by their numbers, "" where none is tagged
+fn (g laneTags&) Suffix() String {
+    if g.A == "" and g.P == "" and g.Q == "": return ""
+    return $".t" + $tagNumber(g.A) + "." + $tagNumber(g.P) + "." + $tagNumber(g.Q)
+}
+
+# an access tag's number, "" for none
+fn tagNumber(tag String&) String& {
+    at := ", !tbaa !"
+    return tag[at.Len():] if tag.StartsWith(at) else ""
 }
 
 # whether the target has feature f (its attributes' "+f")
