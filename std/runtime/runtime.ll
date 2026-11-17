@@ -647,6 +647,10 @@ declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)
 ; closure the task made, or was handed, may still hold it. Its head is this chunk, which has no room, so the
 ; allocation's fast path is the same as ever and fails on it, and the slow path finds the scope in its tail slot
 @__olang_fwd_chunk = global %olang.chunk zeroinitializer
+; P2b: what a stand-in made in its join's own scope (__olang_standin_in) holds in its parts word, which a stand-in never
+; otherwise uses (a part list is a root's, and a stand-in has a parent): this marker while nothing holds it, then its
+; keeper's address with the low bit set (__olang_scope_hold)
+@__olang_standin_mark = global i64 0
 ; O1b: the program's own scope - what a global's initializer allocates into. Never closed, so what
 ; it holds lives as long as the program. Its owner word marks it, and every part of it, as the program's
 @__olang_global_scope = global %olang.scope { ptr null, ptr null, ptr null, ptr @__olang_global_scope, ptr null, ptr null, ptr null }
@@ -3135,6 +3139,124 @@ make:
   ret ptr %sub
 }
 
+; P2b: a task's stand-in for parent made in home, the join block's own scope, which closes once the join has folded it
+; back (__olang_scope_merge) - so a join costs what it builds into parent and nothing else, however often it runs (one
+; made in parent, as __olang_standin makes it, stayed there until parent closed: 56 bytes a join a loop of joins kept
+; for good). What may hold a stand-in past its join holds its keeper instead (__olang_scope_hold), made in the stand-in's
+; own storage, which the fold hands to parent. None for the program's scope, as __olang_standin
+define ptr @__olang_standin_in(ptr %parent0, ptr %home) {
+entry:
+  %p = call ptr @__olang_scope_mine(ptr %parent0)
+  %op = getelementptr %olang.scope, ptr %p, i32 0, i32 3
+  %o = load atomic ptr, ptr %op monotonic, align 8
+  %isprog = icmp eq ptr %o, @__olang_global_scope
+  br i1 %isprog, label %prog, label %make
+prog:
+  ret ptr null
+make:
+  %sub = call ptr @__olang_scope_alloc_a(ptr %home, i64 56, i64 8)
+  store %olang.scope zeroinitializer, ptr %sub
+  %mp = getelementptr %olang.scope, ptr %sub, i32 0, i32 4
+  store ptr @__olang_standin_mark, ptr %mp
+  %pp = getelementptr %olang.scope, ptr %sub, i32 0, i32 5
+  store ptr %p, ptr %pp
+  ret ptr %sub
+}
+
+; P2b: scope s as something that may outlive a task holds it - a closure's captured scope, a generator's home, a scope
+; handle kept in a place: s itself, but for a stand-in made in its join's scope, its KEEPER - a forwarder made once, in
+; the stand-in's own storage, to the stand-in while the task runs and to what it stood in for once folded (as a stand-in
+; made in its parent forwards itself). Its storage goes to the parent at the fold, so the keeper lives as long as what
+; holds it can. Called on the thread that builds into s
+define ptr @__olang_scope_hold(ptr %s) alwaysinline {
+entry:
+  %none = icmp eq ptr %s, null
+  br i1 %none, label %plain, label %look
+look:
+  %mp = getelementptr %olang.scope, ptr %s, i32 0, i32 4
+  %m = load ptr, ptr %mp
+  %fresh = icmp eq ptr %m, @__olang_standin_mark
+  br i1 %fresh, label %make, label %kept
+kept:
+  %mi = ptrtoint ptr %m to i64
+  %bit = and i64 %mi, 1
+  %has = icmp ne i64 %bit, 0
+  br i1 %has, label %keeper, label %plain
+keeper:
+  %ki = and i64 %mi, -2
+  %k = inttoptr i64 %ki to ptr
+  ret ptr %k
+make:
+  %f = call ptr @__olang_standin_keeper(ptr %s)
+  ret ptr %f
+plain:
+  ret ptr %s
+}
+
+define ptr @__olang_standin_keeper(ptr %s) noinline {
+entry:
+  %f = call ptr @__olang_scope_alloc_a(ptr %s, i64 56, i64 8)
+  store %olang.scope { ptr @__olang_fwd_chunk, ptr null, ptr null, ptr @__olang_fwd_chunk, ptr null, ptr null, ptr null }, ptr %f
+  %tp = getelementptr %olang.scope, ptr %f, i32 0, i32 2
+  store ptr %s, ptr %tp
+  %fi = ptrtoint ptr %f to i64
+  %tag = or i64 %fi, 1
+  %t = inttoptr i64 %tag to ptr
+  %mp = getelementptr %olang.scope, ptr %s, i32 0, i32 4
+  store ptr %t, ptr %mp
+  ret ptr %f
+}
+
+; P2b: the regions made in a stand-in (its kids) handed to dst as it is folded - closed with dst, after its destructors,
+; as dst's own are; each names dst as its parent (and owner, as __olang_region_make names it) from now on
+define void @__olang_kids_move(ptr %src, ptr %dst) {
+entry:
+  %skp = getelementptr %olang.scope, ptr %src, i32 0, i32 6
+  %first = load ptr, ptr %skp
+  %none = icmp eq ptr %first, null
+  br i1 %none, label %done, label %prep
+prep:
+  %dhp = getelementptr %olang.scope, ptr %dst, i32 0, i32 0
+  %dh = load ptr, ptr %dhp
+  %dreg = icmp eq ptr %dh, @__olang_region_chunk
+  %owner = select i1 %dreg, ptr null, ptr %dst
+  br label %walk
+walk:
+  %r = phi ptr [ %first, %prep ], [ %nx, %step ]
+  %pp = getelementptr %olang.region, ptr %r, i32 0, i32 4
+  store ptr %dst, ptr %pp
+  %op = getelementptr %olang.region, ptr %r, i32 0, i32 6
+  %o = load ptr, ptr %op
+  %wassrc = icmp eq ptr %o, %src
+  br i1 %wassrc, label %reown, label %owned
+reown:
+  store ptr %owner, ptr %op
+  br label %owned
+owned:
+  %np = getelementptr %olang.region, ptr %r, i32 0, i32 3
+  %nx = load ptr, ptr %np
+  %last = icmp eq ptr %nx, null
+  br i1 %last, label %splice, label %step
+step:
+  br label %walk
+splice:
+  %dkp = getelementptr %olang.scope, ptr %dst, i32 0, i32 6
+  %dfirst = load ptr, ptr %dkp
+  store ptr %dfirst, ptr %np
+  %dhas = icmp ne ptr %dfirst, null
+  br i1 %dhas, label %back, label %head
+back:
+  %bp = getelementptr %olang.region, ptr %dfirst, i32 0, i32 2
+  store ptr %r, ptr %bp
+  br label %head
+head:
+  store ptr %first, ptr %dkp
+  store ptr null, ptr %skp
+  br label %done
+done:
+  ret void
+}
+
 ; O29: each chunk of a list, from head to its end, named as held by scope o
 define void @__olang_chunks_own(ptr %head, ptr %o) {
 entry:
@@ -4014,6 +4136,11 @@ go:
   %parentp = getelementptr %olang.scope, ptr %src, i32 0, i32 5
   %parent = load ptr, ptr %parentp
   %dst = call ptr @__olang_scope_mine(ptr %parent)
+  ; P2b: a stand-in made in its join's scope (__olang_standin_in) - else one made in its parent, which forwards itself
+  %markp = getelementptr %olang.scope, ptr %src, i32 0, i32 4
+  %mark0 = load ptr, ptr %markp
+  %inparent = icmp eq ptr %mark0, null
+  call void @__olang_kids_move(ptr %src, ptr %dst)
   %sdheadptr = getelementptr %olang.scope, ptr %src, i32 0, i32 1
   %sdhead = load ptr, ptr %sdheadptr
   %nodtors = icmp eq ptr %sdhead, null
@@ -4036,10 +4163,20 @@ dsplice:
   br label %chunks
 chunks:
   %sheadptr = getelementptr %olang.scope, ptr %src, i32 0, i32 0
-  %shead = load ptr, ptr %sheadptr
-  %nochunks = icmp eq ptr %shead, null
-  br i1 %nochunks, label %done, label %splice
+  %shead0 = load ptr, ptr %sheadptr
+  %nochunks = icmp eq ptr %shead0, null
+  br i1 %nochunks, label %done, label %which
+which:
+  br i1 %inparent, label %splice, label %own
+  ; P2b: the chunks name the stand-in's keeper from now on (O29, as a part's name its root when folded), the stand-in
+  ; itself going with its join's scope - made here, on the joiner's thread, where nothing held it: the task has finished
+own:
+  %keeper = call ptr @__olang_scope_hold(ptr %src)
+  %ownhead = load ptr, ptr %sheadptr
+  call void @__olang_chunks_own(ptr %ownhead, ptr %keeper)
+  br label %splice
 splice:
+  %shead = load ptr, ptr %sheadptr
   %stailptr = getelementptr %olang.scope, ptr %src, i32 0, i32 2
   %stail = load ptr, ptr %stailptr
   %dheadptr = getelementptr %olang.scope, ptr %dst, i32 0, i32 0
@@ -4059,6 +4196,23 @@ settail:
   ; ...and from now on forwards to it: a closure made on the task, or the environment copy it was handed, may hold it
   ; past the join (its header lives as long as dst does - it was made there)
 done:
+  br i1 %inparent, label %forward, label %kept
+  ; P2b: the keeper, if anything made one, forwards to dst - or, dst a stand-in itself (a nested join), to dst's keeper,
+  ; which outlives dst's own join as this one outlives this join
+kept:
+  %mark1 = load ptr, ptr %markp
+  %mi = ptrtoint ptr %mark1 to i64
+  %bit = and i64 %mi, 1
+  %haskeeper = icmp ne i64 %bit, 0
+  br i1 %haskeeper, label %rekeep, label %ret
+rekeep:
+  %ki = and i64 %mi, -2
+  %k = inttoptr i64 %ki to ptr
+  %to = call ptr @__olang_scope_hold(ptr %dst)
+  %ktp = getelementptr %olang.scope, ptr %k, i32 0, i32 2
+  store ptr %to, ptr %ktp
+  ret void
+forward:
   %fheadptr = getelementptr %olang.scope, ptr %src, i32 0, i32 0
   store ptr @__olang_fwd_chunk, ptr %fheadptr
   %ftailptr = getelementptr %olang.scope, ptr %src, i32 0, i32 2

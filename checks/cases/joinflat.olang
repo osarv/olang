@@ -1,0 +1,79 @@
+# check: run
+# P2b: a loop of joins keeps its memory flat. A task given a scope to build into (here the two a long-lived value and
+# its source live in) builds through a stand-in for it, made in the join block's own scope - a stand-in used to be made
+# in the scope it stood in for, 56 bytes each that stayed until that scope closed, which for main's was never: ~110
+# bytes a join here, 11MB over the loop. What a task makes that may outlive its join - a closure building into the
+# stand-in, kept in the long-lived value - holds the stand-in's keeper, which forwards to the scope it stood in for
+import "std/os"
+
+# the resident set, in kB
+fn rssKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmRSS:") catch default -1
+    if at < 0: return -1
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+type Stage struct(xs Array<I64>, failure String = "") {
+    xs
+    failure
+}
+
+type Source struct(base I64) {
+    base
+}
+
+fn draw(src Source&, a mut Stage&, n I64) {
+    for i in range a.xs.Len(): a.xs[i] = src.base + i + n
+    if n < 0: a.failure = "negative " + $n
+}
+
+fn step(src Source&, a mut Stage&, n I64) {
+    join { spawn draw(src, a, n) }
+}
+
+# a task leaving a closure that builds into the scope its join stood in for, called once the join is done
+type Keep struct() {
+    say fn&(n I64) String = fn(n I64) String { return "" }
+}
+
+fn leave(k mut Keep&, tag String&) {
+    k.say = fn(n I64) String { return tag + $n }
+}
+
+fn kept(k mut Keep&, tag String&) {
+    join { spawn leave(k, tag) }
+}
+
+# a join inside a task: its stand-in folded into the outer task's, which is folded at the outer join
+fn nested(a mut Stage&, n I64) {
+    join { spawn draw(Source(n), a, n) }
+}
+
+fn outer(a mut Stage&, n I64) {
+    join { spawn nested(a, n) }
+}
+
+fn main() ? {
+    src := Source(7)
+    a := Stage(Array<I64>(8))
+    for i in range 2000: step(src, a, i)
+    before := rssKb()
+    for i in range 200000: step(src, a, i)
+    grew := rssKb() - before
+    assert a.xs[3] == 7 + 3 + 199999 and a.failure == ""
+    assert before > 0 and grew < 1024, "200000 joins grew the resident set by " + $grew + "kB"
+
+    k := Keep()
+    tag := "n=" + $src.base
+    kept(k, tag)
+    churn := Array<I64>(1000, 1)
+    s := 0
+    for c in churn: s += c
+    assert k.say(5) == "n=75" and s == 1000
+
+    for i in range 1000: outer(a, i)
+    assert a.xs[0] == 999 + 999
+}

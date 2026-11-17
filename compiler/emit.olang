@@ -3791,6 +3791,12 @@ fn (fe mut fnEm&) constItem(el types.TypeId, c I32) String {
 
 # ---- scopes ----
 
+# P2b: scope header sc as what may outlive a task holds it - a task's stand-in's keeper, else sc itself
+fn (fe mut fnEm&) held(sc String&) String {
+    fe.E.runtime("__olang_scope_hold")
+    return fe.let("call ptr @__olang_scope_hold(ptr " + $sc + ")")
+}
+
 # a scope reference's header (a builder's for a text builder): where what is built there is allocated
 fn (fe mut fnEm&) scope(r mir.ScopeRef) String {
     match r {
@@ -4949,22 +4955,22 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             fe.E.runtime("__olang_region_or")
             o := fe.objectPtr(fe.val(x), fe.otype(x))
             r := fe.let("call ptr @__olang_region_or(ptr " + $o + ", ptr " + $fe.scope(s) + ")")
-            return fe.let("ptrtoint ptr " + $r + " to i64")
+            return fe.let("ptrtoint ptr " + $fe.held(r) + " to i64")
         }
         case mir.Rvalue.ScopeOf(x) {
             fe.E.runtime("__olang_scope_of")
             o := fe.objectPtr(fe.val(x), fe.otype(x))
             r := fe.let("call ptr @__olang_scope_of(ptr " + $o + ", ptr null)")
-            return fe.let("ptrtoint ptr " + $r + " to i64")
+            return fe.let("ptrtoint ptr " + $fe.held(r) + " to i64")
         }
         case mir.Rvalue.ScopeOr(sc, x) {
             fe.E.runtime("__olang_scope_or")
             o := "null" if x == mir.Operand.None else fe.objectPtr(fe.val(x), fe.otype(x))
             r := fe.let("call ptr @__olang_scope_or(ptr " + $fe.scope(sc) + ", ptr " + $o + ")")
-            return fe.let("ptrtoint ptr " + $r + " to i64")
+            return fe.let("ptrtoint ptr " + $fe.held(r) + " to i64")
         }
         case mir.Rvalue.Sole(k) { return fe.load("i1", "@" + $fe.E.sole(k)) }
-        case mir.Rvalue.Handle(s) { return fe.let("ptrtoint ptr " + $fe.scope(s) + " to i64") }
+        case mir.Rvalue.Handle(s) { return fe.let("ptrtoint ptr " + $fe.held(fe.scope(s)) + " to i64") }
         case mir.Rvalue.ErrPush {
             fe.E.runtime("__olang_errpay_push")
             r := fe.let("call ptr @__olang_errpay_push()")
@@ -6306,6 +6312,7 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
             if sc != "null" {
                 fe.E.runtime("__olang_scope_escape")
                 fe.w("call void @__olang_scope_escape(ptr " + $sc + ")")
+                sc = fe.held(sc)
             }
             fe.store("ptr", sc, fe.let("getelementptr " + $et + ", ptr " + $env + ", i32 0, i32 " + $(I64(args.N) + j)), ", !tbaa !28")
         }
@@ -6314,7 +6321,7 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
         # D18: a generator - its walk begun where it lives, dropped with that scope
         home := fe.scope(s)
         gs := fe.E.sym(code)
-        env = fe.let("call ptr @" + $gs + ".coro(ptr " + $env + ", ptr " + $home + ")")
+        env = fe.let("call ptr @" + $gs + ".coro(ptr " + $env + ", ptr " + $fe.held(home) + ")")
         # D18e: in the ".walk" form the caller destroys the walk itself, where its scope closes - nothing registered,
         # so the coroutine's handle stays visible to LLVM and its frame can be elided
         if not fe.walkForm {
@@ -8567,8 +8574,8 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
         match r {
             case mir.ScopeRef.Program { vals.Push("null") }
             case _ {
-                e.declare("__olang_standin", "ptr @__olang_standin(ptr)")
-                sub := fe.let("call ptr @__olang_standin(ptr " + $fe.scope(r) + ")")
+                e.runtime("__olang_standin_in")
+                sub := fe.let("call ptr @__olang_standin_in(ptr " + $fe.scope(r) + ", ptr " + $js + ")")
                 subs.Push($sub)
                 vals.Push($sub)
             }
@@ -8600,8 +8607,8 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
                 vals.Push("null")
             }
             case _ {
-                e.declare("__olang_standin", "ptr @__olang_standin(ptr)")
-                sub := fe.let("call ptr @__olang_standin(ptr " + $fe.scope(r) + ")")
+                e.runtime("__olang_standin_in")
+                sub := fe.let("call ptr @__olang_standin_in(ptr " + $fe.scope(r) + ", ptr " + $js + ")")
                 subs.Push($sub)
                 copyF[i] = fields.Len()
                 fields.Push("ptr")
