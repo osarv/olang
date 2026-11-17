@@ -2046,7 +2046,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 ac0cb24df228eac5 494276e48e18f7fa checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-bf9307d786d4d19d 473f981d72517a73 checks/checks.olang
+ce8c44007b844f64 71e80044a94ab8fd checks/checks.olang
 e441d89352158de4 51f391891d39e1c7 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 efb54136ad6286dc checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb 11ac830c3b4509ca checks/fixtures/agree/math.olang
@@ -2374,7 +2374,7 @@ e20178f94e07dfed 093e0335a8debfcd compiler/bindgen.olang
 90881337ba685229 eea384b1077dc23b compiler/build.olang
 9eb8d9916112f375 acad139c7c5a3871 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
-b0dfb4ad31b0247c a02a4c9bc80b4626 compiler/check.olang
+534ae4197713bf14 00ebd743e842ea27 compiler/check.olang
 da018e972c2ecc90 2073133fd217ef43 compiler/cond.olang
 2ab98962469bc960 89092d630e387ca2 compiler/definit.olang
 db407b9ec2aacf25 e1e61b9b123ebbaf compiler/diag.olang
@@ -2526,7 +2526,7 @@ f6e04d43ad554209 2c7bed0e54ce92f8 std/csv.olang
 794dc209a5c10699 b880214aa676b09d std/deque.olang
 c9a567592977f803 42d43d3811e894ce std/ffi.olang
 eae29e622e0002e5 7c8a766d6833ed7c std/filepath.olang
-e8b67671a543d575 2b9f7167c0d19d88 std/flags.olang
+f1f8cdcb99507086 5f9412bdd12f0050 std/flags.olang
 b8a767e48672cdbb 475c6d45c3718d89 std/frame.olang
 528fca0c14f3c6d8 6c09a5b8abb7221a std/fuzz.olang
 c75dacbbaf48a1e2 8aa4a652f9fdd17c std/heap.olang
@@ -2650,6 +2650,7 @@ a519a74d61801dcf 4341a6fc3472d279 tests/promises.olang
 1ed6c61d621cabe7 3329b041268e64f4 tests/reclaimtasks.olang
 b5ef26df71c5e9d8 d290f513fc2e56b4 tests/reflect.olang
 5075b8937e6628c4 bb505fad95c5ed7c tests/reflmod.olang
+3d5f36715ff3e78e d965d9c6969da76f tests/refltextindex.olang
 835ba0f57f4caddd ffb7322c928edb6c tests/runner.olang
 0c4c3adea751bf6a 75ac204e9b845a85 tests/shared.olang
 307585c2d6e47496 ad7d080b0a55df0c tests/slotfacts.olang
@@ -2657,6 +2658,7 @@ c452c9cb509c23e1 dca352c6c89a7600 tests/structpat.olang
 0d4b3ba0fcda27dc f54bfde8d599baa6 tests/textplus.olang
 2fb13fa3e9f7127c a1fe4e3375cf79b7 tests/textslot.olang
 306278cf38ee3057 34b0c2b9622614a4 tests/topassert.olang
+b85bbc40e839bded b5a7ded126f0400f tests/tuplefacts.olang
 865512a5b10174be 415d01faaa817e2d tests/typedefaults.olang
 7ffdae4bcc341292 9f9c543d3541d069 tests/unique.olang
 40b8b670318d4478 685c5774d1e2bcf4 tests/unreachable.olang
