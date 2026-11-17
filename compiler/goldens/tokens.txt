@@ -2458,7 +2458,7 @@ bff38ad021d5542d 494ccbf7f61a1712 compiler/tools/rungold.olang
 67f2c232d9fc22f4 c15bde3121236ac1 compiler/tools/seed.olang
 d60c568945ef50db 53ecc35e37b0bcfa compiler/tools/tokdiff.olang
 b5d5a7ffc3c55aed c3739971a0322646 compiler/tools/toolkit.olang
-b8437f1d100e8c07 25d6d4b8ac146137 compiler/typed.olang
+474bde0b9a08677f e352135a9837eba7 compiler/typed.olang
 e0222b80e1fe43ba 0c998876e4d5c42e compiler/types.olang
 ac9569bf452c8a83 824cfe83e800236a compiler/unparse.olang
 e2ea203aa101b68f a5e34ee613900ef3 compiler/views.olang
@@ -2627,7 +2627,7 @@ ef74496ac1efc479 e44f14abefad5ec5 tests/inplace.olang
 088eb892c113e59d 9974f29a802ae1b1 tests/intsweep.olang
 432084bd41b5333d cdcb187a535b881c tests/intwidths.olang
 9224eb3a58446980 4813c6979a7a5c85 tests/kept.olang
-1e48b6ce34b3d2d0 4f8a94ece21941e0 tests/keptfacts.olang
+b992f53737d169de fed789714451e4eb tests/keptfacts.olang
 32026d6663c936db 9a9c8b26af45b84c tests/keptparams.olang
 4c4d9485d7579430 2975a77a6c229a11 tests/keyenummod.olang
 3253d9e1f272b7f0 04f2480b059d1b45 tests/keyenums.olang
