@@ -39223,3 +39223,43 @@ Measured: spawnleak 2,759 pages to 4 over 100,000 joins; joinleak flat (90 pages
 checks/cases/joinflat.olang pins it (22 MB before, under 1 MB now), with a closure a task leaves building into the
 scope its join stood in for, called after an array churn, and a join nested in a task. Checked: the self-build fixed
 point, `make race`, `make quick`.
+
+## 2026-11-17: defaults in function types (T21d, D8b, E14b; the user's call; wt-fndefaults)
+
+The user, 2026-11-16: "Yes, build this", reversing the earlier "keep function types without defaults for now". A
+function type may now declare defaults, `fn&(x F32, k F32 = 1.0) F32`; a call through a value of it leaves them off,
+writes `default`, or names them (E14b), and the type's defaults fill the call while compiling - the caller supplies
+them, as D8a has it for a declaration's.
+
+**Where the defaults live.** A function type already carried its parameters' names beside its identity (the names
+entry, rendering only; `Unnamed` and `Plain` drop it). The defaults are held with the names (`types.Table`'s
+`ParamNamesWith`, a row per default whose text renders), so two types differing only in defaults are one type to every
+rule - Same, instances, scopes - and a value assigned from one function type to another simply takes the target's: the
+place's type is the one the call reads. The rows are `generic.Program`'s (`FnDefault`: module, expression, context),
+one per written position and instance's arguments; a call through a value checks the row's expression in a frame of
+the module it was written in, as `defaultArg` does a declaration's (`check.typeDefault`). The resolver walks a function
+type's defaults (`names.typeRef`), which it never had reason to before.
+
+**Named functions and lambdas carry their own.** A named function made a value, and a lambda with nothing expected,
+have their declaration's defaults in the value's type, so `g := connect; g("h", port = 2)` works. One consequence:
+checks/cases/e14bvalue.olang (`f := connect` then `f("h", port = 2)`) now compiles, so the case was rewritten to name an
+argument through a type that gives no defaults, and NamedArgThroughValue reworded ("only a parameter its function type
+gives a default is named").
+
+**Conflicts.** A named function or lambda given to a function type is refused only where both declare a default for
+one parameter and the two differ (T21d's error, at the value: the parameter, both defaults, the type, and "give k the
+default '= 1.0', or none"). A function declaring none, or one the type does not give, fits as before; values between
+function types are never compared. Defaults are compared as compile-time values by `check.sameConst` over the checked
+expressions: the same literal bits at one type (`2.0` and `2.00` agree), constant data, the same function or lambda
+body, or one constructor's, function's, case's or tuple's call of such values (a default has no other behaviour, D8a,
+so the same call is the same value); anything else, a global's value among them, counts as different. Deciding by the
+evaluator was weighed and left: the checker compares before the evaluator runs, and the structural comparison is exact
+for what defaults are written as.
+
+**Decided along the way (mine):** a function type's default reading a local of the function it is written in is D8a's
+"cannot be computed" error (the calls it stands in see no local), where it reached a checker gap before. D8b's trailing
+rule was never enforced - `fn f(a I64 = 1, b I64)` compiled, `b` impossible to leave off; the parser now says it for
+every parameter list (declarations, lambdas, constructors, function types) with DefaultNotTrailing, now ruled D8b and
+split into note and help. The compile-time evaluator needed nothing: a call through a value reaches it with every
+argument filled; tests/fndefaults.olang bakes each case as a global and decides it in asserts, and runs it on a Live
+input.

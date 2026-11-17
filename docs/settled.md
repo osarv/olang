@@ -475,7 +475,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   I64 ? A, B`. **Whole-item grouping (L18c, the user's call)**: a list item holding a top-level comma is parenthesized
   whole, `Map<String&, (fn(x I64) I64, I64 ? A, B)>`. Parentheses group nothing else.
 - **Defaults and `default` (D8a/D8b/E14).** Trailing defaults, `default` in an argument slot. A default is built per
-  call in its declaration's context.
+  call in its declaration's context. D8b's trailing rule is the parser's, for every parameter list (2026-11-17: it was
+  never enforced on declarations).
+- **Defaults in function types (T21d, the user's "Yes, build this", 2026-11-16, reversing "keep function types without
+  defaults for now"; built 2026-11-17).** `fn&(x F32, k F32 = 1.0) F32`: a call through a value leaves them off, gives
+  `default` or names them (E14b); the type's defaults fill the call while compiling, checked where the type is written
+  (D8a). A named function's or lambda's value carries its own declaration's defaults (`g := connect; g("h", port = 2)`).
+  Defaults are no part of a type's identity (held with its parameter names; Unnamed drops both); a value assigned between
+  function types takes the target's. A named function or lambda given to a type is refused (T21d's error, naming the
+  parameter, both defaults and the one to write) only where both declare a default for one parameter and the two are
+  different compile-time values: the same literal bits at one type, constant data, function, or one constructor's,
+  function's, case's or tuple's call of such values are the same; anything else (a lambda, a global's value) only as its
+  own declaration.
 - **Tests name their targets (B7a, B3a, B14, B15, 2026-10-26).** `test Twice "doubles" { }`, `test Map.Get "..."`: a
   function, type or `Type.Method` of the test's own file; an unknown target or a duplicate is an error. `olang doc`
   lists tests as examples. `olang test FILE WORD...` runs the tests a word names; words naming none fail the file
@@ -497,7 +508,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`olang profile FILE [ARGS]` (B20, QBL, the user's decision 2026-10-26).** A built-in sampling profiler; prints
   self/total by function, hot lines and callers, and writes an SVG flame graph. docs/profiling.md.
 - **Arguments by name (E14b, QBG, 2026-10-26 - reverses the 2026-09 rejection).** A defaulted parameter only, after
-  every positional argument, in any order, each once (`connect(h, retries = 5)`).
+  every positional argument, in any order, each once (`connect(h, retries = 5)`); through a function value, a parameter
+  its type gives a default (T21d).
 - **Variadic parameters (D8g, QCF, the user's "yes, add variadic args", 2026-10-31).** `fn sum(xs ...I64)`: any number
   of arguments, held as a fixed array in the caller's frame, or `...a` passes an array on; inside a read-only
   `Array<T>&`. Last but defaulted parameters; not constructors, payloads or externs.
