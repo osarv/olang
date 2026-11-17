@@ -1539,19 +1539,145 @@ fn (c mut Checker&) typeNames(x types.TypeId, t types.TypeId, depth I64) Bool {
 }
 
 # D19: what a builder's name already is in its owner's namespace - "a case", "a member the language reads through a
-# type's name" - "" for nothing
+# type's name", "a type member" - "" for nothing
 fn (c mut Checker&) builderNameTaken(o types.TypeId, n source.NameId) String {
+    if c.P.MemberOf(o, n) >= 0: return "a type member"
+    return c.namespaceTaken(o, n)
+}
+
+# ---- type members (D4a) ----
+
+# D4a: whether a type declared in place has a body one may have - a struct's or an enum's (one that did not parse is
+# said already)
+fn inPlaceBody(td ast.TypeDecl&) Bool {
+    if td.Body == null: return true
+    return match td.Body! {
+        case ast.TypeBody.Struct(_), ast.TypeBody.Enum(_, _): true
+        case _: false
+    }
+}
+
+# D4a: a type member's declaration - its owner a type its module declares (in the prelude a built-in type too) or a
+# variable a trait of its module constrains; a generic owner written over its variables; one declared in place a
+# struct or an enum of one owner; a name its owner's namespace does not hold already, once
+fn (c mut Checker&) memberRules(mi I64, sp source.Span, bodyOk Bool) {
+    m := c.P.MemberAt(mi, sp.Start)
+    if m < 0: return
+    c.push(-1, mi, types.VoidT, types.ListId(0))
+    defer: c.pop()
+    owner := c.P.MemberOwnerRef(m)
+    osp := owner.Span()
+    written := c.src(osp)
+    if not bodyOk {
+        c.err(osp, msgs.MemberInPlaceKind("is a struct or an enum"))
+        return
+    }
+    o := c.memberOwnerOk(mi, m, written)
+    if o == types.UnknownT: return
+    n := c.P.MemberName(m)
+    taken := c.namespaceTaken(o, n) if c.P.T.KindOf(o) != types.Kind.Var else c.reflectedName(c.text(n))
+    if taken == "" and c.P.T.KindOf(o) != types.Kind.Var and c.P.BuilderOf(o, n) >= 0: taken = "a builder"
+    nsp := memberSpan(source.Span(osp.Start, osp.End + 1 + I32(c.text(n).Len())), c.text(n).Len())
+    if taken != "" {
+        c.err(nsp, msgs.MemberNameTaken(written, c.tok(n), taken))
+        return
+    }
+    if c.P.MemberBefore(m) >= 0: c.err(nsp, msgs.MemberTwice(written, c.tok(n)))
+}
+
+# D4a: a member's owner, where its module may declare a member of it - the owner over its variables, a trait's
+# variable; Unknown, said, where it is none
+fn (c mut Checker&) memberOwnerOk(mi I64, m I64, written String&) types.TypeId {
+    osp := c.P.MemberOwnerRef(m).Span()
+    k := c.P.MemberKey(m)
+    if k < 0 {
+        c.err(osp, msgs.MemberOwnerKind(written))
+        return types.UnknownT
+    }
+    prelude := c.P.L.Mods[mi].Prelude
+    low := k & ((I64(1) << 40) - 1)
+    if (k >> 40) == 4 {
+        if c.P.MemberInPlace(m) {
+            c.err(osp, msgs.MemberInPlaceKind("has one owner, not every type of a trait"))
+            return types.UnknownT
+        }
+        tm := c.P.DeclModule(types.DeclId(I32(low)))
+        if tm != mi and not (prelude and c.P.L.Mods[tm].Prelude) {
+            c.err(osp, msgs.MemberOwnerElsewhere(c.text(c.P.T.DeclName(types.DeclId(I32(low))))))
+            return types.UnknownT
+        }
+        return c.P.T.Var(generic.MemberOwner(m), 0, types.ReadOnly)
+    }
+    if (k >> 40) != 1 {
+        # a built-in type: the prelude's alone
+        if not prelude {
+            c.err(osp, msgs.MemberOwnerElsewhere(written))
+            return types.UnknownT
+        }
+        return types.TypeId(I32(low)) if (k >> 40) == 3 else types.UnknownT
+    }
+    d := types.DeclId(I32(low))
+    dk := c.P.T.DeclKindOf(d)
+    if dk != types.DeclKind.Struct and dk != types.DeclKind.Enum and dk != types.DeclKind.Over and dk != types.DeclKind.Foreign {
+        c.err(osp, msgs.MemberOwnerKind(written))
+        return types.UnknownT
+    }
+    dm := c.P.DeclModule(d)
+    if dm != mi and not (prelude and c.P.L.Mods[dm].Prelude) {
+        c.err(osp, msgs.MemberOwnerElsewhere(written))
+        return types.UnknownT
+    }
+    if not c.memberOwnerArgs(m, d, written): return types.UnknownT
+    return c.P.SelfType(d)
+}
+
+# D4a: a generic owner written over its variables, one name per parameter; a member declared in place is of no
+# generic owner
+fn (c mut Checker&) memberOwnerArgs(m I64, d types.DeclId, written String&) Bool {
+    osp := c.P.MemberOwnerRef(m).Span()
+    args := match c.P.MemberOwnerRef(m) {
+        case ast.TypeRef.Named(_, _, a): a
+        case _: Array<ast.TypeRef&>(0)
+    }
+    if c.P.T.DeclParams(d) == 0: return true
+    if c.P.MemberInPlace(m) {
+        c.err(osp, msgs.MemberInPlaceKind("is of an owner that is no generic"))
+        return false
+    }
+    ok := args.Len() == c.P.WrittenArity(d)
+    for a in args {
+        match a {
+            case ast.TypeRef.Named(asp, ap, aa) if ap.Len() == 1 and aa.Len() == 0 {
+                if c.P.R.Use(c.fr().File, asp.Start).Kind != names.What.TypeVar: ok = false
+            }
+            case _ { ok = false }
+        }
+    }
+    if not ok: c.err(osp, msgs.MemberOwnerArgs(c.text(c.P.T.DeclName(d))))
+    return ok
+}
+
+# D19, D4a: what a name already is in a type's namespace apart from its builders and members - "a case", "a member the
+# language reads through a type's name" - "" for nothing
+fn (c mut Checker&) namespaceTaken(o types.TypeId, n source.NameId) String {
     name := c.text(n)
     if c.isEnum(o) and c.hasCase(o, n): return "a case"
-    if generic.ProjectsType(name) or name == "Functions" or name == "Methods" or name == "Cases" or name == "Fields" or
-       name == "Params" or name == "Results" or name == "Errors" or name == "Name" or name == "Kind" or name == "Size" or
-       name == "Align" or name == "Length" or name == "Nullable" {
-        return "a member reflection reads through a type's name"
-    }
+    r := c.reflectedName(name)
+    if r != "": return r
     if c.isNumber(o) and (name == "Max" or name == "Min" or name == "Inf" or name == "NaN" or name == "Epsilon" or name == "SmallestNormal") {
         return "a limit of the number type"
     }
     if name == "From" and c.isEnum(o) and c.rawsOf(o).Ty != types.UnknownT: return "the raw value's reverse"
+    return ""
+}
+
+# D19, D4a: whether a name is one reflection reads through any type's name (G32, G41): what it is, "" for none
+fn (c mut Checker&) reflectedName(name String&) String {
+    if generic.ProjectsType(name) or name == "Functions" or name == "Methods" or name == "Cases" or name == "Fields" or
+       name == "Params" or name == "Results" or name == "Errors" or name == "Name" or name == "Kind" or name == "Size" or
+       name == "Align" or name == "Length" or name == "Nullable" or name == "Attr" or name == "HasAttr" {
+        return "a member reflection reads through a type's name"
+    }
     return ""
 }
 
@@ -1882,8 +2008,10 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                 }
                 tests++
             }
+            case ast.Decl.Member(msp, _) { c.memberRules(mi, msp, true) }
             case ast.Decl.Type(tsp, td) {
                 c.declAttrs(mi, d)
+                if td.Owner != null: c.memberRules(mi, tsp, inPlaceBody(td))
                 c.typeRules(mi, tsp, td)
                 c.declaredCtor(mi, td)
                 c.traitSets(mi, td)
@@ -6765,9 +6893,16 @@ fn (c mut Checker&) typeNamed(x ast.Expr&) types.TypeId {
                 if t >= types.TypeId(0) and c.P.T.KindOf(t) != types.Kind.Const and c.P.T.KindOf(t) != types.Kind.ConstExpr { return t }
             }
         }
-        case ast.Expr.Member(sp, _, _) {
+        case ast.Expr.Member(sp, b, n) {
             ref := c.P.R.Member(c.fr().File, sp.End)
             if ref.Kind == names.What.Type and ref.Index >= 0: return c.declType(c.P.DeclFor(ref.Module, ref.Index))
+            # D4a: a type member, "Account.Json", "T.Accumulator", "lib.Percent.Accumulator"
+            bt := c.typeNamed(b)
+            if bt < types.TypeId(0) or bt == types.UnknownT: return types.TypeId(-1)
+            m := c.P.MemberOf(bt, n)
+            if m < 0: return types.TypeId(-1)
+            c.memberSeen(sp, bt, m)
+            return c.P.MemberType(m, bt)
         }
         case ast.Expr.Generic(sp, g, targs) {
             # G6b: a generic enum's instance written with its arguments, "Tree<I64>.Leaf(3)"
@@ -12470,7 +12605,7 @@ fn (c mut Checker&) callMember(sp source.Span, f ast.Expr&, msp source.Span, x a
     caseNamed := et0 >= types.TypeId(0) and c.isEnum(et0) and c.hasCase(et0, n)
     gd0 := c.genericNamed(x)
     if gd0 >= types.DeclId(0) and c.P.T.DeclKindOf(gd0) == types.DeclKind.Enum: caseNamed = true
-    if generic.ProjectsType(c.text(n)) and not caseNamed {
+    if (generic.ProjectsType(c.text(n)) or c.memberNamed(x, n)) and not caseNamed {
         rt := c.reflType(f)
         if rt == types.UnknownT {
             c.dropArgs(args)
@@ -15776,7 +15911,7 @@ fn (c mut Checker&) reflType(x ast.Expr&) types.TypeId {
     match x {
         case ast.Expr.Member(sp, b, n) {
             name := c.text(n)
-            if not generic.ProjectsType(name): return types.TypeId(-1)
+            if not generic.ProjectsType(name): return c.memberThrough(sp, b, n)
             bt := types.TypeId(-1)
             if name == "Type": bt = c.descTypeOf(b)
             if bt < types.TypeId(0): bt = c.reflType(b)
@@ -16241,6 +16376,35 @@ fn (c mut Checker&) reflExpr(sp source.Span, v reflVal) typed.Expr& {
     return c.enumCase(sp, sp, v.Ty, cn[v.I], Array<ast.Expr&>(0))
 }
 
+# D4a: b.n where b is a reflected type with a member n - "T.Element.Accumulator": the member's type; -1 where it is none
+fn (c mut Checker&) memberThrough(sp source.Span, b ast.Expr&, n source.NameId) types.TypeId {
+    bt := c.reflType(b)
+    if bt < types.TypeId(0) or bt == types.UnknownT: return types.TypeId(-1)
+    m := c.P.MemberOf(bt, n)
+    if m < 0: return types.TypeId(-1)
+    c.memberSeen(sp, bt, m)
+    return c.P.MemberType(m, bt)
+}
+
+# D4a: whether x.n names a type member - the call "Grid.Point(2, 3)" is then the call its type's name is
+fn (c mut Checker&) memberNamed(x ast.Expr&, n source.NameId) Bool {
+    t := c.reflType(x)
+    return t >= types.TypeId(0) and t != types.UnknownT and c.P.MemberOf(t, n) >= 0
+}
+
+# D4a, M6: a type member read at sp - one whose name is lower-case is its module's alone
+fn (c mut Checker&) memberSeen(sp source.Span, t types.TypeId, m I64) {
+    if not c.P.MemberHidden(m, c.fr().Mi): return
+    n := c.P.MemberName(m)
+    c.err(memberSpan(sp, c.text(n).Len()), msgs.MemberPrivate(c.ty(t), c.tok(n)))
+}
+
+# T.Accumulator (G32, D4a): the prelude's member - T itself where a type has none
+fn (c mut Checker&) accumulator(t types.TypeId) types.TypeId {
+    a := c.P.MemberNamed(t, "Accumulator")
+    return a if a != types.UnknownT else t
+}
+
 # x.n read as a reflected member (G32, G34): its value, or an error - null where x.n is no reflection (a field, an
 # enum's case, a number's limit)
 fn (c mut Checker&) reflMember(sp source.Span, nsp source.Span, x ast.Expr&, n source.NameId) typed.Expr?& {
@@ -16254,7 +16418,7 @@ fn (c mut Checker&) reflMember(sp source.Span, nsp source.Span, x ast.Expr&, n s
     if t >= types.TypeId(0) {
         if t == types.UnknownT: return c.unknown(sp)
         if c.isEnum(t) and not c.viaTypeVar(x) and c.hasCase(t, n): return null
-        if generic.ProjectsType(name) {
+        if generic.ProjectsType(name) or c.P.MemberOf(t, n) >= 0 {
             c.err(sp, msgs.ReflTypeNotValue($c.src(sp)))
             return c.unknown(sp)
         }
@@ -22189,7 +22353,7 @@ fn (c mut Checker&) laneTotal(sp source.Span, nsp source.Span, name String&, k I
     # Sum<A Number = T.Accumulator> (E39, G4a, G4b): A the number the call is wanted as, else the lanes' total type
     if name == "Sum" {
         a := c.wantedAt(sp)
-        if a == types.UnknownT or c.isRef(a) or c.isNamed(a) or not c.isNumber(a): a = c.P.Accumulator(c.deref(e))
+        if a == types.UnknownT or c.isRef(a) or c.isNamed(a) or not c.isNumber(a): a = c.accumulator(c.deref(e))
         if not c.P.T.Same(a, e) {
             c.totalSite(nsp, c.deref(e))
             return c.laneSumIn(sp, nsp, k, a, nsp)

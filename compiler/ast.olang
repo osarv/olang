@@ -355,8 +355,12 @@ type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Also Arr
     Dflt
 }
 
+# A type member declared in place (D4a, "type Account.Json enum { ... }") has its owner, the type written before the
+# ".", in Owner (null for none), the name after the "." in Member, and as Name the two joined, "Account.Json" - a name
+# no source writes alone, as a builder's is (D19)
 type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool, Body TypeBody?&
-                     Attrs Array<Attr&>& = Array<Attr&>(0), Word DeclWord = DeclWord.Plain, Packed Bool = false) {
+                     Attrs Array<Attr&>& = Array<Attr&>(0), Word DeclWord = DeclWord.Plain, Packed Bool = false
+                     Owner TypeRef?& = null, Member source.NameId = source.NameId(0)) {
     Name
     Params
     Extends
@@ -364,6 +368,18 @@ type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool
     Attrs      # the attributes written before it (G39)
     Word       # the word before its body (T13a, T13b): immut, unique, or none
     Packed     # T13c: "packed" right before "struct" - laid out bit by bit, no padding
+    Owner
+    Member
+}
+
+# D4a: a type member naming a type, "type U8.Accumulator = U64", "type T.Accumulator<T Number> = T": its owner as
+# written, its name after the ".", the type variables its list after the name introduces (a trait's default), and the
+# type it names
+type MemberDecl struct(Owner TypeRef&, Name source.NameId, Params Array<TypeParam&>&, Ty TypeRef&) {
+    Owner
+    Name
+    Params
+    Ty
 }
 
 # what a type declaration says of its values before its body: nothing, never changing after their constructor (immut,
@@ -392,6 +408,7 @@ type Decl enum {
     Fn(f Func&)
     Extern(f Func&)
     Type(sp source.Span, t TypeDecl&)
+    Member(sp source.Span, m MemberDecl&)    # D4a: "type Owner.Name = Type"
     Global(sp source.Span, v VarDecl&)
     # the path's span holds its quotes; link the library a C header's declarations are in (X9), its quotes too - (0, 0)
     # for none

@@ -1,0 +1,6 @@
+# check: fail error[G38]: 'Cell' of I64
+# also: its type members are Accumulator
+fn main() {
+    x I64.Cell = 1
+    assert x == 1
+}

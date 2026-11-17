@@ -1,0 +1,5 @@
+# check: fail error[D4a]: Grid has two members named 'Cell'
+type Grid struct(W I64) { W }
+type Grid.Cell = F32
+type Grid.Cell = F64
+fn main() { assert Grid.Cell.Name == "F32" }

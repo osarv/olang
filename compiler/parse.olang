@@ -655,7 +655,12 @@ fn (p mut Parser&) attributed() ast.Decl?& ? Fail {
         }
         case ast.Decl.Type(sp, td) {
             p.declareAttrs(attrs)
-            return ast.Decl.Type(sp, ast.TypeDecl(td.Name, td.Params, td.Extends, td.Body, attrs, td.Word, td.Packed))
+            return ast.Decl.Type(sp, ast.TypeDecl(td.Name, td.Params, td.Extends, td.Body, attrs, td.Word, td.Packed, td.Owner
+                                                  td.Member))
+        }
+        case ast.Decl.Member(_, _) {
+            p.attrRefused(attrs)
+            return d
         }
         case _ { return d }
     }
@@ -849,6 +854,7 @@ fn (p mut Parser&) topLine() ast.TopBranch& ? Fail {
 
 fn (p mut Parser&) typeDecl() ast.Decl& ? Fail {
     at := try p.want(token.Tok.Type)
+    if p.ownerAhead(): return try p.memberDecl(at)
     name := try p.name()
     if p.sees(token.Tok.Error): return try p.errorDecl(at, name)
     return try p.typeDeclRest(at, name) catch {
@@ -893,6 +899,53 @@ fn (p mut Parser&) errorWords(cases mut Vec<ast.CaseDecl&>&) ? Fail {
         try p.entryEnd()
     }
     p.advance()
+}
+
+# G38, D4a: whether a name after a type's "." may name a type - a reflected one (Base, Element, Target, Type) or a type
+# member a declaration gives (Accumulator) - and not one of the values reflection, a limit or Place gives
+fn typeWord(w String&) Bool {
+    if w.Len() == 0 or w[0] < 'A' or w[0] > 'Z': return false
+    for v in Array<String&>["Name", "Kind", "Length", "Nullable", "Size", "Align", "Fields", "Cases", "Params", "Results"
+                            "Methods", "Functions", "Errors", "Min", "Max", "Inf", "NaN", "Epsilon", "SmallestNormal", "Here"
+                            "Offset", "BitOffset", "Bits", "HasDefault", "Default", "Attr", "HasAttr"] {
+        if w == v: return false
+    }
+    return true
+}
+
+# D4a: a type member - "type U8.Accumulator = U64", "type T.Accumulator<T Number> = T" naming a type; "type
+# Account.Json enum { ... }" declaring one in place, its name the two joined as a builder's is (D19)
+fn (p mut Parser&) memberDecl(at I32) ast.Decl& ? Fail {
+    ot := p.tk()
+    on := try p.name()
+    oargs Array<ast.TypeRef&>& = Array<ast.TypeRef&>(0)
+    if p.sees(token.Tok.Lt): oargs = try p.typeArgs()
+    owner := ast.TypeRef.Named(p.from(ot.Start), Array<source.NameId>(1, on), oargs)
+    try p.want(token.Tok.Dot)
+    member := try p.name()
+    p.receiverVars(owner, false)
+    if p.sees(token.Tok.Lt) or p.sees(token.Tok.Assign) {
+        tps Array<ast.TypeParam&>& = Array<ast.TypeParam&>(0)
+        if p.sees(token.Tok.Lt): tps = try p.typeParams()
+        try p.want(token.Tok.Assign)
+        ty := try p.typeExpr()
+        sp := p.from(at)
+        try p.endStmt()
+        return ast.Decl.Member(sp, ast.MemberDecl(owner, member, tps, ty))
+    }
+    name := p.names.Intern($p.names.Text(on) + "." + $p.names.Text(member))
+    d := try p.typeDeclRest(at, name) catch {
+        p.salvage.Push(ast.Decl.Type(p.from(at), ast.TypeDecl(name, Array<ast.TypeParam&>(0), false, null, Array<ast.Attr&>(0)
+                                                              ast.DeclWord.Plain, false, owner, member)))
+        error Fail.Syntax
+    }
+    match d {
+        case ast.Decl.Type(sp, td) {
+            return ast.Decl.Type(sp, ast.TypeDecl(td.Name, td.Params, td.Extends, td.Body, td.Attrs, td.Word, td.Packed, owner
+                                                  member))
+        }
+        case _ { return d }
+    }
 }
 
 fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl& ? Fail {
@@ -2608,7 +2661,7 @@ fn (p mut Parser&) matchBody(value Bool) ast.Match& ? Fail {
         steps := 0
         for ok and p.ts.Toks[i].Kind == token.Tok.Dot and p.ts.Toks[i + 1].Kind == token.Tok.Iden {
             w := p.text(p.ts.Toks[i + 1])
-            if w != "Type" and w != "Base" and w != "Element" and w != "Target" and w != "Accumulator": ok = false
+            if not typeWord(w): ok = false
             i += 2
             steps++
         }

@@ -3944,7 +3944,7 @@ compiler/ast:Chain	32 8	%"compiler/ast:Chain"	{ { i64, ptr }, { i64, ptr } }	fie
 compiler/ast:Chain&	8 8	ptr	-	-
 compiler/ast:Compr	56 8	%"compiler/ast:Compr"	{ ptr, ptr, i32, i32, ptr, ptr, i1, i64 }	fields 0,8,16,20,24,32,40,48
 compiler/ast:Compr&	8 8	ptr	-	-
-compiler/ast:Decl	72 8	{ i64, [8 x i64] }	-	cases 0;0;0,8;0,8;0,8,12,20;0,8,16,32,48;0,8,16,32;0,8;0,8,16;0,8,16;0,8,16
+compiler/ast:Decl	72 8	{ i64, [8 x i64] }	-	cases 0;0;0,8;0,8;0,8;0,8,12,20;0,8,16,32,48;0,8,16,32;0,8;0,8,16;0,8,16;0,8,16
 compiler/ast:Decl&	8 8	ptr	-	-
 compiler/ast:Expr	40 8	{ i64, [4 x i64] }	-	cases 0,8;0,8;0,8;0,8,16;0,8,16;0,8,16,24;0,8,16;0,8;0,8,16,24;0,8,16;0,8,16;0,8,16;0,8,16;0,8,16;0,8,16,24;0,8,16;0,8,16;0,8;0,8;0,8,16;0,8;0,8;0,8;0;0,8,16;0,8;0,8;0,8
 compiler/ast:Expr&	8 8	ptr	-	-
@@ -3980,7 +3980,7 @@ compiler/ast:TopIf	32 8	%"compiler/ast:TopIf"	{ ptr, ptr, ptr, ptr }	fields 0,8,
 compiler/ast:TopIf&	8 8	ptr	-	-
 compiler/ast:TypeBody	56 8	{ i64, [6 x i64] }	-	cases 0;0,16;0,16,32;0,8;
 compiler/ast:TypeBody&	8 8	ptr	-	-
-compiler/ast:TypeDecl	64 8	%"compiler/ast:TypeDecl"	{ i32, { i64, ptr }, i1, ptr, { i64, ptr }, i32, i1 }	fields 0,8,24,32,40,56,60
+compiler/ast:TypeDecl	80 8	%"compiler/ast:TypeDecl"	{ i32, { i64, ptr }, i1, ptr, { i64, ptr }, i32, i1, ptr, i32 }	fields 0,8,24,32,40,56,60,64,72
 compiler/ast:TypeDecl&	8 8	ptr	-	-
 compiler/ast:TypeParam	56 8	%"compiler/ast:TypeParam"	{ %"compiler/source:Span", i32, ptr, { i64, ptr }, i1, ptr }	fields 0,8,16,24,40,48
 compiler/ast:TypeParam&	8 8	ptr	-	-

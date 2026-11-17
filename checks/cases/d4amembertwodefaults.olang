@@ -1,0 +1,10 @@
+# check: fail error[G38]: 'Wide' of I64
+# also: the defaults of two of its traits give it one
+type Small trait for I8, I64 { }
+type Signed trait for I64, I32 { }
+type T.Wide<T Small> = I64
+type T.Wide<T Signed> = I32
+fn main() {
+    x I64.Wide = 1
+    assert x == 1
+}

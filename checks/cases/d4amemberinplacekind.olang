@@ -1,0 +1,4 @@
+# check: fail error[D4a]: a type declared in place is a struct or an enum
+type Grid struct(W I64) { W }
+type Grid.Width extends I64
+fn main() { assert Grid(1).W == 1 }

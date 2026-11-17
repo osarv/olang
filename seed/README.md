@@ -20,9 +20,9 @@ make seed       # writes the seed again from the current source (compiler/tools/
 they are built on, as every olang build is (B12). The standard library is named relatively while the seed is written,
 so no path of the checkout that wrote it is in it.
 
-**This seed** was written on 2026-11-16 from wt-sumnarrow's sources (8b7d7659), so it reads default type parameters
-(`<A = T.Accumulator>`, as std/prelude uses), beside S1b's one-line bodies, `defer: stmt` and `catch E: stmt`; `make clean;
-make boot; make fixedpoint` from it passes. The seed before it (278969b6's) read no default type parameter.
+**This seed** was written on 2026-11-16 from wt-members' sources, so it reads type members (D4a: `type U8.Accumulator =
+U64`, `type T.Accumulator<T Number> = T`, as std/prelude declares them), beside default type parameters, S1b's one-line
+bodies, `defer: stmt` and `catch E: stmt`. The seed before it (wt-sumnarrow's) read no type member.
 
 **When it is written again.** The seed need not be current: an older seed builds the current source as long as that
 source uses nothing the seed's compiler cannot build - `make bootstrap` shows it does. That is why the comparison (`make fixedpoint`) is

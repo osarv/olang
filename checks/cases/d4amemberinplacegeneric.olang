@@ -1,0 +1,6 @@
+# check: fail error[D4a]: a type declared in place is of an owner that is no generic
+type Box<T> struct(V T) { V }
+type Box<T>.Key enum {
+    A
+}
+fn main() { assert Box<I64>(1).V == 1 }

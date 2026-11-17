@@ -81,6 +81,16 @@ fn (w mut writer&) decl(d ast.Decl&) {
         }
         case ast.Decl.ExternBlock(_, link, ds) { w.externBlock(link, ds) }
         case ast.Decl.Type(_, t) { w.typeDecl(t) }
+        case ast.Decl.Member(_, m) {
+            # D4a: "type Owner.Name<T Trait> = Type"
+            w.put("type ")
+            w.ty(m.Owner)
+            w.put(".")
+            w.name(m.Name)
+            w.typeParams(m.Params)
+            w.put(" = ")
+            w.ty(m.Ty)
+        }
         case ast.Decl.Global(_, v) {
             if not v.Hidden: w.varDecl(v)
         }
@@ -343,7 +353,7 @@ fn (w mut writer&) typeDecl(t ast.TypeDecl&) {
         case _ { }
     }
     w.put("type ")
-    w.name(t.Name)
+    w.inPlaceName(t)
     w.typeParams(t.Params)
     if t.Word == ast.DeclWord.Immut: w.put(" immut")
     if t.Word == ast.DeclWord.Unique: w.put(" unique")
@@ -351,6 +361,17 @@ fn (w mut writer&) typeDecl(t ast.TypeDecl&) {
     if t.Extends: w.put(" extends")
     w.put(" ")
     w.typeBody(t.Body!)
+}
+
+# a type's name; one declared in place (D4a) its owner as written, "Box<T>", then "." and its member
+fn (w mut writer&) inPlaceName(t ast.TypeDecl&) {
+    if t.Owner == null {
+        w.name(t.Name)
+        return
+    }
+    w.ty(t.Owner!)
+    w.put(".")
+    w.name(t.Member)
 }
 
 # "<T, U Shape, N I64>": a type's, a function's or a constructor's type parameters (G1, G3, G10d)

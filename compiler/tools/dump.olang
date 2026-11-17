@@ -440,6 +440,9 @@ fn (w mut walker&) decl(d ast.Decl&) {
         case ast.Decl.Global(sp, v) {
             if not w.skipped(sp.Start): w.vars(v)
         }
+        case ast.Decl.Member(sp, _) {
+            if not w.skipped(sp.Start): w.line("MEMBER", sp)
+        }
         case ast.Decl.Import(sp, _, _, _) {
             if not w.skipped(sp.Start): w.line("IMPORT", sp)
         }

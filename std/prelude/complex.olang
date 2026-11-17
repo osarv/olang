@@ -11,6 +11,9 @@ type C16 struct(Re F16, Im F16 = 0) {
     Im
 }
 
+# C16 totals as itself (D4a, G32): Cumsum's running total is its own
+type C16.Accumulator = C16
+
 fn (a C16) Plus(b C16) C16 { return C16(a.Re + b.Re, a.Im + b.Im) }
 fn (a C16) Minus(b C16) C16 { return C16(a.Re - b.Re, a.Im - b.Im) }
 fn (a C16) Mul(b C16) C16 { return C16(a.Re * b.Re - a.Im * b.Im, a.Re * b.Im + a.Im * b.Re) }
@@ -32,6 +35,9 @@ type C32 struct(Re F32, Im F32 = 0) {
     Im
 }
 
+# C32 totals as itself (D4a, G32): Cumsum's running total is its own
+type C32.Accumulator = C32
+
 fn (a C32) Plus(b C32) C32 { return C32(a.Re + b.Re, a.Im + b.Im) }
 fn (a C32) Minus(b C32) C32 { return C32(a.Re - b.Re, a.Im - b.Im) }
 fn (a C32) Mul(b C32) C32 { return C32(a.Re * b.Re - a.Im * b.Im, a.Re * b.Im + a.Im * b.Re) }
@@ -52,6 +58,9 @@ type C64 struct(Re F64, Im F64 = 0) {
     Re
     Im
 }
+
+# C64 totals as itself (D4a, G32): Cumsum's running total is its own
+type C64.Accumulator = C64
 
 fn (a C64) Plus(b C64) C64 { return C64(a.Re + b.Re, a.Im + b.Im) }
 fn (a C64) Minus(b C64) C64 { return C64(a.Re - b.Re, a.Im - b.Im) }

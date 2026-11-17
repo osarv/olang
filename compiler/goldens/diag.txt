@@ -1170,6 +1170,77 @@ d3bunread.olang:20:5: error[D3b]: 'n' is declared and never read - read it, or l
    20 |     n := 0
       |     ^
 compilation failed with 5 errors
+=== d4amembercase.olang
+d4amembercase.olang:6:12: error[D4a]: 'Red' is already a case of Color
+    6 | type Color.Red = I64
+      |            ^~~
+d4amembercase.olang:6:12: help: name the member otherwise
+compilation failed with 1 error
+=== d4amemberelsewhere.olang
+d4amemberelsewhere.olang:2:6: error[D4a]: a type member is declared in its owner's module, and I8 is not this module's
+    2 | type I8.Wide = I64
+      |      ^~
+d4amemberelsewhere.olang:2:6: note: a trait's default is declared in the trait's module
+d4amemberelsewhere.olang:2:6: help: declare it there
+compilation failed with 1 error
+=== d4amemberinplacegeneric.olang
+d4amemberinplacegeneric.olang:3:6: error[D4a]: a type declared in place is of an owner that is no generic
+    3 | type Box<T>.Key enum {
+      |      ^~~~~~
+d4amemberinplacegeneric.olang:3:6: note: a member declared in place is one type, a struct or an enum, of one owner that is no generic and no type variable
+d4amemberinplacegeneric.olang:3:6: help: declare the type apart and name it, 'type Owner.Name = Type'
+compilation failed with 1 error
+=== d4amemberinplacekind.olang
+d4amemberinplacekind.olang:3:6: error[D4a]: a type declared in place is a struct or an enum
+    3 | type Grid.Width extends I64
+      |      ^~~~
+d4amemberinplacekind.olang:3:6: note: a member declared in place is one type, a struct or an enum, of one owner that is no generic and no type variable
+d4amemberinplacekind.olang:3:6: help: declare the type apart and name it, 'type Owner.Name = Type'
+compilation failed with 1 error
+=== d4amembermissing.olang
+d4amembermissing.olang:4:7: error[G38]: 'Cell' of I64: a type's reflected types are Base, Element and Target, a field's, a parameter's and a result's Type; its type members are Accumulator
+    4 |     x I64.Cell = 1
+      |       ^~~~~~~~
+compilation failed with 1 error
+=== d4amembernotvalue.olang
+d4amembernotvalue.olang:5:10: error[G38]: 'Grid.Cell' is a type, not a value
+    5 |     x := Grid.Cell
+      |          ^~~~~~~~~
+d4amembernotvalue.olang:5:10: help: write it where a type goes: a declaration ('x Grid.Cell = ...'), a type argument or a match's subject
+compilation failed with 1 error
+=== d4amemberownerargs.olang
+d4amemberownerargs.olang:3:6: error[D4a]: a member of the generic Box is written over its variables
+    3 | type Box<I64>.Item = I64
+      |      ^~~~~~~~
+d4amemberownerargs.olang:3:6: note: it is every instance's, each reading it with its own arguments
+d4amemberownerargs.olang:3:6: help: write each of the owner's arguments as a name, 'type Box<T>.Item = T'
+compilation failed with 1 error
+=== d4amemberpreludetype.olang
+d4amemberpreludetype.olang:2:6: error[D4a]: a type member is declared in its owner's module, and Vec<T> is not this module's
+    2 | type Vec<T>.Item = T
+      |      ^~~~~~
+d4amemberpreludetype.olang:2:6: note: a trait's default is declared in the trait's module
+d4amemberpreludetype.olang:2:6: help: declare it there
+compilation failed with 1 error
+=== d4amembertraitdefault.olang
+d4amembertraitdefault.olang:2:6: error[D4a]: a type member is declared in its owner's module, and Number is not this module's
+    2 | type T.Wide<T Number> = I64
+      |      ^
+d4amembertraitdefault.olang:2:6: note: a trait's default is declared in the trait's module
+d4amembertraitdefault.olang:2:6: help: declare it there
+compilation failed with 1 error
+=== d4amembertwice.olang
+d4amembertwice.olang:4:11: error[D4a]: Grid has two members named 'Cell'
+    4 | type Grid.Cell = F64
+      |           ^~~~
+d4amembertwice.olang:4:11: note: a type has one member of a name; its own overrides a trait's default
+d4amembertwice.olang:4:11: help: remove one
+compilation failed with 1 error
+=== d4amembertwodefaults.olang
+d4amembertwodefaults.olang:8:7: error[G38]: 'Wide' of I64: the defaults of two of its traits give it one; it declares its own to choose
+    8 |     x I64.Wide = 1
+      |       ^~~~~~~~
+compilation failed with 1 error
 === d8adefault.olang
 d8adefault.olang:5:14: error[D8a]: this default cannot be computed while compiling
     5 | fn f(n I32 = counter) I32 { return n }
@@ -4649,7 +4720,7 @@ compilation failed with 1 error
 reflnomember.olang:9:24: error[G32]: Point has no reflected member 'Width'
     9 | fn main() { n := Point.Width }
       |                        ^~~~~
-reflnomember.olang:9:24: note: a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Accumulator, Nullable, Size and Align
+reflnomember.olang:9:24: note: a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align, and the type members its declarations give it (D4a)
 compilation failed with 1 error
 === reflnotlist.olang
 reflnotlist.olang:9:18: error[G33]: I64 has no Fields - only a struct and an enum's case have fields

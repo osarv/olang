@@ -47,6 +47,21 @@ type pattern struct(Expr ast.Expr?&, Mi I64, Owner I64, Want types.TypeId, Ty as
 }
 
 # a function or method (D7, M19): where it is declared
+# D4a: a type member - its module, where its declaration is, its owner as written, its name, its own type variables (a
+# trait's default), the type it names (an alias), or the name of the type declared in place (0 for an alias), and its
+# owner's key (M19's, -1 for an owner no key names)
+type memberRow struct(Mi I64, Sp source.Span, Owner ast.TypeRef&, Name source.NameId, Params Array<ast.TypeParam&>&
+                      Ty ast.TypeRef?&, Decl source.NameId, Key I64) {
+    Mi
+    Sp
+    Owner
+    Name
+    Params
+    Ty
+    Decl
+    Key
+}
+
 type fnRow struct(Mi I64, F ast.Func&, Extern Bool) {
     Mi
     F
@@ -137,6 +152,13 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     defaultBuilders Vec<I64>          # the builders declared on a constrained type variable: traits' defaults (D19, M19e)
     defaultBuilderTraits Vec<I64>     # beside each, its trait's DeclId
     ownerT Map<I64, types.TypeId>     # by builder: its owner over its variables (D19)
+    members Vec<memberRow>             # D4a: every type member declared, in the order the modules are read
+    memberHead Map<pair.Pair<I64, I64>, I64>  # (owner key, name): the first member declared; the rest by memberNext
+    memberNext Map<I64, I64>
+    defaultMembers Vec<I64>            # the members declared on a constrained type variable: traits' defaults (M19e)
+    memberAt Map<pair.Pair<I64, I64>, I64>  # (module, where its declaration starts): the member declared there
+    memberTy Map<pair.Pair<I64, types.TypeId>, types.TypeId>  # (member, owner type): the type it names there, once read
+    memberReading Map<I64, Bool>       # the members being read - a member naming itself through others reads as nothing
     instances Vec<instance>
     instanceOf Map<pair.Pair<I64, types.ListId>, I64>
     argReps Map<types.ListId, types.ListId>  # arguments told apart only by function types' parameter names: the first
@@ -1073,18 +1095,23 @@ fn (p mut Program&) named(c Context&, sp source.Span, path Array<source.NameId>&
     if path.Len() >= 2 {
         h := p.reflHead(c, path[0])
         if h >= types.TypeId(0): return p.projectPath(c, sp, h, path, args)
-        # a declared or built-in type's ("Meters.Base", "String.Element"), its head recorded where its name ends
-        hr := p.R.Member(p.file(c.Mi), sp.Start + I32(p.text(path[0]).Len()))
-        if hr.Kind == names.What.Type and hr.Index >= 0 {
-            d := p.DeclFor(hr.Module, hr.Index)
-            if p.T.DeclParams(d) > 0: return types.UnknownT
-            return p.projectPath(c, sp, p.Apply(c, d, Array<ast.TypeRef&>(0)), path, args)
-        }
-        if hr.Kind == names.What.Builtin {
-            hn := p.text(path[0])
-            ht := types.BoolT if hn == "Bool" else p.T.Prim(hn)
-            if ht == types.UnknownT: return ht
-            return p.projectPath(c, sp, ht, path, args)
+        # a declared or built-in type's ("Meters.Base", "String.Element", "lib.Account.Json"), its head recorded where
+        # its name ends
+        end := sp.Start
+        for k in range path.Len() - 1 {
+            end += I32(p.text(path[k]).Len()) + (I32(1) if k > 0 else I32(0))
+            hr := p.R.Member(p.file(c.Mi), end)
+            if hr.Kind == names.What.Type and hr.Index >= 0 {
+                d := p.DeclFor(hr.Module, hr.Index)
+                if p.T.DeclParams(d) > 0: return types.UnknownT
+                return p.projectPath(c, sp, p.Apply(c, d, Array<ast.TypeRef&>(0)), path, args, k + 1)
+            }
+            if hr.Kind == names.What.Builtin {
+                hn := p.text(path[k])
+                ht := types.BoolT if hn == "Bool" else p.T.Prim(hn)
+                if ht == types.UnknownT: return ht
+                return p.projectPath(c, sp, ht, path, args, k + 1)
+            }
         }
     }
     if path.Len() == 1 {
@@ -2947,6 +2974,8 @@ fn (p mut Program&) addFns(mi I64, ds Array<ast.Decl&>&) {
         match d {
             case ast.Decl.Fn(f) { p.addFn(mi, f, false) }
             case ast.Decl.Extern(f) { p.addFn(mi, f, true) }
+            case ast.Decl.Member(sp, md) { p.addMember(mi, sp, md.Owner, md.Name, md.Params, md.Ty, source.NameId(0)) }
+            case ast.Decl.Type(sp, td) if td.Owner != null { p.addMember(mi, sp, td.Owner!, td.Member, td.Params, null, td.Name) }
             case ast.Decl.ExternBlock(_, _, xs) { p.addFns(mi, xs) }
             case ast.Decl.If(_, ti) { p.addFnsIf(mi, ti, p.L.Chosen(mi, ti.Cond!.Span().Start), 0) }
             case _ { }
@@ -3007,6 +3036,159 @@ fn (p mut Program&) addBuilder(mi I64, f ast.Func&, i I64) {
         p.defaultBuilderTraits.Push(k & ((I64(1) << 40) - 1))
     }
 }
+
+# ---- type members (D4a) ----
+
+# a type member, keyed by its owner as a builder is - one chain per owner key and name, a trait's defaults apart
+fn (p mut Program&) addMember(mi I64, sp source.Span, owner ast.TypeRef&, name source.NameId, tps Array<ast.TypeParam&>&
+                              ty ast.TypeRef?&, decl source.NameId) {
+    i := p.members.Len()
+    k := p.recvKey(mi, owner, tps)
+    p.members.Push(memberRow(mi, sp, owner, name, tps, ty, decl, k))
+    p.memberAt.Put(pair.Pair(mi, I64(sp.Start)), i)
+    if k < 0: return
+    if (k >> 40) == 4 {
+        p.defaultMembers.Push(i)
+        return
+    }
+    mk := pair.Pair(k, I64(name))
+    head := try p.memberHead.Get(mk) catch default -1
+    if head < 0 {
+        p.memberHead.Put(mk, i)
+        return
+    }
+    for p.memberNext.Has(head) { head = try p.memberNext.Get(head) catch default -1 }
+    p.memberNext.Put(head, i)
+}
+
+# D4a: the member declared at a declaration's start in module mi; -1 for none
+fn (p mut Program&) MemberAt(mi I64, start I32) I64 {
+    p.allFns()
+    return try p.memberAt.Get(pair.Pair(mi, I64(start))) catch default -1
+}
+
+fn (p Program&) MemberCount() I64 { return p.members.Len() }
+fn (p Program&) MemberModule(m I64) I64 { return p.members[m].Mi }
+fn (p Program&) MemberName(m I64) source.NameId { return p.members[m].Name }
+fn (p Program&) MemberKey(m I64) I64 { return p.members[m].Key }
+fn (p Program&) MemberOwnerRef(m I64) ast.TypeRef& { return p.members[m].Owner }
+fn (p Program&) MemberSpan(m I64) source.Span { return p.members[m].Sp }
+# whether a member declares its type in place (D4a's second form)
+fn (p Program&) MemberInPlace(m I64) Bool { return p.members[m].Decl != source.NameId(0) }
+
+# D4a: type t's member of that name - its own, else a default of a trait t satisfies (M19e); -1 for none, -2 where the
+# defaults of two traits reach it. A member is never inherited (T29f), as a builder is not
+fn (p mut Program&) MemberOf(t types.TypeId, name source.NameId) I64 {
+    p.allFns()
+    if p.members.Len() == 0: return -1
+    x := p.T.Plain(p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t)
+    key := p.typeKey(x)
+    if key >= 0 {
+        m := try p.memberHead.Get(pair.Pair(key, I64(name))) catch default -1
+        if m >= 0: return m
+    }
+    found := -1
+    for m in p.defaultMembers {
+        if p.members[m].Name != name: continue
+        tk := p.members[m].Key & ((I64(1) << 40) - 1)
+        if not p.reachesDefault(x, p.SelfType(types.DeclId(I32(tk)))): continue
+        if found >= 0 and p.members[found].Key != p.members[m].Key: return -2
+        if found < 0: found = m
+    }
+    return found
+}
+
+# D4a: whether a trait's default member reaches type x - x satisfies the trait, or extends a type that does (T29f: the
+# closed number traits list the built-in types alone, T31a, so "Meters extends F64" is reached through F64, the member
+# read with the trait's variable bound to Meters itself)
+fn (p mut Program&) reachesDefault(x types.TypeId, tr types.TypeId) Bool {
+    b := x
+    for _ in range 16 {
+        if p.Satisfies(b, tr): return true
+        if not p.Extends(b): return false
+        b = p.T.Base(b)
+    }
+    return false
+}
+
+# D4a: the members declared before m with its owner key and name - a duplicate, said where m is; -1 for none
+fn (p mut Program&) MemberBefore(m I64) I64 {
+    row := p.members[m]
+    if row.Key < 0: return -1
+    if (row.Key >> 40) == 4 {
+        for d in p.defaultMembers {
+            if d >= m: return -1
+            if p.members[d].Key == row.Key and p.members[d].Name == row.Name: return d
+        }
+        return -1
+    }
+    head := try p.memberHead.Get(pair.Pair(row.Key, I64(row.Name))) catch default -1
+    return head if head != m else -1
+}
+
+# D4a: every member name type t has, its own and its traits' defaults, each once
+fn (p mut Program&) MemberNames(t types.TypeId) Vec<source.NameId> {
+    p.allFns()
+    out Vec<source.NameId>
+    for m in range p.members.Len() {
+        n := p.members[m].Name
+        if n in out: continue
+        if p.MemberOf(t, n) == m: out.Push(n)
+    }
+    return out
+}
+
+# D4a: the type member m names for type t (its owner, or a type satisfying its trait): the type declared in place, else
+# the type it is written as, read in its module with its owner's variables bound to t's
+fn (p mut Program&) MemberType(m I64, t types.TypeId) types.TypeId {
+    x := p.T.Plain(p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t)
+    ck := pair.Pair(m, x)
+    known := try p.memberTy.Get(ck) catch default types.TypeId(-1)
+    if known >= types.TypeId(0): return known
+    if try p.memberReading.Get(m) catch default false: return types.UnknownT
+    p.memberReading.Put(m, true)
+    r := p.readMember(m, x)
+    p.memberReading.Put(m, false)
+    p.memberTy.Put(ck, r)
+    return r
+}
+
+fn (p mut Program&) readMember(m I64, x types.TypeId) types.TypeId {
+    row := p.members[m]
+    if row.Decl != source.NameId(0) {
+        e := p.TypeEntry(row.Mi, row.Decl)
+        if e < 0: return types.UnknownT
+        d := p.DeclFor(row.Mi, e)
+        return types.UnknownT if p.T.DeclParams(d) > 0 else p.SelfType(d)
+    }
+    c := Context(row.Mi, MemberOwner(m))
+    match row.Owner {
+        case ast.TypeRef.Named(sp, path, args) {
+            if args.Len() == 0 and path.Len() == 1 and p.R.Use(p.file(row.Mi), sp.Start).Kind == names.What.TypeVar { c.Vars.Put(path[0], x) }
+            if args.Len() > 0: p.bindOwnerArgs(c, row.Mi, args, x)
+        }
+        case _ { }
+    }
+    return p.Resolve(c, row.Ty)
+}
+
+# D4a: a generic owner's variables ("type Box<T>.Item = T") bound to the arguments of t's instance in their places
+fn (p mut Program&) bindOwnerArgs(c mut Context&, mi I64, args Array<ast.TypeRef&>&, t types.TypeId) {
+    if p.T.KindOf(t) != types.Kind.Named: return
+    vals := p.T.Items(p.T.Args(t))
+    for i, a in args {
+        if i >= vals.Len(): return
+        match a {
+            case ast.TypeRef.Named(asp, ap, aa) if ap.Len() == 1 and aa.Len() == 0 {
+                if p.R.Use(p.file(mi), asp.Start).Kind == names.What.TypeVar: c.Vars.Put(ap[0], vals[i])
+            }
+            case _ { }
+        }
+    }
+}
+
+# the variables a member's declaration introduces (D4a): their own, apart from every type's and function's
+fn MemberOwner(m I64) I64 { return -(I64(1) << 41) - m }
 
 # D19: a builder's key, its owner's as a receiver's would be (M19); -1 for a function that is none or an owner no key
 # names (a variable no trait constrains)
@@ -3192,6 +3374,14 @@ fn (p mut Program&) recvKey(mi I64, t ast.TypeRef?&, tps Array<ast.TypeParam&>&)
                 k := listed(tps, path[0])
                 if k == null: return -1
                 return p.constraintKey(mi, k)
+            }
+            # D4a: a type declared in place, "fn (p Grid.Point) Sum()" - its owner recorded where its name ends; a
+            # module's type, "fn (r lib.Rec&) Twice()", has no owner there and is keyed as any type
+            if path.Len() == 2 {
+                hr := p.R.Member(p.file(mi), sp.Start + I32(p.text(path[0]).Len()))
+                inPlace := $p.text(path[0]) + "." + $p.text(path[1])
+                e := p.TypeEntry(hr.Module, p.L.Names.Intern(inPlace)) if hr.Kind == names.What.Type and hr.Index >= 0 else -1
+                if e >= 0: return keyDecl(p.DeclFor(hr.Module, e))
             }
             if ref.Kind == names.What.Type and ref.Index >= 0: return keyDecl(p.DeclFor(ref.Module, ref.Index))
             if ref.Kind == names.What.Builtin {
@@ -5487,7 +5677,6 @@ fn (p mut Program&) Project(t types.TypeId, name String&) types.TypeId, String {
         if p.T.KindOf(t) == types.Kind.Named and p.Body(t) and p.T.DeclKindOf(p.T.DeclOf(t)) == types.DeclKind.Over { return p.T.Base(t), "" }
         return t, ""
     }
-    if name == "Accumulator": return p.Accumulator(t), ""
     if name == "Element" {
         r := p.ReflUnder(t)
         if p.T.KindOf(r) == types.Kind.Array: return p.T.Elem(r), ""
@@ -5504,20 +5693,38 @@ fn (p mut Program&) Project(t types.TypeId, name String&) types.TypeId, String {
         if fd.K == DescFunc: return p.ErrSetOf(p.T.Errors(fd.Of)), ""
         return types.UnknownT, "only a function type has Errors"
     }
-    return types.UnknownT, "a type's reflected types are Base, Element, Target and Accumulator, a field's, a parameter's and a result's Type"
+    # D4a: a member its declarations give the type, its own or its traits' default ("U8.Accumulator", "Account.Json")
+    m := p.MemberOf(t, p.L.Names.Intern(name))
+    if m >= 0: return p.MemberType(m, t), ""
+    if m == -2: return types.UnknownT, "the defaults of two of its traits give it one; it declares its own to choose"
+    return types.UnknownT, p.NoMemberWhy(t)
 }
 
-# T.Accumulator (G32): the type a total of T's values is worked in - the type itself, but for a built-in integer narrower
-# than 64 bits (I64, or U64 where it is unsigned) and F16 and BF16 (F32). The one place it is looked up
-fn (p mut Program&) Accumulator(t types.TypeId) types.TypeId {
-    if p.T.KindOf(t) == types.Kind.Named: return t
-    if p.T.IsInt(t) and p.T.Bits(t) < 64: return p.T.Prim("U64") if p.T.IsUnsigned(t) else p.T.Prim("I64")
-    if t == p.T.Prim("F16") or t == p.T.Prim("BF16"): return p.T.Prim("F32")
-    return t
+# what a type's "." may name as a type, said where a name is none of it (G38, D4a): the reflected types and the type's
+# members
+fn (p mut Program&) NoMemberWhy(t types.TypeId) String {
+    why := "a type's reflected types are Base, Element and Target, a field's, a parameter's and a result's Type"
+    ms := p.MemberNames(t)
+    if ms.Len() == 0: return why + "; it has no type members"
+    ws Vec<String>
+    for n in ms: ws.Push($p.text(n))
+    return why + "; its type members are " + $ws.Join(", ")
 }
 
-# whether a reflected member's name is one Project reads
-fn ProjectsType(name String&) Bool { return name == "Type" or name == "Base" or name == "Element" or name == "Target" or name == "Accumulator" }
+# D4a, M6: whether member m is hidden from module mi - its name lower-case, and mi not its module
+fn (p mut Program&) MemberHidden(m I64, mi I64) Bool {
+    row := p.members[m]
+    return row.Mi != mi and not load.Public(p.text(row.Name)) and not p.L.Mods[mi].Prelude
+}
+
+# D4a: the type member of that name a type has - Unknown for none
+fn (p mut Program&) MemberNamed(t types.TypeId, name String&) types.TypeId {
+    m := p.MemberOf(t, p.L.Names.Intern(name))
+    return p.MemberType(m, t) if m >= 0 else types.UnknownT
+}
+
+# whether a reflected member's name is one Project reads whatever the type (a type member is read where its type has it)
+fn ProjectsType(name String&) Bool { return name == "Type" or name == "Base" or name == "Element" or name == "Target" }
 
 # what a path's first name stands for as a type to project from (G38): a type variable bound to a type, or a name a
 # body holds a descriptor in; -1 for neither
@@ -5535,9 +5742,10 @@ fn (p mut Program&) reflHead(c Context&, n source.NameId) types.TypeId {
 
 # a projection path "T.Base.Element" (G38): each name after the first projecting the type before it - put off, as a
 # pattern resolved per instance (T7c's), where the type is not known yet
-fn (p mut Program&) projectPath(c Context&, sp source.Span, h types.TypeId, path Array<source.NameId>&, args Array<ast.TypeRef&>&) types.TypeId {
+fn (p mut Program&) projectPath(c Context&, sp source.Span, h types.TypeId, path Array<source.NameId>&, args Array<ast.TypeRef&>&
+                               from I64 = 1) types.TypeId {
     t := h
-    for k in range 1, path.Len() {
+    for k in range from, path.Len() {
         if t == types.UnknownT: return t
         if not p.T.Closed(t) {
             key := p.T.ConstExpr("refl:" + $c.Owner + ":" + $c.Mi + ":" + $sp.Start + ":" + $sp.End)
@@ -5549,6 +5757,11 @@ fn (p mut Program&) projectPath(c Context&, sp source.Span, h types.TypeId, path
         nt, why := p.Project(t, name)
         if why != "" {
             p.L.Diags.ErrorOncePerLine(p.at(c.Mi, sp), msgs.ReflNoType(name, p.ReflName(t), why))
+            return types.UnknownT
+        }
+        m := p.MemberOf(t, path[k]) if not ProjectsType(name) else -1
+        if m >= 0 and p.MemberHidden(m, c.Mi) {
+            p.L.Diags.ErrorOncePerLine(p.at(c.Mi, sp), msgs.MemberPrivate(p.ReflName(t), "'" + $name + "'"))
             return types.UnknownT
         }
         t = nt

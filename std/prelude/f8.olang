@@ -53,6 +53,9 @@ type F8E4M3 struct(value F64) {
     Bits U8 = f8E4M3Bits(value)
 }
 
+# F8E4M3 totals as itself (D4a, G32): it has its own "+" and widens to no wider format
+type F8E4M3.Accumulator = F8E4M3
+
 # the sign bit of x - set for -0.0 too, which "x < 0" is not, so a negative zero keeps its sign
 fn f8Sign(x F64) I32 { return 128 if x.Bits() >> 63 == 1 else 0 }
 
@@ -81,6 +84,9 @@ fn (a F8E4M3) Eq(b F8E4M3) Bool { return a.F64() == b.F64() }
 type F8E5M2 struct(value F64) {
     Bits U8 = f8E5M2Bits(value)
 }
+
+# F8E5M2 totals as itself (D4a, G32): it has its own "+" and widens to no wider format
+type F8E5M2.Accumulator = F8E5M2
 
 fn f8E5M2Bits(x F64) U8 {
     if x != x { return 127 }                             # NaN: exponent all ones, a nonzero mantissa

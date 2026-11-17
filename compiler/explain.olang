@@ -25,8 +25,11 @@ fn Item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
     dot := try name.Find(".") catch default -1
     if dot > 0 {
         f := fnNamed(c, mi, name)
-        if f < 0: error Missing.Name
-        return fnItem(c, sc, f)
+        if f >= 0: return fnItem(c, sc, f)
+        # D4a: a type declared in place, "Account.Json"
+        d := typeNamed(c, mi, name)
+        if d < types.DeclId(0): error Missing.Name
+        return typeItem(c, d)
     }
     id := nm.Intern(name)
     for e in c.P.R.Tables[mi].Entries {

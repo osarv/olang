@@ -39133,3 +39133,66 @@ total type against loops written by hand, baked and decided while compiling, and
 same comparison built for -target x86-64-v3 and x86-64 (the widening step, byte-by-byte tail) and alderlake (avxvnni's
 256-bit vpdpbusd) gives the same totals.
 
+## 2026-11-16: type members (D4a; G32, G38; the user's call; wt-members)
+
+The user decided, after `T.Accumulator` landed as a table in the compiler (`generic.Accumulator`), that a type's
+Accumulator is declared, not looked up: types declared in a type's namespace, owner-qualified the way builders are
+(D19, `fn Color.FromHex`). Two forms:
+
+```
+type T.Accumulator<T Number> = T     # the prelude: a default for every Number
+type U8.Accumulator = U64            # the prelude: U8's own, overriding it
+type Percent.Accumulator = U64       # a program's type, in its own module
+type Account.Json enum String {      # a member declaring a new nominal type in place
+    UserID = "id"
+    Name
+}
+```
+
+**The alias form** names a type and declares none. **The in-place form** declares a nominal type whose name is the two
+joined, `Account.Json`, as a builder's is (`ast.TypeDecl.Owner` and `.Member` beside the joined `Name`): it goes through
+every path a type declaration does, so its rendering (`membermod.Account.Json.UserID`), symbol name, reflection (its
+`Cases` and their text values, its `Fields`), methods (`fn (p Grid.Point) Sum()`), doc item and LSP symbol come with
+it. The owner rules are the builders' (`recvKey`): a type of the module, a built-in type in the prelude, a generic owner
+over its variables (`type Box<T>.Item = T`, read with each instance's arguments), or a trait-constrained variable, which
+makes the member a default of the trait. Decisions within the user's direction (mine):
+
+1. **A type's own member overrides a trait's default** (as M19e's own method does), and **two traits' defaults reaching
+   one type are an error where the member is read**, saying to declare its own - not the first one found.
+2. **A member is never inherited through `extends`** (as a builder is not), but a trait's default reaches an extending
+   type through its base (`reachesDefault`: T31a's closed number traits list only the built-in types, as wt-extfix found
+   for methods), with the trait's variable bound to the declared type itself. So `Meters.Accumulator` is `Meters`, and
+   `Percent extends U8` totals as `Percent`, not as U8's `U64` - unless its module declares `type Percent.Accumulator =
+   U64`. This keeps the sums wt-sumnarrow's corpus pinned (tests/typedefaults.olang) unchanged.
+3. **What the table gave every type, the prelude now declares.** The default is over `Number` (the user's example), so a
+   non-number has no Accumulator unless it declares one: the prelude declares it for the F8 formats (themselves, as the
+   brief asked: they widen to nothing) and the complex types `C16`, `C32`, `C64` (themselves, so `Cumsum` over them, which
+   has no constraint, keeps working). The overrides: every `In` and `Un` below 64 bits (I64 and U64), `F16` and `BF16`
+   (F32) - 128 lines in std/prelude/number.olang. `generic.Accumulator` is gone; `generic.Project` and the checker's
+   lane `Sum` read the member (`MemberNamed`).
+4. **In-place: a struct or an enum of one non-generic owner** - a generic or a type variable would need a type per
+   instance, which is a generic type's job; `extends` and other bodies are refused (`MemberInPlaceKind`), pointing at the
+   alias form. Grammar: `type IDEN [type-args] "." IDEN ...`; an owner through an import's alias is not written (the
+   builders' grammar), so a member of another module's type cannot even be spelled - a built-in type or a prelude type
+   outside the prelude is the "declared in its owner's module" error.
+5. **Where `Owner.Name` is read**: every type path G38 takes (`mm.Percent.Accumulator`, `T.Accumulator` through a type
+   variable per instance, `T.Element.Accumulator` through `memberThrough`), a call (`Grid.Point(2, 3)`,
+   `U8.Accumulator(x)` - the call its type's name is, as a reflected type's), and a value (an error, G38's). A generic
+   instance followed by a member in type position (`Box<I64>.Item`) is not written, as `Array<F32>.Element` is not: a
+   type variable bound to the instance reads it. A lower-case member is private (M6, `MemberPrivate`).
+
+Bugs met on the way: the loader's token scan of type names (`load.typeNames`, which feeds the prelude's type set and the
+parser's oracle) read `type F16.Accumulator` as declaring a type named `F16`, so in the prelude every built-in name with
+a member resolved to a non-existent prelude type - hundreds of cascading errors (`Array<?>`, "Vec<Char> cannot be
+indexed"). It now skips a name followed by `.` or by an owner's argument list and a `.`. A method's receiver written
+`Grid.Point` was keyed by its owner (the head's use), so the method landed on `Grid`; `recvKey` now reads the head
+recorded where its name ends and keys the type declared in place. `explain`/`doc` read a dotted item name as
+`Type.Method` only; a type declared in place is found by its joined name.
+
+Bootstrap: the prelude's new declarations need a compiler that reads them, so the stage-1 compiler was built by
+wt-sumnarrow's (the seed's) from the new compiler source over the old prelude, then built the rest; the seed is written
+again in the same commit.
+Checked: tests/members.olang (5, run and evaluator alike) with tests/typedefaults.olang unchanged, the prelude's tests,
+tests/shared.olang, the cases touching builders, reflection, defaults and traits (eleven new `d4amember*`), diagtest,
+consistency, the goldens recaptured (tokens, trees, layout, diagnostics, module graphs), and `BOOT_FRESH=1 make boot;
+make fixedpoint` from the new seed, which installs the very compiler the two-stage build made.

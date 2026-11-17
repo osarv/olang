@@ -1,0 +1,7 @@
+# check: fail error[D4a]: 'Red' is already a case of Color
+type Color enum {
+    Red
+    Green
+}
+type Color.Red = I64
+fn main() { assert Color.Red != Color.Green }

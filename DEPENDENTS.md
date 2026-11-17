@@ -81,6 +81,17 @@ odd-width paths (`tests/intsweep.olang`); `tools/precedence_migrate.olang` if pr
 E11b's join (`check.olang` `textPlus`/`opAst`, `String.Plus` in `std/prelude/text.olang`); the parser's `Adjacent` reading
 stays for `tools/textjoin_migrate.olang`, so a change to how `$` or a literal is read keeps it reading the old joins.
 
+## A declaration form (D4-D19; type members D4a)
+
+A new top-level form - a case of `ast.Decl`, or a new spelling after `type`/`fn`: `parse.olang` (`typeDecl`,
+`ownerAhead`, `attributed`), every exhaustive match over `ast.Decl` (`names.olang` `collect`/`bodies`, `generic.olang`
+`addFns`, `check.olang` `decls`, `unparse.olang`, `session.olang`'s symbols, `doc.olang`'s items, and
+`compiler/tools/dump.olang`, which `make` builds for the goldens); `load.olang` `typeNames`, a token scan of `type NAME`
+that feeds the prelude's type set and the parser's oracle - a form whose name after `type` is no type of the module (a
+member, `type U8.Accumulator`) must be skipped there; `explain.olang` `Item` and `doc.olang` `declAt`, which read a
+dotted name as `Type.Method` first; goldens (`make tokgold astgold layoutgold diaggold modgold`); the seed when std
+uses the form (seed/README.md).
+
 ## A literal form (E19-E21, E27, S13h)
 
 A form of `[...]` - with a type in front or none (the type expected where it stands, else its own, E20): `parse.olang`
