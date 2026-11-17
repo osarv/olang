@@ -39088,3 +39088,48 @@ constraint the instance's type fails, now declares a trait and a default of its 
 to keep testing T32a; SPEC's example there no longer names `Sum`. A default whose own constraint refuses it while a
 variable bound earlier already fails its constraint is left to G19's error for that variable (`boundsMet`), the first
 cause.
+
+## 2026-11-17: the byte dot product keeps a vector total (E39's LaneDot; an optimization, mine; wt-lanesum)
+
+E39's `(x * w).Sum<I32>()` over `U8` x `I8` went through `LaneDot` a block of 256 lanes at a time, each block reduced
+to one number (`llvm.vector.reduce.add` of `mul(zext, sext)`, which LLVM 18 turns into four vpdpbusd and a horizontal
+sum), the rest of the lanes one by one. Two costs followed (found by oann's packed GemmI8): below a depth of 256 no
+block formed and the lanes went one by one - oann's 1x128x128 at 1.9 us against 1.1 us for its own plain sums, so
+kernels/gemm padded every depth to 256 - and every block paid a horizontal sum. The earlier entry noted why the block
+was 256: a vector total carried across blocks in plain IR is not a reduction LLVM recognizes, and it went back to
+vpmaddwd/vpdpwssd.
+
+Now `LaneDot` takes every lane (args: references to the two operands' first elements and the count, which may be
+known only at run time) and emit calls a helper, `olang_lanedot.<form>`, made once per form (step width, signedness
+pairing, masked tail, i32 or i64 result) as a `linkonce_odr alwaysinline` function with the target's attributes. It
+keeps four vectors of i32 lanes, four steps of a vector of bytes a turn while they fit, then one step at a time; the
+last, short step loads its bytes with `llvm.masked.load` where the target has AVX-512BW (a zero mask skipped), else
+goes byte by byte; the vectors are reduced once, at the end. A step is `llvm.x86.avx512.vpdpbusd.512` (or `.256`)
+called by name where the operands are one unsigned and one signed byte array (the unsigned one passed first) and the
+target has avx512vnni (512-bit vectors) or avxvnni / avx512vnni+vl (256), so nothing depends on LLVM recognizing a
+pattern; elsewhere, and for `U8` x `U8` or `I8` x `I8`, a step is a widening multiply and add in i32 lanes. An `I64`
+total sums chunks of 8192 steps, each reduced in i64, so no i32 lane can overflow (4 x 8192 products under 2^15, or
+8192 under 2^16); a 16-bit total is the i32 result truncated, exact as integer arithmetic is in any order. The
+checker's `laneSumIn` now emits the single `LaneDot` and no loop for this shape (`laneDots`, `LaneDotBlock` and the
+lane loop's start and step parameters went); the evaluator's `laneDot` already added any count.
+
+Measured on this machine (Sapphire Rapids, AVX-512 VNNI), 128 outputs of a depth-d dot each, best of 7 rounds, ns per
+output, the old lowering built by master f2ea1414:
+
+| depth | new | old (256-blocks) | plain loop |
+|---|---|---|---|
+| 32 | 1.70 | 2.54 | 2.47 |
+| 64 | 1.39 | 4.62 | 3.47 |
+| 128 | 1.90 | 5.63 | 5.92 |
+| 256 | 2.61 | 2.96 | 9.51 |
+| 784 | 10.1 | 11.3 | 29.6 |
+| 1024 | 7.89 | 14.4 | 33.9 |
+
+(784's rows are not 64-byte aligned, so its loads split cache lines.) The vnnitile shape (oann repro/vnnitile.olang: per-lane groups of four products into I32 lanes, a's
+four bytes broadcast) is not a `Sum` to one number, so this does not reach it: it needs a total per group of four
+adjacent lanes - a grouped lane total into a vector, which lowers to vpdpbusd acc, broadcast(a), b - recorded as
+future work, no syntax added. Tests: tests/lanes.olang's odd depths (1, 3, 255, 257) for every signedness pairing and
+total type against loops written by hand, baked and decided while compiling, and an `I64` total past one chunk. The
+same comparison built for -target x86-64-v3 and x86-64 (the widening step, byte-by-byte tail) and alderlake (avxvnni's
+256-bit vpdpbusd) gives the same totals.
+

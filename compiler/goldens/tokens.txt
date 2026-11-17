@@ -2371,14 +2371,14 @@ e20178f94e07dfed 093e0335a8debfcd compiler/bindgen.olang
 90881337ba685229 eea384b1077dc23b compiler/build.olang
 9eb8d9916112f375 acad139c7c5a3871 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
-1b791223885905a4 032ea481900303be compiler/check.olang
+a3db1303224dc291 199b92586666987c compiler/check.olang
 da018e972c2ecc90 2073133fd217ef43 compiler/cond.olang
 2ab98962469bc960 89092d630e387ca2 compiler/definit.olang
 db407b9ec2aacf25 e1e61b9b123ebbaf compiler/diag.olang
 8eecc7e6e624f53a 744bfcc1480f0aa4 compiler/diagmsg.olang
 c0c2d4d140b48421 e178e8d9a5a70205 compiler/doc.olang
 ffdfae4680125f72 fb3cf75029f1260a compiler/effects.olang
-1e01a4a5099f2aeb 8b95f79bd39e1cfc compiler/emit.olang
+8b7abbebcd3637c8 284f743d6a887d28 compiler/emit.olang
 2c3bf6bb250faaaf e3b8a8f879358b4f compiler/eval.olang
 005747b0ed64e52a e20be05bd90ebe03 compiler/explain.olang
 f8904f06be8de907 3cd94887e148f032 compiler/facts.olang
@@ -2453,7 +2453,7 @@ bff38ad021d5542d 494ccbf7f61a1712 compiler/tools/rungold.olang
 67f2c232d9fc22f4 c15bde3121236ac1 compiler/tools/seed.olang
 d60c568945ef50db 53ecc35e37b0bcfa compiler/tools/tokdiff.olang
 b5d5a7ffc3c55aed c3739971a0322646 compiler/tools/toolkit.olang
-1ecee35abc6429ab 9415c3ae6256bd25 compiler/typed.olang
+4a410cd65437a462 9415c3ae6256bd25 compiler/typed.olang
 12634a6da2bd8d2f 2537f5e6cfd14808 compiler/types.olang
 ba41c8ba9b5b94f4 59d0512d79ecd77f compiler/unparse.olang
 e2ea203aa101b68f a5e34ee613900ef3 compiler/views.olang
@@ -2625,7 +2625,7 @@ ef74496ac1efc479 e44f14abefad5ec5 tests/inplace.olang
 9224eb3a58446980 4813c6979a7a5c85 tests/kept.olang
 1e48b6ce34b3d2d0 4f8a94ece21941e0 tests/keptfacts.olang
 32026d6663c936db 9a9c8b26af45b84c tests/keptparams.olang
-bd4ab93ae99c8810 95892948a6ecf965 tests/lanes.olang
+aeda1ee7f21454a4 66751122b8c7ad84 tests/lanes.olang
 01ffe7335fe6ab32 05af3c33041bc780 tests/literals.olang
 cb1a5845ede026cf 7846a1adaf912717 tests/match.olang
 94e697619ecc82db f914c024da060aa2 tests/namedargs.olang
