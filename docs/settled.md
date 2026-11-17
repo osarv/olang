@@ -659,10 +659,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   through the constructor (G37). A struct's private fields are in `T.Fields` only in its module. `json.Encode(v)`/
   `json.Decode<T>(text)` take any value; a struct with storage and no field Encode may read is a compile-time error
   (2026-11-15, the AI study: it was written `{}`).
-- **Typed attributes and function reflection (G39-G41, R8, QBN, QBO, the user's decisions 2026-10-26).** `@Type(args)` /
-  `@Type` before a type, function, enum case, constructor field or parameter: a value of a type the program declares,
-  built while compiling; the compiler gives none a meaning. Read by `try x.Attr<A>()` and `x.HasAttr<A>()`.
-  `alias.Functions` and `T.Methods` give `FuncInfo` descriptors; `f(args)` calls one.
+- **Key enums and function reflection (G39, G41, D4a; attributes removed, the user's decision 2026-11-16).** Attributes
+  (`@Type(args)`, `x.Attr<A>()`, `x.HasAttr<A>()`, `AttrError`) are gone. What a type says to a library is a key enum
+  declared as its member, `type Account.Json enum { UserID = "id", Name }`: a case names a field (an enum's case), its
+  text the key (its name where written bare); unlisted fields are skipped and read back as their defaults; a case
+  naming no field, or an unlisted parameter with no default on a read, is the library's decided assert (S18c). A
+  generic reads it through `T.HasMember("Json")` (G32, a decided Bool) and `c.Value` (G34: the raw value, else the
+  name). An enum naming no raw type with a text-literal value has text raw values (T17e). std reads `Json` (policy as a
+  call argument, `naming = json.Snake`), `Csv` (column names and order), `Flags` (help) and `Short` (one-letter
+  names). `alias.Functions` and `T.Methods` give `FuncInfo` descriptors; `f(args)` calls one; a table of function
+  values replaces `@Route`-style collection. `olang fix` (tools/attrs_migrate) turns json/csv/flags attributes into the
+  enums.
 - **Function facts (G42, QBP 9, B1.1, the user's "yes build with item 6" 2026-10-27; sharper rule item 27, "do the
   sharper rule" 2026-11-03).** `mix.Allocates`, `Blocks`, `WritesGlobals`, `CallsC`, `Spawns`, `Recursive`,
   `Terminates`, `Pure`, `Returns` through a function's name or a descriptor: a Bool constant, true where the function or

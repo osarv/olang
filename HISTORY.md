@@ -39196,3 +39196,63 @@ Checked: tests/members.olang (5, run and evaluator alike) with tests/typedefault
 tests/shared.olang, the cases touching builders, reflection, defaults and traits (eleven new `d4amember*`), diagtest,
 consistency, the goldens recaptured (tokens, trees, layout, diagnostics, module graphs), and `BOOT_FRESH=1 make boot;
 make fixedpoint` from the new seed, which installs the very compiler the two-stage build made.
+
+## 2026-11-17: attributes removed; key enums (G39, G40 gone; G32, G34, T17e; the user's call 2026-11-16; wt-noattr)
+
+The user removed attributes ("They're not used enough, and they're kind of messy"): `@Type(args)` on declarations
+(G39), `x.Attr<A>()`/`x.HasAttr<A>()` and the prelude's `AttrError` (G40) are gone with the parser's `attributed`,
+`attrs`, the hidden globals that held their values, the checker's attribute pass, explain's and doc's attribute lines,
+the formatter's `@` prefix and the diagnostics `AttrPlace`, `AttrPun`, `AttrType`, `AttrTwice`, `AttrWritable`,
+`AttrNotBuilt` and `AttrRead`. A removed spelling is simply gone (PRINCIPLES 4): an `@` before a declaration is the
+ordinary parse error. The `@` that began a line was kept from continuing a matrix product only for attributes; that
+rule went with them, and `@` is an operator like any other at a line's start. PRINCIPLES.md's "attributes are library
+data" clause became "what a type tells a library is ordinary code the library reads by reflection".
+
+What replaced them is the user's: a **key enum** declared as the type's member (D4a), `type Account.Json enum {
+UserID = "id", Name }` - a case names a field, its text is the key (the case's name where written bare), the case order
+is the order written (CSV's column order), an unlisted field is skipped and read back as its default, and a case naming
+no field is an error the library says by reflection and a decided assert, not a compiler rule. A naming policy is the
+call's (`json.Encode(a, naming = json.Snake)`); explicit keys override it. flags: `Options.Flags`, the text the help;
+the option name stays the field's. The functions the attribute tests collected by `@Route`/`@Command` became a table
+of function values, `Routes := Array<Route>[Route("/users", Users)!, ...]`.
+
+What the compiler needed for a library to read one, decided here (mine, within the user's direction):
+
+- `T.HasMember("Json")` (G32): whether a type has a member of that name the reading module may see, a Bool decided
+  while compiling (G35), so `T.Json` is checked only for types that have it. The alternatives weighed: a trait's
+  default member (`type T.Json<T Keyed> = ...`) gives every type a placeholder enum, which then must be told apart
+  from a written one; a `T.Members` list of descriptors is more machinery than a yes-or-no needs. Its argument is a
+  text literal (HasMemberArg otherwise).
+- `c.Value` on a case descriptor (G34): the case's raw value, its name where the enum has none - so a key enum with no
+  text at all (`enum { Name }`) needs no raw type for a generic to read its keys.
+- T17e: an enum naming no raw type one of whose cases writes a text literal has text raw values, as if `String` were
+  written - the user's spelling `type Account.Json enum { UserID = "id" }` (and D4a's own example) wrote none. An
+  integer raw value still needs its type (it decides the layout); RawWithoutType says so.
+- flags' one-letter names, which `@flags.Short('n')` gave, are a second member `type Options.Short enum { Count = "n" }`
+  - the same construct, no other place to put them.
+- std/json's policy constants `json.Exact`, `json.Camel`, `json.Snake`, `json.Kebab` (globals of `Naming`), and the
+  parameter renamed `keys` -> `naming`; a type's own `@json.Naming` has no successor (the call's argument decides).
+
+Bugs found on the way and fixed:
+
+- An assert after an unrolled walk (G33) was never decided while compiling: `typed.loopLeaves` walked a loop's post
+  clause after taking the loop's own id off the walk's inner blocks, so the post clause's `break` of its own item loop
+  (every unrolled item has one) read as leaving the block - S18c then kept every such assert a run-time check. The
+  library's "names no field" and "no default" asserts sit after such walks.
+- A decided assert's message joining a reflected text without `$` (`T.Name + "..." + c.Name`) was shown as written:
+  `reflTextOf` now renders any text `reflFold` knows.
+- Open, not fixed: indexing a reflected text (`f.Name[0]`, `c.Value[0]`) is checked to no type and reaches the
+  lowerer as a gap ("does not lower an unknown type"); flags reads a short name through a helper taking the text.
+
+`olang fix` gains tools/attrs_migrate (a text tool, triggered by `@`): `@json.Key`/`@json.Skip`, `@csv.Column`/
+`@csv.Skip`, `@flags.Help` and `@flags.Short` on a struct's parameters and fields or an enum's cases become the key
+enums written after the type, each listing every member not skipped in the order declared; `keys = json.Naming.X`
+becomes `naming = json.X`; a type's own `@json.Naming` is dropped and said for a person, and an attribute on a generic
+type or of another library is left for a person. oann has none of these: its own attributes (`@Name("c_proj")` in
+io/checkpoint.olang, `@Keep` in dyn/neuron.olang read by dyn/settle.olang and dyn/system.olang) are migrated there by
+hand.
+
+Tests: std/json's, std/csv's and std/flags' tests rewritten to key enums (run and evaluator alike);
+tests/attrs.olang and tests/attrmod.olang became tests/keyenums.olang and tests/keyenummod.olang (key enums read by a
+generic, T.HasMember, c.Value, text raw values with no type, the function table beside G41); the sixteen attr* cases
+deleted; new cases keyenumnofield, keyenumnodefault, hasmemberarg.

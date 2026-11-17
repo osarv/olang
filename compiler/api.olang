@@ -214,9 +214,8 @@ fn pushFits(b mut StringBuilder&, key String&, it doc.Entry&) {
 # "deprecated" for an item whose doc comment carries a Deprecated: note (L4b), else ""
 fn depMark(it doc.Entry&) String { return "deprecated" if doc.Deprecation(it.Doc) != "" else "" }
 
-# a doc line's signature: its first line past its attributes, its comment taken off
-fn sigLine(line String&) String {
-    t := doc.PastAttrs(line)
+# a doc line's signature: its first line, its comment taken off
+fn sigLine(t String&) String {
     nl := try t.Find("\n") catch default t.Len()
     s := t[:nl]
     c := try s.Find("   #") catch default s.Len()

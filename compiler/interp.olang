@@ -649,7 +649,7 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
             continue
         }
         img := try x.M.Image(m, n) catch eval.NotBaked {
-            unbaked(x, c, d, i, gd, abortsAt, whyNot)
+            unbaked(x, c, d, i, abortsAt, whyNot)
             continue
         }
         out.Put(i, img)
@@ -666,23 +666,15 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
     return out
 }
 
-# global i, whose initializer gave no image: a comptime's why kept for its error (K3); an attribute that could not be
-# built an error (G39); an initializer reaching what aborts the program an error at the global (K1/K2), said once per
-# place it is reached (a global reading another reaches the other's)
-fn unbaked(x mut Exec&, c mut typecheck.Checker&, d mut diag.Diagnostics&, i I64, av ast.VarDecl?&
+# global i, whose initializer gave no image: a comptime's why kept for its error (K3); an initializer reaching what
+# aborts the program an error at the global (K1/K2), said once per place it is reached (a global reading another reaches
+# the other's)
+fn unbaked(x mut Exec&, c mut typecheck.Checker&, d mut diag.Diagnostics&, i I64
            abortsAt mut Map<pair.Pair<I64, I64>, Bool>&, whyNot mut Map<I64, String&>&) {
     b := x.Bodies[i]
     if c.ComptimeSites.Has(i) {
         why, _, _ := valueWhy(x.M.Stopped, b.Sp)
         whyNot.Put(i, why)
-        return
-    }
-    # G39: an attribute's value is built while compiling, or is an error - never set at startup
-    if av != null and av.Hidden {
-        # one evaluated with nothing to write - of no size, or reaching storage it cannot hold - is built all the same,
-        # and set at startup as any global
-        why, _, _ := valueWhy(x.M.Stopped, b.Sp)
-        if not x.Faulty.Has(i) and why != "" { d.Error(diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End)), msgs.AttrNotBuilt(why)) }
         return
     }
     at := diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End))

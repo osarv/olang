@@ -17,7 +17,8 @@
 # fail with.
 #
 # Reading and writing go through std/csv and std/json, which build each record through its constructor by reflection:
-# a column is matched to a parameter by name ("@csv.Column", "@json.Key" rename one).
+# a column is matched to a parameter by name (a key enum declared as the row type's member Csv or Json renames one,
+# D4a).
 
 import "std/csv"
 import "std/json"

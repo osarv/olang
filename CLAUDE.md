@@ -72,7 +72,7 @@ subsections:
 
 - **Syntax and statements**: line breaks, listing rule, `fn`, comments, one-line bodies, command-line words and tools (explain, doc, lsp, mcp, api), operators, loops, `match` and patterns, tests, `defer`, `become`, literals, text rendering.
 - **Types**: numeric primitives and widths, widening, references and `&`, permissions, arrays, structs, `immut`, `unique`, destructors, packed structs, enums, methods, operators as methods, lambdas, traits, `any`, function types.
-- **Generics**: generic enums, type arguments and parameter lists, monomorphization, needs, inference, error-set parameters, generators, reflection, attributes, function facts.
+- **Generics**: generic enums, type arguments and parameter lists, monomorphization, needs, inference, error-set parameters, generators, reflection, key enums, function facts.
 - **Errors**: error sets and `?`, `try`/`catch`/`!`, error types and values, errors carrying data, std errors, `main`.
 - **Memory and scopes (§8)**: scopes inferred, no manual scopes, run-time scope lookup, reference locals per assignment, placement, lending, constructors, early freeing, no reference counting.
 - **Concurrency**: `join`/`spawn`, failing tasks, memory model, atomics, runtime threads.

@@ -1,0 +1,135 @@
+# key enums (D4a, the user's call): a type's own keys declared as an enum among its members, read by a generic through
+# reflection while compiling (G32-G35) - T.HasMember, a case's Value, its text raw values (T17e) - and functions
+# reflected (G41) beside a table of function values; what the evaluator bakes and decides agrees with the run time
+import "keyenummod"
+
+type User struct(Id I64, Cache I64 = 0) {
+    Id
+    Cache
+    Count := 3
+    Plain I64 = 4
+}
+
+# User's keys: Id as "id", Count by its name; Cache and Plain unlisted
+type User.Keys enum {
+    Count
+    Id = "id"
+}
+
+type Color enum {
+    Red
+    Green(g I64, h I64)
+    Blue
+}
+
+type Color.Keys enum {
+    Red = "r"
+    Blue
+}
+
+# an enum of text raw values whose type is not written: its cases' texts (T17e)
+type Op enum {
+    Plus = "+"
+    Times
+}
+
+# each key, in the key enum's order - or each field's name where T has none
+fn keys<T>() String {
+    b := StringBuilder()
+    if T.HasMember("Keys") {
+        for c in T.Keys.Cases: b.Push($c.Name + "=" + $c.Value + " ")
+    } else {
+        for f in T.Fields: b.Push($f.Name + " ")
+    }
+    return b.ToString()
+}
+
+KeysBaked := keys<User>()
+CasesBaked := keys<Color>()
+
+test keys "a key enum is read by its cases, a field it does not list left out" {
+    assert keys<User>() == "Count=Count Id=id " and KeysBaked == keys<User>()
+    assert keys<Color>() == "Red=r Blue=Blue " and CasesBaked == keys<Color>()
+    assert keys<keyenummod.Rec>() == "A=alpha "
+    assert User.HasMember("Keys") and not Op.HasMember("Keys") and not I64.HasMember("Keys")
+    assert Op.Plus.Value() == "+" and Op.Times.Value() == "Times" and (try Op.From("+")) == Op.Plus
+    for c in Op.Cases {
+        if c.Name == "Plus": assert c.Value == "+"
+    }
+}
+
+# the routes of keyenummod's table, by path
+fn routes() Map<String&, fn&(q String&) String> {
+    m := Map<String&, fn&(q String&) String>()
+    for r in keyenummod.Routes: m.Put(r.Path, r.Handler)
+    return m
+}
+
+# keyenummod's commands run with one argument: each word and what it gave
+fn commands(x I64) String {
+    s := ""
+    for c in keyenummod.Commands: s = $s + $c.Word + "=" + $c.Run(x) + " "
+    return s
+}
+
+# a function's shape as reflection reads it
+fn shapes() String {
+    s := ""
+    for f in keyenummod.Functions {
+        s = $s + $f.Name + "(" + $f.Params.Len() + "):" + $f.Type.Name
+        for p in f.Params {
+            s = $s + " " + $p.Name + $("=" if p.HasDefault else "")
+        }
+        s = $s + ";"
+    }
+    return s
+}
+
+# a type's methods called on a value, the receiver first
+fn methods(r keyenummod.Rec) String {
+    s := ""
+    for m in keyenummod.Rec.Methods {
+        if m.Params.Len() == 1 { s = $s + $m.Name + "=" + $m(r, 3) + " " } else { s = $s + $m.Name + "=" + $m(r) + " " }
+    }
+    return s
+}
+
+# a generic taking a function's descriptor, failing as the function does
+
+fn half(x I64) I64 ? Odd {
+    if x % 2 != 0: error Odd
+    return x / 2
+}
+
+fn apply<F>(f F, x I64) I64 ? F.Errors { return try f(x) }
+
+CommandsBaked := commands(5)
+ShapesBaked := shapes()
+
+test "functions reflected beside a table of function values" {
+    m := routes()
+    assert m.Len() == 2 and (m.Get("/items")!)("x") == "items:x" and (m.Get("/users")!)("y") == "users:y"
+    assert commands(5) == "add=15 hidden=4 " and CommandsBaked == commands(5)
+    assert shapes() == "Users(1):fn&(String&) String q;Items(1):fn&(String&) String q;Add(2):fn&(I64, I64) I64 a b=;Plain(1):fn&(I64) I64 x;OwnNames(0):fn&() String;"
+    assert ShapesBaked == shapes()
+    assert methods(keyenummod.Rec(1)) == "Sum=3 Twice=9 "
+    assert apply(keyenummod.Functions[3], 4) == 8
+    for f in keyenummod.Functions {
+        if f.Name == "Plain": assert apply(f, 21) == 42
+    }
+}
+
+# the module's own half and its error
+fn halves() I64 ? Odd {
+    total I64 = 0
+    for f in me2.Functions {
+        if f.Name == "half": total += try apply(f, 8)
+    }
+    return total
+}
+
+import me2 "keyenums"
+
+test "a reflected function's errors are its descriptor's" {
+    assert (try halves()) == 4
+}

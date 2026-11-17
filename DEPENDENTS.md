@@ -84,7 +84,7 @@ stays for `tools/textjoin_migrate.olang`, so a change to how `$` or a literal is
 ## A declaration form (D4-D19; type members D4a)
 
 A new top-level form - a case of `ast.Decl`, or a new spelling after `type`/`fn`: `parse.olang` (`typeDecl`,
-`ownerAhead`, `attributed`), every exhaustive match over `ast.Decl` (`names.olang` `collect`/`bodies`, `generic.olang`
+`ownerAhead`), every exhaustive match over `ast.Decl` (`names.olang` `collect`/`bodies`, `generic.olang`
 `addFns`, `check.olang` `decls`, `unparse.olang`, `session.olang`'s symbols, `doc.olang`'s items, and
 `compiler/tools/dump.olang`, which `make` builds for the goldens); `load.olang` `typeNames`, a token scan of `type NAME`
 that feeds the prelude's type set and the parser's oracle - a form whose name after `type` is no type of the module (a

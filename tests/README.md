@@ -46,8 +46,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   function, a plain function and a typed local, both branches, decided while compiling beside the run time.
 - `fnref.olang` - function types reference-only (`fn&`, `fn?&`, T21), declared function types (`Handler&`, T21b) and
   arrays that may be null (`String?&`, T2c), baked and decided while compiling beside the run time.
-- `attrs.olang`, `attrmod.olang` - typed attributes (G39, G40) on every declaration they take and functions reflected
-  (G41): a router and a command table collected while compiling from `attrmod`'s handlers, baked beside the run time.
+- `keyenums.olang`, `keyenummod.olang` - key enums (D4a): a type's keys declared as an enum among its members, read by a
+  generic through `T.HasMember` and a case's `Value` (G32, G34), text raw values with no type written (T17e); functions
+  reflected (G41) beside a router and a command table of function values, baked beside the run time.
 - `members.olang`, `membermod.olang` - type members (D4a): the prelude's `T.Accumulator` default and its overrides, a
   program's own override, an extends type with and without one, a generic owner's member, members declared in place (an
   enum read by reflection with its text values, a struct with a method); baked and decided while compiling beside the

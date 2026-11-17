@@ -1,9 +1,0 @@
-# check: fail error[G39]: this attribute's value cannot be built while compiling
-# G39, K1: an attribute is built while compiling, or is an error - never set at startup
-type Size struct(n I64) {
-    assert n > 0
-    n
-}
-@Size(0)
-fn f() I64 { return 1 }
-fn main() { assert f() == 1 }

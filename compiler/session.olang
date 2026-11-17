@@ -742,7 +742,6 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             w.leaf(b, name, KindTypeParameter, I64(sp.Start), I64(sp.End), s, s + name.Len(), $t[I64(md.Owner.Span().Start):I64(md.Owner.Span().End)])
         }
         case ast.Decl.Global(sp, v) {
-            if v.Hidden { return }          # an attribute's (G39), shown with what it is written on
             for k in range v.Names.Len() {
                 ns := v.NameSps[k]
                 w.leaf(b, nm.Text(v.Names[k]), KindVariable, I64(sp.Start), I64(sp.End), I64(ns.Start), I64(ns.End), "")

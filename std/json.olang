@@ -847,19 +847,27 @@ fn writeNumber(sb mut StringBuilder&, v F64) { sb.Push($v) }
 # Char as a string of it, numbers and Bools as themselves, a reference as what it names, an error value (T20) as "$"
 # writes it ("io.Error.Failed") and null as null. "json.Encode(Point(1, 2))".
 #
-# Names become keys by a policy (Naming): as declared by default, else as "keys" says - "json.Encode(v, keys =
-# json.Naming.Snake)" writes a field CreatedAt as "created_at" - or as its type says, which wins over the call's: a type
-# declared under "@json.Naming.Camel" is written so wherever it is. A member's own "@json.Key("id")" - on a field, a
-# constructor's parameter (a field punning it has it) or a case - names it whatever the policy, and "@json.Skip" on a
-# field leaves it out. Attributes are read while compiling (G40): a type's keys cost what its plain names do, each
-# policy applied as the name is written
-fn Encode<T>(v T, indent String& = "", keys Naming = Naming.Exact) String& {
-    w := writer(indent, keys)
+# Names become keys by a policy (Naming): as declared by default, else as "naming" says - "json.Encode(v, naming =
+# json.Snake)" writes a field CreatedAt as "created_at". A type chooses its own keys with a key enum declared as its
+# member Json (D4a): each case names a field (of an enum, a case) and its text is the key, a case written without one
+# keyed by its name under the policy; the fields it lists are written in its order, and a field it does not list is
+# left out - read back, it takes its default:
+#
+#     type Account struct(UserID I64, Name String&, Cache I64 = 0) { UserID, Name, Cache }
+#     type Account.Json enum {
+#         UserID = "id"
+#         Name
+#     }
+#
+# A case naming no field is a compile-time error. Keys are worked out while compiling (G32-G35): a type's cost what
+# its plain names do
+fn Encode<T>(v T, indent String& = "", naming Naming = Naming.Exact) String& {
+    w := writer(indent, naming)
     w.any(v, 0)
     return w.out.ToString()
 }
 
-# ---- keys (QBK 4, G39) ----
+# ---- keys (QBK 4, D4a) ----
 
 # how a member's name becomes its key - a struct's fields, an enum's cases and their fields: CreatedAt as Exact writes
 # it, as Camel "createdAt", Snake "created_at", Kebab "created-at". A name's words begin at a capital after a small
@@ -871,18 +879,52 @@ type Naming enum {
     Kebab
 }
 
-# a member's key, whatever the policy: "@json.Key("id")" on a field, a constructor's parameter or a case
-type Key struct(Name String&) ? {
-    if not Name.Len() > 0: error ArgumentError.Invalid("Key: Name.Len() > 0")
-    Name
+# the policies, as a call names them: "json.Encode(v, naming = json.Snake)"
+Exact Naming = Naming.Exact
+Camel Naming = Naming.Camel
+Snake Naming = Naming.Snake
+Kebab Naming = Naming.Kebab
+
+# the keys of T's members (D4a): its key enum's, T.Json, where it declares one - a case's text, or its name under the
+# policy where it was written without one - else every member's name under the policy
+type namer<T> struct(naming Naming) {
+    naming
 }
 
-# a field left out: never written, and on reading its parameter takes its default (a parameter with none is a
-# compile-time error - Decode could not build the value)
-type Skip struct() { }
+# a member's key - a field's, a constructor's parameter's, a case's
+fn (n namer<T>&) key<F>(f F) String& {
+    if T.HasMember("Json") {
+        keysNamed<T>(n)
+        for c in T.Json.Cases {
+            if c.Name == f.Name: return caseKey(c, n.naming)
+        }
+    }
+    return keyText(f, n.naming)
+}
 
-# the policy a type's members are named by: its own "@json.Naming" where it has one, else the call's
-fn policy<T>(given Naming) Naming { return try T.Attr<Naming>() catch default given }
+# a key enum's case's key: its text, or its name under the policy where it was written without one
+fn caseKey<C>(c C, keys Naming) String& {
+    if c.Value == c.Name: return keyText(c, keys)
+    return c.Value
+}
+
+# every case of T's key enum names one of its fields, or of an enum one of its cases - else a compile-time error (S18c)
+fn keysNamed<T>(n namer<T>&) {
+    for c in T.Json.Cases: caseNamed(n, c)
+}
+
+fn caseNamed<T, C>(n namer<T>&, c C) {
+    if T.Kind == TypeKind.Enum {
+        for k in T.Cases {
+            if k.Name == c.Name: return
+        }
+    } else {
+        for f in T.Fields {
+            if f.Name == c.Name: return
+        }
+    }
+    assert false, T.Name + ".Json's case " + c.Name + " names no field of " + T.Name
+}
 
 # a name as a policy writes it
 fn KeyOf(name String&, keys Naming) String {
@@ -922,12 +964,6 @@ fn keyInto(b mut StringBuilder&, name String&, keys Naming) {
     }
 }
 
-# the key of a field or a parameter: its own "@json.Key", else its name by the policy
-fn keyFor<F>(f F, keys Naming) String& {
-    if f.HasAttr<Key>(): return (f.Attr<Key>()!).Name
-    return keyText(f, keys)
-}
-
 # a member's name as each policy writes it, converted while compiling (K3), once per member of each type - an encode or
 # a decode only picks one
 fn keyText<F>(f F, keys Naming) String& {
@@ -946,17 +982,18 @@ fn keyText<F>(f F, keys Naming) String& {
 # WrongKind), Bools, Chars (text of one character), arrays, Lists, Vecs, Maps with text keys and references (to what
 # such a value is) are read as Encode writes them, an enum's case built from its name and its fields' members (G34), an
 # error value from its word's text or null (WrongKind for a word not of its type). Members are found by their keys as
-# Encode writes them - its Naming, a type's own, a member's "@json.Key" - and a parameter "@json.Skip" leaves out takes
-# its default.
+# Encode writes them - its Naming, a type's key enum - and a parameter its key enum leaves out takes its default (one with
+# none is a compile-time error: Decode could not build the value).
 # Fails with what Parse fails with, with Error.Missing and Error.WrongKind where the text does not fit
 # the type, and with what a constructor fails with
-fn Decode<T>(text String&, keys Naming = Naming.Exact) T ? {
+fn Decode<T>(text String&, naming Naming = Naming.Exact) T ? {
     j := try Json.Parse(text)
-    return try From<T>(j, keys)
+    return try From<T>(j, naming)
 }
 
 # a value of type T read from a tree, as Decode reads it from text
-fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
+fn From<T>(j Json&, naming Naming = Naming.Exact) T ? {
+    keys := naming
     match T {
         case String { return String(try j.AsStr()) }
         case String& { return $(try j.AsStr()) }
@@ -1002,8 +1039,8 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
                 return v
             } else if T.Kind == TypeKind.Struct {
                 o := try j.AsObj()
-                k := policy<T>(keys)
-                return try T(try member(o, p, k, keys) for p in T.Params)
+                n := namer<T>(keys)
+                return try T(try member(o, p, n) for p in T.Params)
             } else if T.Kind == TypeKind.Error {
                 # an error value (T20) as "$" writes it, "io.Error.Failed"; null for none
                 match j {
@@ -1018,21 +1055,21 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
                 error Error.WrongKind
             } else if T.Kind == TypeKind.Enum {
                 # a case with no fields as its name; one with fields as an object of one member, its name
-                k := policy<T>(keys)
+                n := namer<T>(keys)
                 match j {
                     case Json.Str(name) {
                         for c in T.Cases {
                             if c.Fields.Len() == 0 {
-                                if name == keyFor(c, k): return c()
+                                if name == n.key(c): return c()
                             }
                         }
                     }
                     case Json.Obj(o) {
                         if o.Len() == 1 {
                             for c in T.Cases {
-                                if o.Keys[0] == keyFor(c, k) {
+                                if o.Keys[0] == n.key(c) {
                                     fs := try o.Values[0].AsObj()
-                                    return c(try caseField(fs, f, k, keys) for f in c.Fields)
+                                    return c(try caseField(fs, f, keyText(f, keys), keys) for f in c.Fields)
                                 }
                             }
                         }
@@ -1048,32 +1085,34 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
     }
 }
 
-# a constructor parameter's argument: the member of its key (named by the type's policy k), else its default - which
-# a skipped one always takes. keys is the call's policy, for the members' own types
-fn member<P>(o Object&, p P, k Naming, keys Naming) P.Type ? {
-    if p.HasAttr<Skip>() {
-        assert p.HasDefault, "a parameter json.Skip leaves out takes its default, and this one has none"
-        return p.Default
-    } else {
-        name := keyFor(p, k)
-        if p.HasDefault {
-            if not o.Has(name): return p.Default
+# a constructor parameter's argument: the member of its key, else its default - which one T's key enum leaves out
+# always takes, and which it must have
+fn member<P, T>(o Object&, p P, n namer<T>&) P.Type ? {
+    if T.HasMember("Json") {
+        for c in T.Json.Cases {
+            if c.Name == p.Name: return try arg(o, p, caseKey(c, n.naming), n.naming)
         }
-        if P.Type.Kind == TypeKind.Reference {
-            # a reference's referent read as a value and moved where the argument lands (O26a): a call's result of a
-            # reference type is read-only as written, and a constructor's argument may need it writable
-            v := try From<P.Type.Target>(try o.At(name), keys)
-            return v
-        } else {
-            return try From<P.Type>(try o.At(name), keys)
-        }
+        if p.HasDefault: return p.Default
+        assert false, "json.Decode: " + T.Name + "'s parameter " + p.Name + " is in no case of " + T.Name + ".Json, and has no default to take"
+        unreachable
     }
+    return try arg(o, p, keyText(p, n.naming), n.naming)
 }
 
-# a case's field's value: the member of its key
-fn caseField<F>(o Object&, f F, k Naming, keys Naming) F.Type ? {
-    name := keyFor(f, k)
+# a parameter's value: the member of that key, its default where there is none. keys is the call's policy, for the
+# members' own types
+fn arg<P>(o Object&, p P, name String&, keys Naming) P.Type ? {
+    if p.HasDefault {
+        if not o.Has(name): return p.Default
+    }
+    return try caseField(o, p, name, keys)
+}
+
+# a member's value: the member of that key
+fn caseField<F>(o Object&, f F, name String&, keys Naming) F.Type ? {
     if F.Type.Kind == TypeKind.Reference {
+        # a reference's referent read as a value and moved where the argument lands (O26a): a call's result of a
+        # reference type is read-only as written, and a constructor's argument may need it writable
         v := try From<F.Type.Target>(try o.At(name), keys)
         return v
     } else {
@@ -1199,22 +1238,20 @@ fn (w mut writer&) any<T>(v T, depth I64) {
                 # an error value (T20) as "$" writes it, "io.Error.Failed"; null for none
                 if v == null { w.out.Push("null") } else { w.text($v) }
             } else if T.Kind == TypeKind.Enum {
-                k := policy<T>(w.keys)
+                n := namer<T>(w.keys)
                 for c in T.Cases {
                     if v == c {
                         if c.Fields.Len() == 0 {
-                            w.named(c, k)
+                            w.text(n.key(c))
                         } else {
                             w.out.PushChar('{')
                             w.newline(depth + 1)
-                            w.named(c, k)
-                            w.colon()
+                            w.key(n.key(c))
                             w.out.PushChar('{')
                             for i, f in c.Fields {
                                 if i > 0: w.out.PushChar(',')
                                 w.newline(depth + 2)
-                                w.named(f, k)
-                                w.colon()
+                                w.key(keyText(f, w.keys))
                                 w.any(f.Of(v), depth + 2)
                             }
                             w.newline(depth + 1)
@@ -1231,37 +1268,37 @@ fn (w mut writer&) any<T>(v T, depth I64) {
     }
 }
 
-# a struct's fields as an object - those json.Skip leaves out aside, so an empty one is "{}"
+# a struct's fields as an object - those its key enum lists, in its order, where it declares one - so an empty one is
+# "{}"
 fn (w mut writer&) fields<T>(v T, n I64, depth I64) {
-    k := policy<T>(w.keys)
     w.out.PushChar('{')
     first := true
-    for f in T.Fields {
-        if not f.HasAttr<Skip>() {
-            if not first: w.out.PushChar(',')
-            first = false
-            w.newline(depth + 1)
-            w.named(f, k)
-            w.colon()
-            w.any(f.Of(v), depth + 1)
-        }
+    if T.HasMember("Json") {
+        keysNamed<T>(namer<T>(w.keys))
+        for c in T.Json.Cases: first = w.keyed(v, c, first, depth)
+    } else {
+        for f in T.Fields: first = w.field(f.Of(v), keyText(f, w.keys), first, depth)
     }
     if not first: w.newline(depth)
     w.out.PushChar('}')
 }
 
-# a member's key, quoted: its own "@json.Key", else its name by the policy - a name needs no escape
-fn (w mut writer&) named<F>(f F, keys Naming) {
-    if f.HasAttr<Key>() {
-        w.text((f.Attr<Key>()!).Name)
-    } else {
-        w.out.PushChar('"')
-        w.out.Push(keyText(f, keys))
-        w.out.PushChar('"')
+# the field of v a key enum's case c names, under c's key; whether none was written yet
+fn (w mut writer&) keyed<T, C>(v T, c C, first Bool, depth I64) Bool {
+    for f in T.Fields {
+        if f.Name == c.Name: return w.field(f.Of(v), caseKey(c, w.keys), first, depth)
     }
+    return first
 }
 
-fn (w mut writer&) colon() { w.out.Push(": " if w.indent.Len() > 0 else ":") }
+# one member of an object: x under key; false, as none is the first after it
+fn (w mut writer&) field<X>(x X, key String&, first Bool, depth I64) Bool {
+    if not first: w.out.PushChar(',')
+    w.newline(depth + 1)
+    w.key(key)
+    w.any(x, depth + 1)
+    return false
+}
 
 # a member's name and the ':' after it
 fn (w mut writer&) key<K>(k K) {
@@ -1603,18 +1640,27 @@ if TestBuild {
         assert Encode(doc) == bakedReport
     }
 
-    # key policies and attributes (QBK 4, G39): a type's own policy, a member's own key, a field left out
-    @Naming.Snake
-    type Account struct(UserID I64, @Key("display") DisplayName String&, @Skip Cache I64 = 9) {
+    # key policies and key enums (QBK 4, D4a): the call's policy, a type's own keys, a field left out
+    type Account struct(UserID I64, DisplayName String&, Cache I64 = 9) {
         UserID
         DisplayName
         Cache
         LastSeenAt I64 = 5
     }
 
+    type Account.Json enum {
+        LastSeenAt
+        UserID = "id"
+        DisplayName = "display"
+    }
+
     type Event enum {
-        @Key("boot") StartUp
+        StartUp
         PowerOff(AfterSeconds I64)
+    }
+
+    type Event.Json enum {
+        StartUp = "boot"
     }
 
     type Plain struct(FirstName String&, HTTPServer I64) {
@@ -1622,35 +1668,35 @@ if TestBuild {
         HTTPServer
     }
 
-    bakedAccount String = Encode(Account(3, "ada"))
-    bakedCamel String = Encode(Plain("bo", 1), keys = Naming.Camel)
+    bakedAccount String = Encode(Account(3, "ada"), naming = Snake)
+    bakedCamel String = Encode(Plain("bo", 1), naming = Camel)
 
-    test Naming "names become keys by a policy, a type's own winning, a member's own key over both" {
+    test Naming "names become keys by a policy, a key enum's text over it" {
         assert KeyOf("CreatedAt", Naming.Snake) == "created_at" and KeyOf("CreatedAt", Naming.Camel) == "createdAt"
         assert KeyOf("CreatedAt", Naming.Kebab) == "created-at" and KeyOf("CreatedAt", Naming.Exact) == "CreatedAt"
         assert KeyOf("HTTPServer", Naming.Snake) == "http_server" and KeyOf("UserID", Naming.Camel) == "userId"
         assert KeyOf("x2Go", Naming.Snake) == "x2_go" and KeyOf("max_len", Naming.Camel) == "maxLen"
-        assert bakedAccount == "{\"user_id\":3,\"display\":\"ada\",\"last_seen_at\":5}"
-        assert Encode(Account(3, "ada")) == bakedAccount
-        # the type's own policy wins over the call's
-        assert Encode(Account(3, "ada"), keys = Naming.Kebab) == bakedAccount
+        # the key enum's order, its texts, and its case written bare under the policy; Cache is left out
+        assert bakedAccount == "{\"last_seen_at\":5,\"id\":3,\"display\":\"ada\"}"
+        assert Encode(Account(3, "ada"), naming = Snake) == bakedAccount
+        assert Encode(Account(3, "ada")) == "{\"LastSeenAt\":5,\"id\":3,\"display\":\"ada\"}"
         assert bakedCamel == "{\"firstName\":\"bo\",\"httpServer\":1}"
-        assert Encode(Plain("bo", 1), keys = Naming.Camel) == bakedCamel
-        assert Encode(Plain("bo", 1), keys = Naming.Kebab) == "{\"first-name\":\"bo\",\"http-server\":1}"
-        assert Encode(Event.StartUp) == "\"boot\"" and Encode(Event.PowerOff(3), keys = Naming.Snake) == "{\"power_off\":{\"after_seconds\":3}}"
+        assert Encode(Plain("bo", 1), naming = Camel) == bakedCamel
+        assert Encode(Plain("bo", 1), naming = Kebab) == "{\"first-name\":\"bo\",\"http-server\":1}"
+        assert Encode(Event.StartUp) == "\"boot\"" and Encode(Event.PowerOff(3), naming = Snake) == "{\"power_off\":{\"after_seconds\":3}}"
     }
 
-    test Skip "a field left out is never written, and read back takes its default" {
-        a := try Decode<Account>("{\"user_id\": 7, \"display\": \"bo\", \"Cache\": 1}")
+    test "a field its key enum leaves out is never written, and read back takes its default" {
+        a := try Decode<Account>("{\"id\": 7, \"display\": \"bo\", \"Cache\": 1}")
         assert a.UserID == 7 and a.DisplayName == "bo" and a.Cache == 9 and a.LastSeenAt == 5
-        p := try Decode<Plain>("{\"first-name\": \"cy\", \"http-server\": 2}", keys = Naming.Kebab)
+        p := try Decode<Plain>("{\"first-name\": \"cy\", \"http-server\": 2}", naming = Kebab)
         assert p.FirstName == "cy" and p.HTTPServer == 2
         e := try Decode<Event>("\"boot\"")
         assert e == Event.StartUp
-        f := try Decode<Event>("{\"power_off\": {\"after_seconds\": 4}}", keys = Naming.Snake)
+        f := try Decode<Event>("{\"power_off\": {\"after_seconds\": 4}}", naming = Snake)
         assert f == Event.PowerOff(4)
         missing := false
-        try Decode<Plain>("{\"FirstName\": \"cy\", \"HTTPServer\": 2}", keys = Naming.Camel) catch Error.Missing { missing = true }
+        try Decode<Plain>("{\"FirstName\": \"cy\", \"HTTPServer\": 2}", naming = Camel) catch Error.Missing { missing = true }
         assert missing
     }
 

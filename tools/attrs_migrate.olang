@@ -1,0 +1,409 @@
+# attrs_migrate - attributes removed (G39, G40; 2026-11-16, the user's call): a type's keys are a key enum declared as
+# its member (D4a). The attributes std/json, std/csv and std/flags read become those enums, each written after the type
+# it is on:
+#
+#     @json.Key("id") on a field (a constructor's parameter, a case)   ->  type T.Json enum { ... Field = "id" ... }
+#     @json.Skip                                                        ->  the field left out of T.Json
+#     @csv.Column("price"), @csv.Skip                                   ->  type T.Csv enum, the same way
+#     @flags.Help("how many"), @flags.Short('n')                        ->  type T.Flags enum, type T.Short enum
+#
+# A key enum lists the members it keys, so a type given one lists every field (an enum's every case; flags every
+# parameter) in the order declared - but those skipped - each with its key where an attribute gave one. A call's
+# "keys = json.Naming.Snake" becomes "naming = json.Snake". What has no key enum is left for a person and said so: a
+# type's own "@json.Naming" (the policy is the call's now), an attribute on a generic type (a member declared in place
+# has one owner, no generic), an attribute of any other type. Code only: comments and text are left alone.
+# Re-runnable: a file with none of these attributes changes nothing.
+#
+#     olang build tools/attrs_migrate.olang && build/tools_attrs_migrate FILE...    rewrites the files, naming each one changed
+
+import "std/os"
+import "std/io"
+import "srcmask"
+
+fn main() ? io.Error {
+    args := os.Args()
+    notes Vec<String>
+    for k in range 1, args.Len() {
+        path := args[k]
+        text := try os.ReadFile(path) catch os.Error {
+            try io.PutErrLn("attrs_migrate: " + $path + ": cannot be read")
+            continue
+        }
+        r := result.Of(text)
+        for n in r.Notes: notes.Push($path + ":" + $n)
+        if r.Text == text: continue
+        try os.WriteFile(path, r.Text) catch os.Error { try io.PutErrLn("attrs_migrate: " + $path + ": cannot be written") }
+        try io.PutLn(path)
+    }
+    if notes.Len() == 0: return
+    try io.PutLn("for a person:")
+    for n in notes: try io.PutLn("  " + $n)
+}
+
+# a file migrated, and the places left for a person ("LINE: why")
+type result struct(Text String, Notes Vec<String>&) { Text, Notes }
+
+# one attribute read: its library (json, csv, flags), its word (Key, Skip, Column, Help, Short, Naming), its argument's
+# text as written ("\"id\"", "'n'"; "" for none) and where it stands
+type attr struct(Lib String&, Word String&, Arg String&, Start I64, End I64) { Lib, Word, Arg, Start, End }
+
+# what a type's attributes give: per member (field, parameter or case) its key or help, its short name, and whether it
+# is left out - by library
+type member struct(Name String&) {
+    Name
+    Json String = ""
+    JsonSkip Bool = false
+    Csv String = ""
+    CsvSkip Bool = false
+    Help String = ""
+    Short String = ""
+}
+
+fn result.Of(text String&) result {
+    notes Vec<String>
+    libs := aliases(text)
+    if libs.Len() == 0: return result($text, notes)
+    t := policies(text, libs)
+    from I64 = 0       # past the attributes left for a person
+    for {
+        mask := srcmask.Mask(t, true)
+        at, first := typeWithAttrs(t, mask, libs, from)
+        if at < 0: break
+        next, said := typeMigrated(t, mask, at, libs)
+        if said != "": notes.Push($lineOf(t, first) + ": " + $said)
+        if next == t: from = first + 1
+        t = next
+    }
+    return result(t, notes)
+}
+
+# the libraries imported and the names they are imported by: "json" -> its alias ("json" where it has none)
+fn aliases(text String&) Map<String, String> {
+    out Map<String, String>
+    for line in text.Lines() {
+        s := srcmask.Strip(line)
+        if not s.StartsWith("import "): continue
+        for lib in Array<String&>["json", "csv", "flags"] {
+            if not s.EndsWith($"\"std/" + $lib + "\""): continue
+            words := s.Split(" ")
+            out.Put($lib, $words[1] if words.Len() == 3 else $lib)
+        }
+    }
+    return out
+}
+
+# "keys = json.Naming.Snake" as "naming = json.Snake"
+fn policies(text String&, libs Map<String, String>&) String {
+    a := try libs.Get("json") catch default ""
+    if a == "": return $text
+    return text.Replace($"keys = " + $a + ".Naming.", $"naming = " + $a + ".")
+}
+
+# the line holding offset at, counted from 1
+fn lineOf(t String&, at I64) I64 {
+    n I64 = 1
+    for i in range at {
+        if t[i] == '\n': n++
+    }
+    return n
+}
+
+type noAttr error { Here }
+
+# the attribute starting at i ('@' there, in code), whose library is one imported - failing where none is
+fn attr.At(t String&, mask String&, i I64, libs Map<String, String>&) attr ? noAttr {
+    if t[i] != '@' or mask[i] != 'c': error noAttr.Here
+    for lib in Array<String&>["json", "csv", "flags"] {
+        a := try libs.Get($lib) catch default ""
+        if a == "" or not t[i + 1:].StartsWith($a + "."): continue
+        j := i + 1 + a.Len() + 1
+        w := j
+        for w < t.Len() and srcmask.IsWord(t[w]): w++
+        word := t[j:w]
+        if word == "Naming" {
+            for w < t.Len() and (srcmask.IsWord(t[w]) or t[w] == '.'): w++
+        }
+        arg := ""
+        if w < t.Len() and t[w] == '(' {
+            close := srcmask.CloseOf(t, mask, w)
+            if close < 0: error noAttr.Here
+            arg = srcmask.Strip(t[w + 1:close - 1])
+            w = close
+        }
+        return attr($lib, $word, $arg, i, w)
+    }
+    error noAttr.Here
+}
+
+# the start of the first type declaration (its "type" or the first attribute above it) one of whose attributes from
+# from on is a library's, and where that attribute is; -1 for none
+fn typeWithAttrs(t String&, mask String&, libs Map<String, String>&, from I64) I64, I64 {
+    for i in range from, t.Len() {
+        try attr.At(t, mask, i, libs) catch noAttr { continue }
+        return declStart(t, mask, i), i
+    }
+    return -1, -1
+}
+
+# where the declaration holding offset i begins: the attribute lines above "type" included
+fn declStart(t String&, mask String&, i I64) I64 {
+    at := i
+    for {
+        k := lineStartAt(t, at)
+        s := srcmask.StripStart(t[k:])
+        if s.StartsWith("type "): return k
+        if k == 0: return k
+        at = k - 1
+    }
+    unreachable
+}
+
+fn lineStartAt(t String&, i I64) I64 {
+    k := i
+    for k > 0 and t[k - 1] != '\n': k--
+    return k
+}
+
+# the type declaration starting at at with its attributes gone and its key enums written after it, and what is left
+# for a person - where it has none to be given, why, and the text unchanged
+fn typeMigrated(t String&, mask String&, at I64, libs Map<String, String>&) String, String {
+    head := at
+    for not srcmask.StripStart(t[head:]).StartsWith("type ") {
+        nl := try t[head:].Find("\n") catch default -1
+        if nl < 0: return $t, "a type's attribute standing before no type"
+        head = head + nl + 1
+    }
+    kw := head + (t[head:].Len() - srcmask.StripStart(t[head:]).Len())
+    n := kw + 5
+    e := n
+    for e < t.Len() and srcmask.IsWord(t[e]): e++
+    name := t[n:e]
+    if e < t.Len() and t[e] == '<': return $t, "an attribute on the generic type " + $name + " - give its key enum by hand, as a member alias"
+    body := try bodyOpen(t, mask, e) catch noBody { return $t, "the type " + $name + " has no body the attributes stand in" }
+    close := srcmask.CloseOf(t, mask, body)
+    if close < 0: return $t, "the type " + $name + "'s body does not close"
+    said := ""
+    for i in range at, close {
+        a := try attr.At(t, mask, i, libs) catch noAttr { continue }
+        if a.Word == "Naming": said = "the type " + $name + "'s own json.Naming went: a policy is the call's, 'naming = json." + $policyOf(t[a.Start:a.End]) + "'"
+        else if not known(a): return $t, "the attribute " + $t[a.Start:a.End] + " has no key enum"
+    }
+    members := membersOf(t, mask, at, e, body, close, libs)
+    stripped := stripAttrs(t[:close], mask[:close], at, libs)
+    return $stripped + $t[close:lineEnd(t, close)] + $enumsOf(name, members) + $t[lineEnd(t, close):], said
+}
+
+# the policy a json.Naming attribute names: "Snake"
+fn policyOf(written String&) String {
+    dot := try written.FindLast(".") catch default -1
+    return $written[dot + 1:]
+}
+
+fn known(a attr) Bool {
+    if a.Lib == "json": return a.Word == "Key" or a.Word == "Skip"
+    if a.Lib == "csv": return a.Word == "Column" or a.Word == "Skip"
+    return a.Word == "Help" or a.Word == "Short"
+}
+
+type noBody error { Here }
+
+# the brace opening a type's body after its name: past "struct(...)" or "enum"
+fn bodyOpen(t String&, mask String&, from I64) I64 ? noBody {
+    i := from
+    for i < t.Len() {
+        if mask[i] == 'c' and t[i] == '(' {
+            i = srcmask.CloseOf(t, mask, i)
+            if i < 0: error noBody.Here
+            continue
+        }
+        if mask[i] == 'c' and t[i] == '{': return i
+        if mask[i] == 'c' and t[i] == '\n' and i > from and t[i - 1] != '(' and t[i - 1] != ',': error noBody.Here
+        i++
+    }
+    error noBody.Here
+}
+
+# the offset past the end of the line holding i
+fn lineEnd(t String&, i I64) I64 {
+    nl := try t[i:].Find("\n") catch default -1
+    return t.Len() if nl < 0 else i + nl + 1
+}
+
+# t[from:] with every library attribute and the spaces after it taken out - a line left blank by it with it
+fn stripAttrs(t String&, mask String&, from I64, libs Map<String, String>&) String {
+    b := StringBuilder()
+    b.Push(t[:from])
+    at := from
+    for at < t.Len() {
+        end := lineEnd(t, at)
+        line := lineStripped(t, mask, at, end, libs)
+        if srcmask.Strip(line) != "" or srcmask.Strip(t[at:end]) == "": b.Push(line)
+        at = end
+    }
+    return b.ToString()
+}
+
+# the text from at to end with every library attribute and the spaces after it taken out
+fn lineStripped(t String&, mask String&, at I64, end I64, libs Map<String, String>&) String {
+    b := StringBuilder()
+    i := at
+    for i < end {
+        a := try attr.At(t, mask, i, libs) catch noAttr {
+            b.PushChar(t[i])
+            i++
+            continue
+        }
+        i = a.End
+        for i < end and t[i] == ' ': i++
+    }
+    return b.ToString()
+}
+
+# the members of the type declared from at to close - its constructor's parameters then its body's fields (puns
+# counted once), or an enum's cases - each with what its attributes say
+fn membersOf(t String&, mask String&, at I64, nameEnd I64, body I64, close I64, libs Map<String, String>&) Vec<member> {
+    out Vec<member>
+    open := try t[nameEnd:body].Find("(") catch default -1
+    if open >= 0 {
+        p := nameEnd + open
+        end := srcmask.CloseOf(t, mask, p) - 1
+        for piece in pieces(t, mask, p + 1, end): add(out, t, mask, piece, libs)
+    }
+    for piece in pieces(t, mask, body + 1, close - 1) {
+        if declares(t, mask, piece, libs): add(out, t, mask, piece, libs)
+    }
+    return out
+}
+
+# the spans of a list's items between from and to: split at "," and line breaks outside brackets
+fn pieces(t String&, mask String&, from I64, to I64) Vec<pair> {
+    out Vec<pair>
+    depth I64 = 0
+    s := from
+    for i in range from, to {
+        if mask[i] != 'c': continue
+        ch := t[i]
+        if ch == '(' or ch == '[' or ch == '{' or ch == '<': depth++
+        if ch == ')' or ch == ']' or ch == '}' or ch == '>': depth--
+        if depth > 0 or (ch != ',' and ch != '\n'): continue
+        out.Push(pair(s, i))
+        s = i + 1
+    }
+    out.Push(pair(s, to))
+    return out
+}
+
+type pair struct(A I64, B I64) { A, B }
+
+# whether a body's item declares a member: past its attributes, a name and then nothing, a type or ":="
+fn declares(t String&, mask String&, p pair, libs Map<String, String>&) Bool {
+    i := pastAttrs(t, mask, p.A, p.B, libs)
+    if i >= p.B or not srcmask.IsIdStart(t[i]) or mask[i] != 'c': return false
+    j := i
+    for j < p.B and srcmask.IsWord(t[j]): j++
+    word := t[i:j]
+    if word == "fn" or word == "if" or word == "for" or word == "assert" or word == "error" or word == "return": return false
+    rest := srcmask.Strip(t[j:p.B])
+    if rest == "" or rest.StartsWith(":=") or rest.StartsWith("#"): return true
+    return srcmask.IsIdStart(rest[0]) or rest[0] == '['
+}
+
+fn pastAttrs(t String&, mask String&, from I64, to I64, libs Map<String, String>&) I64 {
+    i := from
+    for i < to {
+        if t[i] == ' ' or t[i] == '\t' {
+            i++
+            continue
+        }
+        a := try attr.At(t, mask, i, libs) catch noAttr { return i }
+        i = a.End
+    }
+    return i
+}
+
+# the member an item declares added to out, once, with its attributes
+fn add(out mut Vec<member>&, t String&, mask String&, p pair, libs Map<String, String>&) {
+    i := pastAttrs(t, mask, p.A, p.B, libs)
+    if i >= p.B or not srcmask.IsIdStart(t[i]): return
+    j := i
+    for j < p.B and srcmask.IsWord(t[j]): j++
+    m := member($t[i:j])
+    k := -1
+    for x in range out.Len() {
+        if out[x].Name == m.Name: k = x
+    }
+    if k >= 0: m = out[k]
+    for a in range p.A, i {
+        x := try attr.At(t, mask, a, libs) catch noAttr { continue }
+        take(m, x)
+    }
+    if k >= 0 { out[k] = m } else { out.Push(m) }
+}
+
+# what one attribute says of its member
+fn take(m mut member&, a attr) {
+    if a.Lib == "json" and a.Word == "Key": m.Json = $a.Arg
+    if a.Lib == "json" and a.Word == "Skip": m.JsonSkip = true
+    if a.Lib == "csv" and a.Word == "Column": m.Csv = $a.Arg
+    if a.Lib == "csv" and a.Word == "Skip": m.CsvSkip = true
+    if a.Lib == "flags" and a.Word == "Help": m.Help = $a.Arg
+    if a.Lib == "flags" and a.Word == "Short": m.Short = shortText(a.Arg)
+}
+
+# a short name's character literal as text: 'n' -> "n"
+fn shortText(arg String&) String {
+    if arg.Len() == 3 and arg[0] == '\'': return $"\"" + $arg[1:2] + "\""
+    return $arg
+}
+
+# the key enums the members' attributes give, each a declaration after the type's
+fn enumsOf(name String&, ms Vec<member>&) String {
+    b := StringBuilder()
+    if given(ms, "json"): b.Push(enumText(name, "Json", ms, "json"))
+    if given(ms, "csv"): b.Push(enumText(name, "Csv", ms, "csv"))
+    if given(ms, "flags"): b.Push(enumText(name, "Flags", ms, "flags"))
+    if given(ms, "short"): b.Push(enumText(name, "Short", ms, "short"))
+    return b.ToString()
+}
+
+# whether some member has an attribute of lib's
+fn given(ms Vec<member>&, lib String&) Bool {
+    for m in ms {
+        if lib == "json" and (m.Json != "" or m.JsonSkip): return true
+        if lib == "csv" and (m.Csv != "" or m.CsvSkip): return true
+        if lib == "flags" and m.Help != "": return true
+        if lib == "short" and m.Short != "": return true
+    }
+    return false
+}
+
+# "type Name.Member enum { ... }": every member lib does not leave out, with its key where it has one
+fn enumText(name String&, memberName String&, ms Vec<member>&, lib String&) String {
+    b := StringBuilder()
+    b.Push($"\ntype " + $name + "." + $memberName + " enum {\n")
+    for m in ms {
+        if lib == "json" and m.JsonSkip or lib == "csv" and m.CsvSkip: continue
+        if lib == "short" and m.Short == "": continue
+        v := m.Json if lib == "json" else (m.Csv if lib == "csv" else (m.Help if lib == "flags" else m.Short))
+        b.Push($"    " + $m.Name + $(" = " + $v if v != "" else "") + "\n")
+    }
+    b.Push("}\n")
+    return b.ToString()
+}
+
+test result.Of "attributes become key enums after their type; what has none is left for a person" {
+    a := "import \"std/json\"\n\ntype User struct(@json.Key(\"id\") Id I64, @json.Skip Cache I64 = 0) {\n    Id\n    Cache\n    Name String& = \"x\"\n}\n\nx := json.Encode(u, keys = json.Naming.Snake)\n"
+    want := "import \"std/json\"\n\ntype User struct(Id I64, Cache I64 = 0) {\n    Id\n    Cache\n    Name String& = \"x\"\n}\n\ntype User.Json enum {\n    Id = \"id\"\n    Name\n}\n\nx := json.Encode(u, naming = json.Snake)\n"
+    r := result.Of(a)
+    assert r.Text == want and r.Notes.Len() == 0
+    assert result.Of(r.Text).Text == r.Text
+    f := "import \"std/flags\"\ntype O struct(@flags.Help(\"how many\") @flags.Short('n') Count I64 = 1, Quiet Bool = false) { Count, Quiet }\n"
+    assert result.Of(f).Text == "import \"std/flags\"\ntype O struct(Count I64 = 1, Quiet Bool = false) { Count, Quiet }\n\ntype O.Flags enum {\n    Count = \"how many\"\n    Quiet\n}\n\ntype O.Short enum {\n    Count = \"n\"\n}\n"
+    e := "import j \"std/json\"\ntype E enum {\n    @j.Key(\"boot\") StartUp\n    Off\n}\n"
+    assert result.Of(e).Text == "import j \"std/json\"\ntype E enum {\n    StartUp\n    Off\n}\n\ntype E.Json enum {\n    StartUp = \"boot\"\n    Off\n}\n"
+    p := "import \"std/json\"\n@json.Naming.Snake\ntype P struct(A I64) { A }\n"
+    rp := result.Of(p)
+    assert rp.Text == "import \"std/json\"\ntype P struct(A I64) { A }\n" and rp.Notes.Len() == 1
+    none := "type T struct(A I64) { A }\n# @json.Key(\"x\")\n"
+    assert result.Of(none).Text == none
+}

@@ -1,7 +1,0 @@
-# check: fail error[G39]: field 'x' is a pun of its parameter
-# G39, G40: a pun is its parameter stored - one place for its attributes
-type Key struct(Name String&) { Name }
-type P struct(x I64) {
-    @Key("x") x
-}
-fn main() { assert P(1).x == 1 }

@@ -1675,7 +1675,7 @@ fn (c mut Checker&) namespaceTaken(o types.TypeId, n source.NameId) String {
 fn (c mut Checker&) reflectedName(name String&) String {
     if generic.ProjectsType(name) or name == "Functions" or name == "Methods" or name == "Cases" or name == "Fields" or
        name == "Params" or name == "Results" or name == "Errors" or name == "Name" or name == "Kind" or name == "Size" or
-       name == "Align" or name == "Length" or name == "Nullable" or name == "Attr" or name == "HasAttr" {
+       name == "Align" or name == "Length" or name == "Nullable" or name == "HasMember" {
         return "a member reflection reads through a type's name"
     }
     return ""
@@ -2010,14 +2010,12 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
             }
             case ast.Decl.Member(msp, _) { c.memberRules(mi, msp, true) }
             case ast.Decl.Type(tsp, td) {
-                c.declAttrs(mi, d)
                 if td.Owner != null: c.memberRules(mi, tsp, inPlaceBody(td))
                 c.typeRules(mi, tsp, td)
                 c.declaredCtor(mi, td)
                 c.traitSets(mi, td)
                 c.traitHeader(mi, td)
             }
-            case ast.Decl.Fn(_) { c.declAttrs(mi, d) }
             case ast.Decl.Assert(sp, k, msg) {
                 c.push(-1, mi, types.VoidT, types.ListId(0))
                 c.topAssert(mi, sp, k, msg)
@@ -4507,18 +4505,7 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     }
     from := c.stmts.Len()
     x typed.Expr?& = null
-    if v.Hidden and k < v.Values.Len() {
-        # G39: an attribute's value - a type written bare its constructor called with no arguments ("@json.Skip")
-        ax := c.attrCall(v.Values[k])
-        x = c.attrExpr(ax)
-        want = c.inferred(ax, x, true)
-        if want != types.UnknownT and not c.attrTypeOk(want) {
-            c.err(ax.Span(), msgs.AttrType(c.ty(want)))
-        } else if want != types.UnknownT and c.holdsWritable(want) {
-            # an attribute is read as a read-only copy of constant data (G39, T25c)
-            c.err(ax.Span(), msgs.AttrWritable(c.ty(want)))
-        }
-    } else if k < v.Values.Len() {
+    if k < v.Values.Len() {
         x = c.exprTo(v.Values[k], want)
         if v.Ty == null: want = c.inferred(v.Values[k], x, true)
         # B10c: a build constant's default, which -D's value replaces - fitted to its type as a literal written there
@@ -4803,159 +4790,6 @@ fn (c mut Checker&) unrollUnbind(n source.NameId, was types.TypeId) {
     if n == source.NameId(0) or c.text(n) == "_": return
     c.fr().Ctx.Vars.Remove(n)
     c.reflUnbind(n, was)
-}
-
-# ---- attributes (G39) ----
-
-# an attribute's value as written: a type named bare is its constructor called with no arguments ("@json.Skip"), an
-# enum's case written bare its value ("@Level.High")
-fn (c mut Checker&) attrCall(x ast.Expr&) ast.Expr& {
-    named := false
-    match x {
-        case ast.Expr.Name(_, _), ast.Expr.Member(_, _, _) { named = c.typeNamed(x) >= types.TypeId(0) }
-        case ast.Expr.Generic(_, g, _) { named = c.genericNamed(g) >= types.DeclId(0) }
-        case _ { }
-    }
-    if not named: return x
-    return ast.Expr.Call(x.Span(), x, Array<ast.Expr&>(0))
-}
-
-# an attribute's value checked (G39): what it can fail with - a constructor's requirement (D17), say - ends its
-# building as "!" would, an error where it is built while compiling
-fn (c mut Checker&) attrExpr(y ast.Expr&) typed.Expr& {
-    fr := c.fr()
-    mark := fr.leaks.Len()
-    before := fr.Fallible
-    fr.Tries++
-    x := c.expr(y, types.UnknownT)
-    fr.Tries--
-    covered := fr.Fallible != before
-    fr.Fallible = before
-    if not covered: return x
-    fr.leaks.Truncate(mark)
-    return typed.Expr.Try(y.Span(), typeOf(x), typed.Try(x, Array<typed.Clause&>(0), true))
-}
-
-# whether a type is one an attribute may be (G39): a struct, an enum or a declared number type a program declares - a
-# built-in type, the prelude's included (String, Vec), says nothing of what the attribute means
-fn (c mut Checker&) attrTypeOk(t types.TypeId) Bool {
-    if not c.isNamed(t): return false
-    d := c.P.T.DeclOf(t)
-    if c.P.L.Mods[c.P.T.DeclModule(d)].Identity.StartsWith("std/prelude"): return false
-    k := c.P.T.DeclKindOf(d)
-    if k == types.DeclKind.Struct or k == types.DeclKind.Enum: return true
-    return k == types.DeclKind.Over and c.isNumber(t)
-}
-
-# a declaration's attributes (G39): each checked as its global is, at most one of each type
-fn (c mut Checker&) attrsChecked(mi I64, attrs Array<ast.Attr&>&) {
-    if attrs.Len() == 0: return
-    seen Vec<types.TypeId>
-    for a in attrs {
-        t := c.globalType(mi, a.Global)
-        if t == types.UnknownT: continue
-        for s in seen {
-            if c.P.T.Same(s, t) {
-                c.push(-1, mi, types.VoidT, types.ListId(0))
-                c.err(a.Sp, msgs.AttrTwice(c.ty(t)))
-                c.pop()
-            }
-        }
-        seen.Push(t)
-    }
-}
-
-# every attribute a declaration's parts carry (G39): a type's, its constructor's parameters' and fields', its cases'
-# and their fields'; a function's and its parameters'
-fn (c mut Checker&) declAttrs(mi I64, d ast.Decl&) {
-    match d {
-        case ast.Decl.Type(_, td) {
-            c.attrsChecked(mi, td.Attrs)
-            if td.Body != null: c.bodyAttrs(mi, td.Body!)
-        }
-        case ast.Decl.Fn(f) {
-            c.attrsChecked(mi, f.Attrs)
-            for prm in f.S.Params: c.attrsChecked(mi, prm.Attrs)
-        }
-        case _ { }
-    }
-}
-
-# the attributes a type's body writes: its constructor's parameters and its body's declarations, a case's and its
-# payload's, a declared number's constructor's parameters
-fn (c mut Checker&) bodyAttrs(mi I64, body ast.TypeBody&) {
-    match body {
-        case ast.TypeBody.Struct(sb) {
-            for prm in sb.Params: c.attrsChecked(mi, prm.Attrs)
-            for st in sb.Body {
-                if st == ast.Stmt.Var: c.attrsChecked(mi, st.v.Attrs)
-            }
-        }
-        case ast.TypeBody.Enum(cases, _) {
-            for cd in cases {
-                c.attrsChecked(mi, cd.Attrs)
-                for prm in cd.Payload: c.attrsChecked(mi, prm.Attrs)
-            }
-        }
-        case ast.TypeBody.Over(_, ctor) {
-            if ctor == null: return
-            for prm in ctor.S.Params: c.attrsChecked(mi, prm.Attrs)
-        }
-        case _ { }
-    }
-}
-
-# what "x.Attr<A>()" reads the attributes of (G40): the descriptor x is, or the type it names; -1 for neither, Unknown
-# where that was said wrong
-fn (c mut Checker&) attrHolder(x ast.Expr&) types.TypeId {
-    dt := c.descTypeOf(x)
-    if dt >= types.TypeId(0): return dt
-    return c.reflType(x)
-}
-
-# the attribute of type a written on what holder names (G40): its module and its hidden global's name, -1 for none
-fn (c mut Checker&) attrFound(holder types.TypeId, a types.TypeId) I64, source.NameId {
-    mi, attrs := c.P.AttrsOf(holder)
-    if mi < 0: return -1, source.NameId(0)
-    for at in attrs {
-        t := c.globalType(mi, at.Global)
-        if c.P.T.Same(t, a) or c.P.T.Same(c.P.Held(a), t): return mi, at.Global
-    }
-    return -1, source.NameId(0)
-}
-
-# "x.Attr<A>()" and "x.HasAttr<A>()" (G40) - null where g reads no attribute: x is no type and no descriptor
-fn (c mut Checker&) attrRead(sp source.Span, g ast.Expr&, targs Array<ast.TypeRef&>&, args Array<ast.Expr&>&) typed.Expr?& {
-    x, name, nsp := c.attrCallee(g)
-    if name == "": return null
-    holder := c.attrHolder(x)
-    if holder < types.TypeId(0): return null
-    if holder == types.UnknownT or targs.Len() != 1 or args.Len() != 0 {
-        if holder != types.UnknownT: c.err(nsp, msgs.AttrRead(name))
-        c.dropArgs(args)
-        return c.unknown(sp)
-    }
-    a := c.resolve(targs[0])
-    if a == types.UnknownT: return c.unknown(sp)
-    mi, gn := c.attrFound(holder, a)
-    if name == "HasAttr" { return c.lit(sp, types.BoolT, 1 if mi >= 0 else 0) }
-    if mi < 0 { return c.invoke(sp, nsp, c.P.PreludeFn("std/prelude/reflect", "attrMissing"), null, Array<ast.Expr&>(0), Array<typed.Expr&>(0), Array<types.TypeId>(1, a)) }
-    # an attribute of a type holding a "mut" reference is an error where it is written (G39), and nothing more here
-    if c.holdsWritable(c.globalType(mi, gn)): return c.unknown(sp)
-    v := c.read(sp, typed.Lvalue.Global(sp, c.globalType(mi, gn), mi, gn))
-    return c.invoke(sp, nsp, c.P.PreludeFn("std/prelude/reflect", "attrGot"), null, Array<ast.Expr&>(0), Array<typed.Expr&>[v])
-}
-
-# the receiver and the name of "x.Attr" or "x.HasAttr" (G40), "" for another
-fn (c mut Checker&) attrCallee(g ast.Expr&) ast.Expr&, String, source.Span {
-    match g {
-        case ast.Expr.Member(msp, x, n) {
-            name := c.text(n)
-            if name == "Attr" or name == "HasAttr": return x, name, memberSpan(msp, name.Len())
-            return g, "", msp
-        }
-        case _ { return g, "", g.Span() }
-    }
 }
 
 # ---- a global's value given below it (D13e) ----
@@ -12569,11 +12403,12 @@ fn (c mut Checker&) wantedAt(sp source.Span) types.TypeId {
 fn (c mut Checker&) call1(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, want types.TypeId) typed.Expr& {
     match f {
         case ast.Expr.Name(nsp, n) { return c.callNamed(sp, f, nsp, n, args, want) }
-        case ast.Expr.Member(msp, x, n) { return c.callMember(sp, f, msp, x, n, args, want) }
+        case ast.Expr.Member(msp, x, n) {
+            hm := c.hasMemberCall(sp, msp, x, n, args)
+            if hm != null: return hm
+            return c.callMember(sp, f, msp, x, n, args, want)
+        }
         case ast.Expr.Generic(gsp, g, targs) {
-            # G40: x.Attr<A>(), x.HasAttr<A>() - a type's or a descriptor's attributes
-            ar := c.attrRead(sp, g, targs, args)
-            if ar != null: return ar
             return c.genericCall(sp, gsp, g, targs, args, want)!
         }
         case _ { return c.callValue(sp, c.opAfter(f.Span(), 1), c.expr(f, types.UnknownT), args) }
@@ -16096,6 +15931,9 @@ fn (c mut Checker&) reflTextOf(x ast.Expr&) String ? Unrendered {
         }
         case _ { }
     }
+    # text reflection knows, joined without "$": "T.Name", a descriptor's "c.Name"
+    v := c.reflFold(x)
+    if v.Ok and v.K == RvText: return v.S
     error Unrendered
 }
 
@@ -16173,8 +16011,7 @@ fn (c mut Checker&) reflFold(x ast.Expr&) reflVal {
         }
         case ast.Expr.Call(_, f, args) {
             return match f {
-                case ast.Expr.Generic(_, g, targs): c.reflHasAttr(g, targs, args)
-                case ast.Expr.Member(_, y, n): c.reflLen(y, n, args)
+                case ast.Expr.Member(_, y, n): c.reflLen(y, n, args) if c.text(n) != "HasMember" else c.reflHasMember(y, n, args)
                 case _: reflVal.noRefl()
             }
         }
@@ -16193,18 +16030,28 @@ fn (c mut Checker&) reflFold(x ast.Expr&) reflVal {
     }
 }
 
-# G40, G35: "x.HasAttr<A>()" is known while compiling
-fn (c mut Checker&) reflHasAttr(g ast.Expr&, targs Array<ast.TypeRef&>&, args Array<ast.Expr&>&) reflVal {
-    ax, name, _ := c.attrCallee(g)
-    if name != "HasAttr" or targs.Len() != 1 or args.Len() != 0: return reflVal.noRefl()
-    holder := c.attrHolder(ax)
-    if holder < types.TypeId(0): return reflVal.noRefl()
+# G32, G35: "T.HasMember("Json")" - whether type T has a type member of that name (D4a) the module reading it may
+# read, a Bool known while compiling: what a library reads a type's own declarations through ("type Account.Json enum")
+fn (c mut Checker&) reflHasMember(y ast.Expr&, n source.NameId, args Array<ast.Expr&>&) reflVal {
+    if c.text(n) != "HasMember": return reflVal.noRefl()
+    t := c.reflType(y)
+    if t < types.TypeId(0): return reflVal.noRefl()
     c.reflTouched = true
-    if holder == types.UnknownT: return reflVal.noRefl()
-    a := c.resolve(targs[0])
-    if a == types.UnknownT: return reflVal.noRefl()
-    mi, _ := c.attrFound(holder, a)
-    return reflVal.rvBool(mi >= 0)
+    if t == types.UnknownT or args.Len() != 1: return reflVal.noRefl()
+    lit := try c.textValue(args[0]) catch NotText { return reflVal.noRefl() }
+    m := c.P.MemberOf(t, c.P.L.Names.Intern($String(c.strBytes(lit))))
+    return reflVal.rvBool(m >= 0 and not c.P.MemberHidden(m, c.fr().Mi))
+}
+
+# "T.HasMember("Json")" checked as a value (G32): a Bool literal - null where x.n is no such call, an error where its
+# argument is no text literal
+fn (c mut Checker&) hasMemberCall(sp source.Span, msp source.Span, x ast.Expr&, n source.NameId, args Array<ast.Expr&>&) typed.Expr?& {
+    if c.text(n) != "HasMember" or c.reflType(x) < types.TypeId(0): return null
+    v := c.reflHasMember(x, n, args)
+    if v.Ok: return c.lit(sp, types.BoolT, v.I)
+    if c.reflType(x) != types.UnknownT: c.err(memberSpan(msp, 9), msgs.HasMemberArg())
+    c.dropArgs(args)
+    return c.unknown(sp)
 }
 
 # a reflected list's "Len()" is known while compiling (G32)
@@ -16272,6 +16119,7 @@ fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
     ds := c.P.DescOf(dt)
     c.reflTouched = true
     if name == "Name": return reflVal.rvText(c.descName(ds))
+    if name == "Value" and ds.K == generic.DescCase: return c.reflCaseValue(ds)
     if name == "HasDefault" and ds.K == generic.DescParam: return reflVal.rvBool(c.paramDefault(ds) != null)
     if name == "Offset" and ds.K == generic.DescField {
         off := c.fieldOffset(ds)
@@ -16282,6 +16130,17 @@ fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
         return reflVal.rvInt(b) if b >= 0 else reflVal.noRefl()
     }
     return reflVal.noRefl()
+}
+
+# a case's Value (G34): its raw value (T17e) - text, or an integer where it is an I64 - and where its enum names no raw
+# type, its name; an error value's word and a struct's one case have their names
+fn (c mut Checker&) reflCaseValue(ds generic.Desc) reflVal {
+    r := c.P.ReflUnder(ds.Of)
+    if not c.isEnum(r): return reflVal.rvText(c.descName(ds))
+    raws := c.rawsOf(r)
+    if raws.Ty == types.UnknownT or ds.Case >= raws.Bits.Len(): return reflVal.rvText(c.descName(ds))
+    if raws.Text: return reflVal.rvText($String(raws.Bytes[ds.Case]))
+    return reflVal.rvInt(raws.Bits[ds.Case])
 }
 
 fn (c mut Checker&) typeKindType() types.TypeId { return c.P.PreludeType("std/prelude/reflect", "TypeKind") }
@@ -16449,10 +16308,10 @@ fn (c mut Checker&) reflMember(sp source.Span, nsp source.Span, x ast.Expr&, n s
     v := c.reflConst(x, n)
     if v.Ok: return c.reflExpr(sp, v)
     have := match ds.K {
-        case generic.DescField: "Name, Type, Offset, BitOffset, Bits, Of, Attr and HasAttr"
-        case generic.DescCase: "Name, Fields, Attr and HasAttr"
-        case generic.DescParam: "Name, Type, HasDefault, Default, Attr and HasAttr"
-        case generic.DescFunc: "Name, Type, Params, Results, Errors, Attr, HasAttr, NoReturn, Exported, Extern, Commutes and G42's facts - and it is called"
+        case generic.DescField: "Name, Type, Offset, BitOffset, Bits and Of"
+        case generic.DescCase: "Name, Value and Fields"
+        case generic.DescParam: "Name, Type, HasDefault and Default"
+        case generic.DescFunc: "Name, Type, Params, Results, Errors, NoReturn, Exported, Extern, Commutes and G42's facts - and it is called"
         case _: "Type"
     }
     what := match ds.K {
@@ -16881,6 +16740,16 @@ fn (c mut Checker&) rawsOf(t types.TypeId) rawTable& {
     return r
 }
 
+# whether a case of an enum naming no raw type writes a text literal for its value - its raw type is then String (T17e)
+fn (c mut Checker&) textValued(cases Array<ast.CaseDecl&>&) Bool {
+    for cd in cases {
+        if cd.Value == null: continue
+        try c.textValue(cd.Value!) catch NotText { continue }
+        return true
+    }
+    return false
+}
+
 # an enum declaration's raw values (T17e), its errors said where report is: a raw type that is text or an integer
 # type; each case's value written as a literal of it, else text its name, an integer one more than the case before's
 fn (c mut Checker&) rawTable(d types.DeclId, report Bool) rawTable& {
@@ -16896,7 +16765,7 @@ fn (c mut Checker&) rawTable(d types.DeclId, report Bool) rawTable& {
 # rawTable of an enum declaration's cases and raw type
 fn (c mut Checker&) rawEnum(d types.DeclId, cases Array<ast.CaseDecl&>&, raw ast.TypeRef?&, report Bool) rawTable& {
     none := rawTable(types.UnknownT, false, Array<I64>(0), Array<Array<U8>&>(0))
-    if raw == null {
+    if raw == null and not c.textValued(cases) {
         if report {
             for cd in cases {
                 if cd.Value != null: c.err(cd.Value!.Span(), msgs.RawWithoutType())
@@ -16904,11 +16773,12 @@ fn (c mut Checker&) rawEnum(d types.DeclId, cases Array<ast.CaseDecl&>&, raw ast
         }
         return none
     }
-    rt := c.P.Resolve(c.P.DeclContext(d), raw)
+    # T17e: an enum naming no raw type whose case writes a text literal has text raw values, "enum { UserID = "id" }"
+    rt := c.textType() if raw == null else c.P.Resolve(c.P.DeclContext(d), raw)
     if rt == types.UnknownT: return none
     text := c.P.T.Same(rt, c.textType())
     if not text and not c.isInt(rt) {
-        if report: c.err(raw.Span(), msgs.RawType(c.ty(rt)))
+        if report and raw != null: c.err(raw.Span(), msgs.RawType(c.ty(rt)))
         return none
     }
     n := cases.Len()

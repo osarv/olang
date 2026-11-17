@@ -196,13 +196,6 @@ fn word(text String&, t token.Token) String { return $text[t.Start:t.End] }
 # the name a declaration declares - "f", "T", "T.M", "T.Builder", "import io", a global's name - or "" for a statement
 fn declKey(text String&, toks Array<token.Token>&, a I64, b I64) String {
     i := a
-    # attributes before it (G39): "@T", "@m.T(...)"
-    for i <= b and toks[i].Kind == token.Tok.At {
-        i++
-        for i <= b and (toks[i].Kind == token.Tok.Iden or toks[i].Kind == token.Tok.Dot): i++
-        if i <= b and toks[i].Kind == token.Tok.LParen: i = matching(toks, i, b) + 1
-    }
-    if i > b: return ""
     if toks[i].Kind == token.Tok.Iden and word(text, toks[i]) == "export": i++
     if i > b: return ""
     k := toks[i].Kind

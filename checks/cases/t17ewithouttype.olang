@@ -1,4 +1,4 @@
-# check: fail error[T17e]: a raw value needs the enum's raw type, written after 'enum': 'enum String {' or 'enum U8 {'
+# check: fail error[T17e]: an integer raw value needs the enum's raw type, written after 'enum': 'enum U8 {'
 type Odd enum {
     A = 1
 }
