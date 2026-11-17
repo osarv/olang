@@ -39473,3 +39473,39 @@ verifies nothing, and `SSL_CTX_set_verify` wants a callback olang cannot pass as
 closes its own) and is built fresh at the return; the helpers free the context and descriptor on their failure paths.
 Tests run `openssl s_server -www` locally with a certificate made for `localhost`: trusted + named host passes, an
 untrusted one and a trusted one for another name (127.0.0.1) fail with Verify.
+## 2026-11-17: exclusive parameters - noalias on a writable reference proven alone (O43; an optimization, mine; wt-noalias)
+
+oann's INT8 micro-kernels accumulated into a local tile and copied it out at the end, because accumulating straight
+into the `mut tile<I32>&` parameter measured ~3x slower at 512^3: LLVM kept the tile's lanes in memory, loading and
+storing them every step of the depth loop. Reproduced with a small kernel (`x += (a4 * w).Sum<I32>(4)` into a
+parameter's tile against into a local, each module compiled alone as an object is): 2.7x. Three things kept the lanes
+out of registers, found by editing the IR by hand: (1) the LaneDots helper's loads and stores carried no access tag, so
+the tile's i32 lanes could alias the U8/I8 operands - whose data pointers come out of `{ i64, ptr }` descriptors passed
+by value, which no noalias can name, so only T36's tags tell them apart; (2) the loop's slice-bounds exits come before
+the stores, so promoting them needs the tile known dereferenceable and aligned on entry; (3) a speculative store at
+those exits needs the storage known to be nobody else's - LLVM's noalias (or `writable`).
+
+`writable` was rejected: it says the bytes are loaded and stored back on entry, which another task writing a different
+field of the same value at the same time (legal in olang) would lose. noalias is per byte and only constrains what the
+function touches, so it is the one stated. The language has no exclusivity rule for `mut` (T25b is permission only, no
+borrow checker), so the compiler proves it per function (effects.Exclusive): T36 means two places overlap only where one
+type holds the other in place, so a writable reference parameter is exclusive where no other parameter (plain data
+passed as a value aside), the result built through memory, nor what the referent's own references lead to (a node
+whose next is itself) reaches a type holding the referent or held by it - anything opaque (a function value, an `any`,
+a trait, an extern type) reaching everything; and the body, through all it may call, reads no mutable global nor an
+immutable one holding a reference (new fact RefGlobals), calls nothing unknown or through a value, no C but its math,
+starts no task, waits on nothing and makes no atomic operation (new fact Atomics: another task's write it orders would be
+an access not based on the parameter). Lambdas (environments) and generators (coroutine frames) get none. Because what
+the body may call decides it, it is a whole-program fact (B3i), "O43 NAME" with the mask as value, decided for every
+body whose type allows any before reuse is judged, and read by the module holding the code. The pointer is written
+`noalias dereferenceable(size) align(a)` (`_or_null` for `?&`); align is the type's, since no reference names a packed
+field (T13c). LaneDots' helper now carries the lanes' and the operands' element tags, in its name.
+
+Measured (the kernel compiled per module, as oann's was; best of 7 on a loaded machine): the in-place accumulate went
+from 297 ms to 213 ms against the local's 123-136 ms - the lanes' loads leave the loop (the IR shows them as phis) but
+their stores stay in it: sinking a store past an exit where the loop had not stored yet (here the slice-bounds checks)
+needs LLVM's `writable`, which claims more than is proven, so the stores stay. With `writable` added by hand the two
+were equal (135 vs 133 ms). Closing that gap needs either a language rule that a `mut` parameter's whole referent is
+the call's alone (across tasks too), or the bounds checks hoisted out of the loop. In a whole-program LTO build both
+forms were already equal (the kernel inlined into a caller holding a local tile). The compiler's own IR carries 2104
+exclusive parameters; its self-build time did not move measurably.

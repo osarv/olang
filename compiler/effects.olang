@@ -45,6 +45,8 @@ type Facts struct() {
     Blocks Bool = false         # may wait: a join, a lock, a channel, a sleep, C not known to return at once
     WritesGlobals Bool = false  # stores into a global
     ReadsGlobals Bool = false   # reads a mutable global
+    RefGlobals Bool = false     # reads an immutable global holding a reference (what it refers to may change)
+    Atomics Bool = false        # an atomic operation (P9): what it orders, another task may write
     CallsC Bool = false         # calls an extern or a C import, C's math functions and the runtime's own aside
     Opaque Bool = false         # calls C not known to return
     Spawns Bool = false         # starts a task
@@ -772,6 +774,8 @@ fn Merge(into mut Facts&, from Facts&) {
     into.Blocks = into.Blocks or from.Blocks
     into.WritesGlobals = into.WritesGlobals or from.WritesGlobals
     into.ReadsGlobals = into.ReadsGlobals or from.ReadsGlobals
+    into.RefGlobals = into.RefGlobals or from.RefGlobals
+    into.Atomics = into.Atomics or from.Atomics
     into.CallsC = into.CallsC or from.CallsC
     into.Opaque = into.Opaque or from.Opaque
     into.Spawns = into.Spawns or from.Spawns
@@ -1915,7 +1919,9 @@ fn (e mut Effects&) prim(op typed.PrimOp, args Array<typed.Expr&>&) {
              typed.PrimOp.LaneDots {
             # args[0] borrows the integer place written (LaneDots: the first of the integers)
             if args.Len() > 0: e.written(args[0])
+            if op != typed.PrimOp.LaneDots: e.cur.Atomics = true
         }
+        case typed.PrimOp.AtomicLoad { e.cur.Atomics = true }
         case _ { }
     }
     for y in args: e.expr(y)
@@ -2052,8 +2058,9 @@ fn (e mut Effects&) place(p typed.Lvalue&, store Bool) {
 fn (e mut Effects&) placeParts(p typed.Lvalue&) {
     match p {
         case typed.Lvalue.Local(_, _, _), typed.Lvalue.Target(_, _) { }
-        case typed.Lvalue.Global(_, _, mi, n) {
+        case typed.Lvalue.Global(_, ty, mi, n) {
             if e.mutGlobal(mi, n): e.cur.ReadsGlobals = true
+            else if not plainData(e.P.T, ty): e.cur.RefGlobals = true
         }
         case typed.Lvalue.Deref(_, _, r) { e.expr(r) }
         case typed.Lvalue.Field(_, _, base, _) { e.placeParts(base) }
@@ -2575,4 +2582,168 @@ fn (e Effects&) bodyName(w I64) String {
         case typed.BodyOf.Dtor(_): "a destructor"
         case _: "a body"
     }
+}
+
+# ---- exclusive parameters (O43) ----
+
+# O43: the parameters of body b given to it as a writable reference that nothing else the body may reach during the call
+# can reach the storage of - bit i parameter i (the receiver first) - which its code is written with LLVM's noalias.
+# Storage is never read as another type (T36), so two places overlap only where one's type holds the other's in place;
+# a writable reference parameter is exclusive where no other parameter, nor the result built where the caller says, nor
+# what its referent's own references lead to, reaches a type that holds its referent or that its referent holds, and the
+# body - through all it may call - reads no global that changes or that holds a reference, calls nothing not known, no C
+# but its math, starts no task, waits on nothing and makes no atomic operation (another task's write would be ordered
+# by it). A function's body only: not a lambda's (its environment), nor a generator's
+fn (e mut Effects&) Exclusive(b I64) I64 {
+    mask := e.ExclusiveShapes(b)
+    if mask == 0: return 0
+    f := e.Of(b)
+    if f.ReadsGlobals or f.WritesGlobals or f.RefGlobals or f.CallsC or f.Unknown or f.Back or f.Unchecked or f.Through: return 0
+    if f.Spawns or f.Blocks or f.Atomics: return 0
+    return mask
+}
+
+# ...as its type alone says, before what the body does: the parameters no other one, nor the result, may reach
+fn (e mut Effects&) ExclusiveShapes(b I64) I64 {
+    if b < 0 or b >= e.Bodies.Len(): return 0
+    body typed.Body& = e.Bodies[b]
+    if body.Gen or body.Of != typed.BodyOf.Fn: return 0
+    t types.Table& = e.P.T
+    ty := body.Ty
+    if t.KindOf(t.Repr(ty)) != types.Kind.Func: return 0
+    ps := t.Items(t.Params(ty))
+    cand := 0
+    for i in range (ps.Len() if ps.Len() < 62 else 62) {
+        if exclusiveShape(t, ps[i]): cand = cand | (I64(1) << i)
+    }
+    if cand == 0: return 0
+    # what each parameter, and the result, may reach (-1: anything) - plain data passed as a value, nothing
+    reach Vec<Map<I64, Bool>>
+    for p in ps: reach.Push(Map<I64, Bool>() if plainData(t, p) and not t.ViaMemory(p) else reachOf(t, p))
+    res := t.Result(ty)
+    out := reachOf(t, res) if res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res) else Map<I64, Bool>()
+    mask := 0
+    for i in range ps.Len() {
+        if cand & (I64(1) << i) == 0: continue
+        r := t.Repr(t.Referent(ps[i]))
+        held := Map<I64, Bool>()
+        try heldIn(t, r, held, 0) catch { continue }
+        # (what its own references lead to too: a node whose next is itself)
+        clash := overlaps(t, r, held, out) or overlaps(t, r, held, reachBeyond(t, held))
+        for j in range ps.Len() {
+            if j != i and not clash: clash = overlaps(t, r, held, reach[j])
+        }
+        if not clash: mask = mask | (I64(1) << i)
+    }
+    return mask
+}
+
+# a writable reference to one value of a type laid out in place - a struct, an enum, a number, a fixed array - passed as
+# one pointer
+fn exclusiveShape(t types.Table&, p types.TypeId) Bool {
+    if not t.IsRef(p) or t.PermOf(p) & types.Writable == 0: return false
+    r := t.Repr(t.Referent(p))
+    return match t.KindOf(r) {
+        case types.Kind.Array: t.Length(r) != types.TypeId(0)
+        case types.Kind.Named: t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct or t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum
+        case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16
+             types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64: true
+        case _: false
+    }
+}
+
+# whether storage of type r, holding held in place, may overlap storage reach names: a type reached holds r, or r holds
+# it; true where reach may be anything (-1)
+fn overlaps(t types.Table&, r types.TypeId, held Map<I64, Bool>&, reach Map<I64, Bool>&) Bool {
+    if reach.Has(-1): return true
+    for u in reach.Keys() {
+        if held.Has(u): return true
+        inner := Map<I64, Bool>()
+        try heldIn(t, types.TypeId(I32(u)), inner, 0) catch { return true }
+        if inner.Has(I64(r)): return true
+    }
+    return false
+}
+
+# what the references and run-time-length arrays among held lead to
+fn reachBeyond(t types.Table&, held Map<I64, Bool>&) Map<I64, Bool> {
+    all := Map<I64, Bool>()
+    for k in held.Keys() {
+        u := types.TypeId(I32(k))
+        x := types.TypeId(0)
+        if t.IsRef(u): x = t.Referent(u)
+        else if t.KindOf(u) == types.Kind.Array and t.Length(u) == types.TypeId(0): x = t.Elem(u)
+        if x == types.TypeId(0): continue
+        for v in reachOf(t, x).Keys(): all.Put(v, true)
+    }
+    return all
+}
+
+# the storage types a value of type ty may lead to: those it holds in place and, through each reference and
+# run-time-length array among them, what they refer to, at any depth - with -1 where it may lead anywhere (a function
+# value's environment, an "any", a type not known)
+fn reachOf(t types.Table&, ty types.TypeId) Map<I64, Bool> {
+    seen := Map<I64, Bool>()
+    work Vec<types.TypeId>
+    work.Push(ty)
+    for work.Len() > 0 {
+        x := work.Pop()!
+        held := Map<I64, Bool>()
+        try heldIn(t, x, held, 0) catch {
+            seen.Put(-1, true)
+            return seen
+        }
+        for k in held.Keys() {
+            if seen.Has(k): continue
+            seen.Put(k, true)
+            u := types.TypeId(I32(k))
+            if t.IsRef(u): work.Push(t.Referent(u))
+            else if t.KindOf(u) == types.Kind.Array and t.Length(u) == types.TypeId(0): work.Push(t.Elem(u))
+        }
+    }
+    return seen
+}
+
+# what a type holds is not known: a function value's environment, an "any", a trait, a type variable, a type not laid
+# out - it may hold anything
+type Unknowable error { Held }
+
+# the storage types a value of type ty holds in place - itself, and its fields', payloads' and a fixed array's
+# elements', at any depth - added to into (a declared type over another stored as its base, T36)
+fn heldIn(t types.Table&, ty types.TypeId, into mut Map<I64, Bool>&, depth I64) ? Unknowable {
+    if depth > 64: error Unknowable.Held
+    if ty == types.TypeId(0): return
+    r := t.Repr(ty)
+    into.Put(I64(r), true)
+    match t.KindOf(r) {
+        case types.Kind.Ref { if t.KindOf(t.Referent(r)) == types.Kind.Any: error Unknowable.Held }
+        case types.Kind.Array { if t.Length(r) != types.TypeId(0): try heldIn(t, t.Elem(r), into, depth + 1) }
+        case types.Kind.Tuple, types.Kind.Record { try heldInAll(t, t.Items(t.Parts(r)), into, depth) }
+        case types.Kind.Named {
+            k := t.DeclKindOf(t.DeclOf(r))
+            if k == types.DeclKind.Error: return
+            if k != types.DeclKind.Struct and k != types.DeclKind.Enum or not t.HasBody(r): error Unknowable.Held
+            try heldInAll(t, t.Items(t.Fields(r)), into, depth)
+            try heldInAll(t, t.Items(t.Cases(r)), into, depth)
+        }
+        case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16
+             types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64, types.Kind.Int
+             types.Kind.Void { }
+        case _ { error Unknowable.Held }
+    }
+}
+
+fn heldInAll(t types.Table&, xs Array<types.TypeId>&, into mut Map<I64, Bool>&, depth I64) ? Unknowable {
+    for x in xs: try heldIn(t, x, into, depth + 1)
+}
+
+# whether a value of type ty is plain data: nothing it holds refers anywhere
+fn plainData(t types.Table&, ty types.TypeId) Bool {
+    held := Map<I64, Bool>()
+    try heldIn(t, ty, held, 0) catch { return false }
+    for k in held.Keys() {
+        u := types.TypeId(I32(k))
+        if t.IsRef(u) or t.KindOf(u) == types.Kind.Array and t.Length(u) == types.TypeId(0): return false
+    }
+    return true
 }
