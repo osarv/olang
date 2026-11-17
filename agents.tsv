@@ -228,5 +228,6 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-17	oannahead	sonnet	medium	done						Ahead prefetch + settle options under spectral
 2026-11-17	membersfix2	opus	medium	done				yes		no code change needed						after 2nd restart
 2026-11-17	lanesumfix2	opus	medium	done	102	19	39	yes		no code change needed						after 2nd restart
-2026-11-17	merge-lanesum2	sonnet	low	running
-2026-11-17	joinleak	opus	medium	running						join/spawn 113B leak
+2026-11-17	merge-lanesum2	sonnet	low	restarted
+2026-11-17	joinleak	opus	medium	restarted						join/spawn 113B leak
+2026-11-17	merge-members2	sonnet	low	running						after 3rd restart (disk full)
