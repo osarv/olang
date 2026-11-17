@@ -1,0 +1,243 @@
+start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
+2026-11-07T13:05	Section-8 round 2: O27 placement	opus	xhigh	completed	386	341	112	?	?	
+2026-11-07T13:05	Literals round: type in front, FromIter	opus	high	completed	835	350	94	?	?	
+2026-11-07T13:05	Tidy round: small fixes	opus	high	completed	650	340	88	?	?	
+2026-11-07T15:00	Section-8 round 3: T22a relations	opus	high	completed	758	205	62	?	?	
+2026-11-07T15:00	Unique hand-on move round	opus	xhigh	completed	752	263	73	?	?	
+2026-11-07T16:16	Bulk review 8: section 8 and memory	opus	high	completed	467	144	18	?	?	
+2026-11-07T16:16	Bulk review 8: language features	opus	high	completed	448	138	16	?	?	
+2026-11-07T16:16	Bulk review 8: tools and runtime	opus	high	completed	475	154	22	?	?	
+2026-11-07T16:39	Bulk 8 fixes: payloads and tests	opus	high	completed	669	213	23	?	?	
+2026-11-07T17:59	Trim CLAUDE.md settled decisions	sonnet	medium	completed	281	16	78	?	?	
+2026-11-08T08:02	Design note: function values	opus	xhigh	completed	717	128	46	?	?	
+2026-11-08T09:02	Design note: generational back-pointers	opus	xhigh	completed	569	61	36	?	?	
+2026-11-08T09:03	Audit every refusal by cause	opus	high	completed	539	105	29	?	?	
+2026-11-08T09:12	Round 1: one tier of keywords	sonnet	medium	completed	409	68	22	?	?	
+2026-11-08T09:18	Trim CLAUDE.md and the memory files	sonnet	medium	completed	238	27	11	?	?	
+2026-11-08T09:30	Saturating arithmetic, continued	opus	high	completed	315	66	21	?	?	
+2026-11-08T09:30	Benchmarks, continued	opus	high	completed	324	88	44	?	?	
+2026-11-08T11:21	fnvalues round 2: Destroy removed	sonnet	medium	completed	296	124	62	?	?	
+2026-11-08T12:40	fnvalues round 3: dtor follows storage	opus	high	completed	322	148	71	?	?	
+2026-11-08T12:40	std/net constructors by value	sonnet	medium	completed	131	18	32	?	?	
+2026-11-08T14:06	fnvalues round 4: promise words	opus	xhigh	completed	645	286	104	?	?	
+2026-11-08T14:07	refusal round R5: become tail scope	opus	high	completed	554	287	98	?	?	
+2026-11-08T16:09	many ifs: compile memory fix	opus	high	completed	435	192	80	?	?	
+2026-11-08T16:10	fnvalues round 5: effect words	opus	high	completed	555	204	169	?	?	
+2026-11-08T17:17	Scope whole-program compilation	opus	high	completed	289	54	8	?	?	
+2026-11-08T17:26	Fix G42 reuse-key bug	opus	high	completed	275	74	9	?	?	
+2026-11-08T17:43	Plan and record wholeprog+genrefs	opus	high	completed	276	51	17	?	?	
+2026-11-08T17:57	Build std/pool	sonnet	medium	completed	164	31	43	?	?	
+2026-11-08T18:26	Read paper 2006.04439	sonnet	high	completed	165	5	1	?	?	
+2026-11-08T18:26	Read paper 2610.14162	sonnet	high	completed	201	9	3	?	?	
+2026-11-08T18:26	Read paper 2512.24695	sonnet	high	completed	220	15	3	?	?	
+2026-11-08T19:38	Slim the always-loaded context	sonnet	medium	completed	164	19	4	?	?	
+2026-11-08T19:45	E1: settling experiment	sonnet	medium	completed	140	15	23	n/a	?	results table + 2 LANGUAGE items; epdr mod5 diverged
+2026-11-08T20:00	F6 fnvalues round 6: scopes found at run time	opus	medium	completed	352	184	52	no (stale goldens + PROGRESS.md only)	?	41 refusals now run; found+fixed early-free UAF; 2 program-scope fallbacks remain
+2026-11-08T20:00	W1 facts with readers + incremental harness	opus	medium	completed	342	162	104	no (stale goldens + README only)	?	found 2 bugs (stale object via lowering read, -memory counts)
+2026-11-08T21:30	R1 refusals 5.1	opus	medium	completed	342	169	110	yes	?	41/44 compile; IR identical; scopesan+scopefuzz pass
+2026-11-08T21:30	W2 early freeing in every module	opus	medium	completed	454	243	130	no (stale goldens only)	?	found+fixed nested-region bug; session peak 260->1.7MB
+2026-11-09T00:30	F7 following into calls (twins)	opus	medium	completed	455	185	70	no (checks+diaggold from newly compiling cases)	?	14 shapes now run; sanitizer caught a wrong-frame build -> refused T22c
+2026-11-09T02:30	Fix stale-object link + fuzz gen	opus	medium	completed	224	72	39	yes	?	root fns not emitted when reused importer reaches root
+2026-11-09T02:40	R2 refusals 5.2	opus	medium	completed	313	162	60	yes	?	13/15 + 2 of 5.4; IR identical
+2026-11-09T04:00	F8 derived scopes passed	opus	medium	completed	427	276	86	yes	?	Logged/Tally 183->1.7MB; found Vec<Logged> lent+push use-after-close (pre-existing)
+2026-11-09T06:00	Fix Vec<Logged> lent+push drop	opus	medium	completed	231	75	31	no (golden capture missed new file)	?	drop of non-local place runs in its home scope (Plan.DropHome)
+2026-11-09T07:00	Review A section-8 soundness	opus	medium	completed	233	75	16	n/a	n/a	0 bugs in rounds; 1 pre-existing ctor-field bug; 3 over-rejections; fuzzers 1000+600 clean
+2026-11-09T07:30	Fix ctor field collection bug	opus	medium	completed	239	124	81	no (run golden missed new cases)	?	one cause for IR bug + T25c over-rejection
+2026-11-09T09:00	Early freeing for global stores	opus	medium	completed	343	133	61	yes	?	705->13MB; found Map key-text early-free UAF
+2026-11-09T10:00	Survey: small strong reasoning LLMs	sonnet	medium	completed	151	11	2	n/a	n/a	abstracts only; some ids unverified
+2026-11-09T10:30	Build kept locals in the place region	opus	medium	completed	397	164	78	yes	?	field 586->2.2MB, map keys 266->2.4MB; fuzz caught own bug
+2026-11-09T11:30	Design note: settling niche	sonnet	medium	completed	150	9	2	n/a	n/a	abstracts only; 8 ids from memory
+2026-11-09T12:00	Read 4 settling-niche papers	sonnet	medium	completed	268	16	2	n/a	n/a	all ids verified; numbers from papers
+2026-11-09T13:00	Read EBT paper 2507.02092	sonnet	medium	completed	189	7	2	n/a	n/a	id verified; figures not extracted
+2026-11-09T11:30	Fix Map.Get copy kept per turn	opus	medium	completed	281	135	74	yes	?	readHere looked through no try; 535->1.8MB
+2026-11-09T13:30	Design note: systems view	sonnet	medium	completed	156	7	2	n/a	n/a	abstract level; classics from memory
+2026-11-09T11:30	G1 weak and generational types	opus	medium	completed	395	199	93	yes	?	19 checks cases; 4 items left for G2+G3
+2026-11-09T13:00	G2+G3 generational header and count	opus	medium	completed	599	303	117	no (reuse bug real, fixed; goldens)	?	found stale-record bug (facts decided in lowering)
+2026-11-09T13:00	W3a incremental front end part 1	opus	medium	completed	403	164	120	yes	?	front end 5.6->4.5s; caught stale embed key; fixed W1 record cut bug
+2026-11-09T15:10	R6+R7 generators, ends ordered	opus	medium	completed	440	294	78	no (one .want order change)	?	8 refused cases run; errdefer-at-walk-end latent bug fixed
+2026-11-09T15:10	R3 refusals 5.3	opus	medium	completed	342	187	120	no (one fixture now compiles)	?	15/15 run; IR identical
+2026-11-09	fallbacks	opus	medium	done	293	141	65	pass		program-scope fallbacks via lookup/derivedRoot/capRoot; gen walk placement; found T22c null-scope fallback
+2026-11-09	overrej	opus	medium	done	360	225	79	goldens		p7 wrong count (dtor late) fixed; r1/r2 relaxed; p9 sound, message only
+2026-11-09	R4	opus	medium	done	287	123	55	pass		7 task refusals accepted; found spawn call-copy built per turn (use after scope)
+2026-11-09	F9	opus	medium	done	364	156	71	goldens		clones; sort 0.102->0.081s; IR +0.35%
+2026-11-09	F10	opus	medium	done	411	204	75	pass		followed fn values in free/D9h/E31b/M19g; found lambda-in-conversion bug
+2026-11-09	R8	opus	medium	lost-at-verify						container restart during final verify; work all committed; merged by me
+2026-11-10	G4	opus	medium	lost						container restart ~20 min in, nothing committed; relaunched
+2026-11-10	W4	opus	medium	done				pass		field sets; found element-field build use-after-scope; invented compile-apart store for B3i
+2026-11-10	G4	opus	medium	done	556	286	185	fail(goldens,checkir)		reclaiming; dlist 97->1.7MB tree 104->1.8 lru 49->13.8; needed one resume
+2026-11-10	F12	opus	high	done				goldens		fixed fields T22d, trait promise words T30c; design pass in brief
+2026-11-10	G5+G6	opus	medium	done	617	294	133	fail(stored run)		LRU 13.8->7.0 (Map key copies left); fuzzer found 3 bugs; residual gap: temp ref to shallow copy not compared at sites
+2026-11-10	W3b	opus	medium	done				goldens		scope judgings kept; no-op 6->4.2s; found 2 reuse gaps; T13d relower bug left
+2026-11-10	F11	sonnet	medium	done				goldens(+baseline fails)		tools show fits/twins; api variance
+2026-11-10	incfix	opus	medium	done	263	117	35	goldens		editing copies from records (ReadExpr by value); lsp abs path; OOM not a bug
+2026-11-10	reviewB2	opus	high	done				-		~25 probes; 1 confirmed W3b stale record (G42 fact not in key); no use-after-scope
+2026-11-10	reviewB1	opus	high	done	244	83	10	-		17 probes, no confirmed hole; suspicion Temp not counted in GenInfo.Reach -> sent to b2fix
+2026-11-10	b2fix	opus	medium	done	376	200	50	goldens		capFollowed not restored from record; twin records keyed; sl over-rejection; B1 temp count
+2026-11-13	leftB	opus	medium	done				pass		1-3 already fixed; LRU 7.2->2.0MB; text slots per scope
+2026-11-13	leftA	opus	medium	done				goldens		found real use-after-free on reassigned ref param (heldParam); stored-capture lookup; twins recorded; T30c msg
+2026-11-13	axes	opus	medium	done				goldens+OOM		E16f multi-axis subscripts via Axis enum; E21 nested literals; 2 bugs fixed
+2026-11-13	ease	opus	medium	done	257	121		goldens+OOM		print/println, -quick run, interpret warnings
+2026-11-13	lits	opus	medium	done	340	137		layout golden		target-typed literals E20/E20a; keyed comprehensions; bare array patterns
+2026-11-14	printcap	sonnet	medium	done	212	79		pass(2nd)		Print/Println; io.Put* rename via tool (774 files); len removed
+2026-11-14	oneline2	sonnet	low	done				diag golden		320 blocks/82 files converted; catch/lambda skipped
+2026-11-14	refac1	opus	medium	done				pass		nesting tool; only 6 fns >5; 148 at 5 remain
+2026-11-14	refac2	opus	medium	done				pass		148->31 at depth5; 6 long fns split
+2026-11-14	refac3	opus	medium	done	275	119		pass		all fns depth<=4, none >200 lines; helper-extraction over-rejection O10c (rootPlace Deref)
+2026-11-14	helperrej	opus	medium	done	265	128		pass		O10c over-rejection via call landing; narrow readFrom fix; seed regenerated
+2026-11-14	diagsplit	sonnet	medium	done				unverified(queue)		~380 msgs split; headline median 85->55, >120: 314->2
+2026-11-14	prompt	opus	medium	done	427	153	110	disk-full then pass		REPL via whole-session recheck per cell; snapshot copy; D3a prompt exception
+2026-11-14	jupyter	opus	medium	done(2 agents, restart)				pass		zmtp in olang; kernel; Display; nbclient verified
+2026-11-14	plot	sonnet	medium	done(goldens left, disk full)	192	47	48	-		std/plot SVG
+2026-11-14	frame	opus	medium	done	227	83		pass(2nd)		std/frame, array helpers, rand distributions
+2026-11-14	nvimcmd	sonnet	low	done				unverified		nvim :Olang* commands + keymaps
+2026-11-14	plotshow	sonnet	low	done				targeted		p.Show viewer choice; WSL interop message
+2026-11-14	lineedit	opus	medium	done	320	131	104	targeted		emacs+vi editing, history, paint, paste
+2026-11-14	litmix	sonnet	medium	done(disk stop, resumed)	177	31		targeted		E20 mixed literal, M22 tag, M9 prelude hint
+2026-11-14	bootfix	opus	medium	done	274	140		targeted		jobs by memory, progress, 2 stages, install copy+editors; Text file busy bug found later
+2026-11-14	muloti	opus	medium	done				targeted		wideMul via umul.with.overflow + weak __muloti4 on aarch64
+2026-11-14	nbrun	sonnet	medium	done				targeted		olang notebook run
+2026-11-14	msgfix	sonnet	medium	done				targeted		TextForLength/CharsForText/BuilderForText helps; t.Bytes()
+2026-11-14	checked	opus	medium	merged, master 52c3ff94 (verify: stale interp case fixed, 2 OOM kills pass alone)						checked builds: index/div/shift checks in test/debug/interpret
+2026-11-14	cells	opus	high	merged, master 52c3ff94 (verify: stale interp case fixed, 2 OOM kills pass alone)						compiled notebook/prompt cells
+2026-11-14	testmem	opus	medium	merged, master 374c1e3c (verify passed on the tip)						test-build memory peaks before v1
+2026-11-15	oannport	opus	high	done, wt-oannport 81aaba7 (core 12 modules pass; merged all)						oann round 1: catch up to olang v1 (wt-oannport)
+2026-11-15	oanndata	sonnet	high	done, pushed wt-oanndata 8cbba30 (7 modules pass, bench ported; 2 olang bugs)						oann round 1b: sparse, store, tokenizer, datasets, script ports, repro re-check (wt-oanndata)
+2026-11-15	oanncirc	sonnet	high	done, pushed wt-oanncirc (circuit 23, board 14 pass)						oann round 1c: circuit, board (wt-oanncirc)
+2026-11-15	oannagent	sonnet	high	done, pushed wt-oannagent (consolidator 6, agent 15 pass)						oann round 1d: consolidator, agent (wt-oannagent)
+2026-11-15	fixbugs	sonnet	medium	merged, master 25659695 (tool tests pass)						olang: null_migrate crash, E11b join message (from oann)
+2026-11-15	eqnull	opus	high	stopped by restart; finished by eqnull2						olang: null test by == null, is removed (the user, reversing E10c)
+2026-11-15	oannex	sonnet	high	done, merged; oann master a084560 (173 tests pass)						oann round 1e: examples (wt-oannex)
+2026-11-15	oannbench	sonnet	high	done, merged into wt-oannport 8b05bee (11 compile; INT8 5x slower: rowStep not inlined)						oann round 1f: bench programs (wt-oannbench)
+2026-11-15	spinner	sonnet	high	stopped by restart; finished by spinner2						olang: braille spinner wherever we wait, the installer too
+2026-11-15	int8	opus	high	running						olang: INT8 rowStep no longer inlined (oann int8 5x slower)
+2026-11-15	condnull	sonnet	high	done aacc4597; to be verified within wt-eqnull						olang: c if x else null into a generic method parameter T?&
+2026-11-15	fastinterp	opus	high	merged, master 2a79804d (1e8 loop 55.9 s -> 0.50 s)						olang: interpret runs compiled (-quick, checked); evaluator as -evaluate
+2026-11-15	cellcheck	sonnet	medium	merged, master c733d3d9						olang: cells built checked (E16g); interpret run cache bounded
+2026-11-15	eqnull2	opus	high	done; merging (seed rewrite)						finish == null (fresh after restart)
+2026-11-15	spinner2	sonnet	high	merged, master 360b9901 (bootstrap from seed passes)						finish 3x2 spinner (fresh after restart)
+2026-11-15	int8b	opus	high	done, merged into wt-merge						INT8 inlining (fresh after restart)
+2026-11-15	strplus	opus	high	merged, master e6232af1						olang: text joins by +, adjacency removed (the user)
+2026-11-15	oannmeasure2	sonnet	medium	done, oann master (MNIST 5x slower: rowStep not inlined, same cause as INT8)						oann round 2: baselines vs DESIGN
+2026-11-15	oannplan	opus	high	done, oann master bcd805f (docs/redesign.md)						oann round 2: docs/redesign.md + work packages
+2026-11-15	oanngemm	opus	high	done, oann master (M4 parity, Gemv 2-4x, VNNI)						oann A2 gemm
+2026-11-15	oanntensor	sonnet	high	done, oann master (19 tests)						oann A1 tensor
+2026-11-15	oannelem	sonnet	high	merged, oann master						oann A3 elem+attention
+2026-11-15	timeit	sonnet	medium	done, wt-timeit 73c2348f (merge after strplus; evaluator disagreement on -runs parse, argv[0] under -bench)						std/bench: repeats with spread, Time, Compare
+2026-11-15	reader	sonnet	medium	merged, master c733d3d9						std/io Reader (Line, Word, Next<T>, Bytes, All)
+2026-11-15	varat	sonnet	high	merged into wt-merge						olang: variadic At/SetAt, SetSlice (for oann tensors)
+2026-11-15	dwarf	opus	high	done, wt-dwarf 8f5c6e38 (merge after strplus)						olang: full DWARF + nvim-dap (:OlangDebug)
+2026-11-15	lspwarn	sonnet	low	merged, master						olang LSP: unused names as warnings
+2026-11-15	oannmig2	sonnet	low	done, oann master (234 ok; fix renamed Clone wrongly - reverted)						oann to olang master (== null via olang fix)
+2026-11-15	fieldnarrow	opus	high	done, wt-fieldnarrow (merge after strplus; recapture goldens)						olang: field-path narrowing
+2026-11-15	racetests	sonnet	high	done, wt-racetests 7ec7192d (merge after strplus)						olang test: spawning tests under -race
+2026-11-15	parse	sonnet	low	merged into wt-merge						prelude: F*.Parse, Bool.Parse
+2026-11-15	aistudy	sonnet	low	done, wt-aistudy (docs/aistudy.md; 30/50 programs failed at run time)						50 AI-written programs study
+2026-11-15	oannsparse	sonnet	high	done, oann master						oann A4 sparse+conv
+2026-11-15	oannscan	sonnet	high	done, oann master						oann A5 scan
+2026-11-15	oannio	sonnet	medium	done, oann master						oann A6 data+io
+2026-11-15	oannad	opus	high	done, oann master (97.70%, arena 45 vs 90 MB, 0 kB growth; facts too coarse)						oann B1 autodiff
+2026-11-15	oanndyn	opus	high	done, oann master (sweeps 64/66/71 exact; 3 olang bugs; join leak)						oann B2a dyn core
+2026-11-15	merge2	opus	medium	running						merge fieldnarrow, racetests, dwarf, timeit onto + joins
+2026-11-15	earlyfree	opus	high	running						O8d: early freeing as a provable guarantee (design, then build)
+2026-11-15	oannlearn	opus	high	running						oann B2b learning rules
+2026-11-15	oannboard	sonnet	high	running						oann B4 board backend
+2026-11-15	oannnn	sonnet	high	running						oann B3 nn layers/optim/train
+2026-11-15	oannmodels	sonnet	high	running
+2026-11-15	oannbridge	opus	high	running
+2026-11-15	oannbake	sonnet	medium	running
+2026-11-15	merge3	opus	medium	running
+2026-11-15	freeing2	opus	high	running
+2026-11-15	bugs1	opus	medium	running
+2026-11-15	freeing3	opus	high	running
+2026-11-15	nocontracts	opus	medium	running
+2026-11-15	oanncut	sonnet	medium	running
+2026-11-15	freeing4	opus	medium	running
+2026-11-15	sect8	opus	high	running
+2026-11-15	facts2	opus	medium	running
+2026-11-15	oannmem	sonnet	medium	running
+2026-11-15	oannkern	opus	medium	running
+2026-11-15	freeing5	opus	medium	running
+2026-11-15	aistudy2	opus	medium	running
+2026-11-15	freeing6	opus	high	completed
+2026-11-16	freeing7	opus	medium	completed
+2026-11-16	freeing8	opus	medium	completed	382	224	85	yes		slot fast path within 4%; shipped; found warm-rebuild O10c bug
+2026-11-16	warmrec	opus	medium	completed	234	81	19	yes		warm-rebuild O10c: landedOn not in scope records
+2026-11-16	factsreg	opus	medium	completed	449	268	83	yes		RefsKept.Kept too pessimistic (freeing6); NoneKept
+2026-11-16	facts3	opus	medium	completed	254	153	33	yes		array copies counted; quant growth = test self-measure under race
+2026-11-16	oannfix2	sonnet	low	completed	95	8	12	yes		settle copies to refs, resident warm-up
+2026-11-16	oneline2	sonnet	low	completed	110	22	45	yes		13007 blocks; catch NAME e: rejected (parser bug)
+2026-11-16	predverify	opus	medium	completed	159	77	14	yes		catch e: parse; target scenario; race fixture overlap
+2026-11-16	agentdyn	opus	medium	completed	329	116	39			round 1: modules on dyn, bandit paired match
+2026-11-16	verifyfix	opus	medium	completed	301	167	222	yes		explain expectation, mir Holds, race via 4096 counters
+2026-11-16	agentdyn2	opus	medium	completed	154	41	26	yes		all examples match; legacy removed; consolidator 33-40% slower on ad/graph
+2026-11-16	adperf	opus	medium	completed	293	146	47	yes		ad/graph small 2.5x; silent empty Value sent back; ThinLTO gap found
+2026-11-16	rangeargs	opus	low	completed	108	38	6	yes		S9b fourth arg refused
+2026-11-16	readln	sonnet	medium	completed	183	90	73	yes		Scan/Scanln, adaptive buffer, Available, size removed
+2026-11-16	lspcomp	opus	medium	completed	169	72	43	yes		nvim never enabled completion; server gaps (chains, supplied, trait defaults, privates)
+2026-11-16	nodump	opus	medium	completed	239	154	65	yes		DONTDUMP reservation, failure_end exit 1/2, OLANG_CORE
+2026-11-16	lspdir	opus	low	completed	152	63	47	yes		analysis in cache, B9c split
+2026-11-16	litcmp	opus	low	killed						stopped by an interrupt, WIP uncommitted
+2026-11-16	argsdef	opus	low	killed						stopped by an interrupt after its commit; merged by me
+2026-11-16	oannmake	sonnet	low	completed	103	9	1	yes		make help default, README for users
+2026-11-16	lspimport	opus	low	killed
+2026-11-16	osfile	opus	medium	killed
+2026-11-16	readmes	sonnet	low	completed	123	16	2	yes		README history sweep, 3 repos
+2026-11-16	litcmp2	opus	medium	completed	219	106	43	yes		S8a literals, scripting warning, one-line bodies everywhere
+2026-11-16	lspimport2	opus	low	completed	108	23	9	partial		disk full, shared/goldens not run
+2026-11-16	osfile2	opus	medium	completed	143	142	24	no		found field-destructor leak (compiler)
+2026-11-16	steward	sonnet	medium	completed	105	21	23	yes		merged lspimport, disk, scanln ok
+2026-11-16	nvimsigns	sonnet	low	completed	93	11	1	yes
+2026-11-16	buildopt	opus	medium	completed	268	167	76	yes		cache caps, build/rec bounded, ThinFrom 32 MB
+2026-11-16	oannkern2	opus	medium	completed	278	150	70	yes		BF16 GEMV 0.19->0.65x, int8 baseline via quant split, VNNI not expressible
+2026-11-16	fielddrop	opus	medium	completed	191	92	29	yes		check order: := field types before NeedsDrop
+2026-11-16	steward2	sonnet	medium	completed	122	48	64	yes		merged litcmp, osfile, buildopt
+2026-11-16	serve	opus	medium	completed	200	78	92	yes		serve lsp/mcp/jupyter, notebooks via run
+2026-11-16	extfix	opus	medium	completed	203	103	74	yes		extends generic methods, print exit 1
+2026-11-16	oannmig2	sonnet	low	completed	112	29	45	partial		fix tools misfired 5 ways
+2026-11-16	fixtools	opus	low	completed	256	182	145	partial		tools fixed, defer_migrate; seed blocks refusal
+2026-11-16	steward3	sonnet	medium	completed	106	26	57	yes		merged extfix, serve
+2026-11-16	seed	opus	medium	completed	141	59	44	yes		seed rewritten twice, bare defer refused
+2026-11-16	verify	sonnet	medium	completed				fail		merged seed; verify 7 scenario fails
+2026-11-16	oannprune	opus	medium	completed	291	103	50	yes		run-time pruning, 20% kept holds accuracy
+2026-11-16	sumt	opus	medium	completed	206	90	17	yes		Sum<A>, LaneDot 256-lane vpdpbusd, 2.5-3.9x
+2026-11-16	vfix2	opus	medium	running
+2026-11-16	sumnarrow	opus	low	running
+2026-11-16	vfix2	opus	medium	done	225	147	98	no(fixes)		full verify passed 0c5530e8 incl wt-sumt
+2026-11-16	merge-vfix2	sonnet	low	done				yes		merged 872fa987
+2026-11-16	oannsum	sonnet	medium	done						INT8 kernels via Sum<I32>
+2026-11-16	sumtotal	opus	medium	done	370	232	122			parts 1-3; part 4 too big
+2026-11-16	attrsurvey	sonnet	low	done						read-only: can attributes be dropped
+2026-11-16	oannprune2	opus	medium	done						XOR skip bug, cubic prune schedule, Tiles/LowRank prune, compaction, MNIST prune
+2026-11-16	oannmnist	sonnet	medium	done						fetch MNIST+shakespeare, measure, prune mnist_learn
+2026-11-16	oannvnni	opus	medium	done						packed INT8 GEMM via vpdpbusd (k-quad packing)
+2026-11-16	merge-sumnarrow	sonnet	low	stopped	91	5	1			quick failed: seed lacks new syntax
+2026-11-16	members	opus	high	restarted						type members + in-place enum
+2026-11-16	oannconv	sonnet	medium	restarted						INT8 conv depth-9 profile + dense pruning control
+2026-11-16	seed-sumnarrow	sonnet	medium	restarted						seed rewrite + merge
+2026-11-16	merge-sumnarrow2	sonnet	low	done						after restart
+2026-11-16	members2	opus	high	done	321	191	51	no	1 (extuse M19)						after restart, from uncommitted diff
+2026-11-16	oannconv2	sonnet	medium	done						after restart
+2026-11-16	oannsettle	opus	medium	done						Anderson, Gauss-Seidel, Contraction()
+2026-11-16	lanesum	opus	medium	done	194	72	41	no	1 (E39 missing in built run)						LaneDot vector accumulator
+2026-11-16	merge-members	sonnet	low	stopped	98	11	31			quick failed: real bugs in members
+2026-11-17	oanncert	opus	medium	done						certify by spectral norm
+2026-11-17	membersfix	opus	medium	restarted						fix quick failures
+2026-11-17	merge-lanesum	sonnet	low	stopped
+2026-11-17	oanncert2	opus	medium	done						L2 stop test + nudged certificate
+2026-11-17	lanesum-fix	opus	medium	restarted						resumed: quick failures
+2026-11-17	oannahead	sonnet	medium	done						Ahead prefetch + settle options under spectral
+2026-11-17	membersfix2	opus	medium	done				yes		no code change needed						after 2nd restart
+2026-11-17	lanesumfix2	opus	medium	done	102	19	39	yes		no code change needed						after 2nd restart
+2026-11-17	merge-lanesum2	sonnet	low	restarted
+2026-11-17	joinleak	opus	medium	restarted						join/spawn 113B leak
+2026-11-17	merge-members2	sonnet	low	done						after 3rd restart (disk full)
+2026-11-17	joinleak2	opus	medium	running						join leak, from master 5f85a388
+2026-11-17	noattr	opus	medium	done	~421	243	158	no (disk full)		drop attributes, key enums; layoutdiff golden recaptured, not re-run
+2026-11-17	joinleak2	opus	medium	done	~375	146	141	no (disk full)		goldens hand-edited run.txt; quick re-run after freeing disk
+2026-11-17	steward-noattr	sonnet	medium	done	~120	~30	~40	yes		merge b44b33d3
+2026-11-17	fndefaults	opus	medium	done	~269	147	120	yes		T21d; found D8b unenforced
+2026-11-17	oannattr	sonnet	medium	done				no (suite not rerun)		merge 8afdcbb; pad-256 kept (unpadded slower)
+2026-11-17	steward-fndef	sonnet	medium	running						merge wt-fndefaults + oann D8b check
+2026-11-17	fixes3	opus	medium	running						facts tuple bind, reflected text index, Makefile boot-fresh
+2026-11-17	oanncert3	opus	medium	running						nudged-phase certificate
+2026-11-17	oanncompact	sonnet	medium	running						compact retired units
