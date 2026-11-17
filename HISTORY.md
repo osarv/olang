@@ -39389,3 +39389,26 @@ totals against the loop written by hand at 0, 1, 7, 15, 16, 17, 33, 64 and 100 g
 both operand orders, a broadcast group, the array form, a total of the totals; 255 x -128 in every byte, two signed
 operands (the plain helper), a float `Sum(2)` with a shared operand of two - each run, baked into a global and decided
 while compiling. checks/cases lanegroupsize and lanegrouplengths.
+
+## 2026-11-17: an atomic's or LaneDots's written place is lent, not kept (G42's Kept; mine; wt-lanedst)
+
+oann's GemmI8 tiles: `t.v[a:b] += (x * b).Sum<I32>(4)` straight into a `mut tile&` parameter made `assert not
+GemmI8.Allocates` false, while the same `+=` into a local tile copied out did not. The lowering was not the cause: every
+destination `+=` writes in place - a slice of a field reached through a mut parameter, the whole field, a nested
+field, a generic struct's, a `mut Array` parameter's slice - takes LaneDots (vpdpbusd), and the caller's code was the
+same instruction for instruction as for a plain lane `+=`, which was judged allocation-free. The facts were wrong:
+`LocalUses.prim` walked every prim's arguments as operands (Ctx.Op), and a writable borrow outside a call's arguments is
+taken for an escape (`borrow`: Ctx.Esc). LaneDots's first argument and an atomic's (`AtomicStore`, `AtomicAdd`,
+`AtomicSwap`, `AtomicCompareSwap`) are such borrows, so the parameter written through them counted as kept
+(EscOwn), RefsKept.NoneKept said no, and a caller's local lent to it was Kept and counted as allocating. The same held
+for `c.n[1].AtomicAdd(1)` through a mut parameter. Not a rule about aliasing through mut references: the borrow lives
+for the one operation, as a call's writable argument does. Now those prims' first argument is walked as a call's
+argument (Ctx.Arg: written, WrOther, never an escape; `typed.writesFirst`). A second false "allocates" sat beside it,
+for every lane `x op= v` (plain or LaneDots) whose target is a whole field through a mut parameter (`t.v += w`): the
+checker holds the target in a hidden reference local (laneTarget), and its Let of a writable borrow was also taken
+for an escape (`borrow` turned every context but a call's argument into Ctx.Esc), where a slice target's Let was
+recorded as an alias. A writable borrow a reference local holds is now that local's alias as a read-only one is
+(Ctx.Alias: written, and what the local does closeAliases does to the place - its escapes, lends, gives and stores),
+so the reference local's own uses decide. tests/keptfacts.olang: each destination
+and an atomic through a mut parameter, `assert not ... Allocates` on the callers, the values checked at run time and
+decided while compiling.

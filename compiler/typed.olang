@@ -663,6 +663,14 @@ fn allInert(xs Array<Expr&>&) Bool {
     return true
 }
 
+# a prim writing through the place its first argument borrows: an atomic's integer, LaneDots's first lane
+fn writesFirst(op PrimOp) Bool {
+    return match op {
+        case PrimOp.AtomicStore, PrimOp.AtomicAdd, PrimOp.AtomicSwap, PrimOp.AtomicCompareSwap, PrimOp.LaneDots: true
+        case _: false
+    }
+}
+
 fn storesNothing(op PrimOp) Bool {
     return match op {
         case PrimOp.AtomicStore, PrimOp.AtomicAdd, PrimOp.AtomicSwap, PrimOp.AtomicCompareSwap, PrimOp.Drop, PrimOp.Retire: false
@@ -1635,7 +1643,10 @@ fn (u mut LocalUses&) expr(x Expr?&, ctx Ctx) {
 fn (u mut LocalUses&) borrow(p Lvalue&, ty types.TypeId, ctx Ctx) {
     if (u.T.PermOf(ty) & types.Writable) != 0 {
         u.write(p, true)
-        if ctx != Ctx.Arg: u.use(p, Ctx.Esc, true)
+        # (held by a reference local - E39's `x op= v` target, laneTarget - it is that local's alias: what the local
+        # does, closeAliases does to the place)
+        if ctx == Ctx.Alias: u.use(p, ctx, true)
+        else if ctx != Ctx.Arg: u.use(p, Ctx.Esc, true)
         return
     }
     if ctx == Ctx.Ret or ctx == Ctx.Store: ctx = Ctx.Esc
@@ -1888,7 +1899,14 @@ fn (u mut LocalUses&) lendOf(a Expr&) I64 {
 }
 
 fn (u mut LocalUses&) prim(op PrimOp, args Array<Expr&>&, ctx Ctx) {
-    for a in args {
+    for i in range args.Len() {
+        a := args[i]
+        # the place an atomic or LaneDots writes (args[0]): lent writably for the operation alone, kept nowhere - a call's
+        # argument, so a mut parameter written there is no escape of what it names (its caller's local stays unkept)
+        if i == 0 and writesFirst(op) {
+            u.expr(a, Ctx.Arg)
+            continue
+        }
         match op {
             case PrimOp.Convert { u.expr(a, ctx) }
             case PrimOp.AnyMake { u.expr(a, Ctx.Esc) }

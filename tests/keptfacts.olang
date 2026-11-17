@@ -74,6 +74,50 @@ assert not converted.Allocates, "a fixed array given as an array reference alloc
 assert not inTasks.Allocates, "a parameter or an outer local given a joined task allocates"
 assert not viewed.Allocates, "a local a value only read is built of allocates"
 
+# the place an atomic or E39's LaneDots writes - a lane of a field reached through a mut parameter, a slice of it, an
+# array parameter's - is lent for that operation alone: the caller's local is kept by nothing (oann's GemmI8 tiles)
+type acc32 struct() {
+    v := Array<I32>(32)
+    n := Array<I64>(2)
+}
+
+type accOf<T> struct() {
+    v := Array<T>(32)
+}
+
+type nest struct() {
+    in := acc32()
+}
+
+fn dotsSlice(x Array<U8>&, b Array<I8>&, t mut acc32&) { t.v[16:32] += (x * b).Sum<I32>(4) }
+fn dotsWhole(x Array<U8>&, b Array<I8>&, t mut acc32&) { t.v += (x * b).Sum<I32>(4) }
+fn dotsGeneric(x Array<U8>&, b Array<I8>&, t mut accOf<I32>&) { t.v[0:16] += (x * b).Sum<I32>(4) }
+fn dotsNested(x Array<U8>&, b Array<I8>&, t mut nest&) { t.in.v[0:16] += (x * b).Sum<I32>(4) }
+fn dotsArray(x Array<U8>&, b Array<I8>&, v mut Array<I32>&) { v[0:16] += (x * b).Sum<I32>(4) }
+fn bumped(t mut acc32&) { t.n[1].AtomicAdd(3) }
+
+fn dotsInto(x Array<U8>&, b Array<I8>&) I64 {
+    t := acc32()
+    dotsSlice(x[0:4], b, t)
+    g := accOf<I32>()
+    dotsGeneric(x[0:4], b, g)
+    w := nest()
+    dotsNested(x[0:4], b, w)
+    a := Array<I32>(16)
+    dotsArray(x[0:4], b, a)
+    bumped(t)
+    return I64(t.v[17]) + I64(g.v[0]) + I64(w.in.v[15]) + I64(a[3]) + t.n[1]
+}
+
+fn dotsAll(x Array<U8>&, b Array<I8>&) I64 {
+    t := acc32()
+    dotsWhole(x, b, t)
+    return I64(t.v[31])
+}
+
+assert not dotsInto.Allocates, "a local an atomic or a grouped total writes through a mut parameter allocates"
+assert not dotsAll.Allocates, "a local a grouped total writes whole through a mut parameter allocates"
+
 # kept: a value built of a local stored where it outlives the call, or of a part of what a callee is lent
 type holder struct(d mut Array<F32>&) {
     d
@@ -137,6 +181,10 @@ assert not handedBack.Allocates, "a view handed back is copied by its caller"
 
 test lent "a local kept by nothing is the frame's, and reads back what was written" {
     assert lent(3) == 1.0 and converted() == 28.0 and viewed(2.5) == 2.5
+    # each group 2 * (1 + 2 + 3 + 4) = 20 - four bytes shared by every group, or all 128 bytes - and the atomic 3
+    xs := Array<U8>[U8(1 + p % 4) for p in range 128]
+    assert dotsInto(xs, Array<I8>(64, 2)) == 4 * 20 + 3 and dotsAll(xs, Array<I8>(128, 2)) == 20
+    assert dotsInto(Array<U8>[1, 2, 3, 4], Array<I8>(64, 2)) == 83 # S18c: decided while compiling
     d := Array<F32>(4)
     for i in range 4: d[i] = F32(i)
     out := Array<F32>(4)
