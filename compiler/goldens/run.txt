@@ -1339,6 +1339,10 @@
 === test tests/structpat.olang
 | status 0
 | ok - Point: S13i: struct patterns take a struct apart by its fields, at run time and while compiling
+=== test tests/textfields.olang
+| status 0
+| ok - C2a: text and array defaults of a constructor's fields read back as written
+| ok - C2g: a field's text default joined into other text, at run time and baked
 === test tests/textplus.olang
 | status 0
 | ok - pieces and values joined

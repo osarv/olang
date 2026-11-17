@@ -39389,3 +39389,17 @@ totals against the loop written by hand at 0, 1, 7, 15, 16, 17, 33, 64 and 100 g
 both operand orders, a broadcast group, the array form, a total of the totals; 255 x -128 in every byte, two signed
 operands (the plain helper), a float `Sum(2)` with a shared operand of two - each run, baked into a global and decided
 while compiling. checks/cases lanegroupsize and lanegrouplengths.
+
+## 2026-11-17: a constructor's text field keeps its literal (C2a, C2g; a fix, mine; wt-strdefault)
+
+`type Cfg struct() { path String = "data/x.csv" }` read `c.path` back as ten zero bytes (or a closed frame's bytes):
+the length right, the elements gone. Optimization 9 (`lower.slotLen`/`slotCopy`) copies a text local initialized from a
+literal of at most 256 bytes into a hidden stack slot of the frame, asked only whether the local's home is the frame. A
+constructor's field (`run` keeps its slot in the frame and records where its elements go in `fieldStor`, the instance's
+scope, C2g) passed that test, so the copy went into the constructor's frame and the instance kept a pair naming it after
+the return. Every text or array field given a literal by default was hit - in the body, by `:=`, nested in another
+instance - and the compile-time evaluator, running the same lowering, refused it ("it uses storage after the scope it
+was made in closed"). The fix: `slotLen` gives no slot to a field or to any local `fieldStor` homes elsewhere (O26a's
+returned locals, R3's kept parameters), so `arrayCopy` builds the copy where `storageOf` says - the instance. A
+parameter's default punned into a field, an array literal and a joined text were never slot-copied and stay as they
+were. tests/textfields.olang reads each back after an arena churn, at run time, baked (K2) and decided (S18c).
