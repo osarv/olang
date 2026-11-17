@@ -17546,6 +17546,8 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Lvalue?& {
         case ast.Expr.Member(sp, y, n) {
             ref := c.P.R.Member(c.fr().File, sp.End)
             if ref.Kind == names.What.Global: return typed.Lvalue.Global(sp, c.globalType(ref.Module, n), ref.Module, n)
+            # G33-G35: a reflected member (f.Name, c.Value) is a value of its own, read where it is indexed or measured
+            if not w and c.descTypeOf(y) >= types.TypeId(0): return c.valuePlace(x)
             if ref.Kind == names.What.None and c.typeNamed(y) < types.TypeId(0) {
                 # S8d: a field path narrowed to a payload written whole is the payload's copy, read and never written
                 wp := -1 if w else c.wholePath(extended(c.narrowPath(y), n), sp, false, types.UnknownT)
@@ -17588,6 +17590,11 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Lvalue?& {
         }
         case _ { }
     }
+    return c.valuePlace(x)
+}
+
+# x read as a value: the place it reads, or a temporary holding it
+fn (c mut Checker&) valuePlace(x ast.Expr&) typed.Lvalue?& {
     v := c.expr(x, types.UnknownT)
     t := typeOf(v)
     if t == types.UnknownT: return null
