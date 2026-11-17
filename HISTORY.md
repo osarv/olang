@@ -39129,5 +39129,7 @@ output, the old lowering built by master f2ea1414:
 four bytes broadcast) is not a `Sum` to one number, so this does not reach it: it needs a total per group of four
 adjacent lanes - a grouped lane total into a vector, which lowers to vpdpbusd acc, broadcast(a), b - recorded as
 future work, no syntax added. Tests: tests/lanes.olang's odd depths (1, 3, 255, 257) for every signedness pairing and
-total type against loops written by hand, baked and decided while compiling, and an `I64` total past one chunk.
+total type against loops written by hand, baked and decided while compiling, and an `I64` total past one chunk. The
+same comparison built for -target x86-64-v3 and x86-64 (the widening step, byte-by-byte tail) and alderlake (avxvnni's
+256-bit vpdpbusd) gives the same totals.
 
