@@ -234,5 +234,6 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-17	joinleak2	opus	medium	running						join leak, from master 5f85a388
 2026-11-17	noattr	opus	medium	done	~421	243	158	no (disk full)		drop attributes, key enums; layoutdiff golden recaptured, not re-run
 2026-11-17	joinleak2	opus	medium	done	~375	146	141	no (disk full)		goldens hand-edited run.txt; quick re-run after freeing disk
-2026-11-17	steward-noattr	sonnet	medium	running						merge wt-noattr
+2026-11-17	steward-noattr	sonnet	medium	done	~120	~30	~40	yes		merge b44b33d3
 2026-11-17	fndefaults	opus	medium	running						defaults in function types
+2026-11-17	oannattr	sonnet	medium	running						oann attr migration + drop gemm pad-256
