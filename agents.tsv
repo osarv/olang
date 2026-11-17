@@ -223,5 +223,6 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-17	oanncert	opus	medium	done						certify by spectral norm
 2026-11-17	membersfix	opus	medium	running						fix quick failures
 2026-11-17	merge-lanesum	sonnet	low	stopped
-2026-11-17	oanncert2	opus	medium	running						L2 stop test + nudged certificate
+2026-11-17	oanncert2	opus	medium	done						L2 stop test + nudged certificate
 2026-11-17	lanesum-fix	opus	medium	running						resumed: quick failures
+2026-11-17	oannahead	sonnet	medium	running						Ahead prefetch + settle options under spectral
