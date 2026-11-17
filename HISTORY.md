@@ -39318,7 +39318,8 @@ vpdpbusd (the non-saturating form) gives. The evaluator's `laneDots` adds the sa
 decided tests agree with the run time. A `x += ` of any other shape materializes the array and adds it lane by lane.
 
 The repro now writes `row += (pa[o:o + 4] * b).Sum<I32>(4)` per row of 16 outputs; built for this machine (Ryzen 5 7600,
-AVX-512 VNNI) its micro-kernel is vpdpbusd (count below in the commit's report). Tests: tests/lanes.olang's grouped
+AVX-512 VNNI) its micro-kernel is `vpbroadcastd` of a's word and `vpdpbusd` from b's 64 bytes into a register accumulator (4 in
+main, LLVM keeping only the row it prints, unrolled four steps), printing what the scalar form printed (2152356). Tests: tests/lanes.olang's grouped
 totals against the loop written by hand at 0, 1, 7, 15, 16, 17, 33, 64 and 100 groups (a vector step and its tail),
 both operand orders, a broadcast group, the array form, a total of the totals; 255 x -128 in every byte, two signed
 operands (the plain helper), a float `Sum(2)` with a shared operand of two - each run, baked into a global and decided

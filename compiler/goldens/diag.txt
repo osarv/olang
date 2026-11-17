@@ -3355,6 +3355,20 @@ lanecompare.olang:6:10: error[E39]: '<' does not compare arrays - lane by lane i
     6 |     if a < b { }
       |          ^
 compilation failed with 1 error
+=== lanegrouplengths.olang
+lanegrouplengths.olang:5:36: error[E39]: an array of 3 lanes does not fit groups of 4 beside 8
+    5 |     b := (a * Array<I32>[1, 2, 3]).Sum(4)
+      |                                    ^~~
+lanegrouplengths.olang:5:36: note: the arrays of a grouped 'Sum' are of one length, a whole number of groups, or of one group's, shared by every group
+lanegrouplengths.olang:5:36: help: make the lengths fit the groups, or sum the lanes with a loop
+compilation failed with 1 error
+=== lanegroupsize.olang
+lanegroupsize.olang:6:21: error[E39]: a grouped 'Sum' takes its group's size as a whole number above zero known while compiling
+    6 |     b := a.Sum<I64>(n)
+      |                     ^
+lanegroupsize.olang:6:21: note: Sum<A>(n) adds each n lanes in turn into a lane of its own
+lanegroupsize.olang:6:21: help: write the size as a literal or a constant, as 'Sum<I32>(4)'
+compilation failed with 1 error
 === laneinplacerefs.olang
 laneinplacerefs.olang:10:7: error[E39]: lane operators give elements that may not be or hold references - build the array with a loop
    10 |     x += y
