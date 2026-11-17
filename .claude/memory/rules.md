@@ -63,6 +63,7 @@ slimming of 2026-11-08").
 - **Questions go to the Orchestrator (the user's standing rule, relayed 2026-11-17)**: every question for the user is sent to the Orchestrator (SendMessage "Orchestrator"), numbered, each with the default followed meanwhile and a recommendation; the user asks only the Orchestrator. Carry on with the default meanwhile. (Answering the user's own questions typed in this session is unchanged.)
 - **Minimal tokens (the user's standing rule, relayed 2026-11-17)**: tokens are the only bottleneck - CPU and memory are cheap (cloud VMs unlimited; locally the GPU and RAM still limit). Prefer cheap models and low effort, short briefs and reports.
 - **Tell the Orchestrator of decisions (standing rule, relayed 2026-11-17)**: a decision or new direction the user gives this session that affects other sessions or the plan goes to the Orchestrator as one line (SendMessage "Orchestrator").
+- Fallback if SendMessage to the Orchestrator fails: a comment on osarv/orchestrator#1 starting "Coding Local: " (a relay wakes it). This machine has no gh and only SSH to GitHub, so the fallback needs gh installed and logged in first.
 - **Agent length**: one fresh agent per round of a big batch, from a hand-off note kept up to date; resume only for a
   short follow-up within about an hour; never resume a very long agent for a new round.
 - **Pacing by usage**: every week until the user changes it, use what the work needs, run in parallel only what does not
