@@ -239,3 +239,5 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-17	oannattr	sonnet	medium	done				no (suite not rerun)		merge 8afdcbb; pad-256 kept (unpadded slower)
 2026-11-17	steward-fndef	sonnet	medium	running						merge wt-fndefaults + oann D8b check
 2026-11-17	fixes3	opus	medium	running						facts tuple bind, reflected text index, Makefile boot-fresh
+2026-11-17	oanncert3	opus	medium	running						nudged-phase certificate
+2026-11-17	oanncompact	sonnet	medium	running						compact retired units
