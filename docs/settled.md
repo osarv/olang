@@ -1278,6 +1278,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   2026-11-17, no syntax added) is an `Array<A>` of a lane per `n` lanes, an operand of exactly `n` lanes one group's,
   shared by every group; `x += (a4 * w).Sum<I32>(4)` over bytes (`LaneDots`) is vpdpbusd acc, broadcast(a4), w where
   the target has VNNI, x's lanes loaded and stored, else the plain sum; any other use builds the array.
+- **Exclusive parameters (O43, mine, 2026-11-17).** A writable reference parameter passed as one pointer is written
+  `noalias dereferenceable(size) align(a)` where the compiler proves nothing else the call reaches can reach its
+  storage: by T36 two places overlap only where one's type holds the other's in place, so no other parameter, the
+  result built through memory, nor the referent's own references may reach a type holding the referent or held by it;
+  and the body, through all it may call (effects), reads no global that changes or holds a reference, calls nothing
+  unknown, no C but its math, starts no task, waits on nothing, makes no atomic operation. Lambdas and generators get
+  none. A whole-program fact (B3i, "O43 NAME"). LaneDots' helper tags its loads and stores (T36) so its lanes stay in
+  registers across a loop. Changes no meaning.
 - **Testing.** `make verify` runs the corpus, std's tests, `checks/` (must-fail cases and whole-build scenarios) and the
   port's diffs; `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the
   user's rule). The suite runs side by side, at most a job per core, each test build, interpreted run and heavy tool

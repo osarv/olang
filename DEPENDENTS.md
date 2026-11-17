@@ -63,6 +63,9 @@ the same judgement (`typed.olang` `RefsKept.None`/`OwnSlot`, `effects.olang` `on
 condition changes the other, SPEC G42's `Allocates` row and `tests/slotfacts.olang`. A value local the scope pass may
 place where it is kept (`scope.olang` letMoved, paramLift, ownLifts: O26a, O28, R3) is counted by `typed.olang`'s
 `RefsKept.Kept` (`effects.olang` keptLocals): a new reason to place a local off the frame changes Kept.
+Exclusive parameters (O43, `effects.olang` `Exclusive`, written by `emit.olang`'s `exclusive` as noalias) rest on T36 and
+on what a body may reach: a new way for code to reach storage - a kind of global, a call through something not followed,
+a synchronisation (`Facts.Atomics`, `Blocks`), a type laid out or punned another way (`heldIn`) - changes `Exclusive`.
 
 ## What folds while compiling
 
