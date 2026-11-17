@@ -39196,3 +39196,30 @@ Checked: tests/members.olang (5, run and evaluator alike) with tests/typedefault
 tests/shared.olang, the cases touching builders, reflection, defaults and traits (eleven new `d4amember*`), diagtest,
 consistency, the goldens recaptured (tokens, trees, layout, diagnostics, module graphs), and `BOOT_FRESH=1 make boot;
 make fixedpoint` from the new seed, which installs the very compiler the two-stage build made.
+
+## 2026-11-17: a join keeps nothing - stand-ins made in the join's scope (P2b; a fix, mine; wt-joinleak)
+
+oann's repro/spawnleak.olang (a loop of `join { spawn draw(src, a, 4) }`, the task given a long-lived source and a
+staging value by `mut` reference) grew by ~113 bytes a join for good: 2,759 pages over 100,000 joins. The earlier
+joinleak fix (freeing gap 13) gave no stand-ins to a callee building nothing; this callee may build (`a.failure = $e`),
+so it is given one per scope variable - two here - and `__olang_standin` made each in the scope it stood in for, 56
+bytes that stayed there after the fold as a forwarder (a closure the task made might still hold it). Here that scope is
+main's, which never closes.
+
+The fix: `__olang_standin_in(parent, home)` makes the stand-in in the join block's own scope, which closes right after
+the join has folded it (`spawn` in emit passes `%sJ`). What a stand-in's address may outlive the join in is exactly
+what keeps a scope beyond a call: a closure's captured scope, a generator's home, a scope handle kept in a place
+(`Handle`, and the results of `ScopeOf`, `ScopeOr`, `RegionOr`); there emit calls `__olang_scope_hold`, which for such a
+stand-in hands out its KEEPER instead - a forwarder made once in the stand-in's own storage (so it reaches the parent
+with the fold), forwarding to the stand-in while the task runs and, from the fold, to what it stood in for (to that
+one's keeper where it is a stand-in itself, a nested join). The parts word a stand-in never otherwise uses marks it
+(`@__olang_standin_mark`, then the keeper with its low bit set). At the fold the stand-in's chunks are named as held by
+the keeper (O29's run-time scope lookup, as a folded part's are named by their root) - made then if the task built
+anything. Found on the way and fixed with it: regions made in a stand-in (its kids) were never handed on at the fold,
+so they were closed with nothing - `__olang_kids_move` gives them to the parent, which now closes them after its
+destructors. The one-argument `__olang_standin` stays, its stand-in forwarding itself as before, for the seed's code.
+
+Measured: spawnleak 2,759 pages to 4 over 100,000 joins; joinleak flat (90 pages at 200,000 and at 1,000,000 joins).
+checks/cases/joinflat.olang pins it (22 MB before, under 1 MB now), with a closure a task leaves building into the
+scope its join stood in for, called after an array churn, and a join nested in a task. Checked: the self-build fixed
+point, `make race`, `make quick`.

@@ -879,7 +879,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Constructors (C2d, C2g).** A bare field lives with the instance; an argument binds the instance only where the
   body can make it hold it; a constructor's top level allocates into the instance scope. A field given a lambda or an
   adapter lives where what it captured does.
-- **Scopes belong to one thread (P2, decision 48).** A task's scope arguments are private stand-ins folded at the join.
+- **Scopes belong to one thread (P2, decision 48).** A task's scope arguments are private stand-ins folded at the join. A stand-in is made in the join block's own scope (P2b, 2026-11-17, mine), so a loop of joins keeps nothing; what
+  may outlive the join - a closure, a generator, a scope handle - holds its keeper, a forwarder made in the stand-in's
+  storage (handed to the parent at the fold), and regions made in a stand-in become the parent's at the fold.
 - **Letting go (O8d, round 3 of `docs/memory.md`, 2026-10-18; the user's QAB: "the user should not have to deal with
   it").** Storage a place lets go of while it was its only holder may be reclaimed then rather than at the scope's
   close - the compiler's optimization, unobservable but in memory, never running a destructor early (O15). `own`,
