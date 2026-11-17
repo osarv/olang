@@ -1,0 +1,41 @@
+# a reflected text indexed (G33-G35): a field's name and a key enum case's text raw value read by a constant index or
+# measured, while compiling a walk over T.Fields and T.Keys.Cases, as any text is - what the evaluator bakes agrees
+
+type Point struct(Xpos I64, ypos I64) {
+    Xpos
+    ypos
+}
+
+type Point.Keys enum {
+    Xpos = "x"
+    ypos = "why"
+}
+
+# each field's first letter and its name's length
+fn initials<T>() String {
+    b := StringBuilder()
+    for f in T.Fields {
+        b.PushChar(f.Name[0])
+        b.Push($f.Name.Len())
+    }
+    return b.ToString()
+}
+
+# each key's last letter
+fn lasts<T>() String {
+    b := StringBuilder()
+    for c in T.Keys.Cases: b.PushChar(c.Value[c.Value.Len() - 1])
+    return b.ToString()
+}
+
+Initials := initials<Point>()
+Lasts := lasts<Point>()
+
+assert Initials == "X4y4"
+assert Lasts == "xy"
+
+test initials "a reflected text indexed reads its bytes" {
+    assert initials<Point>() == "X4y4"
+    assert lasts<Point>() == "xy"
+    assert Initials == "X4y4" and Lasts == "xy"
+}

@@ -118,6 +118,20 @@ StoreMost I64 = 8000
 # captured as runCase builds and runs it
 StoredRuns String& = try os.ReadFile("compiler/goldens/run.txt") catch default ""
 
+# the clang the checks compile C with, the compiler's own (compiler/target.olang FindClang, the makefile's SEED_CLANG):
+# OLANG_CLANG, else the newest of target.Clangs on PATH - "clang" where none is, so a check fails naming it. Each
+# command run by sh has it as "$CLANG"
+Clang String& = findClang()
+
+fn findClang() String& {
+    env := try os.Env("OLANG_CLANG") catch default ""
+    if env != "": return $env
+    for name in Array<String&>["clang-20", "clang-19", "clang-18", "clang"] {
+        if os.Run("command -v " + $name + " > /dev/null 2>&1") == 0: return $name
+    }
+    return "clang"
+}
+
 # what every check found - the scenarios', then the cases', in the order of Scenarios and Cases: "" for a check that
 # passed, and what went wrong for one that did not
 Outcomes Array<String&>& = runAll()
@@ -253,9 +267,10 @@ fn olang() String& {
     return $root() + "/" + $o
 }
 
-# runs cmd inside dir; the compiler is "$OLANG" there, and what it printed lands in dir/out.txt
+# runs cmd inside dir; the compiler is "$OLANG" there, the C compiler "$CLANG" (Clang), and what it printed lands in
+# dir/out.txt
 fn sh(dir String&, cmd String&) I32 {
-    return os.Run("cd " + $os.Quote(dir) + " && OLANG=" + $os.Quote(olang()) + " && " + $cmd)
+    return os.Run("cd " + $os.Quote(dir) + " && OLANG=" + $os.Quote(olang()) + " && CLANG=" + $os.Quote(Clang) + " && " + $cmd)
 }
 
 fn outOf(dir String&) String& {
@@ -755,9 +770,9 @@ fn sidebyside(r mut report&) ? Failed {
     dir := fresh("sidebyside")
     os.Run("cp checks/fixtures/sidebyside/* " + $os.Quote(dir))
     wrap String& = ("mkdir bin && printf '#!/bin/sh\nfor a; do [ \"$p\" = -o ] && echo \"$a\" >> %s/compiles.txt; p=$a; done\nexec %s \"$@\"\n' " +
-                    $os.Quote(dir) + " \"$(command -v clang)\" > bin/clang && chmod +x bin/clang")
+                    $os.Quote(dir) + " \"$(command -v \"$CLANG\")\" > bin/clang && chmod +x bin/clang")
     try r.expect(sh(dir, wrap) == 0, "no clang to wrap", dir)
-    side String& = ("export PATH=$PWD/bin:$PATH; \"$OLANG\" build a.olang > a.txt 2>&1 & A=$!; \"$OLANG\" build b.olang > b.txt 2>&1 & " + $
+    side String& = ("export OLANG_CLANG=$PWD/bin/clang; \"$OLANG\" build a.olang > a.txt 2>&1 & A=$!; \"$OLANG\" build b.olang > b.txt 2>&1 & " + $
                     "B=$!; \"$OLANG\" build c.olang > c.txt 2>&1 & C=$!; wait $A; a=$?; wait $B; b=$?; wait $C; c=$?; [ $a$b$c = 000 ]")
     try r.expect(sh(dir, side) == 0, "a build side by side failed", dir)
     try r.expect(sh(dir, "./build/a > out.txt && ./build/b >> out.txt && ./build/c >> out.txt") == 0, "a program did not run", dir)
@@ -1976,7 +1991,7 @@ fn clones(r mut report&) ? Failed {
     msort String& = "awk '/^define .*@clones_2emsort_clone4_clones_2ebefore\\(/,/^}/' " + $ll
     try r.expect(sh(dir, $msort + " | grep -c 'call void @clones_2emsort_clone4_clones_2ebefore(' | grep -qx 2") == 0, "msort's clone does not recurse into itself", dir)
     try r.expect(sh(dir, $msort + " | grep -q 'call i1 @clones_2ebefore'") == 0, "msort's clone calls before through its value", dir)
-    try r.expect(sh(dir, "clang -O3 -S -emit-llvm -Wno-override-module -o opt.ll " + $ll + " > out.txt 2>&1") == 0, "clang -O3", dir)
+    try r.expect(sh(dir, "\"$CLANG\" -O3 -S -emit-llvm -Wno-override-module -o opt.ll " + $ll + " > out.txt 2>&1") == 0, "clang -O3", dir)
     merge String& = "awk '/^define .*sortMergeForward_3cI64_2c_20_3f_3e_clone5_/,/^}/' opt.ll"
     try r.expect(sh(dir, $merge + " | grep -q '^define'") == 0, "no clone of sortMergeForward", dir)
     try r.expect(sh(dir, $merge + " | grep -qE 'call [^@(]*%[A-Za-z0-9._]+\\('") != 0, "an indirect call in the clone's merge loop", dir)
@@ -2653,7 +2668,7 @@ test "the arena's chunk pool gives memory back beyond its bound" { assert passed
 fn chunkpool(r mut report&) ? Failed {
     dir := fresh("chunkpool")
     os.Run("cp checks/fixtures/chunkpool/* " + $os.Quote(dir))
-    try r.expect(sh(dir, "clang -shared -fPIC -o sysconf.so sysconf.c -ldl > out.txt 2>&1") == 0, "sysconf.so", dir)
+    try r.expect(sh(dir, "\"$CLANG\" -shared -fPIC -o sysconf.so sysconf.c -ldl > out.txt 2>&1") == 0, "sysconf.so", dir)
     try r.expect(sh(dir, "\"$OLANG\" build budget.olang > out.txt 2>&1") == 0, "budget.olang did not build", dir)
     try r.expect(sh(dir, "LD_PRELOAD=./sysconf.so ./build/budget > out.txt 2>&1") == 0, "budget", dir)
 }
@@ -2688,13 +2703,13 @@ CtypesScript := ("import ctypes, sys\n" + $
 fn cinterop(r mut report&) ? Failed {
     dir := fresh("cinterop")
     os.Run("cp checks/fixtures/cinterop/* " + $os.Quote(dir))
-    try r.expect(sh(dir, "clang -c -O2 abi.c -o abi.o > out.txt 2>&1") == 0, "abi.c did not compile", dir)
+    try r.expect(sh(dir, "\"$CLANG\" -c -O2 abi.c -o abi.o > out.txt 2>&1") == 0, "abi.c did not compile", dir)
     try r.expect(sh(dir, "\"$OLANG\" build abi.olang > out.txt 2>&1 && ./build/abi > abi.txt") == 0, "abi.olang", dir)
     try r.expect(sh(dir, "cmp -s abi.txt abi.out") == 0, "abi printed otherwise than abi.out says", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize -output abi.ds abi.olang > out.txt 2>&1 && ./abi.ds > abi.ds.txt") == 0, "abi -debug -sanitize", dir)
     try r.expect(sh(dir, "cmp -s abi.ds.txt abi.out") == 0, "abi under -debug -sanitize printed otherwise", dir)
     # O8d: a view held across an extern call that calls back an export fn letting go of what it names
-    try r.expect(sh(dir, "clang -c -O2 callback.c -o callback.o > out.txt 2>&1") == 0, "callback.c did not compile", dir)
+    try r.expect(sh(dir, "\"$CLANG\" -c -O2 callback.c -o callback.o > out.txt 2>&1") == 0, "callback.c did not compile", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -debug -sanitize -output cb.ds callback.olang > out.txt 2>&1 && ./cb.ds > cb.txt") == 0
                  "callback -debug -sanitize", dir)
     try r.expect(outOf(dir).Contains("memory: 'G.t' keeps what it lets go of") and sh(dir, "cmp -s cb.txt callback.out") == 0
@@ -2716,10 +2731,10 @@ fn cinterop(r mut report&) ? Failed {
     try r.expect(sh(dir, "test -f build/libmylib.so && test -f build/mylib.h") == 0, "no libmylib.so and mylib.h", dir)
     # only the export fns' entries are shown
     try r.expect(sh(dir, "nm -D --defined-only build/libmylib.so | grep -v ' [TWV] \\(add\\|sum\\|seen\\|greet\\|parse\\|check\\|norm2\\|scale\\|mid\\|pidKnown\\|squares\\)$' | grep -q ' [TDBRW] '") != 0, "the library shows more than its entries", dir)
-    try r.expect(sh(dir, "clang -O1 -Wall -Werror use.c -o use -Lbuild -lmylib -lpthread > out.txt 2>&1") == 0, "use.c did not compile against mylib.h", dir)
+    try r.expect(sh(dir, "\"$CLANG\" -O1 -Wall -Werror use.c -o use -Lbuild -lmylib -lpthread > out.txt 2>&1") == 0, "use.c did not compile against mylib.h", dir)
     try r.expect(sh(dir, "LD_LIBRARY_PATH=build ./use > use.txt && cmp -s use.txt use.out") == 0, "use printed otherwise than use.out says", dir)
     # X16: bindgen writes bind.h's declarations as bind.gen holds them, and a program using them calls bind.c's code
-    try r.expect(sh(dir, "clang -c -O2 bind.c -o bind.o > out.txt 2>&1") == 0, "bind.c did not compile", dir)
+    try r.expect(sh(dir, "\"$CLANG\" -c -O2 bind.c -o bind.o > out.txt 2>&1") == 0, "bind.c did not compile", dir)
     try r.expect(sh(dir, "\"$OLANG\" bindgen bind.h -output gen.olang > out.txt 2>&1 && cmp -s gen.olang bind.gen") == 0, "bindgen wrote otherwise than bind.gen", dir)
     try r.expect(sh(dir, "sed 's/^extern {$/extern link \"bind.o\" {/' gen.olang | cat - binduse.part > bindprog.olang && \"$OLANG\" build bindprog.olang > out.txt 2>&1") == 0, "bindprog.olang", dir)
     try r.expect(sh(dir, "./build/bindprog > bindprog.txt && cmp -s bindprog.txt bindprog.out") == 0, "bindprog printed otherwise than bindprog.out says", dir)
@@ -2959,7 +2974,7 @@ fn scopesan(r mut report&) ? Failed {
     rename String& = ("for o in build/*.debug.san.o; do for s in $(nm $o | awk '$2 == \"T\" && $3 ~ /Touch$/ { print $3 }'); do" +
                       " objcopy --redefine-sym $s=stub_Touch $o || exit 1; done; done")
     try r.expect(sh(dir, ("objcopy --redefine-sym main=olang_main build/stub.*.main.debug.san.o > out.txt 2>&1 && " + $rename +
-                          " && clang -O0 drive.c build/*.debug.san.o -o drive -lpthread -ldl -lm >> out.txt 2>&1")) == 0
+                          " && \"$CLANG\" -O0 drive.c build/*.debug.san.o -o drive -lpthread -ldl -lm >> out.txt 2>&1")) == 0
                  "drive.c did not link", dir)
     try r.expect(sh(dir, "./drive ok > out.txt 2>&1") == 0 and outOf(dir) == "ok 1499500\n", "drive ok", dir)
     mem String& = "use after scope closed: storage a closed scope gave back was read or written\n"
@@ -3193,7 +3208,7 @@ fn regions(r mut report&) ? Failed {
     dir := fresh("regions")
     os.Run("cp checks/fixtures/regions/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug stub.olang > out.txt 2>&1") == 0, "stub.olang did not build", dir)
-    try r.expect(sh(dir, "clang -O0 drive.c build/olang_runtime.*.debug.o -o drive -lpthread -ldl -lm > out.txt 2>&1") == 0
+    try r.expect(sh(dir, "\"$CLANG\" -O0 drive.c build/olang_runtime.*.debug.o -o drive -lpthread -ldl -lm > out.txt 2>&1") == 0
                  "drive.c did not link", dir)
     for want in Array<String&>["small 2 0", "large 2 0", "null 0 0", "kept 4 0", "chain 200000 0", "part 6 0"] {
         mode := want[:try want.FindByte(' ') catch default 0]
@@ -3210,7 +3225,7 @@ fn scopefind(r mut report&) ? Failed {
     dir := fresh("scopefind")
     os.Run("cp checks/fixtures/scopefind/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug stub.olang > out.txt 2>&1") == 0, "stub.olang did not build", dir)
-    try r.expect(sh(dir, "clang -O0 drive.c build/olang_runtime.*.debug.o -o drive -lpthread -ldl -lm > out.txt 2>&1") == 0
+    try r.expect(sh(dir, "\"$CLANG\" -O0 drive.c build/olang_runtime.*.debug.o -o drive -lpthread -ldl -lm > out.txt 2>&1") == 0
                  "drive.c did not link", dir)
     for mode in Array<String&>["small", "large", "region", "none", "thread"] {
         try r.expect(sh(dir, "./drive " + $mode + " > out.txt 2>&1") == 0 and outOf(dir) == $mode + " 0\n", "drive " + $mode, dir)

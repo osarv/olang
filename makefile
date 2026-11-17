@@ -298,10 +298,10 @@ bootstrap: prereq
 	$(BOOTSTRAP)
 
 # build/olang as a file, for OLANG=build/olang: bootstrapped (boot, below) when missing or older than the sources it is
-# built from (what the compiler holds of std included). The seed is not among them: build/olang is the second build of
-# the current source, by a compiler built from it, the same whichever seed started the chain (make fixedpoint checks it)
+# built from (what the compiler holds of std included) or than the seed - a seed written again is the sign of source a
+# compiler older than it may not read (seed/README.md), so the chain starts again from it
 BOOT_SOURCES = $(wildcard compiler/*.olang) $(wildcard std/*.olang) $(wildcard std/prelude/*.olang) $(wildcard std/runtime/*.ll)
-build/olang: $(BOOT_SOURCES)
+build/olang: $(BOOT_SOURCES) $(SEED_FILES)
 	$(MAKE) boot
 
 # boot: make bootstrap, unless a bootstrap of exactly these inputs has passed here before - then the compiler it
@@ -363,6 +363,9 @@ seed: build/compiler_tools_seed
 		b=$$(basename $$f); \
 		if [ -e $(SEED_DIR)/$$b.xz ] && xz -dc $(SEED_DIR)/$$b.xz | cmp -s - $$f; then continue; fi; \
 		echo "seed: $(SEED_DIR)/$$b.xz"; xz -9 -T1 -c $$f > $(SEED_DIR)/$$b.xz; done
+	@# (build/olang, the seed tool's prerequisite, compiles the source this seed is written from: kept newer than the
+	@# seed, so the next make does not bootstrap from it again)
+	@touch build/olang
 
 run: $(OLANG)
 	$(OLANG_ENV) $(OLANG) build tests/runner.olang
@@ -439,7 +442,8 @@ verify:
 	@echo "verify: all checks passed"
 
 # the edit-test loop: the same suite as verify on what is already built - build/olang rebuilt by itself when a source
-# of it is newer (one build, the objects and build/rec it left reused), bootstrapped only when there is none. What it
+# of it is newer (one build, the objects and build/rec it left reused), bootstrapped when there is none or the seed is
+# newer (a seed written again: the old compiler may not read the source it was written from). What it
 # leaves out is what only verify checks: a clean build/, the bootstrap from the seed, and the compiler rebuilding itself
 # identically (a change to the code generator is first applied to the compiler by verify)
 quick:
@@ -449,6 +453,8 @@ quick:
 
 quickolang:
 	@if [ ! -x build/olang ]; then $(MAKE) --no-print-directory boot; \
+	elif [ -n "$$(find $(SEED_FILES) -newer build/olang)" ]; then \
+		echo "quick: the seed is newer than build/olang - bootstrapped from it"; $(MAKE) --no-print-directory boot; \
 	elif [ -n "$$(find $(BOOT_SOURCES) -newer build/olang)" ]; then \
 		echo "quick: build/olang rebuilt by itself"; \
 		build/olang build $(SELF_STD) -output build/olang.next compiler/olang.olang && mv build/olang.next build/olang; fi

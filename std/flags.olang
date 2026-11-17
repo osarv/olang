@@ -302,16 +302,12 @@ fn (k flagsOf<T>&) names<C>(c C) {
 fn (k flagsOf<T>&) short<Q>(q Q) Char {
     if T.HasMember("Short") {
         for c in T.Short.Cases {
-            if c.Name == q.Name: return letter(c.Value)
+            if c.Name != q.Name: continue
+            assert c.Value.Len() == 1 and c.Value[0] != '-', "a short name is one letter, and this is \"" + $c.Value + "\""
+            return c.Value[0]
         }
     }
     return Char(0)
-}
-
-# a short name's letter, from its text in T.Short
-fn letter(t String&) Char {
-    assert t.Len() == 1 and t[0] != '-', "a short name is one letter, and this is \"" + $t + "\""
-    return t[0]
 }
 
 # a parameter's flag, declared with its help and its short name

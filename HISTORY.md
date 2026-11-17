@@ -39323,3 +39323,28 @@ every parameter list (declarations, lambdas, constructors, function types) with 
 split into note and help. The compile-time evaluator needed nothing: a call through a value reaches it with every
 argument filled; tests/fndefaults.olang bakes each case as a global and decides it in asserts, and runs it on a Live
 input.
+
+## 2026-11-17: a reflected text indexed (G33-G35; a fix, mine; wt-fixes3)
+
+`f.Name[0]` or `c.Value[0]` in a walk over `T.Fields` or `T.Keys.Cases` was checked to no type and reached the
+lowerer as a gap ("an unknown type"), the case left open by wt-noattr above. The cause: indexing looks for the place
+of what it indexes, and a member of a reflected item (`f.Name`) went through the place of `f`, which a reflected item
+has none of - so the index had no base. Now a member of a reflected item (`checker.descTypeOf` names its descriptor)
+is read as a value where a place is asked for - a temporary holding the text, as any value with no place of its own
+is (`valuePlace`, the fallback `place` already ended in) - and indexing, slicing and measuring it work as on any
+text; what the evaluator bakes agrees (tests/refltextindex.olang, a global baked and decided asserts beside the run).
+std/flags drops its `letter` helper: `short` reads the case's text directly.
+
+Asked beside it, and not a bug: oann's dyn/settle saw a tuple binding `x, y := p.rate(0).U, p.rate(1).U` read as
+allocating where bindings one to a line were thought not to. Measured on master: both forms are copies of the
+columns (T7b: an array bound by value is its own), both count as storage built (G42's copyBuilds), and lowering copies
+both alike (OLANG_VIEWDUMP). Bound as references
+(`x, y := p.rate(0), p.rate(1)`, then `x.U`) neither allocates. tests/tuplefacts.olang pins the parity.
+
+`make` and `make quick` in a worktree whose build/olang predates a seed written again rebuilt the compiler with the
+stale one, which fails on the syntax the new seed was written for. build/olang now depends on the seed too, and
+quick's own check boots from the seed (`make boot`, its cache keyed by the seed) where a seed file is newer than
+build/olang. Verified on wt-fixes3: a seed file touched boots once (a cache hit, the content unchanged) through both `make`
+and `make quick`, and the run after does nothing. `make seed` now touches build/olang after writing: build/olang is
+the seed tool's prerequisite, so it already compiles the source the new seed came from, and without the touch the next
+`make` would bootstrap from that seed for nothing.

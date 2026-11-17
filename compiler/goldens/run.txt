@@ -535,6 +535,9 @@
 === test tests/reflmod.olang
 | status 0
 | ok - a module's own reflection sees its private fields; its generics see what this module sees
+=== test tests/refltextindex.olang
+| status 0
+| ok - initials: a reflected text indexed reads its bytes
 === test tests/runner.olang
 | status 0
 | ok - calling back across the cycle from runner
@@ -1353,6 +1356,9 @@
 === test tests/topassert.olang
 | status 0
 | ok - a file whose top-level asserts hold builds and runs
+=== test tests/tuplefacts.olang
+| status 0
+| ok - refsPaired: a tuple binding reads what each name is given, as bindings apart do
 === test tests/typedefaults.olang
 | status 0
 | ok - G4a, G4b: a default type argument where nothing else gives one, the wanted type before it, written ones first

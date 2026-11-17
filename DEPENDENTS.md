@@ -195,6 +195,7 @@ cases `checks/cases/d17*.olang`.
 | `compiler/olang.olang` `help` ("environment:"), `compiler/goldens/drv.txt` (`make drvgold`) | `olang help` lists the build's variables |
 | `README.md`, `docs/install.md`, `makefile` (the bootstrap sets `OLANG_TIMES`) | where users are told of it |
 | `OLANG_AUTORACE`: `compiler/build.olang` (`racesSpawners`), `olang.olang` `help` ("environment:"), SPEC P7a, `checks/checks.olang` (`racetests`) | `olang test`'s race build of the tests that start a task, turned off by 0 |
+| `OLANG_CLANG` and the clangs looked for on PATH: `compiler/target.olang` (`FindClang`, `Clangs`), `makefile` (`SEED_CLANG`), `checks/checks.olang` (`findClang`, each C compile as `"$CLANG"`, the `sidebyside` wrapper set as `OLANG_CLANG`) | the checks compile C with the clang the compiler uses; a hardcoded `clang` fails where only `clang-NN` is installed |
 | `OLANG_SPINNER`: `compiler/spin.olang` (`Enabled`), `makefile` (`bootstrap`'s loop around clang), `checks/checks.olang` (the prompt's pty scenario sets it to 0; the `spinner` scenario drives it) | the busy indicator (B25) |
 
 The busy indicator's frames are `Frames` in `compiler/spin.olang`; `makefile`'s `bootstrap` loop repeats them (a shell cannot import them).
