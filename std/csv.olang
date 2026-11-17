@@ -183,37 +183,31 @@ fn Record(fields ...String&, sep Char = ',') String ? Error {
     return String(out)
 }
 
-# ---- records as structs (G39, G40) ----
+# ---- records as structs (G32-G35, D4a) ----
 #
 # A struct's fields are columns, by reflection while compiling: each of text (String, String&), a Char, a Bool or a
-# number, written as "$" writes it. A column is named by its field's or its constructor parameter's name (a field
-# punning one has its attributes), or by "@csv.Column("name")" written on it; "@csv.Skip" leaves a field out.
+# number, written as "$" writes it. A column is named by its field's name, in the fields' order - or, where the struct
+# declares a key enum as its member Csv (D4a), the columns are the fields it lists, in its order, each named by its
+# case's text (its name where written without one); a field it does not list is no column, and read back its parameter
+# takes its default. A case naming no field is a compile-time error.
 #
-#     type Item struct(Name String&, @csv.Column("price") Cost F64, @csv.Skip Note String& = "") { Name, Cost, Note }
+#     type Item struct(Name String&, Cost F64, Note String& = "") { Name, Cost, Note }
+#     type Item.Csv enum {
+#         Name
+#         Cost = "price"
+#     }
 #     text := try csv.Encode(items)                 # Name,price\npen,1.5\n - Header, then a RecordOf each
 #     items := try csv.Decode<Item>(text)           # a Vec<Item>, by the header's names
-
-# a column's name, written on a field or a constructor's parameter (G39)
-type Column struct(Name String&) ? {
-    if not Name.Len() > 0: error ArgumentError.Invalid("Column: Name.Len() > 0")
-    Name
-}
-
-# a field that is no column (G39): never written, and read back its parameter takes its default
-type Skip struct() { }
-
-# the column a field or a parameter is: its own "@csv.Column", else its name
-fn columnOf<F>(f F) String& {
-    if f.HasAttr<Column>() { return $(f.Attr<Column>()!).Name }
-    return $f.Name
-}
 
 # T's columns as a record: the header a text of T's records begins with
 fn Header<T>(sep Char = ',') String ? Error {
     assert T.Kind == TypeKind.Struct, "csv writes a struct's fields as columns"
     names Vec<String&>
-    for f in T.Fields {
-        if not f.HasAttr<Skip>() { names.Push(columnOf(f)) }
+    if T.HasMember("Csv") {
+        columns<T>().named()
+        for c in T.Csv.Cases: names.Push(c.Value)
+    } else {
+        for f in T.Fields: names.Push(f.Name)
     }
     return try Record(...names.ToArray(), sep = sep)
 }
@@ -230,10 +224,35 @@ fn Encode<T>(xs Array<T>&, sep Char = ',') String ? Error {
 fn RecordOf<T>(v T, sep Char = ',') String ? Error {
     assert T.Kind == TypeKind.Struct, "csv writes a struct's fields as columns"
     fs Vec<String&>
-    for f in T.Fields {
-        if not f.HasAttr<Skip>() { fs.Push(cell(f.Of(v))) }
+    if T.HasMember("Csv") {
+        for c in T.Csv.Cases: fs.Push(cellOf(v, c))
+    } else {
+        for f in T.Fields: fs.Push(cell(f.Of(v)))
     }
     return try Record(...fs.ToArray(), sep = sep)
+}
+
+# the field of v a key enum's case c names, as its text
+fn cellOf<T, C>(v T, c C) String {
+    for f in T.Fields {
+        if f.Name == c.Name: return cell(f.Of(v))
+    }
+    unreachable      # columns<T>.named said so while compiling
+}
+
+# T's columns, as its key enum Csv lists them (D4a)
+type columns<T> struct() { }
+
+# every case of T.Csv names one of T's fields - else a compile-time error (S18c)
+fn (k columns<T>&) named() {
+    for c in T.Csv.Cases: k.names(c)
+}
+
+fn (k columns<T>&) names<C>(c C) {
+    for f in T.Fields {
+        if f.Name == c.Name: return
+    }
+    assert false, T.Name + ".Csv's case " + c.Name + " names no field of " + T.Name
 }
 
 # a field's text: text as it is, a number, a Bool or a Char as "$" writes it
@@ -249,7 +268,7 @@ fn cell<V>(x V) String {
 }
 
 # the records of a text whose first is its header, each built as a T through its constructor (G37): a parameter from
-# the column its name (or "@csv.Column") names, read as its type; a column missing, or a parameter "@csv.Skip" leaves out,
+# the column its name (or its case in T.Csv) names, read as its type; a column missing, or a parameter T.Csv leaves out,
 # its default. Fails with what Rows fails with, NoColumn where a parameter with no default has no column and BadValue
 # where a field is no value of its type - and with what the constructor fails with
 fn Decode<T>(text String&, sep Char = ',') Vec<T> ? {
@@ -257,37 +276,45 @@ fn Decode<T>(text String&, sep Char = ',') Vec<T> ? {
     out Vec<T>
     rows := Rows(text, sep)
     header := try rows.Next() catch Exhausted { return out }
+    k := columns<T>()
     for {
         row := try rows.Next() catch Exhausted { break }
         # decided while compiling (G35): for another T only the assertion above is said
-        if T.Kind == TypeKind.Struct: out.Push(try T(try argument(header, row, p, rows.Line) for p in T.Params))
+        if T.Kind == TypeKind.Struct: out.Push(try T(try k.argument(header, row, p, rows.Line) for p in T.Params))
     }
     return out
 }
 
-# a constructor parameter's argument from a record: its column's field, read as its type, else its default
-fn argument<P>(header Array<String&>&, row Array<String&>&, p P, line I64) P.Type ? Error {
-    if p.HasAttr<Skip>() {
-        assert p.HasDefault, "a parameter csv.Skip leaves out takes its default, and this one has none"
-        return p.Default
-    } else {
-        name := columnOf(p)
-        at I64 = -1
-        for i, h in header {
-            if h == name and at < 0 { at = i }
+# a constructor parameter's argument from a record: its column's field, read as its type, else its default - which one
+# T.Csv leaves out always takes, and which it must have
+fn (k columns<T>&) argument<P>(header Array<String&>&, row Array<String&>&, p P, line I64) P.Type ? Error {
+    if T.HasMember("Csv") {
+        for c in T.Csv.Cases {
+            if c.Name == p.Name: return try column(header, row, p, c.Value, line)
         }
-        if at < 0 or at >= row.Len() {
-            if p.HasDefault { return p.Default }
-            error Error.NoColumn(name)
-        }
-        if P.Type.Kind == TypeKind.Reference {
-            # text read as new text and moved where the argument lands (O26a), as json's member does
-            v := try value<P.Type.Target>(row[at]) catch badValue { error Error.BadValue(line, name, row[at]) }
-            return v
-        } else {
-            return try value<P.Type>(row[at]) catch badValue { error Error.BadValue(line, name, row[at]) }
-        }
+        if p.HasDefault: return p.Default
+        assert false, "csv.Decode: " + T.Name + "'s parameter " + p.Name + " is in no case of " + T.Name + ".Csv, and has no default to take"
+        unreachable
     }
+    return try column(header, row, p, p.Name, line)
+}
+
+# a parameter's argument from the column named name, its default where the header has none
+fn column<P>(header Array<String&>&, row Array<String&>&, p P, name String&, line I64) P.Type ? Error {
+    at I64 = -1
+    for i, h in header {
+        if h == name and at < 0 { at = i }
+    }
+    if at < 0 or at >= row.Len() {
+        if p.HasDefault { return p.Default }
+        error Error.NoColumn(name)
+    }
+    if P.Type.Kind == TypeKind.Reference {
+        # text read as new text and moved where the argument lands (O26a), as json's member does
+        v := try value<P.Type.Target>(row[at]) catch badValue { error Error.BadValue(line, name, row[at]) }
+        return v
+    }
+    return try value<P.Type>(row[at]) catch badValue { error Error.BadValue(line, name, row[at]) }
 }
 
 # a field read as a value of type V
@@ -411,12 +438,19 @@ test "Rows read while compiling as at run time" {
     assert csvTotalBaked == 123 and (try csvTotal("a,1\n\"b,\"\"c\"\"\",2\nd,3") catch default -1) == csvTotalBaked
 }
 
-# a struct of columns (G39): one renamed, one left out, a pun having its parameter's attributes
-type item struct(Name String&, @Column("price") Cost F64, Count I64 = 1, @Skip Note String& = "-", Fresh Bool = true) {
+# a struct of columns (D4a): one renamed, one left out
+type item struct(Name String&, Cost F64, Count I64 = 1, Note String& = "-", Fresh Bool = true) {
     Name
     Cost
     Count
     Note
+    Fresh
+}
+
+type item.Csv enum {
+    Name
+    Cost = "price"
+    Count
     Fresh
 }
 

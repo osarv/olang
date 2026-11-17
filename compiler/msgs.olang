@@ -988,12 +988,6 @@ type Diag enum {
     ReflArgCompr
     ReflNoType
     ReflMatchSubject
-    AttrPlace
-    AttrPun
-    AttrType
-    AttrTwice
-    AttrNotBuilt
-    AttrWritable
     ComptimeLocal
     ComptimeNotBaked
     ComptimeForTry
@@ -1001,7 +995,7 @@ type Diag enum {
     ComptimeForElem
     ComptimeForUnknown
     ComptimeForTooMany
-    AttrRead
+    HasMemberArg
     ReflFnList
     ReflFnCall
     LaneLengths
@@ -1054,7 +1048,7 @@ fn ByteSwapWidth(ty String&, bits I64) r.Msg { return r.Msg(Diag.ByteSwapWidth, 
 fn AtomicWidth(ty String&) r.Msg { return r.Msg(Diag.AtomicWidth, "P9, T4a", $ty + " is no atomic width", "the atomic operations take integers of 8, 16, 32 or 64 bits", "hold the value as one of those") }
 
 # compile-time reflection (G32-G38)
-fn ReflNoMember(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoMember, "G32", $ty + " has no reflected member '" + $name + "'", "a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align, and the type members its declarations give it (D4a)") }
+fn ReflNoMember(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoMember, "G32", $ty + " has no reflected member '" + $name + "'", "a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size, Align and HasMember, and the type members its declarations give it (D4a)") }
 fn ReflNoKind(ty String&) r.Msg { return r.Msg(Diag.ReflNoKind, "G32", $ty + " has no TypeKind", "only a struct, an enum, a number, Bool, an array, a reference, a function type and an error value have one") }
 fn ReflNoLength(ty String&) r.Msg { return r.Msg(Diag.ReflNoLength, "G32", $ty + " has no Length - only an array whose length is known while compiling has one") }
 fn ReflNoLayout(ty String&, name String&) r.Msg { return r.Msg(Diag.ReflNoLayout, "G32", $ty + " has no " + $name + " - it is not laid out (a trait, an error type, an extern type)") }
@@ -1075,13 +1069,9 @@ fn ReflCaseOther(c String&, ty String&) r.Msg { return r.Msg(Diag.ReflCaseOther,
 fn ReflCaseUnreachable() r.Msg { return r.Msg(Diag.ReflCaseUnreachable, "G36", "no type can reach this case - a case before it takes every type it does") }
 fn ReflArgCompr() r.Msg { return r.Msg(Diag.ReflArgCompr, "G37", "a comprehension as a call's arguments must walk a list known while compiling", "'T.Params', 'T.Fields' ... are such lists", "write another comprehension in brackets, 'Array<T>[e for x in c]'") }
 fn ReflNoType(name String&, ty String&, why String&) r.Msg { return r.Msg(Diag.ReflNoType, "G38", $"'" + $name + "' of " + $ty + ": " + $why) }
+fn HasMemberArg() r.Msg { return r.Msg(Diag.HasMemberArg, "G32", "'HasMember' takes the member's name as text, one argument", "", "write 'T.HasMember(\"Json\")'") }
 
-# attributes (G39, G40) and the functions reflection reads (G41)
-fn AttrPlace() r.Msg { return r.Msg(Diag.AttrPlace, "G39", "nothing here takes an attribute", "an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter") }
-fn AttrPun(name String&) r.Msg { return r.Msg(Diag.AttrPun, "G39", $"field '" + $name + "' is a pun of its parameter", "it has the parameter's attributes", "write the attribute on the parameter") }
-fn AttrType(ty String&) r.Msg { return r.Msg(Diag.AttrType, "G39", $"an attribute is a value of a declared type, and this is " + $ty, "a struct, an enum's case or a declared number type") }
-fn AttrTwice(ty String&) r.Msg { return r.Msg(Diag.AttrTwice, "G39", $"a declaration takes one attribute of each type, and this is its second " + $ty) }
-fn AttrWritable(ty String&) r.Msg { return r.Msg(Diag.AttrWritable, "G39", $"an attribute's value holds a 'mut' reference, and " + $ty + " is read-only data", "an attribute's value is baked while compiling, and no reader could write through the reference", "give its type read-only references ('T&')") }
+# the functions reflection reads (G41)
 fn ComptimeLocal(tok String&) r.Msg { return r.Msg(Diag.ComptimeLocal, "K3", $tok + " is a local or a parameter, and a comptime is computed while compiling", "only the running program knows a local or a parameter", "compute it from constants, globals and type parameters, or drop 'comptime'") }
 fn ComptimeNotBaked(why String&) r.Msg { return r.Msg(Diag.ComptimeNotBaked, "K3", "this comptime cannot be computed while compiling", $why) }
 fn ComptimeForTry() r.Msg { return r.Msg(Diag.ComptimeForTry, "K3a", "a comptime for's walk cannot fail at run time", "its elements are computed while compiling, so nothing of its walk fails at run time", "write 'comptime for x in e'") }
@@ -1089,8 +1079,6 @@ fn ComptimeForSource(ty String&) r.Msg { return r.Msg(Diag.ComptimeForSource, "K
 fn ComptimeForElem(ty String&) r.Msg { return r.Msg(Diag.ComptimeForElem, "K3a", $"a comptime for's elements are integers, Bool or Char, found " + $ty, "", "walk its positions: 'comptime for i in range xs.Len()'") }
 fn ComptimeForUnknown(why String&) r.Msg { return r.Msg(Diag.ComptimeForUnknown, "K3a", "a comptime for's elements cannot be computed while compiling", $why) }
 fn ComptimeForTooMany(n I64, most I64) r.Msg { return r.Msg(Diag.ComptimeForTooMany, "K3a", $"this comptime for unrolls into " + $n + " copies, at most " + $most, "", "walk it at run time: drop 'comptime'") }
-fn AttrNotBuilt(why String&) r.Msg { return r.Msg(Diag.AttrNotBuilt, "G39", "this attribute's value cannot be built while compiling", $why) }
-fn AttrRead(name String&) r.Msg { return r.Msg(Diag.AttrRead, "G40", $"'" + $name + "' takes the attribute's type and no arguments - '" + $name + "<json.Key>()'") }
 fn ReflFnList(what String&) r.Msg { return r.Msg(Diag.ReflFnList, "G41", $what, "", "'Functions' is read through an import's alias ('handlers.Functions'), 'Methods' through a type") }
 fn ReflFnCall(name String&, want I64, have I64) r.Msg { return r.Msg(Diag.ReflFnCall, "G41", $"'" + $name + "' is called with " + $want + " arguments (a method's receiver first), found " + $have) }
 fn ReflMatchSubject() r.Msg { return r.Msg(Diag.ReflMatchSubject, "G13", "'match' on a type takes a type known while compiling", "", "match a type variable, or a type a reflected member names") }
@@ -1780,7 +1768,7 @@ fn RawNoFit(v String&, ty String&) r.Msg { return r.Msg(Diag.RawNoFit, "T17e", "
 fn RawRepeated(name String&, v String&, other String&) r.Msg { return r.Msg(Diag.RawRepeated, "T17e", "'" + $name + "' has the raw value " + $v + ", which '" + $other + "' has already - raw values are distinct") }
 
 # a raw value in an enum that names no raw type (T17e)
-fn RawWithoutType() r.Msg { return r.Msg(Diag.RawWithoutType, "T17e", "a raw value needs the enum's raw type, written after 'enum': 'enum String {' or 'enum U8 {'") }
+fn RawWithoutType() r.Msg { return r.Msg(Diag.RawWithoutType, "T17e", "an integer raw value needs the enum's raw type, written after 'enum': 'enum U8 {'", "an enum naming none has text raw values where a case writes a text literal") }
 
 # a raw type on an anonymous enum (T17e)
 fn RawAnonymous() r.Msg { return r.Msg(Diag.RawAnonymous, "T17e", "only a declared enum has raw values - declare the enum with 'type'") }

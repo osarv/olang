@@ -1,0 +1,53 @@
+# key enums and functions reflected across a module (D4a, G32-G41): handlers in a table of function values, a type
+# whose key enum another module's generic reads - the importer sees the exported functions, this module all of its own
+import me "keyenummod"
+
+# where a handler answers, and the handler
+type Route struct(Path String&, Handler fn&(q String&) String) ? {
+    if not Path.StartsWith("/"): error ArgumentError.Invalid("Route: Path.StartsWith(\"/\")")
+    Path
+    Handler
+}
+
+# a command-line word, and what it does
+type Command struct(Word String&, Run fn&(a I64) I64, Help String& = "") { Word, Run, Help }
+
+fn Users(q String&) String { return "users:" + $q }
+
+fn Items(q String&) String { return "items:" + $q }
+
+fn Add(a I64, b I64 = 10) I64 { return a + b }
+
+fn Plain(x I64) I64 { return x * 2 }
+
+fn private(x I64) I64 { return x - 1 }
+
+# the routes and the commands, a table of function values
+Routes := Array<Route>[Route("/users", Users)!, Route("/items", Items)!]
+Commands := Array<Command>[Command("add", addOne, "adds two numbers"), Command("hidden", private)]
+
+fn addOne(a I64) I64 { return Add(a) }
+
+# a record with a renamed field: its key enum, Rec.Keys, lists A as "alpha" and leaves B out
+type Rec struct(A I64, B I64 = 2) { A, B }
+
+type Rec.Keys enum {
+    A = "alpha"
+}
+
+fn (r Rec&) Sum() I64 { return r.A + r.B }
+
+fn (r Rec&) Twice(k I64) I64 { return (r.A + r.B) * k }
+
+# this module's own functions, private ones included, through an import of itself
+fn OwnNames() String {
+    s := ""
+    for f in me.Functions {
+        if f.Params.Len() == 1: s = $s + $f.Name + " "
+    }
+    return s
+}
+
+test "a module walks its own functions, private ones too, through an import of itself" {
+    assert OwnNames() == "Users Items Plain private addOne "
+}

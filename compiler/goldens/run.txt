@@ -44,14 +44,6 @@
 | ok - a false assert after what leaves a function is not reached
 | ok - a true assert is decided wherever it is
 | ok - the evaluator agrees
-=== test tests/attrmod.olang
-| status 0
-| ok - a module walks its own functions, private ones too, through an import of itself
-=== test tests/attrs.olang
-| status 0
-| ok - Key: attributes are read on types, fields, puns, cases and their fields
-| ok - functions reflected: a router and a command table collected while compiling
-| ok - a reflected function's errors are its descriptor's
 === test tests/axes.olang
 | status 0
 | ok - Matrix.Slice: rows, columns and the rest
@@ -386,6 +378,14 @@
 | ok - vecs: keeps a parameter where a reference parameter reaches
 | ok - bindings: keeps a match binding past its clause
 | ok - slices: hands back a slice of a run-time array parameter's copy
+=== test tests/keyenummod.olang
+| status 0
+| ok - a module walks its own functions, private ones too, through an import of itself
+=== test tests/keyenums.olang
+| status 0
+| ok - keys: a key enum is read by its cases, a field it does not list left out
+| ok - functions reflected beside a table of function values
+| ok - a reflected function's errors are its descriptor's
 === test tests/lanes.olang
 | status 0
 | ok - E39: lane operators - built, fused, totalled, compared and chosen - baked, decided while compiling and run
@@ -1524,7 +1524,7 @@
 | status 0
 | ok - flags are read in every spelling, the rest are arguments
 | ok - what the declarations do not allow fails, with a message
-| ok - Flags.Read: a struct's parameters are flags, its attributes their help
+| ok - Flags.Read: a struct's parameters are flags, its key enums their help and short names
 | ok - the help text lists every flag
 | ok - Error: an error names the flag and what it was given
 === test std/frame.olang
@@ -1602,8 +1602,8 @@
 | ok - the fixture file
 | ok - Parse and Encode give the same while compiling as at run time
 | ok - a value of any type written by its type
-| ok - Naming: names become keys by a policy, a type's own winning, a member's own key over both
-| ok - Skip: a field left out is never written, and read back takes its default
+| ok - Naming: names become keys by a policy, a key enum's text over it
+| ok - a field its key enum leaves out is never written, and read back takes its default
 | ok - a value of any type read through its constructor
 | ok - error values are written as their words, and read back
 | ok - whole numbers are read and written exactly, through I64's and U64's ranges
@@ -1948,11 +1948,6 @@
 | status 0
 === run anyenumpayload.olang
 | status 0
-=== run attrhasruns.olang
-| status 0
-=== run attrreadonlyref.olang
-| status 0
-| attr cell 41
 === run b10cdefault.olang
 | status 0
 === run b10cnodefine.olang

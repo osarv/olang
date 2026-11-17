@@ -4741,8 +4741,13 @@ fn (w mut leaveWalk&) stmtLeaves(s Stmt&) Bool {
     }
 }
 
+# a loop's body and its post clause: a jump from either to the loop leaves nothing - an unrolled walk's item (G33) has
+# its post clause break its loop
 fn (w mut leaveWalk&) loopLeaves(body Block&, post Block?&) Bool {
-    return w.openLeaves(body) or w.openLeaves(post)
+    w.inner.Push(body.Id)
+    out := w.stmtsLeave(body.Stmts) or w.openLeaves(post)
+    try w.inner.Pop() catch { }
+    return out
 }
 
 # a block opened inside - a loop's body or post clause, a block statement (the block a for-in's break leaves): a jump to

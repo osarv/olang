@@ -109,95 +109,6 @@ atomicvalue.olang:6:17: error[T6b]: I64 does not flow into I32 - convert it, as 
     6 |     x.AtomicAdd(y)
       |                 ^
 compilation failed with 1 error
-=== attrbuiltin.olang
-attrbuiltin.olang:3:2: error[G39]: an attribute is a value of a declared type, and this is I64
-    3 | @I64(3)
-      |  ^~~~~~
-attrbuiltin.olang:3:2: note: a struct, an enum's case or a declared number type
-compilation failed with 1 error
-=== attrfntype.olang
-attrfntype.olang:4:15: error[G39]: nothing here takes an attribute
-    4 | fn call(f fn&(@Key("x") n I64) I64) I64 { return f(1) }
-      |               ^~~~~~~~~
-attrfntype.olang:4:15: note: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
-compilation failed with 1 error
-=== attrglobal.olang
-attrglobal.olang:4:1: error[G39]: nothing here takes an attribute
-    4 | @Key("x")
-      | ^~~~~~~~~
-attrglobal.olang:4:1: note: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
-compilation failed with 1 error
-=== attrlambda.olang
-attrlambda.olang:5:13: error[G39]: nothing here takes an attribute
-    5 |     f := fn(@Key("x") n I64) I64 { return n }
-      |             ^~~~~~~~~
-attrlambda.olang:5:13: note: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
-compilation failed with 1 error
-=== attrlocal.olang
-attrlocal.olang:5:5: error[G39]: nothing here takes an attribute
-    5 |     @Key("x") n := 3
-      |     ^~~~~~~~~
-attrlocal.olang:5:5: note: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
-compilation failed with 1 error
-=== attrmissing.olang
-attrmissing.olang:7:12: error[E15]: this call can fail - write 'try', and catch or pass on its errors
-    7 |     k := P.Attr<Key>()
-      |            ^~~~
-compilation failed with 1 error
-=== attrnotbuilt.olang
-attrnotbuilt.olang:7:2: error[G39]: this attribute's value cannot be built while compiling
-    7 | @Size(0)
-      |  ^~~~~~~
-attrnotbuilt.olang:7:2: note: an assertion in it fails, which aborts the program
-compilation failed with 1 error
-=== attrprelude.olang
-attrprelude.olang:3:16: error[G39]: an attribute is a value of a declared type, and this is Vec<I64>
-    3 | type P struct(@Vec<I64>() x I64) { x }
-      |                ^~~~~~~~~~
-attrprelude.olang:3:16: note: a struct, an enum's case or a declared number type
-compilation failed with 1 error
-=== attrpun.olang
-attrpun.olang:5:5: error[G39]: field 'x' is a pun of its parameter
-    5 |     @Key("x") x
-      |     ^~~~~~~~~
-attrpun.olang:5:5: note: it has the parameter's attributes
-attrpun.olang:5:5: help: write the attribute on the parameter
-compilation failed with 1 error
-=== attrread.olang
-attrread.olang:7:16: error[G40]: 'Attr' takes the attribute's type and no arguments - 'Attr<json.Key>()'
-    7 |     k := try P.Attr<Key>(1) catch default Key("")
-      |                ^~~~
-compilation failed with 1 error
-=== attrreceiver.olang
-attrreceiver.olang:5:5: error[G39]: nothing here takes an attribute
-    5 | fn (@Key("x") b Box&) Get() I64 { return b.v }
-      |     ^~~~~~~~~
-attrreceiver.olang:5:5: note: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
-compilation failed with 1 error
-=== attrrequire.olang
-attrrequire.olang:7:16: error[D17e]: this call breaks Tag's requirement 'v >= 0'
-    7 | type P struct(@Tag(-1) x I64) { x }
-      |                ^~~
-attrrequire.olang:4:8: note: the condition
-    4 |     if not v >= 0: error ArgumentError.Invalid("Tag: v >= 0")
-      |        ^~~~~~~~~~
-attrrequire.olang:7:16: error[G39]: this attribute's value cannot be built while compiling
-    7 | type P struct(@Tag(-1) x I64) { x }
-      |                ^~~~~~~
-attrrequire.olang:7:16: note: an error reaches '!', which ends the program
-compilation failed with 2 errors
-=== attrtwice.olang
-attrtwice.olang:4:25: error[G39]: a declaration takes one attribute of each type, and this is its second Key
-    4 | type P struct(@Key("a") @Key("b") x I64) { x }
-      |                         ^~~~~~~~~
-compilation failed with 1 error
-=== attrwritable.olang
-attrwritable.olang:10:2: error[G39]: an attribute's value holds a 'mut' reference, and Holder is read-only data
-   10 | @Holder(Cell(1))
-      |  ^~~~~~~~~~~~~~~
-attrwritable.olang:10:2: note: an attribute's value is baked while compiling, and no reader could write through the reference
-attrwritable.olang:10:2: help: give its type read-only references ('T&')
-compilation failed with 1 error
 === atundeclared.olang
 atundeclared.olang:8:11: error[E31]: Bag& declares SetAt but not At, which reading x[i] calls
     8 |     y := b[0]
@@ -821,8 +732,8 @@ compilation failed with 1 error
 csvdecodearray.olang:10:21: error[S18c]: this assertion is false, evaluated while compiling: csv.Decode<T> gives a Vec of T, one record: T is a struct with a field for each column, and Array<Row> is none
    10 |     rows := try csv.Decode<Array<Row>>(text)
       |                     ^~~~~~
-$ROOT/std/csv.olang:256:19: note: in the standard library's code, here
-  256 |     assert T.Kind == TypeKind.Struct, "csv.Decode<T> gives a Vec of T, one record: T is a struct with a field for each column, and " + T.Name + " is none"
+$ROOT/std/csv.olang:275:19: note: in the standard library's code, here
+  275 |     assert T.Kind == TypeKind.Struct, "csv.Decode<T> gives a Vec of T, one record: T is a struct with a field for each column, and " + T.Name + " is none"
       |                   ^~
 csvdecodearray.olang:10:21: note: instantiated here, with T = Array<Row>
    10 |     rows := try csv.Decode<Array<Row>>(text)
@@ -3089,6 +3000,12 @@ hashfloat.olang:7:14: error[G19, E10b]: Pf does not satisfy the constraint Hasha
 hashfloat.olang:7:14: note: it has no Hash
 hashfloat.olang:7:14: help: declare 'Hash() I64', agreeing with '=='
 compilation failed with 1 error
+=== hasmemberarg.olang
+hasmemberarg.olang:7:16: error[G32]: 'HasMember' takes the member's name as text, one argument
+    7 |     Println($A.HasMember(name))
+      |                ^~~~~~~~~
+hasmemberarg.olang:7:16: help: write 'T.HasMember("Json")'
+compilation failed with 1 error
 === hexnarrow.olang
 hexnarrow.olang:5:13: error[T6]: '0x100000000' does not fit U32
     5 |     a U32 = 0x100000000
@@ -3155,11 +3072,11 @@ compilation failed with 1 error
 jsonprivatefields.olang:10:18: error[S18c]: this assertion is false, evaluated while compiling: json.Encode: every field of Item is private to its module, so it would be written as {} - capitalize the fields json writes
    10 |     Println(json.Encode(Array<Item>[Item("pen", 3), Item("ink", 1)]))
       |                  ^~~~~~
-$ROOT/std/json.olang:1196:43: note: in the standard library's code, here
- 1196 |                 assert T.Fields.Len() > 0 or T.Size == 0, "json.Encode: every field of " + T.Name + " is private t...
+$ROOT/std/json.olang:1235:43: note: in the standard library's code, here
+ 1235 |                 assert T.Fields.Len() > 0 or T.Size == 0, "json.Encode: every field of " + T.Name + " is private t...
       |                                           ^~
-$ROOT/std/json.olang:1188:23: note: instantiated here, with T = Item
- 1188 |                     w.any(x, depth + 1)
+$ROOT/std/json.olang:1227:23: note: instantiated here, with T = Item
+ 1227 |                     w.any(x, depth + 1)
       |                       ^~~
 compilation failed with 1 error
 === k1assertaborts.olang
@@ -3213,6 +3130,28 @@ k2abortsread.olang:9:1: note: an assertion in it fails, which aborts the program
 k2abortsread.olang:6:5: note: here
     6 |     assert n < 2, "too big"
       |     ^~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== keyenumnodefault.olang
+keyenumnodefault.olang:15:19: error[S18c]: this assertion is false, evaluated while compiling: json.Decode: Account's parameter Name is in no case of Account.Json, and has no default to take
+   15 |     a := try json.Decode<Account>("{\"id\": 1}")
+      |                   ^~~~~~
+$ROOT/std/json.olang:1096:16: note: in the standard library's code, here
+ 1096 |         assert false, "json.Decode: " + T.Name + "'s parameter " + p.Name + " is in no case of " + T.Name + ".Json, and has no default to take"
+      |                ^~~~~
+$ROOT/std/json.olang:1043:34: note: instantiated here, with P = ParamInfo<Account, 1>, T = Account
+ 1043 |                 return try T(try member(o, p, n) for p in T.Params)
+      |                                  ^~~~~~
+compilation failed with 1 error
+=== keyenumnofield.olang
+keyenumnofield.olang:16:18: error[S18c]: this assertion is false, evaluated while compiling: Account.Json's case Nmae names no field of Account
+   16 |     Println(json.Encode(Account(1, "a")))
+      |                  ^~~~~~
+$ROOT/std/json.olang:926:12: note: in the standard library's code, here
+  926 |     assert false, T.Name + ".Json's case " + c.Name + " names no field of " + T.Name
+      |            ^~~~~
+$ROOT/std/json.olang:913:28: note: instantiated here, with T = Account, C = CaseInfo<Account.Json, 1>
+  913 |     for c in T.Json.Cases: caseNamed(n, c)
+      |                            ^~~~~~~~~
 compilation failed with 1 error
 === keywordlocal.olang
 keywordlocal.olang:4:5: error[L9a]: 'keeps' is a keyword, not a name
@@ -4657,7 +4596,7 @@ reflcaseunreachable.olang:15:18: note: instantiated here, with T = I64
       |                  ^~~~~~
 compilation failed with 1 error
 === refldescnomember.olang
-refldescnomember.olang:9:34: error[G34]: a field has no 'Width' - its members are Name, Type, Offset, BitOffset, Bits, Of, Attr and HasAttr
+refldescnomember.olang:9:34: error[G34]: a field has no 'Width' - its members are Name, Type, Offset, BitOffset, Bits and Of
     9 | fn main() { n := Point.Fields[0].Width }
       |                                  ^~~~~
 compilation failed with 1 error
@@ -4720,7 +4659,7 @@ compilation failed with 1 error
 reflnomember.olang:9:24: error[G32]: Point has no reflected member 'Width'
     9 | fn main() { n := Point.Width }
       |                        ^~~~~
-reflnomember.olang:9:24: note: a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size and Align, and the type members its declarations give it (D4a)
+reflnomember.olang:9:24: note: a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Nullable, Size, Align and HasMember, and the type members its declarations give it (D4a)
 compilation failed with 1 error
 === reflnotlist.olang
 reflnotlist.olang:9:18: error[G33]: I64 has no Fields - only a struct and an enum's case have fields
@@ -6096,9 +6035,10 @@ t17evalueclash.olang:6:11: error[E23, E33, E37, P9, T17e]: the compiler supplies
       |           ^~~~~
 compilation failed with 1 error
 === t17ewithouttype.olang
-t17ewithouttype.olang:3:9: error[T17e]: a raw value needs the enum's raw type, written after 'enum': 'enum String {' or 'enum U8 {'
+t17ewithouttype.olang:3:9: error[T17e]: an integer raw value needs the enum's raw type, written after 'enum': 'enum U8 {'
     3 |     A = 1
       |         ^
+t17ewithouttype.olang:3:9: note: an enum naming none has text raw values where a case writes a text literal
 compilation failed with 1 error
 === t17sep.olang
 t17sep.olang:4:23: error[T2]: unknown type 'South'

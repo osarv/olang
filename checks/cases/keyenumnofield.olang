@@ -1,0 +1,17 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling: Account.Json's case Nmae names no field of Account
+# D4a, json: a key enum's case names a field; one naming none is an error while compiling, said by the library's
+# decided assert at the call
+import "std/json"
+
+type Account struct(UserID I64, Name String&) {
+    UserID, Name
+}
+
+type Account.Json enum {
+    UserID = "id"
+    Nmae
+}
+
+fn main() {
+    Println(json.Encode(Account(1, "a")))
+}

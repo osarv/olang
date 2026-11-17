@@ -12,7 +12,7 @@
 #   in from where it would otherwise be; the block a continued condition opens is indented from the statement, as Go
 #   writes it.
 # - one space between two tokens, except none: inside brackets and type brackets, before ",", around "." and a slice's
-#   ":", after a prefix operator ("-x", "~x", "$x", "++x", an attribute's "@x"), before a postfix one, before a call's
+#   ":", after a prefix operator ("-x", "~x", "$x", "++x"), before a postfix one, before a call's
 #   or an index's bracket, and where the file had none around a reference marker "&" (its spacing decides what it marks, T24, E25).
 # - "{" has a space before it, a block on one line a space inside each brace ("{ }" when empty).
 # - comments stay where they are, as written; a run of lines ending in comments has them start in one column, one
@@ -72,7 +72,7 @@ type formatter struct(text String&, toks Array<token.Token>&) {
     text
     toks
     argOpen mut Array<I64>& = Array<I64>(toks.Len())
-    # a "(" grouping a function type in a list (L18c), an attribute's "@" (G39): spaced as written below
+    # a "(" grouping a function type in a list (L18c): spaced as written below
     group mut Array<Bool>& = Array<Bool>(toks.Len())
     closes mut Array<I64>& = Array<I64>(toks.Len())
     bodyColon mut Array<Bool>& = Array<Bool>(toks.Len())  # a ":" before a one-line body (S1b)
@@ -432,12 +432,10 @@ fn (f formatter&) before(r I64) I64 {
     return p
 }
 
-# whether the token at index j (real index r) is a prefix operator: "-", "~", "$", or "++"/"--" before its operand -
-# or the "@" an attribute begins with (G39), which the parser marks
+# whether the token at index j (real index r) is a prefix operator: "-", "~", "$", or "++"/"--" before its operand
 fn (f formatter&) prefix(j I64, r I64) Bool {
     k := f.kind(j)
     if k == token.Tok.Tilde or k == token.Tok.Dollar: return true
-    if k == token.Tok.At: return f.group[j]
     if k != token.Tok.Minus and k != token.Tok.Inc and k != token.Tok.Dec: return false
     p := f.before(r)
     return p < 0 or not f.operandEnd(p)

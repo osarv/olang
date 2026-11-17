@@ -18,12 +18,20 @@
 # argument is positional, in order, in Args(). "-h" and "--help" make Parse fail with HELP, Help() being the text to
 # print. A short name of 0 means none. Imported with `import "std/flags"`.
 #
-# Or declared as a struct's constructor parameters, read by reflection while compiling (G39, G40) - each a flag named
+# Or declared as a struct's constructor parameters, read by reflection while compiling (G32-G35) - each a flag named
 # by its name in lowercase words with dashes (MaxLen is --max-len), of its type (Bool, an integer, a float, text), its
-# default its default, its help and short name its attributes; one with no default must be given:
+# default its default; one with no default must be given. Its help comes from a key enum declared as the struct's
+# member Flags (D4a): a case names a parameter and its text is the help, and a parameter it does not list is no flag
+# and takes its default (one with none is a compile-time error). A member Short gives one-letter names the same way:
 #
-#     type Options struct(@flags.Help("stop after this many matches") @flags.Short('n') Count I64 = 10
-#                         @flags.Help("print nothing") Quiet Bool = false) { Count, Quiet }
+#     type Options struct(Count I64 = 10, Quiet Bool = false) { Count, Quiet }
+#     type Options.Flags enum {
+#         Count = "stop after this many matches"
+#         Quiet = "print nothing"
+#     }
+#     type Options.Short enum {
+#         Count = "n"
+#     }
 #     opts := try p.Read<Options>(os.Args()) catch flags.Error.Help { ... }
 
 # why Parse failed - Message() says it in a sentence, naming the argument: HELP: "-h" or "--help" was given; UNKNOWN: a
@@ -36,15 +44,6 @@ type Error error {
     BadValue(flag String, text String)     # a value that is none of its flag's type
     DeclaredTwice(flag String)
     Required(flag String)                  # Read: a flag declared by a parameter with no default was not given
-}
-
-# a flag's help, written on a parameter Read declares it from (G39)
-type Help struct(Text String&) { Text }
-
-# a flag's one-letter name, written on a parameter Read declares it from (G39)
-type Short struct(Letter Char) ? {
-    if not (Letter != 0 and Letter != '-'): error ArgumentError.Invalid("Short: Letter != 0 and Letter != '-'")
-    Letter
 }
 
 # what a flag holds
@@ -255,22 +254,68 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
     }
 }
 
-# ---- flags declared by a struct (G39, G40) ----
+# ---- flags declared by a struct (G32-G35, D4a) ----
 
 # a T built from the command line: each of its constructor's parameters a flag, declared after the ones declared
 # already, its value the flag's - the parameter's default where the line does not give it, REQUIRED (with a Message())
 # where it has none. Fails as Parse does, and with what T's constructor fails with
 fn (p mut Flags&) Read<T>(args Array<String&>&) T ? {
     assert T.Kind == TypeKind.Struct, "flags reads a struct's constructor parameters"
-    for q in T.Params: p.declare(q)
+    k := flagsOf<T>()
+    for q in T.Params: p.declare(k, q)
     try p.Parse(args)
-    return try T(try p.s.valueOf(q) for q in T.Params)
+    return try T(try p.s.valueOf(k, q) for q in T.Params)
 }
 
-# a parameter's flag, declared
-fn (p mut Flags&) declare<Q>(q Q) {
-    help String& = $(q.Attr<Help>()!).Text if q.HasAttr<Help>() else ""
-    short := (q.Attr<Short>()!).Letter if q.HasAttr<Short>() else Char(0)
+# T's flags, as its key enums Flags and Short give them (D4a)
+type flagsOf<T> struct() { }
+
+# a parameter's flag, declared - where T.Flags lists it, or T has no Flags
+fn (p mut Flags&) declare<Q, T>(k flagsOf<T>&, q Q) {
+    if not T.HasMember("Flags") {
+        p.flag(q, "", k.short(q))
+        return
+    }
+    k.named()
+    for c in T.Flags.Cases {
+        if c.Name == q.Name {
+            p.flag(q, $c.Value if c.Value != c.Name else "", k.short(q))
+            return
+        }
+    }
+    assert q.HasDefault, "flags.Read: " + T.Name + "'s parameter " + q.Name + " is in no case of " + T.Name + ".Flags, and has no default to take"
+}
+
+# every case of T.Flags names a parameter of T's constructor - else a compile-time error (S18c)
+fn (k flagsOf<T>&) named() {
+    for c in T.Flags.Cases: k.names(c)
+}
+
+fn (k flagsOf<T>&) names<C>(c C) {
+    for q in T.Params {
+        if q.Name == c.Name: return
+    }
+    assert false, T.Name + ".Flags's case " + c.Name + " names no parameter of " + T.Name
+}
+
+# a parameter's one-letter name: its case's in T.Short, 0 for none
+fn (k flagsOf<T>&) short<Q>(q Q) Char {
+    if T.HasMember("Short") {
+        for c in T.Short.Cases {
+            if c.Name == q.Name: return letter(c.Value)
+        }
+    }
+    return Char(0)
+}
+
+# a short name's letter, from its text in T.Short
+fn letter(t String&) Char {
+    assert t.Len() == 1 and t[0] != '-', "a short name is one letter, and this is \"" + $t + "\""
+    return t[0]
+}
+
+# a parameter's flag, declared with its help and its short name
+fn (p mut Flags&) flag<Q>(q Q, help String&, short Char) {
     name := dashed(q.Name)
     match Q.Type {
         case Bool {
@@ -303,8 +348,20 @@ fn (p mut Flags&) declare<Q>(q Q) {
     }
 }
 
-# a parameter's value: its flag's, as the parameter's type - REQUIRED where a parameter with no default was not given
-fn (s mut state&) valueOf<Q>(q Q) Q.Type ? Error {
+# a parameter's value: its flag's, as the parameter's type - its default where T.Flags does not list it
+fn (s mut state&) valueOf<Q, T>(k flagsOf<T>&, q Q) Q.Type ? Error {
+    if T.HasMember("Flags") {
+        for c in T.Flags.Cases {
+            if c.Name == q.Name: return try s.flagValue(q)
+        }
+        if q.HasDefault: return q.Default
+        unreachable      # declare said so while compiling
+    }
+    return try s.flagValue(q)
+}
+
+# a parameter's flag's value, as the parameter's type - REQUIRED where a parameter with no default was not given
+fn (s mut state&) flagValue<Q>(q Q) Q.Type ? Error {
     name := dashed(q.Name)
     f := try s.byName(name) catch noFlag { unreachable }
     if not q.HasDefault and not f.isSet {
@@ -426,16 +483,27 @@ test "what the declarations do not allow fails, with a message" {
     try p.Parse(Array<String&>["tool"]) catch Error.DeclaredTwice { } catch Error { unreachable }
 }
 
-# flags declared by a struct (G39)
-type options struct(@Help("how many") @Short('n') Count I64 = 10, @Help("say more") Verbose Bool = false
-                    MaxLen U8 = 8, Out String&) {
-    Count, Verbose, MaxLen, Out
+# flags declared by a struct (D4a): its key enums give their help and short names; Skipped is listed by neither, so no
+# flag
+type options struct(Count I64 = 10, Verbose Bool = false, MaxLen U8 = 8, Out String&, Skipped I64 = 4) {
+    Count, Verbose, MaxLen, Out, Skipped
 }
 
-test Flags.Read "a struct's parameters are flags, its attributes their help" {
+type options.Flags enum {
+    Count = "how many"
+    Verbose = "say more"
+    MaxLen
+    Out
+}
+
+type options.Short enum {
+    Count = "n"
+}
+
+test Flags.Read "a struct's parameters are flags, its key enums their help and short names" {
     p := Flags("tool", "does things")
     o := p.Read<options>(Array<String&>["tool", "-n", "3", "--out", "x", "--max-len=9", "rest"])!
-    assert o.Count == 3 and not o.Verbose and o.MaxLen == 9 and o.Out == "x" and p.Args()[0] == "rest"
+    assert o.Count == 3 and not o.Verbose and o.MaxLen == 9 and o.Out == "x" and o.Skipped == 4 and p.Args()[0] == "rest"
     assert p.Help() == ("usage: tool [flags] [arguments]\ndoes things\n\nflags:\n" +
         "  -n, --count INT    how many (default 10)\n" +
         "      --verbose      say more\n" +

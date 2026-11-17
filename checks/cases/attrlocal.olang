@@ -1,7 +1,0 @@
-# check: fail error[G39]: nothing here takes an attribute
-# G39: a local is no declaration reflection reads
-type Key struct(Name String&) { Name }
-fn main() {
-    @Key("x") n := 3
-    assert n == 3
-}

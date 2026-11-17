@@ -1,0 +1,8 @@
+# check: fail error[G32]: 'HasMember' takes the member's name as text, one argument
+# G32: T.HasMember is decided while compiling, so its argument is a text literal
+type A struct(X I64) { X }
+
+fn main() {
+    name := "Json"
+    Println($A.HasMember(name))
+}

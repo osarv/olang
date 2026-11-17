@@ -1,0 +1,17 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling: json.Decode: Account's parameter Name is in no case of Account.Json, and has no default to take
+# D4a, json: a field its key enum leaves out is read back as its default; one with no default cannot be built, an error
+# while compiling at the decode
+import "std/json"
+
+type Account struct(UserID I64, Name String&) {
+    UserID, Name
+}
+
+type Account.Json enum {
+    UserID = "id"
+}
+
+fn main() ? {
+    a := try json.Decode<Account>("{\"id\": 1}")
+    Println(a.UserID)
+}
