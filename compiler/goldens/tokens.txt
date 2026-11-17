@@ -775,6 +775,7 @@ d41d1e66acab7a66 3e4988f3ec55920b checks/cases/inttoolarge.olang
 223a22b354cee139 5dbdd13aec5485c2 checks/cases/isnulls.olang
 e6e5b5ce2312f5ca 0e4a73ed5aa58365 checks/cases/itnotmut.olang
 f3d783e9890ce24d a85c9920bf682db0 checks/cases/itredecl.olang
+d2832d559ba79d7b 9be5f0e794dfd491 checks/cases/joinflat.olang
 0c4f1dc20d56f3e7 00af33515e087b8a checks/cases/joinwritesafter.olang
 ee5cf01cacff0f2d 194353b2619eb7e2 checks/cases/jsonprivatefields.olang
 931edc0d1f6a73a8 bed13d387f4c9b4a checks/cases/k1assertaborts.olang
@@ -2389,7 +2390,7 @@ db407b9ec2aacf25 e1e61b9b123ebbaf compiler/diag.olang
 8eecc7e6e624f53a 744bfcc1480f0aa4 compiler/diagmsg.olang
 5bdfbd4085a223b5 adf787fa60906063 compiler/doc.olang
 ffdfae4680125f72 fb3cf75029f1260a compiler/effects.olang
-8b7abbebcd3637c8 284f743d6a887d28 compiler/emit.olang
+b023c7e5448f953b 83b84ac111097ec0 compiler/emit.olang
 2c3bf6bb250faaaf e3b8a8f879358b4f compiler/eval.olang
 cb1a11df49d0c569 69b32750145b05b7 compiler/explain.olang
 f8904f06be8de907 3cd94887e148f032 compiler/facts.olang
@@ -2450,7 +2451,7 @@ e80657e77bb89289 8e3e279943847a78 compiler/testdata/lex/strateof.olang
 a4d11107338659ab 6531a20ca9f45498 compiler/tools/dump.olang
 cfb1266e111461e5 632542299aad5e41 compiler/tools/emitdiff.olang
 ed6e41afea84150a 4e61a7a7dd1cf88d compiler/tools/emitdump.olang
-9ad30b1b216cf3dc bd1818618c9400d4 compiler/tools/evaldiff.olang
+b254c20e94cf6460 79e4c1f0bc09b5d6 compiler/tools/evaldiff.olang
 92398fd91ceec3f7 e10ab55c2416a4d4 compiler/tools/fmt.olang
 90cdc4e1817524f3 29822f6e37f71390 compiler/tools/layoutdiff.olang
 293aacc26d544a2b 5d7c802d6e795883 compiler/tools/layoutgold.olang

@@ -53,6 +53,8 @@ Skipped Array<String&> = Array<String&>[
     "checks/cases/o8earrays.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"
     "checks/cases/o8edlist.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"
     "checks/cases/o8elru.olang - a million lookups, minutes interpreted; its peak is the compiler's under interpret"
+    # P2b: 200,000 joins, their tasks sequential under interpret; the resident set it holds flat is the compiler's there
+    "checks/cases/joinflat.olang - 200,000 joins interpreted; the memory it holds flat is the build's"
     "checks/cases/o8dmapkeyfree.olang - a million puts and removes, minutes interpreted; its peak is the compiler's under interpret"
     "checks/cases/o8estack.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"
     "checks/cases/o8etree.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"

@@ -2478,6 +2478,8 @@
 | 1-title-built-at-run-time
 === run isname.olang
 | status 0
+=== run joinflat.olang
+| status 0
 === run joinwritesafter.olang
 | status 0
 === run keywordfield.olang
