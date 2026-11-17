@@ -412,6 +412,15 @@
 | ok - a statement match's clauses are blocks or one statement after ':'
 | ok - a guard's test narrows in its clause
 | ok - the evaluator agrees: globals baked from the same matches
+=== test tests/membermod.olang
+| status 0
+=== test tests/members.olang
+| status 0
+| ok - D4a: the prelude's T.Accumulator - a default for every Number, overridden by each narrow built-in number
+| ok - D4a: a member read through a type variable, each instance its type's own
+| ok - D4a: a program's members - an override in the owner's module, an extends type left with the default, a generic owner's
+| ok - D4a: a type declared in place - an enum read by reflection with its text values, a struct with a method
+| ok - D4a: a sum totals in the type's own Accumulator
 === test tests/namedargs.olang
 | status 0
 | ok - a defaulted parameter is given by name, in any order, after the arguments by position

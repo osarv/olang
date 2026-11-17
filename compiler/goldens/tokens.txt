@@ -417,6 +417,17 @@ f554474eb8bf7f4a f2b55ca1e39455d7 checks/cases/d3afunctionparam.olang
 59140c1fc2da0586 3fc9a297797f72d3 checks/cases/d3aparam.olang
 6a7d322053c5cbfe a2b7916d720dc12b checks/cases/d3bread.olang
 4fe542e2bd4287f0 0996c4a7fae942f0 checks/cases/d3bunread.olang
+39e58d31dde71821 ed4a6b8e40904075 checks/cases/d4amembercase.olang
+2e3fbaa490349d47 420b9aac2231afe8 checks/cases/d4amemberelsewhere.olang
+6da26c0b6cb1c730 34428a9dbed5a65c checks/cases/d4amemberinplacegeneric.olang
+6e2a7b5b66a12b08 874102403db530b8 checks/cases/d4amemberinplacekind.olang
+17e4b914652f9c21 d7ddc0e849a85fc3 checks/cases/d4amembermissing.olang
+fea93bfdda7dd230 3d9aba9300dd232a checks/cases/d4amembernotvalue.olang
+055b49506d6c0c57 e91fb6627e981091 checks/cases/d4amemberownerargs.olang
+66d1d366217b3836 d9d4925a2caa26ff checks/cases/d4amemberpreludetype.olang
+4e8c9d6b8cc167e7 2d5c19996430cff2 checks/cases/d4amembertraitdefault.olang
+f3a10601e4710dd7 a7e170895e29163e checks/cases/d4amembertwice.olang
+4c8e0378b337a172 20f4335a575179a9 checks/cases/d4amembertwodefaults.olang
 6d7f4c3b509af7f6 7a0cc3be412bf383 checks/cases/d8adefault.olang
 4a7a6afe3d3c0486 7f952cff1d14c7f9 checks/cases/d8cdestructinner.olang
 a020681fea0e01e9 e016294bee621773 checks/cases/d8dcount.olang
@@ -2386,7 +2397,7 @@ f8904f06be8de907 3cd94887e148f032 compiler/facts.olang
 9d6497cb3fb47103 f9105105277c4bc4 compiler/fix.olang
 b2908c4c910c8358 0c3e13e3a72063c3 compiler/fmt.olang
 832f8ffc27f69e96 c6695a6ca41b2dd3 compiler/free.olang
-1327d36688829465 f60630bf0c396c67 compiler/generic.olang
+14c7c4b439cb223c c6cc7918d447c84f compiler/generic.olang
 47fe819ebe95c3ba 50c26f6891967c89 compiler/interp.olang
 23a885a6497e989e 121d5f76d127824b compiler/jupyter.olang
 8299f0d6f657ceae ba0b78c0c7122d77 compiler/lineedit.olang
@@ -2628,6 +2639,8 @@ ef74496ac1efc479 e44f14abefad5ec5 tests/inplace.olang
 bd4ab93ae99c8810 95892948a6ecf965 tests/lanes.olang
 01ffe7335fe6ab32 05af3c33041bc780 tests/literals.olang
 cb1a5845ede026cf 7846a1adaf912717 tests/match.olang
+bd604793a79e1dd0 d7d4a9777703b2e7 tests/membermod.olang
+43716d6db39bbcf8 d7de16659f863891 tests/members.olang
 94e697619ecc82db f914c024da060aa2 tests/namedargs.olang
 b1bcaf8d86a15d05 8f760064917ffc2b tests/nll.olang
 23682d829b564f02 0a3ff8fc4d42b9a5 tests/nulltest.olang

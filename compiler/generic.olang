@@ -3375,12 +3375,13 @@ fn (p mut Program&) recvKey(mi I64, t ast.TypeRef?&, tps Array<ast.TypeParam&>&)
                 if k == null: return -1
                 return p.constraintKey(mi, k)
             }
+            # D4a: a type declared in place, "fn (p Grid.Point) Sum()" - its owner recorded where its name ends; a
+            # module's type, "fn (r lib.Rec&) Twice()", has no owner there and is keyed as any type
             if path.Len() == 2 {
-                # D4a: a type declared in place, "fn (p Grid.Point) Sum()" - its owner recorded where its name ends
                 hr := p.R.Member(p.file(mi), sp.Start + I32(p.text(path[0]).Len()))
-                if hr.Kind != names.What.Type or hr.Index < 0: return -1
-                e := p.TypeEntry(hr.Module, p.L.Names.Intern($p.text(path[0]) + "." + $p.text(path[1])))
-                return keyDecl(p.DeclFor(hr.Module, e)) if e >= 0 else -1
+                inPlace := $p.text(path[0]) + "." + $p.text(path[1])
+                e := p.TypeEntry(hr.Module, p.L.Names.Intern(inPlace)) if hr.Kind == names.What.Type and hr.Index >= 0 else -1
+                if e >= 0: return keyDecl(p.DeclFor(hr.Module, e))
             }
             if ref.Kind == names.What.Type and ref.Index >= 0: return keyDecl(p.DeclFor(ref.Module, ref.Index))
             if ref.Kind == names.What.Builtin {
