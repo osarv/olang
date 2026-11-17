@@ -22,3 +22,7 @@
 - (2026-11-17, wt-lanesum) Done: LaneDot vector accumulator (short depths fast). Future: a grouped lane total into a vector (per-lane groups of four) lowering to `vpdpbusd acc, broadcast(a), b` would let oann's packed micro-kernel use VNNI (repro oann repro/vnnitile.olang); a language question only if it needs syntax. After wt-lanesum merges: oann drops the pad-to-256 path (kernels/gemm dots/dotsPay) if plain Sum is as fast.
 - (2026-11-17, HIGH, freeing guarantee) A `join` with one spawn keeps ~113 B per join for the rest of the run: oann repro/spawnleak.olang (and the older repro/joinleak.olang, queued in plan.md 2026-11-15 and still open). Next olang agent after the members/lanesum fixes merge.
 - (2026-11-17) Three container restarts overnight; the third found the disk 99% full (worktree builds 7-9 GB each, /tmp 3 GB). Keep at most 2 olang builds at once, remove merged worktrees promptly, and consider capping build/ size (build/rec). joinleak restarts after the members merge (wt/joinleak exists, empty but for scratch/).
+
+## From wt-noattr (2026-11-17)
+- oann hand migration after noattr installs: io/checkpoint.olang `@Name("c_proj")` (line 655, read by fieldName/HasAttr at 255); dyn/neuron.olang `@Keep` (line 26, read at dyn/settle.olang:320, comments in dyn/system.olang 336/1186). LifCell<T> is generic: alias member over a module-level enum.
+- olang bug: indexing a reflected text (`f.Name[0]`) is a lowering gap (std/flags works around it with a helper).
