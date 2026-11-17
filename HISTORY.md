@@ -39470,6 +39470,11 @@ body whose type allows any before reuse is judged, and read by the module holdin
 `noalias dereferenceable(size) align(a)` (`_or_null` for `?&`); align is the type's, since no reference names a packed
 field (T13c). LaneDots' helper now carries the lanes' and the operands' element tags, in its name.
 
-Measured (the kernel compiled per module, as oann's was): the in-place accumulate went from 2.7x slower than the
-local to the same speed; the IR shows the twelve 16-lane accumulators as loop phis. In a whole-program LTO build both
-were already equal (the kernel inlined into a caller holding a local tile).
+Measured (the kernel compiled per module, as oann's was; best of 7 on a loaded machine): the in-place accumulate went
+from 297 ms to 213 ms against the local's 123-136 ms - the lanes' loads leave the loop (the IR shows them as phis) but
+their stores stay in it: sinking a store past an exit where the loop had not stored yet (here the slice-bounds checks)
+needs LLVM's `writable`, which claims more than is proven, so the stores stay. With `writable` added by hand the two
+were equal (135 vs 133 ms). Closing that gap needs either a language rule that a `mut` parameter's whole referent is
+the call's alone (across tasks too), or the bounds checks hoisted out of the loop. In a whole-program LTO build both
+forms were already equal (the kernel inlined into a caller holding a local tile). The compiler's own IR carries 2104
+exclusive parameters; its self-build time did not move measurably.

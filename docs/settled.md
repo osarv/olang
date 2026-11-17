@@ -1284,8 +1284,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   result built through memory, nor the referent's own references may reach a type holding the referent or held by it;
   and the body, through all it may call (effects), reads no global that changes or holds a reference, calls nothing
   unknown, no C but its math, starts no task, waits on nothing, makes no atomic operation. Lambdas and generators get
-  none. A whole-program fact (B3i, "O43 NAME"). LaneDots' helper tags its loads and stores (T36) so its lanes stay in
-  registers across a loop. Changes no meaning.
+  none. A whole-program fact (B3i, "O43 NAME"). LaneDots' helper tags its loads and stores (T36). `writable` is not
+  written: it claims the whole referent on entry, which another task writing another field may not grant. Changes no
+  meaning.
 - **Testing.** `make verify` runs the corpus, std's tests, `checks/` (must-fail cases and whole-build scenarios) and the
   port's diffs; `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the
   user's rule). The suite runs side by side, at most a job per core, each test build, interpreted run and heavy tool

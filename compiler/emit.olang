@@ -2544,6 +2544,7 @@ fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed 
 fn (e mut Emitter&) exclusive(p types.TypeId, excl I64, i I64) String {
     if i >= 62 or excl & (I64(1) << i) == 0 or e.ty(p) != "ptr": return ""
     r := e.T.Repr(e.T.Referent(p))
+    e.P.Layout(r)
     n, a := e.T.Size(r), e.T.Align(r)
     if n <= 0: return " noalias"
     return $" noalias dereferenceable" + $("_or_null" if e.T.IsNullable(p) else "") + "(" + $n + ")" + $(" align " + $a if a > 1 else "")
