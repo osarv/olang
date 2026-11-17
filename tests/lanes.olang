@@ -271,3 +271,62 @@ test "E39: Sum<A> of byte products at odd depths, every pairing of signedness, a
     n := 1100000
     assert (Array<U8>(n, 255) * Array<I8>(n, -128)).Sum<I64>() == I64(n) * -32640
 }
+
+# E39's grouped total, Sum<A>(n): lane j the Sum<A> of lanes j * n to j * n + n - 1, an operand of one group's lanes
+# shared by every group - against the loop written by hand, x += of a byte product's groups of four (LaneDots: vpdpbusd
+# where the target has it) and the array made alike
+fn plainGroups(x Array<I32>&, a Array<U8>&, b Array<I8>&) Array<I32> {
+    r := Array<I32>(x.Len(), 0)
+    for j in range x.Len() {
+        s := x[j]
+        for t in range 4 {
+            at := t if a.Len() == 4 else 4 * j + t
+            s += I32(a[at]) * I32(b[4 * j + t])
+        }
+        r[j] = s
+    }
+    return r
+}
+
+fn groupsAgree(n I64) Bool {
+    a := Array<U8>[U8((p * 37 + 11) % 256) for p in range 4 * n]
+    b := Array<I8>[I8(p % 256 - 128) for p in range 4 * n]
+    one := Array<U8>[255, 0, 128, 255]
+    x := Array<I32>[I32(j * 1000 - 5000) for j in range n]
+    want := plainGroups(x, a, b)
+    shared := plainGroups(x, one, b)
+    y := Array<I32>[v for v in x]
+    y += (a * b).Sum<I32>(4)
+    z := Array<I32>[v for v in x]
+    z += (b * a).Sum<I32>(4)             # the unsigned operand second
+    s := Array<I32>[v for v in x]
+    s += (one * b).Sum<I32>(4)           # one group's four bytes, broadcast to every group
+    built := x + (a * b).Sum<I32>(4)     # the grouped total as an array
+    return y == want and z == want and s == shared and built == want and (a * b).Sum<I32>(4).Sum<I64>() == (a * b).Sum<I64>()
+}
+
+fn groupsAll() Bool {
+    for n in [0, 1, 7, 15, 16, 17, 33, 64, 100] {
+        if not groupsAgree(n): return false
+    }
+    return true
+}
+
+# the extremes: 255 times -128 in every byte, each group -130560, and a group of two over floats
+fn groupsExtreme(n I64) Bool {
+    x := Array<I32>(n, 1)
+    x += (Array<U8>(4 * n, 255) * Array<I8>(4 * n, -128)).Sum<I32>(4)
+    y := Array<I32>(n, 0)
+    y += (Array<I8>(4 * n, -128) * Array<I8>(4 * n, -128)).Sum<I32>(4)   # two signed operands: no vpdpbusd, the same sum
+    f := Array<F64>[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    return x == Array<I32>(n, -130559) and y == Array<I32>(n, 65536) and f.Sum(2) == Array<F64>[3.0, 7.0, 11.0] and
+        (f * Array<F64>[1.0, 10.0]).Sum(2) == Array<F64>[21.0, 43.0, 65.0]
+}
+
+Groups33 mut I64 = 33 # read at run time
+GroupsBaked := groupsAll() and groupsExtreme(17)
+
+test "E39: Sum<A>(n), the grouped total, agrees with the loop written by hand - vpdpbusd's groups of four bytes" {
+    assert groupsAll() and groupsAgree(Groups33) and groupsExtreme(Groups33) and GroupsBaked
+    assert groupsAll() and groupsExtreme(17) # S18c: decided while compiling
+}

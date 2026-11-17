@@ -666,6 +666,7 @@ fn allInert(xs Array<Expr&>&) Bool {
 fn storesNothing(op PrimOp) Bool {
     return match op {
         case PrimOp.AtomicStore, PrimOp.AtomicAdd, PrimOp.AtomicSwap, PrimOp.AtomicCompareSwap, PrimOp.Drop, PrimOp.Retire: false
+        case PrimOp.LaneDots: false
         case _: true
     }
 }
@@ -1967,6 +1968,11 @@ type PrimOp enum {
     # the products of the n lanes from them, each element widened to ty (an integer) first, added in ty - in any order,
     # an integer sum's being exact. The target's dot instructions where it has them (vpdpbusd)
     LaneDot
+    # E39's "x += (p * q).Sum<A>(4)": args [x, p, q, g, ps, qs] - x a writable reference to the first of g 32-bit integers,
+    # p and q references to bytes: into x's lane j the four products of p's bytes from j * ps and q's from j * qs (ps, qs
+    # 4, or 0 for an operand of one group's four bytes, shared by every group), each widened by its own signedness -
+    # wrapping, as I32's "+" does. vpdpbusd where the target has it
+    LaneDots
     # T13c: args [x, k] - field k (a constant) of the packed value x, its bits read out as the field's type ty
     Unpack
     # T13c: args [x, k, v] - the packed value x, of type ty, with field k's bits replaced by v's

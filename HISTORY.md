@@ -39348,3 +39348,44 @@ build/olang. Verified on wt-fixes3: a seed file touched boots once (a cache hit,
 and `make quick`, and the run after does nothing. `make seed` now touches build/olang after writing: build/olang is
 the seed tool's prerequisite, so it already compiles the source the new seed came from, and without the touch the next
 `make` would bootstrap from that seed for nothing.
+
+## 2026-11-17: the grouped lane total, Sum<A>(n) (E39's LaneDots; mine, no syntax added; wt-vnnitile)
+
+oann's repro/vnnitile.olang - a packed INT8 micro-kernel in the VNNI layout, b as [k/4][16][4] bytes and a's four
+bytes of a step broadcast to every lane - could not reach vpdpbusd: each output lane's four adjacent products was
+written as scalar sums, and LLVM forms vpdpbusd only from a reduction to one value (LaneDot's `(x * w).Sum<I32>()`).
+The entry above recorded the wanted form as future work: a per-lane total of groups of adjacent products into a
+vector.
+
+Options weighed: a new operator or a new method name, rejected - a group of lanes summed is what `Sum` already means,
+only per group; LaneDot keeping a vector accumulator, which has no way to say "this vector is the accumulator" without
+a new type; and a grouped `Sum` taking the group's size as its argument, chosen. `a.Sum<A>(n)` is an `Array<A>` of a
+lane per `n` lanes in turn, each lane the `Sum<A>` of its group; `n` must be known while compiling (it decides the
+instruction). The broadcast needed a rule of its own: an array operand of exactly `n` lanes is one group's, shared by
+every group, as a value that is not an array is shared by every lane - `(a4 * w).Sum<I32>(4)` with `a4` four bytes.
+The other arrays are of one length, a whole number of groups (none of them: one group); lengths known while compiling
+that do not fit are an error (LaneGroupLengths), others are checked once each and abort as "lane lengths differ". So a
+lane operation of two arrays of different known lengths is no longer said where the operator is written but where the
+lanes are built (laneNode.Short, laneShortSay) - the same message at the same place, unless a grouped Sum takes the
+shorter as its group.
+
+The checker makes `Sum<A>(n)` a placeholder (LaneGroup). Taken as an array - assigned, an operand of another lane
+operator, a total's receiver - it is a Collect over the groups, each group's lanes added in A in order, a shared
+operand's element read at the lane's place in its group (laneGroupOut). Under `x += ` with a byte product (one unsigned,
+one signed, or any pairing), A and x's elements one 32-bit integer and groups of four, it is one prim, `LaneDots`
+(args: x's first lane writable, the operands' first bytes, the group count, each operand's step - 4, or 0 for a shared
+one), after checking x has a lane a group (laneDotGroups). emit calls a helper `olang_lanedots.<form>`: where the
+target has avx512vnni (512-bit vectors, 16 lanes a step) or avxvnni / avx512vnni+vl (256, 8 lanes) and the operands
+are unsigned and signed bytes (the unsigned passed first), each step loads x's lanes, the operands' 64 (32) bytes - or
+one 32-bit word splat, for a shared operand - calls `llvm.x86.avx512.vpdpbusd.512` (`.256`) and stores; the groups
+left go one by one. Elsewhere every group goes one by one in plain IR. A lane wraps in I32 as `+` does, which is what
+vpdpbusd (the non-saturating form) gives. The evaluator's `laneDots` adds the same products byte by byte, so baked and
+decided tests agree with the run time. A `x += ` of any other shape materializes the array and adds it lane by lane.
+
+The repro now writes `row += (pa[o:o + 4] * b).Sum<I32>(4)` per row of 16 outputs; built for this machine (Ryzen 5 7600,
+AVX-512 VNNI) its micro-kernel is `vpbroadcastd` of a's word and `vpdpbusd` from b's 64 bytes into a register accumulator (4 in
+main, LLVM keeping only the row it prints, unrolled four steps), printing what the scalar form printed (2152356). Tests: tests/lanes.olang's grouped
+totals against the loop written by hand at 0, 1, 7, 15, 16, 17, 33, 64 and 100 groups (a vector step and its tail),
+both operand orders, a broadcast group, the array form, a total of the totals; 255 x -128 in every byte, two signed
+operands (the plain helper), a float `Sum(2)` with a shared operand of two - each run, baked into a global and decided
+while compiling. checks/cases lanegroupsize and lanegrouplengths.

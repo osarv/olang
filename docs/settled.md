@@ -1272,7 +1272,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   product (`(x * w).Sum<I32>()` over `U8` x `I8`, `LaneDot`) is one helper over every lane: vectors of `I32` lanes
   carried to the end and reduced once, four steps a turn, the short last step masked (AVX-512BW) or byte by byte; a step
   is vpdpbusd, called by name where the target has avx512vnni or avxvnni, else a widening multiply-add; an `I64` total
-  reduces every 8192 steps so no lane overflows (2026-11-17).
+  reduces every 8192 steps so no lane overflows (2026-11-17). The **grouped total** `a.Sum<A>(n)` (E39, mine,
+  2026-11-17, no syntax added) is an `Array<A>` of a lane per `n` lanes, an operand of exactly `n` lanes one group's,
+  shared by every group; `x += (a4 * w).Sum<I32>(4)` over bytes (`LaneDots`) is vpdpbusd acc, broadcast(a4), w where
+  the target has VNNI, x's lanes loaded and stored, else the plain sum; any other use builds the array.
 - **Testing.** `make verify` runs the corpus, std's tests, `checks/` (must-fail cases and whole-build scenarios) and the
   port's diffs; `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the
   user's rule). The suite runs side by side, at most a job per core, each test build, interpreted run and heavy tool

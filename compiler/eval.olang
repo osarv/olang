@@ -3053,6 +3053,10 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
     match op {
         case typed.PrimOp.Len { return m.lenOf(fi, x, at) }
         case typed.PrimOp.LaneDot { return m.laneDot(fi, args, ty) }
+        case typed.PrimOp.LaneDots {
+            m.laneDots(fi, args)
+            return 0
+        }
         case typed.PrimOp.Same {
             p := m.addr(fi, x, 1)
             q := m.addr(fi, m.arg(fi, args, 1), 2)
@@ -3404,6 +3408,30 @@ fn (m mut Machine&) laneDot(fi I64, args mir.Range, ty types.TypeId) I64 {
         s = s + a * b
     }
     return s & bmask(m.ibits(ty))
+}
+
+# E39's "x += (p * q).Sum<A>(4)" (LaneDots): into each of g 32-bit lanes from x's first, the four products of p's bytes
+# from j * ps and q's from j * qs, each widened by its own signedness, the lane wrapping as I32's "+" does
+fn (m mut Machine&) laneDots(fi I64, args mir.Range) {
+    a := m.rdPtr(m.addr(fi, m.arg(fi, args, 0), 1))
+    x, y := m.arg(fi, args, 1), m.arg(fi, args, 2)
+    p := m.rdPtr(m.addr(fi, x, 2))
+    q := m.rdPtr(m.addr(fi, y, 3))
+    g := m.scalar(fi, m.arg(fi, args, 3))
+    ps, qs := m.scalar(fi, m.arg(fi, args, 4)), m.scalar(fi, m.arg(fi, args, 5))
+    et := m.T.Repr(m.T.Referent(m.T.Repr(m.opType(fi, x))))
+    ft := m.T.Repr(m.T.Referent(m.T.Repr(m.opType(fi, y))))
+    for j in range g {
+        at := Ptr(a.Id, a.Off + 4 * j)
+        s := m.rd(at, 4)
+        for t in range 4 {
+            u := m.intValue(m.rd(Ptr(p.Id, p.Off + j * ps + t), 1), et)
+            v := m.intValue(m.rd(Ptr(q.Id, q.Off + j * qs + t), 1), ft)
+            s = s + u * v
+        }
+        if m.halted: return
+        m.wr(at, 4, s & bmask(32))
+    }
 }
 
 # an atomic operation, evaluated as the plain one on its place (K1, P9)

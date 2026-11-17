@@ -1005,6 +1005,8 @@ type Diag enum {
     LaneMaskBool
     LaneSumNotNumber
     LaneSumNarrows
+    LaneGroupSize
+    LaneGroupLengths
     ByteSwapWidth
     AtomicWidth
     GenericNeeds
@@ -1042,6 +1044,8 @@ fn LaneReferences() r.Msg { return r.Msg(Diag.LaneReferences, "E39", "lane opera
 fn LaneCompare(op String&, how String&) r.Msg { return r.Msg(Diag.LaneCompare, "E39", $op + " does not compare arrays - lane by lane it is '" + $how + "', an Array<Bool>") }
 fn LaneMaskBool(what String&, ty String&) r.Msg { return r.Msg(Diag.LaneMaskBool, "E39", $what + " takes lanes of Bool, found " + $ty) }
 fn LaneSumNotNumber(ty String&) r.Msg { return r.Msg(Diag.LaneSumNotNumber, "E39", "'Sum' works in a number type, and " + $ty + " is none", "Sum<A> computes every lane and the total in A", "name a number type the elements widen to, as 'Sum<I32>()', or write 'Sum()'") }
+fn LaneGroupSize() r.Msg { return r.Msg(Diag.LaneGroupSize, "E39", "a grouped 'Sum' takes its group's size as a whole number above zero known while compiling", "Sum<A>(n) adds each n lanes in turn into a lane of its own", "write the size as a literal or a constant, as 'Sum<I32>(4)'") }
+fn LaneGroupLengths(n I64, most I64, g I64) r.Msg { return r.Msg(Diag.LaneGroupLengths, "E39", "an array of " + $n + " lanes does not fit groups of " + $g + " beside " + $most, "the arrays of a grouped 'Sum' are of one length, a whole number of groups, or of one group's, shared by every group", "make the lengths fit the groups, or sum the lanes with a loop") }
 fn LaneSumNarrows(from String&, to String&) r.Msg { return r.Msg(Diag.LaneSumNarrows, "E39", "'Sum<" + $to + ">' would narrow the " + $from + " elements", $from + " does not widen to " + $to + " with nothing lost (T6b)", "name a type " + $from + " widens to, or convert the operands first") }
 
 # integers of any width (T4a)

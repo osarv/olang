@@ -5564,6 +5564,10 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         }
         case typed.PrimOp.AnyInstance { return fe.let("extractvalue { ptr, ptr } " + $x + ", 0") }
         case typed.PrimOp.LaneDot { return fe.laneDot(x, t0, args, ty) }
+        case typed.PrimOp.LaneDots {
+            fe.laneDots(x, args)
+            return "undef"
+        }
         case typed.PrimOp.AnyIs {
             # T34: the table's first word against the type's identity - a null any's table the empty one
             tab := fe.let("extractvalue { ptr, ptr } " + $x + ", 1")
@@ -5968,6 +5972,90 @@ fn (fe mut fnEm&) laneDot(p String&, pt types.TypeId, args mir.Range, ty types.T
     r := fe.let("call " + $rt + " @" + $f + "(ptr " + $x + ", ptr " + $y + ", i64 " + $n + ")")
     if bits >= 32: return r
     return fe.let("trunc i32 " + $r + " to " + $fe.ty(t.Repr(ty)))
+}
+
+# E39's "x += (p * q).Sum<A>(4)" (LaneDots): the groups added into x's lanes by a helper (laneDotsFn) - the unsigned
+# operand first, as vpdpbusd takes it
+fn (fe mut fnEm&) laneDots(a String&, args mir.Range) {
+    t := fe.E.T
+    po, qo := fe.arg(args, 1), fe.arg(args, 2)
+    pt, qt := fe.otype(po), fe.otype(qo)
+    ux := t.IsUnsigned(t.Repr(t.Referent(t.Repr(pt))))
+    uy := t.IsUnsigned(t.Repr(t.Referent(t.Repr(qt))))
+    p, q := fe.val(po, pt), fe.val(qo, qt)
+    g := fe.val(fe.arg(args, 3), fe.otype(fe.arg(args, 3)))
+    sp, sq := fe.val(fe.arg(args, 4), fe.otype(fe.arg(args, 4))), fe.val(fe.arg(args, 5), fe.otype(fe.arg(args, 5)))
+    swap := uy and not ux
+    f := fe.E.laneDotsFn(uy if swap else ux, ux if swap else uy)
+    x, y := (q if swap else p), (p if swap else q)
+    xs, ys := (sq if swap else sp), (sp if swap else sq)
+    fe.w("call void @" + $f + "(ptr " + $a + ", ptr " + $x + ", ptr " + $y + ", i64 " + $g + ", i64 " + $xs + ", i64 " + $ys + ")")
+}
+
+# E39's LaneDots: the helper adding groups of four byte products into 32-bit lanes - p's bytes unsigned where ux, q's
+# where uy, a group j's from p at j * ps and q at j * qs (0: the same four bytes, broadcast) - its name. Where p's are
+# unsigned and q's signed on a target with avx512vnni or avxvnni, a step is vpdpbusd on L lanes (16 at 512 bits, 8 at
+# 256) - the lanes loaded, added into and stored - the groups left one by one; else every group one by one, which LLVM
+# vectorizes as it can
+fn (e mut Emitter&) laneDotsFn(ux Bool, uy Bool) String {
+    width := 512 if e.Attrs.Contains("\"prefer-vector-width\"=\"512\"") else
+        (256 if e.Attrs.Contains("\"prefer-vector-width\"=\"256\"") else 128)
+    d := laneDotForm()
+    d.Ux = ux
+    d.Uy = uy
+    if ux and not uy and width == 512 and e.feature("avx512vnni"): d.Dp = 512
+    else if ux and not uy and width >= 256 and (e.feature("avxvnni") or e.feature("avx512vnni") and e.feature("avx512vl")): d.Dp = 256
+    d.L = d.Dp / 32
+    name := $"olang_lanedots." + $("dp" if d.Dp > 0 else "w") + $d.Dp + "." + $("u" if ux else "s") + $("u" if uy else "s")
+    if e.has(name): return name
+    if d.Dp > 0 {
+        vt := $"<" + $d.L + " x i32>"
+        dp := $"llvm.x86.avx512.vpdpbusd." + $d.Dp
+        e.declare(dp, $vt + " @" + $dp + "(" + $vt + ", " + $vt + ", " + $vt + ")")
+    }
+    e.item(name, HomeShared, laneDotsBody(name, d))
+    return name
+}
+
+# the text of LaneDots helper name of form d
+fn laneDotsBody(name String&, d laneDotForm&) String {
+    b := StringBuilder()
+    b.Push($"define linkonce_odr hidden void @" + $name + "(ptr %a, ptr %p, ptr %q, i64 %g, i64 %ps, i64 %qs) alwaysinline #0 {\nentry:\n")
+    if d.Dp == 0: b.Push("  br label %t\nt:\n  br label %sh\n")
+    else {
+        vt := $"<" + $d.L + " x i32>"
+        b.Push("  br label %h\nh:\n  %j = phi i64 [ 0, %entry ], [ %j1, %pq ]\n")
+        b.Push($"  %j1 = add i64 %j, " + $d.L + "\n  %cj = icmp sle i64 %j1, %g\n  br i1 %cj, label %v, label %t\nv:\n")
+        b.Push("  %ap = getelementptr i32, ptr %a, i64 %j\n")
+        b.Push($"  %av = load " + $vt + ", ptr %ap, align 4\n  br label %p0\n")
+        for side in Array<String&>["p", "q"] {
+            o := $"%" + $side
+            b.Push($side + "0:\n  " + $o + "o = mul i64 %j, %" + $side + "s\n  " + $o + "a = getelementptr i8, ptr " + $o + ", i64 " + $o + "o\n")
+            b.Push($"  " + $o + "one = icmp eq i64 %" + $side + "s, 0\n  br i1 " + $o + "one, label %" + $side + "b, label %" + $side + "l\n")
+            b.Push($side + "b:\n  " + $o + "w = load i32, ptr " + $o + "a, align 1\n")
+            b.Push($"  " + $o + "i = insertelement " + $vt + " poison, i32 " + $o + "w, i64 0\n")
+            b.Push($"  " + $o + "s1 = shufflevector " + $vt + " " + $o + "i, " + $vt + " poison, " + $vt + " zeroinitializer\n  br label %" + $side + "j\n")
+            b.Push($side + "l:\n  " + $o + "v1 = load " + $vt + ", ptr " + $o + "a, align 1\n  br label %" + $side + "j\n")
+            b.Push($side + "j:\n  " + $o + "x = phi " + $vt + " [ " + $o + "s1, %" + $side + "b ], [ " + $o + "v1, %" + $side + "l ]\n")
+            b.Push($"  br label %" + $("q0" if side == "p" else "pq") + "\n")
+        }
+        b.Push($"pq:\n  %r = call " + $vt + " @llvm.x86.avx512.vpdpbusd." + $d.Dp + "(" + $vt + " %av, " + $vt + " %px, " + $vt + " %qx)\n")
+        b.Push($"  store " + $vt + " %r, ptr %ap, align 4\n  br label %h\nt:\n  br label %sh\n")
+    }
+    # the groups left, one by one
+    from := "0" if d.Dp == 0 else "%j"
+    b.Push($"sh:\n  %k = phi i64 [ " + $from + ", %t ], [ %k1, %sb ]\n  %ck = icmp slt i64 %k, %g\n  br i1 %ck, label %sb, label %done\nsb:\n")
+    b.Push("  %akp = getelementptr i32, ptr %a, i64 %k\n  %s0 = load i32, ptr %akp, align 4\n")
+    b.Push("  %pko = mul i64 %k, %ps\n  %qko = mul i64 %k, %qs\n")
+    for i in range 4 {
+        b.Push($"  %pi" + $i + " = add i64 %pko, " + $i + "\n  %pp" + $i + " = getelementptr i8, ptr %p, i64 %pi" + $i + "\n")
+        b.Push($"  %pb" + $i + " = load i8, ptr %pp" + $i + "\n  %pw" + $i + " = " + $("zext" if d.Ux else "sext") + " i8 %pb" + $i + " to i32\n")
+        b.Push($"  %qi" + $i + " = add i64 %qko, " + $i + "\n  %qp" + $i + " = getelementptr i8, ptr %q, i64 %qi" + $i + "\n")
+        b.Push($"  %qb" + $i + " = load i8, ptr %qp" + $i + "\n  %qw" + $i + " = " + $("zext" if d.Uy else "sext") + " i8 %qb" + $i + " to i32\n")
+        b.Push($"  %m" + $i + " = mul i32 %pw" + $i + ", %qw" + $i + "\n  %s" + $(i + 1) + " = add i32 %s" + $i + ", %m" + $i + "\n")
+    }
+    b.Push("  store i32 %s4, ptr %akp, align 4\n  %k1 = add i64 %k, 1\n  br label %sh\ndone:\n  ret void\n}\n")
+    return b.ToString()
 }
 
 # how a LaneDot helper adds: V bytes a step into L lanes of i32, by vpdpbusd of Dp bits (0 for none: a widening

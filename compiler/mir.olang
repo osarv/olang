@@ -1902,6 +1902,7 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
         case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire, typed.PrimOp.AnyInstance: 1
         case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap: 1
         case typed.PrimOp.AtomicCompareSwap, typed.PrimOp.Repack, typed.PrimOp.LaneDot: 3
+        case typed.PrimOp.LaneDots: 6
         case _: 2
     }
     if n != want {
@@ -1976,6 +1977,15 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
                 v.bad("LaneDot of a " + $v.canon(a))
             }
             if not t.IsInt(t.Repr(ty)): v.bad("LaneDot typed " + $v.canon(ty))
+        }
+        case typed.PrimOp.LaneDots {
+            ok := t.IsRef(ra) and t.IsInt(t.Repr(t.Referent(ra))) and t.Bits(t.Repr(t.Referent(ra))) == 32
+            for j in range 1, 3 {
+                b := t.Repr(v.operandType(v.arg(r, j)))
+                if not t.IsRef(b) or not t.IsInt(t.Repr(t.Referent(b))) or t.Bits(t.Repr(t.Referent(b))) != 8: ok = false
+            }
+            if not ok: v.bad("LaneDots of a " + $v.canon(a))
+            if ty != types.VoidT: v.bad("LaneDots typed " + $v.canon(ty))
         }
         case typed.PrimOp.Retire {
             x := t.Referent(ra) if t.IsRef(ra) else a
