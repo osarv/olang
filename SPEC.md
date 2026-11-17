@@ -5113,7 +5113,7 @@ with no storage. The operands are evaluated once, left to right, before any lane
 held); arrays are borrowed, never copied. A result is **fixed** (laid out in place, T7c) where every array operand's
 length is known while compiling, else a new array built where the expression lands, as a comprehension is (E27).
 
-The operands' lengths must be **equal**. Where both are known while compiling a difference is a compile-time error;
+The operands' lengths must be **equal** (a grouped `Sum`'s, below, excepted). Where both are known while compiling a difference is a compile-time error;
 otherwise they are compared once per operation - never per lane - and a difference aborts as a slice out of range does
 (E16b): `FILE:LINE: lane lengths differ` (S18a). There is no checked form: the lengths are the program's to keep
 equal, as a slice's bounds are.
@@ -5134,6 +5134,18 @@ Arrays have these **lane methods**, the compiler's as `Len()` is, on any array t
   product of two byte arrays into a wider integer uses the target's byte dot instructions where it has them
   (vpdpbusd). A dot instruction that would reorder a float sum (vdpbf16ps) is not used: `Sum<F32>` over `BF16` is the
   sequential sum of the widened products.
+- `a.Sum<A>(n)`, `a.Sum(n)` - the **grouped total**: an `Array<A>` of a lane per group of `n` lanes in turn, its lane `j`
+  the `Sum<A>` of lanes `j * n` to `j * n + n - 1` (`A` as in `Sum` - the one named, else `T.Accumulator` - each
+  lane computed in it). `n` is a whole number above zero known while compiling (a literal, a constant); anything else
+  is an error. An array operand of exactly `n` lanes is **one group's, shared by every group**, as a value that is not
+  an array is shared by every lane: lane `j * n + t` reads its element `t`. Every other array operand is of one length, a
+  whole number of groups (none: one group); lengths known while compiling that do not fit are a compile-time error, else they
+  are checked once and abort as `lane lengths differ`. `x += (a * w).Sum<I32>(4)` with `a` an `Array<U8>` of four bytes
+  and `w` an `Array<I8>` of `4 * x.Len()` adds into each lane of `x` its four products - the VNNI layout's step, which
+  the compiler makes vpdpbusd with `a` broadcast where the target has it (avx512vnni, avxvnni), `x`'s lanes loaded,
+  added into and stored, and else the plain sum; an integer total wraps in `A` as `+` does, whatever the instruction.
+  Taken as an array anywhere else it is a new array, made where it stands; `x += ` of any other shape is the
+  in-place loop below.
 - `a.Min()`, `a.Max()` - the least and greatest by `<` (E31's `Less` for a type of its own), ties the first; a float
   NaN, once met, is the answer (IEEE's minimum and maximum propagate it). An empty array fails with
   `ArrayError.Empty`, so both are written with `try` (or `!`).
@@ -5164,6 +5176,7 @@ reference points, nothing written back, as `v[i].xs[j] += k` is.
 ```
 d := (a * b).Sum()                      # a dot product: one loop, no array
 q := (x * w).Sum<I32>()                 # bytes widened to I32, multiplied and summed there (vpdpbusd)
+acc += (a4 * w).Sum<I32>(4)             # each lane of acc += four adjacent products, a4's four bytes shared (vpdpbusd)
 y += a * k                              # in place
 m := try (a - b).Max()                  # fails with ArrayError.Empty on empty arrays
 c := a.LanesLess(b).Select(a, b)        # the lesser of each pair

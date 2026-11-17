@@ -1,0 +1,7 @@
+# check: fail a grouped 'Sum' takes its group's size as a whole number above zero known while compiling
+# E39: Sum<A>(n)'s group is a size known while compiling
+fn main() {
+    n := 4
+    a := Array<I32>[1, 2, 3, 4]
+    b := a.Sum<I64>(n)
+}

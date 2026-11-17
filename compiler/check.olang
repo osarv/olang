@@ -14315,10 +14315,13 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
     if lm and (c.laneOf(rx) >= 0 or c.laneArray(rt)) {
         nm := c.text(n)
         if c.laneOf(rx) >= 0 or c.P.MethodOf(c.deref(rt), n) < 0 or nm == "Some" or nm == "Every" {
+            w := types.UnknownT
+            if targs.Len() > 0: w = c.resolve(targs[0])
+            if targs.Len() > 0 and w == types.UnknownT: return c.unknown(sp)
+            wsp := targs[0].Span() if targs.Len() > 0 else nsp
+            if nm == "Sum" and args.Len() == 1: return c.laneGroups(sp, nsp, c.laneLeaf(rx), w, wsp, args[0])   # E39's grouped total
             if targs.Len() == 0: return c.laneMethod(sp, nsp, nm, rx, args)
-            w := c.resolve(targs[0])
-            if w == types.UnknownT: return c.unknown(sp)
-            return c.laneTotal(sp, nsp, nm, c.laneLeaf(rx), w, targs[0].Span())
+            return c.laneTotal(sp, nsp, nm, c.laneLeaf(rx), w, wsp)
         }
     }
     if targs.Len() > 0 {
@@ -21755,19 +21758,22 @@ fn (c mut Checker&) comprOpen(sp source.Span) {
 # is all-zero bits, D13c, so no other value is one). What takes a placeholder as lanes builds on its node; anything
 # else takes the array, made where it stands (laneOut)
 type laneNode struct(Kind I64, Op token.Tok, Sp source.Span, OpSp source.Span, A I64, B I64, C I64, X typed.Expr?&
-                     Elem types.TypeId, Len I64, Decl types.TypeId) {
-    Kind       # LaneArr, LaneScalar, LaneBin, LaneUn, LaneCmp, LaneSel
+                     Elem types.TypeId, Len I64, Decl types.TypeId, Short I64 = -1) {
+    Kind       # LaneArr, LaneScalar, LaneBin, LaneUn, LaneCmp, LaneSel, LaneGroup
     Op         # the operator: of LaneBin and LaneUn; EqEq or Lt for LaneCmp
     Sp
     OpSp
-    A          # the operands' nodes: LaneBin's two, LaneUn's one, LaneCmp's two, LaneSel's mask then its two choices
-    B
+    A          # the operands' nodes: LaneBin's two, LaneUn's one, LaneCmp's two, LaneSel's mask then its two choices,
+               # LaneGroup's lanes grouped
+    B          # LaneGroup: the group's size
     C
     X          # a leaf's value: an array (LaneArr) or what every lane shares (LaneScalar)
     Elem       # the type of its elements; Unknown where they are no operation, which building them says
     Len        # its length where it is known while compiling (T7c), else -1
     Decl       # the declared array type the operation keeps - every array operand of it of that type (T29e) - else
                # Unknown: the result is an Array<Elem>
+    Short      # LaneBin: its operands' other length known while compiling, where it differs from Len - an error
+               # (LaneLengths) unless a grouped Sum takes the shorter as its group (E39); else -1
 }
 
 LaneArr I64 = 0
@@ -21776,6 +21782,7 @@ LaneBin I64 = 2
 LaneUn I64 = 3
 LaneCmp I64 = 4
 LaneSel I64 = 5
+LaneGroup I64 = 6   # Sum<A>(n): the totals of each n lanes in turn
 LaneMagic I64 = 1 << 40
 
 # the operators that work lane by lane on arrays (E39); "==" and "!=" compare whole arrays (E10), "<" and the other
@@ -21790,7 +21797,8 @@ fn laneTok(op token.Tok) Bool {
 # the methods every array has that take lanes as they are (E39): the totals, the comparisons, the choice
 fn laneMethodName(name String&, n I64) Bool {
     return match name {
-        case "Sum", "Min", "Max", "Some", "Every": n == 0
+        case "Sum": n == 0 or n == 1   # Sum(n): the grouped total
+        case "Min", "Max", "Some", "Every": n == 0
         case "LanesEqual", "LanesLess": n == 1
         case "Select": n == 2
         case _: false
@@ -21835,9 +21843,11 @@ fn (c mut Checker&) laneType(k I64) types.TypeId {
 fn (c mut Checker&) laneHold(sp source.Span, k I64) typed.Expr& { return typed.Expr.Lit(sp, c.laneType(k), LaneMagic + k) }
 
 # an operand of a lane operation as a node: a placeholder's own, or a leaf - an array, or a value every lane shares
-fn (c mut Checker&) laneLeaf(x typed.Expr&) I64 {
+fn (c mut Checker&) laneLeaf(x0 typed.Expr&) I64 {
+    x := x0
     k := c.laneOf(x)
-    if k >= 0: return k
+    if k >= 0 and c.laneNodes[k].Kind != LaneGroup: return k
+    if k >= 0: x = c.laneOut(x)   # a grouped total is an operand as the array it makes
     t := typeOf(x)
     if c.laneArray(t) {
         at := c.arrayOf(t)
@@ -21930,6 +21940,11 @@ fn (c mut Checker&) laneBinary(sp source.Span, opSp source.Span, op token.Tok, x
     b := c.laneLeaf(y)
     e := c.laneBinType(op, c.laneNodes[a].Elem, c.laneNodes[b].Elem)
     ks := Array<I64>[a, b]
+    # lengths known while compiling that differ are said where the lanes are built - a grouped Sum's group excepted
+    la, lb := c.laneNodes[a].Len, c.laneNodes[b].Len
+    if la >= 0 and lb >= 0 and la != lb {
+        return c.laneHold(sp, c.laneAdd(laneNode(LaneBin, op, sp, opSp, a, b, -1, null, e, la, c.laneDecl(ks, e), lb)))
+    }
     return c.laneHold(sp, c.laneAdd(laneNode(LaneBin, op, sp, opSp, a, b, -1, null, e, c.laneLen(ks, opSp), c.laneDecl(ks, e))))
 }
 
@@ -21998,7 +22013,9 @@ fn (c mut Checker&) laneElemType(x typed.Expr?&) types.TypeId {
 type laneVals struct() {
     N I64 = -1            # the local holding the length, -1 where it is known while compiling
     W types.TypeId = types.UnknownT   # Sum<A>'s A, every number leaf widened to it (E39); Unknown for none
+    T I64 = -1            # Sum<A>(n): the local counting lanes within a group
     held Map<I64, I64>    # by leaf node: the local holding its value - an array's borrowed once - absent for a literal
+    shared Map<I64, I64>  # Sum<A>(n), by array leaf: the local holding whether it is one group's length, shared by every group
 }
 
 # each leaf of node k evaluated once, in the order written, before the loop - an array borrowed (E12c) - and the length
@@ -22039,6 +22056,7 @@ fn (c mut Checker&) laneHoldLeaves(k I64, lv mut laneVals&) {
 # the length node k's lanes have, from its leaves held in lv: known while compiling, or held in a hidden local (lv.N) -
 # every array's but the first's checked against the first's (LaneLen)
 fn (c mut Checker&) laneLength(sp source.Span, k I64, lv mut laneVals&) {
+    c.laneShortSay(k)
     order Vec<I64>
     c.laneLeaves(k, order)
     fixed := c.laneNodes[k].Len
@@ -22108,7 +22126,10 @@ fn (c mut Checker&) laneElem(sp source.Span, k I64, lv laneVals&, i typed.Expr&)
         if h < 0: return c.unknown(sp)
         ht := c.localType(h)
         base typed.Lvalue& = typed.Lvalue.Deref(sp, c.deref(ht), c.readLocal(sp, h))
-        return c.laneWiden(c.read(sp, typed.Lvalue.Elem(sp, n.Elem, typed.Elem(base, i, typed.Check.None))), lv)
+        g := try lv.shared.Get(k) catch default -1
+        at := i
+        if g >= 0: at = typed.Expr.Cond(sp, c.i64(), typed.Cond(c.readLocal(sp, g), c.readLocal(sp, lv.T), i))   # one group's, shared
+        return c.laneWiden(c.read(sp, typed.Lvalue.Elem(sp, n.Elem, typed.Elem(base, at, typed.Check.None))), lv)
     }
     if n.Kind == LaneScalar {
         h := try lv.held.Get(k) catch default -1
@@ -22173,6 +22194,7 @@ fn (c mut Checker&) laneOut(x typed.Expr&) typed.Expr& {
     if k < 0: return x
     sp := x.Span()
     n := c.laneNodes[k]
+    if n.Kind == LaneGroup: return c.laneGroupOut(sp, k)
     if n.Elem == types.UnknownT: return c.laneSay(sp, k)
     if c.isRef(n.Elem) or c.P.T.HoldsRefs(n.Elem) {
         c.err(sp, msgs.LaneReferences())
@@ -22354,6 +22376,181 @@ fn (c mut Checker&) laneDot(sp source.Span, k I64, lv laneVals&, w types.TypeId,
     return typed.Expr.Cond(sp, w, typed.Cond(some, dot, c.zero(sp, w)))
 }
 
+# Sum<A>(n) (E39): the totals of each n lanes in turn - an Array<A>, its lane j the Sum<A> of lanes j * n to j * n + n - 1
+# of k - n a whole number above zero known while compiling; A the one named, else the lanes' total type (G32). A
+# placeholder (LaneGroup), built by laneGroupOut where it is taken as an array, by laneDotGroups where "x +=" takes a
+# byte product's groups of four
+fn (c mut Checker&) laneGroups(sp source.Span, nsp source.Span, k I64, w0 types.TypeId, wsp source.Span, garg ast.Expr&) typed.Expr& {
+    gk := c.knownInt(garg)
+    gn := c.P.T.ConstValue(gk) if gk >= types.TypeId(0) else -1
+    if gn <= 0 {
+        c.value(c.exprTo(garg, c.i64()), garg.Span())
+        c.err(garg.Span(), msgs.LaneGroupSize())
+        return c.unknown(sp)
+    }
+    # A the one named - the lanes' own elements need be no operation then, each widened to A first - else their total type
+    w := w0
+    e := c.laneNodes[k].Elem
+    if w == types.UnknownT and e == types.UnknownT: return c.laneSay(sp, k)
+    if w == types.UnknownT: w = c.accumulator(c.deref(e))
+    if not c.laneWorksIn(k, w, wsp): return c.unknown(sp)
+    return c.laneHold(sp, c.laneAdd(laneNode(LaneGroup, token.Tok.Plus, sp, nsp, k, gn, -1, null, w, -1, types.UnknownT)))
+}
+
+# the lanes a grouped Sum over node k walks, its leaves held in lv: a local holding the length of the arrays not of one
+# group's gn lanes (gn where every one is). Every array is of that length or of gn - such a one marked in lv as shared
+# by every group - and that length a whole number of groups: said at nsp while compiling where every length is known,
+# else checked once each (LaneLen, a guaranteed check)
+fn (c mut Checker&) laneGroupLength(sp source.Span, nsp source.Span, k I64, gn I64, lv mut laneVals&) I64 {
+    order Vec<I64>
+    c.laneLeaves(k, order)
+    known := true
+    most I64 = -1
+    for leaf in order {
+        ln := c.laneNodes[leaf]
+        if ln.Kind != LaneArr: continue
+        if ln.Len < 0: known = false
+        if ln.Len != gn and ln.Len > most: most = ln.Len
+    }
+    if known and most < 0: most = gn
+    if known: c.laneGroupSay(nsp, order, most, gn)
+    l := c.hidden(sp, c.i64())
+    lens Vec<I64>
+    for leaf in order {
+        ln := c.laneNodes[leaf]
+        h := try lv.held.Get(leaf) catch default -1
+        if ln.Kind != LaneArr or h < 0: continue
+        ll := c.hidden(sp, c.i64())
+        n := c.lit(sp, c.i64(), ln.Len) if ln.Len >= 0 else c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, h), null)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(ll)), n))
+        if lens.Len() == 0: c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(l)), c.lit(sp, c.i64(), -1)))
+        sh := c.hidden(sp, types.BoolT)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(sh)), c.prim(sp, types.BoolT, typed.PrimOp.Eq, c.readLocal(sp, ll), c.lit(sp, c.i64(), gn))))
+        lv.shared.Put(leaf, sh)
+        # the longest not of one group's length
+        more := c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, l), c.readLocal(sp, ll))
+        take := typed.Expr.Cond(sp, types.BoolT, typed.Cond(more, c.negate(sp, c.readLocal(sp, sh)), c.lit(sp, types.BoolT, 0)))
+        c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, c.i64(), typed.LocalId(I32(l))), typed.Expr.Cond(sp, c.i64(), typed.Cond(take, c.readLocal(sp, ll), c.readLocal(sp, l)))))
+        lens.Push(ll)
+    }
+    if lens.Len() == 0: c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(l)), c.lit(sp, c.i64(), gn)))
+    else {
+        none := c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, l), c.lit(sp, c.i64(), 0))
+        c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, c.i64(), typed.LocalId(I32(l))), typed.Expr.Cond(sp, c.i64(), typed.Cond(none, c.lit(sp, c.i64(), gn), c.readLocal(sp, l)))))
+    }
+    if known: return l
+    for ll in lens {
+        one := c.prim(sp, types.BoolT, typed.PrimOp.Eq, c.readLocal(sp, ll), c.lit(sp, c.i64(), gn))
+        c.laneSame(sp, c.readLocal(sp, l), typed.Expr.Cond(sp, c.i64(), typed.Cond(one, c.readLocal(sp, l), c.readLocal(sp, ll))))
+    }
+    c.laneSame(sp, c.prim(sp, c.i64(), typed.PrimOp.Rem, c.readLocal(sp, l), c.lit(sp, c.i64(), gn)), c.lit(sp, c.i64(), 0))
+    return l
+}
+
+# a grouped Sum's lengths known while compiling that do not fit: an array neither the longest's length nor a group's,
+# or the longest no whole number of groups - most the longest not of a group's length
+fn (c mut Checker&) laneGroupSay(nsp source.Span, order Vec<I64>&, most I64, gn I64) {
+    for leaf in order {
+        ln := c.laneNodes[leaf]
+        if ln.Kind != LaneArr or ln.Len == most or ln.Len == gn: continue
+        c.err(nsp, msgs.LaneGroupLengths(ln.Len, most, gn))
+        return
+    }
+    if most % gn != 0: c.err(nsp, msgs.LaneGroupLengths(most, most, gn))
+}
+
+# the check that two lengths are equal, once (LaneLen: "lane lengths differ" where not)
+fn (c mut Checker&) laneSame(sp source.Span, a typed.Expr&, b typed.Expr&) {
+    from := c.exprs.Len()
+    c.exprs.Push(a)
+    c.exprs.Push(b)
+    c.emit(typed.Stmt.Eval(sp, typed.Expr.Prim(sp, c.i64(), typed.PrimOp.LaneLen, typed.Check.Abort, gather(c.exprs, from))))
+}
+
+# a lane operation under node k on arrays of lengths known while compiling that differ, said once, where it is written
+fn (c mut Checker&) laneShortSay(k I64) {
+    n := c.laneNodes[k]
+    if n.Kind == LaneArr or n.Kind == LaneScalar or n.Kind == LaneGroup: return
+    if n.Short >= 0 {
+        c.err(n.OpSp, msgs.LaneLengths(n.Len, n.Short))
+        c.laneNodes[k].Short = -1
+        return
+    }
+    if n.A >= 0: c.laneShortSay(n.A)
+    if n.B >= 0: c.laneShortSay(n.B)
+    if n.C >= 0: c.laneShortSay(n.C)
+}
+
+# a grouped Sum taken as an array (E39): its leaves evaluated once, then one loop over the groups, each group's lanes
+# added in A from its zero in order (Sum<A>'s), into a new Array<A> of a lane a group
+fn (c mut Checker&) laneGroupOut(sp source.Span, k I64) typed.Expr& {
+    n := c.laneNodes[k]
+    w := n.Elem
+    gn := n.B
+    from := c.stmts.Len()
+    lv := laneVals()
+    lv.W = w
+    c.laneHoldLeaves(n.A, lv)
+    l := c.laneGroupLength(sp, n.OpSp, n.A, gn, lv)
+    gs := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(gs)), c.prim(sp, c.i64(), typed.PrimOp.Div, c.readLocal(sp, l), c.lit(sp, c.i64(), gn))))
+    at := c.P.T.Array(w, types.TypeId(0))
+    cfrom := c.stmts.Len()
+    cid, couter, cmark := c.open(typed.BlockKind.Collect, sp)
+    j, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.readLocal(sp, gs))
+    acc := c.hidden(sp, w)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(acc)), c.zero(sp, w)))
+    t, tid, touter, tmark, tfrom := c.laneLoopOpen(sp, c.lit(sp, c.i64(), gn))
+    lv.T = t
+    i := c.hidden(sp, c.i64())
+    at0 := c.prim(sp, c.i64(), typed.PrimOp.Mul, c.readLocal(sp, j), c.lit(sp, c.i64(), gn))
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(i)), c.prim(sp, c.i64(), typed.PrimOp.Add, at0, c.readLocal(sp, t))))
+    s := c.opValues(sp, n.OpSp, token.Tok.Plus, c.readLocal(sp, acc), c.laneElem(sp, n.A, lv, c.readLocal(sp, i)), sp, sp)
+    c.emit(typed.Stmt.Assign(sp, typed.Lvalue.Local(sp, w, typed.LocalId(I32(acc))), c.fit(s, w, sp)))
+    c.laneLoopClose(sp, t, tid, touter, tmark, tfrom)
+    c.emit(typed.Stmt.Yield(sp, c.readLocal(sp, acc)))
+    c.laneLoopClose(sp, j, id, outer, mark, lfrom)
+    b := c.close(cid, couter, cmark, cfrom)
+    r := typed.Expr.Collect(sp, at, typed.Collect(c.readLocal(sp, gs), b, c.site(typed.SiteKind.Collect, sp), typed.Check.None, true))
+    return typed.Expr.Seq(sp, at, typed.Seq(gather(c.stmts, from), r))
+}
+
+# "x += (p * q).Sum<A>(4)" (E39) with p and q arrays of bytes, A and x's elements one 32-bit integer: each group of four
+# products added into x's lane in place by one LaneDots - vpdpbusd where the target has it, an operand of one group's
+# four bytes a broadcast. false for any other shape, which is the plain loop
+fn (c mut Checker&) laneDotGroups(sp source.Span, t types.TypeId, h I64, g I64) Bool {
+    n := c.laneNodes[g]
+    if n.Kind != LaneGroup or n.B != 4 or not c.laneDotShape(n.A, n.Elem) or c.P.T.Bits(n.Elem) != 32: return false
+    e := c.laneElemOf(t)
+    if not c.P.T.Same(e, n.Elem): return false
+    bn := c.laneNodes[n.A]
+    lv := laneVals()
+    lv.W = n.Elem
+    c.laneHoldLeaves(n.A, lv)
+    l := c.laneGroupLength(sp, n.OpSp, n.A, 4, lv)
+    gs := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(gs)), c.prim(sp, c.i64(), typed.PrimOp.Div, c.readLocal(sp, l), c.lit(sp, c.i64(), 4))))
+    c.laneSame(sp, c.readLocal(sp, gs), c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, h), null))   # a lane of x a group
+    z := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(z)), c.lit(sp, c.i64(), 0)))
+    from := c.exprs.Len()
+    base typed.Lvalue& = typed.Lvalue.Deref(sp, c.deref(c.localType(h)), c.readLocal(sp, h))
+    c.exprs.Push(typed.Expr.Borrow(sp, c.P.T.Ref(e, types.Writable), typed.Lvalue.Elem(sp, e, typed.Elem(base, c.readLocal(sp, z), typed.Check.None))))
+    for x in Array<I64>[bn.A, bn.B]: c.exprs.Push(c.laneAt(sp, x, lv, c.readLocal(sp, z)))
+    c.exprs.Push(c.readLocal(sp, gs))
+    for x in Array<I64>[bn.A, bn.B] {
+        sh := try lv.shared.Get(x) catch default -1
+        c.exprs.Push(typed.Expr.Cond(sp, c.i64(), typed.Cond(c.readLocal(sp, sh), c.lit(sp, c.i64(), 0), c.lit(sp, c.i64(), 4))))
+    }
+    dots := typed.Expr.Prim(sp, types.VoidT, typed.PrimOp.LaneDots, typed.Check.None, gather(c.exprs, from))
+    # only where there is a group: an empty array has no lane 0 to refer to
+    tfrom := c.stmts.Len()
+    c.stmts.Push(typed.Stmt.Eval(sp, dots))
+    then := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, tfrom))
+    c.emit(typed.Stmt.If(sp, typed.If(c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, z), c.readLocal(sp, gs)), then, null)))
+    return true
+}
+
 # a reference to leaf x's element at lane i - an array leaf's, held in lv
 fn (c mut Checker&) laneAt(sp source.Span, x I64, lv laneVals&, i typed.Expr&) typed.Expr& {
     n := c.laneNodes[x]
@@ -22368,6 +22565,8 @@ fn (c mut Checker&) laneAssign(sp source.Span, osp source.Span, op token.Tok, p 
     t := p.Type()
     h := c.laneTarget(sp, p)
     v := c.laneArg(value, c.laneElemOf(t))
+    g := c.laneOf(v)
+    if g >= 0 and op == token.Tok.Plus and c.laneDotGroups(sp, t, h, g): return
     lv := laneVals()
     c.laneStore(sp, osp, op, t, h, c.laneLeaf(v), lv)
 }
@@ -27325,7 +27524,7 @@ fn (c mut Checker&) effS(st typed.Stmt&) Bool {
 fn effectOp(op typed.PrimOp) Bool {
     return match op {
         case typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap, typed.PrimOp.AtomicCompareSwap: true
-        case typed.PrimOp.Retire: true
+        case typed.PrimOp.Retire, typed.PrimOp.LaneDots: true
         case _: false
     }
 }
