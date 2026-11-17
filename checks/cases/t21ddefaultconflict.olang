@@ -1,0 +1,9 @@
+# check: fail error[T21d]: parameter 'k' defaults to 2.0 here, but to 1.0 in
+# T21d: a named function declaring a default its function type contradicts - a call through the value would take the
+# type's, so the function's own is refused rather than silently passed over
+fn scale(x F64, k F64 = 2.0) F64 { return x * k }
+
+fn main() {
+    f fn&(x F64, k F64 = 1.0) F64 = scale
+    assert f(1.0) == 1.0
+}

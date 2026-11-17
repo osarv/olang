@@ -1,0 +1,8 @@
+# check: fail error[D8b]: 'k' has no default, but a parameter before it does
+# D8b in a function type (T21d): defaulted parameters are trailing, as in a declaration's list
+fn twice(x F64, k F64) F64 { return x * k }
+
+fn main() {
+    f fn&(x F64 = 1.0, k F64) F64 = twice
+    assert f(1.0, 2.0) == 2.0
+}

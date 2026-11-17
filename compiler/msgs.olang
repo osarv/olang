@@ -520,6 +520,7 @@ type Diag enum {
     NamedArgAlsoPositional
     PositionalAfterNamed
     NamedArgThroughValue
+    FnTypeDefaultConflict
     NamedArgNotHere
     TestTargetUnknown
     TestTargetUnknownMeant
@@ -1349,7 +1350,7 @@ fn DeclaredTwice(tok String&) r.Msg { return r.Msg(Diag.DeclaredTwice, "", $tok 
 fn FieldHasParamName(tok String&) r.Msg { return r.Msg(Diag.FieldHasParamName, "C2a", "field " + $tok + " has a parameter's name", "", "write it bare to take the parameter's value, or name it apart") }
 fn TraitMethodGeneric(tok String&) r.Msg { return r.Msg(Diag.TraitMethodGeneric, "T35", "trait method " + $tok + " may not be generic in a type of its own") }
 fn CtorFieldNoValue(tok String&) r.Msg { return r.Msg(Diag.CtorFieldNoValue, "C4", "field " + $tok + " names no parameter of the constructor - give it a value, with '=' or ':='") }
-fn DefaultNotTrailing(tok String&) r.Msg { return r.Msg(Diag.DefaultNotTrailing, "D8a", $tok + " has no default, but a parameter before it does - defaulted parameters come last") }
+fn DefaultNotTrailing(tok String&) r.Msg { return r.Msg(Diag.DefaultNotTrailing, "D8b", $tok + " has no default, but a parameter before it does", "defaulted parameters come last", "give " + $tok + " a default, or move it before the defaulted ones") }
 fn TypeVarNamesType(tok String&) r.Msg { return r.Msg(Diag.TypeVarNamesType, "G1", "type variable " + $tok + " is named after a type - choose a name no type has, as '<T>'") }
 fn TypeDefaultNotTrailing(name String&) r.Msg { return r.Msg(Diag.TypeDefaultNotTrailing, "G4a", "type variable " + $name + " has no default, and one before it has", "the variables a call may leave off are the last ones", "give " + $name + " a default, or move it before the variables that have one") }
 fn TypeDefaultOnCtor(name String&) r.Msg { return r.Msg(Diag.TypeDefaultOnCtor, "G4a", "a constructor's type variable " + $name + " has a default", "a constructor's own variables are inferred from its arguments (G10d)", "remove '= ...', or give the type's own parameter the default") }
@@ -1560,7 +1561,8 @@ fn NamedArgRequired(tok String&) r.Msg { return r.Msg(Diag.NamedArgRequired, "E1
 fn NamedArgTwice(tok String&) r.Msg { return r.Msg(Diag.NamedArgTwice, "E14b", "parameter " + $tok + " is named twice") }
 fn NamedArgAlsoPositional(tok String&) r.Msg { return r.Msg(Diag.NamedArgAlsoPositional, "E14b", "parameter " + $tok + " is given by position already") }
 fn PositionalAfterNamed() r.Msg { return r.Msg(Diag.PositionalAfterNamed, "E14b", "an argument by position comes before every argument by name") }
-fn NamedArgThroughValue() r.Msg { return r.Msg(Diag.NamedArgThroughValue, "E14b", "a call through a function value takes its arguments by position", "a function type names no parameters") }
+fn NamedArgThroughValue() r.Msg { return r.Msg(Diag.NamedArgThroughValue, "E14b", "a call through this function value takes its arguments by position", "only a parameter its function type gives a default is named (T21d), and this type gives none") }
+fn FnTypeDefaultConflict(name String&, have String&, want String&, ty String&) r.Msg { return r.Msg(Diag.FnTypeDefaultConflict, "T21d", "parameter " + $name + " defaults to " + $have + " here, but to " + $want + " in " + $ty, "a call through the value takes the function type's default", "give " + $name + " the default '= " + $want + "', or none") }
 fn NamedArgNotHere() r.Msg { return r.Msg(Diag.NamedArgNotHere, "E14b", "an argument by name is for a defaulted parameter in a call", "it gives a function's, a method's or a constructor's defaulted parameter") }
 fn TestTargetUnknown(text String&) r.Msg { return r.Msg(Diag.TestTargetUnknown, "B7a", "a test names a function, a type or Type.Method of its file, and '" + $text + "' is none") }
 fn TestTargetUnknownMeant(text String&, best String&) r.Msg { return r.Msg(Diag.TestTargetUnknownMeant, "B7a", "a test target '" + $text + "' is none of its file's - did you mean '" + $best + "'?", "a test names a function, a type or Type.Method of its file") }

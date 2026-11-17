@@ -440,6 +440,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     spreadSaid Map<pair.Pair<I64, I64>, Bool>   # D8g: the "...a" said not to stand alone, by file and position
     spreadBad Bool = false      # G37: an argument comprehension that could not spread, said (its call is unknown)
     testKeys StringBuilder      # B7a: the root's tests of a target, each target and description between zero bytes
+    typeDflt I64 = 0            # T21d: inside a function type's default being checked
     namedBad Bool = false       # E14b: arguments by name that do not give the parameters, said (the call is unknown)
     argOrder Vec<I64>           # E14b: for the next callBody, the written position of each parameter's argument, -1 for none
     typeCaseBinds Vec<pair.Pair<source.NameId, types.TypeId>>   # G36: what the type case matchOnType chose binds
@@ -6639,6 +6640,8 @@ fn (c mut Checker&) spellFunc(b mut StringBuilder&, t types.TypeId) {
             b.PushChar(' ')
         }
         c.spell(b, ps[i], false)
+        row := c.P.T.DefaultAt(t, i)
+        if row != 0: b.Push(" = " + $c.P.T.DefaultText(row))   # T21d
     }
     b.PushChar(')')
     if c.P.T.KindOf(res) == types.Kind.Tuple {
@@ -7615,6 +7618,8 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
         c.P.L.Diags.Note(rec, c.at(sp), msgs.NoteFuncTypeScopes(c.ty(have)))
         return x
     }
+    # T21d: a named function whose defaults contradict the ones the function type it is given to declares
+    if c.P.T.KindOf(want) == types.Kind.Func and c.P.T.DefaultsOf(want).Len() > 0 and namedFnValue(x): c.defaultsAgree(have, want, sp)
     if have == want or c.P.T.Same(have, want) {
         if c.isRef(want) and (c.P.T.PermOf(want) & types.Writable) != 0: c.roWritableRef(x, sp)
         return x
@@ -8634,6 +8639,11 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId, want types.TypeId = ty
             c.err(sp, msgs.ComptimeLocal(c.tok(n)))
             return c.unknown(sp)
         }
+        if id < 0 and c.typeDflt > 0 {
+            # T21d, D8a: a function type's default is computed for calls that see none of the locals where it is written
+            c.err(sp, msgs.DefaultNotComputable("it reads the local " + $c.tok(n) + ", which the calls it stands in do not see"))
+            return c.unknown(sp)
+        }
         if id < 0 {
             c.gap(sp, "a local the checker has not bound")
             return c.unknown(sp)
@@ -8938,7 +8948,11 @@ fn (c mut Checker&) fnValue(sp source.Span, f I64, explicit Array<types.TypeId>&
     c.roFns.Push(roFn(id, 0, c.at(sp), "'" + $c.text(c.P.FnDecl(f).Name) + "'"))   # T25c
     # its parameters' names, which "$" renders the value with (E11a)
     d := c.P.FnDecl(f)
-    if d.Recv == null and d.S.Params.Len() == c.P.T.Items(c.P.T.Params(sig)).Len() { sig = c.P.T.WithNames(sig, c.P.SigNames(d.S)) }
+    # and its defaults (T21d): a call through the value leaving them off takes them, checked where they are written
+    if d.Recv == null and d.S.Params.Len() == c.P.T.Items(c.P.T.Params(sig)).Len() {
+        ns := c.P.T.ParamNamesWith(c.P.SigNameIds(d.S), c.P.TypeDefaults(c.P.FnContext(f, args), d.S, args))
+        sig = c.P.T.WithNames(sig, ns)
+    }
     return typed.Expr.Fn(sp, sig, typed.FnVal.Named(typed.BodyId(I32(id))))
 }
 
@@ -14257,6 +14271,156 @@ fn (c mut Checker&) setOrder(ord Array<I64>&) {
     for w in ord: c.argOrder.Push(w)
 }
 
+# T21d: whether x is a named function made a value where it is written
+fn namedFnValue(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Fn(_, _, typed.FnVal.Named(_)): true
+        case _: false
+    }
+}
+
+# T21d: a function or lambda of type have, given to function type want, declaring a default for a parameter that want
+# gives another - compared as the values they compute while compiling, each checked where it is written; one that
+# cannot be compared (a lambda) is the same only as its own declaration
+fn (c mut Checker&) defaultsAgree(have types.TypeId, want types.TypeId, sp source.Span) {
+    ps := c.P.T.Items(c.P.T.Params(want))
+    for i in range ps.Len() {
+        a, b := c.P.T.DefaultAt(have, i), c.P.T.DefaultAt(want, i)
+        if a == 0 or b == 0 or a == b: continue
+        mark := c.P.L.Diags.Count()
+        x := c.typeDefault(sp, have, i, ps[i])
+        y := c.typeDefault(sp, want, i, ps[i])
+        failed := c.P.L.Diags.Count() > mark
+        if failed or sameConst(x, y): continue
+        name := c.P.T.ParamName(want, i)
+        at, wt := c.P.T.DefaultText(a), c.P.T.DefaultText(b)
+        c.err(sp, msgs.FnTypeDefaultConflict(msgs.Tok(name), at, wt, c.ty(want)))
+        return
+    }
+}
+
+# T21d: whether two defaults are one compile-time value: the same literal bits at the same type, the same constant
+# data, the same named function, the same lambda, or one constructor's, function's, case's or tuple's of such values;
+# anything else (a read of a global) is compared no further and counts as different
+fn sameConst(a typed.Expr&, b typed.Expr&) Bool {
+    match a {
+        case typed.Expr.Away(_, _, x) { return sameConst(x, b) }
+        case _ { }
+    }
+    match b {
+        case typed.Expr.Away(_, _, y) { return sameConst(a, y) }
+        case _ { }
+    }
+    return match a {
+        case typed.Expr.Lit(_, t, v): match b {
+            case typed.Expr.Lit(_, u, w): t == u and v == w
+            case _: false
+        }
+        case typed.Expr.Data(_, _, _, k): match b {
+            case typed.Expr.Data(_, _, _, l): sameData(k, l)
+            case _: false
+        }
+        case typed.Expr.Fn(_, _, f): match b {
+            case typed.Expr.Fn(_, _, g): sameFnVal(f, g)
+            case _: false
+        }
+        case typed.Expr.Call(_, t, cl): match b {
+            case typed.Expr.Call(_, u, dl): t == u and sameBody(cl.Target, dl.Target) and sameConsts(cl.Args, dl.Args)
+            case _: false
+        }
+        case typed.Expr.Make(_, t, m): match b {
+            case typed.Expr.Make(_, u, n): t == u and sameMake(m, n)
+            case _: false
+        }
+        case _: false
+    }
+}
+
+fn sameConsts(xs Array<typed.Expr&>&, ys Array<typed.Expr&>&) Bool {
+    if xs.Len() != ys.Len(): return false
+    for i in range xs.Len() {
+        if not sameConst(xs[i], ys[i]): return false
+    }
+    return true
+}
+
+fn sameData(k typed.Const&, l typed.Const&) Bool {
+    return match k {
+        case typed.Const.Bits(v): match l {
+            case typed.Const.Bits(w): v == w
+            case _: false
+        }
+        case typed.Const.Bytes(x): match l {
+            case typed.Const.Bytes(y): sameBytes(x, y)
+            case _: false
+        }
+        case typed.Const.Items(xs): match l {
+            case typed.Const.Items(ys): sameItems(xs, ys)
+            case _: false
+        }
+    }
+}
+
+fn sameBytes(x Array<U8>&, y Array<U8>&) Bool {
+    if x.Len() != y.Len(): return false
+    for i in range x.Len() {
+        if x[i] != y[i]: return false
+    }
+    return true
+}
+
+fn sameItems(xs Array<typed.Const&>&, ys Array<typed.Const&>&) Bool {
+    if xs.Len() != ys.Len(): return false
+    for i in range xs.Len() {
+        if not sameData(xs[i], ys[i]): return false
+    }
+    return true
+}
+
+fn sameMake(m typed.Make&, n typed.Make&) Bool {
+    return m.Kind == n.Kind and m.Tag == n.Tag and m.Length == null and n.Length == null and sameConsts(m.Items, n.Items)
+}
+
+# a lambda is the same only as itself: its one body (D16), capturing nothing in a default
+fn sameFnVal(f typed.FnVal&, g typed.FnVal&) Bool {
+    return match f {
+        case typed.FnVal.Named(x): match g {
+            case typed.FnVal.Named(y): x == y
+            case _: false
+        }
+        case typed.FnVal.Lambda(x, _, _): match g {
+            case typed.FnVal.Lambda(y, _, _): x == y
+            case _: false
+        }
+        case _: false
+    }
+}
+
+# one constructor's or function's instance (its body), called with the same values - a default computes with no other
+# behaviour (D8a), so the same call is the same value
+fn sameBody(f typed.Callee&, g typed.Callee&) Bool {
+    return match f {
+        case typed.Callee.Body(x): match g {
+            case typed.Callee.Body(y): x == y
+            case _: false
+        }
+        case _: false
+    }
+}
+
+# T21d: a function type's parameters as namedArgs reads them - its names, and its defaults' expressions
+fn (c mut Checker&) typeParams(sp source.Span, t types.TypeId) Array<ast.Param&>& {
+    ns := c.P.T.NamesOf(t)
+    out := Vec<ast.Param&>()
+    for i in range ns.Len() {
+        row := c.P.T.DefaultAt(t, i)
+        x ast.Expr?& = null
+        if row != 0: x = (try c.P.FnDefaultOf(row) catch { continue }).X
+        out.Push(ast.Param(sp, source.NameId(I32(ns[i])), null, x, Array<ast.Attr&>(0)))
+    }
+    return out.ToArray()
+}
+
 # arguments by name where nothing names parameters (E14b): said, and the call is unknown
 fn (c mut Checker&) namedNotHere(args Array<ast.Expr&>&, through Bool) Bool {
     for a in args {
@@ -14361,8 +14525,33 @@ fn (c mut Checker&) argDefault(sp source.Span, target typed.Callee&, f I64, k I6
             if file != here: return typed.Expr.Away(sp, file, x)
             return x
         }
+        case typed.Callee.Value(fv) { return c.typeDefault(sp, c.P.T.NonNull(typeOf(fv)), k, want) }
         case _ { return c.defaultArg(sp, f, k, hasRecv, want, c.calleeArgs(target)) }
     }
+}
+
+# T21d: parameter k's default of function type t, where a call through a value of it leaves k off - checked where the
+# type is written (D8a), as a declaration's is
+fn (c mut Checker&) typeDefault(sp source.Span, t types.TypeId, k I64, want types.TypeId) typed.Expr& {
+    np := c.P.T.Items(c.P.T.Params(t)).Len()
+    row := c.P.T.DefaultAt(t, k)
+    d := try c.P.FnDefaultOf(row) catch {
+        c.err(sp, msgs.ArgCount(np, "" if np == 1 else "s", k))
+        return c.unknown(sp)
+    }
+    here := c.fr().File
+    fr := c.fr()
+    inner := c.push(fr.Body, d.Mi, types.VoidT, types.ListId(0))
+    inner.Ctx = d.Ctx
+    inner.Block = fr.Block
+    c.typeDflt++
+    x := c.exprTo(d.X, want)
+    c.typeDflt--
+    c.defaultReads(x)
+    file := c.fr().File
+    c.pop()
+    if file != here: return typed.Expr.Away(sp, file, x)
+    return x
 }
 
 fn (c mut Checker&) defaultArg(sp source.Span, f I64, k I64, hasRecv Bool, want types.TypeId, iargs types.ListId) typed.Expr& {
@@ -15020,7 +15209,18 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&, a
         c.err(fv.Span(), msgs.ReadMaybeNull(c.src(fv.Span()), c.ty(t), bangOf(c.src(fv.Span())), c.endedWhy(c.src(fv.Span()))))
         t = c.P.T.NonNull(t)
     }
-    if c.P.T.KindOf(t) == types.Kind.Func { return c.callBody(sp, fsp, t, typed.Callee.Value(fv), -1, null, args, Array<typed.Expr&>(0)) }
+    if c.P.T.KindOf(t) == types.Kind.Func {
+        # E14b, T21d: arguments by name through a value whose type names its parameters and gives some defaults
+        if c.P.T.DefaultsOf(t).Len() > 0 and hasNamed(args) {
+            args = c.namedArgs(c.typeParams(sp, t), args, c.src(fsp))
+            if c.namedBad {
+                c.namedBad = false
+                c.dropArgs(args)
+                return c.unknown(sp)
+            }
+        }
+        return c.callBody(sp, fsp, t, typed.Callee.Value(fv), -1, null, args, Array<typed.Expr&>(0))
+    }
     m := c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("Call"))
     if m < 0: m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("call"))
     c.privateRole(m, t, "Call", fsp, msgs.Tok(c.src(fsp)))
@@ -21539,7 +21739,10 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
     c.state[id] = 2
     c.roFns.Push(roFn(id, 0, c.at(sp), "this lambda"))   # T25c
     # with nothing expected the value renders with its own parameters' names (E11a); else it is the type expected
-    vt := c.P.T.WithNames(ty, c.P.SigNames(f.S)) if w == types.UnknownT else c.P.T.WithNames(ty, c.P.T.NamesIdOf(w))
+    # and its own defaults (T21d) - an expected type's where one is expected, which its own may not contradict
+    own := c.P.T.WithNames(ty, c.P.T.ParamNamesWith(c.P.SigNameIds(f.S), c.P.TypeDefaults(parent.Ctx, f.S)))
+    if w != types.UnknownT: c.defaultsAgree(own, w, sp)
+    vt := own if w == types.UnknownT else c.P.T.WithNames(ty, c.P.T.NamesIdOf(w))
     return typed.Expr.Fn(sp, vt, typed.FnVal.Lambda(typed.BodyId(I32(id)), caps, c.site(typed.SiteKind.Closure, sp)))
 }
 

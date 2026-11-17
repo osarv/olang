@@ -1343,6 +1343,21 @@ otherwise - a lambda, a named function, a `fn&(e Event)` - fits a `Handler&` dir
 it takes no type parameters (G6) and does not `extend` (T29f). A value of one is a function value - two words, called
 as `h(e)` - and renders as its signature (E11a); its type is spelled `Handler&`.
 
+**T21d (defaults in function types).** A function type's parameters may declare **defaults**, as a declaration's do
+(D8a, trailing by D8b): `fn&(x F32, k F32 = 1.0) F32`, `type Scaler fn(x F64, k F64 = 2.0) F64`. A call through a
+value of the type may leave them off, give them by `default` (E14a) or by name (E14b): the call takes the **type's**
+defaults - the caller supplies them, as for a declaration's (D8a: computed while compiling, its names meaning what they
+mean where the type is written, built where the call builds its arguments). A named function made a value, and a
+lambda with nothing expected, have their own declaration's defaults in their value's type, so `g := connect` calls
+`g("h", port = 2)`. Defaults are no part of a function type's identity: two types differing in them alone are one type
+to every other rule, and a value assigned from one function type to another takes the target's defaults (a type with
+none takes none). A **named function or lambda** given to a function type (stored, passed, returned) is refused only on
+a **conflict**: it declares a default for a parameter the type also gives one, and the two are different values. They
+are compared as the values they compute while compiling - the same literal at the same type, the same constant data,
+the same function, or one constructor's, function's, case's or tuple's of such values; a default not so compared (a
+lambda, a global's value) is the same only as its own declaration. A function declaring no default, or a default the
+type does not give, fits as before; the error names the parameter, both defaults and the one to write.
+
 **T21c (promises).** A function type may end with **promises**: words after its signature, separated by spaces, each
 saying what every call through a value of the type does not do, or does only as far as it says:
 
@@ -2387,7 +2402,7 @@ G16) share the one made for them, which is a function of that module's code wher
 **D8b.** Defaulted parameters must be **trailing**: once one parameter declares a default, every
 parameter after it must too. A call may then omit any number of trailing arguments (E14), and may reach
 past a defaulted parameter with the `default` keyword (E14a). The same rules apply unchanged to a
-constructor's own `param-list` (§9.1 C1).
+constructor's own `param-list` (§9.1 C1) and to a function type's (T21d).
 
 **D8g (variadic parameters).** A parameter written `xs ...T` is **variadic**: a call gives it any number of arguments
 of type `T`, none included - `fn sum(xs ...I64) I64` is called `sum()`, `sum(1)`, `sum(1, 2, 3)` - and inside the body
@@ -4223,7 +4238,8 @@ it: given `connect(host Array<U8>, port I32 = 80, timeout I32 = 30, retries I32 
 a call (its other use, introducing a `try`'s fallback value, is §7 R9a), and only where the corresponding parameter declares a default (D8a); it is not an expression and
 may not be assigned, nested, or used as a value anywhere.
 
-**E14b (arguments by name).** A **defaulted** parameter (D8a) may be given by name: `connect(h, retries = 5)`,
+**E14b (arguments by name).** A **defaulted** parameter (D8a) - a declaration's, or a function type's for a call
+through a value of it (T21d) - may be given by name: `connect(h, retries = 5)`,
 `connect(h, 81, retries = 5, timeout = 9)`.
 
 ```
@@ -4239,8 +4255,8 @@ naming the nearest defaulted one. Every argument is **evaluated in the order wri
 but a literal is evaluated into a hidden local where it is written, and the call reads those, so moving an argument
 by name moves when it runs. Functions, methods, constructors (C2), generic functions and constructors (their type
 arguments inferred from the arguments written, G9), and a trait's methods called through an `any` (T31b) take
-arguments by name. A call through a function value does not - a function type names no parameters (T21) - and a name
-anywhere else (a conversion, a case, a built-in) is a compile-time error. The names of a function's defaulted
+arguments by name, and so does a call through a function value, for the parameters its function type gives defaults
+(T21d) - through a type giving none it does not - and a name anywhere else (a conversion, a case, a built-in) is a compile-time error. The names of a function's defaulted
 parameters are therefore part of what it promises its callers: renaming one changes every call naming it; a required
 parameter's name stays the declaration's own.
 
