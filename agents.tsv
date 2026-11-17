@@ -215,9 +215,10 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-16	oannconv	sonnet	medium	restarted						INT8 conv depth-9 profile + dense pruning control
 2026-11-16	seed-sumnarrow	sonnet	medium	restarted						seed rewrite + merge
 2026-11-16	merge-sumnarrow2	sonnet	low	done						after restart
-2026-11-16	members2	opus	high	done	321	191	51						after restart, from uncommitted diff
+2026-11-16	members2	opus	high	done	321	191	51	no	1 (extuse M19)						after restart, from uncommitted diff
 2026-11-16	oannconv2	sonnet	medium	done						after restart
 2026-11-16	oannsettle	opus	medium	done						Anderson, Gauss-Seidel, Contraction()
 2026-11-16	lanesum	opus	medium	running						LaneDot vector accumulator
-2026-11-16	merge-members	sonnet	low	running
+2026-11-16	merge-members	sonnet	low	stopped	98	11	31			quick failed: real bugs in members
 2026-11-17	oanncert	opus	medium	running						certify by spectral norm
+2026-11-17	membersfix	opus	medium	running						fix quick failures
