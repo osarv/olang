@@ -236,4 +236,4 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-17	joinleak2	opus	medium	done	~375	146	141	no (disk full)		goldens hand-edited run.txt; quick re-run after freeing disk
 2026-11-17	steward-noattr	sonnet	medium	done	~120	~30	~40	yes		merge b44b33d3
 2026-11-17	fndefaults	opus	medium	running						defaults in function types
-2026-11-17	oannattr	sonnet	medium	running						oann attr migration + drop gemm pad-256
+2026-11-17	oannattr	sonnet	medium	done				no (suite not rerun)		merge 8afdcbb; pad-256 kept (unpadded slower)
