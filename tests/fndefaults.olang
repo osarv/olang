@@ -1,0 +1,106 @@
+# T21d: a function type may declare defaults - a call through a value of it leaves them off, names them (E14b) or gives
+# them; a function or lambda fits it with the same defaults or none, and a value given from another function type takes
+# the target's. Each computation is done as a global the evaluator bakes and an assert it decides (K2, S18c), and on an
+# input it cannot see (Live), at run time
+
+Live mut I64 = 0
+
+type Point struct(x I64, y I64) { x, y }
+
+fn scale(x F64, k F64 = 2.0) F64 { return x * k }
+fn plain(x F64, k F64) F64 { return x * k }
+fn affine(x I64, k I64 = 1, b I64 = 0) I64 { return x * k + b }
+fn shift(p Point, by Point = Point(1, 1)) I64 { return p.x + by.x + (p.y + by.y) * 10 }
+
+# a declared function type with a default (T21b)
+type Scaler fn(x F64, k F64 = 2.0) F64
+
+# a field and a parameter of function types with defaults
+type Lin struct(f fn&(x I64, k I64 = 1, b I64 = 0) I64) { f }
+
+fn apply(f fn&(x I64, k I64 = 1, b I64 = 0) I64, x I64) I64 { return f(x) + f(x, 2) + f(x, b = 100) }
+
+fn omitted(x F64) F64 {
+    f fn&(x F64, k F64 = 2.0) F64 = scale
+    return f(x)
+}
+
+fn named(x I64) I64 {
+    f fn&(x I64, k I64 = 1, b I64 = 0) I64 = affine
+    return f(x, b = 5) + f(x, b = 7, k = 3)
+}
+
+fn given(x I64) I64 {
+    f fn&(x I64, k I64 = 1, b I64 = 0) I64 = affine
+    return f(x, 4, 3)
+}
+
+# a function declaring no defaults fits a type that declares some, which then supply them
+fn noneOwn(x F64) F64 {
+    f fn&(x F64, k F64 = 3.0) F64 = plain
+    return f(x)
+}
+
+# a value from a type without defaults: the target's apply
+fn between(x F64) F64 {
+    g fn&(x F64, k F64) F64 = plain
+    f fn&(x F64, k F64 = 4.0) F64 = g
+    h fn&(x F64, k F64 = 5.0) F64 = f
+    return f(x) + h(x)
+}
+
+# a lambda given to the type, with the same default and with none
+fn lambdas(x I64) I64 {
+    f fn&(x I64, k I64 = 1, b I64 = 0) I64 = fn(y I64, k I64 = 1, b I64 = 0) I64 { return y * k + b }
+    g fn&(x I64, k I64 = 1, b I64 = 0) I64 = fn(y, k, b) { return y - k - b }
+    return f(x, b = 2) + g(x)
+}
+
+# a lambda's own defaults, with nothing expected, and a named function's: the value's type carries them
+fn ownDefaults(x I64) I64 {
+    f := fn(y I64, k I64 = 10) I64 { return y * k }
+    g := affine
+    return f(x) + g(x, b = 1)
+}
+
+fn structured(p Point) I64 {
+    f fn&(p Point, by Point = Point(1, 1)) I64 = shift
+    return f(p) + f(p, by = Point(0, 0))
+}
+
+fn declared(x F64) F64 {
+    s Scaler& = scale
+    return s(x) + s(x, k = 0.5)
+}
+
+BakedOmitted := omitted(1.5)
+BakedNamed := named(2)
+BakedGiven := given(2)
+BakedNone := noneOwn(2.0)
+BakedBetween := between(1.0)
+BakedLambdas := lambdas(5)
+BakedOwn := ownDefaults(3)
+BakedApply := apply(affine, 3)
+BakedField := Lin(affine).f(4, b = 1)
+BakedStructured := structured(Point(2, 3))
+BakedDeclared := declared(4.0)
+
+test "a call through a value leaves a default off, names it, or gives it" {
+    assert BakedOmitted == 3.0 and omitted(1.5 + F64(Live)) == 3.0
+    assert BakedNamed == 7 + 13 and named(2 + Live) == BakedNamed
+    assert BakedGiven == 11 and given(2 + Live) == 11
+    assert BakedApply == 3 + 6 + 103 and apply(affine, 3 + Live) == BakedApply
+    assert BakedField == 5 and Lin(affine).f(4 + Live, b = 1) == 5
+    assert BakedStructured == 3 + 40 + 2 + 30 and structured(Point(2 + Live, 3)) == BakedStructured
+    assert BakedDeclared == 8.0 + 2.0 and declared(4.0 + F64(Live)) == BakedDeclared
+}
+
+test "a function with no defaults, and a value from another function type, take the target type's" {
+    assert BakedNone == 6.0 and noneOwn(2.0 + F64(Live)) == 6.0
+    assert BakedBetween == 9.0 and between(1.0 + F64(Live)) == 9.0
+}
+
+test "lambdas: the same defaults as the type, none, and their own" {
+    assert BakedLambdas == 7 + 4 and lambdas(5 + Live) == BakedLambdas
+    assert BakedOwn == 30 + 4 and ownDefaults(3 + Live) == BakedOwn
+}

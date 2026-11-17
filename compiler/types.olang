@@ -201,6 +201,9 @@ type Table struct(Names mut source.Names&) {
     scopeKeys Map<Array<I64>&, ScopesId> # then the results'
     nameLists Vec<Array<I64>&>         # a written function type's parameter names (NameIds), by index; 0 none
     nameKeys Map<Array<I64>&, I64>
+    nameDflts Vec<Array<I64>&>         # ... and its parameters' defaults (D8a, T21d), by the same index: a row of dflts
+                                       # each, 0 for none; empty where none has one
+    dflts Vec<String&>                 # T21d: a default written in a function type, by row: its text (rendering, Canon)
     promiseLists Vec<Array<I64>&>      # a function type's promises (T21c) in canonical form (Promises), by index; 0 none
     promiseKeys Map<Array<I64>&, I64>
     refHolds Vec<U8>                    # HoldsRefs, once asked, by type: 1 being asked, 2 no, 3 yes (0 not asked)
@@ -225,6 +228,8 @@ fn Table.New(names mut source.Names&) Table {
     t.lists.Push(Array<TypeId>(0))
     t.scopes.Push(Array<I64>(0))
     t.nameLists.Push(Array<I64>(0))
+    t.nameDflts.Push(Array<I64>(0))
+    t.dflts.Push("")
     t.promiseLists.Push(Array<I64>[0, 0])
     for k in Array<Kind>[Kind.Unknown, Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32
                   Kind.U64, Kind.F16, Kind.BF16, Kind.F32, Kind.F64, Kind.Null, Kind.DefaultErr, Kind.Noreturn] {
@@ -564,16 +569,53 @@ fn (t mut Table&) Untagged(f TypeId) TypeId {
 }
 
 # a written function type's parameter names, interned (0 for none: a type no source wrote, or one with no parameters)
-fn (t mut Table&) ParamNames(ns Array<I64>&) I64 {
+fn (t mut Table&) ParamNames(ns Array<I64>&) I64 { return t.ParamNamesWith(ns, Array<I64>(0)) }
+
+# T21d: a written function type's parameter names and their defaults (rows of Default, 0 for none; empty for no
+# defaults), interned together - two types told apart by their defaults are the same type to every rule but a call
+# leaving an argument off (names and defaults render and fill in calls only, Unnamed leaves both out)
+fn (t mut Table&) ParamNamesWith(ns Array<I64>&, ds Array<I64>&) I64 {
     if ns.Len() == 0: return 0
-    key mut Array<I64>& = Array<I64>(ns.Len())
+    has := false
+    for d in ds: has = has or d != 0
+    n := ns.Len() + (ds.Len() + 1 if has else 0)
+    key mut Array<I64>& = Array<I64>(n)
     for i in range ns.Len(): key[i] = ns[i]
+    if has {
+        key[ns.Len()] = -1
+        for i in range ds.Len(): key[ns.Len() + 1 + i] = ds[i]
+    }
     id := try t.nameKeys.Get(key) catch default -1
     if id >= 0: return id
     id = t.nameLists.Len()
-    t.nameLists.Push(key)
+    names mut Array<I64>& = Array<I64>(ns.Len())
+    for i in range ns.Len(): names[i] = ns[i]
+    dl mut Array<I64>& = Array<I64>(ds.Len() if has else 0)
+    if has {
+        for i in range ds.Len(): dl[i] = ds[i]
+    }
+    t.nameLists.Push(names)
+    t.nameDflts.Push(dl)
     t.nameKeys.Put(key, id)
     return id
+}
+
+# T21d: a default written in a function type, its text kept for rendering - a row, never 0
+fn (t mut Table&) Default(text String&) I64 {
+    t.dflts.Push(text)
+    return t.dflts.Len() - 1
+}
+
+# T21d: a default's text, by row
+fn (t Table&) DefaultText(row I64) String& { return t.dflts[row] }
+
+# T21d: a function type's parameters' defaults, rows of Default (0 for none); empty where it declares none
+fn (t Table&) DefaultsOf(f TypeId) Array<I64>& { return t.nameDflts[t.at(f).E] if t.KindOf(f) == Kind.Func else t.nameDflts[0] }
+
+# T21d: parameter i's default row in function type f, 0 for none
+fn (t Table&) DefaultAt(f TypeId, i I64) I64 {
+    ds := t.DefaultsOf(f)
+    return ds[i] if i >= 0 and i < ds.Len() else 0
 }
 
 # the names entry of a function type (0 for none)
@@ -2180,9 +2222,11 @@ fn (t mut Table&) canonFunc(b mut StringBuilder&, id TypeId) {
     if t.canonNames and d.E != 0 {
         b.PushChar('{')
         ns := t.nameLists[d.E]
+        ds := t.nameDflts[d.E]
         for i in range ns.Len() {
             if i > 0: b.PushChar(',')
             b.Push(t.Names.Text(source.NameId(I32(ns[i]))))
+            if i < ds.Len() and ds[i] != 0: b.Push("=" + $t.dflts[ds[i]])
         }
         b.PushChar('}')
     }

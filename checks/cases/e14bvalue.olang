@@ -1,7 +1,7 @@
-# check: fail error[E14b]: a call through a function value takes its arguments by position
-# E14b: a function type names no parameters, so a call through a function value takes none by name
+# check: fail error[E14b]: a call through this function value takes its arguments by position
+# E14b, T21d: only a parameter its function type gives a default is named through a value - this type gives none
 fn connect(host String&, port I64 = 80) I64 { return port }
 fn main() {
-    f := connect
+    f fn&(host String&, port I64) I64 = connect
     x := f("h", port = 2)
 }

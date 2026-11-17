@@ -1689,6 +1689,10 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
         }
         case ast.TypeRef.Func(_, s) {
             for p in s.Params: r.typeRef(p.Ty)
+            # T21d: a function type's defaults, whose names mean what they mean where the type is written
+            for p in s.Params {
+                if p.Dflt != null: r.expr(p.Dflt)
+            }
             for res in s.Results: r.typeRef(res)
             for e in s.Errors: r.path(e)
         }

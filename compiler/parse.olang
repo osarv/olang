@@ -1316,9 +1316,24 @@ fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>& ? Fail {
     p.brackets--
     try p.want(token.Tok.RParen)
     ps := gather(p.prms, from)
+    p.trailingDefaults(ps)
     p.spreadRules(ps, ok, p.spreadOk, va)
     p.spreadOk = false
     return ps
+}
+
+# D8b: once a parameter declares a default every one after it does - a declaration's, a lambda's, a constructor's and a
+# function type's list alike (T21d); the first one that does not is said
+fn (p mut Parser&) trailingDefaults(ps Array<ast.Param&>&) {
+    seen := false
+    for prm in ps {
+        if prm.Dflt != null {
+            seen = true
+        } else if seen {
+            p.report(prm.Sp.Start, prm.Sp.End, msgs.DefaultNotTrailing(msgs.Tok(p.names.Text(prm.Name))))
+            return
+        }
+    }
 }
 
 # D8g: a variadic parameter is a function's (a method's, a lambda's, a function type's), never an extern's - whose
