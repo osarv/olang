@@ -418,6 +418,14 @@ fn File.Create(path String&) File ? Error {
     return File(fd)
 }
 
+# the file at "path", to write at its end: created when it is not there, kept as it is when it is (O_WRONLY | O_CREAT |
+# O_APPEND, 0666 less the umask) - every write lands after what the file held, whoever else appends too
+fn File.Append(path String&) File ? Error {
+    fd := fcntl.open($path + "\0", 0x441, 0x1B6)
+    try check(fd, path)
+    return File(fd)
+}
+
 # the file at "path", to read
 fn File.Open(path String&) File ? Error {
     fd := fcntl.open($path + "\0", 0)
@@ -672,6 +680,18 @@ test "Create writes through a File, a piece at a time" {
     got := try rd.Read(buf)
     assert got.Len() == 7
     assert (try rd.Read(buf)).Len() == 0
+}
+
+test "Append writes after what the file holds, and creates the file when it is not there" {
+    assert Run("mkdir -p build/os_files && rm -f build/os_files/appended") == 0
+    for part in Array<String>["one ", "two ", "three"] {
+        f := try File.Append("build/os_files/appended")
+        try f.Write(part)
+    }
+    assert (try ReadFile("build/os_files/appended") catch default "") == "one two three"
+    denied := false
+    try File.Append("build/os_files/no/such/dir/f") catch Error.NotFound { denied = true } catch { }
+    assert denied
 }
 
 # whether "fd" is open in this process, as /proc/self/fd lists it
