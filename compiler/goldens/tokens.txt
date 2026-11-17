@@ -2657,6 +2657,7 @@ b5ef26df71c5e9d8 d290f513fc2e56b4 tests/reflect.olang
 0c4c3adea751bf6a 75ac204e9b845a85 tests/shared.olang
 307585c2d6e47496 ad7d080b0a55df0c tests/slotfacts.olang
 c452c9cb509c23e1 dca352c6c89a7600 tests/structpat.olang
+b043808fc75ce994 65143d47c35f3f5a tests/textfields.olang
 0d4b3ba0fcda27dc f54bfde8d599baa6 tests/textplus.olang
 2fb13fa3e9f7127c a1fe4e3375cf79b7 tests/textslot.olang
 306278cf38ee3057 34b0c2b9622614a4 tests/topassert.olang
