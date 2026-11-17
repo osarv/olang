@@ -39304,4 +39304,7 @@ both alike (OLANG_VIEWDUMP). Bound as references
 `make` and `make quick` in a worktree whose build/olang predates a seed written again rebuilt the compiler with the
 stale one, which fails on the syntax the new seed was written for. build/olang now depends on the seed too, and
 quick's own check boots from the seed (`make boot`, its cache keyed by the seed) where a seed file is newer than
-build/olang.
+build/olang. Verified on wt-fixes3: a seed file touched boots once (a cache hit, the content unchanged) through both `make`
+and `make quick`, and the run after does nothing. `make seed` now touches build/olang after writing: build/olang is
+the seed tool's prerequisite, so it already compiles the source the new seed came from, and without the touch the next
+`make` would bootstrap from that seed for nothing.

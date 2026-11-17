@@ -1266,7 +1266,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   build behind the memory gate (compiler/tools/memgate.olang, 2026-11-14, the user's "machine-agnostic"): it starts
   once the memory the machine, container or cgroup has now leaves room for its measured peak beside what the running
   ones may still take - never a fixed size or core count (docs/testmem.md); `make quick` is the edit-test loop; `make
-  verify` stays the gate.
+  verify` stays the gate. `make` and `make quick` rebuild build/olang by itself from newer source and bootstrap it
+  again from a seed newer than it (2026-11-17); `make seed` leaves build/olang newer than the seed it wrote.
 
 ### The C compiler and the port
 

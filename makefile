@@ -363,6 +363,9 @@ seed: build/compiler_tools_seed
 		b=$$(basename $$f); \
 		if [ -e $(SEED_DIR)/$$b.xz ] && xz -dc $(SEED_DIR)/$$b.xz | cmp -s - $$f; then continue; fi; \
 		echo "seed: $(SEED_DIR)/$$b.xz"; xz -9 -T1 -c $$f > $(SEED_DIR)/$$b.xz; done
+	@# (build/olang, the seed tool's prerequisite, compiles the source this seed is written from: kept newer than the
+	@# seed, so the next make does not bootstrap from it again)
+	@touch build/olang
 
 run: $(OLANG)
 	$(OLANG_ENV) $(OLANG) build tests/runner.olang
