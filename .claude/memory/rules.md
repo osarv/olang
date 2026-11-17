@@ -165,6 +165,9 @@ slimming of 2026-11-08").
 No third-party code (plugins, packages from outside the distribution, curl-piped scripts) in the user's config or
 install without asking first (the user, 2026-11-16, after render-markdown.nvim was added on their yes to "add render-markdown" without saying it was third-party: "wait, are we usign a third party plugin now?" ... "that wasnt the plan"): name what is third-party before proposing it.
 
+## Retrieved datasets
+Datasets downloaded for experiments live outside worktrees, in /home/oscar/claude/data/<name> (locally; never committed), linked into a worktree; removing a worktree must not lose them (2026-11-17: e2's Sudoku data was lost with its worktree and fetched again).
+
 ## Temporary files
 The user, 2026-11-09: delete /tmp data (the scratchpad, agents' scratch, fuzz and check output) whenever it is useful,
 no need to ask.
