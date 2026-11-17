@@ -654,7 +654,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `I64`, `U8`/`U16`/`U32` `U64`, `F16`/`BF16` `F32`; a program's type declares its own),
   `T.Nullable`, `T.Size`, `T.Align`, and the lists `T.Fields`, `T.Cases`, `T.Params`, `T.Results`, `T.Errors`. A list
   is no value: a `for` over it is unrolled, `.Len()` and a constant index are constants. Elements are descriptors
-  (`f.Name`, `f.Type`, `f.Offset`, `f.Of(v)`, `c(args)`). Conditions over reflected constants decide `if`s, asserts
+  (`f.Name`, `f.Type`, `f.Offset`, `f.Of(v)`, `c(args)`); a descriptor's text is a value, indexed and measured as any
+  text (`f.Name[0]`, 2026-11-17). Conditions over reflected constants decide `if`s, asserts
   and `match` per instance (G35); `match T` takes trait and generic cases (G36); `T(arg(p) for p in T.Params)` builds
   through the constructor (G37). A struct's private fields are in `T.Fields` only in its module. `json.Encode(v)`/
   `json.Decode<T>(text)` take any value; a struct with storage and no field Encode may read is a compile-time error
