@@ -4,7 +4,15 @@ import "std/os"
 # O8f (docs/freeing.md gap 11): a Vec's growth frees the buffer it replaces in every program - here one with an owner
 # place holding a Vec whole (a) and copies of one made outside any region (m.Get), each of which kept every Vec<I64>'s
 # old buffers before. Two Vecs grown one after the other in one scope: the second grows into the buffers the first
-# let go of, so the peak is three buffers of the last size, not four (the measure: peak resident memory gained, in MB)
+# let go of, so the peak is three buffers of the last size, not four. The measure is the peak ADDRESS SPACE gained
+# (VmPeak), what the program took from the system - every chunk of 128KB up is mapped for itself (a smaller one is in
+# a slot of the range reserved at the start) and a chunk let go of stays mapped in the pool until it is taken again -
+# not the peak resident memory (VmHWM): with transparent huge pages a chunk's untouched tail is resident or not as the
+# kernel finds a huge page free, which on a loaded machine moved the same run between 24 and 28 MB.
+# The limit, from the buffer size: the last buffer holds 2^20 I64s, 8 MB, in a chunk of the class above 8 MB and its
+# header - 10 MB (the classes step by a quarter of a power of two). Three such chunks are 30 MB: v's buffer, w's, and
+# the chunks v grew out of (5 + 2.5 + 1.25 + ... MB, under 10), which w grows into; a program keeping them is at four,
+# 40 MB (w maps its own), and the limit is midway between, 35 MB. Measured: 29.9 MB, and 39.7 kept
 N I64 = 1000000
 
 fn mk(i I64) Vec<I64> {
@@ -13,11 +21,11 @@ fn mk(i I64) Vec<I64> {
     return w
 }
 
-# the peak resident memory, in KB (VmHWM)
+# the peak address space, in KB (VmPeak)
 fn peak() I64 {
     st := try os.ReadFile("/proc/self/status") catch default ""
     for line in st.Lines() {
-        if line.StartsWith("VmHWM:"): return try line[6:line.Len() - 3].Trim().ParseInt(10) catch default 0
+        if line.StartsWith("VmPeak:"): return try line[7:line.Len() - 3].Trim().ParseInt(10) catch default 0
     }
     return 0
 }
@@ -38,5 +46,5 @@ fn main() {
     w Vec<I64>
     for i in range N: w.Push(v[i])
     gained := (peak() - p0) / 1024
-    io.PutLn($t + " " + $w[N - 1] + " " + $("three buffers" if gained < 27 else "kept, " + $gained + " MB"))!
+    io.PutLn($t + " " + $w[N - 1] + " " + $("three buffers" if gained < 35 else "kept, " + $gained + " MB"))!
 }
