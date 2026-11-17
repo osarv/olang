@@ -42,7 +42,7 @@ one rule that composes over special cases; fix rough edges found while building.
 - **What is public (the user, 2026-11-15):** "make the framework public, hide the weights (and similarly)": oann holds every mechanism, settling ones included; oagent holds the AGI model being bootstrapped - its configuration, weights, data, recipes and experiments. And (the same day): "any datasets we create, not just retrieve, will be in oagent as well ... basically any company secrets" - anything made in-house that gives an edge (created datasets, weights, recipes, results) is oagent's; retrieved public data and the general framework are oann's.
 - **I am the research agent:** reading papers, compiling them and trying things is part of the job ("feel free to use the
   Arxiv connector frivolously"); paper notes in oagent's papers/.
-- **GPUs are local:** the user's own machine (RTX 4060 8 GB, sm_89 first; Ryzen 5 7600 with AVX-512; 16 GB RAM, 7.4 GiB
+- **GPUs are local:** the user's own machine (RTX 4060 8 GB, sm_89 first; Ryzen 5 7600 with AVX-512; 16 GB RAM, 12 GB
   visible in WSL; specs in oagent's machine/specs.txt). No paid cloud GPUs.
 - **Settling networks are the main experiment** (2026-10-28: "This is what we are going to be experimenting with
   primarily"): weigh olang by what the settle needs - many small cache-resident GEMVs in an allocation-free loop,

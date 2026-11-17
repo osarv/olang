@@ -1806,3 +1806,16 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   the listed differences). Last fix: B12a's foreign-target refusal for this-machine modes said before the clang check
   (a clang-18 container). Next: the trim merged, then the after-done items (benchmarks, coverage, REPL + Jupyter,
   saturating arithmetic, platforms, olang get) and oann's port - the user's order.
+
+
+## Hand-off to the local session (2026-11-17), merged the same day
+
+- Hand-off to the local session (2026-11-17 ~09:30 CET; the cloud session stopped its agents, all work pushed): read .claude/memory/handoff.md first. In flight, each on its pushed branch:
+  - olang wt-fndefaults (d3a25bff, T21d defaults in function types + D8b enforced; quick passed alone): merge into master; wt-merge (5619f85f) holds a half-done merge whose boot failed - redo from master. D8b may break oann (reorder only).
+  - olang wt-fixes3 (fb2a4d5a): function facts on a tuple binding (test committed, fix status unknown), indexing a reflected text (`f.Name[0]`, then drop std/flags' helper), the Makefile booting fresh when seed/ is newer than build/olang.
+  - oann wt-oanncert3 (c29b215, WIP): a nudged-phase certificate tight enough for beta 0.5 (state-dependent readout slopes; PROGRESS.md "Next").
+  - oann wt-oanncompact (43df154, WIP): compacting retired units after pruning (PROGRESS.md ~line 186); merge only if it pays or is small.
+  - Then: olang vnnitile grouped lane total (oann repro/vnnitile.olang) for INT8 at shallow depths; then oann's GPU route; then oagent's experiments (EXPERIMENTS.md).
+  - Also queued: indexing a reflected text is a lowering gap; ~/.cache/olang needs a size cap; worktree builds take 7-9 GB each.
+
+Outcome: olang master c26f3303a holds wt-fndefaults (no oann reorderings needed), wt-fixes3 (plus checks finding the compiler's clang, gdb print pretty off) and wt-vnnitile (E39 grouped Sum, vpdpbusd). oann: the nudged certificate merged (aa64822: sound, 0 batches certified at beta 0.5, 44% of rows); compaction measured and not built (98efa76, upper bound ~2%); the GPU plan (e5ea964).

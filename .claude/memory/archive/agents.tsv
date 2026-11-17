@@ -241,3 +241,10 @@ start	agent	model	effort	status	ktok	tools	min	verify_first	bugs_later	notes
 2026-11-17	fixes3	opus	medium	running						facts tuple bind, reflected text index, Makefile boot-fresh
 2026-11-17	oanncert3	opus	medium	running						nudged-phase certificate
 2026-11-17	oanncompact	sonnet	medium	running						compact retired units
+2026-11-17T09:55	steward-fndef (local)	sonnet	medium	running						redo merge wt-fndefaults + oann D8b
+2026-11-17T09:55	fixes3 (local)	opus	medium	done	130	71	93	no (checks: hardcoded clang, gdbinit)		3 fixes held; checks clang lookup + gdb pretty off; b75de38b3
+2026-11-17T09:55	oanncert3 (local)	opus	medium	done	164	87	68	no (numpy env)		sound; 0 batches certified at beta .5 (rows 44% spectral); merged aa64822; test misses start-state-only variant
+2026-11-17T09:55	oanncompact (local)	sonnet	medium	done	47	8			not built: upper bound ~2% (98efa76)
+2026-11-17T10:17	vnnitile (local)	opus	medium	done	280	162	114	no (env: clang, gdb; goldens)		a.Sum<A>(n), LaneDots -> vpdpbusd x4; ae047bf33
+2026-11-17T10:17	oanngpu design (local)	opus	medium	done	112	23	5			GPU backend plan, no headers yet (merged e5ea964)
+2026-11-17T10:23	ebr round 1 (local)	opus	medium	running						oagent e2: EBR reproduction, CPU, <=3h

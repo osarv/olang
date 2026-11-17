@@ -3,4 +3,3 @@
 - [Plan](plan.md) — work order, recorded future work, parked items and revisit-ifs
 - [Decisions](decisions.md) — numbered ledger of open questions (each with default + recommendation)
 - [Archive](archive/) — not imported: `rules_log.md` (rules' stories and the pre-slimming full text), `direction_log.md` (same for direction), `decisions_log.md`, `next_steps_log.md`, `concurrency_gaps.md`, `open_language_gaps.md`, `vec_growth_question.md`
-- [Hand-off](handoff.md) — not imported: the cloud session's hand-off of 2026-11-17 (branches in flight, the order next, how it worked); delete once its work is merged
