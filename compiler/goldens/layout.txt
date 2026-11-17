@@ -3936,7 +3936,7 @@ compiler/ast:Branch	32 8	%"compiler/ast:Branch"	{ %"compiler/source:Span", { i64
 compiler/ast:Branch&	8 8	ptr	-	-
 compiler/ast:Case	72 8	%"compiler/ast:Case"	{ %"compiler/source:Span", { i64, ptr }, { i64, ptr }, ptr, { i64, ptr }, ptr }	fields 0,8,24,40,48,64
 compiler/ast:Case&	8 8	ptr	-	-
-compiler/ast:CaseDecl	64 8	%"compiler/ast:CaseDecl"	{ %"compiler/source:Span", i32, { i64, ptr }, i1, ptr, { i64, ptr } }	fields 0,8,16,32,40,48
+compiler/ast:CaseDecl	48 8	%"compiler/ast:CaseDecl"	{ %"compiler/source:Span", i32, { i64, ptr }, i1, ptr }	fields 0,8,16,32,40
 compiler/ast:CaseDecl&	8 8	ptr	-	-
 compiler/ast:Catch	72 8	%"compiler/ast:Catch"	{ %"compiler/source:Span", { i64, ptr }, { i64, ptr }, { i64, ptr }, i1, i32, %"compiler/source:Span" }	fields 0,8,24,40,56,60,64
 compiler/ast:Catch&	8 8	ptr	-	-
@@ -3952,7 +3952,7 @@ compiler/ast:For3	40 8	%"compiler/ast:For3"	{ ptr, ptr, ptr, { i64, ptr } }	fiel
 compiler/ast:For3&	8 8	ptr	-	-
 compiler/ast:ForIn	64 8	%"compiler/ast:ForIn"	{ i32, i32, ptr, i1, { i64, ptr }, { i64, ptr }, i1 }	fields 0,4,8,16,24,40,56
 compiler/ast:ForIn&	8 8	ptr	-	-
-compiler/ast:Func	104 8	%"compiler/ast:Func"	{ %"compiler/source:Span", ptr, i32, ptr, { i64, ptr }, { i64, ptr }, i1, i1, { i64, ptr }, ptr, i32 }	fields 0,8,16,24,32,48,64,65,72,88,96
+compiler/ast:Func	88 8	%"compiler/ast:Func"	{ %"compiler/source:Span", ptr, i32, ptr, { i64, ptr }, { i64, ptr }, i1, i1, ptr, i32 }	fields 0,8,16,24,32,48,64,65,72,80
 compiler/ast:Func&	8 8	ptr	-	-
 compiler/ast:If	24 8	%"compiler/ast:If"	{ ptr, ptr, ptr }	fields 0,8,16
 compiler/ast:If&	8 8	ptr	-	-
@@ -3962,7 +3962,7 @@ compiler/ast:Match	40 8	%"compiler/ast:Match"	{ %"compiler/source:Span", ptr, i1
 compiler/ast:Match&	8 8	ptr	-	-
 compiler/ast:Multi	40 8	%"compiler/ast:Multi"	{ { i64, ptr }, i1, { i64, ptr } }	fields 0,16,24
 compiler/ast:Multi&	8 8	ptr	-	-
-compiler/ast:Param	48 8	%"compiler/ast:Param"	{ %"compiler/source:Span", i32, ptr, ptr, { i64, ptr } }	fields 0,8,16,24,32
+compiler/ast:Param	32 8	%"compiler/ast:Param"	{ %"compiler/source:Span", i32, ptr, ptr }	fields 0,8,16,24
 compiler/ast:Param&	8 8	ptr	-	-
 compiler/ast:Path	24 8	%"compiler/ast:Path"	{ %"compiler/source:Span", { i64, ptr } }	fields 0,8
 compiler/ast:Path&	8 8	ptr	-	-
@@ -3980,13 +3980,13 @@ compiler/ast:TopIf	32 8	%"compiler/ast:TopIf"	{ ptr, ptr, ptr, ptr }	fields 0,8,
 compiler/ast:TopIf&	8 8	ptr	-	-
 compiler/ast:TypeBody	56 8	{ i64, [6 x i64] }	-	cases 0;0,16;0,16,32;0,8;
 compiler/ast:TypeBody&	8 8	ptr	-	-
-compiler/ast:TypeDecl	80 8	%"compiler/ast:TypeDecl"	{ i32, { i64, ptr }, i1, ptr, { i64, ptr }, i32, i1, ptr, i32 }	fields 0,8,24,32,40,56,60,64,72
+compiler/ast:TypeDecl	64 8	%"compiler/ast:TypeDecl"	{ i32, { i64, ptr }, i1, ptr, i32, i1, ptr, i32 }	fields 0,8,24,32,40,44,48,56
 compiler/ast:TypeDecl&	8 8	ptr	-	-
 compiler/ast:TypeParam	56 8	%"compiler/ast:TypeParam"	{ %"compiler/source:Span", i32, ptr, { i64, ptr }, i1, ptr }	fields 0,8,16,24,40,48
 compiler/ast:TypeParam&	8 8	ptr	-	-
 compiler/ast:TypeRef	48 8	{ i64, [5 x i64] }	-	cases 0,8,24;0,8;0,8;0,8,16,17;0,8,16;0,8;0,8;0,8
 compiler/ast:TypeRef&	8 8	ptr	-	-
-compiler/ast:VarDecl	88 8	%"compiler/ast:VarDecl"	{ { i64, ptr }, { i64, ptr }, ptr, { i64, ptr }, i1, i1, { i64, ptr }, i1 }	fields 0,16,32,40,56,57,64,80
+compiler/ast:VarDecl	64 8	%"compiler/ast:VarDecl"	{ { i64, ptr }, { i64, ptr }, ptr, { i64, ptr }, i1, i1 }	fields 0,16,32,40,56,57
 compiler/ast:VarDecl&	8 8	ptr	-	-
 compiler/source:NameId	4 4	i32	-	-
 compiler/source:Names	104 8	%"compiler/source:Names"	{ %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/map:Map.38ecd5291a2eac158a479efae74bd262" }	fields 0,32
@@ -4718,7 +4718,7 @@ compiler/parse:NameList	32 8	%"compiler/parse:NameList"	{ { i64, ptr }, { i64, p
 compiler/parse:NameList&	8 8	ptr	-	-
 compiler/parse:Oracle	288 8	%"compiler/parse:Oracle"	{ %"std/prelude/map:Map.38ecd5291a2eac158a479efae74bd262", %"std/prelude/map:Map.38ecd5291a2eac158a479efae74bd262", %"std/prelude/map:Map.38ecd5291a2eac158a479efae74bd262", %"std/prelude/map:Map.38ecd5291a2eac158a479efae74bd262" }	fields 0,72,144,216
 compiler/parse:Oracle&	8 8	ptr	-	-
-compiler/parse:Parser	1056 8	%"compiler/parse:Parser"	{ ptr, ptr, ptr, ptr, ptr, i64, i64, i32, i32, i32, i32, i1, i1, i1, i1, i1, i1, i1, i1, i1, i64, i1, i1, i64, i1, i64, i1, i32, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/map:Map.38ecd5291a2eac158a479efae74bd262", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i1, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i1, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i1, i1, i1 }	fields 0,8,16,24,32,40,48,56,60,64,68,72,73,74,75,76,77,78,79,80,88,96,97,104,112,120,128,132,136,168,200,272,304,336,368,400,432,464,496,528,560,592,624,640,672,704,736,768,800,801,808,840,872,904,912,944,976,1008,1009,1016,1048,1049,1050
+compiler/parse:Parser	1016 8	%"compiler/parse:Parser"	{ ptr, ptr, ptr, ptr, ptr, i64, i64, i32, i32, i32, i32, i1, i1, i1, i1, i1, i1, i1, i1, i1, i64, i1, i1, i64, i1, i64, i1, i32, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/map:Map.38ecd5291a2eac158a479efae74bd262", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i1, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i1, i1, i1, i1 }	fields 0,8,16,24,32,40,48,56,60,64,68,72,73,74,75,76,77,78,79,80,88,96,97,104,112,120,128,132,136,168,200,272,304,336,368,400,432,464,496,528,560,592,624,640,672,704,736,768,800,801,808,840,872,904,912,944,976,1008,1009,1010,1011
 compiler/parse:Parser&	8 8	ptr	-	-
 compiler/parse:stackMarks	56 8	%"compiler/parse:stackMarks"	{ i64, i64, i64, i64, i64, i64, i64 }	fields 0,8,16,24,32,40,48
 compiler/typed:Alt	24 8	%"compiler/typed:Alt"	{ ptr, { i64, ptr } }	fields 0,8
