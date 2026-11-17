@@ -26,3 +26,4 @@
 ## From wt-noattr (2026-11-17)
 - oann hand migration after noattr installs: io/checkpoint.olang `@Name("c_proj")` (line 655, read by fieldName/HasAttr at 255); dyn/neuron.olang `@Keep` (line 26, read at dyn/settle.olang:320, comments in dyn/system.olang 336/1186). LifCell<T> is generic: alias member over a module-level enum.
 - olang bug: indexing a reflected text (`f.Name[0]`) is a lowering gap (std/flags works around it with a helper).
+- (2026-11-17) Done: join leak (dbbf0ad4), attributes dropped (b44b33d3), oann migrated (8afdcbb). oann keeps pad-to-256: unpadded dots measured 10-20% slower at depth 784 (oann PROGRESS.md) - the vnnitile grouped total is what would beat it.
