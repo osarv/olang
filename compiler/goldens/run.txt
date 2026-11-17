@@ -237,6 +237,11 @@
 === test tests/filtered.olang
 | status 0
 | ok - a filtered comprehension's result is an array of its own
+=== test tests/fndefaults.olang
+| status 0
+| ok - a call through a value leaves a default off, names it, or gives it
+| ok - a function with no defaults, and a value from another function type, take the target type's
+| ok - lambdas: the same defaults as the type, none, and their own
 === test tests/fnref.olang
 | status 0
 | ok - nested: a null inside a value renders null, and an enum's zero holds its payload's zero values

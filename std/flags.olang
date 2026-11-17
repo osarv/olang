@@ -485,8 +485,8 @@ test "what the declarations do not allow fails, with a message" {
 
 # flags declared by a struct (D4a): its key enums give their help and short names; Skipped is listed by neither, so no
 # flag
-type options struct(Count I64 = 10, Verbose Bool = false, MaxLen U8 = 8, Out String&, Skipped I64 = 4) {
-    Count, Verbose, MaxLen, Out, Skipped
+type options struct(Out String&, Count I64 = 10, Verbose Bool = false, MaxLen U8 = 8, Skipped I64 = 4) {
+    Out, Count, Verbose, MaxLen, Skipped
 }
 
 type options.Flags enum {
@@ -505,10 +505,10 @@ test Flags.Read "a struct's parameters are flags, its key enums their help and s
     o := p.Read<options>(Array<String&>["tool", "-n", "3", "--out", "x", "--max-len=9", "rest"])!
     assert o.Count == 3 and not o.Verbose and o.MaxLen == 9 and o.Out == "x" and o.Skipped == 4 and p.Args()[0] == "rest"
     assert p.Help() == ("usage: tool [flags] [arguments]\ndoes things\n\nflags:\n" +
+        "      --out TEXT\n" +
         "  -n, --count INT    how many (default 10)\n" +
         "      --verbose      say more\n" +
         "      --max-len INT  (default 8)\n" +
-        "      --out TEXT\n" +
         "  -h, --help         show this help\n")
     q := Flags("tool")
     try q.Read<options>(Array<String&>["tool"]) catch Error.Required { } catch { unreachable }

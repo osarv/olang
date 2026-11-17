@@ -1,0 +1,6 @@
+# check: fail error[T21d]: parameter 'b' defaults to 1 here, but to 0 in
+# T21d: a lambda declaring a default the function type it is given to contradicts
+fn main() {
+    f fn&(x I64, b I64 = 0) I64 = fn(x I64, b I64 = 1) I64 { return x + b }
+    assert f(1) == 1
+}

@@ -1,0 +1,9 @@
+# check: fail error[D8a]: this default cannot be computed while compiling
+# T21d, D8a: a function type's default is computed for the calls it stands in, which see no local of where it is written
+fn sc(x I64, k I64) I64 { return x * k }
+
+fn main() {
+    n := 3
+    f fn&(x I64, k I64 = n) I64 = sc
+    assert f(1) == 3
+}

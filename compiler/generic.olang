@@ -120,6 +120,10 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     raisedFields Map<I64, types.ListId>    # T19b, R3b: an error raised by name's payload field types by its payload enum's
                                            # declaration, once its first raise settled them (SettleRaised)
     unifyDepth I64 = 0                 # how far inside a type's arguments Unify is (G9d binds a value given whole alone)
+    # T21d: the defaults written in function types, by the table's row (types.Table.Default): where each is written and
+    # the context it is checked in; one row per written position
+    fnDflts Map<I64, FnDefault>
+    dfltRows Map<String&, I64>
     declMi Vec<I64>                   # by DeclId: its module and its entry in the module's name table
     declEi Vec<I64>
     varsAt Map<I64, I64>               # by owner: where its variables start in vars, and how many
@@ -453,6 +457,17 @@ type Context struct(Mi I64, Owner I64) {
     # loop's name, a local or parameter holding one), or a Const (an unrolled loop's position)
     Refl Map<source.NameId, types.TypeId>
 }
+
+# T21d: a default written in a function type - its module, its expression and the context it is checked in (D8a: its
+# names mean what they mean where it is written)
+type FnDefault struct(Mi I64, X ast.Expr&, Ctx Context) {
+    Mi
+    X
+    Ctx
+}
+
+# T21d: the default a function type's row stands for
+fn (p Program&) FnDefaultOf(row I64) FnDefault ? MapError { return try p.fnDflts.Get(row) }
 
 fn (p mut Program&) declContext(d types.DeclId) Context {
     mi := p.declMi[I64(d)]
@@ -1320,7 +1335,29 @@ fn (p mut Program&) funcType(c Context&, sp source.Span, s ast.Sig&) types.TypeI
         f = p.T.Refunc(f, p.T.Params(f), p.T.Result(f), types.ListId(0), p.T.ScopesOf(f))
     }
     f = p.T.WithPromises(f, p.promisesOf(c, s, f))
-    return p.T.WithNames(f, p.SigNames(s))
+    return p.T.WithNames(f, p.T.ParamNamesWith(p.SigNameIds(s), p.TypeDefaults(c, s)))
+}
+
+# T21d: the defaults a signature's parameters write, a row each (0 for none) - one row per written position and
+# instance's arguments: a function type's, and a declaration's or lambda's, which its value's type carries (D8b's
+# trailing rule is the parser's)
+fn (p mut Program&) TypeDefaults(c Context&, s ast.Sig&, args types.ListId = types.ListId(0)) Array<I64>& {
+    ds := Array<I64>(s.Params.Len())
+    for i, prm in s.Params {
+        if prm.Dflt != null: ds[i] = p.defaultRow(c, prm.Dflt!, args)
+    }
+    return ds
+}
+
+fn (p mut Program&) defaultRow(c Context&, x ast.Expr&, args types.ListId = types.ListId(0)) I64 {
+    sp := x.Span()
+    key := $c.Mi + ":" + $sp.Start + ":" + $I64(args)
+    row := try p.dfltRows.Get(key) catch default 0
+    if row != 0: return row
+    row = p.T.Default(p.L.Mods[c.Mi].Src!.Text[I64(sp.Start):I64(sp.End)])
+    p.dfltRows.Put(key, row)
+    p.fnDflts.Put(row, FnDefault(c.Mi, x, c))
+    return row
 }
 
 # ---- promises (T21c) ----
@@ -1510,10 +1547,12 @@ fn viewGenTy(p Program&, t ast.TypeRef&) Bool {
 }
 
 # a signature's parameters' names, interned for a function type to render with (E11a)
-fn (p mut Program&) SigNames(s ast.Sig&) I64 {
+fn (p mut Program&) SigNames(s ast.Sig&) I64 { return p.T.ParamNames(p.SigNameIds(s)) }
+
+fn (p Program&) SigNameIds(s ast.Sig&) Array<I64>& {
     ns := Array<I64>(s.Params.Len())
     for i in range s.Params.Len(): ns[i] = I64(s.Params[i].Name)
-    return p.T.ParamNames(ns)
+    return ns
 }
 
 fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName source.NameId) types.TypeId {
