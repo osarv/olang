@@ -2370,7 +2370,7 @@ e20178f94e07dfed 093e0335a8debfcd compiler/bindgen.olang
 90881337ba685229 eea384b1077dc23b compiler/build.olang
 9eb8d9916112f375 acad139c7c5a3871 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
-b81ca15a37263fa5 2ecde5f0bef9892b compiler/check.olang
+00975d4e9575c64d 2d49a70ac3432f09 compiler/check.olang
 da018e972c2ecc90 2073133fd217ef43 compiler/cond.olang
 2ab98962469bc960 89092d630e387ca2 compiler/definit.olang
 db407b9ec2aacf25 e1e61b9b123ebbaf compiler/diag.olang
@@ -2522,7 +2522,7 @@ f6e04d43ad554209 2c7bed0e54ce92f8 std/csv.olang
 794dc209a5c10699 b880214aa676b09d std/deque.olang
 c9a567592977f803 42d43d3811e894ce std/ffi.olang
 eae29e622e0002e5 7c8a766d6833ed7c std/filepath.olang
-31c2c4c095f70533 abaf1ca540d46df4 std/flags.olang
+a9a00f3689122d38 67b75516995a3f76 std/flags.olang
 b8a767e48672cdbb 475c6d45c3718d89 std/frame.olang
 528fca0c14f3c6d8 6c09a5b8abb7221a std/fuzz.olang
 c75dacbbaf48a1e2 8aa4a652f9fdd17c std/heap.olang
@@ -2645,6 +2645,7 @@ a519a74d61801dcf 4341a6fc3472d279 tests/promises.olang
 1ed6c61d621cabe7 3329b041268e64f4 tests/reclaimtasks.olang
 b5ef26df71c5e9d8 d290f513fc2e56b4 tests/reflect.olang
 5075b8937e6628c4 bb505fad95c5ed7c tests/reflmod.olang
+3d5f36715ff3e78e d965d9c6969da76f tests/refltextindex.olang
 835ba0f57f4caddd ffb7322c928edb6c tests/runner.olang
 0c4c3adea751bf6a 75ac204e9b845a85 tests/shared.olang
 307585c2d6e47496 ad7d080b0a55df0c tests/slotfacts.olang
@@ -2652,6 +2653,7 @@ c452c9cb509c23e1 dca352c6c89a7600 tests/structpat.olang
 0d4b3ba0fcda27dc f54bfde8d599baa6 tests/textplus.olang
 2fb13fa3e9f7127c a1fe4e3375cf79b7 tests/textslot.olang
 306278cf38ee3057 34b0c2b9622614a4 tests/topassert.olang
+b85bbc40e839bded b5a7ded126f0400f tests/tuplefacts.olang
 865512a5b10174be 415d01faaa817e2d tests/typedefaults.olang
 7ffdae4bcc341292 9f9c543d3541d069 tests/unique.olang
 40b8b670318d4478 685c5774d1e2bcf4 tests/unreachable.olang
