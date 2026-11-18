@@ -964,6 +964,7 @@ f3783007b1144f5e 154704de95918c63 checks/cases/o17borrowsplitwrap.olang
 802bd5afb89ede35 5d797f389db15218 checks/cases/o17bpendingok.olang
 73e731f117c883b0 06868902953009e6 checks/cases/o17btrydefaultarray.olang
 db4b6d4cb5ca7a95 114a61595b2e3401 checks/cases/o17btrydefaultkept.olang
+c858ff409881f12b a5e78fdf2559bae6 checks/cases/o17ccapture.olang
 d3610e665ca2e73c 3e23445d233a574c checks/cases/o17cholderkept.olang
 f44109bb08a0fb68 d2b6ceca03043b76 checks/cases/o17cholderlocal.olang
 3c415cf0b8cbda86 d4a2d8aae42d398d checks/cases/o17copylent.olang
@@ -971,6 +972,7 @@ f44109bb08a0fb68 d2b6ceca03043b76 checks/cases/o17cholderlocal.olang
 ff1cd2e93e58baaa 7f613e11efb53094 checks/cases/o17handout.olang
 77af79de3a151956 b58f37f9b2c36a8a checks/cases/o17lambdareads.olang
 10a1ef99dd900844 07bb0228db7264a8 checks/cases/o17lambdastore.olang
+66bfd1853dad95c3 3b0b47059950a5e4 checks/cases/o17nullstore.olang
 e0f2283738246030 607cca9e03fe90af checks/cases/o17ownkept.olang
 6a03db3c4fc50bfb a6d5030702ddb612 checks/cases/o17ownturnstruct.olang
 63ff7e1fc37425c1 ecfc718ee4de1638 checks/cases/o17ownturnvec.olang
@@ -1064,6 +1066,7 @@ a4e4397a9a5cbb3d 3205b9d4c2f8a517 checks/cases/o26own.olang
 8191e8ee0b099d54 6a7e314f480ad400 checks/cases/o27destructorview.olang
 e6dfe04fd38f1892 7d77358000170252 checks/cases/o27genborrow.olang
 0067011f7b6d5a1a dd4433ff7b3748e8 checks/cases/o29spawnfound.olang
+782ea08771a31d1b ec3cce53bbf86ce8 checks/cases/o44nullbase.olang
 fc3eb74fe0f0df3f 677eed996217e226 checks/cases/o4bblock.olang
 0065fa805d3b499f ec1587f7ce50836c checks/cases/o4bbyvaluebuild.olang
 70e3b11ca14c8227 4187c88d7432952d checks/cases/o4bmapvalueblock.olang
@@ -2405,7 +2408,7 @@ e16765f56912e3a6 22d3690134ecf863 compiler/fmt.olang
 8299f0d6f657ceae ba0b78c0c7122d77 compiler/lineedit.olang
 211de0b5ecb13aac 4324dd1a83c4b615 compiler/listing.olang
 f25119be92c6587e 3825c2dbc7b7a788 compiler/load.olang
-a14b3c11bdfc9d4e 487ef0dc5f1ddf9b compiler/lower.olang
+521c9a9cdca0f40f d76eb3a172be3efc compiler/lower.olang
 0a6ba37a53fb9662 26f5ffd009f3d4b4 compiler/lsp.olang
 7dc09dd9a3624990 5eddb899d10cc9ce compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
@@ -2422,7 +2425,7 @@ e2b2b02653bc4b63 5a8b70218b099dfd compiler/prompt.olang
 cbc70baf5730545d 2566970bf4106d0b compiler/records.olang
 0c3f8c24752ad48a 5b5a3902974907e2 compiler/runtime.olang
 74927aaea47abc0f 8100b336b3b50d5c compiler/scan.olang
-d7ead2d7b456aab9 9dd0a04cbf49a12a compiler/scope.olang
+012727fa05074544 8c7bc7871821b6ba compiler/scope.olang
 ad0b24259637a1f2 35b31b7c785e8b14 compiler/session.olang
 8981299fcf27ba06 13b1ab50b72ab2a0 compiler/source.olang
 9bee4e94ca053127 882c3c1eac35e714 compiler/spin.olang
@@ -2664,7 +2667,7 @@ b5ef26df71c5e9d8 d290f513fc2e56b4 tests/reflect.olang
 3d5f36715ff3e78e d965d9c6969da76f tests/refltextindex.olang
 835ba0f57f4caddd ffb7322c928edb6c tests/runner.olang
 0c4c3adea751bf6a 75ac204e9b845a85 tests/shared.olang
-9961dcad2585ff1a 32d3b9ad54b34a8a tests/slicehoist.olang
+65be2149dd87b5aa 85d6cedda5cdc0fe tests/slicehoist.olang
 307585c2d6e47496 ad7d080b0a55df0c tests/slotfacts.olang
 c452c9cb509c23e1 dca352c6c89a7600 tests/structpat.olang
 b043808fc75ce994 65143d47c35f3f5a tests/textfields.olang

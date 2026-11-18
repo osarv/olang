@@ -39674,3 +39674,26 @@ do the same through `Diag.Note()` and `Diag.Help()` in scan.olang, passed on by 
 constructor-parameter hint; `VariadicHere` takes its fix as a second argument. An assert's message now follows "this assertion
 is false:" with "evaluated while compiling" on a note. The 12 left are an assert's own message text (std's) and G38/T22b rows
 whose text is built from names. The `# check: fail` / `# also:` expectations of 125 checks/cases lines follow the new headlines.
+## 2026-11-18: the soundness review of the week's section-8 and codegen changes (review3; mine)
+
+G42's two-root fix, O10c's global getter, O43/O44, O17c and E16h through fixed locals were read against their entries
+and tried with adversarial programs under -debug and the scope sanitizer. Three bugs, each fixed with a case:
+- **O44 read a slice's base before the loop through a narrowed `?&`.** `for k in range n { if r != null { x :=
+  r.A[k:k + 1] } }` - the hoisted test reads `r.A`'s length before the loop, where the narrowing test has not run; a
+  null `r` stopped the program (-debug; undefined at -O3). fixedBase now takes a reference local only where its type is
+  never null (lower.olang fixedRef). checks/cases/o44nullbase.olang (-debug), tests/slicehoist.olang's `narrowed`.
+- **O17 missed a store through a conversion to `?&`.** The scope pass's keep walk (kwExpr) took every prim's operands
+  as inert, so `k.s = v` with `s` a `V?&` field (a Convert of `v`) kept nothing: a callee storing its parameter so was
+  judged to keep nothing of it, and a by-value parameter's own storage lent to it was accepted - the stored reference
+  then named a frame that had closed (the sanitizer's use after scope closed; it predates this week). A conversion and
+  an `any` made of a reference now pass the reference on (typed.PassesRefs, as LocalUses already did).
+  checks/cases/o17nullstore.olang.
+- **O17c let a lambda carry a holder's region away.** `w := W(v); f := fn() { keepIt(k, w.v) }` - the lambda's summary
+  follows its capture's own storage, not what a reference read out of it names, which for a holder is the region; O17c
+  dropped the keep the declaration used to make. A captured holder now keeps its region (scope.olang kwCapture), as
+  before O17c. checks/cases/o17ccapture.olang.
+The rest held: O43's exclusivity is by type overlap (T36, declared types by their base), writable only under Alone;
+O44's affine bounds are exact modulo 2^64 and the tested ranges leave no wrap (I64 arithmetic is emitted without
+nsw); O10c's static result is bound only where the summary holds it exactly to the program's, the arguments' own
+relations still asked (a mixed getter's local lands in the program's scope); E16h's held errors are dropped on a write
+anywhere, and a type-dependent initializer in a generic body or a comptime for's guarded copy is not refused.

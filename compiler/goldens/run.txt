@@ -2903,6 +2903,8 @@
 === run o29spawnfound.olang
 | status 0
 | 51 105 0
+=== run o44nullbase.olang
+| status 0
 === run o4bblock.olang
 | status 0
 === run o4bbyvaluebuild.olang
