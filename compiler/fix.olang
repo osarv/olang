@@ -267,11 +267,11 @@ fn builder(exe String&, tools String&, bin String&, todo Vec<I64>&, programs Arr
 
 # the files of files the compiler reports an error in - compiling each alone, side by side (the driven tools act only on
 # what its diagnostics say, so a file it compiles cleanly gives them nothing to do)
-fn failing(exe String&, files Array<String&>&) Array<String&> {
+fn failing(exe String&, files Array<String&>&, bin String&, compiler String&, std String&) Array<String&> {
     bad mut Array<Bool>& = Array<Bool>(files.Len(), false)
     next mut Array<I64>& = Array<I64>(1, 0)
     join {
-        for _ in range CheckWidth.Min(files.Len()): spawn checker(exe, files, next, bad)
+        for _ in range CheckWidth.Min(files.Len()): spawn checker(exe, files, next, bad, bin, compiler, std)
     }
     out Vec<String&>
     for i in range files.Len() {
@@ -282,12 +282,32 @@ fn failing(exe String&, files Array<String&>&) Array<String&> {
 
 CheckWidth I64 = 4
 
-fn checker(exe String&, files Array<String&>&, next mut Array<I64>&, bad mut Array<Bool>&) {
+fn checker(exe String&, files Array<String&>&, next mut Array<I64>&, bad mut Array<Bool>&, bin String&, compiler String&
+    std String&) {
     for {
         k := next[0].AtomicAdd(1)
         if k >= files.Len(): return
-        bad[k] = not compiles(exe, files[k])
+        bad[k] = not verdict(exe, files[k], bin, compiler, std)
     }
+}
+
+# whether a file compiles, remembered in the cache (B17) as a marker named by the hash of the compiler, std and the texts
+# of the file and the modules it imports but std's: a file none of whose texts a tool has changed since is not compiled
+# again by the next fix
+fn verdict(exe String&, file String&, bin String&, compiler String&, std String&) Bool {
+    parts Vec<String&>
+    parts.Push(compiler)
+    parts.Push(std)
+    seen Map<String, Bool>
+    closure(file, seen, parts)
+    key := filepath.Join(bin, "compiles-" + $build.HashOf(parts)[0:16])
+    if os.Exists(key) {
+        build.Touch(key)
+        return true
+    }
+    ok := compiles(exe, file)
+    if ok: try os.WriteFile(key, "") catch os.Error { }
+    return ok
 }
 
 # whether the compiler builds a file's module (its tests included) with no error, -quick, into a directory of its own
@@ -365,7 +385,7 @@ fn run(files Array<String&>&, before Vec<String&>&, exe String&, std String&, sa
     for t in Order() {
         if driven(ToolKinds[t]) and not driving {
             driving = true
-            given = failing(exe, files)
+            given = failing(exe, files, bin, compiler, lib)
             if timed: said.Write("olang fix: " + $given.Len() + " of " + $files.Len() + " files the compiler reports an error in\n")
         }
         if given.Len() == 0 or not triggered(ToolTriggers[t], textsOf(given)): continue

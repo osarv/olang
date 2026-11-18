@@ -39605,3 +39605,10 @@ e31esetatfixed reworded from the false "declares At but not SetAt"). Overlaps: a
 `At(i, j)` and a variadic one never meet; an item written `:` or `...` is a Slice (E16f), never an At. Corpus:
 tests/axes.olang's Grid (stores, compound stores, an increment, an index with an effect evaluated once, nested in a
 Vec), with a top-level assert the evaluator decides.
+
+**`olang fix`: remembered compile verdicts (B17, 2026-11-18; wt-fixcache).** The tool programs were already cached and
+trigger-filtered; what remained on a warm run (about 210 s of 230 on a copy of oann, 121 files) was `failing`, which
+compiled every file alone to find those the driven tools act on. A file that compiles is now remembered in the `fix`
+cache as a `compiles-KEY` marker, KEY the hash of the compiler, std and the texts of the file and the modules it imports
+beside it; a second `olang fix .` over oann dropped from ~210 s to ~22 s with an identical result. The evaluator and the
+built run agree on S1b's catch one-line body (`interp@tests/shared.olang` passes, 764 tests), so nothing changed there.
