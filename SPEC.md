@@ -4349,7 +4349,11 @@ operation the program writes is undefined (E6a, E8a, E16), it is a **compile-tim
 literal cases of E6a, E8a and E16 widened to the integers known while compiling as T7c's lengths are: a literal-only
 expression (E4a), an immutable global whose value folds (K2; a build constant as the build gives it, B10c), a `comptime
 for` copy's variable (K3a), and arithmetic on these - the same in every instance of the body it is written in, so not
-a by-value array's length (G29), which an instance of one length is often guarded against by what the others need. It
+a by-value array's length (G29), which an instance of one length is often guarded against by what the others need.
+For an index, a divisor and a shift amount (not a range's bounds) a **fixed** local (S8c) of an integer type whose
+initializer is itself known so - through other fixed locals included - is known too, its value its initializer's
+(`n := I64(0)` then `a[n + 4]`, `7 / n`): a local written anywhere in its function - in a loop, on one branch, after
+the read - is not, and a parameter never is. It
 is an error where
 
 - **an index** `base[index]` into an array whose length is known (T7c) is known, and outside `[0, base.Len())`

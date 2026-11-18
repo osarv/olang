@@ -1,0 +1,12 @@
+# check: fail error[E16h]: index 'n + 4' is 4, outside the array's 3 elements
+# also: help: index within 0 to 2, or write '.Get(i)' to have it checked where it runs
+# never: 'n + 2'
+# E16h: an index known through a fixed local (S8c) - a plain scalar declared with a value its function never writes -
+# outside an array of a known length is an error where it is written, as a literal one is; one inside is not
+fn pick() I64 {
+    a := Array<I64>(3, 0)
+    n := I64(0)
+    return a[n + 2] + a[n + 4]
+}
+
+fn main() { }

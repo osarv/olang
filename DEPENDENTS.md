@@ -72,7 +72,8 @@ a synchronisation (`Facts.Atomics`, `Blocks`), a type laid out or punned another
 `generic.olang`'s `FoldKnown` (through `check.olang`'s `knownInt`) decides T7c's lengths and E16h's proofs alike: widening
 what folds widens which indexes, divisors and shift amounts are errors - SPEC E16h's list, `tests/proven.olang` (what stays
 legal) and the checks cases `e16h*`. A way to cut a loop's turn short (`typed.CutsShort`) or a place an index is reached on
-every turn (`typed.EveryTurn`) is E16h's too.
+every turn (`typed.EveryTurn`) is E16h's too, and so is what makes a local fixed (S8c: `fixedInits`, `writes`, `noteWrite`),
+which `fixedInt` reads through.
 
 ## An operator or punctuation
 

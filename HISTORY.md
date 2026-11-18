@@ -39612,3 +39612,24 @@ compiled every file alone to find those the driven tools act on. A file that com
 cache as a `compiles-KEY` marker, KEY the hash of the compiler, std and the texts of the file and the modules it imports
 beside it; a second `olang fix .` over oann dropped from ~210 s to ~22 s with an identical result. The evaluator and the
 built run agree on S1b's catch one-line body (`interp@tests/shared.olang` passes, 764 tests), so nothing changed there.
+
+## 2026-11-18: E16h through fixed locals (wt-rangeloc)
+
+SPEC E16h said "any value known while compiling", but a value known only through a local was not decided:
+`n := I64(0); a[n + 4]` and `7 / n` built. The gap is closed by reusing S8c's fixed locals rather than a new
+analysis: a plain scalar declared with a value, which nothing in its function writes (an assignment, `++`/`--`, a
+writable borrow, an atomic, a spawn target - `noteWrite`), holds its initializer wherever it is read, which is already
+how an asked condition reads it. `fixedInt` takes the fixed locals an index, divisor or shift amount reads
+(`onlyFixed`), binds each integer one's folded initializer in a copy of the context's variables (a round per local, as
+one initializer may read another; a by-value array's length excluded as before) and folds the operand there with the
+program's typed fold, so `U8(255) + 1` is zero as the run time has it. Whether a local is written is known only once
+its body is checked - a write may come after the read, in a loop around it - so such an error is reported into a
+diagnostic group of its own (`provenErr`), chosen or dropped by `settleFixed` once every body is checked (dropped where
+the body writes a local it read). The group nests in a branch's group, so a branch the build does not take says
+nothing. Decided (mine): single definite assignment by S8c's rule only - "the latest assignment on every path" would
+need a reaching-definitions pass per function, and S8c's rule already serves conditions; range bounds (`for i in range
+n`) do not read locals, since their candidates are decided as the loop closes, before a later write is known. A scalar
+local cannot be written through a reference (T24), so no alias case arises. Linear: one walk of the operand and its
+initializers, only where an operand reads a local at all. Corpus: tests/proven.olang's `locals` (written in a loop, on
+a branch, after the read; known and in range), baked as a global and decided by an assert while compiling beside the
+run; checks: e16hlocalindex, e16hlocaldivisor, e16hlocalshift.

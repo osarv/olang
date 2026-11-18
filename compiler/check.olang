@@ -258,6 +258,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     rangeKnown Map<pair.Pair<I64, I64>, knownRange>  # E16h: (body, local): a for-in's variable over a range known here
     rangeNow knownRange = knownRange(0, -1, -1)      # ... the range being walked, while its variable is declared
     rangeIdx Vec<rangeIndex>                         # E16h: indices by such a variable, decided as their loop closes
+    fixedProofs Vec<fixedProof>                      # E16h: errors known through fixed locals (S8c), held until settled
+    fixedRead Vec<I64>                               # E16h: the fixed locals fixedInt last read
     exprs Vec<typed.Expr&>                # nodes being gathered into lists, nested lists on top
     stmts Vec<typed.Stmt&>
     atRecs Vec<atRec>                     # each x[i] read through At as a place: what writing back through it needs
@@ -798,6 +800,7 @@ fn (c mut Checker&) reset() {
     c.rangeExprs = Map<pair.Pair<I64, I64>, Bool>()
     c.rangeKnown = Map<pair.Pair<I64, I64>, knownRange>()
     c.rangeIdx = Vec<rangeIndex>()
+    c.fixedProofs = Vec<fixedProof>()
     c.exprs = Vec<typed.Expr&>()
     c.stmts = Vec<typed.Stmt&>()
     c.atRecs = Vec<atRec>()
@@ -959,6 +962,12 @@ fn (c mut Checker&) settleFixed() {
         }
     }
     c.AssertAsks.Truncate(k)
+    # E16h: an error known through fixed locals is said unless the body writes one of them after all
+    d := c.P.L.Diags
+    for p in c.fixedProofs {
+        if c.rewritten(p.Body, p.Fixed): d.Drop(p.Group)
+        else: d.Choose(p.Group)
+    }
 }
 
 # an asked if the build turned out not to decide (its condition reads a written local, or does not evaluate): checked
@@ -10426,6 +10435,59 @@ type rangeIndex struct(Loop I64, Sp source.Span, At source.Span, Text String, Va
     Len
 }
 
+# E16h: an error known through fixed locals (S8c) - its group, held until every body is checked; said unless its body
+# (Body) writes one of the locals (Fixed) it read after all
+type fixedProof struct(Body I64, Fixed Array<I64>&, Group I64) {
+    Body, Fixed, Group
+}
+
+# E16h: an integer x known through the fixed locals it reads (S8c), each an integer whose initializer folds - its value
+# as a Const, the locals read in fixedRead; -1 for none. Only a guess until settleFixed: a write found later undoes it
+fn (c mut Checker&) fixedInt(x ast.Expr&) types.TypeId {
+    marked := c.lastFixed.Len()
+    m := try c.onlyFixed(x) catch NotFixed default Map<source.NameId, I64>()
+    c.lastFixed.Truncate(marked)
+    if m.Len() == 0 or c.readsLength(x, 0): return types.TypeId(-1)
+    ctx := generic.Context(c.fr().Ctx.Mi, c.fr().Ctx.Owner)
+    for e in c.fr().Ctx.Vars: ctx.Vars.Put(e.Key, e.Value)
+    c.fixedRead.Clear()
+    for e in m: c.fixedRead.Push(e.Value)
+    # one initializer may read another: each round binds one more at least
+    for _ in range m.Len() {
+        if c.bindFixed(ctx, m) == 0: break
+    }
+    k := c.P.FoldKnown(ctx, x, c.i64())
+    return k if c.P.T.KindOf(k) == types.Kind.Const else types.TypeId(-1)
+}
+
+# fixedInt's round: each fixed local of m not bound yet whose initializer folds bound in ctx - how many were
+fn (c mut Checker&) bindFixed(ctx mut generic.Context&, m Map<source.NameId, I64>&) I64 {
+    grew I64 = 0
+    for e in m {
+        if ctx.Vars.Has(e.Key): continue
+        fi := try c.fixedInits.Get(pair.Pair(c.fr().Body, e.Value)) catch { return 0 }
+        if not c.isInt(fi.Ty) or c.readsLength(fi.Init, 0): return 0
+        k := c.P.FoldKnown(ctx, fi.Init, fi.Ty)
+        if c.P.T.KindOf(k) != types.Kind.Const: continue
+        ctx.Vars.Put(e.Key, k)
+        grew++
+    }
+    return grew
+}
+
+# E16h's error m at sp: said now where what is known is known from no local, else held until settleFixed (fixedProof)
+fn (c mut Checker&) provenErr(sp source.Span, m diagmsg.Msg, fixed Bool) {
+    if not fixed {
+        c.err(sp, m)
+        return
+    }
+    d := c.P.L.Diags
+    g := d.Hold()
+    c.err(sp, m)
+    d.EndHold()
+    c.fixedProofs.Push(fixedProof(c.fr().Body, c.fixedRead.ToArray(), g))
+}
+
 # E16h: an integer x is known to be while compiling, the same in every instance of the body it is in - a literal-only
 # expression, an immutable global's value, a comptime for's variable - as a Const; -1 for none. A by-value array's
 # length (G29) is not one: an instance of one length is often guarded by what the others need
@@ -10473,9 +10535,11 @@ fn (c mut Checker&) knownBounds(rargs Array<ast.Expr&>&) knownRange {
 # elements: an error where it is known (E16h), a candidate decided as the loop closes where it is a range's
 fn (c mut Checker&) provenIndex(x ast.Expr&, n I64, sp source.Span) {
     k := c.provenInt(x)
+    fixed := k < types.TypeId(0)
+    if fixed: k = c.fixedInt(x)
     if k >= types.TypeId(0) {
         v := c.P.T.ConstValue(k)
-        if v < 0 or v >= n: c.err(x.Span(), msgs.IndexProven(c.src(x.Span()), v, n))
+        if v < 0 or v >= n: c.provenErr(x.Span(), msgs.IndexProven(c.src(x.Span()), v, n), fixed)
         return
     }
     r := c.rangeOf(x, 0)
@@ -10548,17 +10612,19 @@ fn (c mut Checker&) provenAmount(op token.Tok, t types.TypeId, b ast.Expr&) Bool
     shift := op == token.Tok.Shl or op == token.Tok.Shr
     if not shift and op != token.Tok.Slash and op != token.Tok.Percent: return false
     k := c.provenInt(b)
+    fixed := k < types.TypeId(0)
+    if fixed: k = c.fixedInt(b)
     if k < types.TypeId(0): return false
     v := c.P.T.ConstValue(k)
     if not shift {
         if v != 0: return false
-        c.err(b.Span(), msgs.DivisorProven(c.src(b.Span())))
-        return true
+        c.provenErr(b.Span(), msgs.DivisorProven(c.src(b.Span())), fixed)
+        return not fixed
     }
     w := c.P.T.Bits(c.under(t))
     if v >= 0 and v < w: return false
-    c.err(b.Span(), msgs.ShiftProven(c.ty(t), c.src(b.Span()), v, w))
-    return true
+    c.provenErr(b.Span(), msgs.ShiftProven(c.ty(t), c.src(b.Span()), v, w), fixed)
+    return not fixed
 }
 
 # whether two expressions read the same name, or the same chain of fields, written twice (E16a's lo and lo + k)

@@ -331,6 +331,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   puts outside, where every turn reaches it (the body's top level, no condition; no break, continue, return, error,
   yield, passed-on try or ending in the body; the variable never assigned). Only the proven: nothing else is checked
   and no run-time check is added. Mine: the rule number, the turn-reaching condition, `x /= 0` now E6a's error too.
+  Through locals (2026-11-18, mine): an index, divisor or shift amount reading S8c's fixed locals (an integer declared
+  with a value its function never writes, its initializer known so too) is known; any write anywhere - a loop, a
+  branch, after the read - makes it unknown, and the error is held until the body is checked (`settleFixed`). Range
+  bounds do not read locals.
 - **Subscripts by axes, NumPy's (E16f, the user's "yes, do them" 2026-11-13, for ML; built 2026-11-13).** `m[0:2, :]`,
   `m[..., 1]`, `c[0, :, 1:]`: a range (`lo:hi`, either end off, bare `:`) or `...` among the items calls the type's
   `Slice` with one prelude `Axis` per item - `Index(i)`, `Range(lo, hi)` (an end off: 0, `I64.Max`), `Rest`; the

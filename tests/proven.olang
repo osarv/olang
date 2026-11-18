@@ -41,6 +41,32 @@ fn divide(x I64, d I64) I64 { return x / d if d != Zero else 0 }
 
 fn shifted(x I32) I32 { return x << Width }
 
+# a local whose value is not the same at every read is no value known: written in a loop, on one branch, or after the
+# read (a write found later in the body still counts); one known and in range is no error either
+fn locals(flag Bool) I64 {
+    a := Array<I64>(3, 0)
+    for i in range 3: a[i] = i + 1
+    n := I64(0)
+    total := 0
+    for _ in range 3 {
+        total += a[n]
+        n++
+    }
+    j := I64(0)
+    if flag: j = 1
+    if flag: total += 7 / j
+    d := I64(0)
+    for t in range 3 {
+        if t > 0: total += 6 / d
+        d = t + 1
+    }
+    w := I64(5)
+    return total + a[w - 3] + 9 / (w - 4) + (I32(1) << (w + 26))
+}
+
+Locals := locals(true)
+assert Locals == 6 + 7 + 9 + 3 + 9 + I64(I32.Min)
+
 Guarded := guarded(Array<F32>[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
 Pairs := pairs()
 
@@ -52,4 +78,5 @@ assert shifted(1) == I32.Min
 test "what is not proven stays legal, and runs as written" {
     assert guarded(Array<F32>[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]) == Guarded and pairs() == Pairs
     assert divide(9, 3) == 3 and shifted(1) == I32.Min
+    assert locals(true) == Locals and locals(false) == 6 + 9 + 3 + 9 + I64(I32.Min)
 }
