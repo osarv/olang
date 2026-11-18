@@ -311,3 +311,42 @@ fn voxelSum() I64 {
 
 # the compile-time evaluator agrees (K1, S17a): the same stores and reads, decided while compiling
 assert voxelSum() == 5 + 8 + (6 + 5 + 8)
+
+# a variadic At beside a SetAt of two indexes (E31e): x[i, j, ...] reads through At with any number, x[i, j] = v and a
+# compound store through x[i, j] - At's read, then SetAt's write-back - take two, each index evaluated once
+type Grid struct(d mut Array<I64>&, w I64, asked I64) {
+    d
+    w
+    asked
+}
+
+fn (g Grid&) At(i ...I64) I64 { return g.d[i[0] * g.w + i[1] + (i[2] if i.Len() > 2 else 0)] }
+fn (g mut Grid&) SetAt(i I64, j I64, v I64) { g.d[i * g.w + j] = v }
+fn (g mut Grid&) Ask() I64 {
+    g.asked++
+    return g.asked
+}
+
+fn gridSum() I64 {
+    g := Grid(Array<I64>(9), 3, 0)
+    g[1, 1] = 4
+    g[1, 1] += 3
+    g[2, 0]++
+    g[g.Ask(), 2] *= 5
+    g[0, 0] = g.asked
+    vs := Vec<Grid>()
+    vs.Push(Grid(Array<I64>(4), 2, 0))
+    vs[0][1, 0] += 9
+    return g[1, 1] + g[2, 0] + g[1, 1, 1] + g[0, 0] + vs[0][1, 0]
+}
+
+test Grid.At "a variadic At with a SetAt of two indexes" {
+    g := Grid(Array<I64>(9), 3, 0)
+    g[0, 2] = 2
+    g[0, 2] += 1
+    g[g.Ask(), 1] -= 4
+    assert g[0, 2] == 3 and g[0, 1, 1] == 3 and g[1, 1] == -4 and g.asked == 1
+    assert gridSum() == 7 + 1 + 0 + 1 + 9
+}
+
+assert gridSum() == 18

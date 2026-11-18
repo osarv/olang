@@ -1,0 +1,12 @@
+# check: fail error[E31e]: Box's SetAt takes 1 index, 2 written
+# E31e: a store through x[i, j] - read by a variadic At, written back by SetAt - gives SetAt both indexes: a SetAt of
+# one index is no write-back for it (it once took At's gathered array as its index). Write SetAt(i I64, j I64, v I64),
+# or SetAt(i ...I64, v I64)
+type Box struct(n I64) { n }
+fn (b Box&) At(i ...I64) I64 { return b.n }
+fn (b mut Box&) SetAt(i I64, v I64) { b.n = v }
+
+fn main() {
+    b := Box(1)
+    b[1, 2] += 3
+}

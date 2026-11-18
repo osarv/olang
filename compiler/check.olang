@@ -683,11 +683,15 @@ type weakPlace struct(At diag.Where, Label String, Key I64) {
     Key
 }
 
-type atRec struct(Body I64, Site I64, Base typed.Lvalue&, Of types.TypeId) {
+# N: the indexes written; Held: a variadic At's indexes, each in a hidden local, where SetAt takes them one by one
+# (E31e, variadicAt)
+type atRec struct(Body I64, Site I64, Base typed.Lvalue&, Of types.TypeId, N I64, Held Array<I64>&) {
     Body
     Site
     Base
     Of
+    N
+    Held
 }
 
 # ---- the program ----
@@ -17289,10 +17293,11 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Lvalue&, items Array<ast.E
             c.noIndex(sp, t, b.Type(), items.Len())
             return null
         }
-        call := c.invoke(sp, sp, m, c.read(sp, base), items, Array<typed.Expr&>(0))
+        vcall, held := c.variadicAt(sp, m, base, t, items)
+        call := vcall if vcall != null else c.invoke(sp, sp, m, c.read(sp, base), items, Array<typed.Expr&>(0))
         if typeOf(call) == types.UnknownT: return null
         site := c.site(typed.SiteKind.Temp, sp)
-        c.atRecs.Push(atRec(c.fr().Body, I64(site), base, t))
+        c.atRecs.Push(atRec(c.fr().Body, I64(site), base, t, items.Len(), held))
         return typed.Lvalue.Temp(sp, typeOf(call), call, site)
     }
     if items.Len() != 1 {
@@ -20170,6 +20175,56 @@ fn (c mut Checker&) zeroDecl(v ast.VarDecl&, nsp source.Span, t types.TypeId) ty
     return x, unsetCand(c.fr().Body, -1, g, noZero, ask, nsp, t, v.Field)
 }
 
+# E31e: x[i, j] read through a variadic At where the type's SetAt takes that many indexes each on its own: each index
+# held in a hidden local, in order, and the array made of them where the call is (packed), so a store through x[i, j]
+# (writeBack) gives them to SetAt as its own parameters; null and no locals where At is not variadic, SetAt takes the
+# indexes as At does, or one is "...a"
+fn (c mut Checker&) variadicAt(sp source.Span, m I64, base typed.Lvalue&, t types.TypeId, items Array<ast.Expr&>&) typed.Expr?&, Array<I64>& {
+    none := Array<I64>(0)
+    if c.P.T.SpreadAt(c.P.Sig(m)) < 0: return null, none
+    sm := c.roleMethod(t, "SetAt", items.Len() + 1)
+    if sm < 0 or c.P.T.SpreadAt(c.P.Sig(sm)) >= 0: return null, none
+    for it in items {
+        if it.IsSpread() or it.IsNamed(): return null, none
+    }
+    pts := c.paramsOn(m, base.Type())
+    held mut Array<I64>& = Array<I64>(items.Len())
+    pre mut Array<typed.Expr&>& = Array<typed.Expr&>(items.Len(), c.hole(sp))
+    for i in range items.Len() {
+        a := c.value(c.expr(items[i], c.indexParam(m, pts, i)), items[i].Span())
+        held[i] = c.hidden(a.Span(), typeOf(a))
+        c.stmts.Push(typed.Stmt.Let(a.Span(), typed.LocalId(I32(held[i])), a))
+        pre[i] = c.readLocal(a.Span(), held[i])
+    }
+    return c.invoke(sp, sp, m, c.read(sp, base), Array<ast.Expr&>(0), c.packed(sp, m, pts, pre)), held
+}
+
+# whether the x[i] of the record r reads through a variadic At given its indexes as one array (not held one by one)
+fn (c mut Checker&) gatheredAt(r I64) Bool {
+    a := c.atRecs[r]
+    if a.Held.Len() > 0: return false
+    m := c.roleMethod(a.Of, "At", a.N)
+    return m >= 0 and c.P.T.SpreadAt(c.P.Sig(m)) >= 0
+}
+
+# E31, E31e: no SetAt for a store into x[...] of n indexes on t (spelled ty) - one not of the operator's shape, one taking
+# another number of indexes, or none (through: the store reads the element by At and writes it back)
+fn (c mut Checker&) noSetAt(t types.TypeId, ty String&, osp source.Span, n I64, through Bool) {
+    if c.notOperator(t, "SetAt", osp, "'x[i] = v'", 2, true): return
+    m := c.P.MethodOf(t, c.P.L.Names.Intern("SetAt"))
+    if m < 0: m = c.P.MethodOf(t, c.P.L.Names.Intern("setAt"))
+    if m >= 0: c.err(osp, msgs.SetatIndexCount(ty, c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() - 2, n))
+    else if through: c.err(osp, msgs.WriteThroughAtNoSetat(ty))
+    else: c.err(osp, msgs.SetatUndeclared(ty))
+}
+
+# a call's arguments: the receiver recv, then a read of each hidden local in ix
+fn (c mut Checker&) withIndexes(recv typed.Expr&, ix Array<I64>&) Array<typed.Expr&>& {
+    out mut Array<typed.Expr&>& = Array<typed.Expr&>(ix.Len() + 1, recv)
+    for i in range ix.Len(): out[i + 1] = c.readLocal(recv.Span(), ix[i])
+    return out
+}
+
 # x[i] = v on a declared type: x.SetAt(i, v) (E31); false where x is an array, or the target no index
 fn (c mut Checker&) assignAt(sp source.Span, op token.Tok, target ast.Expr&, value ast.Expr&) Bool {
     match target {
@@ -20184,7 +20239,7 @@ fn (c mut Checker&) assignAt(sp source.Span, op token.Tok, target ast.Expr&, val
             m := c.roleMethod(dt, "SetAt", items.Len() + 1)
             if m < 0 {
                 osp := c.opAfter(target.Span(), 1)
-                if not c.notOperator(dt, "SetAt", osp, "'x[i] = v'", 2, true) { c.err(osp, msgs.SetatUndeclared(c.ty(base.Type()))) }
+                c.noSetAt(dt, c.ty(base.Type()), osp, items.Len(), false)
                 return true
             }
             # x[i] read through At (E31b): this SetAt on the copy, then x[i] written back
@@ -20773,6 +20828,9 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
     for ri >= 0 {
         tv := c.tempValue(at)
         args := c.callArgs(seqInner(tv))
+        # a variadic At's indexes, given SetAt one by one (variadicAt)
+        ix := c.atRecs[ri].Held
+        if ix.Len() > 0 and args.Len() > 0: args = c.withIndexes(args[0], ix)
         if args.Len() == 0 {
             c.gap(sp, "a store through an element read of this kind (E31b)")
             return true
@@ -20790,8 +20848,10 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
         of := c.atRecs[recs[l]].Of
         n := calls[l].Len() - 1
         sm := c.roleMethod(of, "SetAt", n + 1)
+        # a variadic At's indexes, gathered into one array, go on to a variadic SetAt only
+        if sm >= 0 and c.gatheredAt(recs[l]) and c.P.T.SpreadAt(c.P.Sig(sm)) < 0: sm = -1
         if sm < 0 {
-            if not c.notOperator(of, "SetAt", osp, "'x[i] = v'", 2, true) { c.err(osp, msgs.WriteThroughAtNoSetat(c.ty(of))) }
+            c.noSetAt(of, c.ty(of), osp, c.atRecs[recs[l]].N, true)
             if value != null: c.expr(value, types.UnknownT)
             return true
         }
@@ -20891,7 +20951,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
         rm := c.inPlace(c.atRecs[recs[l]].Of, hs.Len(), elTys[l])
         inplace[l] = rm >= 0
         am := rm if rm >= 0 else c.roleMethod(c.atRecs[recs[l]].Of, "At", hs.Len())
-        el := c.invoke(sp, sp, am, c.read(sp, base), Array<ast.Expr&>(0), reads)
+        el := c.invoke(sp, sp, am, c.read(sp, base), Array<ast.Expr&>(0), c.packed(sp, am, c.paramsOn(am, base.Type()), reads))
         t := c.hidden(sp, typeOf(el))
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(t)), el))
         temps[l] = t

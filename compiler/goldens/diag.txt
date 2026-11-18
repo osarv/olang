@@ -2208,10 +2208,19 @@ e31dcopyshape.olang:4:18: error[E31d]: this Copy has the wrong shape
 e31dcopyshape.olang:4:18: note: Copy takes nothing but its receiver, read through a read-only reference, gives a new tree and cannot fail
 e31dcopyshape.olang:4:18: help: write 'fn (x tree&) Copy() tree'
 compilation failed with 1 error
+=== e31esetatcount.olang
+e31esetatcount.olang:11:13: error[E31e]: Box's SetAt takes 1 index, 2 written
+   11 |     b[1, 2] += 3
+      |             ^~
+e31esetatcount.olang:11:13: note: a store into x[i, j], or through it, gives SetAt every index written, then the value
+e31esetatcount.olang:11:13: help: write one index per parameter, or declare 'SetAt(i ...I64, v E)'
+compilation failed with 1 error
 === e31esetatfixed.olang
-e31esetatfixed.olang:9:13: error[E31]: Box declares At but not SetAt, which x[i] = v calls
+e31esetatfixed.olang:9:13: error[E31e]: Box's SetAt takes 1 index, 2 written
     9 |     b[1, 2] = 3
       |             ^
+e31esetatfixed.olang:9:13: note: a store into x[i, j], or through it, gives SetAt every index written, then the value
+e31esetatfixed.olang:9:13: help: write one index per parameter, or declare 'SetAt(i ...I64, v E)'
 compilation failed with 1 error
 === e31esetslicecount.olang
 e31esetslicecount.olang:8:6: error[E16f]: Grid's SetSlice takes 2 axes, 3 written

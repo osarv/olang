@@ -39582,3 +39582,26 @@ text calls it - to join the value inside, write '$(...)'"; since, it read `E13b:
 naming no way out. The rule stays; the checker now remembers the callee of a call "$" renders whose `(` is written
 apart (check.olang callApart), and where that callee is no function says E11b at the `(`, with E13b as the note and
 `$(...)` as the help (checks/cases/e11bparenafterpiece.olang).
+
+### 2026-11-18, a variadic At beside a fixed SetAt (E31e)
+
+oann's tensor wanted `t[i, j]` on a rank-N type with a variadic `At(idx ...I64)` (repro oann repro/variadicat.olang).
+Reads and plain stores already worked since E31e (2026-11-15): the repro passed on master, its "E31" status was stale.
+What did not: a compound store or increment through `x[i, j]` with a variadic `At` and a `SetAt(i, j, v)` of a fixed
+number. The write-back (check.olang writeBack) took SetAt's index count from At's call, whose arguments were the
+receiver and the one gathered array, so it looked for a SetAt of one index: with none it said "declares At but not
+SetAt" (false - it does), and with a `SetAt(i, v)` it passed the array as the index (E12, "expected I64, found
+Array<I64>&"). SPEC had written the gap down as a rule ("needs both declared in the same form"); it was a gap, not a
+design, and it is gone: one rule composes - a store takes the number of indexes SetAt takes, whichever form At has.
+
+How: where At is variadic and the type's SetAt takes the written number of indexes on their own (variadicAt), each
+index is held in a hidden local in written order and At's array made of reads of them (packed); the atRec records the
+locals (Held) and the count written (N), and the write-back gives SetAt a read of each - so every index is evaluated
+once, the read and the write-back see the same values. A variadic At with no such SetAt keeps the gathered array, and
+the write-back then takes only a variadic SetAt (gatheredAt), so a fixed SetAt of another count is no longer handed
+the array. The error for a SetAt of the wrong count is new: SetatIndexCount, E31e, "Box's SetAt takes 1 index, 2
+written", help "write one index per parameter, or declare 'SetAt(i ...I64, v E)'" (checks/cases e31esetatcount,
+e31esetatfixed reworded from the false "declares At but not SetAt"). Overlaps: a type declares one At (M21), so a fixed
+`At(i, j)` and a variadic one never meet; an item written `:` or `...` is a Slice (E16f), never an At. Corpus:
+tests/axes.olang's Grid (stores, compound stores, an increment, an index with an effect evaluated once, nested in a
+Vec), with a top-level assert the evaluator decides.

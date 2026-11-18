@@ -660,6 +660,7 @@ type Diag enum {
     SliceNeedsLen
     AtUndeclared
     SetatUndeclared
+    SetatIndexCount
     WriteThroughAtNoSetat
     WriteThroughAtBuilds
     CondLentWritable
@@ -1695,6 +1696,7 @@ fn IsAsNotEnum(ty String&) r.Msg { return r.Msg(Diag.IsAsNotEnum, "E32", "'as' a
 fn SliceNeedsLen(ty String&) r.Msg { return r.Msg(Diag.SliceNeedsLen, "E31", "a slice with no end runs to Len(), and " + $ty + " has none") }
 fn AtUndeclared(ty String&) r.Msg { return r.Msg(Diag.AtUndeclared, "E31", $ty + " declares SetAt but not At, which reading x[i] calls") }
 fn SetatUndeclared(ty String&) r.Msg { return r.Msg(Diag.SetatUndeclared, "E31", $ty + " declares At but not SetAt, which x[i] = v calls") }
+fn SetatIndexCount(ty String&, have I64, n I64) r.Msg { return r.Msg(Diag.SetatIndexCount, "E31e", $ty + "'s SetAt takes " + $have + (" index" if have == 1 else " indexes") + ", " + $n + " written", "a store into x[i, j], or through it, gives SetAt every index written, then the value", "write one index per parameter, or declare 'SetAt(i ...I64, v E)'") }
 fn WriteThroughAtNoSetat(ty String&) r.Msg { return r.Msg(Diag.WriteThroughAtNoSetat, "E31", "this writes through x[i] on " + $ty + ", which declares At but not SetAt", "the copy At gives back is never written back", "declare SetAt") }
 fn WriteThroughAtBuilds() r.Msg { return r.Msg(Diag.WriteThroughAtBuilds, "E31, O17", "x[i] gives a copy, and the call can build into what it holds", "it builds where the copy is", "hold the elements by reference, or take it in place ('x.RefMut(i)')") }
 fn CondLentWritable() r.Msg { return r.Msg(Diag.CondLentWritable, "E28", "this call would write a copy of what a conditional or a match chose", "a conditional or a match gives a copy of the value it chooses, which the call writes and drops", "call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference") }

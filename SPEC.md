@@ -4810,9 +4810,12 @@ indexes and nothing else. The `SetAt` of a type takes the **value as its last pa
 one parameter that may follow it (D8g); a `SetAt` with its variadic parameter anywhere else is an error naming that.
 Everything else is as for a fixed number of indexes: the indexes are evaluated left to right and then the value (S4); a
 compound store `t[i, j] += v` and an increment read through `At` and store through `SetAt` with the place held once
-(E31b), which needs both declared in the same form - a variadic `At` with a `SetAt` of a fixed number of indexes is the
-operator for that many only; either may declare errors (E31a); `t.At(i, j)` called by name gathers its arguments as
-any call does (D8g). The operators are named by their roles, so the private spellings `at` and `setAt` do likewise
+(E31b), each index evaluated once. The two need not be declared in the same form: a variadic `At` beside a `SetAt` of a
+fixed number of indexes reads `t[i]`, `t[i, j, k]` with any number, and stores - `t[i, j] = v` and through `t[i, j]`
+alike - with exactly the number `SetAt` takes, each index then given `SetAt` as its own argument; a store of another
+number is a compile-time error naming both counts. Either may declare errors (E31a); `t.At(i, j)` called by name
+gathers its arguments as any call does (D8g). A type declares one `At` (M21), so a fixed `At(i, j)` and a variadic one
+never meet; an item written `:` or `...` makes the subscript a `Slice` (E16f), never an `At`. The operators are named by their roles, so the private spellings `at` and `setAt` do likewise
 (M6b).
 
 A store into a slice - `x[lo:hi, :] = v`, `x[..., 0] = v`, and `x[lo:hi] = v` where the type declares a `SetSlice` taking `Axis` values - is the call

@@ -468,7 +468,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   decision 2026-10-25)** after an operator's result lets `2.0 * v` call `v.Mul(2.0)`. A store through `x[i]` uses
   `SetAt` (E31b). **Any number of indexes (E31e, 2026-11-15, for oann's rank-N Tensor)**: `At(i ...I64)` and `SetAt(i ...I64,
   v T)` are the operators for `x[i]`, `x[i, j]`, `x[i, j, k]` ... (the indexes the variadic array, nothing allocated); a
-  SetAt's value is its last parameter, after the variadic one (the one parameter D8g lets follow it). **`SetSlice`
+  SetAt's value is its last parameter, after the variadic one (the one parameter D8g lets follow it). A variadic At
+  beside a SetAt of a fixed number of indexes (2026-11-18): reads take any number, stores and compound stores through
+  `x[i, j]` exactly SetAt's, each index given SetAt on its own and evaluated once; another number is E31e naming both. **`SetSlice`
   (E31e)**: a store into a slice, `x[0:2, :] = v`, calls `SetSlice(axes ...Axis, v)` (or one `Axis` per axis, then the
   value); none declared keeps E16a's error, which names it. No user-declared operator symbols; `==` and `$` overridable only by `Eq`/`Str`.
 - **Several results, no tuples (D8c/D8d, the user's call).** `return a, b`, `q, r := f()`, `f(g())`; `Pair<A, B>` in
