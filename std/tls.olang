@@ -177,13 +177,18 @@ test "a session to a server whose certificate is trusted and names the host carr
     dir := try os.MkTemp("build", "tls")
     assert os.Run("openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=localhost -addext subjectAltName=DNS:localhost -keyout " + dir + "/k.pem -out " + dir + "/c.pem 2>/dev/null") == 0
     port := try freePort()
-    srv := try os.Process.Start("openssl", "s_server", "-www", "-accept", $port, "-cert", dir + "/c.pem", "-key", dir + "/k.pem")
+    # a wall-clock limit (timeout) ends the server even if this test dies
+    cmd := "exec timeout 60 openssl s_server -www -naccept 8 -accept " + $port + " -cert " + dir + "/c.pem -key " + dir + "/k.pem"
+    srv := try os.Process.Start("sh", "-c", cmd)
+    defer {                                                                # on every exit, a failed assert included
+        srv.Kill()
+        try srv.Wait() catch { }
+        os.Run("pkill -f 's_server.*-accept " + $port + " ' 2>/dev/null")
+    }
     first := firstLine("localhost", port, dir + "/c.pem")
     assert first == "HTTP/1.0 200"
     assert firstLine("localhost", port, "") == "verify"                    # a certificate nothing trusts
     assert firstLine("127.0.0.1", port, dir + "/c.pem") == "verify"        # trusted, but not for this name
-    srv.Kill()
-    try srv.Wait()
     try os.RemoveAll(dir)
 }
 
