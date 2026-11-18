@@ -19,7 +19,7 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 | local (WSL, GPU) | oagent wt-e2settle | e2 settling arm (dyn) | 2026-11-18 |
 - OLang Cloud (2026-11-18): olang wt-diagshort - error rows over 120 chars split into headline + note/help
 - e7 research (cloud, 2026-11-18): oagent experiments/e7-memory - hybrid core: RLS/gated-delta memory + Hopfield step in the energy (mod-5, MQAR); branches wt-e7*
-- e4-amortize cloud session (2026-11-18): oagent experiments/e4-amortize, oann wt-amortize - amortized settling (settling-niche 2.1): predictor z0 + Anderson baseline
+- e4-amortize cloud session (2026-11-18): done - oagent d12ddae (experiments/e4-amortize); no oann changes
 - e6 research (cloud, 2026-11-18): oagent experiments/e6-gradients - gradient estimators at the fixed point on dyn (implicit, JFB, EP, holomorphic EP); branches wt-e6*
 - research cloud e5 (session_01DLX3U...UW, 2026-11-18): oagent experiments/e5-depth (wt-e5depth) - adaptive depth: settling core vs looped baseline on parity/counting/reachability/addition, length generalization
 - e8-local cloud session (2026-11-18): oagent experiments/e8-local - three-factor local rules (eligibility x neuromodulator, EP nudge as global signal) vs EP and exact gradient on dyn MNIST, then a distal-reward task
