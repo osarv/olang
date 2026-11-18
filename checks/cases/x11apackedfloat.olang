@@ -1,4 +1,4 @@
-# check: fail error[X11a]: Sample is packed and holds a float, so it crosses to C by reference only - write 'Sample&'
+# check: fail error[X11a]: Sample is packed and holds a float
 # X11a: a packed struct crosses by value only as integer bits - C passes a packed float its own way
 type Sample packed struct(tag U4, v F32) { tag, v }
 extern {

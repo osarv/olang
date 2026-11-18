@@ -1,4 +1,4 @@
-# check: fail error[M19g]: 'v' may grow here while a task holds a view of it - give the task a copy: 'v.ToArray()'
+# check: fail error[M19g]: 'v' may grow here while a task holds a view of it
 # also: note: the task holding a view of 'v' is started here
 # M19g: a task given a view holds it until its join - the Vec growing before the join may replace what the task reads
 fn look(d Array<I64>&) I64 { return d[0] }

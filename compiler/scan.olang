@@ -82,8 +82,8 @@ fn (d Diag) Message() String {
         case LexError.NonAscii: "non-ASCII byte - olang source is ASCII"
         case LexError.NulByte: "NUL byte in the source - is this a text file?"
         case LexError.CarriageReturn: "carriage return - save the file with LF line endings"
-        case LexError.Semicolon: "olang has no ';' - a statement ends where its line does; put the next one on a line of its own"
-        case LexError.CommaEndsLine: "a comma never ends a line - items on different lines are separated by the line break; remove it"
+        case LexError.Semicolon: "olang has no ';'"
+        case LexError.CommaEndsLine: "a comma never ends a line"
         case LexError.UnclosedComment: "unterminated block comment - '##' closes it"
         case LexError.UnclosedString: "unterminated string literal"
         case LexError.StringNewline: "string literal not closed on its line - write \\n for a newline"
@@ -95,7 +95,7 @@ fn (d Diag) Message() String {
         case LexError.BadHexEscape: "'\\x' needs two hexadecimal digits, as \\x41"
         case LexError.BadUnicodeEscape: "'\\u' needs one to six hexadecimal digits in braces, as \\u{1F600}"
         case LexError.BadCodePoint: "a Unicode code point is at most 10FFFF and no surrogate (D800-DFFF)"
-        case LexError.WideCharEscape: "a character literal holds one byte - \\u{...} there is below 80; write the text in \"\""
+        case LexError.WideCharEscape: "a character literal holds one byte, and \\u{...} there is below 80"
         case LexError.RawUnclosed: "unterminated raw text - '\"\"\"' closes it"
         case LexError.RawAfterOpen: "raw text across lines begins on the line after its '\"\"\"' - move this to the next line"
         case LexError.RawCloseNotAlone: "the closing '\"\"\"' of raw text across lines stands on a line of its own"
@@ -107,6 +107,25 @@ fn (d Diag) Message() String {
         case LexError.DigitSeparator: "'_' in a number must stand between two digits"
         case LexError.PointNoDigit: "a decimal point needs a digit after it"
         case LexError.TwoPoints: "a number has at most one decimal point"
+    }
+}
+
+# why a lexical error is one, where its message does not say it
+fn (d Diag) Note() String {
+    return match d.Kind {
+        case LexError.Semicolon: "a statement ends where its line does"
+        case LexError.CommaEndsLine: "items on different lines are separated by the line break"
+        case _: ""
+    }
+}
+
+# what to write instead, where the message does not say it
+fn (d Diag) Help() String {
+    return match d.Kind {
+        case LexError.Semicolon: "put the next statement on a line of its own"
+        case LexError.CommaEndsLine: "remove it"
+        case LexError.WideCharEscape: "write the text in \"\""
+        case _: ""
     }
 }
 

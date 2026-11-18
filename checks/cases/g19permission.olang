@@ -1,4 +1,4 @@
-# check: fail S does not satisfy the constraint Filler on T: it has no method Fill that fits
+# check: fail S does not satisfy the constraint Filler on T
 # G19/T25b: a method writing through a parameter its trait only lets it read does not meet the trait - said where the
 # type is bound, not inside the generic code calling it
 type Node struct(v I32) { v }

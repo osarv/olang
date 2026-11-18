@@ -1,4 +1,4 @@
-# check: fail error[T7e]: Columns<Pos> takes a record for its rows, and Pos has a constructor that checks or fails
+# check: fail error[T7e]: Columns<Pos> takes a record for its rows
 # T7e: a constructor that checks what it is given keeps no promise once a column is written element by element
 type Pos struct(n I64) ? {
     if not n >= 0: error ArgumentError.Invalid("Pos: n >= 0")

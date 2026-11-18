@@ -1,4 +1,4 @@
-# check: fail error[S18c]: this assertion is false, evaluated while compiling
+# check: fail error[S18c]: this assertion is false: field Cells (Array<I64>) has no order - ByFields compares numbers, Bool, Char, a type with Less, and structs and enums by their fields
 # also: field Cells (Array<I64>) has no order - ByFields compares numbers, Bool, Char, a type with Less, and structs and enums by their fields
 # also: note: instantiated here, with F = FieldInfo<Row, 0, 1>, V = Array<I64>
 # also: compilation failed with 1 error

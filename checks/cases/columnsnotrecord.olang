@@ -1,4 +1,4 @@
-# check: fail error[T7e]: Columns<Q> takes a record for its rows, and Q has a field its constructor computes
+# check: fail error[T7e]: Columns<Q> takes a record for its rows
 # T7e: a Columns' row type is a record - a struct whose constructor declares exactly its fields, each a parameter
 # written bare. A computed field would go stale as soon as a column is written element by element
 type Q struct(x F32) {

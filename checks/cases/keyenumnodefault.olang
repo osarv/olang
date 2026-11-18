@@ -1,4 +1,4 @@
-# check: fail error[S18c]: this assertion is false, evaluated while compiling: json.Decode: Account's parameter Name is in no case of Account.Json, and has no default to take
+# check: fail error[S18c]: this assertion is false: json.Decode: Account's parameter Name is in no case of Account.Json, and has no default to take
 # D4a, json: a field its key enum leaves out is read back as its default; one with no default cannot be built, an error
 # while compiling at the decode
 import "std/json"

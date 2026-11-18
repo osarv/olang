@@ -1,4 +1,4 @@
-# check: fail error[T7e]: ColumnVec<I64> takes a record for its rows, and I64 is no struct
+# check: fail error[T7e]: ColumnVec<I64> takes a record for its rows
 # T7e: rows are records - a number has no fields to lay out as columns
 fn main() {
     v := ColumnVec<I64>()

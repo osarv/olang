@@ -1,15 +1,15 @@
-# check: fail error[S18c]: this assertion is false, evaluated while compiling: I33
-# also: this assertion is false, evaluated while compiling: U33
-# also: this assertion is false, evaluated while compiling: I40
-# also: this assertion is false, evaluated while compiling: U40
-# also: this assertion is false, evaluated while compiling: I48
-# also: this assertion is false, evaluated while compiling: I53
-# also: this assertion is false, evaluated while compiling: I63
-# also: this assertion is false, evaluated while compiling: U63
-# also: this assertion is false, evaluated while compiling: I64
-# also: this assertion is false, evaluated while compiling: I65
-# also: this assertion is false, evaluated while compiling: U100
-# also: this assertion is false, evaluated while compiling: I128
+# check: fail error[S18c]: this assertion is false: I33
+# also: this assertion is false: U33
+# also: this assertion is false: I40
+# also: this assertion is false: U40
+# also: this assertion is false: I48
+# also: this assertion is false: I53
+# also: this assertion is false: I63
+# also: this assertion is false: U63
+# also: this assertion is false: I64
+# also: this assertion is false: I65
+# also: this assertion is false: U100
+# also: this assertion is false: I128
 # T4a, K1: the evaluator computes every width exactly - each assert says the digest is not the one the built program
 # computes (tests/intsweep.olang), so each is decided false while compiling only where the evaluator agrees with it
 # (it once computed I33 to I63 as I64s, the second bulk review's F1)

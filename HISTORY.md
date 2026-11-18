@@ -39612,3 +39612,13 @@ compiled every file alone to find those the driven tools act on. A file that com
 cache as a `compiles-KEY` marker, KEY the hash of the compiler, std and the texts of the file and the modules it imports
 beside it; a second `olang fix .` over oann dropped from ~210 s to ~22 s with an identical result. The evaluator and the
 built run agree on S1b's catch one-line body (`interp@tests/shared.olang` passes, 764 tests), so nothing changed there.
+
+## 2026-11-18: diagnostics split into headline, note and help (B11; the user's call 2026-11-13; wt-diagshort)
+
+Error rows over 120 characters in compiler/goldens/diag.txt went from 132 to 12 (over 100: 466 to 329). About 110 messages
+in compiler/msgs.olang keep a headline of roughly 80 characters naming the rule and what is wrong; the reason moved to
+the `note:` row and the fix ("write X instead") to `help:`, nothing dropped. The scanner's long messages (L18, L18a, L13/L15)
+do the same through `Diag.Note()` and `Diag.Help()` in scan.olang, passed on by load and fmt; `NoSuchMember` splits the C2a
+constructor-parameter hint; `VariadicHere` takes its fix as a second argument. An assert's message now follows "this assertion
+is false:" with "evaluated while compiling" on a note. The 12 left are an assert's own message text (std's) and G38/T22b rows
+whose text is built from names. The `# check: fail` / `# also:` expectations of 125 checks/cases lines follow the new headlines.

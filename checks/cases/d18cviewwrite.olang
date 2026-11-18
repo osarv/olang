@@ -1,4 +1,4 @@
-# check: fail error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
+# check: fail error[T25b]: this writes through a read-only reference
 # D18c: a generator's borrowed elements are read-only views
 type Node struct(v I64) { v }
 

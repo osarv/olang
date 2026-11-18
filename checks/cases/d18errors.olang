@@ -1,4 +1,4 @@
-# check: fail error[D18]: a generator fails as its Next does - write its errors in its result: 'Iterator<I64 ? E>'
+# check: fail error[D18]: a generator fails as its Next does
 # D18: a generator's errors are written in its result, Iterator<T ? E>
 type Bad error { No }
 

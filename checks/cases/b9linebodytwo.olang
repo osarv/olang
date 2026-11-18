@@ -1,4 +1,4 @@
-# check: fail error[S1b]: a top-level branch's one-line body is one declaration on the line of its ':' - write a block, '{ ... }'
+# check: fail error[S1b]: a top-level branch's one-line body is one declaration
 # B9, S1b: a top-level one-line branch holds one declaration on its line
 Debug Bool = true
 if Debug: fn f() I64 {

@@ -262,7 +262,7 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool, c Bool = f
     m.Toks = scan.Tokens.Scan(m.Src!.Text)
     for d in m.Toks!.Diags {
         line := d.Start
-        l.Diags.Error(diag.Where.Span(m.File, I64(line), I64(d.End)), diagmsg.Msg(msgs.Diag.UnknownChar, d.Rule(), d.Message()))
+        l.Diags.Error(diag.Where.Span(m.File, I64(line), I64(d.End)), diagmsg.Msg(msgs.Diag.UnknownChar, d.Rule(), d.Message(), d.Note(), d.Help()))
     }
     l.prescan(m)
     m.Oracle = parse.Oracle()

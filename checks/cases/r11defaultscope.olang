@@ -1,4 +1,4 @@
-# check: fail error[R11, O25]: a reference default lives where the call's result does
+# check: fail error[R11, O25]: a reference default must live where the call's result does
 # R11, O25g: a default given where something can be stored through the result lives exactly where the result does -
 # here 'd' is one of two blocks' storage, and the result is built in this one, so a write through 'm' could store into
 # either

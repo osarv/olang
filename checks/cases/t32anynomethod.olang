@@ -1,4 +1,4 @@
-# check: fail any aShape& has no method 'Side' - an 'any' is used through its trait's methods alone
+# check: fail note: an 'any' is used through its trait's methods alone
 # T32b: run-time trait values
 type aShape trait {
     Area() I64

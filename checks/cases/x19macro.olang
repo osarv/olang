@@ -1,4 +1,4 @@
-# check: fail error[X19]: the C import has no olang form of 'stdout': a variable
+# check: fail error[X19]: the C import has no olang form of 'stdout'
 # X18, X19: what a C import cannot declare - here an extern variable - is an error where it is used, saying why
 import s "stdio.h"
 

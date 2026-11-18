@@ -1,4 +1,4 @@
-# check: fail error[S18c]: this assertion is false, evaluated while compiling
+# check: fail error[S18c]: this assertion is false: a BitSet is over cases that carry no payload
 # also: a BitSet is over cases that carry no payload
 # also: bitsetpayloadlater.olang:13:10: error[S18c]
 # also: compilation failed with 1 error

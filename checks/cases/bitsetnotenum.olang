@@ -1,4 +1,4 @@
-# check: fail error[S18c]: this assertion is false, evaluated while compiling
+# check: fail error[S18c]: this assertion is false: a BitSet is over an enum's cases
 # also: a BitSet is over an enum's cases
 # also: compilation failed with 1 error
 # also: bitsetnotenum.olang:10:10: error[S18c]

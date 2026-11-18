@@ -1,4 +1,4 @@
-# check: fail error[S17a]: this top-level assert is false, decided while compiling: 3 sizes, 4 names
+# check: fail error[S17a]: this top-level assert is false: 3 sizes, 4 names
 # S17a: a false top-level assert says its message, computed while compiling
 Sizes Array<I64> = Array<I64>[1, 2, 3]
 Names Array<String&> = Array<String&>["a", "b", "c", "d"]

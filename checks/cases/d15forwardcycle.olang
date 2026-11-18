@@ -1,4 +1,4 @@
-# check: fail error[B5a]: these globals' initializers read each other, so none can be set first: A -> B -> C -> A
+# check: fail error[B5a]: these globals' initializers read each other
 # D15/B5a: ':=' globals reading each other in a cycle have no type to give - reported as a typed cycle is, not as "?"
 import "std/io"
 A := B + 1

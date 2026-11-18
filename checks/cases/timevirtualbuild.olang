@@ -1,4 +1,4 @@
-# check: fail error[S18c]: this assertion is false, evaluated while compiling: time.Virtual runs only in a test build ('olang test')
+# check: fail error[S18c]: this assertion is false: time.Virtual runs only in a test build ('olang test') - a program's clock is the real one
 # also: note: instantiated here
 # std/time: a virtual clock is for tests - called in a program, it is an error at the call's instance
 import "std/time"

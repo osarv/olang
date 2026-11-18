@@ -1,4 +1,4 @@
-# check: fail error[T17e]: 'From' makes a case from its raw value alone, and Shape's case 'Round' carries a payload
+# check: fail error[T17e]: 'From' cannot make Shape's case 'Round'
 type Shape enum U8 {
     Dot
     Round(r F64)

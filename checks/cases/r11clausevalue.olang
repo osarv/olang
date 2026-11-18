@@ -1,4 +1,4 @@
-# check: fail error[R11]: a block's last value is not the clause's value - write '} default -1' after the block
+# check: fail error[R11]: a block's last value is not the clause's value
 # also: write '} default 0' after the block
 # never: a clause here leaves
 # never: error[S3]
