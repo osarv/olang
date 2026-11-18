@@ -18,4 +18,3 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 | local (WSL, GPU) | oann wt-gp8 | GP8 done: merged oann cca2b42 - views, stacks of products on the GPU; e2 trains 5-10x the CPU's | 2026-11-18 |
 | local (WSL, GPU) | oagent wt-e2settle | e2 settling arm (dyn) | 2026-11-18 |
 - OLang Cloud (2026-11-18): olang wt-diagshort - error rows over 120 chars split into headline + note/help
-- OLang Cloud (2026-11-18): oagent wt-actfn - EXPERIMENTS.md #2, activation functions vs tanh (CPU)
