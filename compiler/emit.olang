@@ -2539,15 +2539,19 @@ fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed 
 }
 
 # O43: what an exclusive parameter's pointer says (effects.Exclusive): that nothing else the call reaches reaches its
-# referent, which is there, aligned as its type is (no reference names a packed field, T13c), the whole call - "" for any
-# other
+# referent, which is there, aligned as its type is (no reference names a packed field, T13c), the whole call - and, with
+# mir.Alone, writable - "" for any other
 fn (e mut Emitter&) exclusive(p types.TypeId, excl I64, i I64) String {
     if i >= 62 or excl & (I64(1) << i) == 0 or e.ty(p) != "ptr": return ""
     r := e.T.Repr(e.T.Referent(p))
     e.P.Layout(r)
     n, a := e.T.Size(r), e.T.Align(r)
     if n <= 0: return " noalias"
-    return $" noalias dereferenceable" + $("_or_null" if e.T.IsNullable(p) else "") + "(" + $n + ")" + $(" align " + $a if a > 1 else "")
+    # (writable where no task can run beside the call, mir.Alone: LLVM may then store back bytes it loaded, as when it
+    # keeps the referent in registers through a loop and stores it at the loop's exits)
+    nullable := e.T.IsNullable(p)
+    w := " writable" if excl & mir.Alone != 0 and not nullable else ""
+    return $" noalias" + $w + " dereferenceable" + $("_or_null" if nullable else "") + "(" + $n + ")" + $(" align " + $a if a > 1 else "")
 }
 
 # what a definition says of its inlining: a collection's growth (typed.Body.Cold) never inlined and cold

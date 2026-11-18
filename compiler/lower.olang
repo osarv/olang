@@ -354,12 +354,16 @@ fn (lw Lowerer&) exclusiveFact(id I64) String {
 }
 
 # ...decided for every body, before any module's code is reused
+# (with mir.Alone where no task can run beside any call: effects.Alone)
 fn (lw mut Lowerer&) DecideExclusive() {
+    alone I64 = -1
     for id in range lw.Bodies.Len() {
         if lw.Bodies[id].Of != typed.BodyOf.Fn: continue
         if lw.fx == null: lw.fx = effects.Effects(lw.P, lw.Bodies)
         if lw.fx!.ExclusiveShapes(id) == 0: continue
-        lw.Exclusive.Put(id, lw.fx!.Exclusive(id))
+        if alone < 0: alone = mir.Alone if lw.fx!.Alone() else 0
+        mask := lw.fx!.Exclusive(id)
+        lw.Exclusive.Put(id, mask | alone if mask != 0 else 0)
         lw.P.Facts.Decide(lw.exclusiveFact(id), $(try lw.Exclusive.Get(id) catch default 0), false)
     }
 }
@@ -569,6 +573,9 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     tryRel I64 = -1                 # a try statement with clauses releasing its value on its success path (O8d): -1 not,
                                     # else 1 + the place's guard (free.Guard) << 2, 2 where the place is a part place
                                     # (free.PartPlace), and 0 the value or 1 the handle's state (free.IsHandle)
+    # O44: the slices, by span, whose bounds the versioned loop being lowered proved on entry (provenOn its fast copy)
+    proven Map<I64, Bool>
+    provenOn Bool = false
     walkSite typed.SiteId = typed.SiteId(-1)    # D18e: the generator call whose walk a for-in makes and finishes here
     # D9h: the call sites whose array value result is read where it stands - its consumer only reads it before
     # the statement ends - or handed back as it is by a return (a view of this body's arguments): a call of a function
@@ -1687,7 +1694,7 @@ fn (ln mut lowering&) runDefers(i I64, phase deferPhase) {
         # deferred code runs as a block of its own, inside the block it is registered in
         was := ln.heldDrop
         ln.heldDrop = ln.isDrop(k)
-        ln.block(ln.defers[k])
+        ln.deferred(k)
         ln.heldDrop = was
     }
     for k in mine: ln.deferAt[k] = lv.S
@@ -1765,6 +1772,15 @@ fn (ln lowering&) runsIn(k I64, phase deferPhase, joined Bool) Bool {
 # B3e: deferred code k, just registered, lowered once more as its cleanup - blocks nothing but the registration reaches
 # (Stmt.Deferred), ending in Resume - which interpret runs for each block a stop on what it does not run leaves, as the
 # built program, going on, would leave them. Lowered where it is registered: inside its block, nothing above it open
+# deferred code k lowered where it runs - registered outside any loop O44 versions (none registers one), so no slice of
+# it is among the proven ones, even one in a copy of that loop it holds
+fn (ln mut lowering&) deferred(k I64) {
+    on := ln.provenOn
+    ln.provenOn = false
+    ln.block(ln.defers[k])
+    ln.provenOn = on
+}
+
 fn (ln mut lowering&) cleanup(sp source.Span, k I64) {
     if ln.dead: return
     s := ln.deferAt[k]
@@ -1773,7 +1789,7 @@ fn (ln mut lowering&) cleanup(sp source.Span, k I64) {
     back := ln.cur
     ln.start(entry)
     ln.deferAt[k] = mir.ScopeId(-1)
-    ln.block(ln.defers[k])
+    ln.deferred(k)
     ln.deferAt[k] = s
     ln.end(mir.Term.Resume(sp))
     ln.start(back)
@@ -2283,9 +2299,31 @@ fn (ln mut lowering&) ifStmt(sp source.Span, i typed.If&) {
     ln.patch(ends)
 }
 
+# a loop (S9), versioned where O44 proves its slices' bounds on entry: the proven copy with those slices unchecked,
+# the other as written
+fn (ln mut lowering&) loop(sp source.Span, body typed.Block&, post typed.Block?&) {
+    fast := try ln.hoistChecks(body, post) catch {
+        ln.loopOnce(sp, body, post)
+        return
+    }
+    yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(fast, yes, no))
+    ends Vec<mir.BlockId>
+    ln.start(yes)
+    ln.provenOn = true
+    ln.loopOnce(sp, body, post)
+    ln.provenOn = false
+    ln.proven.Clear()
+    ln.leaveOpen(ends)
+    ln.start(no)
+    ln.loopOnce(sp, body, post)
+    ln.leaveOpen(ends)
+    ln.patch(ends)
+}
+
 # a loop (S9): its body a scope of its own each turn, entered at its head; a continue runs the post clause, then the
 # head again; a break leaves to after it
-fn (ln mut lowering&) loop(sp source.Span, body typed.Block&, post typed.Block?&) {
+fn (ln mut lowering&) loopOnce(sp source.Span, body typed.Block&, post typed.Block?&) {
     head := ln.F.NewBlock()
     ln.goto(head)
     ln.start(head)
@@ -2301,6 +2339,338 @@ fn (ln mut lowering&) loop(sp source.Span, body typed.Block&, post typed.Block?&
     }
     done := try ln.loops.Pop() catch { return }
     ln.patch(done.brk)
+}
+
+# ---- O44: slice bounds proven before a counted loop ----
+
+# O44: a loop whose slices are not proven, or a bound that is no start + step * k
+type notProven error {
+    Bound
+}
+
+# a bound as start + step * k, computed before the loop; Moves where the step can be other than 0
+type affineSum struct(A mir.Operand, B mir.Operand, Moves Bool) {
+    A
+    B
+    Moves
+}
+
+# a slice's span as one key
+fn spanKey(sp source.Span) I64 { return (I64(sp.Start) << 32) | I64(sp.End) }
+
+# what O44's walk of a counted loop found: its counter K; the locals the loop assigns; the value each local it declares
+# was given, as the walk reaches it; by span, whether every checked slice written there has bounds that move with K by
+# a step known on entry (on the second walk); and All, the Bool proving them all, computed before the loop
+type hoistWalk struct(K I64) {
+    K
+    emit Bool = false
+    ok Bool = true
+    assigned Map<I64, Bool>
+    env Map<I64, typed.Expr&>
+    spans Map<I64, Bool>
+    aliased Map<I64, Bool>              # the locals a reference may write: read through no step
+    all mir.Operand = mir.Operand.None
+    first mir.Operand = mir.Operand.None    # K on entry, the first turn's
+    n mir.Operand = mir.Operand.None        # the count less one, the last turn's K
+}
+
+# O44: a counted loop (B1.1: "for k in range" and "for x in a", its count n worked out before it, its counter k from 0
+# up by one) that calls nothing, starts no task, defers nothing and stores only scalars, whose checked slices' bounds are
+# lo + step * k with lo and step computed from what the loop does not change: each bound computed before the loop at
+# its first and last turn - linear there, with no wrapping, so between them too - and the slices' bounds tested once;
+# the Bool saying all of them hold for every turn (with the count under 2^31, the starts under 2^62 and the steps under
+# 2^31), and whether there is any such slice. Its copy then runs with them unchecked: what it does is what the checked
+# loop does, the checks it leaves out being ones that cannot fail
+fn (ln mut lowering&) hoistChecks(body typed.Block&, post typed.Block?&) mir.Operand ? notProven {
+    if ln.dead or ln.provenOn or post == null or not ln.B.Bounded.Has(body.Id) or body.Stmts.Len() == 0: error notProven.Bound
+    k, n := ln.countedBy(body, post)
+    if k < 0: error notProven.Bound
+    h := hoistWalk(k)
+    ln.hoistStmts(h, body.Stmts)
+    if not h.ok or h.assigned.Has(k) or h.assigned.Has(n): error notProven.Bound
+    sp := ln.B.Blocks[I64(body.Id)].Sp
+    count := ln.copyLocal(mir.LocalId(I32(n)))
+    h.first = ln.copyLocal(mir.LocalId(I32(k)))
+    h.n = ln.prim(typed.PrimOp.Sub, mir.I64T, Array<mir.Operand>[count, ln.constI64(1)], sp)
+    h.all = ln.prim(typed.PrimOp.Lt, types.BoolT, Array<mir.Operand>[count, ln.constI64(I64(1) << 31)], sp)
+    ln.hoistAll(h, ln.prim(typed.PrimOp.Ge, types.BoolT, Array<mir.Operand>[h.first, ln.constI64(0)], sp), sp)
+    h.emit = true
+    h.env.Clear()
+    u := typed.LocalUses.Uses(ln.T, ln.B)
+    for i in range u.Esc.Len() {
+        if u.Esc[i] or u.WrOther[i]: h.aliased.Put(i, true)
+    }
+    for a in u.AliasOf {
+        if a >= 0: h.aliased.Put(a, true)
+    }
+    ln.hoistStmts(h, body.Stmts)
+    found := false
+    for key in h.spans.Keys() {
+        if try h.spans.Get(key) catch default false {
+            ln.proven.Put(key, true)
+            found = true
+        }
+    }
+    if not found or not h.ok {
+        ln.proven.Clear()
+        error notProven.Bound
+    }
+    idle := ln.prim(typed.PrimOp.Le, types.BoolT, Array<mir.Operand>[count, h.first], sp)
+    return ln.prim(typed.PrimOp.BitOr, types.BoolT, Array<mir.Operand>[idle, h.all], sp)
+}
+
+# a counted loop's counter and count: its body first "if not (k < n) { break }", its post clause "k = k + 1" alone;
+# -1 for any other loop
+fn (ln mut lowering&) countedBy(body typed.Block&, post typed.Block&) I64, I64 {
+    if post.Stmts.Len() != 1: return -1, -1
+    k := match body.Stmts[0] {
+        case typed.Stmt.If(_, i): readLocalId(firstArg(firstArg(i.Test)))
+        case _: -1
+    }
+    n := match body.Stmts[0] {
+        case typed.Stmt.If(_, i): readLocalId(secondArg(firstArg(i.Test)))
+        case _: -1
+    }
+    if k < 0 or n < 0 or not ln.isI64(ln.B.Locals[k].Ty): return -1, -1
+    match post.Stmts[0] {
+        case typed.Stmt.Assign(_, typed.Lvalue.Local(_, _, id), typed.Expr.Prim(_, _, typed.PrimOp.Add, _, xs)) {
+            if I64(id) == k and xs.Len() == 2 and readLocalId(xs[0]) == k and litOf(xs[1]) == 1: return k, n
+        }
+        case _ { }
+    }
+    return -1, -1
+}
+
+fn firstArg(x typed.Expr?&) typed.Expr?& {
+    if x == null: return null
+    return match x {
+        case typed.Expr.Prim(_, _, typed.PrimOp.Not, _, xs): xs[0] if xs.Len() == 1 else null
+        case typed.Expr.Prim(_, _, typed.PrimOp.Lt, _, xs): xs[0] if xs.Len() == 2 else null
+        case _: null
+    }
+}
+
+fn secondArg(x typed.Expr?&) typed.Expr?& {
+    if x == null: return null
+    return match x {
+        case typed.Expr.Prim(_, _, typed.PrimOp.Lt, _, xs): xs[1] if xs.Len() == 2 else null
+        case _: null
+    }
+}
+
+fn readLocalId(x typed.Expr?&) I64 {
+    if x == null: return -1
+    return match x {
+        case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _): I64(id)
+        case _: -1
+    }
+}
+
+# the local a place is or is a field of, -1 for an element (a store there changes no length nor a scalar local) or a
+# place reached through a reference
+fn rootLocal(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): I64(id)
+        case typed.Lvalue.Field(_, _, b, _): rootLocal(b)
+        case _: -1
+    }
+}
+
+fn litOf(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Lit(_, _, bits): bits
+        case _: -1
+    }
+}
+
+fn (ln lowering&) isI64(ty types.TypeId) Bool { return ln.T.KindOf(ln.T.Repr(ty)) == types.Kind.I64 }
+
+fn (ln lowering&) isScalar(ty types.TypeId) Bool {
+    return match ln.T.KindOf(ln.T.Repr(ty)) {
+        case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16: true
+        case types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64: true
+        case _: false
+    }
+}
+
+fn (ln mut lowering&) hoistStmts(h mut hoistWalk&, ss Array<typed.Stmt&>&) {
+    for s in ss {
+        if not h.ok: return
+        ln.hoistStmt(h, s)
+    }
+}
+
+fn (ln mut lowering&) hoistStmt(h mut hoistWalk&, s typed.Stmt&) {
+    match s {
+        case typed.Stmt.Let(_, l, x) {
+            ln.hoistExpr(h, x)
+            h.env.Put(I64(l), x)
+        }
+        case typed.Stmt.Assign(_, p, x) {
+            ln.hoistTarget(h, p)
+            ln.hoistExpr(h, x)
+        }
+        case typed.Stmt.Eval(_, x), typed.Stmt.Assert(_, x, _) { ln.hoistExpr(h, x) }
+        case typed.Stmt.If(_, i) {
+            ln.hoistExpr(h, i.Test)
+            ln.hoistStmts(h, i.Then.Stmts)
+            if i.Else != null: ln.hoistStmts(h, i.Else!.Stmts)
+        }
+        case typed.Stmt.Block(_, b) { ln.hoistStmts(h, b.Stmts) }
+        case typed.Stmt.Loop(_, b, post) {
+            # (a comptime for's one-shot loop, or any inner one: what it assigns is assigned in the loop too)
+            ln.hoistStmts(h, b.Stmts)
+            if post != null: ln.hoistStmts(h, post.Stmts)
+        }
+        case typed.Stmt.Return(_, x) {
+            if x != null: ln.hoistExpr(h, x)
+        }
+        case typed.Stmt.Jump(_, _, _), typed.Stmt.Raise(_, _, _), typed.Stmt.Exit(_, _, _) { }
+        case _ { h.ok = false }
+    }
+}
+
+# a store's place: a scalar - a local's, a field's or an element's - and nothing else, so no array's length changes
+fn (ln mut lowering&) hoistTarget(h mut hoistWalk&, p typed.Lvalue&) {
+    if not ln.isScalar(p.Type()) {
+        h.ok = false
+        return
+    }
+    match p {
+        case typed.Lvalue.Local(_, _, id) { h.assigned.Put(I64(id), true) }
+        case _ { ln.hoistPlace(h, p) }
+    }
+}
+
+fn (ln mut lowering&) hoistPlace(h mut hoistWalk&, p typed.Lvalue&) {
+    match p {
+        case typed.Lvalue.Local(_, _, _), typed.Lvalue.Global(_, _, _, _), typed.Lvalue.Target(_, _) { }
+        case typed.Lvalue.Deref(_, _, r) { ln.hoistExpr(h, r) }
+        case typed.Lvalue.Field(_, _, b, _) { ln.hoistPlace(h, b) }
+        case typed.Lvalue.Temp(_, _, v, _) { ln.hoistExpr(h, v) }
+        case typed.Lvalue.Elem(_, _, e) {
+            ln.hoistPlace(h, e.Base)
+            ln.hoistExpr(h, e.Index)
+        }
+        case _ { h.ok = false }
+    }
+}
+
+fn (ln mut lowering&) hoistExpr(h mut hoistWalk&, x typed.Expr&) {
+    if not h.ok: return
+    match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
+        case typed.Expr.Read(_, _, p, _) { ln.hoistPlace(h, p) }
+        case typed.Expr.Borrow(_, ty, p) {
+            # (a writable borrow of a local writes it)
+            if ln.T.PermOf(ty) & types.Writable != 0 and rootLocal(p) >= 0: h.assigned.Put(rootLocal(p), true)
+            ln.hoistPlace(h, p)
+        }
+        case typed.Expr.Prim(_, _, op, _, xs) {
+            if op == typed.PrimOp.AtomicLoad or op == typed.PrimOp.AtomicStore or op == typed.PrimOp.AtomicAdd or
+               op == typed.PrimOp.AtomicSwap or op == typed.PrimOp.AtomicCompareSwap or op == typed.PrimOp.Retire or
+               op == typed.PrimOp.Drop or op == typed.PrimOp.AnyMake or op == typed.PrimOp.ErrPush: h.ok = false
+            for a in xs: ln.hoistExpr(h, a)
+        }
+        case typed.Expr.Slice(sp, _, s) {
+            ln.hoistPlace(h, s.Base)
+            ln.hoistExpr(h, s.Lo)
+            ln.hoistExpr(h, s.Hi)
+            if h.emit and h.ok and s.Checked != typed.Check.None: ln.hoistSlice(h, sp, s)
+        }
+        case typed.Expr.Cond(_, _, c) {
+            ln.hoistExpr(h, c.C)
+            if c.A != null: ln.hoistExpr(h, c.A!)
+            ln.hoistExpr(h, c.B)
+        }
+        case typed.Expr.Seq(_, _, s) {
+            ln.hoistStmts(h, s.Stmts)
+            if s.X != null: ln.hoistExpr(h, s.X!)
+        }
+        case _ { h.ok = false }
+    }
+}
+
+# a checked slice's bounds at the first and last turn, tested before the loop; its span proven where all its slices are
+fn (ln mut lowering&) hoistSlice(h mut hoistWalk&, sp source.Span, s typed.Slice&) {
+    key := spanKey(sp)
+    was := try h.spans.Get(key) catch default true
+    h.spans.Put(key, false)
+    if not was or not ln.isI64(s.Lo.Type()) or not ln.isI64(s.Hi.Type()) or not ln.fixedBase(h, s.Base): return
+    lo := try ln.affine(h, s.Lo, 0) catch { return }
+    hi := try ln.affine(h, s.Hi, 0) catch { return }
+    a1, b1, a2, b2 := lo.A, lo.B, hi.A, hi.B
+    ln.viewing = true
+    base := ln.place(s.Base)
+    ln.viewing = false
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(base))], sp)
+    lo0 := ln.prim(typed.PrimOp.Add, mir.I64T, Array<mir.Operand>[a1, ln.prim(typed.PrimOp.Mul, mir.I64T, Array<mir.Operand>[b1, h.first], sp)], sp)
+    hi0 := ln.prim(typed.PrimOp.Add, mir.I64T, Array<mir.Operand>[a2, ln.prim(typed.PrimOp.Mul, mir.I64T, Array<mir.Operand>[b2, h.first], sp)], sp)
+    lo1 := ln.prim(typed.PrimOp.Add, mir.I64T, Array<mir.Operand>[a1, ln.prim(typed.PrimOp.Mul, mir.I64T, Array<mir.Operand>[b1, h.n], sp)], sp)
+    hi1 := ln.prim(typed.PrimOp.Add, mir.I64T, Array<mir.Operand>[a2, ln.prim(typed.PrimOp.Mul, mir.I64T, Array<mir.Operand>[b2, h.n], sp)], sp)
+    ln.hoistAll(h, ln.within(a1, I64(1) << 62, sp), sp)
+    ln.hoistAll(h, ln.within(a2, I64(1) << 62, sp), sp)
+    ln.hoistAll(h, ln.within(b1, I64(1) << 31, sp), sp)
+    ln.hoistAll(h, ln.within(b2, I64(1) << 31, sp), sp)
+    for le in Array<Array<mir.Operand>>[[ln.constI64(0), lo0], [ln.constI64(0), lo1], [lo0, hi0], [lo1, hi1], [hi0, n], [hi1, n]] {
+        ln.hoistAll(h, ln.prim(typed.PrimOp.Le, types.BoolT, le, sp), sp)
+    }
+    h.spans.Put(key, true)
+}
+
+fn (ln mut lowering&) hoistAll(h mut hoistWalk&, c mir.Operand, sp source.Span) {
+    h.all = ln.prim(typed.PrimOp.BitAnd, types.BoolT, Array<mir.Operand>[h.all, c], sp)
+}
+
+# -m < x < m
+fn (ln mut lowering&) within(x mir.Operand, m I64, sp source.Span) mir.Operand {
+    a := ln.prim(typed.PrimOp.Gt, types.BoolT, Array<mir.Operand>[x, ln.constI64(-m)], sp)
+    b := ln.prim(typed.PrimOp.Lt, types.BoolT, Array<mir.Operand>[x, ln.constI64(m)], sp)
+    return ln.prim(typed.PrimOp.BitAnd, types.BoolT, Array<mir.Operand>[a, b], sp)
+}
+
+# whether a slice's base names the same array every turn: a local, or a field of one or of what one refers to, that the
+# loop neither declares nor assigns (and stores nothing but scalars, so no length changes)
+fn (ln lowering&) fixedBase(h hoistWalk&, p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): not h.env.Has(I64(id)) and not h.assigned.Has(I64(id))
+        case typed.Lvalue.Field(_, _, b, _): ln.fixedBase(h, b)
+        case typed.Lvalue.Deref(_, _, r): readLocalId(r) >= 0 and not h.env.Has(readLocalId(r)) and not h.assigned.Has(readLocalId(r))
+        case _: false
+    }
+}
+
+# an I64 as start + step * k computed before the loop, wrapping as the loop's own arithmetic does
+fn (ln mut lowering&) affine(h mut hoistWalk&, x typed.Expr&, depth I64) affineSum ? notProven {
+    if depth > 32 or not ln.isI64(x.Type()): error notProven.Bound
+    match x {
+        case typed.Expr.Lit(_, _, bits): return affineSum(ln.constI64(bits), ln.constI64(0), false)
+        case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _): return try ln.affineLocal(h, I64(id), depth)
+        case typed.Expr.Prim(sp, _, op, _, xs): return try ln.affinePrim(h, op, xs, sp, depth)
+        case _: error notProven.Bound
+    }
+}
+
+fn (ln mut lowering&) affineLocal(h mut hoistWalk&, id I64, depth I64) affineSum ? notProven {
+    if id == h.K: return affineSum(ln.constI64(0), ln.constI64(1), true)
+    if try h.assigned.Get(id) catch default false: error notProven.Bound
+    if h.env.Has(id) {
+        x := try h.env.Get(id) catch { error notProven.Bound }
+        return try ln.affine(h, x, depth + 1)
+    }
+    if h.aliased.Has(id): error notProven.Bound
+    return affineSum(ln.copyLocal(mir.LocalId(I32(id))), ln.constI64(0), false)
+}
+
+fn (ln mut lowering&) affinePrim(h mut hoistWalk&, op typed.PrimOp, xs Array<typed.Expr&>&, sp source.Span
+                                 depth I64) affineSum ? notProven {
+    if xs.Len() != 2 or (op != typed.PrimOp.Add and op != typed.PrimOp.Sub and op != typed.PrimOp.Mul): error notProven.Bound
+    x := try ln.affine(h, xs[0], depth + 1)
+    y := try ln.affine(h, xs[1], depth + 1)
+    if op != typed.PrimOp.Mul: return affineSum(ln.prim(op, mir.I64T, [x.A, y.A], sp), ln.prim(op, mir.I64T, [x.B, y.B], sp), x.Moves or y.Moves)
+    if x.Moves and y.Moves: error notProven.Bound
+    if y.Moves: return affineSum(ln.prim(op, mir.I64T, [x.A, y.A], sp), ln.prim(op, mir.I64T, [x.A, y.B], sp), true)
+    return affineSum(ln.prim(op, mir.I64T, [x.A, y.A], sp), ln.prim(op, mir.I64T, [x.B, y.A], sp), x.Moves)
 }
 
 fn (ln mut lowering&) jump(sp source.Span, kind typed.JumpKind, loop typed.BlockId) {
@@ -6526,7 +6896,7 @@ fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir
     if ln.dead: return mir.Operand.None
     lo64 := ln.asI64(lo, s.Lo.Type(), sp)
     hi64 := ln.asI64(hi, s.Hi.Type(), sp)
-    if s.Checked != typed.Check.None {
+    if s.Checked != typed.Check.None and not (ln.provenOn and ln.proven.Has(spanKey(sp))) {
         n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(base))], sp)
         a := ln.prim(typed.PrimOp.Ge, types.BoolT, Array<mir.Operand>[lo64, ln.constI64(0)], sp)
         ln.check(a, s.Checked, mir.ExitKind.SliceBounds, OutOfBounds, sp)

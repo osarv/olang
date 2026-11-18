@@ -1289,9 +1289,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   result built through memory, nor the referent's own references may reach a type holding the referent or held by it;
   and the body, through all it may call (effects), reads no global that changes or holds a reference, calls nothing
   unknown, no C but its math, starts no task, waits on nothing, makes no atomic operation. Lambdas and generators get
-  none. A whole-program fact (B3i, "O43 NAME"). LaneDots' helper tags its loads and stores (T36). `writable` is not
-  written: it claims the whole referent on entry, which another task writing another field may not grant. Changes no
-  meaning.
+  none. A whole-program fact (B3i, "O43 NAME"). LaneDots' helper tags its loads and stores (T36). `writable` is added
+  only where no task can run beside any call (2026-11-18, the user's "unless the compiler proves we are the only one"):
+  nothing in the whole program starts a task and C cannot call back in (effects.Alone, bit 62 of the fact) - elsewhere
+  another task writing another field of the referent is legal, which a store LLVM adds would lose. Changes no meaning.
+- **Slice bounds tested before the loop (O44, the user's choice over a `mut` exclusivity rule, 2026-11-18).** A
+  counted loop (`for k in range`, `for x in a`) that calls nothing, starts no task, defers nothing and stores only
+  scalars is versioned where its checked slices' bounds are `start + step * k`, start and step computed from what the
+  loop does not change (parameters and locals no reference reaches, locals it declares, literals): before the loop each
+  bound is computed at the first and last turn and tested (count under 2^31, starts under 2^62, steps under 2^31, so
+  nothing wraps and a bound is linear between), the copy run when all hold leaving those slices unchecked, the loop as
+  written otherwise. A slice span is unchecked only where every slice written there (comptime copies) is proven.
+  Changes no meaning: the checks left out cannot fail, and a loop whose test fails runs as written.
 - **Testing.** `make verify` runs the corpus, std's tests, `checks/` (must-fail cases and whole-build scenarios) and the
   port's diffs; `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the
   user's rule). The suite runs side by side, at most a job per core, each test build, interpreted run and heavy tool

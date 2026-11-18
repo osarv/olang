@@ -2382,8 +2382,8 @@ da018e972c2ecc90 2073133fd217ef43 compiler/cond.olang
 db407b9ec2aacf25 e1e61b9b123ebbaf compiler/diag.olang
 8eecc7e6e624f53a 744bfcc1480f0aa4 compiler/diagmsg.olang
 b02b474ae1593a73 336dc6b9fb0adbb8 compiler/doc.olang
-2190952f4d088f2c 53a160916acdcd72 compiler/effects.olang
-146d3cd784321f80 10299abefed15a6a compiler/emit.olang
+689243901b94a8f3 8ed9632a8052124e compiler/effects.olang
+c0420c72bfdcd9af 9228813fa32e993d compiler/emit.olang
 773cd6c8d047c2e1 6274158877978a4a compiler/eval.olang
 eba7fd72c9763b72 4d7260221f3478bb compiler/explain.olang
 f8904f06be8de907 3cd94887e148f032 compiler/facts.olang
@@ -2397,11 +2397,11 @@ c8dc3e7fdc0da30f bc76abe19deec840 compiler/fmt.olang
 8299f0d6f657ceae ba0b78c0c7122d77 compiler/lineedit.olang
 211de0b5ecb13aac 4324dd1a83c4b615 compiler/listing.olang
 b2d4381417237511 5f883176bb27566b compiler/load.olang
-d5a1725b9aad555e 15c6fd868d87ca57 compiler/lower.olang
+a14b3c11bdfc9d4e 487ef0dc5f1ddf9b compiler/lower.olang
 0a6ba37a53fb9662 26f5ffd009f3d4b4 compiler/lsp.olang
 7dc09dd9a3624990 5eddb899d10cc9ce compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
-6f703ba40f888577 7901faf407be16cb compiler/mir.olang
+e584497ebb497531 7cfc8b4a2c562b78 compiler/mir.olang
 54e4d648e5dd935e 7c593e4e5f378f2e compiler/msgs.olang
 e12e0b7843a4d69e 56cdf2cd06395bb2 compiler/names.olang
 3f072b84e716c304 59b46a3ae1383924 compiler/needs.olang
@@ -2656,6 +2656,7 @@ b5ef26df71c5e9d8 d290f513fc2e56b4 tests/reflect.olang
 3d5f36715ff3e78e d965d9c6969da76f tests/refltextindex.olang
 835ba0f57f4caddd ffb7322c928edb6c tests/runner.olang
 0c4c3adea751bf6a 75ac204e9b845a85 tests/shared.olang
+9961dcad2585ff1a 32d3b9ad54b34a8a tests/slicehoist.olang
 307585c2d6e47496 ad7d080b0a55df0c tests/slotfacts.olang
 c452c9cb509c23e1 dca352c6c89a7600 tests/structpat.olang
 b043808fc75ce994 65143d47c35f3f5a tests/textfields.olang

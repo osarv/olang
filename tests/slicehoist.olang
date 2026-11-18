@@ -1,0 +1,68 @@
+# a counted loop's slices whose bounds move with its counter (O44): tested once before the loop where nothing the loop
+# does can change what they are tested against, its copy then running them unchecked; a loop the test fails for runs
+# checked as written - here one that leaves before the turn whose slice would be out of range. What each computes is
+# the same either way, and the evaluator bakes the same values (K2)
+
+type Tile struct() {
+    V := Array<I64>(8)
+}
+
+# groups of four added into a tile in place - the shape of oann's INT8 micro-kernel, a comptime for inside
+fn accumulate(a Array<I64>&, t mut Tile&, n I64) {
+    for p in range n {
+        x := a[4 * p:4 * p + 4]
+        comptime for i in range 2 {
+            t.V[i * 4:i * 4 + 4] += x
+        }
+    }
+}
+
+fn accumulated(n I64) Bool {
+    a := Array<I64>[I64(j) for j in range 4 * n]
+    t := Tile()
+    accumulate(a, t, n)
+    for j in range 4 {
+        want I64 = 0
+        for p in range n: want += 4 * p + j
+        if t.V[j] != want or t.V[4 + j] != want: return false
+    }
+    return true
+}
+
+# pairs summed until stop: n past the array's end, so the test before the loop fails and the loop runs checked,
+# leaving before its slice would be out of range
+fn pairs(a Array<I64>&, n I64, stop I64) I64 {
+    s I64 = 0
+    for p in range n {
+        if p == stop: break
+        x := a[p:p + 2]
+        s += x[0] + x[1]
+    }
+    return s
+}
+
+# a range with a start and a step, a bound through a local the loop declares
+fn stepped(a Array<I64>&, hi I64) I64 {
+    s I64 = 0
+    for p in range 2, hi, 3 {
+        q := p - 2
+        y := a[q:q + 2]
+        s += y[1] - y[0]
+    }
+    return s
+}
+
+fn agree() Bool {
+    a := Array<I64>[1, 2, 3, 4, 5, 6]
+    sq := Array<I64>[I64(j * j) for j in range 10]
+    return accumulated(0) and accumulated(1) and accumulated(5) and pairs(a, 100, 3) == 15 and pairs(a, 5, 9) == 35 and
+           stepped(sq, 10) == 1 + 7 + 13 and stepped(sq, 2) == 0
+}
+
+Baked := agree()
+Stop mut I64 = 3   # read at run time
+
+test "O44: a counted loop's slices tested once before it, the loop the same either way" {
+    a := Array<I64>[1, 2, 3, 4, 5, 6]
+    assert agree() and Baked and pairs(a, 1000, Stop) == 15
+}
