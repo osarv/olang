@@ -39509,3 +39509,42 @@ were equal (135 vs 133 ms). Closing that gap needs either a language rule that a
 the call's alone (across tasks too), or the bounds checks hoisted out of the loop. In a whole-program LTO build both
 forms were already equal (the kernel inlined into a caller holding a local tile). The compiler's own IR carries 2104
 exclusive parameters; its self-build time did not move measurably.
+
+## 2026-11-18: slice bounds tested before a counted loop, and writable where no task runs beside a call (O44, O43; wt-hoist)
+
+O43 left oann's in-place accumulate into a `mut tile&` slower than into a local tile: the slices' bounds checks are
+exits in the loop before its stores, and sinking a store past an exit the loop had not stored at needs LLVM's
+`writable`. The user chose (2026-11-18, decision 1 of the ledger) no language rule making a `mut` parameter's referent
+exclusive, but the checks moved out of such loops; and added "unless the compiler proves we are the only one":
+`writable` wherever the compiler proves no other task can touch the referent.
+
+O44, the hoist, is a loop versioning done in lowering. A counted loop (B1.1's Bounded loops of `for k in range` and
+`for x in a`: body first `if not (k < n) { break }`, post `k = k + 1`) qualifies where it calls nothing, starts no
+task, defers nothing and stores only scalars (a local, a field, an element: no store and no call can change an array's
+length or which array a place names), comptime for's one-shot loops and other inner loops walked as part of it. Each
+checked slice whose base is a local, or a field of one or of what one refers to, that the loop neither declares nor
+assigns, and whose bounds are sums and products of literals, the counter, locals the loop declares (their values
+substituted as the walk reaches them) and locals declared before it that nothing assigns in the loop and no reference
+reaches (LocalUses: Esc, WrOther, AliasOf), is written start + step * k. Before the loop both bounds are computed at k's
+first value and at n - 1 and tested against 0 and the base's length; with k's first value at least 0, n under 2^31,
+every start under 2^62 and every step under 2^31 nothing wraps, so a bound is linear in k and holding at both ends it
+holds between. Where every test holds (or the loop runs no turn) the copy with those slices unchecked runs, else the
+loop as written - one more copy of the loop's code, only for loops that have such a slice. A span is unchecked only
+where every slice written there is proven (comptime for's copies share spans); deferred code lowered inside the copy
+(registered outside it, a loop never registers any here) is lowered with no slice unchecked. Nothing changes meaning:
+the checks left out cannot fail, and where the test fails the checked loop runs and fails, or does not, exactly where
+it would have. The MIR the evaluator and interpret run carries both copies, so they agree with the build by
+construction (tests/slicehoist.olang: a kernel of the oann shape, a loop leaving before an out-of-range turn, a range
+with a start and a step; baked and run).
+
+`writable` (O43's bit 62, mir.Alone) is added beside noalias where effects.Alone holds for the whole program: no body
+starts a task (Facts.Spawns over every body) and C cannot call back in (cMayCallBack: no shared library, no function
+handed to C, no export fn with C of the program's own). Then no task can run beside any call, so a store LLVM makes of
+bytes it loaded races with nothing; where a task can exist it stays out, since another task writing a different field
+of the referent at the same time is legal.
+
+Measured on a repro of oann's groupWide (6 rows of 32 I32 lanes, `+= (x * b).Sum<I32>(4)`, kp 512, the kernel module
+compiled alone as -quick does and as a ThinLTO link leaves it; best of 7 runs of 100,000 calls, ms; this machine):
+in place / local tile - neither 89-91 / 52-55; writable only ~60 / ~57; the hoist only ~27 / ~26; both ~24-25 /
+~24-26. The hoist alone closes the gap and also speeds the local-tile form 2x (its own slice checks left the loop);
+writable alone closes most of it.
