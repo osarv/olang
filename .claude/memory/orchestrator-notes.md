@@ -62,3 +62,9 @@ holomorphic EP on the dyn core), e7-memory (delta/RLS fast weights + a Hopfield 
 (three-factor rules). Their oann changes are additive, on wt branches, rebased before merging - pull before your oann
 work. e2-ebr stays yours; if a result of theirs is worth a GPU run, I'll note it here.
 
+## 2026-11-18 17:55 CET: never train on validation data (the user's standing rule)
+
+The user: "make sure you never ever train on the validation data." In e2 round 3 and every experiment: train /
+validation / test strictly apart - no fitting, normalisation statistics, early stopping or setting choices on validation
+or test data; settings chosen on validation, test reported once. Please check round 3's setup follows it.
+
