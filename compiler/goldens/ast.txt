@@ -2391,7 +2391,7 @@ db407b9ec2aacf25 d850fbb42d0e8294 compiler/diag.olang
 8eecc7e6e624f53a d60fad56d190f340 compiler/diagmsg.olang
 b02b474ae1593a73 a4a8294e6adfbb54 compiler/doc.olang
 689243901b94a8f3 3dcc5d853c7b3af7 compiler/effects.olang
-c0420c72bfdcd9af 6513f54ca7825d50 compiler/emit.olang
+071640d31479ecab 2bd5435e6b25f9a6 compiler/emit.olang
 773cd6c8d047c2e1 f0b8479e97ee01bd compiler/eval.olang
 eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
 f8904f06be8de907 9c47d36eb9c4740f compiler/facts.olang
