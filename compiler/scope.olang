@@ -10975,6 +10975,21 @@ fn (s mut Scoper&) bindResult(sp source.Span, ty types.TypeId, c typed.Call&, ft
         t := s.landByObligations(c, rv, beta)
         if t != Term.None: beta[rv] = t
     }
+    # a result the callee holds to the program's scope exactly - a writable reference to a global, "return opened!" - lives
+    # there, wherever it is put: its scope variable is the program's, so that the call asks nothing of its caller (a
+    # caller of the getter otherwise carried the obligation that its own result scope be the program's, and a builder
+    # of a system planned through it needed one argument's scope to outlive another's with no argument: O10c)
+    cb := s.bodyOf(c.Target)
+    if cb >= 0 and s.staticResult(cb, rv): beta[rv] = Term.Program
+}
+
+# whether callee's summary requires its result's scope variable rv to outlive the program's scope, and builds nothing there
+fn (s mut Scoper&) staticResult(callee I64, rv I64) Bool {
+    if not s.summed(callee) or s.sumBuilds(callee, rv): return false
+    for r in s.sum(callee).Rels {
+        if r.Hi == Term.Var(rv) and r.Lo == Term.Program: return true
+    }
+    return false
 }
 
 # callAs's scope variables no argument determines: where the callee's obligations say each must live (O18b), else

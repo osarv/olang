@@ -1,0 +1,37 @@
+# check: build
+# O10c: a function returning a writable reference to a module global ("return opened!") has a static result - the program's
+# scope - that holds wherever its caller puts it: a builder that plans a system through it (Plan builds a unique
+# instance, with a destructor, out of the getter's result) was refused with "the callee needs one argument's scope to
+# outlive another's" though it takes no argument (oann's System.tight, through device.Dev())
+type Mir unique struct(d mut Vec<I64>&) {
+    d
+    K I64 = 1
+} destruct {
+    K = 0
+}
+
+opened mut Vec<I64>?& = null
+
+fn Shared() mut Vec<I64>& {
+    if opened == null: opened = Vec<I64>()
+    return opened!
+}
+
+type Sys struct() {
+    M mut Mir?& = null
+}
+
+fn (s mut Sys&) Plan() {
+    s.M = Mir(Shared())
+}
+
+fn Sys.build() Sys {
+    s := Sys()
+    s.Plan()
+    return s
+}
+
+fn main() {
+    s := Sys.build()
+    assert s.M != null
+}

@@ -846,7 +846,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   in the frame (Plan.RetFrame, freeing gap 19, 2026-11-15). A constructor field given a conditional or a match is the
   instance's slot (C2d, E28). **A call's writable reference result lands in a parameter's derived scope** where its
   obligations say (O18c, oann's learnerarg, 2026-11-15), a field so landed in going back where its callers cannot show
-  what that asks.
+  what that asks. **A getter's writable reference to a global** is the program's scope wherever the call stands: a callee
+  whose summary holds its result scope exactly to the program's (and builds nothing there) binds it so (O10c, oann's
+  device.Dev, 2026-11-18), the call asking nothing of its caller.
 - **A kept local is built where it is kept (O28, O17, D9i; item 17, the user's decision 2026-11-03: "creating it at
   the scope of the thing we're storing it in").** A value local kept by reference past its block or turn, or copied
   whole at its last mention into longer-lived storage, has its storage placed where it is kept, a new value each time

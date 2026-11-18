@@ -39509,3 +39509,17 @@ were equal (135 vs 133 ms). Closing that gap needs either a language rule that a
 the call's alone (across tasks too), or the bounds checks hoisted out of the loop. In a whole-program LTO build both
 forms were already equal (the kernel inlined into a caller holding a local tile). The compiler's own IR carries 2104
 exclusive parameters; its self-build time did not move measurably.
+
+**A global's writable reference returned through a getter (O10c, O18c; 2026-11-18, wt-o10cglobal).** oann's `System<T>.tight`
+and `.mixed` were refused with O10c, "the callee needs one argument's scope to outlive another's", though they take no
+argument: `Plan` built a `Mirror` (unique, with a destructor) from `device.Dev()`, a function returning `Opened!`, a
+writable reference to a module global. Opened read in place (`Opened!`) was fine, so oann kept a public global filled by
+`device.Open()` instead. The cause: returning a writable reference is an exact fit (`fit`, FitReturn), so the getter's
+summary carries `V0 >= P` - its result scope variable must outlive the program's, i.e. be it. A caller bound that variable
+to where the call stands or lands (`bindResult`), so discharging the rel put the obligation "my own scope outlives the
+program" on `Plan`, which its callers (the builders, with no argument to blame) could not show. The fix: `bindResult` binds
+the result variable to the program's scope when the callee's summary requires exactly that and builds nothing there
+(`staticResult`), so the call asks nothing of its caller. Test: `checks/cases/o10cglobalgetter.olang`, reduced to a
+unique instance with a destructor made of a global getter's result, stored in a field of `self` by a method a builder
+calls. (Tried first and dropped: making a call's result existing at the program's scope in `callValue` - the compiler's
+own build of itself then ran out of memory.)
