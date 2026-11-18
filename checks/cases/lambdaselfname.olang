@@ -1,0 +1,6 @@
+# check: fail error[M22]: 'fib' names the local being declared
+# M22: a lambda cannot name the local it initializes (HISTORY 2026-11-15): the error says so and what to write instead
+fn main() {
+    fib := fn(n I64) I64 { return n if n < 2 else fib(n - 1) + fib(n - 2) }
+    Println($fib(20))
+}
