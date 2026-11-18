@@ -15,3 +15,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 | local (WSL, GPU) | oann (next) | GP7 and the GPU follow-ups: ProductI8's I32->F32 dequantization kernel, fusion/CUDA graphs | 2026-11-17 |
 | local (WSL, GPU) | olang (next) | O10c on a function returning a reference to a module global, called from oann System<T>.Plan (plan.md, GP4's entry) | 2026-11-17 |
 | local (WSL, GPU) | oagent wt-ebr2 | e2 (EBR) rounds 2-3, held until the GPU route merges | 2026-11-17 |
+- OLang Cloud (2026-11-18): wt-hoist - hoist slice-bounds exits out of loops accumulating through a mut reference (decision 1, B)

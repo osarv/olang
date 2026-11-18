@@ -21,4 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-1. (2026-11-17, from O43 noalias) Should a `mut` parameter's whole referent belong to the call alone, across tasks too (no other task may write any part of it during the call)? It would let codegen emit LLVM `writable`, closing the in-place accumulate gap (213 ms vs 123-136 ms for a local tile; with `writable` by hand 135 vs 133). Default in effect: no such rule; noalias only where O43 proves exclusivity, stores stay in the loop. Recommendation: no language rule (it would make a data race with a disjoint field a miscompile); instead hoist the slice-bounds exits out of such loops (an optimization, mine), and revisit if that falls short.
+(none)
