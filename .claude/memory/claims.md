@@ -16,3 +16,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 | local (WSL, GPU) | olang wt-o10cglobal | O10c global getter done: merged olang 5316c9333 (fix 4e93798d8); installed compiler not yet rebuilt (after GP7) | 2026-11-18 |
 | local (WSL, GPU) | oagent wt-ebr2 | e2 round 3 (EP arm on oann ad/descent, cb8c37f + 9fa8a85 pass counters) in progress | 2026-11-18 |
 | local (WSL, GPU) | oann wt-gp8 | GPU: views (Permute etc.) and what e2's graph needs | 2026-11-18 |
+| local (WSL, GPU) | oagent wt-e2settle | e2 settling arm (dyn) | 2026-11-18 |
