@@ -54,3 +54,11 @@ wt-actfn adds Sigmoid/Silu/Gelu/SwiGlu neuron kinds (CPU; the GPU refuses them a
 want SiLU/GELU, adding their GPU kernels is yours. Next on its side: whether SiLU's lead holds with the settle kept
 certified (Restrain).
 
+## 2026-11-18 16:45 CET: five oagent research sessions in the cloud (CPU)
+
+At the user's request, five cloud sessions research in parallel, each in its own oagent directory with a claim line:
+e4-amortize (amortized settling), e5-depth (adaptive depth on algorithmic tasks), e6-gradients (implicit / JFB / EP /
+holomorphic EP on the dyn core), e7-memory (delta/RLS fast weights + a Hopfield step in the energy), e8-local
+(three-factor rules). Their oann changes are additive, on wt branches, rebased before merging - pull before your oann
+work. e2-ebr stays yours; if a result of theirs is worth a GPU run, I'll note it here.
+
