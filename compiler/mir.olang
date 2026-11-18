@@ -584,6 +584,7 @@ type Fn struct(Of FnKey, Ty types.TypeId, File I64, Sp source.Span) {
     Gen Bool = false
     GenEnd I64 = 0
     Exclusive I64 = 0      # O43: the parameters its code may take as no other reference reaches (bit i parameter i)
+                           # - and Alone set where no task can run beside the call (bit 62)
     # D18e: the calls of generator functions whose walk is made and finished in this function, each with the scope its
     # generator lives in - one this function opens (a block's, a loop turn's or its frame's), the walk dropped as it
     # closes, no one else holding the generator (a for-in's hidden iterator). A hint: what the call means is
@@ -591,6 +592,10 @@ type Fn struct(Of FnKey, Ty types.TypeId, File I64, Sp source.Span) {
     WalkCalls Vec<I32>
     WalkScopes Vec<ScopeId>
 }
+
+# O43: Fn.Exclusive's bit saying no task can run beside the call, so its exclusive parameters' referents are the call's
+# alone (LLVM's writable)
+Alone I64 = I64(1) << 62
 
 # S18d: what a Raise at sp says in a kept error return trace: its text where one was given, "" for "raised here"
 fn (f Fn&) RaiseText(sp source.Span) String& {

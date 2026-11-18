@@ -2603,6 +2603,17 @@ fn (e mut Effects&) Exclusive(b I64) I64 {
     return mask
 }
 
+# O43: whether a call's exclusive parameters are its alone across tasks too - no task runs beside it, as nothing in the
+# whole program starts one, and C cannot call back into the program from a thread of its own - so a store to the
+# referent's bytes the body did not make (LLVM's writable) can race with nothing
+fn (e mut Effects&) Alone() Bool {
+    if e.cMayCallBack(): return false
+    for b in range e.Bodies.Len() {
+        if e.Of(b).Spawns: return false
+    }
+    return true
+}
+
 # ...as its type alone says, before what the body does: the parameters no other one, nor the result, may reach
 fn (e mut Effects&) ExclusiveShapes(b I64) I64 {
     if b < 0 or b >= e.Bodies.Len(): return 0
