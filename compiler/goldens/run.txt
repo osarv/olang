@@ -1332,6 +1332,9 @@
 | ok - P4a/D16d: a task's default holding a lambda, while compiling and at run time
 | ok - P4a/D16d: a task's default may hold a lambda capturing only values
 | ok - S1b: one-line bodies of functions, types and loops at run time
+=== test tests/slicehoist.olang
+| status 0
+| ok - O44: a counted loop's slices tested once before it, the loop the same either way
 === test tests/slotfacts.olang
 | status 0
 | ok - viaTemp: a call's value lent to a read-only reference is read where it stands
