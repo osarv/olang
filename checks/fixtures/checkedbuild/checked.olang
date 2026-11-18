@@ -21,7 +21,7 @@ test "remainder by zero" { assert rem(1, 0) == 0 }
 test "least by -1" { assert div(I64.Min, -1) == 0 }
 test "compound" {
     x := 5
-    z := 0
+    z := x - 5   # zero, but not known while compiling: x is written (E16h, S8c)
     x /= z
     assert x == 0
 }

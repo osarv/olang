@@ -503,6 +503,9 @@ baa99c193ee1346e aa2daea09ff1341f checks/cases/e16faxiscount.olang
 e350a312ff54fe56 e7bca6c541b32267 checks/cases/e16getnotry.olang
 7dd1b3a684aff62f 6489041384019b21 checks/cases/e16hdivisor.olang
 8a25ce103434bb4c 307a904dc8dbaadf checks/cases/e16hknownindex.olang
+27ca725c41e4aadb 20567790623262c1 checks/cases/e16hlocaldivisor.olang
+76b6b8c578c2e7cc 56ce24bdb2a8b1fd checks/cases/e16hlocalindex.olang
+b13f63eea00789af 79719a3a9044da06 checks/cases/e16hlocalshift.olang
 5c31b2ed70a9b5a8 9290d129fe97e75f checks/cases/e16hrangeindex.olang
 774bec52f68707bc 14f99b6483cb1e3f checks/cases/e16hshift.olang
 66588af211ef2d65 474e9fd7b9ced06e checks/cases/e16slicenumber.olang
@@ -2100,7 +2103,7 @@ e1267c2141f5a260 1cec5eb65d53a468 checks/fixtures/cases/privword.olang
 4444c21850dda8a7 401f9a5de3b78c1b checks/fixtures/cgreview/big.olang
 c8e36c70c127288b 51e3eae9997f4c4d checks/fixtures/cgreview/matcharena.olang
 78b46fb7cc71e3bf 3739268613c88fb4 checks/fixtures/cgreview/tuples.olang
-f1631c1125cc9b85 ac97767d20dfedc7 checks/fixtures/checkedbuild/checked.olang
+581c252dffd2bf6c 3e69f192112200b5 checks/fixtures/checkedbuild/checked.olang
 23ba78a84375f00a 029eaed5bdc5a08c checks/fixtures/checkedbuild/release.olang
 9448cb168a01b1e1 2f3b2934d6e17975 checks/fixtures/chunkpool/budget.olang
 6061988df9706700 c336becaf86b1b62 checks/fixtures/cinterop/abi.olang
@@ -2381,7 +2384,7 @@ e20178f94e07dfed 093e0335a8debfcd compiler/bindgen.olang
 90881337ba685229 eea384b1077dc23b compiler/build.olang
 9eb8d9916112f375 acad139c7c5a3871 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
-28f2bf283ebdbfe0 b705e3b76deed209 compiler/check.olang
+2c1a6ba9f067e50d 5bffa03b2438e21f compiler/check.olang
 da018e972c2ecc90 2073133fd217ef43 compiler/cond.olang
 2ab98962469bc960 89092d630e387ca2 compiler/definit.olang
 db407b9ec2aacf25 e1e61b9b123ebbaf compiler/diag.olang
@@ -2649,7 +2652,7 @@ b1bcaf8d86a15d05 8f760064917ffc2b tests/nll.olang
 df468bf6cad9feab e8a472b3e3d55a08 tests/place.olang
 8f560a1f364f74c0 6364747a17c23682 tests/power.olang
 a519a74d61801dcf 4341a6fc3472d279 tests/promises.olang
-65a92945a50a6b59 c71030653ca4b275 tests/proven.olang
+2cda22cdee171a52 4b2bbf32fe382272 tests/proven.olang
 50a7f3d57b2373dd 5d5afc313c16bede tests/raised.olang
 2e90cef89cf3ae2d 23c56f79e7819ae8 tests/raisedlex.olang
 43cf2a470b5288e5 70e408b3b38faa7e tests/reads.olang
