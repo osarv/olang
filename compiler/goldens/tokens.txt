@@ -600,7 +600,8 @@ a483e1af874d4167 98219e8710b8c74f checks/cases/e31ccommutesfree.olang
 ccf7dd944b224611 d06357610b639df2 checks/cases/e31dcopyonover.olang
 c9a637ce6d0918ab ecb96a3a8ad361b8 checks/cases/e31dcopyresult.olang
 20181b2238e5ca41 ca32bfc0e5b22edc checks/cases/e31dcopyshape.olang
-2d3726a789dc0001 377b98a01f65138e checks/cases/e31esetatfixed.olang
+e4339f7475469f28 01d45bf55380d669 checks/cases/e31esetatcount.olang
+7b3b5632f23dcc7a 377b98a01f65138e checks/cases/e31esetatfixed.olang
 80ad63d1f0668c76 c961643ef1658212 checks/cases/e31esetslicecount.olang
 b1e9fb4269c2a2be 4156c2b8605aefb4 checks/cases/e31esetslicenoaxis.olang
 1d566a1d562605bb 4472d9953b0589de checks/cases/e31esetvaluefirst.olang
@@ -2380,7 +2381,7 @@ e20178f94e07dfed 093e0335a8debfcd compiler/bindgen.olang
 90881337ba685229 eea384b1077dc23b compiler/build.olang
 9eb8d9916112f375 acad139c7c5a3871 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
-12f1a292a1dcb502 e098583a25c37ed0 compiler/check.olang
+28f2bf283ebdbfe0 b705e3b76deed209 compiler/check.olang
 da018e972c2ecc90 2073133fd217ef43 compiler/cond.olang
 2ab98962469bc960 89092d630e387ca2 compiler/definit.olang
 db407b9ec2aacf25 e1e61b9b123ebbaf compiler/diag.olang
@@ -2406,7 +2407,7 @@ a14b3c11bdfc9d4e 487ef0dc5f1ddf9b compiler/lower.olang
 7dc09dd9a3624990 5eddb899d10cc9ce compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
 e584497ebb497531 7cfc8b4a2c562b78 compiler/mir.olang
-d8a8b6bf99d4c99a 3b0fef8e3fd84a93 compiler/msgs.olang
+582c2250852abe07 5e1ff5292b1c1f6a compiler/msgs.olang
 e12e0b7843a4d69e 56cdf2cd06395bb2 compiler/names.olang
 3f072b84e716c304 59b46a3ae1383924 compiler/needs.olang
 79acbc010c9bf08a b1a3323292403dad compiler/notebook.olang
@@ -2592,7 +2593,7 @@ cbf29ce484222325 cbf29ce484222325 tests/Lib.olang
 7c942b2253b74acc 1c66b5d0e648c1a4 tests/any.olang
 c348854a5b5acdb0 406a9a8ea0f455db tests/arraypat.olang
 2e650060c18283db 3b2b7b2993fa8677 tests/asserts.olang
-ea243a015abca175 499491476a2d1eca tests/axes.olang
+07c2d18745a48d08 38d2ecb730e1cbb2 tests/axes.olang
 16600c57f3b4ae11 5d7f727babcda5a2 tests/barelits.olang
 b0a30f43fcdb1650 8382ebbad6d95b14 tests/become.olang
 d1986413c494d127 eb871171bb77c9a9 tests/bench.olang

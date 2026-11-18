@@ -56,6 +56,7 @@
 | ok - Voxels.SetAt: compound stores and parallel assignment
 | ok - Voxels.SetSlice: a store into a slice takes the axes, then the value
 | ok - Cells.At: fallible, generic and nested in a Vec
+| ok - Grid.At: a variadic At with a SetAt of two indexes
 === test tests/barelits.olang
 | status 0
 | ok - a literal with nothing expected takes its own type (E20)
