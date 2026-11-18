@@ -24,6 +24,5 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e8-local cloud session (2026-11-18): oagent experiments/e8-local DONE (oagent main, three-factor local rules; MAP.md holds the open items)
 - e9-sparse cloud session (2026-11-18): done - oagent 33f2ca1 (experiments/e9-sparse); no oann changes
 - e10 research (cloud, 2026-11-18): oagent experiments/e10-sleep - done: oagent 2e075d9 (circuit nights lose to the consolidator; results in README)
-- OLang Cloud (2026-11-18): oann wt-int8stream - INT8 streaming GEMV regained without losing BF16's gain (kernels/gemm)
 - e11 integrate (cloud, 2026-11-18): oagent experiments/e11-integrate (wt-e11) - one system from e7 hybrid + e4 start/halting + e3 neuron + e6 truncated adjoint + e9 events; ablations vs LSTM/GRU/transformer
 - e12-language cloud session (2026-11-18): oagent experiments/e12-language - language gate pilot (transformer vs looped vs settling LM, CPU)
