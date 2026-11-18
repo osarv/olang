@@ -39697,3 +39697,34 @@ O44's affine bounds are exact modulo 2^64 and the tested ranges leave no wrap (I
 nsw); O10c's static result is bound only where the summary holds it exactly to the program's, the arguments' own
 relations still asked (a mixed getter's local lands in the program's scope); E16h's held errors are dropped on a write
 anywhere, and a type-dependent initializer in a generic body or a comptime for's guarded copy is not refused.
+
+## 2026-11-18: freeing gap 22, a struct element's Vec field (O8f, B18a; mine; wt-freegaps)
+
+The round was briefed with three section-8 items from plan.md's queue - gap 19 (a returned value local's 32 bytes a
+call), gap 17's text part (`Array<Vec<String>>`) and genref's third generator kind. All three were already closed:
+gap 19 by `Plan.RetFrame` (wt-sect8, 2026-11-15), gap 17's text by round 6, genref by `HoldingGenerator` (both
+recorded above). Re-measured on master: checks' freeing returned, vectexts and vecvecs run under 8 MB and pass
+`-memory -check`; oann's repro/genref.olang builds, interprets alike, and 8,000,000 walks of it stay at 1.6 MB.
+
+Probing beside them found a gap the list did not have. `ps[i % 10] = P(Vec<I64>[i])`, with `P struct(a Vec<I64>)`,
+kept every old element's buffer - 777 MB at 1,600,000 turns in an `Array<P>`, 64 bytes a turn through a `Vec<P>`'s
+`SetAt`, 1.2 KB a turn where `P.a`'s owner place is decided sole - and `-memory -check` passed every one: PartsOnly
+reads the field as the Vec it is (its buffer a part place), so no gap row was written, while the let-go (free's
+PartsLet, lowering's partReleases) released only leaves that are part places themselves, and a struct's Vec field is
+an owner place (ownerCand) whose buffer lies one step past it. A false proof under the user's "provably" is the worse
+half, so both were changed:
+- **The release.** `free.PartLeaves` gives a value's part leaves through owner fields too (the path through the field,
+  then the Vec's own); PartsLet counts them among the element's let-goes (so a view of the buffer in use across it keeps
+  the place, as for an element that is a Vec) and partReleases releases each. Releasing a part built in an owner's
+  region - where the owner place is sole - is no part region's, and `__olang_region_release_part` does nothing for it.
+  The `Array<P>` program: 777 MB to 13 MB.
+- **The check.** `free.PartsFollowed` (PartsOnly with no owner leaf at any depth) replaces PartsOnly in the two gap
+  conditions (an element assigned, a `SetAt`), so `-memory -check` names every let-go of a struct element holding a
+  Vec by value - conservatively also the `Array<P>` case it now frees.
+
+Left open, and why: releasing the owner place's own region at an element's let-go was tried (a Release of the field,
+guarded by its decision) and taken out - the free pass does not count the owner place among the element's let-goes,
+so a view in use across it would not make the place keep, and the element copy lowering builds (`elemCopy`, split in
+part regions) is not the owner-region store the pass recorded, so what the Release would find was not certain. A
+`SetAt` copy builds the field's buffer in no part region. Both are the next round's (docs/freeing.md, gap 22).
+Fixtures: checks' freeing structelems (flat under 8 MB, interpreted alike), ownerelems (named by `-memory -check`).

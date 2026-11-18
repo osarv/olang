@@ -965,7 +965,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   nothing in use. Round 8 (wt-freeing8): a copy's text is built in slots of where the copy goes, as the place's own
   stores build it, so a program copying a Vec of text frees it (copytext 50 MB to 12 MB) - made cheap enough first: a
   slot scope's allocation one call (`__olang_slot_alloc`) where it was a failed bump, two calls and 128 bytes cleared a
-  string; 1,000,000 copies of 20 strings 152 ms in the arena, 156 ms in slots (238 ms in round 7).
+  string; 1,000,000 copies of 20 strings 152 ms in the arena, 156 ms in slots (238 ms in round 7). Gap 22
+  (2026-11-18, wt-freegaps): an array element holding a struct with a Vec field by value frees the Vec's buffer where it
+  is given another (a part leaf reached through the owner field, `free.PartLeaves`: 777 MB to 13 MB); where the field's
+  own regions (its owner place decided sole) or a `SetAt`'s copy are what is let go of, the release is not built yet,
+  and `-memory -check` names every element let-go of a struct with an owner field (`free.PartsFollowed`) - it had
+  reported none.
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by
