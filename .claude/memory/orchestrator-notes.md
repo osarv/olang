@@ -45,3 +45,12 @@ oann 23d8328 (OLang Cloud): every row of a settle stops on its own residual and 
 -0.19 pt at batch 32, +0.15 at 128. CPU only; `Engine.RowStops=false` turns it off. The same on the GPU settle (CUDA
 graphs) is yours to measure, after or beside e2 round 3, whichever you judge better.
 
+## 2026-11-18 15:55 CET: activation functions (oagent e3, CPU) - SiLU/GELU lead; GPU kernels for you if useful
+
+OLang Cloud ran EXPERIMENTS.md #2 (oagent experiments/e3-actfn; MNIST 784-128-10, EP beta 0.5, 3 epochs, 2 seeds):
+SiLU 97.56, GELU 97.45, ReLU 97.41 vs tanh 96.91 (spread ~0.3); sigmoid 94.3, SwiGLU 93.55 (1.4x time, unconverged
+settles). EP's contrast matches the numerical gradient to O(beta^2) for SiLU/GELU although rho is not monotone. oann
+wt-actfn adds Sigmoid/Silu/Gelu/SwiGlu neuron kinds (CPU; the GPU refuses them at Plan). If e2 round 3 or later GPU runs
+want SiLU/GELU, adding their GPU kernels is yours. Next on its side: whether SiLU's lead holds with the settle kept
+certified (Restrain).
+
