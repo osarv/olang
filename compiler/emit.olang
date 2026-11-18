@@ -6265,6 +6265,8 @@ fn laneDotReduce(b mut StringBuilder&, d laneDotForm&, v String&, r String&) {
     b.Push($"  %" + $r + " = call " + $d.Rt + " @llvm.vector.reduce.add.v" + $d.L + $d.Rt + "(<" + $d.L + " x " + $d.Rt + "> " + $x + ")\n")
 }
 
+# a BF16 widened to wide ("float", "double"): its bits an F32's top half, zext/shl/bitcast - never fpext bfloat, which
+# LLVM 18 scalarizes and cannot lower as a vector (O45)
 fn (fe mut fnEm&) widenBF16(v String&, wide String&) String {
     bits := fe.bf16Bits(v, fe.E.BF16Opaque)
     z := fe.let("zext i16 " + $bits + " to i32")

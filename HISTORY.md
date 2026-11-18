@@ -39633,3 +39633,35 @@ local cannot be written through a reference (T24), so no alias case arises. Line
 initializers, only where an operand reads a local at all. Corpus: tests/proven.olang's `locals` (written in a loop, on
 a branch, after the read; known and in range), baked as a global and decided by an assert while compiling beside the
 run; checks: e16hlocalindex, e16hlocaldivisor, e16hlocalshift.
+
+## 2026-11-18: BF16 widening stays integer; why multi-chain BF16 dot products were taken apart (O45; mine; wt-bf16vec)
+
+oann's BF16 matrix-vector (kernels/gemm `dotNarrow`) ran 0.49-0.66x F32 at cache-resident batch-1 shapes with two sum
+chains a row, and every form with more chains was scalarized into `vmovw`/`vpinsrw` gathers (0.07-0.21x; oann
+PROGRESS.md). The suspicion was olang's widening IR. A repro (a 16-lane dot, four chains, BF16 against F32) showed the
+same 5x, and LLVM's remarks named the cause: "SLP vectorized with cost -1 and with tree size 6", rooted after the loop.
+
+- **The widening is not it.** On the module's IR through clang -O3 -march=native, the forms tried: `zext`+`shl` (the
+  emitter's), `mul` 65536 for the shift, an `i16` load in place of `load bfloat`+`bitcast`, `insertelement` into `<2 x
+  i16>` bitcast to float (more gathers), and `fpext bfloat to float` - scalar throughout (64 `vfmadd231ss`), and in C
+  with an FMA its vector form crashes LLVM 18's X86 backend ("Do not know how to soft promote this operator's
+  operand"). The same C written with `uint16_t` fails for two chains and passes for three or four in a loop: it is
+  LLVM-generic, and fragile.
+- **The cause is SLP's order.** The SLP vectorizer walks blocks in post-order, so a loop's exit block is seen before its
+  header. `laneSum(a) + laneSum(b)` (or two rows' results stored to `out[i]`, `out[i + 1]`) is a pair of isomorphic
+  fadds; `tryToVectorize` on its operands builds a 2-wide tree that follows the lane sums back through the exit and loop
+  phis into the loop's FMAs, pairing chain a's lane j with chain b's lane j - non-consecutive loads, gathered. For F32
+  the gathered floats cost more than they save and the tree is dropped, so the header's phis vectorize the loop
+  horizontally later; for BF16 the vectorized `zext`/`shl` tip it to -1, and the loop is taken apart before the header
+  is reached. `-mllvm -slp-vectorize-hor=false` makes the loop whole (vpmovzxwd, vpslld, zmm FMAs), but it turns off
+  every horizontal reduction SLP finds in every program, so it is not passed.
+- **Decided (mine):** the emitter keeps the integer widening (O45); the rule for a kernel is to add its chains lane by
+  lane before one lane sum, which leaves no isomorphic pair after the loop. oann's `dotRow` (wt-bf16vec there): one
+  row at a time, eight chains (both FMA ports for one row), folded `((0+1)+(2+3))+((4+5)+(6+7))` lane by lane, one
+  `laneSum`; F32 and INT8 rows sum in the same order, so the bit-for-bit storage tests hold. Two rows in one loop are
+  still taken apart for BF16 (the side-by-side stores pair them).
+- **Numbers** (oann bench/storage at batch 1, 9 rounds, alternated with the old build three times, load 10-17):
+  BF16/F32 at 1 x 784 x 128 0.44-0.60x -> 0.69-0.75x, 1 x 512 x 512 0.58-0.62x -> 0.74-0.86x, 1 x 128 x 512
+  0.67-0.73x -> 0.80-0.84x, 1 x 1024 x 1024 (streaming) 1.42-1.70x -> 1.46-1.70x; F32 itself unchanged within noise.
+  BF16 >= F32 at cache-resident sizes is not reached: a widened vector is three vector-port uops (vpmovzxwd, vpslld,
+  FMA) where F32's is one, so BF16 is port-bound near 1.5 cycles a vector while F32 reads L2 at about the same rate.
