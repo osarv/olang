@@ -634,6 +634,18 @@ fn freeing(r mut report&) ? Failed {
     o := outOf(dir)
     try r.expect(o.Contains("gaps.olang:8:9: memory: 'rows[i % 10]' keeps what it lets go of until main's scope closes: a let-go early freeing does not follow (O8f)"), "no row for the element", dir)
     try r.expect(o.Contains("error[B18]: 2 let-goes early freeing does not follow (O8f)"), "no B18 error", dir)
+    # (gap 22: an element holding a struct with a Vec field frees its buffer - under 8 MB, the evaluator alike; where the
+    # field's own regions or a SetAt's copy are let go of, -memory -check names each element, as it does any struct
+    # element with an owner field)
+    try r.expect(sh(dir, "\"$OLANG\" build structelems.olang > out.txt 2>&1") == 0, "structelems built", dir)
+    try r.expect(sh(dir, "(ulimit -v 8192 && ./build/structelems) > out.txt 2>&1") == 0, "structelems under 8 MB", dir)
+    try r.expect(outOf(dir) == "80000200000 2\n", "structelems output", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 structelems.olang > out.txt 2>&1") == 0, "structelems interpreted", dir)
+    try r.expect(outOf(dir) == "20100 2\n", "structelems interpreted output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check ownerelems.olang > out.txt 2>&1") == 1, "ownerelems passed -memory -check", dir)
+    ow := outOf(dir)
+    try r.expect(ow.Contains("ownerelems.olang:24:9: memory: 'rows[i % 10]' lets go of what the element held"), "no row for the element", dir)
+    try r.expect(ow.Contains("ownerelems.olang:25:9: memory: 'v[i % 10] = Q.Mk(i)' lets go of what the element held"), "no row for the SetAt", dir)
 }
 
 # wholeprog 2.1: an earlyfree program's code as a module of its own (splitlib, its main named Run), the root only

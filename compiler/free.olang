@@ -3339,7 +3339,7 @@ fn (w mut walker&) unfollowed(sp source.Span, p typed.Lvalue&) {
         }
         case typed.Lvalue.Elem(_, _, _) {
             k := w.F.placeOfPlace(p)
-            if (k < 0 or not w.F.arr[k]) and not w.F.PartsOnly(p.Type()): w.gap(p.Span(), "lets go of what the element held")
+            if (k < 0 or not w.F.arr[k]) and not w.F.PartsFollowed(p.Type()): w.gap(p.Span(), "lets go of what the element held")
         }
         case _ { }
     }
@@ -3840,7 +3840,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
             if c.Args.Len() > 0 and not f.programCode[b2] and f.fnName(b2) == "SetAt" and w.ownsStorage(c.Args[c.Args.Len() - 1].Type()) {
                 et := c.Args[c.Args.Len() - 1].Type()
                 q := f.placeKey(w.T().Array(et, types.TypeId(0)), -1)
-                if (q < 0 or not f.arr[q]) and not f.PartsOnly(et): w.gap(sp, "lets go of what the element held")
+                if (q < 0 or not f.arr[q]) and not f.PartsFollowed(et): w.gap(sp, "lets go of what the element held")
             }
             if w.Final and f.genOn and w.quiet == 0 {
                 w.gcStmt.Push(w.cur)
@@ -6174,15 +6174,50 @@ fn (f mut Free&) VecWalks(ty types.TypeId) Vec<VecWalk> {
     return out
 }
 
+# O8f (gap 22): whether an element's let-go of a value of type ty is followed - PartsOnly, and no owner field (a struct's
+# Vec by value, ownerCand) anywhere in it: an owner place's own regions, where it is decided sole, are released by no
+# element's let-go, and a SetAt's copy builds such a field's parts in no part region - so -memory -check names it
+fn (f mut Free&) PartsFollowed(ty types.TypeId) Bool {
+    if not f.PartsOnly(ty): return false
+    for lf in f.leaves(ty) {
+        if f.owner[lf.PlaceId]: return false
+    }
+    return true
+}
+
+# O8f (gap 22): the part leaves of a value of type ty - its leaves that are part places, and through a leaf that is an
+# owner place (a struct's Vec field by value, ownerCand) the part leaves of the owner's own type: PartsOnly reads such a
+# field as the Vec it is, so its let-go releases the Vec's buffer as an element of that Vec's type would (a release of
+# a part that was built in the owner's region, where the owner place is sole, is no part region's and does nothing)
+fn (f mut Free&) PartLeaves(ty types.TypeId, depth I64 = 0) Vec<leaf> {
+    out Vec<leaf>
+    if depth > 8: return out
+    for lf in f.leaves(ty) {
+        if f.PartPlace(lf.PlaceId) {
+            out.Push(lf)
+            continue
+        }
+        if not f.owner[lf.PlaceId]: continue
+        for sub in f.PartLeaves(f.valTy[lf.PlaceId], depth + 1) {
+            path := Array<I64>(lf.Path.Len() + sub.Path.Len())
+            for j in range lf.Path.Len(): path[j] = lf.Path[j]
+            for j in range sub.Path.Len(): path[lf.Path.Len() + j] = sub.Path[j]
+            out.Push(leaf(path, sub.PlaceId))
+        }
+    }
+    return out
+}
+
 # the candidate places a let-go of a PartsOnly value of type ty lets go of: its part leaves, and through each Vec it walks
 # the text place or the element's own (O8f) - each a let-go the views in use across it are judged by
 fn (f mut Free&) PartsLet(ty types.TypeId, depth I64 = 0, entry Bool = false) Vec<I64> {
     out Vec<I64>
     if depth > 8: return out
     # (a Map entry's every leaf, as its removal's vacate lets go of them - EntryOnly)
-    for lf in f.leaves(ty) {
-        if entry or f.PartPlace(lf.PlaceId): addTo(out, lf.PlaceId)
+    if entry {
+        for lf in f.leaves(ty): addTo(out, lf.PlaceId)
     }
+    for lf in f.PartLeaves(ty): addTo(out, lf.PlaceId)
     for vw in f.VecWalks(ty) {
         if vw.Texts >= 0: addTo(out, vw.Texts)
         else: addAllTo(out, f.PartsLet(vw.Elem, depth + 1, vw.Next >= 0))

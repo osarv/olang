@@ -1480,8 +1480,14 @@ fn (ln mut lowering&) partReleases(ty types.TypeId, depth I64 = 0, entry Bool = 
     }
     # (a Map entry's every leaf, as its removal's vacate releases them: its text's slots, its value's region -
     # free.EntryOnly)
-    for r in ln.leafPaths(ty) {
-        if entry or r.Part: out.Push(r)
+    if entry {
+        for r in ln.leafPaths(ty): out.Push(r)
+        return out
+    }
+    # (each part leaf, through an owner field too - free.PartLeaves, gap 22)
+    for lf in fr.PartLeaves(ty) {
+        g := ln.guardOf(lf.PlaceId)
+        if g != free.NotSole: out.Push(relPath(g, lf.Path, false, true))
     }
     return out
 }

@@ -1,0 +1,29 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, open): an element holding a struct with a Vec field by value, where the field's own
+# regions are what is let go of (the owner place decided sole) or a SetAt's copy builds it - not followed yet, so
+# -memory -check names each
+N I64 = 1000
+
+type Q struct() { a Vec<I64> }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.a.Push(i)
+    return q
+}
+
+fn main() {
+    rows := Array<Q>(10)
+    v Vec<Q>
+    for k in range 10: v.Push(Q.Mk(k))
+    t := 0
+    for i in range N {
+        q := Q()
+        q.a = Vec<I64>[i, i]
+        rows[i % 10] = q
+        v[i % 10] = Q.Mk(i)
+        t += rows[i % 10].a[0] + v[i % 10].a[0]
+    }
+    io.PutLn($t)!
+}
