@@ -39728,3 +39728,49 @@ so a view in use across it would not make the place keep, and the element copy l
 part regions) is not the owner-region store the pass recorded, so what the Release would find was not certain. A
 `SetAt` copy builds the field's buffer in no part region. Both are the next round's (docs/freeing.md, gap 22).
 Fixtures: checks' freeing structelems (flat under 8 MB, interpreted alike), ownerelems (named by `-memory -check`).
+
+## 2026-11-18: freeing gap 22 closed - an element's owner fields released, owner copies split, lifted locals moved (O8f, B18a; mine; wt-gap22)
+
+The round wt-freegaps left two shapes of gap 22 open, named by `-memory -check`: (a) a `Vec<Q>` (`Q struct() { a
+Vec<I64> }`) given `v[i % 10] = Q.Mk(i)` kept 64 bytes a turn, and (b) an `Array<Q>` given `rows[i % 10] = q`, `q.a`
+always new storage of its own (`Q.a`'s owner place decided sole), kept ~1.2 KB a turn. Measured first: (a) 128 MB at
+2,000,000 turns, (b) 236 MB at 200,000. Four causes, each fixed:
+- **The owner's region at the element's let-go.** `free.ReleaseLeaves` (PartLeaves' successor) gives an element's
+  owner leaves too, each before the leaves its own type releases; `PartsLet` counts them among the element's let-goes,
+  so a view in use across one keeps the owner place (the hole the earlier attempt was taken out for); and
+  `lower.partReleases` releases each owner field's region (`Release`, guarded by its decision) first, which leaves the
+  field empty, then the Vecs' walks and the part leaves - which then find nothing where the owner was sole, and release
+  the buffers where it was not. Releasing the region is sound for the same reason every other owner release is: a
+  place is a declaration, so a sole `Q.a` has every value of it - in a local, a field or an element - built for it in a
+  region of its own, and a copy of a value holding it makes it keep (RCopied, `untracked`).
+- **The copy `SetAt` makes.** `v.data[i] = x` copies its by-value parameter through the type's Copy helper - every
+  part in the Vec's scope, so the element's `ReleasePart` later found no part region. The free pass already records
+  that copy as a store into `Q.a` (copyInto); `free.OwnerSite` names such sites, and `lower.ownerCopy` copies a
+  PartsOnly value there as an array element's copy is made (`partsCopied`): each part place's array in a part region,
+  a kid of where the copy goes - the owner's own region where it is sole (whose release reads a part region that is its
+  kid as its own, `__olang_region_home`), the Vec's scope where it is not.
+- **The local lifted for a move.** The scope pass builds a value local copied whole at its last use where the copy goes
+  (item 17), so that lowering moves it; but lowering refused the move where early freeing made the copy a region (a
+  store into `Q.a`), so `q` lived in main's scope and was copied as well - its own region left there every turn.
+  `free.MovesLeaves` allows the move where the copy's region is made only for owner or part fields of the local's own
+  type (no split, slot or element-splitting part site): the local's value of each was built for that same place at its
+  own store. The move is judged where the region would have been made (its parent). The same refusal kept ~500 bytes a
+  turn in `rows[i % 10] = w` for an `Array<Vec<I64>>` and a Vec local - a part site - unnamed by `-memory -check`
+  (a placement, not a let-go); flat now. And such a local, moved and named by nothing past its block, keeps its own
+  slot in the frame, its parts still built in the outer block (`homeKept`, as O26a's returned locals do, gap 19) - a
+  new 24-byte object there each turn was the last leak.
+- **An owner's own let-go and its parts (found on the way).** Where `Q.a` keeps for a change in place (`q.a.Push(i)`),
+  `q.a = w` releases the old buffer through its part leaf (`leafPaths`) - but the free pass recorded the let-go only of
+  `Q.a`, so a view of the old buffer in use across it was never judged: `r := q.a.View(); q.a = w; t += r[0]` read a
+  released buffer (the evaluator stopped it; the sanitized build did not notice). `walker.goParts` now records the
+  owner's ReleaseLeaves with every assignment let-go of an owner place (a local, a field, a global, a struct field held
+  in place), and lowering releases an owner's parts after its guarded release in code that reads the decision at the
+  link (`ownerParts`: such code released nothing of a not-sole owner). With that, an owner kept only for a change in
+  place whose value is flat parts (a Vec<I64>), each decided sole, frees at every let-go: the report counts it so
+  (`partsFree`) rather than as a gap - ownerelems' `q.a = ...` row.
+
+Measured: (a) and (b) flat at 2,000,000 turns (12.9 MB), `-memory -check` passing, interpreted alike and clean under
+`-sanitize`; ownerelems and soleelems join checks' freeing limited set (under 8 MB at 400,000 turns, interpreted
+alike, `-memory -check`). Left, named by `-memory -check`: a by-value argument's copy (`v[i] = p`, a local p) makes the
+owner place keep (RCopied: the free pass judges before lowering moves it), and structelems' fill copies do; and a
+part place keeps for a same-statement read of another value of it (`v[i] = p` reading p's buffer), judged per place.
