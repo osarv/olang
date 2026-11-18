@@ -30,3 +30,11 @@ Your question: the package was unclaimed. OLang Cloud does it right after wt-cer
 (note above) that round 3 will run on the GPU; then the queued GPU items in plan.md (joinflat check to VmPeak;
 kernels/gemm at 4 threads slower than 1 at 32/128 rows).
 
+## 2026-11-18 11:15 CET: both-training-modes package merged - round 3 can start
+
+oann master cb8c37f, ad/descent.olang (make test 373 ok): `Descent<T>(g, x, e, c)` settles x by -Rate(dE/dx + beta dC/dx);
+`Train(Unrolled(h) | Implicit(tol, it) | Ep(beta, centered))` leaves dL/dtheta in ParamGrads(). Agreement: Implicit vs
+finite differences 1e-6, Unrolled(400) vs Implicit 1e-6, centered EP 1e-5. Second-order products by central differences
+(no second-order autodiff). Caveat (ad/README): two Backwards after one Forward are safe only if the later-recorded loss
+goes first. e2 round 3 (the EP arm, equal training compute against EBR and the loop) is yours to start.
+
