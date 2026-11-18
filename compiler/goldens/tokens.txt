@@ -2059,7 +2059,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 ac0cb24df228eac5 494276e48e18f7fa checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-25f26746f88aded1 2949e77524f04ece checks/checks.olang
+4bb1599d1574a80b 97535a0300083e9e checks/checks.olang
 e441d89352158de4 51f391891d39e1c7 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 efb54136ad6286dc checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb 11ac830c3b4509ca checks/fixtures/agree/math.olang
@@ -2173,7 +2173,9 @@ d18097214e652a69 3810e43fb7df5625 checks/fixtures/freeing/gaps.olang
 c63fbdfdcd4f61e6 786567b89d95661b checks/fixtures/freeing/mapcopy.olang
 d4da91f96eb62c2e 6c2d12ad76355b8a checks/fixtures/freeing/mapelems.olang
 93352884d91c2ff9 5705096c0e0ede1b checks/fixtures/freeing/mapvalues.olang
+a3af92a2456b4c88 68bd5f71a94a81a6 checks/fixtures/freeing/ownerelems.olang
 390ddcbc0280f5e1 1fb953760e1d9d05 checks/fixtures/freeing/returned.olang
+79180390f049aff6 b94be7d9e0fbf589 checks/fixtures/freeing/structelems.olang
 8f42cb1782a3ec6c 5841b675b262b8af checks/fixtures/freeing/tempref.olang
 6f8f63e1e574c89d d1912874adf93448 checks/fixtures/freeing/texts.olang
 394cffd18c1d96c5 d9295aa818a78557 checks/fixtures/freeing/unset.olang
@@ -2401,14 +2403,14 @@ f8904f06be8de907 3cd94887e148f032 compiler/facts.olang
 5b0d1d8455b9f604 195cc71e4c8c755c compiler/fetch.olang
 b8bc27635ac86610 348eb08fc0410154 compiler/fix.olang
 e16765f56912e3a6 22d3690134ecf863 compiler/fmt.olang
-832f8ffc27f69e96 c6695a6ca41b2dd3 compiler/free.olang
+4fa6aec5bdbb2523 0ae038e8ff1696e9 compiler/free.olang
 1b58c42eb72c9af5 e5ef499ffb639fe1 compiler/generic.olang
 5b111314ea0faa97 b4c0210e7d6df3c1 compiler/interp.olang
 23a885a6497e989e 121d5f76d127824b compiler/jupyter.olang
 8299f0d6f657ceae ba0b78c0c7122d77 compiler/lineedit.olang
 211de0b5ecb13aac 4324dd1a83c4b615 compiler/listing.olang
 f25119be92c6587e 3825c2dbc7b7a788 compiler/load.olang
-521c9a9cdca0f40f d76eb3a172be3efc compiler/lower.olang
+9375a87f9f3f5123 4c8b7da4e863882f compiler/lower.olang
 0a6ba37a53fb9662 26f5ffd009f3d4b4 compiler/lsp.olang
 7dc09dd9a3624990 5eddb899d10cc9ce compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
@@ -2460,7 +2462,7 @@ e39ea53d83f4cc1a c115b25fd04df645 compiler/tools/evaldiff.olang
 90cdc4e1817524f3 29822f6e37f71390 compiler/tools/layoutdiff.olang
 293aacc26d544a2b 5d7c802d6e795883 compiler/tools/layoutgold.olang
 f5725bda947671fb a5f440a0120148bd compiler/tools/lowerdump.olang
-7869e9b858093824 836099837cb713d3 compiler/tools/memgate.olang
+8a6eb0318b75da6c e09d70e6880f3395 compiler/tools/memgate.olang
 df7a28b92b6554f0 2d9a2dd0f02ffbfd compiler/tools/modgraph.olang
 922e11d23bb0e002 a9486f115fc943f9 compiler/tools/namesdiff.olang
 e12d25f16febcea4 805f9ab078181038 compiler/tools/nesting.olang
