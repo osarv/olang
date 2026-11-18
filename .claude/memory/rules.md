@@ -175,6 +175,7 @@ No third-party code (plugins, packages from outside the distribution, curl-piped
 install without asking first (the user, 2026-11-16, after render-markdown.nvim was added on their yes to "add render-markdown" without saying it was third-party: "wait, are we usign a third party plugin now?" ... "that wasnt the plan"): name what is third-party before proposing it.
 
 ## Retrieved datasets
+- **Never train on validation or test data (the user, 2026-11-18: "never ever train on the validation data")**: train, validation and test stay strictly apart in every experiment - no fitting, normalisation statistics, early stopping, arm killing or setting choices on validation or test data; choices use a validation split carved from the training set, the test set is read once for the final report.
 Datasets downloaded for experiments live outside worktrees, in /home/oscar/claude/data/<name> (locally; never committed), linked into a worktree; removing a worktree must not lose them (2026-11-17: e2's Sudoku data was lost with its worktree and fetched again).
 
 ## Temporary files

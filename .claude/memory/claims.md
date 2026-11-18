@@ -26,3 +26,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e10 research (cloud, 2026-11-18): oagent experiments/e10-sleep - done: oagent 2e075d9 (circuit nights lose to the consolidator; results in README)
 - OLang Cloud (2026-11-18): oann wt-anderson - Anderson acceleration for the exact adjoint and forward settle (dyn)
 - OLang Cloud (2026-11-18): oann wt-int8stream - INT8 streaming GEMV regained without losing BF16's gain (kernels/gemm)
+- OLang Cloud (2026-11-18): oagent wt-e3val - e3-actfn re-run with a validation split (arms chosen on validation, test read once)
