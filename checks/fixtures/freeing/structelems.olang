@@ -1,7 +1,7 @@
 import "std/io"
 
 # O8f (docs/freeing.md gap 22): an array's element holding a struct whose field is a Vec by value, given another - the
-# old element's buffer is released (a part leaf reached through the owner field, free.PartLeaves); it kept every
+# old element's buffer is released (a part leaf reached through the owner field, free.ReleaseLeaves); it kept every
 # buffer before (777 MB at 1,600,000 turns)
 N I64 = 400000
 

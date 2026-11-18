@@ -1,9 +1,10 @@
 import "std/io"
 
-# O8f (docs/freeing.md gap 22, open): an element holding a struct with a Vec field by value, where the field's own
-# regions are what is let go of (the owner place decided sole) or a SetAt's copy builds it - not followed yet, so
-# -memory -check names each
-N I64 = 1000
+# O8f (docs/freeing.md gap 22): an element holding a struct with a Vec field by value whose owner place is not sole (a
+# change in place, Q.Mk's Push), given another - in an array, and through a Vec's SetAt, whose copy builds the field's
+# buffer in a part region (lower.ownerCopy): the old buffer released through the field (lower.partReleases); each kept
+# a buffer a turn before
+N I64 = 400000
 
 type Q struct() { a Vec<I64> }
 

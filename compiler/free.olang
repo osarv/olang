@@ -378,6 +378,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     splitAt Map<pair.Pair<I64, I64>, Array<I64>>
     slotAt Map<pair.Pair<I64, I64>, Array<I64>>   # O8f: a split copy's slot parts, by (body, site): field << 32 | place
     partAt Map<pair.Pair<I64, I64>, I64>    # O8f: the sites a part place's value is built at, in a part region (PartPlace): the place
+    ownerAt Map<pair.Pair<I64, I64>, I64>   # O8f (gap 22): the copies made for an owner place, by (body, site): the place (OwnerSite)
     partsAsked Map<types.TypeId, Bool>      # O8f: PartsOnly by type - false while it is being found (a type holding itself)
     # feeders (findFeeds): value locals built in the region of the owner place they are stored into, from their
     # declarations - by (body, local), the index in feeds; and the calls given one, judged and redirected into it
@@ -2626,6 +2627,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
             if ol >= 0 {
                 w.store(ol, x, o, sp, w.localName(I64(l)))
                 w.go(ol, LAssign, p.Span(), source.Span(0, 0), -1)
+                w.goParts(ol, p.Span())
             }
             return
         }
@@ -2648,12 +2650,16 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
                 w.storeWithin = -1
                 w.storeInside = -1
                 w.go(k, LAssign, p.Span(), source.Span(0, 0), -1)
+                w.goParts(k, p.Span())
                 return
             }
             # a struct held in place given another value: its candidate leaves let go of theirs, and are given the
             # value's - which a constructor's own stores account for, and a copy stores elsewhere
             lvs := w.F.leaves(p.Type())
-            for lf in lvs: w.go(lf.PlaceId, LLeaf, p.Span(), source.Span(0, 0), -1)
+            for lf in lvs {
+                w.go(lf.PlaceId, LLeaf, p.Span(), source.Span(0, 0), -1)
+                w.goParts(lf.PlaceId, p.Span())
+            }
             if lvs.Len() > 0 and not w.storedWhole(x, cm): o = w.copyInto(lvs, p.Type(), x, o, sp, cm)
         }
         case typed.Lvalue.Global(_, _, _, _) {
@@ -2662,6 +2668,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
                 w.storeWithin = -1
                 w.storeInside = -1
                 w.go(k, LAssign, p.Span(), source.Span(0, 0), -1)
+                w.goParts(k, p.Span())
                 return
             }
         }
@@ -3283,6 +3290,14 @@ fn copiedStore(x typed.Expr&) Bool {
     }
 }
 
+# O8f (gap 22): an owner place k let go of by an assignment - the places its value's storage is in let go of with it
+# (ReleaseLeaves: its part leaves, which lowering releases where k is not decided sole, and the owners inside it), each
+# a let-go the views in use across it are judged by
+fn (w mut walker&) goParts(k I64, sp source.Span) {
+    if not w.F.IsOwner(k): return
+    for lf in w.F.ReleaseLeaves(w.F.valTy[k]) { w.go(lf.PlaceId, LLeaf, sp, source.Span(0, 0), -1) }
+}
+
 # a let-go event: place k let go of by the statement being walked - by an assignment or a vacate of it, a moved value
 # dropped, or a call
 fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee I64) {
@@ -3339,7 +3354,7 @@ fn (w mut walker&) unfollowed(sp source.Span, p typed.Lvalue&) {
         }
         case typed.Lvalue.Elem(_, _, _) {
             k := w.F.placeOfPlace(p)
-            if (k < 0 or not w.F.arr[k]) and not w.F.PartsFollowed(p.Type()): w.gap(p.Span(), "lets go of what the element held")
+            if (k < 0 or not w.F.arr[k]) and not w.F.PartsOnly(p.Type()): w.gap(p.Span(), "lets go of what the element held")
         }
         case _ { }
     }
@@ -3840,7 +3855,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
             if c.Args.Len() > 0 and not f.programCode[b2] and f.fnName(b2) == "SetAt" and w.ownsStorage(c.Args[c.Args.Len() - 1].Type()) {
                 et := c.Args[c.Args.Len() - 1].Type()
                 q := f.placeKey(w.T().Array(et, types.TypeId(0)), -1)
-                if (q < 0 or not f.arr[q]) and not f.PartsFollowed(et): w.gap(sp, "lets go of what the element held")
+                if (q < 0 or not f.arr[q]) and not f.PartsOnly(et): w.gap(sp, "lets go of what the element held")
             }
             if w.Final and f.genOn and w.quiet == 0 {
                 w.gcStmt.Push(w.cur)
@@ -5540,6 +5555,12 @@ fn (f mut Free&) writePlans() {
     # region took in has a region of its own inside that one - a place's value built as part of another's)
     ok Vec<Bool>
     for st in f.stores: ok.Push(st.Kind == SFresh and f.placeable(st))
+    # (O8f, gap 22: each value made for an owner place, whatever its decision - a copy among them has its parts split)
+    for st in f.stores {
+        if st.Kind != SFresh or st.X == null or not f.owner[st.PlaceId]: continue
+        top := f.topSite(st.X!)
+        if top >= 0: f.ownerAt.Put(pair.Pair(st.Body, top), st.PlaceId)
+    }
     for i in f.outerFirst() {
         if not ok[i]: continue
         st := f.stores[i]
@@ -6174,22 +6195,13 @@ fn (f mut Free&) VecWalks(ty types.TypeId) Vec<VecWalk> {
     return out
 }
 
-# O8f (gap 22): whether an element's let-go of a value of type ty is followed - PartsOnly, and no owner field (a struct's
-# Vec by value, ownerCand) anywhere in it: an owner place's own regions, where it is decided sole, are released by no
-# element's let-go, and a SetAt's copy builds such a field's parts in no part region - so -memory -check names it
-fn (f mut Free&) PartsFollowed(ty types.TypeId) Bool {
-    if not f.PartsOnly(ty): return false
-    for lf in f.leaves(ty) {
-        if f.owner[lf.PlaceId]: return false
-    }
-    return true
-}
-
-# O8f (gap 22): the part leaves of a value of type ty - its leaves that are part places, and through a leaf that is an
-# owner place (a struct's Vec field by value, ownerCand) the part leaves of the owner's own type: PartsOnly reads such a
-# field as the Vec it is, so its let-go releases the Vec's buffer as an element of that Vec's type would (a release of
-# a part that was built in the owner's region, where the owner place is sole, is no part region's and does nothing)
-fn (f mut Free&) PartLeaves(ty types.TypeId, depth I64 = 0) Vec<leaf> {
+# O8f (gap 22): the leaves an element's let-go of a value of type ty releases - its leaves that are part places, and
+# each leaf that is an owner place (a struct's Vec field by value, ownerCand) followed by the leaves its own type
+# releases in turn, the owner first. Where the owner place is decided sole, its value's storage is one region of its own
+# (built for it at every store, a copy's parts in part regions that are kids of it), which the owner's release frees
+# whole, leaving the field empty for the releases under it; where it is not, its parts are released one by one - each
+# built in a part region where its place is decided sole (a copy made for the owner splits them: OwnerSite)
+fn (f mut Free&) ReleaseLeaves(ty types.TypeId, depth I64 = 0) Vec<leaf> {
     out Vec<leaf>
     if depth > 8: return out
     for lf in f.leaves(ty) {
@@ -6198,7 +6210,8 @@ fn (f mut Free&) PartLeaves(ty types.TypeId, depth I64 = 0) Vec<leaf> {
             continue
         }
         if not f.owner[lf.PlaceId]: continue
-        for sub in f.PartLeaves(f.valTy[lf.PlaceId], depth + 1) {
+        out.Push(lf)
+        for sub in f.ReleaseLeaves(f.valTy[lf.PlaceId], depth + 1) {
             path := Array<I64>(lf.Path.Len() + sub.Path.Len())
             for j in range lf.Path.Len(): path[j] = lf.Path[j]
             for j in range sub.Path.Len(): path[lf.Path.Len() + j] = sub.Path[j]
@@ -6206,6 +6219,51 @@ fn (f mut Free&) PartLeaves(ty types.TypeId, depth I64 = 0) Vec<leaf> {
         }
     }
     return out
+}
+
+# O8f (gap 22): whether a copy made at site of body b of a value local of type ty, at the local's last use, may be left
+# out (D9i's move) though early freeing made the copy a region: the copy is made only for ty's own fields that are owner
+# or part places (an element store of a struct holding a Vec by value, or of a Vec<I64>) - no split or slot site, no
+# part site splitting what the array's elements own - so the local's own value of each such field, a value of the same
+# place, was built for it at its own store: in a region of its own wherever an owner place is decided sole, in a part
+# region wherever a part place is; the element takes it as the copy's would be (the local's storage outliving the
+# element, as any move asks). The local, lifted where the copy goes (the scope pass's item 17), is moved there
+fn (f mut Free&) MovesLeaves(b I64, site I64, ty types.TypeId) Bool {
+    if f.OwnerSite(b, site) < 0 and not f.PartSite(b, site): return false
+    if f.SplitPath(b, site).Len() > 0 or f.SlotParts(b, site).Len() > 0 or f.PartSplit(b, site, ty) != null: return false
+    lvs := f.leaves(ty)
+    for st in f.stores {
+        if st.Body != b or st.X == null or f.topSite(st.X!) != site: continue
+        if not f.owner[st.PlaceId] and not f.PartPlace(st.PlaceId): return false
+        if not f.leafOf(lvs, st.PlaceId): return false
+    }
+    return true
+}
+
+fn (f Free&) leafOf(lvs Vec<leaf>&, k I64) Bool {
+    for lf in lvs {
+        if lf.PlaceId == k: return true
+    }
+    return false
+}
+
+# O8f (gap 22): the owner place a copy made at site of body b is a value made for (a store into an owner field whose
+# value is that copy), -1 for none - lowering builds such a copy's parts in part regions (elemCopy's split), so that an
+# element's let-go releasing them one by one, where the owner place is not sole, finds each
+fn (f Free&) OwnerSite(b I64, site I64) I64 { return try f.ownerAt.Get(pair.Pair(b, site)) catch default -1 }
+
+# O8f (gap 22): whether owner place k, not decided sole for a change in place alone (RInPlace: what the change builds, a
+# growth's buffer, is a part place's own value), frees all it lets go of through its parts all the same - its value owns
+# storage only as part places' arrays of plain elements, one step in (a Vec<I64>, whose buffer is all it owns), each
+# decided sole: every let-go of it releases them (lower.releases' leafPaths, an element's partReleases)
+fn (f mut Free&) partsFree(k I64) Bool {
+    if not f.IsOwner(k) or f.whyKind[k] != RInPlace: return false
+    ty := f.valTy[k]
+    if not f.PartsOnly(ty) or f.VecWalks(ty).Len() > 0: return false
+    for lf in f.leaves(ty) {
+        if not f.PartPlace(lf.PlaceId) or not f.IsSole(lf.PlaceId): return false
+    }
+    return true
 }
 
 # the candidate places a let-go of a PartsOnly value of type ty lets go of: its part leaves, and through each Vec it walks
@@ -6217,7 +6275,7 @@ fn (f mut Free&) PartsLet(ty types.TypeId, depth I64 = 0, entry Bool = false) Ve
     if entry {
         for lf in f.leaves(ty): addTo(out, lf.PlaceId)
     }
-    for lf in f.PartLeaves(ty): addTo(out, lf.PlaceId)
+    for lf in f.ReleaseLeaves(ty): addTo(out, lf.PlaceId)
     for vw in f.VecWalks(ty) {
         if vw.Texts >= 0: addTo(out, vw.Texts)
         else: addAllTo(out, f.PartsLet(vw.Elem, depth + 1, vw.Next >= 0))
@@ -6427,7 +6485,7 @@ fn (f mut Free&) Report() String {
         }
         if first < 0: continue
         places++
-        if f.IsSole(k): continue
+        if f.IsSole(k) or f.partsFree(k): continue
         kept++
         row := first
         if f.whyKind[k] == RView { row = try f.viewGo.Get(k) catch default first }

@@ -1,0 +1,25 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): an element holding a struct whose Vec field always gets new storage of its own - the
+# field's owner place decided sole, each value in a region of its own - given another: the old value's region released
+# (the owner's release, lower.partReleases); a local moved into the element at its last use takes its region with it
+# (free.MovesLeaves), as a Vec local does into an array of Vecs - each kept a region or a buffer a turn before (a
+# SetAt's copy, and a field whose owner place is not sole: ownerelems)
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn main() {
+    rows := Array<Q>(10)
+    vs := Array<Vec<I64>>(10)
+    t := 0
+    for i in range N {
+        q := Q()
+        q.a = Vec<I64>[i, i]
+        rows[i % 10] = q
+        w := Vec<I64>[i, i, i]
+        vs[i % 10] = w
+        t += rows[i % 10].a[1] + vs[i % 10][2]
+    }
+    io.PutLn($t + " " + $rows[3].a.Len())!
+}

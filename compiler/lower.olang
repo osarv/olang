@@ -1128,6 +1128,20 @@ fn (ln mut lowering&) partCopy(site I64, v mir.Operand, ty types.TypeId, at mir.
     return mir.Operand.Copy(mir.Lvalue.L(d))
 }
 
+# O8f (gap 22): a copy of v made at site for an owner place (free.OwnerSite: a SetAt's copy into a Vec<P>, P holding a
+# Vec by value) - a PartsOnly value's bytes, its parts split as an element's copy builds them (partsCopied): each part
+# place's array in a part region of its own, a kid of at, where that place is decided sole. Where the owner place is
+# sole, at is the owner's region, whose release reads a part region that is its kid as its own (__olang_region_home);
+# where it is not, an element's let-go releasing the parts one by one finds each. None where the copy is no such one
+fn (ln mut lowering&) ownerCopy(site I64, v mir.Operand, ty types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
+    if not ln.freeing or site < 0: return mir.Operand.None
+    fr := ln.L.Free!
+    if fr.OwnerSite(I64(ln.B.Id), site) < 0 or not fr.PartsOnly(ty) or ln.T.RunsCopy(ty): return mir.Operand.None
+    d := ln.local(ln.into(ty, mir.Rvalue.Use(v), sp), ty, sp)
+    ln.partsCopied(pl(mir.Base.Local(d)), ty, at, sp)
+    return mir.Operand.Copy(mir.Lvalue.L(d))
+}
+
 # partCopy's parts of the bytes copied at p, of type ty: the array path leads to copied into at, its elements' storage
 # and every other part into rest. A Vec's buffer (free.VecFields) has its elements below the count copied and the room
 # after them left empty, as a Vec keeps it - text a copy's room held would be built in a slot no walk puts back
@@ -1458,15 +1472,62 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
     g := ln.guardOf(k)
     if k >= 0 and g != free.NotSole {
         out.Push(relPath(g, Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0), fr.SlotPlace(k), fr.PartPlace(k)))
+        # (gap 22: an owner's parts too, where it is not decided sole at the link - its release, where it is, leaves
+        # the value empty first)
+        if g >= 0: ln.ownerParts(k, Array<I64>(0), out)
         return out
     }
     return ln.leafPaths(p.Type())
 }
 
-# O8f (gap 17): what a let-go of a PartsOnly value of type ty releases - each Vec's live elements first (a Vec of text's
-# slots where the text place is decided sole, a Vec of Vecs' elements' parts in turn), then every part leaf
+# O8f (gap 22): the part leaves inside owner place k's value, at path, released where k is not decided sole (its region
+# release, where it is, leaves the value empty, so these find nothing) - free.ReleaseLeaves, the let-goes the free pass
+# judged with k's (walker.goParts)
+fn (ln mut lowering&) ownerParts(k I64, path Array<I64>&, out mut Vec<relPath>&) {
+    fr := ln.L.Free!
+    if not fr.IsOwner(k): return
+    for lf in fr.ReleaseLeaves(fr.PlaceValue(k)) {
+        if not fr.PartPlace(lf.PlaceId): continue
+        g := ln.guardOf(lf.PlaceId)
+        if g == free.NotSole: continue
+        full := Array<I64>(path.Len() + lf.Path.Len())
+        for j in range path.Len(): full[j] = path[j]
+        for j in range lf.Path.Len(): full[path.Len() + j] = lf.Path[j]
+        out.Push(relPath(g, full, false, true))
+    }
+}
+
+# O8f (gap 17): what a let-go of a PartsOnly value of type ty releases - each owner field's region where its place is
+# decided sole, first (gap 22: the field left empty, so that nothing under it is released twice), then each Vec's live
+# elements (a Vec of text's slots where the text place is decided sole, a Vec of Vecs' elements' parts in turn), then
+# every part leaf
 fn (ln mut lowering&) partReleases(ty types.TypeId, depth I64 = 0, entry Bool = false) Vec<relPath> {
     out Vec<relPath>
+    fr := ln.L.Free!
+    # (a Map entry's every leaf, as its removal's vacate releases them: its text's slots, its value's region -
+    # free.EntryOnly)
+    if entry {
+        ln.walkReleases(ty, depth, out)
+        for r in ln.leafPaths(ty): out.Push(r)
+        return out
+    }
+    lvs := fr.ReleaseLeaves(ty)
+    for lf in lvs {
+        if not fr.IsOwner(lf.PlaceId): continue
+        g := ln.guardOf(lf.PlaceId)
+        if g != free.NotSole: out.Push(relPath(g, lf.Path))
+    }
+    ln.walkReleases(ty, depth, out)
+    for lf in lvs {
+        if fr.IsOwner(lf.PlaceId): continue
+        g := ln.guardOf(lf.PlaceId)
+        if g != free.NotSole: out.Push(relPath(g, lf.Path, false, true))
+    }
+    return out
+}
+
+# partReleases' walks of the Vecs a value of type ty holds: each one's live elements let go of before its buffer
+fn (ln mut lowering&) walkReleases(ty types.TypeId, depth I64, out mut Vec<relPath>&) {
     fr := ln.L.Free!
     for vw in fr.VecWalks(ty) {
         if vw.Texts >= 0 {
@@ -1478,18 +1539,6 @@ fn (ln mut lowering&) partReleases(ty types.TypeId, depth I64 = 0, entry Bool = 
             out.Push(relPath(-1, vw.Path, false, false, vw.Data, vw.Count, vw.Elem, vw.Next))
         }
     }
-    # (a Map entry's every leaf, as its removal's vacate releases them: its text's slots, its value's region -
-    # free.EntryOnly)
-    if entry {
-        for r in ln.leafPaths(ty): out.Push(r)
-        return out
-    }
-    # (each part leaf, through an owner field too - free.PartLeaves, gap 22)
-    for lf in fr.PartLeaves(ty) {
-        g := ln.guardOf(lf.PlaceId)
-        if g != free.NotSole: out.Push(relPath(g, lf.Path, false, true))
-    }
-    return out
 }
 
 # what guards place k's release here (free.Guard): never sole where its values are references to a generational type or
@@ -1515,11 +1564,12 @@ fn (ln mut lowering&) leafPaths(ty types.TypeId) Vec<relPath> {
     fr := ln.L.Free!
     for lf in fr.Leaves(ty) {
         g := ln.guardOf(lf.PlaceId)
-        if g == free.NotSole: continue
-        if not fr.IsHandle(lf.PlaceId) {
+        if g != free.NotSole and not fr.IsHandle(lf.PlaceId) {
             out.Push(relPath(g, lf.Path, fr.SlotPlace(lf.PlaceId), fr.PartPlace(lf.PlaceId)))
-            continue
         }
+        # (gap 22: an owner leaf's parts, where it is not decided sole)
+        if g != -1: ln.ownerParts(lf.PlaceId, lf.Path, out)
+        if g == free.NotSole or not fr.IsHandle(lf.PlaceId): continue
         path := Array<I64>(lf.Path.Len() + 1)
         for i in range lf.Path.Len(): path[i] = lf.Path[i]
         path[lf.Path.Len()] = 0
@@ -2181,7 +2231,22 @@ fn (ln mut lowering&) homeKept(l typed.LocalId) {
     if st != typed.Scope.Block or st.b == ln.B.Locals[i].In: return
     ty := ln.B.Locals[i].Ty
     if ln.T.IsRef(ty) or ln.arrayOf(ty) != types.UnknownT and ln.fixedLen(ln.arrayOf(ty)) < 0: return
+    # (O8f, gap 22: a local the scope pass lifted only so that its last use moves it where the copy would go - moved
+    # there, nothing naming its storage - keeps its slot in the frame, its parts built in the outer block as before
+    # (fieldStor, as O26a's returned locals do): the move takes its bytes, and a new object there each turn was kept)
+    if ln.movedLocal(i) and ln.retFrame(typed.LocalUses.Uses(ln.T, ln.B), i) {
+        ln.fieldStor.Put(i, ln.scopeRef(st))
+        return
+    }
     ln.F.Locals[i].Home = ln.scopeRef(st)
+}
+
+# whether value local l is moved at a last use (D9i, movesAtLastUse)
+fn (ln mut lowering&) movedLocal(l I64) Bool {
+    for en in ln.moved {
+        if en.Value == l: return true
+    }
+    return false
 }
 
 # a feeder's declaration (free.FeedSite): its region made afresh, kept made for the calls building where it lives, and -
@@ -5824,10 +5889,16 @@ fn (ln mut lowering&) movable(u typed.LocalUses&, l I64, site I64) Bool {
         fs := ln.L.Free!.FeedSite(I64(ln.B.Id), l)
         if fs >= 0 and fs < ln.plan.RegionKind.Len() and ln.plan.RegionKind[fs] == 1: return true
     }
-    if site >= ln.plan.Built.Len() or ln.plan.RegionKind[site] != 0: return false
+    if site >= ln.plan.Built.Len(): return false
+    dest := ln.plan.Built[site]
+    # (O8f, gap 22: a copy whose region is made only for owner or part fields of the local's own type -
+    # free.MovesLeaves - judged where that region is made)
+    if ln.plan.RegionKind[site] != 0 {
+        if not ln.freeing or not ln.L.Free!.MovesLeaves(I64(ln.B.Id), site, loc.Ty): return false
+        dest = ln.plan.RegionParent[site]
+    }
     init := typed.Call.Of(u.Init[l])
     if init != null and init.Site >= typed.SiteId(0) and ln.plan.RegionKind[I64(init.Site)] != 0: return false
-    dest := ln.plan.Built[site]
     # (a local the scope pass homed in the result scope a returned copy of it is built in: O26a's, T13a's String(out))
     if dest == typed.Scope.Var and l < ln.plan.Stored.Len() {
         st := ln.plan.Stored[l]
@@ -6360,6 +6431,8 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             if sv != mir.Operand.None: return sv
             pv := ln.partCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
             if pv != mir.Operand.None: return pv
+            ov := ln.ownerCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
+            if ov != mir.Operand.None: return ov
             return ln.ownCopyOf(v, ty, ln.madeAt(m.Site), sp)
         }
     }
