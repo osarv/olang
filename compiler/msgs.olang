@@ -1575,11 +1575,7 @@ fn IndexNotInt(ty String&) r.Msg { return r.Msg(Diag.IndexNotInt, "E16", "an ind
 fn IndexOutOfRange(n1 I64, n2 I64) r.Msg { return r.Msg(Diag.IndexOutOfRange, "E16", "index " + $n1 + " is outside the array's " + $n2 + " elements") }
 fn NotSliceable(ty String&) r.Msg { return r.Msg(Diag.NotSliceable, "E16a", $ty + " cannot be sliced") }
 fn SliceBoundNotInt(ty String&) r.Msg { return r.Msg(Diag.SliceBoundNotInt, "E16a", "a slice's bounds are integers, found " + $ty) }
-fn NoSuchMember(ty String&, text String&, hint String&) r.Msg {
-    head := $ty + " has no member '" + $text + "'"
-    if hint.Contains("(C2a): "): return r.Msg(Diag.NoSuchMember, "", head, "it is a parameter of the constructor, not a field (C2a)", "name it alone on a line of the constructor's body")
-    return r.Msg(Diag.NoSuchMember, "", head + $hint)
-}
+fn NoSuchMember(ty String&, text String&, hint String&) r.Msg { return r.Msg(Diag.NoSuchMember, "", $ty + " has no member '" + $text + "'" + $("" if hint.Contains("(C2a): ") else hint), "it is a parameter of the constructor, not a field (C2a)" if hint.Contains("(C2a): ") else "", "name it alone on a line of the constructor's body" if hint.Contains("(C2a): ") else "") }
 fn MemberIsPrivate(text String&, ty String&) r.Msg { return r.Msg(Diag.MemberIsPrivate, "M6a", "member '" + $text + "' of " + $ty + " is private to its module") }
 fn NotAssignable() r.Msg { return r.Msg(Diag.NotAssignable, "S4", "this cannot be written - a variable, an element or a member can") }
 fn AssignIntoTried() r.Msg { return r.Msg(Diag.AssignIntoTried, "R9a", "a 'try ... catch' value is a copy, so nothing written into it is kept", "it is the element or what a clause gives, a copy either way", "write into the collection itself, 'x[i].f = v'") }
