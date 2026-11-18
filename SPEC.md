@@ -4077,7 +4077,9 @@ compile-time error naming the rendering to write (`"n = " + n` asks for `$n`). A
 a compile-time error naming `String(chars)` or a `StringBuilder`. `+` binds as it does on numbers (E5) and `$` tighter,
 so `"a" + $x.Len() + "b"` renders `x.Len()`; as any binary expression, a join continues onto the next line after a line
 ending in `+`, or anywhere inside parentheses (L18, L18a); a catch's `default` takes the whole join after it (R9a),
-`catch default "none: " + $k`. `s += t` on a `String` place is `s = s + t`.
+`catch default "none: " + $k`. `s += t` on a `String` place is `s = s + t`. A parenthesized piece written after a rendering with a
+space between is still a call of what is rendered (E13b: `$alpha (" x")` is `$(alpha(" x"))`); where what is rendered
+is no function the error says so at the `(` and names `$(...)` - or `+` - as the way to join it.
 
 `+` on text is the prelude's `String.Plus` (E31: an operator is a method, M19d), so a generic's `a + b` (G18a), a
 trait requiring `Plus` and the compile-time evaluator (K1) see it as any operator. A chain of them, however grouped -

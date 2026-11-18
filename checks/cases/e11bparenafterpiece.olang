@@ -1,0 +1,11 @@
+# check: fail error[E11b]: '(' after a piece of text calls it
+# also: to join the value inside, write '$(...)'
+# never: E13b]
+# E11b/E13b: a parenthesized piece after a rendering, written apart, calls what is rendered (oann repro/joinparen.olang);
+# the error is said at the "(" and names the way out
+fn main() ? {
+    alpha F64 = 0.5
+    normalized := true
+    text := "alpha " + $alpha (" normalized" if normalized else "")
+    assert text.Len() > 0
+}

@@ -1487,6 +1487,13 @@ e11bjoinvalue.olang:7:10: error[E11b]: '+' joins text, and this is I32
 e11bjoinvalue.olang:7:10: note: a value becomes text only through '$'
 e11bjoinvalue.olang:7:10: help: write '$label(3)'
 compilation failed with 1 error
+=== e11bparenafterpiece.olang
+e11bparenafterpiece.olang:9:31: error[E11b]: '(' after a piece of text calls it
+    9 |     text := "alpha " + $alpha (" normalized" if normalized else "")
+      |                               ^
+e11bparenafterpiece.olang:9:31: note: this is F64, which is not a function - '(args)' after a rendered value calls it (E13b)
+e11bparenafterpiece.olang:9:31: help: to join the value inside, write '$(...)'
+compilation failed with 1 error
 === e11bpluschars.olang
 e11bpluschars.olang:8:19: error[E11b]: '+' joins text, and this is Array<Char>, characters still being written
     8 |     show("say " + chars)
@@ -3945,6 +3952,13 @@ o17aparamref.olang:38:10: error[O17a, T13b]: 'v' is not held by reference
       |          ^
 o17aparamref.olang:38:10: note: it holds references to the caller's storage while its own storage is this call's
 o17aparamref.olang:38:10: help: use 'v' itself, or take its value where it is mentioned last, declaring its type ('w T = v')
+compilation failed with 1 error
+=== o17cholderkept.olang
+o17cholderkept.olang:19:21: error[O17]: this value's references live where its own storage does not
+   19 | fn outer(v V) { put(v) }
+      |                     ^
+o17cholderkept.olang:19:21: note: the callee can store through it
+o17cholderkept.olang:19:21: help: declare it a reference ('x T& = ...')
 compilation failed with 1 error
 === o17permute6.olang
 o17permute6.olang:27:14: error[T25c]: this lambda cannot be a function value

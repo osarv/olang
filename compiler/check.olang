@@ -272,6 +272,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     decided Bool = false                      # the call being built is a declared number's constructor run on a literal (T29d)
     eqAt source.Span = source.Span(-1, -1)    # where the "==" being elaborated is written (M6b's error)
     strAt source.Span = source.Span(-1, -1)   # where the "$" whose renderings are being found is written (M6b's error)
+    pieceCall source.Span = source.Span(-1, -1)   # the callee a "$" renders the call of, its "(" written apart (E11b)
     hashAt source.Span = source.Span(-1, -1)  # where the supplied Hash whose parts are being found is called (M6b's error)
     compoundAt source.Span = source.Span(-1, -1)  # a compound assignment's operator, while its target is read (E31)
     opIn source.Span = source.Span(-1, -1)    # where "in" is written, for the Has or Contains being built (E29)
@@ -11879,7 +11880,10 @@ fn (c mut Checker&) sigText(inst I64, body I64) String {
 }
 
 fn (c mut Checker&) rendered(sp source.Span, y ast.Expr&) typed.Expr& {
+    saved := c.pieceCall
+    c.pieceCall = c.callApart(y)
     x := c.expr(y, types.UnknownT)
+    c.pieceCall = saved
     if typeOf(x) == types.VoidT {
         c.err(source.Span(sp.Start, sp.Start + 1), msgs.StrOfNothing())
         return c.unknown(sp)
@@ -11889,6 +11893,28 @@ fn (c mut Checker&) rendered(sp source.Span, y ast.Expr&) typed.Expr& {
     c.wantStr(typeOf(x), seen, 0)
     c.strAt = source.Span(-1, -1)
     return x
+}
+
+# a call "$" renders whose "(" is written apart from its callee ('$alpha (" x")'): the callee's span, E11b's trap
+fn (c mut Checker&) callApart(y ast.Expr&) source.Span {
+    match y {
+        case ast.Expr.Call(_, f, _) {
+            fs := f.Span()
+            if c.src(source.Span(fs.End, fs.End + 1)) == " ": return fs
+        }
+        case _ { }
+    }
+    return source.Span(-1, -1)
+}
+
+# the "(" after a callee's span, spaces skipped
+fn (c mut Checker&) parenAfter(fsp source.Span) source.Span {
+    at := fsp.End
+    for _ in range 64 {
+        if c.src(source.Span(at, at + 1)) != " ": break
+        at = at + I32(1)
+    }
+    return source.Span(at, at + 1)
 }
 
 # E11c: "$" calls Str wherever a value of a type declaring one sits in what it renders - the instances it calls made
@@ -15063,7 +15089,7 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&, a
     if m < 0: m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("call"))
     c.privateRole(m, t, "Call", fsp, msgs.Tok(c.src(fsp)))
     if m >= 0: return c.invoke(sp, fsp, m, fv, args, Array<typed.Expr&>(0))
-    c.err(fsp, msgs.NotCallable(c.ty(t)))
+    if fsp.Start == c.pieceCall.Start and fsp.End == c.pieceCall.End { c.err(c.parenAfter(fsp), msgs.CallAfterPiece(c.ty(t))) } else { c.err(fsp, msgs.NotCallable(c.ty(t))) }
     c.dropArgs(args)
     return c.unknown(sp)
 }

@@ -39562,7 +39562,7 @@ in place / local tile - neither 89-91 / 52-55; writable only ~60 / ~57; the hois
 ~24-26. The hoist alone closes the gap and also speeds the local-tile form 2x (its own slice checks left the loop);
 writable alone closes most of it.
 
-### O17c: a local holding a parameter in a constructor's instance (2026-11-18)
+## 2026-11-18: a local holding a parameter in a constructor's instance keeps nothing by itself (O17c; mine; wt-reprofix)
 
 oann's repro/lambdacapture.olang: `read(v V&)` building `w := W(v)` and reading `w.v.d[0]` was summarised as keeping
 something in v's region, because the constructor keeps its argument in the instance - so a split value (a lambda's
@@ -39573,3 +39573,12 @@ regionParam forward the holder to the region, so a copy of the local, a copy or 
 made, returned or handed on keeps the region, and a store through it is a store into it
 (checks/cases/o17cholderkept.olang). Holding two regions, or a cursor's several, each is kept at the declaration as
 before. A pure compile-time analysis: nothing for the evaluator to agree on (the run case's asserts run under it).
+
+## 2026-11-18: E11b names `$(...)` again for a parenthesized piece after a rendering (E11b, E13b; mine; wt-reprofix)
+
+oann's repro/joinparen.olang: `"alpha " + $alpha (" normalized" if c else "")` is a call of `alpha` under E13b, as any
+`(args)` after a postfix expression is. Before `+` replaced adjacency the parser said it as E11b "'(' after a piece of
+text calls it - to join the value inside, write '$(...)'"; since, it read `E13b: F64 is not a function`, at `$alpha`,
+naming no way out. The rule stays; the checker now remembers the callee of a call "$" renders whose `(` is written
+apart (check.olang callApart), and where that callee is no function says E11b at the `(`, with E13b as the note and
+`$(...)` as the help (checks/cases/e11bparenafterpiece.olang).

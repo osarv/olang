@@ -244,7 +244,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `$x`, an `Array<Char>` beside a String one naming `String(chars)`. A chain however grouped is one join (every piece
   measured, one allocation, as the adjacency join was); literals alone are one literal. `$` binds tighter than `+`.
   Values render as source writes them; floats shortest round-trip; a type's `Str()` overrides (E11c, the user's call)
-  and is called exactly once per rendering. `tools/textjoin_migrate.olang` rewrites old joins.
+  and is called exactly once per rendering. `tools/textjoin_migrate.olang` rewrites old joins. `$x (y)` written apart is
+  still a call of `x` (E13b); where `x` is no function the error is E11b's at the `(`, naming `$(...)` (2026-11-18).
 - **More syntax rules worth knowing.** `catch` may begin a following line (R9b); a join continues onto a new line, as any
   binary expression, after a line ending in `+` or inside parentheses (E11b, L18); a shift of a literal by a value takes its target's type (E8b) and a literal shift is
   computed exactly (E4a); `x := 1 + 2` is an `I64`. A one-line declaration of several names shares one type (D12b).

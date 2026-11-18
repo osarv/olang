@@ -608,6 +608,7 @@ type Diag enum {
     MembershipNeedsTry
     IncdecInExpression
     NotCallable
+    CallAfterPiece
     UnhandledFallibleCall
     OperatorCallFails
     PowNone
@@ -1644,6 +1645,7 @@ fn MembershipNoMethod(text String&, ty String&) r.Msg { return r.Msg(Diag.Member
 fn MembershipNotBool(text String&) r.Msg { return r.Msg(Diag.MembershipNotBool, "E29", $text + ", which 'in' calls, gives a Bool") }
 fn MembershipNeedsTry(text String&) r.Msg { return r.Msg(Diag.MembershipNeedsTry, "E29", $text + " can fail here - write 'try x in c'") }
 fn IncdecInExpression(tok String&) r.Msg { return r.Msg(Diag.IncdecInExpression, "S3a", $tok + " is a statement of its own, never part of an expression") }
+fn CallAfterPiece(ty String&) r.Msg { return r.Msg(Diag.CallAfterPiece, "E11b", "'(' after a piece of text calls it", "this is " + $ty + ", which is not a function - '(args)' after a rendered value calls it (E13b)", "to join the value inside, write '$(...)'") }
 fn NotCallable(ty String&) r.Msg { return r.Msg(Diag.NotCallable, "E13b", $ty + " is not a function, and declares no Call") }
 fn UnhandledFallibleCall() r.Msg { return r.Msg(Diag.UnhandledFallibleCall, "E15", "this call can fail - write 'try', and catch or pass on its errors") }
 fn VariadicNotLast() r.Msg { return r.Msg(Diag.VariadicNotLast, "D8g", "a variadic parameter is the last one but defaulted ones", "one variadic parameter, and only parameters with a default after it, given by name") }
