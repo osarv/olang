@@ -26,3 +26,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e10 research (cloud, 2026-11-18): oagent experiments/e10-sleep - done: oagent 2e075d9 (circuit nights lose to the consolidator; results in README)
 - e11 integrate (cloud, 2026-11-18): oagent experiments/e11-integrate (wt-e11) - done: integrated system exact to 10000 on mix and S5; a no-settle BPTT cell with the same priors matches it (README conclusion)
 - e12-language cloud session (2026-11-18): done - oagent 6ace9b5 (experiments/e12-language): not promising at pilot scale
+- e13-grids cloud session (2026-11-18): oagent experiments/e13-grids (wt-e13) - in progress: e5 grid follow-ups (unreachable flooding by seed, grid halting), wider spreading tasks, unrolled vs EP-sphere, energy-ranked best-of-N
