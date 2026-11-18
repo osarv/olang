@@ -28,4 +28,3 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e12-language cloud session (2026-11-18): done - oagent 6ace9b5 (experiments/e12-language): not promising at pilot scale
 - e13-grids cloud session (2026-11-18): oagent experiments/e13-grids (wt-e13) - in progress: e5 grid follow-ups (unreachable flooding by seed, grid halting), wider spreading tasks, unrolled vs EP-sphere, energy-ranked best-of-N
 - OLang Cloud (2026-11-18): olang wt-freecopies - the three -memory -check named cases (v[i] = p local, structelems fill copies, same-statement read)
-- OLang Cloud (2026-11-18): oann wt-dynagent - ad/graph gated recurrence as a dyn piece; Sleeper DayRate
