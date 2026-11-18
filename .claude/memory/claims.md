@@ -27,3 +27,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Cloud (2026-11-18): oann wt-anderson - Anderson acceleration for the exact adjoint and forward settle (dyn)
 - OLang Cloud (2026-11-18): oann wt-int8stream - INT8 streaming GEMV regained without losing BF16's gain (kernels/gemm)
 - OLang Cloud (2026-11-18): oagent wt-e3val - e3-actfn re-run with a validation split (arms chosen on validation, test read once)
+- e11 integrate (cloud, 2026-11-18): oagent experiments/e11-integrate (wt-e11) - one system from e7 hybrid + e4 start/halting + e3 neuron + e6 truncated adjoint + e9 events; ablations vs LSTM/GRU/transformer
