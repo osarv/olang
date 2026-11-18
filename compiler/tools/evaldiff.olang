@@ -32,6 +32,8 @@ Expected Array<String&> = Array<String&>[
     "std/chan.olang: Close wakes every task waiting to receive, and RecvUntil sees it before its deadline - a wait for a task (B3e)"
     # B3e, X10: getaddrinfo is handed a struct holding pointers, which the interpreter cannot pass to C
     "std/net.olang: names are resolved through the C library, numbers read as they are - a struct of pointers to C (B3e)"
+    # B3e, X17: the session is dialed through net's getaddrinfo, handed a struct holding pointers the interpreter cannot pass to C
+    "std/tls.olang: a session to a server whose certificate is trusted and names the host carries bytes both ways - a struct of pointers to C (B3e)"
     # a file with a test skipped runs its others named by words, which its test binary sees as its arguments too
     "std/os.olang: Args gives the program's own name first - the words naming the tests to run are arguments (B7a)"
     # what a program measures of its own process is the interpreting compiler's there (O8b, O8d: the built runtime's pool)

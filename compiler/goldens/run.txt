@@ -1693,6 +1693,7 @@
 | ok - Env gives a variable's value, and fails when it is not set
 | ok - WriteFile creates a file, and empties one that is there
 | ok - Create writes through a File, a piece at a time
+| ok - Append writes after what the file holds, and creates the file when it is not there
 | ok - a File closes its descriptor where its holder lets go of it
 | ok - io.Reader reads a File, taken by reference
 | ok - io.Lines follows a file another descriptor is still writing
@@ -1802,6 +1803,10 @@
 | ok - dates are written as RFC 3339 and read back
 | ok - Parse refuses what is not a date
 | ok - Error: Syntax carries the offset where the text stopped being a date
+=== test std/tls.olang
+| status 0
+| ok - a session to a server whose certificate is trusted and names the host carries bytes both ways
+| ok - a session to a port nothing listens at fails with the TCP error
 === test std/utf8.olang
 | status 0
 | ok - code points are written and read back
