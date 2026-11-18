@@ -17,6 +17,5 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 | local (WSL, GPU) | oagent wt-ebr2 | e2 round 3 (EP arm on oann ad/descent, cb8c37f + 9fa8a85 pass counters) in progress | 2026-11-18 |
 | local (WSL, GPU) | oann wt-gp8 | GPU: views (Permute etc.) and what e2's graph needs | 2026-11-18 |
 | local (WSL, GPU) | oagent wt-e2settle | e2 settling arm (dyn) | 2026-11-18 |
-- OLang Cloud (2026-11-18): olang wt-rangeloc - E16h/E6a/E8a decided through locals whose value is known while compiling
 - OLang Cloud (2026-11-18): olang wt-diagshort - error rows over 120 chars split into headline + note/help
 - OLang Cloud (2026-11-18): oagent wt-actfn - EXPERIMENTS.md #2, activation functions vs tanh (CPU)
