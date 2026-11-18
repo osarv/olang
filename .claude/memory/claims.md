@@ -21,7 +21,7 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e4-amortize cloud session (2026-11-18): done - oagent d12ddae (experiments/e4-amortize); no oann changes
 - e6 research (cloud, 2026-11-18): oagent experiments/e6-gradients - done: oann dcb6ff3 (TruncatedGrad, dyn/holo), results in oagent
 - research cloud e5 (session_01DLX3U...UW, 2026-11-18): oagent experiments/e5-depth (wt-e5depth) - adaptive depth: settling core vs looped baseline on parity/counting/reachability/addition, length generalization
-- e8-local cloud session (2026-11-18): oagent experiments/e8-local - three-factor local rules (eligibility x neuromodulator, EP nudge as global signal) vs EP and exact gradient on dyn MNIST, then a distal-reward task
+- e8-local cloud session (2026-11-18): oagent experiments/e8-local DONE (oagent main, three-factor local rules; MAP.md holds the open items)
 - e9-sparse cloud session (2026-11-18): oagent experiments/e9-sparse - sparse event-driven updates (settling-niche 2.4), tile skipping, with/without learned start
 - e10 research (cloud, 2026-11-18): oagent experiments/e10-sleep - sleep into the settling circuit (EXPERIMENTS #1; settling.md 5.10-5.12 tasks); branches wt-e10*
 - OLang Cloud (2026-11-18): oann wt-anderson - Anderson acceleration for the exact adjoint and forward settle (dyn)
