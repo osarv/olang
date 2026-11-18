@@ -2444,7 +2444,7 @@ e80657e77bb89289 8872ecfd680a31d9 compiler/testdata/lex/strateof.olang
 a4d11107338659ab c2600e07c4d9f411 compiler/tools/dump.olang
 cfb1266e111461e5 ebaa45d14d61e358 compiler/tools/emitdiff.olang
 ed6e41afea84150a 1aacb31fb7817042 compiler/tools/emitdump.olang
-b254c20e94cf6460 db885f29f34331fb compiler/tools/evaldiff.olang
+e39ea53d83f4cc1a a04689a9dfdb0c02 compiler/tools/evaldiff.olang
 92398fd91ceec3f7 5e240514a1a7010b compiler/tools/fmt.olang
 90cdc4e1817524f3 dad4eabeef84a98f compiler/tools/layoutdiff.olang
 293aacc26d544a2b 35d25c91432c2269 compiler/tools/layoutgold.olang
