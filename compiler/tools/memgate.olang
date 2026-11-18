@@ -60,6 +60,7 @@ fn main() {
     status, peak := run(dir, me, mb, cmd)
     try os.Remove(resPath(dir, me)) catch os.Error { }
     record(dir, key, peak)
+    if status == 137: try io.PutErrLn($"memgate: " + $key + " was killed by signal 9 (usually the kernel's out-of-memory kill: it held " + $peak + " MB at its last measure, and builds outside this gate share the machine) - run it again alone") catch io.Error { }
     os.Exit(status)
 }
 
