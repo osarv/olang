@@ -1,4 +1,4 @@
-# check: fail error[S18c]: this assertion is false, evaluated while compiling: short
+# check: fail error[S18c]: this assertion is false: short
 # also: s18cinstancecall.olang:12:12: error[S18c]
 # also: note: instantiated here, with a.Len() = 4
 # also: compilation failed with 1 error

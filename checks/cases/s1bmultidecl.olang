@@ -1,4 +1,4 @@
-# check: fail error[S1b]: a one-line body is one simple statement, not a declaration - write a block, '{ ... }'
+# check: fail error[S1b]: a one-line body is one simple statement, not a declaration
 # S1b: a declaration of several names in a one-line body would name nothing after it, as one name's would
 # (s1bdecl.olang); a parallel assignment there is an assignment (s1bparallel.olang)
 fn main() {

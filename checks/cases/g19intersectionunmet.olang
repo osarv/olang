@@ -1,4 +1,4 @@
-# check: fail iaSq does not satisfy the constraint iaHouse on T: it has no method Rooms that fits
+# check: fail iaSq does not satisfy the constraint iaHouse on T
 # G19: two traits side by side are their intersection - the binding meets each
 type iaShape trait {
     Area() I64

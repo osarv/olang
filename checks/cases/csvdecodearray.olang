@@ -1,4 +1,4 @@
-# check: fail error[S18c]: this assertion is false, evaluated while compiling: csv.Decode<T> gives a Vec of T, one record
+# check: fail error[S18c]: this assertion is false: csv.Decode<T> gives a Vec of T, one record: T is a struct with a field for each column, and Array<Row> is none
 # std/csv (the AI study): csv.Decode<Array<Row>> was G33 and E13b inside std's code, its assertion said last; now the assertion alone
 # spec: read CSV with quoted fields and embedded commas using std/csv, sum the 'amount' column
 import "std/csv"

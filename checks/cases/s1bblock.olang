@@ -1,4 +1,4 @@
-# check: fail error[S1b]: a one-line body is one simple statement, not a block (a block takes no ':') - write a block, '{ ... }'
+# check: fail error[S1b]: a one-line body is one simple statement, not a block (a block takes no ':')
 # S1b: a block follows its condition with no ":"
 fn main() {
     x I64 = 1

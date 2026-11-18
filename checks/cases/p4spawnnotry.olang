@@ -1,4 +1,4 @@
-# check: fail error[P4]: this call can fail - write 'spawn try', and what its clauses do not take reaches the join
+# check: fail error[P4]: this call can fail
 # P4: a spawned call that can fail is written with "try", as a fallible call is anywhere (R8)
 type E error {
     Bad

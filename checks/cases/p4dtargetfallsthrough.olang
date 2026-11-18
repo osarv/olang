@@ -1,4 +1,4 @@
-# check: fail error[P4d]: a task of this join binds a target it leaves unwritten when it fails - this clause must leave
+# check: fail error[P4d]: a task of this join leaves a target unwritten when it fails
 # P4d: a target a failed task leaves unwritten is never read after the join - every clause of the "try join" leaves
 import "std/io"
 type E error {

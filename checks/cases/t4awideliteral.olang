@@ -1,4 +1,4 @@
-# check: fail error[T6a, E4a]: this literal expression's value needs more than 64 bits, and a literal's own type is at most U64
+# check: fail error[T6a, E4a]: this literal expression's value needs more than 64 bits
 # T4a/E4a: a literal-only expression is computed exactly up to 128 bits, but a value past 64 bits has no type of its own -
 # "x I128 = 1 << 100" is how it is written
 fn main() {

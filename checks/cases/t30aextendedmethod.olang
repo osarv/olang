@@ -1,4 +1,4 @@
-# check: fail eaSq does not satisfy the constraint eaDwelling on T: it has no method Rooms (eaHouse's) that fits
+# check: fail eaSq does not satisfy the constraint eaDwelling on T
 # T30a: satisfying a trait is satisfying every trait it extends - the method missing is named with its own trait
 type eaShape trait {
     Area() I64

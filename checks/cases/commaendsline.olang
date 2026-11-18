@@ -1,4 +1,4 @@
-# check: fail error[L18a]: a comma never ends a line - items on different lines are separated by the line break; remove it
+# check: fail error[L18a]: a comma never ends a line
 # L18a/QY: items on different lines are separated by the line break alone
 fn add(a I64, b I64) I64 { return a + b }
 fn main() ? {

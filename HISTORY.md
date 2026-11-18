@@ -39665,3 +39665,12 @@ same 5x, and LLVM's remarks named the cause: "SLP vectorized with cost -1 and wi
   0.67-0.73x -> 0.80-0.84x, 1 x 1024 x 1024 (streaming) 1.42-1.70x -> 1.46-1.70x; F32 itself unchanged within noise.
   BF16 >= F32 at cache-resident sizes is not reached: a widened vector is three vector-port uops (vpmovzxwd, vpslld,
   FMA) where F32's is one, so BF16 is port-bound near 1.5 cycles a vector while F32 reads L2 at about the same rate.
+## 2026-11-18: diagnostics split into headline, note and help (B11; the user's call 2026-11-13; wt-diagshort)
+
+Error rows over 120 characters in compiler/goldens/diag.txt went from 132 to 12 (over 100: 466 to 329). About 110 messages
+in compiler/msgs.olang keep a headline of roughly 80 characters naming the rule and what is wrong; the reason moved to
+the `note:` row and the fix ("write X instead") to `help:`, nothing dropped. The scanner's long messages (L18, L18a, L13/L15)
+do the same through `Diag.Note()` and `Diag.Help()` in scan.olang, passed on by load and fmt; `NoSuchMember` splits the C2a
+constructor-parameter hint; `VariadicHere` takes its fix as a second argument. An assert's message now follows "this assertion
+is false:" with "evaluated while compiling" on a note. The 12 left are an assert's own message text (std's) and G38/T22b rows
+whose text is built from names. The `# check: fail` / `# also:` expectations of 125 checks/cases lines follow the new headlines.

@@ -1,4 +1,4 @@
-# check: fail error[D8g]: a variadic parameter is a function's, not a constructor's or a case's - take an array, 'xs Array<T>&'
+# check: fail error[D8g]: a variadic parameter is a function's, not a constructor's or a case's
 type Bag struct(xs ...I64) { xs }
 
 fn main() {

@@ -1,4 +1,4 @@
-# check: fail error[T30b]: Pt does not satisfy the constraint Parsed on T: it has no builder 'Parse' that fits
+# check: fail error[T30b]: Pt does not satisfy the constraint Parsed on T
 # T30b: a trait's builder requirement is met only by a builder of that name and signature
 type Parsed<T> trait { T.Parse(t String&) T ? ParseError }
 type Pt struct(X I64) { X }

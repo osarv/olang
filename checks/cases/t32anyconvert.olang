@@ -1,4 +1,4 @@
-# check: fail an 'any aShape&' is never made an 'any aBig&' - an 'any' is made from its instance's own type, once
+# check: fail note: an 'any' is made from its instance's own type, once
 # T32a: run-time trait values
 type aShape trait {
     Area() I64

@@ -1,4 +1,4 @@
-# check: fail error[S18c]: this assertion is false, evaluated while compiling
+# check: fail error[S18c]: this assertion is false: ByFields orders structs and enums, and this type is neither
 # also: ByFields orders structs and enums, and this type is neither
 # std/order: ByFields<I64> is no ordering by fields
 import "std/order"

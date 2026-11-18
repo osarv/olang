@@ -1,4 +1,4 @@
-# check: fail error[D3a]: 'M' is a type's name - choose another
+# check: fail error[D3a]: 'M' is a type's name
 # D3a: a local of a body may not take a type variable's name
 fn f<M>(a M) I64 {
     M := 3

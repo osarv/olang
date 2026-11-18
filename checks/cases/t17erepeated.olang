@@ -1,4 +1,4 @@
-# check: fail error[T17e]: 'C' has the raw value 1, which 'A' has already - raw values are distinct
+# check: fail error[T17e]: 'C' has the raw value 1, which 'A' has already
 type Odd enum I32 {
     A = 1
     B = 0

@@ -1,4 +1,4 @@
-# check: fail error[S13c]: every alternative binds the same names
+# check: fail error[S13c]: the alternatives of a clause bind different names
 # S13c: the block reads one set of locals whichever alternative matched, so each binds the same names
 type S enum {
     A(x I32)

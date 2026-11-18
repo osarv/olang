@@ -1,4 +1,4 @@
-# check: fail error[S18c]: this assertion is false, evaluated while compiling: reached on every run
+# check: fail error[S18c]: this assertion is false: reached on every run
 # also: compilation failed with 1 error
 # never: passed by
 # S18c: an assert after statements that cannot leave - a loop, an if whose branch does not leave, a clause that takes

@@ -1351,7 +1351,7 @@ fn (p mut Parser&) spreadRules(ps Array<ast.Param&>&, inExtern Bool, allowed Boo
         }
         if ty == null or not isSpreadType(ty): continue
         if inExtern or not allowed {
-            p.report(ty.Span().Start, ty.Span().End, msgs.VariadicHere("an extern's - C's variable arguments are '...'" if inExtern else "a constructor's or a case's - take an array, 'xs Array<T>&'"))
+            p.report(ty.Span().Start, ty.Span().End, msgs.VariadicHere("an extern's" if inExtern else "a constructor's or a case's", "C's variable arguments are '...'" if inExtern else "take an array, 'xs Array<T>&'"))
             return
         }
         if seen >= 0 {

@@ -1,4 +1,4 @@
-# check: fail Q does not satisfy the constraint Quitter on T: it has no method Quit that fits
+# check: fail Q does not satisfy the constraint Quitter on T
 # T31/D8e: a 'noreturn' trait method is met only by a 'noreturn' method
 import "std/os"
 type Quitter trait {

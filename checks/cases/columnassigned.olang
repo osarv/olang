@@ -1,4 +1,4 @@
-# check: fail error[T7e]: a column is assigned whole only alone - 'c.x = v', its length checked against its table's
+# check: fail error[T7e]: a column is assigned whole only alone
 # T7e: a column's length is its table's - "c.X = v" alone checks v's against it once; in a parallel assignment there is
 # no one place for that check, so it is refused
 type P struct(X F32, Y F32) { X, Y }

@@ -1,4 +1,4 @@
-# check: fail a grouped 'Sum' takes its group's size as a whole number above zero known while compiling
+# check: fail a grouped 'Sum' takes a group size known while compiling
 # E39: Sum<A>(n)'s group is a size known while compiling
 fn main() {
     n := 4

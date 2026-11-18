@@ -643,7 +643,7 @@ fn FileLayout(given source.Source&, std String&, prelude String&, color Bool, sa
     file := d.AddFile(src.Path, src.Text)
     ts := scan.Tokens.Scan(src.Text)
     for x in ts.Diags {
-        d.Error(diag.Where.Span(file, I64(x.Start), I64(x.End)), diagmsg.Msg(msgs.Diag.UnknownChar, x.Rule(), x.Message()))
+        d.Error(diag.Where.Span(file, I64(x.Start), I64(x.End)), diagmsg.Msg(msgs.Diag.UnknownChar, x.Rule(), x.Message(), x.Note(), x.Help()))
     }
     p := parse.Parser(src, ts, names, o, d, file)
     decls := p.File()
