@@ -72,6 +72,7 @@ slimming of 2026-11-08").
   **stop code work at ~0.92 weekly** (nothing new starts near it; running agents finish and merge; no end-of-week burn
   unless the user says). A survey the user asked for runs to its end. Usage: `list_events` on the session id with
   `kinds: ["rate_limit_event"]`, `unifiedWindows.seven_day`. The five-hour window is gone. (why: archive/rules_log.md)
+- **Keep working while there is work (the user, 2026-11-18: "whenever there is OLang or OANN work to or OAgent experiments to do, just do them ... at least this week ... I do have a reset this week, so just burn through it ... as long as it can be token efficient. If we are risking wasting tokens on duplicate work, then you might want to hold back, because token efficiency is the most important thing")**: this week, start the next olang/oann/oagent item as soon as one is free, in parallel where it does not collide (claims.md first); hold back only where work could duplicate another session's. From next week the 0.92 weekly cap returns (no reset).
 - **The week ending 2026-11-21: no weekly stop (the user, 2026-11-15: "don't respect the weekly limit this week, because we're going to reset it either way")**; the 0.92 stop returns the week after.
 - **Keep the loaded context small, always** ("the token context is kind of the biggest cost"): what every session loads
   (CLAUDE.md, PRINCIPLES.md, memory files) stays small continuously - an answered ledger entry moves to

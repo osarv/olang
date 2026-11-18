@@ -19,3 +19,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 | local (WSL, GPU) | oagent wt-e2settle | e2 settling arm (dyn) | 2026-11-18 |
 - OLang Cloud (2026-11-18): olang wt-rangeloc - E16h/E6a/E8a decided through locals whose value is known while compiling
 - OLang Cloud (2026-11-18): oann wt-bf16mv - BF16 matrix-vector at 0.21x F32 (CPU)
+- OLang Cloud (2026-11-18): olang wt-diagshort - error rows over 120 chars split into headline + note/help
