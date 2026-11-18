@@ -6562,8 +6562,9 @@ fn (s mut Scoper&) kwExpr(x typed.Expr?&, inert Bool) {
             s.kwExpr(c.Reserve, true)
             s.kwBlock(c.Loop)
         }
-        case typed.Expr.Prim(_, _, _, _, args) {
-            for a in args: s.kwExpr(a, true)
+        case typed.Expr.Prim(_, _, op, _, args) {
+            # (a conversion to "?&", an "any" made of a reference: the reference itself, kept where it goes)
+            for a in args: s.kwExpr(a, inert or not typed.PassesRefs(op))
         }
         case typed.Expr.Slice(_, _, sl) {
             if not inert: s.keepParam(regionRoot(sl.Base))
@@ -6622,7 +6623,9 @@ fn (s mut Scoper&) kwFn(f typed.FnVal&) {
 fn (s mut Scoper&) kwCapture(lb I64, cp typed.Capture&, tr Bool) {
     sm := s.sum(lb)
     k := I64(cp.Inner)
-    if not tr or not (sm.Done or sm.Judging) or k >= sm.CapKeeps.Len() {
+    # (a holder captured, O17c: what the lambda reads out of it is the region's, which its summary does not follow - kept)
+    held := s.holder(flRootExpr(cp.Outer)) >= 0
+    if held or not tr or not (sm.Done or sm.Judging) or k >= sm.CapKeeps.Len() {
         s.kwExpr(cp.Outer, false)
         return
     }

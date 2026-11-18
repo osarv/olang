@@ -867,7 +867,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   header per call. Held by reference or sliced (O17a), its local is lifted likewise. Refused only where nothing can be
   placed (a by-value parameter's storage); where its references live is one of several, O29 finds it.
   A local declared from a constructor's instance holding a parameter (`w := W(v)`) is no keep by itself (O17c,
-  2026-11-18): what is done with it is done with the parameter's region.
+  2026-11-18): what is done with it is done with the parameter's region; a lambda capturing it keeps the region (review3).
+  A reference converted to `?&` or made an `any` is the reference itself where it is kept (review3).
 - **Binding halves and moved field bindings (O17, O25g, O25h, O28, O15; review A's over-rejections, 2026-11-09, mine
   within the user's decisions).** A callee keeps a lent value's own storage only by storing, returning, capturing or
   handing on a reference to it or a part of it - a reference local or slice of a part used only so (Vec's room), an
@@ -1308,7 +1309,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   loop does not change (parameters and locals no reference reaches, locals it declares, literals): before the loop each
   bound is computed at the first and last turn and tested (count under 2^31, starts under 2^62, steps under 2^31, so
   nothing wraps and a bound is linear between), the copy run when all hold leaving those slices unchecked, the loop as
-  written otherwise. A slice span is unchecked only where every slice written there (comptime copies) is proven.
+  written otherwise. A base read through a reference local is read before the loop only where that reference is never null (review3). A slice span is unchecked only where every slice written there (comptime copies) is proven.
   Changes no meaning: the checks left out cannot fail, and a loop whose test fails runs as written.
 - **BF16 widening stays integer (O45, mine, 2026-11-18).** A BF16 widened is its bits `zext` to i32, `shl` 16 and
   `bitcast` to float (`widenBF16`), never `fpext bfloat`: LLVM 18 scalarizes that one (no SLP, a scalar FMA a lane) and

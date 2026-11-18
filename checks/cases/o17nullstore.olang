@@ -1,0 +1,21 @@
+# check: fail error[O17]
+# O17: a reference stored into a "?&" field is the reference itself (a conversion passes it on) - a callee storing its
+# parameter there keeps what it names, so a by-value parameter's own storage lent to it is refused, as for a "&" field
+# (it was accepted, the store left pointing into the by-value parameter's frame)
+type N struct(x I64) {
+    x
+}
+type V struct(n mut N&) {
+    n
+}
+type Sink struct() {
+    s V?& = null
+}
+fn put(v V&, k mut Sink&) { k.s = v }
+fn outer(v V, k mut Sink&) { put(v, k) }
+fn main() {
+    k := Sink()
+    a := N(1)
+    outer(V(a), k)
+    assert k.s!.n.x == 1
+}

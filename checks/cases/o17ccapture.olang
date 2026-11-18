@@ -1,0 +1,30 @@
+# check: fail error[O17]
+# O17c: a local built from a constructor's instance holding the parameter, captured by a lambda that hands a reference
+# read out of it to a keeper - what the lambda reads out of it is the parameter's region, kept: a by-value parameter's
+# own storage lent here is refused (it was accepted, the kept reference left pointing into that parameter's frame)
+type N struct(x I64) {
+    x
+    next mut N?& = null
+}
+type V struct(n mut N&) {
+    n
+}
+type W struct(v V&) {
+    v
+}
+type Sink struct() {
+    s V?& = null
+}
+fn keepIt(k mut Sink&, v V&) { k.s = v }
+fn put(v V&, k mut Sink&) {
+    w := W(v)
+    f := fn() { keepIt(k, w.v) }
+    f()
+}
+fn outer(v V, k mut Sink&) { put(v, k) }
+fn main() {
+    k := Sink()
+    a := N(1)
+    outer(V(a), k)
+    assert k.s!.n.x == 1
+}
