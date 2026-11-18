@@ -1,0 +1,26 @@
+# check: run
+# flags: -debug
+# O44: a slice's base read through a "?&" that a test inside the loop narrows is not read before the loop - a null one
+# was, stopping a program that never reaches its slice (built -debug, where the read is not optimized away)
+type Rows struct(A Array<I64>) {
+    A
+}
+
+NoRows mut Rows?& = null
+Turns mut I64 = 3
+
+fn narrowed(r Rows?&, n I64) I64 {
+    s I64 = 0
+    for k in range n {
+        if r != null {
+            x := r.A[k:k + 1]
+            s += x[0]
+        }
+    }
+    return s
+}
+
+fn main() {
+    assert narrowed(NoRows, Turns) == 0
+    assert narrowed(Rows(Array<I64>[1, 2, 3]), Turns) == 6
+}

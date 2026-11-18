@@ -52,17 +52,35 @@ fn stepped(a Array<I64>&, hi I64) I64 {
     return s
 }
 
+# a base read through a "?&" the loop narrows: not read before the loop, where it may be null
+type Rows struct(A Array<I64>) {
+    A
+}
+
+fn narrowed(r Rows?&, n I64) I64 {
+    s I64 = 0
+    for k in range n {
+        if r != null {
+            x := r.A[k:k + 1]
+            s += x[0]
+        }
+    }
+    return s
+}
+
 fn agree() Bool {
     a := Array<I64>[1, 2, 3, 4, 5, 6]
     sq := Array<I64>[I64(j * j) for j in range 10]
     return accumulated(0) and accumulated(1) and accumulated(5) and pairs(a, 100, 3) == 15 and pairs(a, 5, 9) == 35 and
-           stepped(sq, 10) == 1 + 7 + 13 and stepped(sq, 2) == 0
+           stepped(sq, 10) == 1 + 7 + 13 and stepped(sq, 2) == 0 and
+           narrowed(null, 3) == 0 and narrowed(Rows(a), 3) == 6
 }
 
 Baked := agree()
 Stop mut I64 = 3   # read at run time
+NoRows mut Rows?& = null
 
 test "O44: a counted loop's slices tested once before it, the loop the same either way" {
     a := Array<I64>[1, 2, 3, 4, 5, 6]
-    assert agree() and Baked and pairs(a, 1000, Stop) == 15
+    assert agree() and Baked and pairs(a, 1000, Stop) == 15 and narrowed(NoRows, Stop) == 0
 }

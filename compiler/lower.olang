@@ -2635,9 +2635,16 @@ fn (ln lowering&) fixedBase(h hoistWalk&, p typed.Lvalue&) Bool {
     return match p {
         case typed.Lvalue.Local(_, _, id): not h.env.Has(I64(id)) and not h.assigned.Has(I64(id))
         case typed.Lvalue.Field(_, _, b, _): ln.fixedBase(h, b)
-        case typed.Lvalue.Deref(_, _, r): readLocalId(r) >= 0 and not h.env.Has(readLocalId(r)) and not h.assigned.Has(readLocalId(r))
+        case typed.Lvalue.Deref(_, _, r): ln.fixedRef(h, readLocalId(r))
         case _: false
     }
+}
+
+# ...a reference local the loop neither declares nor assigns, never null: the base is read before the loop, where a test
+# narrowing a "?&" inside it has not run (a null one read there stopped a program that never reached its slice)
+fn (ln lowering&) fixedRef(h hoistWalk&, id I64) Bool {
+    if id < 0 or h.env.Has(id) or h.assigned.Has(id): return false
+    return not ln.T.IsNullable(ln.B.Locals[id].Ty)
 }
 
 # an I64 as start + step * k computed before the loop, wrapping as the loop's own arithmetic does
