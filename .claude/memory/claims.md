@@ -25,6 +25,6 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e9-sparse cloud session (2026-11-18): done - oagent 33f2ca1 (experiments/e9-sparse); no oann changes
 - e10 research (cloud, 2026-11-18): oagent experiments/e10-sleep - done: oagent 2e075d9 (circuit nights lose to the consolidator; results in README)
 - e11 integrate (cloud, 2026-11-18): oagent experiments/e11-integrate (wt-e11) - one system from e7 hybrid + e4 start/halting + e3 neuron + e6 truncated adjoint + e9 events; ablations vs LSTM/GRU/transformer
-- e12-language cloud session (2026-11-18): oagent experiments/e12-language - language gate pilot (transformer vs looped vs settling LM, CPU)
+- e12-language cloud session (2026-11-18): pilot done - oagent 1a7aa4d (experiments/e12-language); EBT arm open
 - OLang Cloud (2026-11-18): olang wt-review3 - bulk soundness review (G42, O10c global getter, O43/O44, O17c, E16h locals)
 - OLang Cloud (2026-11-18): oann wt-dynpieces - top-k store connection + sleep replay rule in dyn
