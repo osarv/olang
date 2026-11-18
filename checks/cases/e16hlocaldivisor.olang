@@ -1,0 +1,14 @@
+# check: fail error[E16h]: '(step - 2)' is zero, so this division is undefined
+# also: help: divide by a value that is not zero, or test it first
+# never: 'width'
+# E16h: a divisor known to be zero through fixed locals (S8c) - each read through its initializer, one reading
+# another - is an error where it is written; one known not to be zero, or read from a local written anywhere, is not
+fn ratio(total I64) I64 {
+    base := I64(1)
+    step := base * 2
+    width := I64(0)
+    width = 4
+    return total / width + total / (step - 2)
+}
+
+fn main() { }

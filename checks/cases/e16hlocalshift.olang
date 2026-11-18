@@ -1,0 +1,12 @@
+# check: fail error[E16h]: shifting U32 by 'bits', which is 40, is outside its width of 32 bits
+# also: help: shift by 0 to 31, or convert the value to a wider type first
+# E16h: a shift amount known through a fixed local (S8c) outside the shifted type's width is an error where it is
+# written, in a compound assignment too
+fn mix(x U32) U32 {
+    bits := I64(40)
+    y := x
+    y <<= bits
+    return y
+}
+
+fn main() { }
