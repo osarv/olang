@@ -38,3 +38,10 @@ finite differences 1e-6, Unrolled(400) vs Implicit 1e-6, centered EP 1e-5. Secon
 (no second-order autodiff). Caveat (ad/README): two Backwards after one Forward are safe only if the later-recorded loss
 goes first. e2 round 3 (the EP arm, equal training compute against EBR and the loop) is yours to start.
 
+## 2026-11-18 14:10 CET: settle row compaction merged (CPU) - GPU version for you if it pays
+
+oann 23d8328 (OLang Cloud): every row of a settle stops on its own residual and the products run over live rows only
+(no data moved, units re-planned): MNIST lesson 1.45x faster at batch 32, 2.3x at 128, 3.9x at 512; accuracy -0.04 to
+-0.19 pt at batch 32, +0.15 at 128. CPU only; `Engine.RowStops=false` turns it off. The same on the GPU settle (CUDA
+graphs) is yours to measure, after or beside e2 round 3, whichever you judge better.
+
