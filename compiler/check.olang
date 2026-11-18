@@ -228,6 +228,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
                                            # subject - a local narrowed to a payload written whole is read as its enum
     selfFrame I64 = -1                    # D16c: the frame of "x = fn ...", while the lambda is checked, and x
     selfName source.NameId = source.NameId(0)
+    declaring source.NameId = source.NameId(0)   # M22: the local whose lambda initializer is checked - naming itself there
     selfCaught Bool = false               # the lambda captured x: it would hold x's earlier value
     nullDecl diag.Where = diag.Where.Nowhere  # T2c: where the type a value is fitted to is written, for the note naming "?&"
     Bodies Vec<mut typed.Body&>
@@ -12657,6 +12658,10 @@ fn (c mut Checker&) callNamed(sp source.Span, f ast.Expr&, nsp source.Span, n so
             c.unknownType(nsp, n)
             return c.unknown(sp)
         }
+        if c.declaring != source.NameId(0) and n == c.declaring {
+            c.err(nsp, msgs.UnknownFunctionSelf(c.tok(n)))
+            return c.unknown(sp)
+        }
         best := c.suggest(c.text(n), true)
         if best.Len() == 0: c.err(nsp, msgs.UnknownFunction(c.tok(n)))
         else if c.P.T.Prim(best) != types.UnknownT: c.err(nsp, msgs.UnknownNumberType(c.tok(n), best))
@@ -20142,7 +20147,10 @@ fn (c mut Checker&) declName(v ast.VarDecl&, i I64, declared types.TypeId, mark 
         # D14d: Array<T>(n) whose every element the counted loop after it writes before any read - no clear
         filled := not v.Field and v.Names.Len() == 1 and c.filledNext(v.Names[i], v.Values[i])
         c.noClear = filled
+        sd := c.declaring
+        if not v.Field and v.Values[i] == ast.Expr.Lambda: c.declaring = v.Names[i]
         x = c.exprTo(v.Values[i], want)
+        c.declaring = sd
         c.noClear = false
         c.nullDecl = wasNull
         if v.Ty == null or v.Infer {

@@ -238,6 +238,7 @@ type Diag enum {
     TypedHoleUntyped
     TypeNotAValue
     UnknownFunction
+    UnknownFunctionSelf
     UnknownFunctionMeant
     UnknownFunctionMethod
     UnknownTypeStd
@@ -1224,6 +1225,7 @@ fn TypedHole(ty String&, fits String&) r.Msg { return r.Msg(Diag.TypedHole, "E41
 fn TypedHoleUntyped() r.Msg { return r.Msg(Diag.TypedHoleUntyped, "E41", "'_' holds the place of a value, and nothing here says its type") }
 fn TypeNotAValue(name String&) r.Msg { return r.Msg(Diag.TypeNotAValue, "G38", "'" + $name + "' is a type, not a value", "", "write it where a type goes: a declaration ('x " + $name + " = ...'), a type argument or a match's subject") }
 fn UnknownFunction(tok String&) r.Msg { return r.Msg(Diag.UnknownFunction, "M22", "unknown function or type " + $tok) }
+fn UnknownFunctionSelf(tok String&) r.Msg { return r.Msg(Diag.UnknownFunctionSelf, "M22", $tok + " names the local being declared", "a lambda's body cannot see the local it initializes", "a lambda cannot call itself by its own name; declare a top-level fn, or call it through a holder reference (see lambdaselfholder)") }
 fn UnknownFunctionMethod(tok String&, meant String&) r.Msg { return r.Msg(Diag.UnknownFunctionMethod, "M22", "unknown function " + $tok + " - it is a method of its first argument", "a method is called on its receiver, never as a function (M19)", "write '" + $meant + "'") }
 fn UnknownFunctionMeant(tok String&, text String&) r.Msg { return r.Msg(Diag.UnknownFunctionMeant, "M22", "unknown function or type " + $tok + " - did you mean '" + $text + "'?") }
 fn UnknownErrorType(tok String&, hint String&) r.Msg { return r.Msg(Diag.UnknownErrorType, "R1", "unknown error type " + $tok + $hint) }

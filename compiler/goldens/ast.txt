@@ -2390,7 +2390,7 @@ e20178f94e07dfed ff5ec0fbe401eade compiler/bindgen.olang
 90881337ba685229 3e0cfd8336125a80 compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 a63bb2cbd4c666c1 32f8e5565363d2f2 compiler/cells.olang
-2c1a6ba9f067e50d 2c031b38f2e39097 compiler/check.olang
+9b2334cb2c5a6e74 ce190337abebd748 compiler/check.olang
 da018e972c2ecc90 402dd6cf0de7cca1 compiler/cond.olang
 2ab98962469bc960 f235e148eac3e4ba compiler/definit.olang
 db407b9ec2aacf25 d850fbb42d0e8294 compiler/diag.olang
@@ -2416,7 +2416,7 @@ b3ae1aedbf6c9015 ce820e28302ae3a1 compiler/lower.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
 e584497ebb497531 0f081d3bdae48bfc compiler/mir.olang
-1da8dece9fb6944a 9f6a18a3986f0f3e compiler/msgs.olang
+1e62a1fca063e4cd 0220ca12b90ef069 compiler/msgs.olang
 e12e0b7843a4d69e 3609653e0e4a8b34 compiler/names.olang
 3f072b84e716c304 202ed56cc066d701 compiler/needs.olang
 79acbc010c9bf08a a1be4111ef62bcb1 compiler/notebook.olang
