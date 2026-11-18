@@ -64,6 +64,7 @@ slimming of 2026-11-08").
 - **Minimal tokens (the user's standing rule, relayed 2026-11-17)**: tokens are the only bottleneck - CPU and memory are cheap (cloud VMs unlimited; locally the GPU and RAM still limit). Prefer cheap models and low effort, short briefs and reports.
 - **Tell the Orchestrator of decisions (standing rule, relayed 2026-11-17)**: a decision or new direction the user gives this session that affects other sessions or the plan goes to the Orchestrator as one line (SendMessage "Orchestrator").
 - Fallback if SendMessage to the Orchestrator fails: a comment on osarv/orchestrator#1 starting "Coding Local: " (a relay wakes it). This machine has no gh and only SSH to GitHub, so the fallback needs gh installed and logged in first.
+- **Read orchestrator-notes.md first (the user, 2026-11-18)**: before starting work, read `.claude/memory/orchestrator-notes.md` (the Orchestrator writes there; it may not be able to message this session). The current Orchestrator is the "Orchestrator" row of osarv/orchestrator's sessions.md; reports and the user's decisions go to that session.
 - **Agent length**: one fresh agent per round of a big batch, from a hand-off note kept up to date; resume only for a
   short follow-up within about an hour; never resume a very long agent for a new round.
 - **Pacing by usage**: every week until the user changes it, use what the work needs, run in parallel only what does not
