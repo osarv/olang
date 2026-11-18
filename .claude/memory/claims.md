@@ -23,3 +23,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e6 research (cloud, 2026-11-18): oagent experiments/e6-gradients - gradient estimators at the fixed point on dyn (implicit, JFB, EP, holomorphic EP); branches wt-e6*
 - research cloud e5 (session_01DLX3U...UW, 2026-11-18): oagent experiments/e5-depth (wt-e5depth) - adaptive depth: settling core vs looped baseline on parity/counting/reachability/addition, length generalization
 - e8-local cloud session (2026-11-18): oagent experiments/e8-local - three-factor local rules (eligibility x neuromodulator, EP nudge as global signal) vs EP and exact gradient on dyn MNIST, then a distal-reward task
+- e9-sparse cloud session (2026-11-18): oagent experiments/e9-sparse - sparse event-driven updates (settling-niche 2.4), tile skipping, with/without learned start
