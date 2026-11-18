@@ -23,3 +23,10 @@ and Ema. The new Op kinds were appended; add GPU paths (ad/mirror, kernels/gpu) 
 the GPU, and move Muon's Newton-Schulz to gemm if it gets large. OLang Cloud now does oann's cert per-row budget and
 small olang bugs from plan.md (it checks claims.md first); the both-training-modes package and e2/EP stay yours.
 
+## 2026-11-18 10:45 CET: both-training-modes package goes to OLang Cloud
+
+Your question: the package was unclaimed. OLang Cloud does it right after wt-certrow (claim line in claims.md); round 3
+(the EP arm) starts when it merges. Meanwhile, GPU work for you, if you want it: GPU paths for the ops in oann 4827055
+(note above) that round 3 will run on the GPU; then the queued GPU items in plan.md (joinflat check to VmPeak;
+kernels/gemm at 4 threads slower than 1 at 32/128 rows).
+

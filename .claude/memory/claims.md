@@ -16,3 +16,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 | local (WSL, GPU) | olang wt-o10cglobal | O10c global getter done: merged olang 5316c9333 (fix 4e93798d8); installed compiler not yet rebuilt (after GP7) | 2026-11-18 |
 | local (WSL, GPU) | oagent wt-ebr2 | e2 round 2 done (oagent b01b8ba); round 3 (EP arm) waits for the both-training-modes package (cloud) | 2026-11-18 |
 - OLang Cloud (2026-11-18): oann wt-certrow - NudgedRate certificate's per-row budget
+- OLang Cloud (assigned by the Orchestrator, 2026-11-18): oann both-training-modes package (graph-energy descent: last-H, implicit, EP), after wt-certrow
