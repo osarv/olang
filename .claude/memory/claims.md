@@ -20,7 +20,7 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e7 research (cloud, 2026-11-18): oagent experiments/e7-memory - done, oagent 66045c8 (README/MAP there); open: EP/implicit training of the hybrid
 - e4-amortize cloud session (2026-11-18): done - oagent d12ddae (experiments/e4-amortize); no oann changes
 - e6 research (cloud, 2026-11-18): oagent experiments/e6-gradients - done: oann dcb6ff3 (TruncatedGrad, dyn/holo), results in oagent
-- research cloud e5 (session_01DLX3U...UW, 2026-11-18): oagent experiments/e5-depth (wt-e5depth) - adaptive depth: settling core vs looped baseline on parity/counting/reachability/addition, length generalization
+- research cloud e5 (2026-11-18): oagent experiments/e5-depth - adaptive depth: round 1 done, oagent 551b7fb (README/MAP there); structural levers (multi-scale energy, addition/reachability) open
 - e8-local cloud session (2026-11-18): oagent experiments/e8-local DONE (oagent main, three-factor local rules; MAP.md holds the open items)
 - e9-sparse cloud session (2026-11-18): oagent experiments/e9-sparse - sparse event-driven updates (settling-niche 2.4), tile skipping, with/without learned start
 - e10 research (cloud, 2026-11-18): oagent experiments/e10-sleep - done: oagent 2e075d9 (circuit nights lose to the consolidator; results in README)
