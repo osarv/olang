@@ -24,6 +24,5 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e8-local cloud session (2026-11-18): oagent experiments/e8-local DONE (oagent main, three-factor local rules; MAP.md holds the open items)
 - e9-sparse cloud session (2026-11-18): oagent experiments/e9-sparse - sparse event-driven updates (settling-niche 2.4), tile skipping, with/without learned start
 - e10 research (cloud, 2026-11-18): oagent experiments/e10-sleep - done: oagent 2e075d9 (circuit nights lose to the consolidator; results in README)
-- OLang Cloud (2026-11-18): oann wt-anderson - Anderson acceleration for the exact adjoint and forward settle (dyn)
 - OLang Cloud (2026-11-18): oann wt-int8stream - INT8 streaming GEMV regained without losing BF16's gain (kernels/gemm)
 - e11 integrate (cloud, 2026-11-18): oagent experiments/e11-integrate (wt-e11) - one system from e7 hybrid + e4 start/halting + e3 neuron + e6 truncated adjoint + e9 events; ablations vs LSTM/GRU/transformer
