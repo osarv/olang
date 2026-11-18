@@ -20,3 +20,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Cloud (2026-11-18): olang wt-diagshort - error rows over 120 chars split into headline + note/help
 - OLang Cloud (2026-11-18): olang wt-bf16vec - BF16->F32 widening kept vectorized in multi-chain loops
 - e7 research (cloud, 2026-11-18): oagent experiments/e7-memory - hybrid core: RLS/gated-delta memory + Hopfield step in the energy (mod-5, MQAR); branches wt-e7*
+- e4-amortize cloud session (2026-11-18): oagent experiments/e4-amortize, oann wt-amortize - amortized settling (settling-niche 2.1): predictor z0 + Anderson baseline
