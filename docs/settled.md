@@ -1310,6 +1310,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   nothing wraps and a bound is linear between), the copy run when all hold leaving those slices unchecked, the loop as
   written otherwise. A slice span is unchecked only where every slice written there (comptime copies) is proven.
   Changes no meaning: the checks left out cannot fail, and a loop whose test fails runs as written.
+- **BF16 widening stays integer (O45, mine, 2026-11-18).** A BF16 widened is its bits `zext` to i32, `shl` 16 and
+  `bitcast` to float (`widenBF16`), never `fpext bfloat`: LLVM 18 scalarizes that one (no SLP, a scalar FMA a lane) and
+  its vector form stops the X86 backend ("Do not know how to soft promote"). The integer form vectorizes (vpmovzxwd,
+  vpslld, a zmm FMA a vector); what took apart BF16 dot products with more than two sum chains is LLVM's SLP order, not
+  the IR: it visits a loop's exit block before its header, so a total of two chains' own lane sums (or two rows' results
+  stored side by side) seeds a 2-wide tree pairing the chains' last lanes, back through the loop - unprofitable for F32
+  (gathered floats), profitable by one for BF16 (the zext/shl it saves). No form of the widening and no narrow LLVM
+  option changes it (`-slp-vectorize-hor=false` does, for every program); a kernel adds its chains lane by lane before
+  one lane sum (oann kernels/gemm `dotRow`).
 - **Testing.** `make verify` runs the corpus, std's tests, `checks/` (must-fail cases and whole-build scenarios) and the
   port's diffs; `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the
   user's rule). The suite runs side by side, at most a job per core, each test build, interpreted run and heavy tool
