@@ -1,0 +1,23 @@
+# check: fail error[O17]
+# O17c: a local built from a constructor's instance holding the parameter is a second name for the parameter's region:
+# a store through it (a node built and linked in here) keeps something in the region, so a value whose references
+# live elsewhere than its own storage (a by-value parameter) is still refused
+type N struct(x I64) {
+    x
+    next mut N?& = null
+}
+type V struct(n mut N&) {
+    n
+}
+type W struct(v V&) {
+    v
+}
+fn put(v V&) {
+    w := W(v)
+    w.v.n.next = N(5)
+}
+fn outer(v V) { put(v) }
+fn main() {
+    a := N(1)
+    outer(V(a))
+}

@@ -859,6 +859,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   parameter itself), a local built there each time its declaration runs - not "always lift", which would hold a copy's
   header per call. Held by reference or sliced (O17a), its local is lifted likewise. Refused only where nothing can be
   placed (a by-value parameter's storage); where its references live is one of several, O29 finds it.
+  A local declared from a constructor's instance holding a parameter (`w := W(v)`) is no keep by itself (O17c,
+  2026-11-18): what is done with it is done with the parameter's region.
 - **Binding halves and moved field bindings (O17, O25g, O25h, O28, O15; review A's over-rejections, 2026-11-09, mine
   within the user's decisions).** A callee keeps a lent value's own storage only by storing, returning, capturing or
   handing on a reference to it or a part of it - a reference local or slice of a part used only so (Vec's room), an

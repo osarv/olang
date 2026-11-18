@@ -7768,7 +7768,10 @@ What the callee can do is read off its **body**, never its signature's types: it
 value's slots when its body stores into the value's region a reference or a value holding references (a field, an
 element, through any depth - by an assignment, or as a spawned task's result, P1g), when it returns a reference into
 that region that can be stored through (the caller could then build through it), or when it passes the region on to a
-call that does either - a fixed point over the program's calls, every call taking part whether the callee's body was
+call that does either. A local declared from a constructor's instance holding the parameter (`w := W(v)`) keeps nothing
+by itself - the instance dies with the call (**O17c**): what the body does with the local it does with the region, so a
+copy of the local, or of anything holding references read out of it, made, returned or handed on keeps the region, and
+a store through it stores into it - a fixed point over the program's calls, every call taking part whether the callee's body was
 checked before it or after, settled once every body is checked; an `extern` keeps nothing, and a callee whose body is
 not known keeps everything. A lambda is known where it is made, its body checked there: making one whose body stores
 into what a writable capture reaches is such a store, into the region it captured from, wherever it is later called -

@@ -522,6 +522,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     flGrew Bool = false
     flCaps Bool = true                     # whether carried follows what a function value captured
     kwTransient Bool = false               # the lambda kwExpr walks next never leaves where it is made (D16c)
+    kwHold I64 = -1                        # the local the constructor call kwExpr walks next is declared into (O17c)
+    holderOf Vec<I64>                      # by local: the one region the instance it was declared from holds (O17c), -1 none, -2 several
     atDest Bool = false                    # the choice val judges next builds its new values at its destination (E28)
     landSite I64 = -1                      # the call an assignment's value is, and its "=" (C2d through a result)
     landSp source.Span = source.Span(0, 0)
@@ -5965,6 +5967,8 @@ fn (s mut Scoper&) computeKeeps(b typed.Body&) {
     }
     s.aliasOf.Clear()
     for _ in range b.Locals.Len(): s.aliasOf.Push(-1)
+    s.holderOf.Clear()
+    for _ in range b.Locals.Len(): s.holderOf.Push(-1)
     s.aliasBlock(b.Root)
     s.regionLocals(b)
     s.cursorRegions()
@@ -6043,6 +6047,7 @@ fn (s mut Scoper&) derivedRead(x typed.Expr&) Bool {
 # l holds only reads of a region into ("s := l.s; s.tail[i] = x" stores into l's region, O17); else l
 fn (s mut Scoper&) regionParam(l I64) I64 {
     if l < 0: return l
+    if s.holder(l) >= 0: return s.holderOf[l]
     if l < s.aliasOf.Len() and s.aliasOf[l] >= 0 {
         l = s.aliasOf[l]
         if not s.isCursorLocal(l): return l
@@ -6361,6 +6366,7 @@ fn (s mut Scoper&) rlFn(f typed.FnVal&, pass I64) {
 }
 
 fn (s mut Scoper&) keepParam(id I64) {
+    if s.holder(id) >= 0: id = s.holderOf[id]
     if id >= 0 and id < s.aliasOf.Len() and s.aliasOf[id] >= 0: id = s.aliasOf[id]
     # a cursor: each region its versions name (decision 8)
     rs := s.cursorRegs(id)
@@ -6369,6 +6375,45 @@ fn (s mut Scoper&) keepParam(id I64) {
         return
     }
     s.keepOne(id)
+}
+
+# O17c: a local declared from a constructor's instance holding one parameter's region (w := W(v)) is no keep of it by
+# itself - the instance dies with the frame; what is done with the local is done with the region: a copy of it, or of
+# what holds references in it, made or handed on, keeps it, and a store through it stores into it. Holding several
+# regions, or a cursor's, it keeps each where it is declared
+fn (s mut Scoper&) holderCand(l I64, x typed.Expr?&) I64 {
+    if x == null or s.B!.Locals[l].Kind != typed.LocalKind.Var: return -1
+    return match s.unAway(x) {
+        case typed.Expr.Call(_, _, c): l if s.P.T.Role(s.calleeType(c)) == types.RoleCtor else -1
+        case _: -1
+    }
+}
+
+fn (s mut Scoper&) holder(l I64) I64 {
+    if l < 0 or l >= s.holderOf.Len(): return -1
+    return s.holderOf[l]
+}
+
+fn (s mut Scoper&) holdOrKeep(h I64, r I64) {
+    rr := s.regionParam(r)
+    one := rr >= 0 and s.cursorRegs(rr).Len() <= 1 and s.regionKind(rr) and s.isRef(s.B!.Locals[rr].Ty)
+    if h < 0 or not one or s.holder(h) == -2 {
+        s.keepParam(r)
+        return
+    }
+    if s.holder(h) == -1 or s.holder(h) == rr {
+        s.holderOf[h] = rr
+        return
+    }
+    s.keepParam(s.holderOf[h])
+    s.keepParam(r)
+    s.holderOf[h] = -2
+}
+
+# a copy or borrow made of place p, rooted at a holder: its region kept (O17c)
+fn (s mut Scoper&) keepHeld(p typed.Lvalue&) {
+    l := flRoot(p)
+    if s.holder(l) >= 0: s.keepParam(l)
 }
 
 fn (s mut Scoper&) keepOne(id I64) {
@@ -6424,7 +6469,9 @@ fn (s mut Scoper&) kwStmt(st typed.Stmt?&) {
             }
             # a cursor's version naming a local: what is done with the cursor is done with what it names (decision 8)
             if s.isCursorLocal(I64(l)) and localRead(s.unAway(x)) >= 0: return
+            s.kwHold = s.holderCand(I64(l), x)
             s.kwExpr(x, false)
+            s.kwHold = -1
         }
         case typed.Stmt.Assign(_, p, x) {
             if s.isCursorLocal(wholeLocal(p)) and localRead(s.unAway(x)) >= 0: return
@@ -6491,15 +6538,18 @@ fn (s mut Scoper&) kwStmt(st typed.Stmt?&) {
 fn (s mut Scoper&) kwExpr(x typed.Expr?&, inert Bool) {
     if x == null: return
     match x {
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p) {
+        case typed.Expr.Read(_, ty, p, _), typed.Expr.Take(_, ty, p) {
             if p == typed.Lvalue.Local {
                 if not inert: s.keepParam(I64(p.id))
                 return
             }
+            # what holds references read out of a holder: its region's, kept (O17c)
+            if not inert and s.holds(ty): s.keepHeld(p)
             s.kwPlace(p)
         }
         case typed.Expr.Borrow(_, _, p) {
             if not inert: s.keepParam(regionRoot(p))
+            if not inert: s.keepHeld(p)
             s.kwPlace(p)
         }
         case typed.Expr.Promote(_, _, pr) { s.kwExpr(pr.X, inert) }
@@ -6517,6 +6567,7 @@ fn (s mut Scoper&) kwExpr(x typed.Expr?&, inert Bool) {
         }
         case typed.Expr.Slice(_, _, sl) {
             if not inert: s.keepParam(regionRoot(sl.Base))
+            if not inert: s.keepHeld(sl.Base)
             s.kwPlace(sl.Base)
             s.kwExpr(sl.Lo, true)
             s.kwExpr(sl.Hi, true)
@@ -6611,6 +6662,8 @@ fn (s mut Scoper&) kwPlace(p typed.Lvalue&) {
 # a call: an argument that is a parameter's reference, or a borrow into what it names, is kept where the callee may
 # keep something in it
 fn (s mut Scoper&) kwCall(c typed.Call&) {
+    h := s.kwHold
+    s.kwHold = -1
     match c.Target {
         case typed.Callee.Value(f) {
             # a lambda called where it is made never leaves it (D16c)
@@ -6647,7 +6700,7 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
         }
         if c.Target == typed.Callee.Value: s.kwValueArg(c, k, r, ps, true)
         else if s.calleeStoresArg(c, k): s.storeParam(r, s.calleePutsArg(c, k))
-        else if s.calleeKeepsArg(c, k): s.keepParam(r)
+        else if s.calleeKeepsArg(c, k): s.holdOrKeep(h, r)
         s.kwHanded(a)
     }
 }

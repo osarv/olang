@@ -1,0 +1,25 @@
+# check: run
+# O17c: a local built from a constructor's instance holding a read-only parameter is no keep of it by itself - the
+# instance dies with the call - so a value whose references live elsewhere than its storage (a by-value parameter, a
+# lambda's capture) is lent to the callee as a direct call's local is (oann repro/lambdacapture.olang)
+type V struct(d mut Array<I32>&, n I64) {
+    d
+    n
+}
+type W struct(v V&) {
+    v
+}
+fn read(v V&) I32 {
+    w := W(v)
+    return w.v.d[0]
+}
+fn outer(v V) I32 { return read(v) }
+fn main() {
+    arr := Array<I32>(4)
+    arr[0] = 7
+    v := V(arr, 4)
+    f := fn() I32 { return read(v) }
+    assert f() == 7
+    assert outer(v) == 7
+    assert read(v) == 7
+}

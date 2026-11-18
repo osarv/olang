@@ -39561,3 +39561,15 @@ compiled alone as -quick does and as a ThinLTO link leaves it; best of 7 runs of
 in place / local tile - neither 89-91 / 52-55; writable only ~60 / ~57; the hoist only ~27 / ~26; both ~24-25 /
 ~24-26. The hoist alone closes the gap and also speeds the local-tile form 2x (its own slice checks left the loop);
 writable alone closes most of it.
+
+### O17c: a local holding a parameter in a constructor's instance (2026-11-18)
+
+oann's repro/lambdacapture.olang: `read(v V&)` building `w := W(v)` and reading `w.v.d[0]` was summarised as keeping
+something in v's region, because the constructor keeps its argument in the instance - so a split value (a lambda's
+capture, a by-value parameter) lent to it was refused with O17 "the callee can store through it", while a direct call
+from main's local was lifted and accepted. The instance dies with the frame. Now computeKeeps records such a local as a
+holder of the one region its constructor call was handed (scope.olang holderCand/holdOrKeep): keepParam and
+regionParam forward the holder to the region, so a copy of the local, a copy or borrow of what holds references in it
+made, returned or handed on keeps the region, and a store through it is a store into it
+(checks/cases/o17cholderkept.olang). Holding two regions, or a cursor's several, each is kept at the declaration as
+before. A pure compile-time analysis: nothing for the evaluator to agree on (the run case's asserts run under it).
