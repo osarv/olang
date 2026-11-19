@@ -2556,7 +2556,10 @@ where nothing changes what the view covers while the local lives. A value given 
 parameter that the callee keeps nothing of, whose result holds no reference, is given it in the frame (`inside(v[k],
 x, y)`), not in an arena of the block - but never a spawned call's argument, which its task reads beside the spawner
 (and each turn's task its own). Where a copy is made, it is built where the value is kept: a local's copy in the
-local's block - so a loop turn's copy is reclaimed with the turn (O2) - whatever storage it was read from.
+local's block - so a loop turn's copy is reclaimed with the turn (O2) - whatever storage it was read from; and the copy
+of a temporary a read-only reference local's declaration lends to the call it is given (`r := v[i].a.View()`), where
+that local takes what it names out of its block by no store, return, capture, task or lend to a body keeping it, in
+that local's block.
 
 **D9i (a value moved at its last use).** A value local's copy made where it is handed on - a by-value argument, a store,
 a part of a value made (QCE) - is left out where that copy is the local's last mention, in the order the function
