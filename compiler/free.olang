@@ -3793,10 +3793,22 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     out Vec<I64>
     # a prelude fill's value is in positions the collection never reads (makeStores): no part of the array
     dead := m.Kind == typed.MakeKind.Fill and w.F.prelude[w.Id]
+    # (O8f, gap 22: a fill of a value owning storage only reads its item, each element its own copy - a view call's
+    # value there, `Array<Q>(n, v[j])`'s At, is copied into the statement's innermost scope or read where it stands
+    # (lower.fill's readHere): no value a store gives a place, no view in use across the statement's let-goes)
+    readFill := m.Kind == typed.MakeKind.Fill and m.Items.Len() == 1 and not dead and copiedCall(m.Items[0]) >= 0
+    readFill = readFill and w.ownsStorage(w.T().Elem(w.T().Plain(w.F.arrayOf(ty))))
+    outerE := w.exemptSite
+    if readFill {
+        w.exemptSite = copiedCall(m.Items[0])
+        w.copying++
+    }
     for it in m.Items {
         o := w.expr(it)
         if not dead: addAllTo(out, o)
     }
+    if readFill: w.copying--
+    w.exemptSite = outerE
     if m.Length != null: w.expr(m.Length!)
     if m.Site >= typed.SiteId(0): addTo(out, orig(ONew, I64(m.Site)))
     # (a copy makes what it owns anew, deep through values: no view of the source's owner or array leaves)

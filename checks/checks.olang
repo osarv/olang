@@ -590,21 +590,21 @@ fn freeing(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/freeing/* checks/fixtures/earlyfree/*.olang " + $os.Quote(dir))
     # (fields: gaps 6-7, elements: 8-9, mapvalues: 10 and 15, unset: 16, vecelems, vectexts, vecvecs and mapelems: 17,
     # mapcopy: 18, returned: 19, views: 20, copytext: a copy's text in slots, 2.3, ownerelems, soleelems, structelems,
-    # copyelems, fillelems and elemcopies: 22)
+    # copyelems, fillelems, elemcopies and fillread: 22)
     limited := Array<String&>["append", "global", "arrays", "fields", "elements", "mapvalues", "unset", "vecelems", "mapcopy"
                               "returned", "vectexts", "vecvecs", "mapelems", "views", "copytext", "ownerelems", "soleelems"
-                              "structelems", "copyelems", "fillelems", "elemcopies"]
+                              "structelems", "copyelems", "fillelems", "elemcopies", "fillread"]
     full := Array<String&>["88890 88890 15288890\n", "88890\n", "220049997\n", "88890 88890 20000 20000\n"
                     "name 319993 value 319993\n", "1 10 value 99993 padded out to some length .........................\n"
                     "19999 20000\n", "401980000 100 100\n", "5980000 7\n", "80001000000 4\n", "1346674 19998 20\n"
                     "600630000 5 30\n", "201350000 5 19\n", "1849900 30\n", "4079860 79993-0 padded out a little\n"
                     "159999600000\n", "159999600000 2\n", "80000200000 2\n", "239999800000 2 1\n"
-                    "400000600000 2 1\n", "399999000003 2 1\n"]
+                    "400000600000 2 1\n", "399999000003 2 1\n", "319985200228 2 1\n"]
     part := Array<String&>["490 490 148890\n", "490\n", "220494\n", "490 490 200 200\n", "name 193 value 193\n"
                     "1 10 value 193 padded out to some length .........................\n", "199 200\n", "59800 100 100\n", "59800 7\n"
                     "20500 4\n", "12272 198 20\n", "66300 5 30\n"
                     "33500 5 19\n", "18400 30\n", "10060 193-0 padded out a little\n", "39800\n", "39800 2\n", "20100 2\n"
-                    "59900 2 1\n", "100300 2 1\n", "99503 2 1\n"]
+                    "59900 2 1\n", "100300 2 1\n", "99503 2 1\n", "72828 2 1\n"]
     for i in range limited.Len() {
         p := limited[i]
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)

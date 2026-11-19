@@ -1,0 +1,29 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): run-time fills whose item is read out of a Vec, `Array<Q>(n, v[j])` - At's value only
+# read by the fill (lower.fill's readHere: copied in the statement's own scope, or read where it stands), no value a
+# store gives Q.a (free.makeOf's readFill) - the element then replaced, the fill read after; a fill from a fill's element
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn main() {
+    q0 := Q()
+    q0.a = Vec<I64>[1, 1]
+    v Vec<Q>
+    for _ in range 10: v.Push(q0)
+    n := 3
+    t := 0
+    for i in range N {
+        u := Array<Q>(n, v[i % 10])
+        p := Q()
+        p.a = Vec<I64>[i, i]
+        v[i % 10] = p
+        u[1] = v[(i + 1) % 10]
+        t += u[0].a[1] + u[1].a[0] + u[2].a.Len()
+        f := Array<Q>(2, u[2])
+        u[2] = p
+        t += f[1].a[0] + Array<Q>(n, v[(i + 2) % 10])[2].a[1]
+    }
+    io.PutLn($t + " " + $v[3].a.Len() + " " + $q0.a[0])!
+}

@@ -392,3 +392,7 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   (`readHere`, D9h) or, where nothing in the callee's window writes what it views, gives it as it is - either way no
   value a store gives `Q.a` (its call exempt from `untracked`) and no view in use across the old element's let-go
   (`free.call`'s viewArg, read as `copiedArg`'s are). Fixture: checks' freeing elemcopies.
+  A run-time fill whose item is read out of a Vec (h5, `Array<Q>(n, v[j])`) frees too: lowering reads a fill's item
+  where it stands where the fill owns storage (`lower.fill`'s readHere - the copy D9h makes, if any, in the statement's
+  innermost scope, not where At's result would live), and the free pass takes that call's value as `viewArg`'s
+  (`makeOf`'s readFill). Fixture: checks' freeing fillread.

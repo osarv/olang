@@ -39870,3 +39870,14 @@ Tried first: exempting the call inside a preserved argument's copy (`makeOf`) - 
 checks' freeing elemcopies (`v[i] = v[j]`, `v[i] = v[i]`, `put(v, i, w)`, `put(v, i, v[j])`) flat under 8 MB at
 400,000 turns (master's compiler: out of memory), interpreted alike at 200, clean under `-sanitize`; review4's 37
 programs agree built, sanitized and interpreted, b2 now passing `-memory -check` too.
+
+A run-time fill whose item is read out of a Vec (review4's h5, `u := Array<Q>(n, v[i % 10])`) kept `Q.a` the same way:
+At's value, the fill's item, taken for a D9h copy made with no store into the place. Lowering's `fill` lowered the
+item with `val`, so the copy (the window was not known quiet) went where the scope pass put At's value - the
+collection's scope where nothing else says, a copy a turn kept there besides. A fill owning storage only reads its
+item, copying it into each element, so `lower.fill` now calls `readHere` on it first: the copy, where one is made,
+goes into the statement's innermost scope, and where the statement writes nothing At views the fill copies straight
+out of the element. The free pass matches it in `makeOf` (readFill: the item's call exempt from `untracked`, its read
+no view in use across the statement's let-goes). Measured: checks' freeing fillread (a fill from a Vec's element read
+after the element is replaced, a fill from a fill's element, a temporary fill from an element) flat under 8 MB at
+400,000 turns (master's compiler: out of memory), interpreted alike at 200, clean under `-sanitize`.

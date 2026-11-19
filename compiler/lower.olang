@@ -6539,6 +6539,9 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
             ln.start(after)
             fv = mir.Operand.Copy(mir.Lvalue.L(v))
         } else {
+            # (O8f, gap 22: a fill owning storage only reads its item, copying it into each element - a view call's value
+            # there is read where it stands, D9h: its copy, where one is made, in the statement's innermost scope)
+            if ln.ownsStorage(el): ln.readHere(m.Items[0])
             fv = ln.val(m.Items[0])
         }
     }

@@ -987,7 +987,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (wt-freecopies); fillelems (wt-fillcopy). A view call's value given as it is to a by-value parameter its callee only
   reads, of a call whose value holds no reference (`v[i] = v[j]`'s At, `put(v, i, v[j])`), is a copy made in the
   statement's own scope or a view dead within the callee's quiet window (`lower.readHere`): no value a store gives a
-  place, no view in use across the statement's let-goes (`free.call`'s viewArg); elemcopies (wt-checkshapes).
+  place, no view in use across the statement's let-goes (`free.call`'s viewArg); elemcopies (wt-checkshapes). So is a
+  view call's value a fill owning storage copies (`Array<Q>(n, v[j])`: `lower.fill`'s readHere, `free.makeOf`'s
+  readFill); fillread.
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by
