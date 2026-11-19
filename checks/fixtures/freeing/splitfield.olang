@@ -1,0 +1,28 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, review4's c1 `s.qs`): a struct's field holding a run-time array of structs owning storage
+# only in part places (`S{qs Array<Q>}`) - a split field (free.SplitField): each value stored into it built in a part
+# region, its Qs' parts each in one of their own; its let-go (`s.qs = u`) releases its elements' parts by its length,
+# then the array. An element's own part changed in place (`s.qs[1].a.Push`) and given another (`s.qs[0].a = ...`)
+type Q struct() { a Vec<I64> }
+type S struct() { qs Array<Q> }
+
+N I64 = 400000
+
+fn main() {
+    s := S()
+    t := 0
+    for i in range N {
+        base := Q()
+        base.a = Vec<I64>[i, i + 2]
+        {
+            u := Array<Q>(3, base)
+            u[1].a.Push(5)
+            s.qs = u
+        }
+        s.qs[1].a.Push(i)
+        s.qs[0].a = Vec<I64>[i + 1]
+        t += s.qs[1].a[2] + s.qs[1].a[3] + s.qs[0].a[0] + s.qs[2].a[1]
+    }
+    io.PutLn($t + " " + $s.qs.Len())!
+}

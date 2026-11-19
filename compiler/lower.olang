@@ -5237,6 +5237,9 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
             if bl >= 0 and not heldRef(at): at = ln.scopeRef(typed.Scope.Block(ln.B.Locals[bl].In))
             sv := ln.splitCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
             if sv != mir.Operand.None: return sv
+            # (review4's a5: a plain value local's copy, its parts in part regions - free.splitLetOf)
+            wv := ln.ownersCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
+            if wv != mir.Operand.None: return wv
             # (c1's keep: an element array of PartsOnly values, its elements' parts in part regions - free.partsArray)
             av := ln.arraysCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
             if av != mir.Operand.None: return av

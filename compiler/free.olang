@@ -2178,6 +2178,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     heldCopy Map<I64, typed.Expr&>
     copyExempt I64 = -1
     splitArr I64 = -1          # the site of a copy stored into an element array place of PartsOnly values (untracked's split)
+    splitLet I64 = -1          # the site of the view call a plain value local is declared with (splitLetOf)
     readArg I64 = -1           # the call whose value is the argument walked, a temporary lent read-only (tempCall)
     copyRead I64 = -1
     # Part C: by let-go, the Defer statement whose block's end it stands at (a holder's drop), -1 for its own statement;
@@ -2447,6 +2448,9 @@ fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made 
     # or stored where an owner's region may hold it - has each element's parts in part regions (lower.fill's
     # ownersCopy): its owners keep for RSplit alone, freeing through their parts)
     parted := filled and fills.Len() == 0 and site >= 0 and w.F.fillParted(ty)
+    # (review4's a5: the copy of a view call's value a plain value local is declared with, `c := v[j]` - its parts split
+    # as well, lower.ownersCopy)
+    parted = parted or (made and site >= 0 and site == w.splitLet and w.F.PartsOnly(ty) and not w.T().RunsCopy(ty))
     if parted: w.F.ownersAt.Put(pair.Pair(w.Id, site), true)
     # (O8f, round 8: a copy lowering makes - made: not a fill's, nor one a declared Copy makes, E31d - builds the text
     # of a place built in slots in slots of where it goes, as the place's own stores do: lower.copySlots)
@@ -2478,6 +2482,18 @@ fn (w mut walker&) splitArrOf(p typed.Lvalue&, x typed.Expr&) I64 {
     k := w.F.placeOfPlace(p)
     if k < 0 or w.F.keyField[k] != -1 or not w.F.PartPlace(k) or w.F.plainElems(k): return -1
     return ownCopySite(x)
+}
+
+# O8f (review4's a5): the site of the call plain value local l is declared with, where its value is a PartsOnly struct
+# (`c := v[j]`, At's value copied, D9h): that copy is built with each part place's array in a part region of its own
+# where that place is sole (lower.ownersCopy), so that its owners keep for that alone (RSplit), freeing through their
+# parts, rather than for a value made with no store into it (RCopied); -1 for none
+fn (w mut walker&) splitLetOf(l I64, x typed.Expr&) I64 {
+    lc := w.body().Locals[l]
+    if lc.Kind != typed.LocalKind.Var or w.T().IsRef(lc.Ty) or w.fields.Has(l) or w.ownLocal(l) >= 0 or w.feeder(l) >= 0: return -1
+    c := initCall(x)
+    if c == null or not w.F.PartsOnly(x.Type()) or w.T().RunsCopy(x.Type()): return -1
+    return I64(c.Site)
 }
 
 # O8f (gap 22): the site of the fill local l is declared with, where lowering builds its elements' owner fields as
@@ -2550,10 +2566,11 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             # (D13d: one declared with no value holds zero bits until its first assignment - nothing made, nothing to
             # release, as null is)
             unset := w.body().Locals[I64(l)].Unset
-            wasF := w.plainFill
+            wasF, wasL := w.plainFill, w.splitLet
             w.plainFill = w.plainFillOf(I64(l), x)
+            w.splitLet = w.splitLetOf(I64(l), x)
             o := Vec<I64>() if unset else w.expr(x)
-            w.plainFill = wasF
+            w.plainFill, w.splitLet = wasF, wasL
             w.copyExempt = exemptWas
             w.exemptSite, w.copiedCtor = outerE, outerC
             if lc != null {
