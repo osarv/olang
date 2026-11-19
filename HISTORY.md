@@ -39774,3 +39774,48 @@ Measured: (a) and (b) flat at 2,000,000 turns (12.9 MB), `-memory -check` passin
 alike, `-memory -check`). Left, named by `-memory -check`: a by-value argument's copy (`v[i] = p`, a local p) makes the
 owner place keep (RCopied: the free pass judges before lowering moves it), and structelems' fill copies do; and a
 part place keeps for a same-statement read of another value of it (`v[i] = p` reading p's buffer), judged per place.
+
+## 2026-11-18: freeing gap 22's named rows closed - preserved arguments, fills split, arguments read before the call (O8f, B18a; mine; wt-freecopies)
+
+wt-gap22 left three rows `-memory -check` named: (1) `v[i] = p` with a local p made the owner place `Q.a` keep (RCopied:
+the by-value argument's copy); (2) structelems' fill (`Array<P>(10, P(Vec<I64>[0]))`) did, each element a copy; (3)
+once (1) was gone, `Q.a` and the Vec's buffer place kept for "a value of it read in this statement is in use when
+'v[i % 10] = p' lets go of it" - p read in the statement whose `SetAt` let go of the old element. Each kept a buffer a
+turn (out of memory under 8 MB at 400,000 turns).
+
+The invariant behind RCopied: a place is a declaration, so a sole `Q.a` must have every value of it built in a region
+of its own, which its let-go releases; a copy made in no region is a value of the place a let-go would release wrongly.
+- **Tried first and dropped: every copy builds owner fields in regions.** The Copy helper (`lower.copyAt`) built an
+  owner field's value in a region of its own (guarded by the place's decision), so that no copy lowering makes would
+  keep. The evaluator stopped fields.olang on a read of freed storage: a constructor's value copied for a field (D9h)
+  is built in the region made for the field's owner value, and a region of its own inside that one hid it - an owner's
+  region is found from its anchors as the nearest region that is no part region, so the outer owner's settle took its
+  value for empty and released it, kids and all. A copy cannot tell, in a helper shared by every site, whether where
+  it goes is such a region. So each row is closed where it is known instead.
+- **(1): a by-value argument's copy its callee only reads keeps nothing.** Where the callee keeps its parameter's
+  parts as they are (`Preserves`: written through nowhere, lent to nothing that writes, kept nowhere, handed back
+  nowhere - `SetAt`, which copies it again into the element through `ownerCopy`), the copy - or the local moved into
+  it at its last use, or the caller's storage it views (argView) - is let go through no place: the parameter is all that
+  holds it until the scope it was built in closes, and what the callee copies out of it is judged where that copy goes.
+  `free.preservedArg` exempts that Make from `untracked`.
+- **(2): a fill builds its elements' owner fields as stores do.** `lower.fillCopy` copies each element as the Copy
+  helper would but an owner field through `ownerField` - a region of its own, a kid of where the array is, guarded by
+  the place's decision and released at once where it holds nothing, its parts in part regions where those are sole -
+  and `untracked` leaves those places out for the fill (`free.FillSplit`, `fillOwners`). Where that is sound is the
+  hidden-region question again: a run-time array's elements are reached by no owner's anchors (they end at the array),
+  so always; a fixed array is held by value, so only where it is a plain local's value - no field, owner or feeder
+  place, which no store's region takes in - built in a block (`free.plainFillOf`, `lower.blockBuilt`). Lowering splits
+  only where that holds; splitting where the free pass did not count on it is harmless (the place keeps, and the guards
+  build nothing of their own).
+- **(3): a by-value argument's read is no view in use across its statement's let-goes.** It was counted where the
+  callee preserves the parameter (`copiedArg` asked `Keeps`), since lowering may then leave the copy out. But argView
+  leaves it out only where `stableRef` holds - a quiet statement (no writable reference handed to a call, no call
+  through a function value or `any`, no statements of its own, no global that can be written) or storage made for the
+  call - so nothing let go in the statement reaches what it reads; otherwise the copy is other storage, or the local
+  moved into it is dead. `copiedArg` drops the condition.
+- **And the read that followed: `t += v[i % 10].a[1]`.** At's value is copied for the caller (D9h) and only lent
+  read-only to the index's `At` through its field `a`; a temporary lent only for reading was already no copy kept
+  (gap 17), but only when lent whole. `tempPlaceCall` sees through fields of the temporary.
+Measured: structelems, copyelems (`v[i] = p` at its last use and read after, `w[i] = r`, a fill), ownerelems,
+soleelems and the probes flat under 8 MB at 400,000 turns, interpreted alike, clean under `-sanitize`. A fill's item
+copied from a local (`Array<Q>(4, base)`) still keeps for that copy (a temporary the fill copies), named.
