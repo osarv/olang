@@ -3407,18 +3407,20 @@ fn (w mut walker&) goParts(k I64, sp source.Span) {
     if not w.F.IsOwner(k): return
     for lf in w.F.ReleaseLeaves(w.F.valTy[k]) { w.go(lf.PlaceId, LLeaf, sp, source.Span(0, 0), -1) }
     # (and, of a PartsOnly value, what its Vecs' live elements hold - released by its walks where it is not sole,
-    # lower.ownerParts: a Vec<Q> local given another value)
+    # lower.ownerParts: a Vec<Q> local given another value - judged against the views in use only: where the owner is
+    # sole its region holds them, so they are no let-go of their own places for the decision or the report)
     if not w.F.PartsOnly(w.F.valTy[k]) or w.F.VecWalks(w.F.valTy[k]).Len() == 0: return
     lvs := w.F.ReleaseLeaves(w.F.valTy[k])
     for q in w.F.PartsLet(w.F.valTy[k]) {
-        if not w.F.leafOf(lvs, q): w.go(q, LLeaf if w.F.PartPlace(q) else LAssign, sp, source.Span(0, 0), -1)
+        if not w.F.leafOf(lvs, q): w.go(q, LLeaf if w.F.PartPlace(q) else LAssign, sp, source.Span(0, 0), -1, true)
     }
 }
 
 # a let-go event: place k let go of by the statement being walked - by an assignment or a vacate of it, a moved value
 # dropped, or a call
-fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee I64) {
+fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee I64, viewsOnly Bool = false) {
     f := w.F
+    if viewsOnly and (not w.Final or w.quiet > 0): return
     if not w.Final {
         # a body that may let go of any place lists none
         if k >= 0 and not f.letsAll[w.Id] and addTo(f.lets[w.Id], k) > 0: f.changed = true
@@ -3434,7 +3436,7 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
     w.goCallee.Push(callee)
     # a call's let-go in the library's code is only this body's views' business: the report and condition 5 read
     # the rest - and so is a yield's, which is no let-go of the generator's own
-    if kind == LYield or (kind == LCall and not f.programCode[w.Id]) {
+    if viewsOnly or kind == LYield or (kind == LCall and not f.programCode[w.Id]) {
         w.goIdx.Push(-1)
         return
     }
@@ -4026,7 +4028,10 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     for j in range c.Args.Len() {
         a := c.Args[j]
         wasRead := w.readArg
-        w.readArg = tempCall(a) if j < ps.Len() and w.T().IsRef(ps[j]) and not w.writable(ps[j]) else -1
+        # (lent only where the call's own value holds no reference: one that may hand back a view of the temporary -
+        # `v[i].a.View()` kept in a local - has lowering keep its copy (D9h) where the view may live)
+        lends := j < ps.Len() and w.T().IsRef(ps[j]) and not w.writable(ps[j]) and not w.T().IsRef(ty) and not w.T().HoldsRefs(ty)
+        w.readArg = tempCall(a) if lends else -1
         copied := not unknown and copiedArg(a)
         # (and a view call's value given as it is to a by-value parameter such a callee only reads, of a call whose value
         # holds no reference - `v[i] = v[j]`'s At: lowering copies it (D9h) into the statement's innermost scope, no value

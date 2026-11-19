@@ -39881,3 +39881,62 @@ out of the element. The free pass matches it in `makeOf` (readFill: the item's c
 no view in use across the statement's let-goes). Measured: checks' freeing fillread (a fill from a Vec's element read
 after the element is replaced, a fill from a fill's element, a temporary fill from an element) flat under 8 MB at
 400,000 turns (master's compiler: out of memory), interpreted alike at 200, clean under `-sanitize`.
+
+## 2026-11-19: freeing - copies of several owners, nested owners, owner locals changed in place, returned fills (O8f, B18a; mine; wt-checkshapes2)
+
+wt-checkshapes left four shapes named by `-memory -check` with their causes found (docs/freeing.md, gap 22's log), and
+a fifth - a view of one owner field kept while a sibling is reassigned - passing the check, to be confirmed. None asks
+a language question; none is closed by a region of its own. Each is closed by building a copy's parts in part regions
+and by releasing an owner that is not sole through what its value holds.
+
+h7, `Q struct() { a Vec<I64>, b Vec<I64> }` copied into a Vec's element (Push's `occupy`, SetAt): `copyLeaves` makes a
+copy for one owner leaf only - a region of its own for it - and with two, "one region would hold them all", so both
+`Q.a` and `Q.b` kept (RMade) and the element's SetAt was a library gap. Now, where the value is PartsOnly and runs no
+declared Copy and each owner leaf's value owns storage only as part places' arrays or owners of such
+(`free.ownersSplit`), the copy site is recorded (`ownersAt`, `OwnersSite`) and lowering builds the copy with each part
+place's array in a part region where that place is sole (`lower.ownersCopy`, `partsCopied` - as an element's copy is
+built). The owners keep for that alone, a new reason, RSplit: any other reason overrides it (`keep`), and a view in use
+across a let-go still judges the place (`unkept`, so the views walk does not skip it). An owner kept RSplit or RInPlace
+frees where everything its let-go releases is sole or frees so in turn (`partsFree`); the report and `libraryGaps`
+read that, and name an owner kept so through the reason of the leaf that keeps (`splitPart`) - h7's own row is now its
+`rb` view, read after `p.a` is reassigned, which keeps `Vec<I64>.data`.
+
+That fifth shape is right to keep: places are keyed by type, so `p.a`'s let-go of `Vec<I64>.data` may, as far as the
+pass can tell, release what `rb := p.b.View()` reads. It is a named view keep with its fix ("read what you need from
+'rb' before"), never a gap; telling the two buffers apart would need places by path.
+
+c1's `made`, a fixed fill returned (`Array<Q>(3, base)` handed back): `fillOwners` builds a fixed fill's owner fields
+as their stores do only where a block holds it - an owner's region around it would be hidden by regions of their own
+inside. Part regions are not hidden (an owner's release reads a part region that is its kid as its own), so such a fill
+now splits each element's parts the same way (`free.fillParted` in `untracked`, `lower.fill` calling `ownersCopy`),
+its owners kept RSplit rather than RCopied.
+
+a3, `R struct() { q Q, b Vec<I64> }`: `R.q` is an owner place (a struct field owning storage), so `r.q.a = ...` changes
+it in place (RInPlace), and R's copies hold two owners, one of them an owner of owners. `ownersSplit` takes owners of
+owners (`splitOwner`), keeping the nested ones (`Q.a`) RSplit too (`splitOwners`); `partsFree` walks `PartsLet` - the
+owner's release leaves, nested owners and their parts, and its Vecs' walks - asking each to be sole or free so in turn;
+lowering's `ownerParts` releases a PartsOnly value's every release as an element's let-go does (`partReleases`, path
+prefixed: nested owners' regions first, the field left empty, then walks, then parts).
+
+f1, a `Vec<Q>` or `Vec<Vec<I64>>` local pushed to and then given another value: `inOwner` keeps the local's place
+(RInPlace) - its callee would need the value's current region to build in it. Instead the let-go of an owner not sole
+whose value is PartsOnly releases through `ownerParts` (`lower.releases`), its Vecs' live elements' own storage
+included, and `partsFree` accepts the walks. The free pass judges the views in use against those walks (`goParts` over
+`PartsLet`) - judgement only (`go`'s viewsOnly, pushing no `letGo` and no `lets`): where the owner is sole its region
+holds what the walks name, so they are no let-go of those places for the decision or the report (making them full
+let-goes named earlyfree's fieldfeed: `Vec<String>`'s texts, kept inside a sole owner's region, now "let go" there). With
+the walks judged, f1's `r1` - a view of an element read after `v = Vec<Q>()` - keeps, where before nothing looked.
+
+Found on the way, by measuring rather than reading the report: review4's a1, a5, a6, a7, h1 and h6 passed
+`-memory -check` while growing ~120 B a turn (50 MB at 400,000 turns). Each holds `x := v[i].a.View()` in a local: At's
+value is a temporary lent read-only through its field to View (`tempPlaceCall`, wt-freecopies), which the pass took
+for no copy kept, but View hands back a view of it that outlives the statement, so lowering copies At's value (D9h)
+where the callee's result would live - the collection's scope - one copy a turn. A temporary is now lent only to a call
+whose value holds no reference (`v[i].a[1]`'s still is), and these programs are named (RCopied: "a call's value copied:
+'v[i % 4]'"). Freeing them needs the copy made in the view local's own block, a question for the scope pass (a view
+local's scope is the collection's by inference); left open, named.
+
+Still named: a Vec of fixed arrays of owners changed in place (c1's `keep`, `Vec<Array<Q>>`: a fixed array element is
+not PartsOnly), and the D9h copy above. Measured: checks' freeing ownerpair, fillreturn, nestedowners and ownervecs
+flat under 8 MB at 400,000 turns (master's compiler: out of memory each), interpreted alike at 200, clean under
+`-sanitize`; review4's 37 programs agree built, sanitized and interpreted; the freeing and earlyfree scenarios pass.

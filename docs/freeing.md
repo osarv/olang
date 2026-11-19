@@ -404,3 +404,28 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   (f1, `v.Push(q)` on a `Vec<Q>` or `Vec<Vec<I64>>` local, then `v = ...`: `inOwner` keeps the local, RInPlace - the
   callee would need the current value's region passed as its scope variable, as `writeFeedCalls` does for a feeder);
   and a fixed fill returned (c1 `made`: not split where it is no block's, RCopied).
+- 2026-11-19, wt-checkshapes2: the four shapes above free, none by a region of its own - by splitting copies into part
+  regions and releasing an owner that is not sole through what its value holds. A copy of a value with several owner
+  leaves (h7, `Q{a, b Vec<I64>}` in Push's `occupy` and SetAt) builds each part place's array in a part region where
+  that place is sole (`free.ownersSplit`, `lower.ownersCopy`, as an element's copy does); its owners keep for that alone
+  (RSplit, which any other reason overrides and a view still judges) and free through their parts. A fixed fill no
+  block holds (c1 `made`, returned) is split so per element (`free.fillParted`, `lower.fill`). An owner kept for RSplit
+  or a change in place (RInPlace) frees where everything its let-go releases is sole or frees so in turn (`partsFree`
+  over `PartsLet`): an owner its value holds (a3, `R{q Q, b Vec<I64>}`: `r.q.a = ...` keeps `R.q` in place, its `Q.a`
+  sole), its Vecs' live elements' own (f1, a `Vec<Q>` or `Vec<Vec<I64>>` local pushed to, then given another value) -
+  lowering releases them, nested owners' regions first, walks, then parts (`lower.ownerParts` through `partReleases`,
+  and `releases` for an owner local not sole), and the free pass judges views against all of them (`goParts` over
+  `PartsLet`: f1's `r1`, a view of an element read after `v = Vec<Q>()`, now keeps rather than being missed). Fixtures:
+  checks' freeing ownerpair, fillreturn, nestedowners, ownervecs. The sibling-field view (h7's `rb := p.b.View()` read
+  after `p.a = ...`) keeps `Vec<I64>.data`: places are by type, so `p.a`'s let-go may release what `rb` reads as far as
+  the pass can tell - a named view keep with its fix ("read what you need from 'rb' before"), never a gap; telling the
+  two fields' buffers apart would need places by path, not by type. A temporary lent read-only through its fields
+  (`tempPlaceCall`) is lent only to a call whose value holds no reference: `x := v[i].a.View()` kept in a local has
+  lowering keep At's copy (D9h) where the view may live - the collection's scope, a copy a turn - which the pass had
+  counted as no copy (-memory -check passed while the program grew ~60-120 B a turn: review4's a1, a5, a6, a7, h1, h6
+  and the view rows of f1 and a3, measured at 400,000 turns); it is now named (RCopied). Walk let-goes an owner's
+  let-go adds (`goParts`) judge views only (`go`'s viewsOnly): where the owner is sole its region holds what they
+  name, so they are no let-go of those places for the decision or the report (a Vec<String> field's texts, earlyfree's
+  fieldfeed).
+  Still named: a Vec of fixed arrays of owners changed in place (c1's `keep`, `Vec<Array<Q>>`: not PartsOnly), and
+  the D9h copy above (copying At's value into the view local's own block would free it).
