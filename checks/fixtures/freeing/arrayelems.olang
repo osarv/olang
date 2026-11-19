@@ -1,24 +1,38 @@
 import "std/io"
 
-# O8f (docs/freeing.md gap 22, review4's c1 `keep`): a Vec of run-time arrays of plain elements - each element's array
-# a part place's value (free.elemArray), built in a part region, released alone where the element is given another
-# (`v[i] = w`) or where the Vec's let-go walks its live elements; and a Vec pushed to
-# only, then given another value (its walk the one let-go of its elements' place: a Vec<String> as well)
+# O8f (docs/freeing.md gap 22, review4's c1 `keep`): a Vec of run-time arrays - of plain elements, or of structs owning
+# storage only in part places (`Q`) - each element's array a part place's value (free.elemArray), built in a part
+# region, its Qs' parts each in one of their own; released where the element is given another (`v[i] = w`) or where the
+# Vec's let-go walks its live elements (an array's own by its length); and a Vec pushed to only, then given another
+# value (its walk the one let-go of its elements' place: a Vec<String> as well)
+type Q struct() { a Vec<I64> }
+
 N I64 = 400000
 
 fn main() {
     keep Vec<Array<I64>>
     texts Vec<String>
+    qs Vec<Array<Q>>
     t := 0
     for i in range N {
         w := Array<I64>(2, i)
         keep.Push(w)
         texts.Push("x" + $(i % 10))
         keep[0] = Array<I64>(3, i + 1)
+        base := Q()
+        base.a = Vec<I64>[i, i + 2]
+        {
+            u := Array<Q>(2, base)
+            qs.Push(u)
+        }
+        fresh := Array<Q>(3, base)
+        qs[0] = fresh
         t += keep[keep.Len() - 1][1] + keep[0][2] + texts[texts.Len() - 1].Len()
+        t += qs[qs.Len() - 1][1].a[1] + qs[0][2].a[0]
         if keep.Len() > 6 {
             keep = Vec<Array<I64>>()
             texts = Vec<String>()
+            qs = Vec<Array<Q>>()
         }
     }
     io.PutLn($t + " " + $keep.Len())!

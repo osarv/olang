@@ -4220,7 +4220,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     # (nor a temporary only lent for reading: what it holds is no value any store gives a place - gap 17)
     lent := I64(c.Site) == w.readArg and c.Site >= typed.SiteId(0)
     if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite and not lent {
-        w.untracked(ty, sp, "a call's value copied", b2 >= 0 and not unknown)
+        w.untracked(ty, sp, "a call's value copied", b2 >= 0 and not unknown, false, false, I64(c.Site))
     }
     if b2 >= 0 and not unknown {
         if f.isCase(b2) {

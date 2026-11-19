@@ -1003,10 +1003,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reference, or to the call a reference local holding its view only in its own block is declared with
   (`free.BlockCopy`): `x := v[i].a.View()` read, lent to bodies keeping nothing of it, read in a deferred block - At's
   copy (D9h), where one is made, goes into that block, dead with the local (viewlocals, wt-d9h). Such a local handed on
-  to a closure, a generator or a task (review4 a5-a7) keeps At's copy in the collection's scope, named (RCopied); so
-  does a Vec of arrays of owners (`Vec<Array<Q>>`) changed in place. An array's run-time array elements of plain
-  elements (a `Vec<Array<I64>>`'s) are a part place by type (`free.elemArray`): each built in a part region, released
-  where an element is given another or the Vec's walk lets it go (`arrayBuffer`); a walk's let-go of a Vec's live
+  to a closure, a generator or a task (review4 a5-a7) keeps At's copy in the collection's scope, named (RCopied).
+  An array's run-time array elements of plain elements or of PartsOnly structs (a `Vec<Array<I64>>`'s, a
+  `Vec<Array<Q>>`'s) are a part place by type (`free.elemArray`): each built in a part region, its elements' parts split
+  (every copy of such an array, `arraysCopy`), released - its elements' parts first, by its length - where an element is
+  given another or the Vec's walk lets it go (`arrayBuffer`); a walk's let-go of a Vec's live
   elements counts as a let-go of their place (`partWalked`), so a `Vec<String>` or `Vec<Array<I64>>` pushed to and
   given another value frees (arrayelems, wt-arrelems).
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared

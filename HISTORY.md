@@ -40022,3 +40022,14 @@ place for the decision (`partWalked`), though the report and the views still jud
 4,000,000 turns: `Vec<Array<I64>>` 64.8 MB to 12.9 MB, `Vec<String>` 33.4 MB to 13.0 MB, flat from 400,000. Fixture:
 checks' freeing arrayelems (master's build runs out of memory under 8 MB).
 
+Then `Vec<Array<Q>>` itself (wt-arrelems, steps 2-3). `elemArray` takes arrays of PartsOnly structs (by
+`refsBeyondParts`: HoldsRefs counts an owned array as a reference): such an element's let-go walks its own elements by
+the array's length, releasing each one's parts, then releases the array (a relPath walking by `Len`); a store into the
+place is built split rather than kept as "its elements may hold storage built with it"; and every copy of such an array
+- the occupy's, a by-value argument's own (D9b), At's D9h copy of a call's value - builds each element's parts in part
+regions where their places are sole (`free.partsArray`, `arraysAt`, `lower.arraysCopy`, `elemArrayCopy`), so the Q's
+owner places keep for RSplit only and free through their parts, as ownersCopy's do. c1's `keep` cut down: 757 MB to 13
+MB at 4,000,000 turns, passing `-memory -check`. Not changed: a fill of a local stored in the statement that lets the old
+element go (`qs[0] = Array<Q>(3, base)`) keeps `Q.a` as a named view - places are by type, so `base.a` read there is as
+far as the pass can tell what the let-go releases.
+

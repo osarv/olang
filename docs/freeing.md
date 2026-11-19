@@ -466,11 +466,12 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   split (no `plainElems` keep for it; `lower.elemArrayCopy`, `partCopy`), and a copy of such an array anywhere (the
   occupy's, a by-value argument's D9b copy) is built with each element's parts in part regions (`free.partsArray`,
   `arraysAt`, `lower.arraysCopy`) - its owners keep for RSplit only, freeing through their parts.
-  **Where to pick up (c1's `keep`, `Vec<Array<Q>>`)**: /tmp/claude-0/ae/k1.olang (c1's keep cut down; also
-  /tmp/claude-0/review4/c1keep.olang) runs flat in every mode but `-memory -check` still names `Q.a` (RCopied) for
-  At's D9h copy of a call's value in `keep[keep.Len() - 1][1].a[1]` (free.olang's call walk, `untracked(ty, sp, "a
-  call's value copied", ...)` with no site, so `arrays` cannot apply): pass the call's site there and split that copy in
-  lowering where D9h copies a call's value (find it from `viewCopyAt`; `arraysCopy` keyed by the call site), or treat
-  `[i]` after At as a chain of reads (gap 20) so no copy is made. Then rerun c1 whole (its other rows: `s.qs` named,
-  the closure's `x` placement) and the probes. Then (2): review4 a5-a7 (a view local handed to a closure, generator or
-  task in its block - `free.BlockCopy`'s conditions, follow the escape into the holder).
+  Step 3: At's D9h copy of such an array (`keep[j][1].a[1]`) split too (the call's site given to `untracked`;
+  `lower.arraysCopy` where a view call's value is copied). c1's `keep` cut down (/tmp/claude-0/ae/k1.olang) passes
+  `-memory -check`, 757 MB to 13 MB at 4,000,000 turns; checks' freeing arrayelems has a `Vec<Array<Q>>` (a block's
+  fill pushed, a fill stored by `qs[0] = fresh`). A fill of `base` stored in the same statement (`qs[0] = Array<Q>(3,
+  base)`) keeps `Q.a` for a named view (places by type: `base.a` read across the old element's let-go) - read first.
+  **Where to pick up**: rerun c1 whole (its other rows: `s.qs` named "its elements may hold storage built with it", the
+  closure's `x` placement) and the review4/review5 probes in every mode; then (2): review4 a5-a7 (a view local handed
+  to a closure, generator or task in its block - `free.BlockCopy`'s conditions, follow the escape into the holder);
+  then the scenarios, scopesan, make quick (goldens: tokens/ast for arrayelems).
