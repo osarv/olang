@@ -27,4 +27,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e11 integrate (cloud, 2026-11-18): oagent experiments/e11-integrate (wt-e11) - done: integrated system exact to 10000 on mix and S5; a no-settle BPTT cell with the same priors matches it (README conclusion)
 - e12-language cloud session (2026-11-18): done - oagent 6ace9b5 (experiments/e12-language): not promising at pilot scale
 - e13-grids cloud session (2026-11-18): oagent experiments/e13-grids (wt-e13) - in progress: e5 grid follow-ups (unreachable flooding by seed, grid halting), wider spreading tasks, unrolled vs EP-sphere, energy-ranked best-of-N
-- OLang Cloud (2026-11-19): olang wt-review4 - soundness review of gap 22 + 0df8e5eab freeing
+- OLang Cloud (2026-11-19): olang wt-fillcopy - the -check case: a fill whose item copies a local (Array<Q>(4, base))
