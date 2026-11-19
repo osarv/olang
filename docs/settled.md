@@ -975,7 +975,6 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   its own owner or part fields (`free.MovesLeaves`), and keeps its own slot in the frame (`homeKept`); an owner's
   direct or field let-go judges views of its parts too (`goParts`) and releases them where it is not sole - an
   owner kept only for a change in place whose parts are flat and sole frees (`partsFree`). checks' freeing ownerelems,
-<<<<<<< HEAD
   soleelems: 777 MB, +64 B and +1.2 KB a turn to flat, under `-memory -check`. A by-value argument's copy its callee only
   reads (`Preserves`) keeps no place - made for none, never let go through one (`free.preservedArg`); a fill builds each
   element's owner fields as stores into their places do (`lower.fillCopy`, `ownerField`: a region of its own where the
@@ -984,9 +983,6 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   argument's read is no view in use across its statement's let-goes (`free.copiedArg`); a temporary lent read-only
   through its fields is no copy kept (`tempPlaceCall`). checks' freeing structelems, copyelems under `-memory -check`
   (wt-freecopies).
-=======
-  soleelems: 777 MB, +64 B and +1.2 KB a turn to flat, under `-memory -check`.
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

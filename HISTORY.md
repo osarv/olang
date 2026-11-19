@@ -39774,7 +39774,6 @@ Measured: (a) and (b) flat at 2,000,000 turns (12.9 MB), `-memory -check` passin
 alike, `-memory -check`). Left, named by `-memory -check`: a by-value argument's copy (`v[i] = p`, a local p) makes the
 owner place keep (RCopied: the free pass judges before lowering moves it), and structelems' fill copies do; and a
 part place keeps for a same-statement read of another value of it (`v[i] = p` reading p's buffer), judged per place.
-<<<<<<< HEAD
 
 ## 2026-11-18: freeing gap 22's named rows closed - preserved arguments, fills split, arguments read before the call (O8f, B18a; mine; wt-freecopies)
 
@@ -39820,5 +39819,3 @@ of its own, which its let-go releases; a copy made in no region is a value of th
 Measured: structelems, copyelems (`v[i] = p` at its last use and read after, `w[i] = r`, a fill), ownerelems,
 soleelems and the probes flat under 8 MB at 400,000 turns, interpreted alike, clean under `-sanitize`. A fill's item
 copied from a local (`Array<Q>(4, base)`) still keeps for that copy (a temporary the fill copies), named.
-=======
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))

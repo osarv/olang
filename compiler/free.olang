@@ -2157,18 +2157,12 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     goEnd Vec<I64>
     closes Map<I64, Vec<types.TypeId>>
     handing I64 = 0             # a unique value being handed on (Seq.Gone): moved, so no view of it is in use here
-<<<<<<< HEAD
     plainFill I64 = -1          # the site of a fill a plain local is declared with, built in a block (plainFillOf)
     preservedArg I64 = -1       # the site of a by-value argument's copy its callee only reads (Preserves): made for
                                 # no place, so no copy keeping one (makeOf)
     copying I64 = 0             # a by-value argument being walked (copiedArg): what it reads is read for the copy
                                 # alone, over once the copy is made - before the call lets go of anything - or by a
                                 # callee that nothing let go in its statement reaches
-=======
-    copying I64 = 0             # a by-value argument being walked whose copy is surely made (copiedArg): what it reads
-                                # is read for the copy alone, over once the copy is made - before the call lets go of
-                                # anything
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
     # by hidden local: the parameter whose unique value it holds, moved there to be stored (check.storeOver's held value)
     heldPar Map<I64, I64>
     yieldOrig Vec<mut Vec<I64>&>  # what each Collect being walked yields may refer into
@@ -2413,15 +2407,10 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
 }
 
 # a value holding owners made with no store into their places (a copy, a call's value copied, D9h): those places keep
-<<<<<<< HEAD
 fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made Bool = false, filled Bool = false
                              block Bool = false) {
     if not w.Final or w.quiet > 0: return
     fills := w.F.fillOwners(ty, block) if filled else Vec<I64>()
-=======
-fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made Bool = false) {
-    if not w.Final or w.quiet > 0: return
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
     # (O8f, round 8: a copy lowering makes - made: not a fill's, nor one a declared Copy makes, E31d - builds the text
     # of a place built in slots in slots of where it goes, as the place's own stores do: lower.copySlots)
     slots := made and not w.T().RunsCopy(ty)
@@ -2429,17 +2418,13 @@ fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made 
         # (O8f: a part place's values a copy makes are built in no part region, which its let-go leaves where they are)
         if w.F.PartPlace(k): continue
         if slots and w.F.SlotPlace(k): continue
-<<<<<<< HEAD
         # (gap 22: nor a fill's element's owner field - built as the place's stores build it: lower.fillCopy)
         if filled and has(fills, k): continue
-=======
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
         if w.F.Debug { try io.PutErr($"untracked " + $k + " at " + $w.F.P.L.Diags.Locate(w.body().File, I64(sp.Start)) + "\n") catch io.Error { } }
         w.F.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by " + $how + ": '" + $w.text(sp) + "'")
     }
 }
 
-<<<<<<< HEAD
 # O8f (gap 22): the site of the fill local l is declared with, where lowering builds its elements' owner fields as
 # their stores do (lower.fillCopy) whether its array is fixed or not: a plain local - no field, owner or feeder place,
 # so no store's region takes the fill's site in (redirect) - and the fill built in a block; -1 for none
@@ -2454,8 +2439,6 @@ fn (w mut walker&) plainFillOf(l I64, x typed.Expr&) I64 {
     return site
 }
 
-=======
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 # whether a value of type ty is a writable reference
 fn (w mut walker&) writable(ty types.TypeId) Bool {
     t := w.T()
@@ -2506,14 +2489,10 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             # (D13d: one declared with no value holds zero bits until its first assignment - nothing made, nothing to
             # release, as null is)
             unset := w.body().Locals[I64(l)].Unset
-<<<<<<< HEAD
             wasF := w.plainFill
             w.plainFill = w.plainFillOf(I64(l), x)
             o := Vec<I64>() if unset else w.expr(x)
             w.plainFill = wasF
-=======
-            o := Vec<I64>() if unset else w.expr(x)
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
             w.copyExempt = exemptWas
             w.exemptSite, w.copiedCtor = outerE, outerC
             if lc != null {
@@ -3805,19 +3784,12 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     # (a copy makes what it owns anew, deep through values: no view of the source's owner or array leaves)
     if m.Kind == typed.MakeKind.Copy: out = w.F.unowned(out)
     exempt := m.Kind == typed.MakeKind.Copy and w.copyExempt >= 0 and I64(m.Site) == w.copyExempt
-<<<<<<< HEAD
     if m.Kind == typed.MakeKind.Copy and m.Site >= typed.SiteId(0) and I64(m.Site) == w.preservedArg: exempt = true
-=======
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
     # (a fill of the zero value, D13c, makes nothing: no storage of any place)
     filled := m.Kind == typed.MakeKind.Fill and m.Items.Len() > 0
     # (gap 17: nor does a fill of a value holding no storage - `Array<Vec<String>>(10)`'s ten empty Vecs)
     if filled and w.F.emptyValue(m.Items[0], null, 0): filled = false
-<<<<<<< HEAD
     if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it", not filled, filled, I64(m.Site) == w.plainFill) }
-=======
-    if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it", not filled) }
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
     w.makeStores(m, ty, sp)
     return out
 }
@@ -3939,7 +3911,6 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         a := c.Args[j]
         wasRead := w.readArg
         w.readArg = tempCall(a) if j < ps.Len() and w.T().IsRef(ps[j]) and not w.writable(ps[j]) else -1
-<<<<<<< HEAD
         copied := not unknown and copiedArg(a)
         if copied: w.copying++
         # (O8f, gap 22: a by-value argument's copy a callee only reads - Preserves: written through nowhere, kept nowhere,
@@ -3949,11 +3920,6 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         if copied and f.Keeps != null and f.Keeps!(b2, j): w.preservedArg = copySiteOf(a)
         o := w.expr(a)
         w.preservedArg = wasP
-=======
-        copied := not unknown and f.copiedArg(a, b2, j)
-        if copied: w.copying++
-        o := w.expr(a)
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
         if copied: w.copying--
         w.readArg = wasRead
         # (a feeder handed to a call the body of which is known: what it builds there is built in its region - feedFits)
@@ -6312,7 +6278,6 @@ fn (f Free&) leafOf(lvs Vec<leaf>&, k I64) Bool {
     return false
 }
 
-<<<<<<< HEAD
 # O8f (gap 22): whether a fill of a run-time array of el builds each element's owner fields as stores into their places
 # do (lower.fillCopy): el a struct owning storage whose copy runs no declared Copy (E31d)
 fn (f mut Free&) FillSplit(el types.TypeId) Bool {
@@ -6348,8 +6313,6 @@ fn (f mut Free&) fillOwners(ty types.TypeId, block Bool) Vec<I64> {
     return out
 }
 
-=======
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 # O8f (gap 22): the owner place a copy made at site of body b is a value made for (a store into an owner field whose
 # value is that copy), -1 for none - lowering builds such a copy's parts in part regions (elemCopy's split), so that an
 # element's let-go releasing them one by one, where the owner place is not sole, finds each
@@ -6453,7 +6416,6 @@ fn (f mut Free&) emptyCtor(c typed.Call&, depth I64) Bool {
     return ok
 }
 
-<<<<<<< HEAD
 # whether a by-value argument is a copy (check's valueArg, a MakeKind.Copy) of a place's value or a call's, with no
 # statements of its own: what it reads is no view in use across a let-go its statement makes. Lowering makes the copy -
 # other storage than what it read - or moves a local at its last use into it (D9i: the local is dead), or leaves it out
@@ -6463,20 +6425,10 @@ fn (f mut Free&) emptyCtor(c typed.Call&, depth I64) Bool {
 fn copiedArg(a typed.Expr&) Bool {
     return match a {
         case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Copy and m.Items.Len() == 1 and copiedItem(m.Items[0])
-=======
-# whether a by-value argument is a copy (check's valueArg, a MakeKind.Copy) lowering surely makes - callee b2 does not
-# keep its parameter j's parts as they are (Keeps; lower.argView leaves out only a copy of one it keeps) - of a place's
-# value or a call's, with no statements of its own
-fn (f mut Free&) copiedArg(a typed.Expr&, b2 I64, j I64) Bool {
-    if b2 < 0 or f.Keeps == null: return false
-    return match a {
-        case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Copy and m.Items.Len() == 1 and copiedItem(m.Items[0]) and not f.Keeps!(b2, j)
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
         case _: false
     }
 }
 
-<<<<<<< HEAD
 # the site of a by-value argument's copy (copiedArg's), -1 for none
 fn copySiteOf(a typed.Expr&) I64 {
     return match a {
@@ -6485,8 +6437,6 @@ fn copySiteOf(a typed.Expr&) I64 {
     }
 }
 
-=======
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 # a copy's item read as it is: a place's value, or a call's
 fn copiedItem(x typed.Expr&) Bool {
     return match x {
@@ -6500,18 +6450,13 @@ fn copiedItem(x typed.Expr&) Bool {
 fn tempCall(a typed.Expr&) I64 {
     return match a {
         case typed.Expr.Promote(_, _, pr): tempCall(pr.X)
-<<<<<<< HEAD
         case typed.Expr.Borrow(_, _, p): tempPlaceCall(p)
-=======
-        case typed.Expr.Borrow(_, _, typed.Lvalue.Temp(_, _, v, _)): tempCall(v)
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
         case typed.Expr.Away(_, _, y): tempCall(y)
         case typed.Expr.Call(_, _, c): I64(c.Site)
         case _: -1
     }
 }
 
-<<<<<<< HEAD
 # the call whose temporary a place is, or is a by-value part of - a field, an element of an array held by value
 # (`v[i].a`, At's value lent through its field): -1 for none
 fn tempPlaceCall(p typed.Lvalue&) I64 {
@@ -6522,8 +6467,6 @@ fn tempPlaceCall(p typed.Lvalue&) I64 {
     }
 }
 
-=======
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 # whether the region made at site of body b is a part region (PartPlace)
 fn (f Free&) PartSite(b I64, site I64) Bool { return f.partAt.Has(pair.Pair(b, site)) }
 

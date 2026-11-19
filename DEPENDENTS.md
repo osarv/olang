@@ -142,15 +142,11 @@ VecFields - the prelude Vec's `data` and `n` by name, so renaming them changes t
 the prelude's `live` - with EntryOnly, so renaming them or changing how a removal empties a slot changes these) is lowered
 by `lower.olang`'s partReleases and textWalk; a copy made in a part region is split by its partCopy (free.PartSplit;
 a Map's other parts and its live entries by partOf and entryCopy, as a Put builds an entry), so a part region holds one
-<<<<<<< HEAD
 array - a change to how a Copy helper builds parts, or to how `Map.add` builds an entry, changes it. An element's
 owner fields (gap 22: `free.olang` ReleaseLeaves, the owner first) are released in that order by partReleases, and an
 owner's own let-go records the same leaves (`goParts`) that `lower.olang`'s ownerParts and leafPaths release; a copy
 made for an owner (free.OwnerSite) is split by ownerCopy, and a move into a copy's region (free.MovesLeaves) is
 lowering's movable - a change to one of each pair changes the other. The stores
-=======
-array - a change to how a Copy helper builds parts, or to how `Map.add` builds an entry, changes it. The stores
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 `occupy` makes are listed in `typed.Body.Rooms` (check.suppliedOccupy) and are no let-go in free.olang or lower.olang.
 A copy's text of a place built in slots is built in slots too (round 8: `lower.olang` copySlots in the Copy helper's
 `copyAt`), and `free.olang`'s `untracked` then keeps no slot place for a copy lowering makes - a new copy path in

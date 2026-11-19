@@ -14,11 +14,7 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 | local (WSL, GPU) | oann wt-gp6 | GP6 done: merged oann ef285b0 | 2026-11-18 |
 | local (WSL, GPU) | oann wt-gp7 | GP7 done: merged oann c5bd404 - the GPU route GP1-GP7 is complete | 2026-11-18 |
 | local (WSL, GPU) | olang wt-o10cglobal | O10c global getter done: merged olang 5316c9333 (fix 4e93798d8); installed compiler not yet rebuilt (after GP7) | 2026-11-18 |
-<<<<<<< HEAD
 | local (WSL, GPU) | oagent wt-ebr2 | e2 round 3 done; scaling in progress, paused 2026-11-19 00:45 (oagent main 40a03ef, experiments/e2-ebr/MAP.md 'Where to pick up'; checkpoints in /home/oscar/claude/data/e2-ckpt) | 2026-11-18 |
-=======
-| local (WSL, GPU) | oagent wt-ebr2 | e2 round 3 done (oagent main e431445): EP on the sphere ties the loop at N=1 (34.2 vs 34.7, test), best of 4 56.2 vs 41.4; next: scale (compute, width) | 2026-11-18 |
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 | local (WSL, GPU) | oann wt-gp8 | GP8 done: merged oann cca2b42 - views, stacks of products on the GPU; e2 trains 5-10x the CPU's | 2026-11-18 |
 | local (WSL, GPU) | oagent wt-e2settle | e2 settling arm (dyn): done on the branch (44cc46f), to merge | 2026-11-18 |
 - e7 research (cloud, 2026-11-18): oagent experiments/e7-memory - done, rounds 1-2 (oagent dc73a02, README/MAP there)
@@ -30,9 +26,5 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e10 research (cloud, 2026-11-18): oagent experiments/e10-sleep - done: oagent 2e075d9 (circuit nights lose to the consolidator; results in README)
 - e11 integrate (cloud, 2026-11-18): oagent experiments/e11-integrate (wt-e11) - done: integrated system exact to 10000 on mix and S5; a no-settle BPTT cell with the same priors matches it (README conclusion)
 - e12-language cloud session (2026-11-18): done - oagent 6ace9b5 (experiments/e12-language): not promising at pilot scale
-<<<<<<< HEAD
 - e13-grids cloud session (2026-11-18): done (paused) - oagent main f66c925 (experiments/e13-grids, README + MAP "Where to pick up"): gated settle exact on reach to 64x64; vor 53.5/38.7 % 32x32; no oann changes
 - OLang Cloud (2026-11-19): olang wt-fillcopy - the -check case: a fill whose item copies a local (Array<Q>(4, base))
-=======
-- OLang Cloud (2026-11-18): olang wt-gap22 - freeing gap 22's open parts (Vec<P> element replacement; a Vec field given new storage)
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))

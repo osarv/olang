@@ -1695,7 +1695,6 @@ e16hknownindex.olang:11:33: error[E16h]: index 'Lanes' is 8, outside the array's
 e16hknownindex.olang:11:33: note: its value is known while compiling
 e16hknownindex.olang:11:33: help: index within 0 to 7, or write '.Get(i)' to have it checked where it runs
 compilation failed with 1 error
-<<<<<<< HEAD
 === e16hlocaldivisor.olang
 e16hlocaldivisor.olang:11:36: error[E16h]: '(step - 2)' is zero, so this division is undefined
    11 |     return total / width + total / (step - 2)
@@ -1717,8 +1716,6 @@ e16hlocalshift.olang:8:11: error[E16h]: shifting U32 by 'bits', which is 40, is 
 e16hlocalshift.olang:8:11: note: the amount is known while compiling
 e16hlocalshift.olang:8:11: help: shift by 0 to 31, or convert the value to a wider type first
 compilation failed with 1 error
-=======
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 === e16hrangeindex.olang
 e16hrangeindex.olang:17:32: error[E16h]: index 'i + 1' reaches 8 in this loop, outside the array's 8 elements
    17 |     for i in range 8: s += acc[i + 1]
@@ -3481,7 +3478,6 @@ lambdaselfcapture.olang:6:5: error[D16c]: this lambda captures 'fib' and is assi
 lambdaselfcapture.olang:6:5: note: the capture is a copy made as the lambda is, so it holds the earlier value of 'fib', never this lambda
 lambdaselfcapture.olang:6:5: help: for a recursive function write a top-level 'fn fib(...)' and pass it what it would capture, or capture a reference holding the function ('h mut Holder& = Holder(...)'; 'h.f = fn ... h.f(...) ...')
 compilation failed with 1 error
-<<<<<<< HEAD
 === lambdaselfname.olang
 lambdaselfname.olang:4:51: error[M22]: 'fib' names the local being declared
     4 |     fib := fn(n I64) I64 { return n if n < 2 else fib(n - 1) + fib(n - 2) }
@@ -3494,8 +3490,6 @@ lambdaselfname.olang:4:64: error[M22]: 'fib' names the local being declared
 lambdaselfname.olang:4:64: note: a lambda's body cannot see the local it initializes
 lambdaselfname.olang:4:64: help: a lambda cannot call itself by its own name; declare a top-level fn, or call it through a holder reference (see lambdaselfholder)
 compilation failed with 2 errors
-=======
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 === lanecompare.olang
 lanecompare.olang:6:10: error[E39]: '<' does not compare arrays - lane by lane it is 'a.LanesLess(b)', an Array<Bool>
     6 |     if a < b { }
@@ -4105,7 +4099,6 @@ o17aparamref.olang:38:10: error[O17a, T13b]: 'v' is not held by reference
 o17aparamref.olang:38:10: note: it holds references to the caller's storage while its own storage is this call's
 o17aparamref.olang:38:10: help: use 'v' itself, or take its value where it is mentioned last, declaring its type ('w T = v')
 compilation failed with 1 error
-<<<<<<< HEAD
 === o17ccapture.olang
 o17ccapture.olang:24:34: error[O17]: this value's references live where its own storage does not
    24 | fn outer(v V, k mut Sink&) { put(v, k) }
@@ -4113,8 +4106,6 @@ o17ccapture.olang:24:34: error[O17]: this value's references live where its own 
 o17ccapture.olang:24:34: note: the callee can store through it
 o17ccapture.olang:24:34: help: declare it a reference ('x T& = ...')
 compilation failed with 1 error
-=======
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 === o17cholderkept.olang
 o17cholderkept.olang:19:21: error[O17]: this value's references live where its own storage does not
    19 | fn outer(v V) { put(v) }
@@ -4122,7 +4113,6 @@ o17cholderkept.olang:19:21: error[O17]: this value's references live where its o
 o17cholderkept.olang:19:21: note: the callee can store through it
 o17cholderkept.olang:19:21: help: declare it a reference ('x T& = ...')
 compilation failed with 1 error
-<<<<<<< HEAD
 === o17nullstore.olang
 o17nullstore.olang:15:34: error[O17]: this value's references live where its own storage does not
    15 | fn outer(v V, k mut Sink&) { put(v, k) }
@@ -4130,8 +4120,6 @@ o17nullstore.olang:15:34: error[O17]: this value's references live where its own
 o17nullstore.olang:15:34: note: the callee can store through it
 o17nullstore.olang:15:34: help: declare it a reference ('x T& = ...')
 compilation failed with 1 error
-=======
->>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 === o17permute6.olang
 o17permute6.olang:27:14: error[T25c]: this lambda cannot be a function value
    27 |     each(ns, fn(x RecN) { if x.nd != null { x.nd!.next = N2(5) } })
