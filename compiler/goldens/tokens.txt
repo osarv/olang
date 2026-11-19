@@ -821,6 +821,7 @@ d76a6f9acee9d3e9 46857676d336e939 checks/cases/l4eof.olang
 1e00eea17a6f7b49 6d48dee4a1abcafd checks/cases/l9typeunparsed.olang
 39819eb08da52a55 4bbb5d0346f4c5f9 checks/cases/lambdaselfcapture.olang
 2bb094fe0852ad21 9c6d1682d1b12318 checks/cases/lambdaselfholder.olang
+3100d250b1926445 48c7c677201581dd checks/cases/lambdaselfname.olang
 7f0d80946d9d9b2a 830315900adec6f8 checks/cases/lanecompare.olang
 0af064e8b20c48cc dc701b6de73449c4 checks/cases/lanegrouplengths.olang
 dd960d3be3c06884 5523d623d8016a7b checks/cases/lanegroupsize.olang
@@ -2466,7 +2467,7 @@ e39ea53d83f4cc1a c115b25fd04df645 compiler/tools/evaldiff.olang
 f5725bda947671fb a5f440a0120148bd compiler/tools/lowerdump.olang
 8a6eb0318b75da6c e09d70e6880f3395 compiler/tools/memgate.olang
 df7a28b92b6554f0 2d9a2dd0f02ffbfd compiler/tools/modgraph.olang
-922e11d23bb0e002 a9486f115fc943f9 compiler/tools/namesdiff.olang
+604abba594680776 5e68b4a6230c8532 compiler/tools/namesdiff.olang
 e12d25f16febcea4 805f9ab078181038 compiler/tools/nesting.olang
 bff38ad021d5542d 494ccbf7f61a1712 compiler/tools/rungold.olang
 03c57a95726b30e1 c103420c21e8ec6e compiler/tools/scopedump.olang
