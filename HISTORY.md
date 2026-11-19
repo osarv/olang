@@ -39974,3 +39974,34 @@ both; memory limits stay on the usual build. Checked: a compiler from before F1'
 segfaults on review5's o1, ov1 and w1 built as usual and prints the right answers under `-free late`,
 the fixed compiler's; review5's 22 probes and review4's 37 give the same output both ways on the fixed compiler.
 docs/freeing.md 1.3 says how reviews use it.
+
+## 2026-11-19: freeing - a view local's D9h copy made in its own block (O8f, D9h; mine; wt-d9h)
+
+wt-checkshapes2 found `x := v[i].a.View()` held in a local passing `-memory -check` while growing ~120 B a turn and
+made it named (RCopied): View hands back a view of At's temporary, so lowering copies At's value (D9h) where the
+callee's result would live - the collection's scope, one copy a turn. SPEC's D9h already says a copy is built where
+the value is kept, a local's copy in the local's block; for a reference local the scope pass infers the collection's
+scope (what the view is of), so the copy went there. Considered: changing the scope pass to give such a local its own
+block as scope - it would then refuse programs that store the local outward, which today compile with no copy at all
+where nothing changes what it views. Taken instead: where the local cannot take what it names out of its block, the
+copy alone moves into the block. `free.BlockCopy` records, per body, the temporaries lent read-only through fields to
+the call a read-only reference local is declared with, where that local is never written, assigned, stored, handed
+back, captured or spawned with, in no value made of it that may be kept (LinkTo), and lent only to bodies keeping
+nothing of it past the call (`RefsKept.NoneKept` - `None` refuses a body walking it, `for x in xs`, which names the
+walk). Lowering's copy of such a call (`blockCopy`) goes into the local's block; the free pass takes the temporary as
+lent - no value a store gives a place - and its value as viewing none of the collection's places (`tempReach` in
+`borrowOf`, the call's `through` left out). That is sound in both of lowering's cases: it copies wherever anything in
+the body may change what the temporary views, and reads in place only where nothing in the body changes that storage
+(heldSrc), so no let-go releases what the local names. Without the last two steps the pass judged the local a view of
+the element's `Q.a` across `v[i] = p` and kept it (RView), half the growth left.
+
+Measured: review4's a1 52 MB to 13 MB at 400,000 turns and flat (13.1 MB at 20,000 and 2,000,000); a1, h1, h6 pass
+the check; checks' freeing viewlocals (a store, a callee given the Vec writably, a lend to `total`, a deferred read in
+an inner block) runs under 8 MB where master's build runs out of memory. review4's 37 and review5's 22 probes print the
+same built, under `-free late`, under `-sanitize` and interpreted. Left named: the local handed on to a closure, a
+generator or a task inside its block (a5, a6, a7), whose escape is a store LocalUses does not follow into the closure
+or join holding it; and c1's `Vec<Array<Q>>` - a fixed array as an element is no part place (no struct field holds
+its buffer, its count is its length), so the Vec's walk of its live elements cannot release each array's buffer and
+its Qs' parts. Closing that needs element arrays as part places of their own - a walk counting by length, a split copy
+at every store into such an element, views judged against it - a round of its own, no language question
+(docs/freeing.md, gap 22's log).
