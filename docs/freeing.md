@@ -396,3 +396,11 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   where it stands where the fill owns storage (`lower.fill`'s readHere - the copy D9h makes, if any, in the statement's
   innermost scope, not where At's result would live), and the free pass takes that call's value as `viewArg`'s
   (`makeOf`'s readFill). Fixture: checks' freeing fillread.
+  Still named, each a compiler limit (no language question), with the cause found: a struct with two owner fields
+  copied into an element (review4 h7: `copyLeaves` makes a copy for one owner leaf only - "one region would hold them
+  all" - so `Q.a`, `Q.b` keep, RMade, in Push's `occupy`, and the element's SetAt counts as a library gap); an owner
+  nested in a struct field (a3, `R{q Q}`: `r.q.a = ...` reaches the element place through `reach`, kept RInPlace,
+  though a direct `p.a = ...` is not); an owner local whose elements own storage changed through a writable reference
+  (f1, `v.Push(q)` on a `Vec<Q>` or `Vec<Vec<I64>>` local, then `v = ...`: `inOwner` keeps the local, RInPlace - the
+  callee would need the current value's region passed as its scope variable, as `writeFeedCalls` does for a feeder);
+  and a fixed fill returned (c1 `made`: not split where it is no block's, RCopied).
