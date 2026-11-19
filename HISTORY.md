@@ -39842,5 +39842,5 @@ Left named: a fixed fill that is no block's (a function's returned array, review
 inside an owner's region, which a region of its own inside would hide - and a run-time fill whose item is read out of
 a Vec (review4's h5, At's copy, D9h). Also fixed: `tempPlaceCall`'s comment named array elements, but the code sees
 through fields only. Measured: checks' freeing fillelems (both shapes, base read after) flat under 8 MB at 400,000
-turns, interpreted alike at 200, clean under `-sanitize`; review4's 35 adversarial programs agree built, sanitized and
+turns, interpreted alike at 200, clean under `-sanitize`; review4's adversarial programs (37) agree built, sanitized and
 interpreted.
