@@ -1509,14 +1509,19 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
 fn (ln mut lowering&) ownerParts(k I64, path Array<I64>&, out mut Vec<relPath>&) {
     fr := ln.L.Free!
     if not fr.IsOwner(k): return
-    for lf in fr.ReleaseLeaves(fr.PlaceValue(k)) {
-        if not fr.PartPlace(lf.PlaceId): continue
-        g := ln.guardOf(lf.PlaceId)
-        if g == free.NotSole: continue
-        full := Array<I64>(path.Len() + lf.Path.Len())
-        for j in range path.Len(): full[j] = path[j]
-        for j in range lf.Path.Len(): full[path.Len() + j] = lf.Path[j]
-        out.Push(relPath(g, full, false, true))
+    lvs := fr.ReleaseLeaves(fr.PlaceValue(k))
+    # (the owners its value holds - an R's Q's Vec - each one's region first, where it is decided sole, leaving the field
+    # empty for the parts under it, as an element's partReleases does)
+    for owners in Array<Bool>[true, false] {
+        for lf in lvs {
+            if fr.IsOwner(lf.PlaceId) != owners or (not owners and not fr.PartPlace(lf.PlaceId)): continue
+            g := ln.guardOf(lf.PlaceId)
+            if g == free.NotSole: continue
+            full := Array<I64>(path.Len() + lf.Path.Len())
+            for j in range path.Len(): full[j] = path[j]
+            for j in range lf.Path.Len(): full[path.Len() + j] = lf.Path[j]
+            out.Push(relPath(g, full, false, not owners))
+        }
     }
 }
 

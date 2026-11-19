@@ -2935,7 +2935,13 @@ fn (w mut walker&) copyLeaves(lvs Vec<leaf>&, cm typed.Expr&, sp source.Span) {
     # part place's array in a part region of its own where that place is decided sole, as an element's copy builds them
     # (lower.ownersCopy): no owner leaf is sole, but each lets go of all it holds through its parts (partsFree, RSplit))
     split := not one and not parts and site >= 0 and owners.Len() > 1 and f.ownersSplit(cm.Type(), owners)
-    if split: f.ownersAt.Put(pair.Pair(w.Id, site), true)
+    if split {
+        f.ownersAt.Put(pair.Pair(w.Id, site), true)
+        # (the owners the owner leaves' values hold in turn - an R's Q's Vec - made with their parts split too)
+        for k in f.splitOwners(owners) {
+            if not owners.Has(k): f.keep(k, RSplit, w.body().File, sp, $"its new value is part of a copy holding other owners too, its parts each built for their own places: '" + $w.text(cm.Span()) + "'")
+        }
+    }
     for lf in lvs {
         k := lf.PlaceId
         if parts and k == owners[0] {
@@ -2956,16 +2962,35 @@ fn (w mut walker&) copyLeaves(lvs Vec<leaf>&, cm typed.Expr&, sp source.Span) {
 
 # O8f (gap 22): whether a copy of a value of type ty whose owner leaves are owners can have its parts split
 # (lower.ownersCopy): ty PartsOnly and running no declared Copy (E31d), each owner leaf a non-handle owner place whose own
-# value owns storage only as partsFree asks - part places' arrays, one step in
+# value owns storage only as partsFree asks - part places' arrays, or owners of such in turn
 fn (f mut Free&) ownersSplit(ty types.TypeId, owners Vec<I64>&) Bool {
     if not f.PartsOnly(ty) or f.T().RunsCopy(ty): return false
     for k in owners {
-        if not f.owner[k] or f.handle[k] or not f.PartsOnly(f.valTy[k]) or f.VecWalks(f.valTy[k]).Len() > 0: return false
-        for lf in f.leaves(f.valTy[k]) {
-            if not f.PartPlace(lf.PlaceId): return false
-        }
+        if not f.splitOwner(k, 0): return false
     }
     return true
+}
+
+fn (f mut Free&) splitOwner(k I64, depth I64) Bool {
+    if depth > 8 or not f.owner[k] or f.handle[k] or not f.PartsOnly(f.valTy[k]) or f.VecWalks(f.valTy[k]).Len() > 0: return false
+    for lf in f.leaves(f.valTy[k]) {
+        if not f.PartPlace(lf.PlaceId) and not f.splitOwner(lf.PlaceId, depth + 1): return false
+    }
+    return true
+}
+
+# the owner places a split copy of owners makes values of with no store into them: each, and the owners their values
+# hold in turn (splitOwner)
+fn (f mut Free&) splitOwners(owners Vec<I64>&) Vec<I64> {
+    out Vec<I64>
+    for k in owners: f.ownersIn(k, out, 0)
+    return out
+}
+
+fn (f mut Free&) ownersIn(k I64, out mut Vec<I64>&, depth I64) {
+    if depth > 8 or not f.IsOwner(k): return
+    addTo(out, k)
+    for lf in f.leaves(f.valTy[k]): f.ownersIn(lf.PlaceId, out, depth + 1)
 }
 
 # O8f (gap 22): whether a fill of fixed array type ty can have each element's parts split (lower.fill's ownersCopy): its
@@ -2980,10 +3005,12 @@ fn (f mut Free&) fillParted(ty types.TypeId) Bool {
         if lf.Path.Len() != 1 or not f.IsOwner(lf.PlaceId): return false
         owners.Push(lf.PlaceId)
     }
+    if owners.Len() == 0 or not f.ownersSplit(el, owners): return false
+    all := f.splitOwners(owners)
     for k in f.heldPlaces(ty) {
-        if not f.PartPlace(k) and not has(owners, k): return false
+        if not f.PartPlace(k) and not has(all, k): return false
     }
-    return owners.Len() > 0 and f.ownersSplit(el, owners)
+    return true
 }
 
 # whether every place of ks is a part place (PartPlace)
@@ -6416,25 +6443,33 @@ fn (f Free&) OwnerSite(b I64, site I64) I64 { return try f.ownerAt.Get(pair.Pair
 fn (f Free&) OwnersSite(b I64, site I64) Bool { return f.Done and f.ownersAt.Has(pair.Pair(b, site)) }
 
 # O8f (gap 22): whether owner place k, not decided sole for a change in place alone (RInPlace: what the change builds, a
-# growth's buffer, is a part place's own value), frees all it lets go of through its parts all the same - its value owns
-# storage only as part places' arrays of plain elements, one step in (a Vec<I64>, whose buffer is all it owns), each
-# decided sole: every let-go of it releases them (lower.releases' leafPaths, an element's partReleases)
-fn (f mut Free&) partsFree(k I64) Bool {
-    if not f.IsOwner(k) or (f.whyKind[k] != RInPlace and f.whyKind[k] != RSplit): return false
+# growth's buffer, a store into an owner its value holds, is a value of a place of its own) or for a copy splitting its
+# parts alone (RSplit), frees all it lets go of through its leaves all the same - its value owns storage only as part
+# places' arrays of plain elements (a Vec<I64>, whose buffer is all it owns) and owners of such (an R's Q), each decided
+# sole or freeing so in turn: every let-go of it releases them, owners first (lower.releases' leafPaths and ownerParts,
+# an element's partReleases)
+fn (f mut Free&) partsFree(k I64, depth I64 = 0) Bool {
+    if depth > 8 or not f.IsOwner(k) or (f.whyKind[k] != RInPlace and f.whyKind[k] != RSplit): return false
     ty := f.valTy[k]
     if not f.PartsOnly(ty) or f.VecWalks(ty).Len() > 0: return false
+    # (an owner its value holds - an R's Q - frees where it is sole, or through its own parts in turn: its let-go
+    # releases it, owners first - lower.ownerParts)
     for lf in f.leaves(ty) {
-        if not f.PartPlace(lf.PlaceId) or not f.IsSole(lf.PlaceId): return false
+        if f.IsSole(lf.PlaceId) and (f.PartPlace(lf.PlaceId) or f.IsOwner(lf.PlaceId)): continue
+        if not f.partsFree(lf.PlaceId, depth + 1): return false
     }
     return true
 }
 
-# the place whose reason owner place k keeps for: where it keeps for RSplit alone (its let-goes release its parts), the
-# first of its part leaves that keeps, else k
-fn (f mut Free&) splitPart(k I64) I64 {
-    if f.whyKind[k] != RSplit: return k
+# the place whose reason owner place k keeps for: where it keeps for RSplit or RInPlace alone, its value owning storage
+# as partsFree asks (its let-goes release its leaves), the first of its leaves that keeps, in turn - else k
+fn (f mut Free&) splitPart(k I64, depth I64 = 0) I64 {
+    if depth > 8 or (f.whyKind[k] != RSplit and f.whyKind[k] != RInPlace) or not f.IsOwner(k): return k
+    if not f.PartsOnly(f.valTy[k]) or f.VecWalks(f.valTy[k]).Len() > 0: return k
     for lf in f.leaves(f.valTy[k]) {
-        if not f.IsSole(lf.PlaceId) and f.whyKind[lf.PlaceId] != RNone: return lf.PlaceId
+        if f.IsSole(lf.PlaceId) or f.partsFree(lf.PlaceId): continue
+        if f.whyKind[lf.PlaceId] == RNone: continue
+        return f.splitPart(lf.PlaceId, depth + 1)
     }
     return k
 }

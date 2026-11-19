@@ -1,0 +1,33 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): an owner nested in a struct field, `R struct() { q Q, b Vec<I64> }` with
+# `Q struct() { a Vec<I64> }`: `r.q.a = ...` changes R.q in place, and R's copies into elements (Push's, SetAt's, a fixed
+# array's element store) hold two owners, each split into part regions (free.ownersSplit) - neither R.q nor R.b is sole,
+# but every let-go of either releases what its value holds, Q.a's region or parts first (partsFree, lower.ownerParts)
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+type R struct() { q Q, b Vec<I64> }
+
+fn R.Mk(i I64) R {
+    r := R()
+    r.q.a = Vec<I64>[i, i + 1]
+    r.b = Vec<I64>[i * 2]
+    return r
+}
+
+fn main() {
+    v Vec<R>
+    for k in range 4: v.Push(R.Mk(k))
+    rows := Array<R>(4)
+    t := 0
+    for i in range N {
+        v[i % 4] = R.Mk(i)
+        w := R.Mk(i + 7)
+        w.q.a = Vec<I64>[i, i, i]
+        rows[i % 4] = w
+        rows[(i + 1) % 4].q = Q()
+        t += v[i % 4].q.a[1] + v[i % 4].b[0] + rows[i % 4].q.a[2] + rows[(i + 1) % 4].q.a.Len()
+    }
+    io.PutLn($t)!
+}
