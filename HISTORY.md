@@ -40033,3 +40033,39 @@ MB at 4,000,000 turns, passing `-memory -check`. Not changed: a fill of a local 
 element go (`qs[0] = Array<Q>(3, base)`) keeps `Q.a` as a named view - places are by type, so `base.a` read there is as
 far as the pass can tell what the let-go releases.
 
+
+## 2026-11-19: freeing - a split field, view locals held by a lambda or a task, `c := v[j]` (O8f, D9h; mine; wt-splitfield)
+
+review4's c1 kept two things after wt-arrelems: `s.qs` (a struct field holding `Array<Q>`) and the D9h copy of a view
+local handed on to a closure or a task (a5, a7). Three changes, no language question.
+
+A struct's field holding a run-time array of PartsOnly structs is a split field (`free.SplitField`). Lowering already
+built a store into such a part place split - `partCopy` (PartSplit) puts the array in the place's part region and each
+element's parts in part regions of their own where their places are sole - but the free pass kept the field ("its
+elements may hold storage built with it"), so none of it was made. Now the store is a fresh value, and the field's
+let-go walks its old array by its length releasing each element's parts (a relPath with Data -2, guarded by the
+field's sole guard) before releasing the array; the free pass judges the elements' part places at that let-go
+(`PartsLet`), as an element array's store does. Leaf releases of such a field (a struct holding it let go of whole)
+release the array only - its elements' part regions, kids of the store's region parent, are reclaimed with that.
+c1 at 400,000 turns: 128 MB to 12.7 MB.
+
+A view local (`r := v[i].a.View()`) captured by a lambda: `typed.LocalUses` now tells a capture by a lambda a Let
+declares a value local with apart from any other escape (`EscBesides`; each such capture a hold: the captured local,
+the holder, the lambda's body and its Capture local). `free.blockView` accepts a hold where the holder lives no longer
+than the view local (declared in its block or one inside it, only called - never assigned, stored, copied, lent, given
+or captured: `holderStays`) and the lambda's body keeps nothing of the capture in turn (`keepsNone`, the same test as
+the local's own, recursively). At's copy is then made in the view local's block (BlockCopy). A reference to a local
+outlasting its task's join given the spawned call (GiveAt, P1a) is no escape besides that either: the task is waited
+for in the local's block. viewholders at 400,000 turns: 103 MB to 12.9 MB; review4 a7 52 MB to 27 MB (a program with
+tasks frees nothing early - the rest of its growth, named).
+
+`c := v[j]` (a plain value local declared with a view call's PartsOnly value, read after the element is replaced) was a
+gap: the copy D9h makes holds `Q.a`'s value with no store into it (RCopied). Its copy is now built split
+(`free.splitLetOf`, `lower.ownersCopy`), so the owners keep for RSplit; where the local is read after the element's
+let-go it keeps as a named view ("read what you need from 'c' before") - the pass cannot tell lowering's copy from a
+view local (`lower.viewLocals`, heldSrc), which reads in place where nothing changes the element. a5 passes
+`-memory -check` (its lambda's part flat; `c`, captured, named).
+
+Not closed: a view handed to a generator (a6, `g := each(v[i].a.View())`) - no local holds the view, the generator value
+does; following it needs BlockCopy for a value local declared with a call carrying the temporary's view in its result,
+with the holder's lends (`Next`) keeping nothing and its yields holding no reference.

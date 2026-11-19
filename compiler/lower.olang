@@ -1537,6 +1537,11 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
     if p == typed.Lvalue.Local and assign: k = fr.LocalPlaceOf(I64(ln.B.Id), I64(p.id))
     g := ln.guardOf(k)
     if k >= 0 and g != free.NotSole {
+        # (c1's s.qs: a split field's elements' parts first, by its length - free.SplitField)
+        if fr.SplitField(k) {
+            et := ln.T.Elem(ln.T.Repr(p.Type()))
+            if ln.partReleases(et).Len() > 0: out.Push(relPath(g, Array<I64>(0), false, false, -2, -1, et))
+        }
         out.Push(relPath(g, Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0), fr.SlotPlace(k), fr.PartPlace(k)))
         # (gap 22: an owner's parts too, where it is not decided sole at the link - its release, where it is, leaves
         # the value empty first)
@@ -5232,6 +5237,9 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
             if bl >= 0 and not heldRef(at): at = ln.scopeRef(typed.Scope.Block(ln.B.Locals[bl].In))
             sv := ln.splitCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
             if sv != mir.Operand.None: return sv
+            # (review4's a5: a plain value local's copy, its parts in part regions - free.splitLetOf)
+            wv := ln.ownersCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
+            if wv != mir.Operand.None: return wv
             # (c1's keep: an element array of PartsOnly values, its elements' parts in part regions - free.partsArray)
             av := ln.arraysCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
             if av != mir.Operand.None: return av

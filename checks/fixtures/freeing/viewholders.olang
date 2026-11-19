@@ -1,0 +1,38 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, D9h, review4's a5): a view local `r := v[i].a.View()` captured by a lambda that a value
+# local of its block (or of a block inside it) holds and only calls, while the element is replaced: At's value is copied
+# (D9h) in the view local's own block (free.BlockCopy), dead with it - the holder dies no later, and the lambda's body
+# keeps nothing of its capture (typed.LocalUses' holds, free.keepsNone)
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn main() {
+    v Vec<Q>
+    for k in range 4 {
+        q := Q()
+        q.a = Vec<I64>[k, k + 3]
+        v.Push(q)
+    }
+    t := 0
+    for i in range N {
+        r := v[i % 4].a.View()
+        f := fn() I64 { return r[1] }
+        p := Q()
+        p.a = Vec<I64>[i, i]
+        v[i % 4] = p
+        t += f()
+        {
+            s := v[(i + 1) % 4].a.View()
+            w := Q()
+            w.a = Vec<I64>[i, i + 1]
+            v[(i + 1) % 4] = w
+            {
+                g := fn() I64 { return s[0] + s.Len() }
+                t += g()
+            }
+        }
+    }
+    io.PutLn($t + " " + $v[1].a.Len())!
+}
