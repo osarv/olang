@@ -9223,7 +9223,7 @@ when storage is reclaimed changes, so a program prints under `-free late` what i
 most the memory a scope's whole life holds. It is the oracle reviews compare a build against: early freeing runs no
 code of its own under it, so a read of storage a let-go released wrongly - which the build, `-sanitize` and the
 evaluator, all running the same releases, agree on - shows as an output that differs. `-free early` is the default.
-`-memory` beside `-free late` reports no place as freeing (nothing is decided). A word after `-free` that is neither is
+`-memory` beside `-free late` lists no place: nothing is decided. A word after `-free` that is neither is
 an error.
 
 **B19 (fuzzing).** `test -fuzz NAME FILE` fuzzes one test of one file: the test NAME names - as a word of B3a's

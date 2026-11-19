@@ -39957,3 +39957,20 @@ and `views` judges it against a view of any buffer that let-go walks (`walkBufs`
 (`bufReach`, PartsLet of the element): the walked place keeps (RView, a named view keep). A callee's walks are its
 callers' (`walkLets`, judged views-only, as goParts' own are). checks/cases/o8fbufview.olang asserts each shape reads
 the old elements built and interpreted.
+
+## 2026-11-19: `-free late`, an oracle for early freeing (B18b; mine; wt-nofree)
+
+review5's F1 was a release the free pass allowed wrongly, and the build, `-sanitize` and `OLANG_EVALUATE=1` all agreed
+on the wrong output: the evaluator runs the same lowered releases, and the sanitizer poisons only what the releases
+release. Only an older compiler, or a hand-computed answer, showed it. An oracle has to run none of that code.
+`-free late` (scripting mode, build, test, run; `-free early` the default) builds with no early-freeing decisions:
+`placement` hands `Free.Decide` no root, as a module compiled on its own is judged (every place keeps, `Done` false, no
+`~~sole` constants, no generational reclaims), so storage is reclaimed only as its scope closes; destructors run as in
+any build (O15), so the output must equal the usual build's. Considered: an environment variable like `OLANG_EVALUATE`
+- a flag was taken because it is part of a build's identity (`.late` in the object and binary names, `late` in the
+record key, so no cache mixes the two) and a review states it on the command line. checks' `earlyfree` and `freeing`
+now build every program at its small size both ways (`late` in checks.olang) and require the evaluator's output from
+both; memory limits stay on the usual build. Checked: a compiler from before F1's fix (4bd2326da^) with this option
+segfaults on review5's o1 and ov1 built as usual and prints the right answers under `-free late` (12018004; 6011000 0),
+the fixed compiler's; review5's 22 probes and review4's 37 give the same output both ways on the fixed compiler.
+docs/freeing.md 1.3 says how reviews use it.
