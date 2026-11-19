@@ -21,4 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-(none)
+1. (2026-11-19, docs/viewmut.md) `for x in v.ViewMut()` binds x as a copy (SPEC S9a), so `x = f(x)` or `x.f = 7` is silently lost. Options: A a dead store to a loop copy is an error (liveness; misses a write read later in the turn); B a for loop's names are read-only - any write to or through the copy is an error naming the index form `for i, x in w: w[i] = ...` (one rule, no flow analysis, matches unique elements; `olang fix` migrates code using x as scratch); C over a writable array x is a writable reference into the element (meaning change; could come later on top of B). Default in effect: no change. Recommendation: B.
