@@ -2061,7 +2061,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-372e93a481086496 8eb684e949500f78 checks/checks.olang
+a69c5778b7b9eb43 495ece16c5186175 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2397,7 +2397,7 @@ be6d4829fde4952d 1bb3e9800f36f5e2 checks/fixtures/weak/unheld.olang
 72c5c47b1749b99b fe279d2b543d60f3 compiler/api.olang
 70444d25186638b1 47ccdf0b8403607a compiler/ast.olang
 e20178f94e07dfed ff5ec0fbe401eade compiler/bindgen.olang
-90881337ba685229 3e0cfd8336125a80 compiler/build.olang
+172122c174426433 4abdab88d5005e0a compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 a63bb2cbd4c666c1 32f8e5565363d2f2 compiler/cells.olang
 9b2334cb2c5a6e74 ce190337abebd748 compiler/check.olang
@@ -2426,16 +2426,16 @@ f25119be92c6587e 4599d1f0b8398118 compiler/load.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
 e584497ebb497531 0f081d3bdae48bfc compiler/mir.olang
-1e62a1fca063e4cd 0220ca12b90ef069 compiler/msgs.olang
+a2d192437e6b796d 6a49e8726e8a74f7 compiler/msgs.olang
 e12e0b7843a4d69e 3609653e0e4a8b34 compiler/names.olang
 3f072b84e716c304 202ed56cc066d701 compiler/needs.olang
 79acbc010c9bf08a a1be4111ef62bcb1 compiler/notebook.olang
-859540fec81a2f46 3d67753c13c1d034 compiler/olang.olang
+fe4307b367d34633 78d8e835377c553c compiler/olang.olang
 b39996c18bbe72bf 450c7b08c181c7db compiler/paint.olang
 972886cfacdeac38 221ac8e3f38d49d6 compiler/parse.olang
 2cf0b668dac274b7 31a01a936fc852db compiler/profile.olang
 e2b2b02653bc4b63 28b9ec011557160d compiler/prompt.olang
-cbc70baf5730545d 1f381a411920bd5b compiler/records.olang
+b00813355e79d1f7 1f381a411920bd5b compiler/records.olang
 0c3f8c24752ad48a 95536513b050b2a4 compiler/runtime.olang
 74927aaea47abc0f 36130c34ac2dc3c0 compiler/scan.olang
 012727fa05074544 70adb6852a5db5c2 compiler/scope.olang
