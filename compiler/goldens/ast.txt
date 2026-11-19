@@ -2060,7 +2060,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-ea88cad5b22a3ef9 c7bb5542f99b2356 checks/checks.olang
+372e93a481086496 8eb684e949500f78 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2171,6 +2171,7 @@ ed65e1c871a90895 f027d66ab67504be checks/fixtures/freeing/elements.olang
 4bb628e5df1ebbeb 32972159450570f4 checks/fixtures/freeing/fields.olang
 4a3bf3927094052d d4708661bde7246f checks/fixtures/freeing/fillelems.olang
 96a3c1472dbe3da4 2b41dcaa53b33b78 checks/fixtures/freeing/fillread.olang
+1fa83c8af5767017 cd3e45916c6b1337 checks/fixtures/freeing/fillreturn.olang
 d18097214e652a69 7b0777b61ce1e0fd checks/fixtures/freeing/gaps.olang
 217397296d19aecc 54f099facf748fa7 checks/fixtures/freeing/global.olang
 88e2dd045d130dae 81d938e106e4ff99 checks/fixtures/freeing/growth.olang
@@ -2178,7 +2179,10 @@ d18097214e652a69 7b0777b61ce1e0fd checks/fixtures/freeing/gaps.olang
 c63fbdfdcd4f61e6 9c1b655af8a433f2 checks/fixtures/freeing/mapcopy.olang
 d4da91f96eb62c2e d5e16ea922b532f1 checks/fixtures/freeing/mapelems.olang
 93352884d91c2ff9 9902fa094c87edbd checks/fixtures/freeing/mapvalues.olang
+5a3504cbdb2bbcff 2956c3d6994e138d checks/fixtures/freeing/nestedowners.olang
 50162bbfab2ccf97 f8c80339a0ac9175 checks/fixtures/freeing/ownerelems.olang
+8eaf18634d2253d0 7457fb76f6eb703a checks/fixtures/freeing/ownerpair.olang
+b1f846fd4e058a4e df12757dbe7999a2 checks/fixtures/freeing/ownervecs.olang
 390ddcbc0280f5e1 a2a5ff8a451d792b checks/fixtures/freeing/returned.olang
 1595f28ebbc7dfb7 35469b6acafae083 checks/fixtures/freeing/soleelems.olang
 d66b7ed7488df41e dae2ec7771244c85 checks/fixtures/freeing/structelems.olang
@@ -2409,14 +2413,14 @@ f8904f06be8de907 9c47d36eb9c4740f compiler/facts.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
-b112db0c6e556f99 0c65ac357c039cea compiler/free.olang
+0ce5b7e237a84f42 e1422e255363189f compiler/free.olang
 1b58c42eb72c9af5 d44fd9cf171506fb compiler/generic.olang
 5b111314ea0faa97 411d018af3a3506b compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang
 8299f0d6f657ceae 5fcac26072ce57dd compiler/lineedit.olang
 211de0b5ecb13aac 9a12ce3d06dabd21 compiler/listing.olang
 f25119be92c6587e 4599d1f0b8398118 compiler/load.olang
-32c347cfa8723c01 af8beb55427308da compiler/lower.olang
+128d641de051657d 82e626fe1b398641 compiler/lower.olang
 0a6ba37a53fb9662 36e2d7fb1015a7d2 compiler/lsp.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
