@@ -2157,7 +2157,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     goEnd Vec<I64>
     closes Map<I64, Vec<types.TypeId>>
     handing I64 = 0             # a unique value being handed on (Seq.Gone): moved, so no view of it is in use here
-    plainFill I64 = -1          # the site of a fill a plain local is declared with, built in a block (plainFillOf)
+    plainFill I64 = -1          # the site of a fill built in a block that stays there: a plain local's value (plainFillOf), a temporary read through (blockFillOf)
     preservedArg I64 = -1       # the site of a by-value argument's copy its callee only reads (Preserves): made for
                                 # no place, so no copy keeping one (makeOf)
     copying I64 = 0             # a by-value argument being walked (copiedArg): what it reads is read for the copy
@@ -2430,6 +2430,12 @@ fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made 
 # so no store's region takes the fill's site in (redirect) - and the fill built in a block; -1 for none
 fn (w mut walker&) plainFillOf(l I64, x typed.Expr&) I64 {
     if w.body().Locals[l].Kind != typed.LocalKind.Var or w.fields.Has(l) or w.ownLocal(l) >= 0 or w.feeder(l) >= 0: return -1
+    return w.blockFillOf(x)
+}
+
+# O8f (gap 22): the site of the fill x is, where it is built in a block (no owner's region, whose anchors would reach
+# its elements'): lowering builds its elements' owner fields as their stores do (lower.blockBuilt); -1 for none
+fn (w mut walker&) blockFillOf(x typed.Expr&) I64 {
     site := match x {
         case typed.Expr.Make(_, _, m): I64(m.Site) if m.Kind == typed.MakeKind.Fill else -1
         case _: -1
@@ -3560,7 +3566,15 @@ fn (w mut walker&) reach(p typed.Lvalue&) Vec<I64> {
             return o
         }
         case typed.Lvalue.Payload(_, _, pl) { return w.reach(pl.Base) }
-        case typed.Lvalue.Temp(_, _, v, _) { return w.expr(v) }
+        case typed.Lvalue.Temp(_, _, v, _) {
+            # (gap 22: a fill given storage only to be read or lent through - `Array<Q>(4, base)[3]` - stays where it
+            # is built, never moved into an owner: a plain local's fill, plainFillOf)
+            wasF := w.plainFill
+            w.plainFill = w.blockFillOf(v)
+            o := w.expr(v)
+            w.plainFill = wasF
+            return o
+        }
         case typed.Lvalue.Target(_, _) {
             o Vec<I64>
             if w.targets.Len() > 0 {
@@ -3789,6 +3803,9 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     filled := m.Kind == typed.MakeKind.Fill and m.Items.Len() > 0
     # (gap 17: nor does a fill of a value holding no storage - `Array<Vec<String>>(10)`'s ten empty Vecs)
     if filled and w.F.emptyValue(m.Items[0], null, 0): filled = false
+    # (gap 22: a fill of a value owning storage holds each element's own copy of it, made where the array is - QCE,
+    # lower.fill's ownCopyOf or fillCopy - deep as a copy is: no view of what the item's owners hold)
+    if filled and w.ownsStorage(w.T().Elem(w.T().Plain(w.F.arrayOf(ty)))): out = w.F.unowned(out)
     if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it", not filled, filled, I64(m.Site) == w.plainFill) }
     w.makeStores(m, ty, sp)
     return out
@@ -6300,7 +6317,7 @@ fn (f mut Free&) CopyOwner(ty types.TypeId, i I64) I64 {
 # the owner places a fill of array type ty builds as their stores do (FillSplit, CopyOwner, lower.fillCopy): a
 # run-time array's, whose elements no owner's anchors reach (they end at the array); a fixed array's - held by value,
 # so an owner holding it reaches its elements' anchors, whose regions a region of their own inside the owner's would
-# hide - only where block, a plain local's value built in a block (plainFill)
+# hide - only where block, built in a block it stays in: a plain local's value or a temporary read through (plainFill)
 fn (f mut Free&) fillOwners(ty types.TypeId, block Bool) Vec<I64> {
     out Vec<I64>
     t := f.T()
@@ -6457,8 +6474,8 @@ fn tempCall(a typed.Expr&) I64 {
     }
 }
 
-# the call whose temporary a place is, or is a by-value part of - a field, an element of an array held by value
-# (`v[i].a`, At's value lent through its field): -1 for none
+# the call whose temporary a place is, or is a by-value field of, through fields only (`v[i].a`: At's value lent
+# through its field): -1 for none
 fn tempPlaceCall(p typed.Lvalue&) I64 {
     return match p {
         case typed.Lvalue.Temp(_, _, v, _): tempCall(v)
