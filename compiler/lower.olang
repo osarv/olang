@@ -921,6 +921,16 @@ fn (ln mut lowering&) built(site typed.SiteId) mir.ScopeRef {
     return ln.scopeRef(ln.plan.Built[I64(site)])
 }
 
+# whether what is made at site is built in a block of this body, in no region of early freeing's and not adopted
+fn (ln mut lowering&) blockBuilt(site typed.SiteId) Bool {
+    if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() or site == ln.adoptSite: return false
+    if ln.plan.RegionKind[I64(site)] != 0: return false
+    return match ln.plan.Built[I64(site)] {
+        case typed.Scope.Block(_): true
+        case _: false
+    }
+}
+
 # where an array made at site is: where the reference it is promoted to goes, if it is the one promote adopts
 fn (ln mut lowering&) madeAt(site typed.SiteId) mir.ScopeRef {
     if site == ln.adoptSite and site >= typed.SiteId(0): return ln.adoptAt
@@ -6540,7 +6550,14 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
     if fixed >= 0 {
         ops := Array<mir.Operand>(fixed)
         if fv == mir.Operand.None { fv = mir.Operand.Const(el, 0) }   # a fixed array's no clear is its local's (Unset)
-        for i in range fixed { ops[i] = ln.ownCopyOf(fv, el, ln.madeAt(m.Site), sp) if owned else fv }
+        # (O8f, gap 22: a fixed array built in a block - no owner's region, whose anchors would reach its elements' -
+        # has its elements' owner fields built as their stores build them: fillCopy, free.plainFillOf)
+        split := owned and ln.blockBuilt(m.Site)
+        for i in range fixed {
+            c := ln.fillCopy(fv, el, ln.madeAt(m.Site), sp) if split else mir.Operand.None
+            if c == mir.Operand.None: c = ln.ownCopyOf(fv, el, ln.madeAt(m.Site), sp) if owned else fv
+            ops[i] = c
+        }
         v := ln.into(at, mir.Rvalue.Aggregate(at, 0, ln.F.Args(ops)), sp)
         if not t.IsRef(t.Repr(ty)): return v
         return ln.into(ty, mir.Rvalue.New(ln.built(m.Site), v, ty), sp)
@@ -6568,7 +6585,10 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
     bp := pl(mir.Base.Local(buf))
     if t.IsRef(t.Repr(ty)): bp = ln.with(bp, mir.Proj.Deref)
     ln.eachIndex(n64, sp, fn(i mir.LocalId) {
-        ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(bp, mir.Proj.Index(i))), mir.Rvalue.Use(ln.ownCopyOf(fv, el, where, sp))))
+        # (O8f, gap 22: an owner field's value built as its place's stores build it - fillCopy)
+        c := ln.fillCopy(fv, el, where, sp)
+        if c == mir.Operand.None: c = ln.ownCopyOf(fv, el, where, sp)
+        ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(bp, mir.Proj.Index(i))), mir.Rvalue.Use(c)))
     })
     return mir.Operand.Copy(mir.Lvalue.L(buf))
 }
@@ -7594,6 +7614,51 @@ fn (ln mut lowering&) elemsPlaced(ty types.TypeId) Bool {
     r := ln.T.Repr(ty)
     if ln.T.KindOf(r) != types.Kind.Array: return false
     return ln.L.Free!.ElemPlace(r) >= 0
+}
+
+# O8f (gap 22): a fill's copy of v, an element of struct type el, made in at (free.FillSplit; a fixed array's only where
+# it is built in a block, blockBuilt) -
+# its bytes, then each owning field copied as the element type's Copy helper copies it, but an owner field's value built
+# as a store into that owner place builds it (ownerField), so that an element's let-go finds what the fill built. None
+# where the fill is no such one
+fn (ln mut lowering&) fillCopy(v mir.Operand, el types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
+    if ln.L.Free == null or not ln.L.Free!.Done or not ln.L.Free!.FillSplit(el): return mir.Operand.None
+    fr := ln.L.Free!
+    d := ln.local(ln.into(el, mir.Rvalue.Use(v), sp), el, sp)
+    parts := ln.partsOf(el)
+    for i in range parts.Len() {
+        q := ln.with(pl(mir.Base.Local(d)), mir.Proj.Field(i))
+        k := ln.copySlots(el, i)
+        o := fr.CopyOwner(el, i)
+        if k >= 0: ln.textSlotCopy(q, parts[i], k, at, sp)
+        else if o >= 0: ln.ownerField(q, parts[i], o, at, sp)
+        else: ln.copyPart(q, parts[i], at, sp)
+    }
+    return mir.Operand.Copy(mir.Lvalue.L(d))
+}
+
+# O8f (gap 22): the owner field at q, of type ft, copied as a store into owner place k builds its value: in a region of
+# its own, a kid of at, where k is decided sole (released at once where it holds nothing), else in at - a PartsOnly
+# value's parts each in a part region where its part place is decided sole (partsCopied, as ownerCopy builds them), so
+# that the owner's release, or its part leaves' where it is not sole, finds what the copy built. Only where at is no
+# owner's region (an array's own scope): an owner's region found from its anchors is the nearest one that is no part
+# region, which a region of its own inside it would hide
+fn (ln mut lowering&) ownerField(q pl, ft types.TypeId, k I64, at mir.ScopeRef, sp source.Span) {
+    fr := ln.L.Free!
+    g := ln.guardOf(k)
+    into := at
+    h := mir.NoLocal
+    if g != free.NotSole {
+        h = ln.temp(mir.I64T, sp)
+        ln.guarded(h, g, mir.Rvalue.Region(at), at, sp)
+        into = mir.ScopeRef.Held(h)
+    }
+    if fr.PartsOnly(ft): ln.partsCopied(q, ft, into, sp)
+    else: ln.copyPart(q, ft, into, sp)
+    if h == mir.NoLocal: return
+    after := ln.whenSole(g, true, sp) if g >= 0 else mir.NoBlock
+    ln.emit(mir.Stmt.Settle(sp, h, ln.mk(q)))
+    if after != mir.NoBlock: ln.joinAt(after)
 }
 
 # O8f (round 7's item 3, round 8): the text place a copy's text parts belong to - the elements of an array of text
