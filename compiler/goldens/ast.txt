@@ -2061,7 +2061,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-a69c5778b7b9eb43 495ece16c5186175 checks/checks.olang
+f6c023227cf7e5a8 9d2dcc0c7e96eaab checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2193,6 +2193,7 @@ d66b7ed7488df41e dae2ec7771244c85 checks/fixtures/freeing/structelems.olang
 0a06a1705b347351 daf6c80fe585a765 checks/fixtures/freeing/vecelems.olang
 cacb6237d4c172a3 39f46cf049cf394e checks/fixtures/freeing/vectexts.olang
 f85984a883699b5b faca90a061ccf4a9 checks/fixtures/freeing/vecvecs.olang
+c3845595cc475bdc 56d60da5cc12b25b checks/fixtures/freeing/viewlocals.olang
 4fc59a4c968365c6 aa466cc165475a6e checks/fixtures/freeing/views.olang
 2a72b778d2934116 e4d48e530bc9bda2 checks/fixtures/generators/exits.olang
 ae3a0de2333f6243 e3a66d6a4d617c0b checks/fixtures/generators/exitst.olang
@@ -2414,14 +2415,14 @@ f8904f06be8de907 9c47d36eb9c4740f compiler/facts.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
-1c7b290f9615b32d fa92dba1df83f1e3 compiler/free.olang
+747a42a3d28f98d3 90fa0b2a26f85203 compiler/free.olang
 1b58c42eb72c9af5 d44fd9cf171506fb compiler/generic.olang
 5b111314ea0faa97 411d018af3a3506b compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang
 8299f0d6f657ceae 5fcac26072ce57dd compiler/lineedit.olang
 211de0b5ecb13aac 9a12ce3d06dabd21 compiler/listing.olang
 f25119be92c6587e 4599d1f0b8398118 compiler/load.olang
-128d641de051657d 82e626fe1b398641 compiler/lower.olang
+e3b8151825ccc71e 9594368a81851b63 compiler/lower.olang
 0a6ba37a53fb9662 36e2d7fb1015a7d2 compiler/lsp.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
