@@ -471,7 +471,14 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   `-memory -check`, 757 MB to 13 MB at 4,000,000 turns; checks' freeing arrayelems has a `Vec<Array<Q>>` (a block's
   fill pushed, a fill stored by `qs[0] = fresh`). A fill of `base` stored in the same statement (`qs[0] = Array<Q>(3,
   base)`) keeps `Q.a` for a named view (places by type: `base.a` read across the old element's let-go) - read first.
-  **Where to pick up**: rerun c1 whole (its other rows: `s.qs` named "its elements may hold storage built with it", the
-  closure's `x` placement) and the review4/review5 probes in every mode; then (2): review4 a5-a7 (a view local handed
-  to a closure, generator or task in its block - `free.BlockCopy`'s conditions, follow the escape into the holder);
-  then the scenarios, scopesan, make quick (goldens: tokens/ast for arrayelems).
+  Step 4: the split copies narrowed to where they are let go of through the element place - the store into it
+  (`splitArr`), a by-value argument's D9b copy, a call's D9h copy - never a copy kept elsewhere (`s.qs = u`, a field
+  kept for "its elements may hold storage built with it"), where part regions only cost: splitting every copy made c1
+  3x worse than master (160 MB against 52 MB at 100,000 turns); now 33 MB. review4/review5's 60 probes print the same
+  built, `-free late`, `-sanitize` and interpreted; `-memory -check` changed only for c1 (passes now).
+  **Where to pick up**: c1 still grows (33 MB at 100,000 turns) for two named keeps: `s.qs` (a struct field holding
+  `Array<Q>`: a field array place whose elements own storage, SFail "its elements may hold storage built with it" -
+  could be a part place built split as the element arrays are) and the closure's `x` (O27 placement, named). Then (2):
+  review4 a5-a7 (a view local handed to a closure, generator or task in its block - `free.blockView` refuses EscHard;
+  following needs LocalUses to say which lambda captures the local and that the local holding it stays in the block);
+  then the scenarios (freeing, earlyfree), scopesan, make quick (goldens: tokens/ast for arrayelems).

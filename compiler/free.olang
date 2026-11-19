@@ -2440,7 +2440,7 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
 
 # a value holding owners made with no store into their places (a copy, a call's value copied, D9h): those places keep
 fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made Bool = false, filled Bool = false
-                             block Bool = false, site I64 = -1) {
+                             block Bool = false, site I64 = -1, split Bool = false) {
     if not w.Final or w.quiet > 0: return
     fills := w.F.fillOwners(ty, block) if filled else Vec<I64>()
     # (O8f, gap 22: a fixed fill whose elements' owner fields are not built as their stores build them - one returned,
@@ -2453,7 +2453,7 @@ fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made 
     slots := made and not w.T().RunsCopy(ty)
     # (c1's keep: a copy stored into an element array place, its elements' parts built in part regions: its owners keep
     # for that alone, freeing through their parts - lower.arraysCopy)
-    arrays := made and site >= 0 and (site == w.splitArr or w.F.partsArray(ty)) and not w.T().RunsCopy(ty)
+    arrays := made and site >= 0 and (site == w.splitArr or (split and w.F.partsArray(ty))) and not w.T().RunsCopy(ty)
     if arrays: w.F.arraysAt.Put(pair.Pair(w.Id, site), true)
     for k in w.F.heldPlaces(ty) {
         # (O8f: a part place's values a copy makes are built in no part region, which its let-go leaves where they are)
@@ -4201,7 +4201,12 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         wasP, wasE := w.preservedArg, w.exemptSite
         if copied and f.Keeps != null and f.Keeps!(b2, j): w.preservedArg = copySiteOf(a)
         if viewArg: w.exemptSite = copiedCall(a)
+        # (c1's keep: a by-value argument's own copy (D9b) of an element array of PartsOnly values, its elements' parts
+        # in part regions - lower.arraysCopy - as the store it is made for builds them)
+        wasS := w.splitArr
+        if copySiteOf(a) >= 0 and w.F.partsArray(a.Type()): w.splitArr = copySiteOf(a)
         o := w.expr(a)
+        w.splitArr = wasS
         w.preservedArg, w.exemptSite = wasP, wasE
         if copied or viewArg: w.copying--
         w.readArg = wasRead
@@ -4220,7 +4225,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     # (nor a temporary only lent for reading: what it holds is no value any store gives a place - gap 17)
     lent := I64(c.Site) == w.readArg and c.Site >= typed.SiteId(0)
     if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite and not lent {
-        w.untracked(ty, sp, "a call's value copied", b2 >= 0 and not unknown, false, false, I64(c.Site))
+        w.untracked(ty, sp, "a call's value copied", b2 >= 0 and not unknown, false, false, I64(c.Site), true)
     }
     if b2 >= 0 and not unknown {
         if f.isCase(b2) {
@@ -6437,7 +6442,8 @@ fn (f mut Free&) elemArray(ty types.TypeId) Bool {
 }
 
 # O8f (c1's keep): whether ty is a run-time array of PartsOnly values that is an element array (elemArray) - a copy of
-# one (a by-value argument's, D9b) is built split, each element's parts in part regions (lower.arraysCopy)
+# one given by value to a call (D9b) or of a call's value (D9h) is built split, each element's parts in part regions
+# (lower.arraysCopy); never one kept elsewhere, whose part regions would only cost
 fn (f mut Free&) partsArray(ty types.TypeId) Bool {
     t := f.T()
     r := t.Repr(ty)
