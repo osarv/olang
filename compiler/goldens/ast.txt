@@ -1100,6 +1100,7 @@ e2f5d6222621154a c6778663745df400 checks/cases/o8elru.olang
 392e400fac6495bc 7918bce7f7de3589 checks/cases/o8estack.olang
 a59b801f3ef341f5 ff51ab1372ceb63b checks/cases/o8etasks.olang
 13c2408865465c0c 1ee34b73f8b5f372 checks/cases/o8etree.olang
+d495d31f49a73e7f 9d90108d708a4aaa checks/cases/o8fbufview.olang
 81066299f1d97792 e6c389f77d2a0ea0 checks/cases/oparity.olang
 1f2db79a48c41f95 57d75c5b5f79b902 checks/cases/opat.olang
 191a355bbf3e47dc 9ef4b053086e1318 checks/cases/opbothcases.olang
@@ -2413,7 +2414,7 @@ f8904f06be8de907 9c47d36eb9c4740f compiler/facts.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
-0ce5b7e237a84f42 e1422e255363189f compiler/free.olang
+1c7b290f9615b32d fa92dba1df83f1e3 compiler/free.olang
 1b58c42eb72c9af5 d44fd9cf171506fb compiler/generic.olang
 5b111314ea0faa97 411d018af3a3506b compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang

@@ -108,6 +108,11 @@ RInPlace I64 = 6  # an owner's value changed in place (ownerCand)
 RCopied I64 = 7   # a value holding an owner's copied where no store is made for it (heldPlaces)
 RSplit I64 = 8    # an owner's value a copy builds with other owners, its parts each in a part region (copyLeaves)
 
+# a let-go's walk (review5): none; a walk of a Vec's live elements in this body (goParts, an element's parts); a callee's
+WalkNone I64 = 0
+WalkIn I64 = 1
+WalkCall I64 = 2
+
 # a store into a candidate place: the value's classification, and where it is built if made for the place
 type store struct(PlaceId I64, Body I64, File I64, Sp source.Span, Kind I64, Of I64, Site I64, X typed.Expr?&, Root typed.Expr?&) {
     PlaceId
@@ -312,6 +317,10 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     parWhole Vec<mut Vec<I64>&>
     lets Vec<mut Vec<I64>&>
     letsAll Vec<Bool>
+    # (review5) by body: the places it lets go of through a walk of a Vec's live elements (goParts, an element's parts) -
+    # a let-go a view of that Vec's buffer is in use across too, since the walk leaves the buffer as it is (bufReach)
+    walkLets Vec<mut Vec<I64>&>
+    bufReachAt Map<I64, Vec<I64>>   # bufReach by buffer place
     # docs/fnvalues.md 4.6, item (3): by body, its calls through a function parameter it never assigns, composed at each
     # call by the argument given - the parameters (bit p) a call through which may let go (letsVia), those of them given
     # an argument that may write (viaMut: a "pure" value may let go only through those), and (escVia) each argument
@@ -857,6 +866,7 @@ fn (f mut Free&) addBody(b I64, root I64) {
     f.parMulti.Push(Vec<I64>())
     f.parWhole.Push(Vec<I64>())
     f.lets.Push(Vec<I64>())
+    f.walkLets.Push(Vec<I64>())
     f.letsAll.Push(false)
     f.letsVia.Push(0)
     f.viaMut.Push(0)
@@ -1743,6 +1753,7 @@ fn (w mut walker&) dtorCallsOf(sp source.Span, ty types.TypeId) {
             continue
         }
         for k in f.lets[b2]: w.go(k, LCall, sp, source.Span(0, 0), b2)
+        for k in f.walkLets[b2]: w.go(k, LCall, sp, source.Span(0, 0), b2, true, WalkCall)
     }
 }
 
@@ -2180,6 +2191,8 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     goRecv Vec<source.Span>   # a call's receiver (empty for none)
     goCallee Vec<I64>         # a call's callee body (LCall), -1 for none
     goIdx Vec<I64>            # its index in Free.goes, -1 where it is not recorded there
+    goVia Vec<I64>            # a walk's let-go (WalkIn, WalkCall), else WalkNone - and the walked value's type
+    goWalkTy Vec<types.TypeId>
     parSite Vec<I64>          # stores of a parameter's value into a place: the parameter, the place, the statement
     parSitePlace Vec<I64>
     parSiteAt Vec<I64>
@@ -2339,6 +2352,8 @@ fn (w mut walker&) reset() {
     w.goRecv.Clear()
     w.goCallee.Clear()
     w.goIdx.Clear()
+    w.goVia.Clear()
+    w.goWalkTy.Clear()
     w.goEnd.Clear()
     w.closes.Clear()
     w.parSite.Clear()
@@ -2735,7 +2750,12 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
             if w.F.PartsOnly(p.Type()) and not w.body().Room(sp) {
                 # (a text place's slots let go as a text element's are - in the prelude's code too, where a struct's
                 # leaves overwriting a vacated slot let go of nothing: a Vec there is empty, its walk puts back none)
-                for k2 in w.F.PartsLet(p.Type()) { w.go(k2, LLeaf if w.F.PartPlace(k2) else LAssign, p.Span(), source.Span(0, 0), -1) }
+                # (review5: what a walk of a Vec it holds lets go of is judged against views of that Vec's buffer too)
+                rlv := w.F.ReleaseLeaves(p.Type())
+                for k2 in w.F.PartsLet(p.Type()) {
+                    wv := WalkNone if w.F.leafOf(rlv, k2) else WalkIn
+                    w.go(k2, LLeaf if w.F.PartPlace(k2) else LAssign, p.Span(), source.Span(0, 0), -1, false, wv, p.Type())
+                }
             }
             if lvs.Len() > 0 and not w.storedWhole(x, cm): o = w.copyInto(lvs, p.Type(), x, o, sp, cm)
         }
@@ -3412,21 +3432,27 @@ fn (w mut walker&) goParts(k I64, sp source.Span) {
     if not w.F.PartsOnly(w.F.valTy[k]) or w.F.VecWalks(w.F.valTy[k]).Len() == 0: return
     lvs := w.F.ReleaseLeaves(w.F.valTy[k])
     for q in w.F.PartsLet(w.F.valTy[k]) {
-        if not w.F.leafOf(lvs, q): w.go(q, LLeaf if w.F.PartPlace(q) else LAssign, sp, source.Span(0, 0), -1, true)
+        if not w.F.leafOf(lvs, q): w.go(q, LLeaf if w.F.PartPlace(q) else LAssign, sp, source.Span(0, 0), -1, true, WalkIn, w.F.valTy[k])
     }
 }
 
 # a let-go event: place k let go of by the statement being walked - by an assignment or a vacate of it, a moved value
 # dropped, or a call
-fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee I64, viewsOnly Bool = false) {
+fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee I64, viewsOnly Bool = false
+                      via I64 = WalkNone, walkTy types.TypeId = types.UnknownT) {
     f := w.F
-    if viewsOnly and (not w.Final or w.quiet > 0): return
+    if viewsOnly and w.quiet > 0: return
     if not w.Final {
         # a body that may let go of any place lists none
+        # (review5: a walk's let-go is its callers' too, judged there against views of the walked buffer - walkLets)
+        if via != WalkNone and k >= 0 and not f.letsAll[w.Id] and addTo(f.walkLets[w.Id], k) > 0: f.changed = true
+        if viewsOnly: return
         if k >= 0 and not f.letsAll[w.Id] and addTo(f.lets[w.Id], k) > 0: f.changed = true
         return
     }
     if w.quiet > 0: return
+    w.goVia.Push(via)
+    w.goWalkTy.Push(walkTy)
     w.goPlace.Push(k)
     w.goAt.Push(w.cur)
     w.goEnd.Push(w.deferStack[w.deferStack.Len() - 1] if kind == LHeld and w.deferStack.Len() > 0 else -1)
@@ -4108,6 +4134,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
             w.goAll(sp, c, b2)
         } else {
             for k in f.lets[b2]: w.go(k, LCall, sp, receiverSpan(c), b2)
+            for k in f.walkLets[b2]: w.go(k, LCall, sp, receiverSpan(c), b2, true, WalkCall)
         }
         # (its calls through the function values it is given, judged by what this call gives it)
         w.viaCall(c, b2, 0, args, sp)
@@ -4374,6 +4401,7 @@ fn (w mut walker&) asRecord(c typed.Call&, rb I64, shift I64, args Vec<Vec<I64>>
         w.goAll(sp, c, rb)
     } else {
         for k in f.lets[rb]: w.go(k, LCall, sp, receiverSpan(c), rb)
+        for k in f.walkLets[rb]: w.go(k, LCall, sp, receiverSpan(c), rb, true, WalkCall)
     }
     w.viaCall(c, rb, shift, args, sp)
 }
@@ -4506,6 +4534,7 @@ fn (w mut walker&) letsThrough(c typed.Call&, a typed.Expr&, pty types.TypeId, w
             }
             # (let go of by the function value given, not by this call's callee: its first argument is no receiver)
             for k in f.lets[rb]: w.go(k, LCall, sp, source.Span(0, 0), rb)
+            for k in f.walkLets[rb]: w.go(k, LCall, sp, source.Span(0, 0), rb, true, WalkCall)
         }
         return
     }
@@ -4966,12 +4995,17 @@ fn (w mut walker&) views() {
             }
         }
         # in a local used after it
+        # (review5: a walk's let-go - of what a Vec's live elements own, the buffer left as it is - is one of a view of
+        # that buffer too: the place it lets go of keeps)
+        bufs := w.walkBufs(g)
         for l in viewers {
             found := false
+            byBuf := false
             for q in viewed[l] {
                 if (k < 0 or q == k) and f.unkept(q): found = true
+                if k >= 0 and has(bufs, q) and has(f.bufReach(q), k) and f.unkept(k): byBuf = true
             }
-            if not found: continue
+            if not found and not byBuf: continue
             u := w.usedAfter(l, s, usesOf[l])
             if u < 0: continue
             name := f.P.L.Names.Text(body.Locals[l].Name)
@@ -4998,9 +5032,44 @@ fn (w mut walker&) views() {
                     f.keepView(q, body.File, w.useSp[u], $who + " is used here, " + $after, at)
                 }
             }
+            if byBuf: f.keepView(k, body.File, w.useSp[u], $who + " is used here, " + $after, at)
             if k >= 0: break
         }
     }
+}
+
+# review5: the buffers a let-go g reaches its place through, by a walk of a Vec's live elements - the buffer places a
+# let-go of its walked value lets go of (WalkIn), or any buffer (WalkCall: a callee's walk, of a value not known here)
+fn (w mut walker&) walkBufs(g I64) Vec<I64> {
+    out Vec<I64>
+    if w.goVia[g] == WalkNone: return out
+    f := w.F
+    if w.goVia[g] == WalkCall {
+        for q in range f.arr.Len() {
+            if f.arr[q]: out.Push(q)
+        }
+        return out
+    }
+    for q in f.PartsLet(w.goWalkTy[g]) {
+        if f.arr[q]: out.Push(q)
+    }
+    return out
+}
+
+# review5: what a walk of a buffer place q's live elements lets go of - the places their own storage is in (PartsLet of
+# the element), none where q is no array place or its elements own nothing
+fn (f mut Free&) bufReach(q I64) Vec<I64> {
+    if q < 0 or q >= f.arr.Len() or not f.arr[q]: return Vec<I64>()
+    if f.bufReachAt.Has(q): return try f.bufReachAt.Get(q) catch default Vec<I64>()
+    t := f.T()
+    r := t.Plain(f.arrayOf(f.valTy[q]))
+    out Vec<I64>
+    if t.KindOf(r) == types.Kind.Array {
+        el := t.Elem(r)
+        if t.OwnedPart(el) or t.OwnsParts(el): out = f.PartsLet(el)
+    }
+    f.bufReachAt.Put(q, out)
+    return out
 }
 
 # ---- local reads ----

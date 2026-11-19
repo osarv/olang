@@ -39940,3 +39940,20 @@ Still named: a Vec of fixed arrays of owners changed in place (c1's `keep`, `Vec
 not PartsOnly), and the D9h copy above. Measured: checks' freeing ownerpair, fillreturn, nestedowners and ownervecs
 flat under 8 MB at 400,000 turns (master's compiler: out of memory each), interpreted alike at 200, clean under
 `-sanitize`; review4's 37 programs agree built, sanitized and interpreted; the freeing and earlyfree scenarios pass.
+
+## 2026-11-19: review5 - a walk's let-go judged against views of the walked buffer (O8f, B18a; mine; wt-review5)
+
+The soundness review of wt-fillcopy, wt-checkshapes and wt-checkshapes2 found one hole. A let-go that walks a Vec's
+live elements releasing what each owns - a `Vec<Q>` local given another value (`lower.releases`' new branch,
+`ownerParts`), an element holding a `Vec<Q>` replaced (`partReleases`), a `Vec<Q>` field given another value - leaves
+the buffer as it is, but a reference into that buffer taken before (`r := v.Ref(1)`, `rs.Ref(j).qs.Ref(1)`,
+`pick(v)`) and read after was judged only against the buffer's place (`Vec<Q>.data`, kept RView) - not against the
+places the walk lets go of (`Q.a`, `Vec<I64>.data`), which stayed sole. The walk then emptied and released what the
+reference still read: `r.a.Len()` read 0 where it was 2, and `r.a[1]` crashed the build (the evaluator, which runs the
+same releases, stopped on it too). The field shape (`h.qs = Vec<Q>()`, or in a callee) was older - the evaluator under
+master's compiler from before these merges already stopped on it - the local and element shapes came with them.
+Now a let-go reached by a walk records it (`go`'s `via`: WalkIn with the walked value's type, WalkCall for a callee's),
+and `views` judges it against a view of any buffer that let-go walks (`walkBufs`) whose elements own the place
+(`bufReach`, PartsLet of the element): the walked place keeps (RView, a named view keep). A callee's walks are its
+callers' (`walkLets`, judged views-only, as goParts' own are). checks/cases/o8fbufview.olang asserts each shape reads
+the old elements built and interpreted.

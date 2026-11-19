@@ -1,0 +1,60 @@
+# check: run
+# O8f (gap 22, review5): a let-go that walks a Vec's live elements releasing what each owns - a Vec<Q> local given
+# another value (lower.ownerParts), an element holding a Vec<Q> replaced (partReleases), a Vec<Q> field given another
+# value, here or in a callee - leaves the buffer as it is, so a reference into that buffer taken before (Ref) and read
+# after still reads the elements' own storage: those places keep (free.walkBufs, bufReach, walkLets), never emptied or
+# freed under it
+type Q struct() { a Vec<I64> }
+type R struct() { qs Vec<Q>, n I64 }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.a = Vec<I64>[i, i + 1]
+    return q
+}
+
+fn R.Mk(i I64) R {
+    r := R()
+    for k in range 3: r.qs.Push(Q.Mk(i + k))
+    return r
+}
+
+fn pick(v Vec<Q>&) Q& { return v.Ref(1) }
+
+fn resetF(r mut R&, i I64) {
+    r.qs = Vec<Q>()
+    r.n = i
+}
+
+fn main() {
+    v Vec<Q>
+    rs Vec<R>
+    for k in range 4: rs.Push(R.Mk(k))
+    h := R()
+    for i in range 50 {
+        v = Vec<Q>()
+        for k in range 3: v.Push(Q.Mk(i + k))
+        r := v.Ref(1)
+        v = Vec<Q>()
+        v.Push(Q.Mk(i))
+        assert r.a.Len() == 2 and r.a[1] == i + 2
+        for k in range 3: v.Push(Q.Mk(i + k))
+        p := pick(v)
+        v = Vec<Q>()
+        assert p.a.Len() == 2 and p.a[0] == i
+        j := i % 4
+        x := rs.Ref(j).qs.Ref(1)
+        want := x.a[1]
+        rs[j] = R.Mk(i)
+        assert x.a.Len() == 2 and x.a[1] == want
+        h.qs = Vec<Q>()
+        for k in range 3: h.qs.Push(Q.Mk(i + k))
+        y := h.qs.Ref(2)
+        h.qs = Vec<Q>()
+        assert y.a.Len() == 2 and y.a[0] == i + 2
+        for k in range 3: h.qs.Push(Q.Mk(i + k))
+        z := h.qs.Ref(0)
+        resetF(h, i)
+        assert z.a.Len() == 2 and z.a[1] == i + 1
+    }
+}
