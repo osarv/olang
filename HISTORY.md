@@ -39971,6 +39971,6 @@ any build (O15), so the output must equal the usual build's. Considered: an envi
 record key, so no cache mixes the two) and a review states it on the command line. checks' `earlyfree` and `freeing`
 now build every program at its small size both ways (`late` in checks.olang) and require the evaluator's output from
 both; memory limits stay on the usual build. Checked: a compiler from before F1's fix (4bd2326da^) with this option
-segfaults on review5's o1 and ov1 built as usual and prints the right answers under `-free late` (12018004; 6011000 0),
+segfaults on review5's o1, ov1 and w1 built as usual and prints the right answers under `-free late`,
 the fixed compiler's; review5's 22 probes and review4's 37 give the same output both ways on the fixed compiler.
 docs/freeing.md 1.3 says how reviews use it.
