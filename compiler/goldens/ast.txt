@@ -821,7 +821,10 @@ d76a6f9acee9d3e9 bde8c72b840c97cc checks/cases/l4eof.olang
 1e00eea17a6f7b49 86972cd80f694e58 checks/cases/l9typeunparsed.olang
 39819eb08da52a55 a775d0b4fc518d05 checks/cases/lambdaselfcapture.olang
 2bb094fe0852ad21 cb85f2e6a6d39e5f checks/cases/lambdaselfholder.olang
+<<<<<<< HEAD
 3100d250b1926445 0d46c3a352974b83 checks/cases/lambdaselfname.olang
+=======
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 7f0d80946d9d9b2a 2ec48aded2af690e checks/cases/lanecompare.olang
 0af064e8b20c48cc 64a4673b0860d7d8 checks/cases/lanegrouplengths.olang
 dd960d3be3c06884 c82264ed2a1cc016 checks/cases/lanegroupsize.olang
@@ -2060,7 +2063,11 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
+<<<<<<< HEAD
 c97b6a1079d23a12 f303f0e70db45cf7 checks/checks.olang
+=======
+d30ea5712a89251d 646224230c4002fd checks/checks.olang
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2164,7 +2171,10 @@ e141c9f76622b90f ad1210872c3388d3 checks/fixtures/fix/today.olang
 a8cb815d7d5549ec 6604c37f6c4c45d8 checks/fixtures/frameenv/frameonly.olang
 1aaa5abd9c5dc32a 03ce4acebd6e7d75 checks/fixtures/freeing/append.olang
 7cba4e5e7992195e 8796924f249340ab checks/fixtures/freeing/arrays.olang
+<<<<<<< HEAD
 98262d21e3298ae3 666e845a85804660 checks/fixtures/freeing/copyelems.olang
+=======
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 9e9757636bfdd107 8f55533713302872 checks/fixtures/freeing/copytext.olang
 ed65e1c871a90895 f027d66ab67504be checks/fixtures/freeing/elements.olang
 4bb628e5df1ebbeb 32972159450570f4 checks/fixtures/freeing/fields.olang
@@ -2392,7 +2402,11 @@ e20178f94e07dfed ff5ec0fbe401eade compiler/bindgen.olang
 90881337ba685229 3e0cfd8336125a80 compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 a63bb2cbd4c666c1 32f8e5565363d2f2 compiler/cells.olang
+<<<<<<< HEAD
 9b2334cb2c5a6e74 ce190337abebd748 compiler/check.olang
+=======
+2c1a6ba9f067e50d 2c031b38f2e39097 compiler/check.olang
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 da018e972c2ecc90 402dd6cf0de7cca1 compiler/cond.olang
 2ab98962469bc960 f235e148eac3e4ba compiler/definit.olang
 db407b9ec2aacf25 d850fbb42d0e8294 compiler/diag.olang
@@ -2406,19 +2420,31 @@ f8904f06be8de907 9c47d36eb9c4740f compiler/facts.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
+<<<<<<< HEAD
 caed5c3dbce2ff4f ed20d90e7901591c compiler/free.olang
+=======
+571becc3d88c714f 5dc6936d5b794250 compiler/free.olang
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 1b58c42eb72c9af5 d44fd9cf171506fb compiler/generic.olang
 5b111314ea0faa97 411d018af3a3506b compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang
 8299f0d6f657ceae 5fcac26072ce57dd compiler/lineedit.olang
 211de0b5ecb13aac 9a12ce3d06dabd21 compiler/listing.olang
 f25119be92c6587e 4599d1f0b8398118 compiler/load.olang
+<<<<<<< HEAD
 e79df51eb8e6a5df bc883743c7411422 compiler/lower.olang
+=======
+b3ae1aedbf6c9015 ce820e28302ae3a1 compiler/lower.olang
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 0a6ba37a53fb9662 36e2d7fb1015a7d2 compiler/lsp.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
 e584497ebb497531 0f081d3bdae48bfc compiler/mir.olang
+<<<<<<< HEAD
 1e62a1fca063e4cd 0220ca12b90ef069 compiler/msgs.olang
+=======
+1da8dece9fb6944a 9f6a18a3986f0f3e compiler/msgs.olang
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 e12e0b7843a4d69e 3609653e0e4a8b34 compiler/names.olang
 3f072b84e716c304 202ed56cc066d701 compiler/needs.olang
 79acbc010c9bf08a a1be4111ef62bcb1 compiler/notebook.olang
@@ -2467,7 +2493,11 @@ e39ea53d83f4cc1a a04689a9dfdb0c02 compiler/tools/evaldiff.olang
 f5725bda947671fb 6bbb716f74543854 compiler/tools/lowerdump.olang
 8a6eb0318b75da6c 65ffd61aadc9d52e compiler/tools/memgate.olang
 df7a28b92b6554f0 c0b503a959fb3dd1 compiler/tools/modgraph.olang
+<<<<<<< HEAD
 604abba594680776 e7bd751669b64fe2 compiler/tools/namesdiff.olang
+=======
+922e11d23bb0e002 469fcb5b2f69d883 compiler/tools/namesdiff.olang
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 e12d25f16febcea4 04e8ace36213a60c compiler/tools/nesting.olang
 bff38ad021d5542d 9c6cd315934193ff compiler/tools/rungold.olang
 03c57a95726b30e1 4f2341ba9415de86 compiler/tools/scopedump.olang

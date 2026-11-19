@@ -921,6 +921,7 @@ fn (ln mut lowering&) built(site typed.SiteId) mir.ScopeRef {
     return ln.scopeRef(ln.plan.Built[I64(site)])
 }
 
+<<<<<<< HEAD
 # whether what is made at site is built in a block of this body, in no region of early freeing's and not adopted
 fn (ln mut lowering&) blockBuilt(site typed.SiteId) Bool {
     if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() or site == ln.adoptSite: return false
@@ -931,6 +932,8 @@ fn (ln mut lowering&) blockBuilt(site typed.SiteId) Bool {
     }
 }
 
+=======
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 # where an array made at site is: where the reference it is promoted to goes, if it is the one promote adopts
 fn (ln mut lowering&) madeAt(site typed.SiteId) mir.ScopeRef {
     if site == ln.adoptSite and site >= typed.SiteId(0): return ln.adoptAt
@@ -6550,6 +6553,7 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
     if fixed >= 0 {
         ops := Array<mir.Operand>(fixed)
         if fv == mir.Operand.None { fv = mir.Operand.Const(el, 0) }   # a fixed array's no clear is its local's (Unset)
+<<<<<<< HEAD
         # (O8f, gap 22: a fixed array built in a block - no owner's region, whose anchors would reach its elements' -
         # has its elements' owner fields built as their stores build them: fillCopy, free.plainFillOf)
         split := owned and ln.blockBuilt(m.Site)
@@ -6558,6 +6562,9 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
             if c == mir.Operand.None: c = ln.ownCopyOf(fv, el, ln.madeAt(m.Site), sp) if owned else fv
             ops[i] = c
         }
+=======
+        for i in range fixed { ops[i] = ln.ownCopyOf(fv, el, ln.madeAt(m.Site), sp) if owned else fv }
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
         v := ln.into(at, mir.Rvalue.Aggregate(at, 0, ln.F.Args(ops)), sp)
         if not t.IsRef(t.Repr(ty)): return v
         return ln.into(ty, mir.Rvalue.New(ln.built(m.Site), v, ty), sp)
@@ -6585,10 +6592,14 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
     bp := pl(mir.Base.Local(buf))
     if t.IsRef(t.Repr(ty)): bp = ln.with(bp, mir.Proj.Deref)
     ln.eachIndex(n64, sp, fn(i mir.LocalId) {
+<<<<<<< HEAD
         # (O8f, gap 22: an owner field's value built as its place's stores build it - fillCopy)
         c := ln.fillCopy(fv, el, where, sp)
         if c == mir.Operand.None: c = ln.ownCopyOf(fv, el, where, sp)
         ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(bp, mir.Proj.Index(i))), mir.Rvalue.Use(c)))
+=======
+        ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(bp, mir.Proj.Index(i))), mir.Rvalue.Use(ln.ownCopyOf(fv, el, where, sp))))
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
     })
     return mir.Operand.Copy(mir.Lvalue.L(buf))
 }
@@ -7616,6 +7627,7 @@ fn (ln mut lowering&) elemsPlaced(ty types.TypeId) Bool {
     return ln.L.Free!.ElemPlace(r) >= 0
 }
 
+<<<<<<< HEAD
 # O8f (gap 22): a fill's copy of v, an element of struct type el, made in at (free.FillSplit; a fixed array's only where
 # it is built in a block, blockBuilt) -
 # its bytes, then each owning field copied as the element type's Copy helper copies it, but an owner field's value built
@@ -7661,6 +7673,8 @@ fn (ln mut lowering&) ownerField(q pl, ft types.TypeId, k I64, at mir.ScopeRef, 
     if after != mir.NoBlock: ln.joinAt(after)
 }
 
+=======
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
 # O8f (round 7's item 3, round 8): the text place a copy's text parts belong to - the elements of an array of text
 # (field -1) or a struct's text field i - where it is one built in slots (free.SlotPlace), so that the copy builds them
 # in slots of where it goes, guarded by the place's decision as every site is: a copy then makes values as the place's

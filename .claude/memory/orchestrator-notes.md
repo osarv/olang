@@ -68,6 +68,7 @@ The user: "make sure you never ever train on the validation data." In e2 round 3
 validation / test strictly apart - no fitting, normalisation statistics, early stopping or setting choices on validation
 or test data; settings chosen on validation, test reported once. Please check round 3's setup follows it.
 
+<<<<<<< HEAD
 ## 2026-11-18 23:10 CET: pacing and the night
 
 The user: this week stops at 95% weekly usage (the reset is saved for next week, when we "really max out and use as much
@@ -75,3 +76,5 @@ as we can"). Overnight the PC (GPU) is off; cloud sessions run olang/oann work (
 (OBetting), and e13-grids (oagent: settling on 2-D spreading and constraint tasks, building on e5 and your e2 sphere
 EP - it won't touch e2-ebr). Pick up e2 scaling from your MAP when the PC is on.
 
+=======
+>>>>>>> a441729 (O8f: record gap 22 closed (freeing.md, settled.md, HISTORY.md))
