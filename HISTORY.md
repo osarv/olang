@@ -39844,3 +39844,29 @@ a Vec (review4's h5, At's copy, D9h). Also fixed: `tempPlaceCall`'s comment name
 through fields only. Measured: checks' freeing fillelems (both shapes, base read after) flat under 8 MB at 400,000
 turns, interpreted alike at 200, clean under `-sanitize`; review4's adversarial programs (37) agree built, sanitized and
 interpreted.
+
+## 2026-11-19: freeing - an element copied into another, and a user function forwarding to SetAt (O8f, B18a; mine; wt-checkshapes)
+
+review4 left `v[i] = v[j]` (its h4) and `fn put(d mut Vec<Q>&, i I64, x Q) { d[i] = x }` called as
+`put(v, i, v[j])` (h3) named by `-memory -check`: `Q.a` kept, "a value holding it is made with no store into it, by a
+call's value copied: 'v[j]'". The argument is At's call itself, not a copy check made (a call's value is no existing
+value, so `valueArg` wraps none), so `free.preservedArg` - which exempts a by-value argument's own copy - never saw it;
+the walker took At's value for a view its caller copies where it keeps it (D9h) and counted the copy as a value of
+`Q.a` built with no store into it (RCopied).
+
+What lowering does with it: `args` calls `readHere` for a by-value argument of a call whose value holds no reference,
+so the call is in `reads`/`readWin`; where the callee's window writes what At views (SetAt writes v) the D9h copy is
+made in the statement's innermost scope (gap 20's rule), dead by the statement's end; where nothing in it does, the
+view is given as it is, dead once the callee returns. Neither is a value any store gives a place, and with the callee
+keeping nothing of its parameter (`Preserves`), the parameter is all that holds it. So `free.call` now treats such an
+argument (`viewArg`: a by-value parameter the callee preserves, a call whose value holds no reference, not a spawn's
+call - lowering's `task` - and the argument a call, through a move) as it treats a preserved copy: its call is exempt
+from `untracked`, and its read is no view in use across the statement's let-goes (`copying`, as `copiedArg`'s). With
+that, the second row the probes then showed ("a value of it read in this statement is in use when 'v[i + 3] = v[i]'
+lets go of it") went too, and both programs free at every let-go. `v[i] = v[i]` reads the old element through the
+copy, made before SetAt lets it go.
+
+Tried first: exempting the call inside a preserved argument's copy (`makeOf`) - no such copy exists here. Measured:
+checks' freeing elemcopies (`v[i] = v[j]`, `v[i] = v[i]`, `put(v, i, w)`, `put(v, i, v[j])`) flat under 8 MB at
+400,000 turns (master's compiler: out of memory), interpreted alike at 200, clean under `-sanitize`; review4's 37
+programs agree built, sanitized and interpreted, b2 now passing `-memory -check` too.

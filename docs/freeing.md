@@ -386,3 +386,9 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   through (`Lvalue.Temp`) is split where it is built in a block, as a plain local's fill (`free.blockFillOf`; lowering
   already split it, `lower.blockBuilt`). Fixture: checks' freeing fillelems. Still named: a fixed fill returned or
   built where it is not a block (review4's c1 `made`), and a run-time fill whose item is read out of a Vec (h5).
+- 2026-11-19, wt-checkshapes: `v[i] = v[j]` (review4 h4) and a user function forwarding its by-value Q to `SetAt`
+  (h3, `put(v, i, v[j])`) free. At's value given as it is to a by-value parameter its callee only reads (`Preserves`),
+  of a call whose value holds no reference and no task's: lowering copies it into the statement's innermost scope
+  (`readHere`, D9h) or, where nothing in the callee's window writes what it views, gives it as it is - either way no
+  value a store gives `Q.a` (its call exempt from `untracked`) and no view in use across the old element's let-go
+  (`free.call`'s viewArg, read as `copiedArg`'s are). Fixture: checks' freeing elemcopies.

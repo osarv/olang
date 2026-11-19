@@ -2143,6 +2143,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     storeWithin I64 = -1       # the parameter the container being stored into is reached from (withinOf), -1 none
     storeInside I64 = -1       # ... the place a value of which it is reached through (insidePlace), -1 none
     exemptSite I64 = -1        # the call a store's value is, whose copy (D9h) is made for the place it is stored into
+    taskSite I64 = -1          # a spawn's call (its arguments read beside the spawner: lower.args' task)
     copiedCtor I64 = -1        # ... where it is a constructor viewing what it is given, its instance copied into a struct
                                # held in place (viewCtor): the parameters it views are copied there, never stored
     # Part C: QCE's copy of a value handed on (check.ownCopy) as the value of a store into a struct or an element held in
@@ -2589,7 +2590,10 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             w.F.taskAt[w.Id] = true
             tc := typed.Call.Of(taskCall(s.Task))
             if tc != null and typed.CalleeBody(tc) >= 0: addTo(w.F.spawned, typed.CalleeBody(tc))
+            wasT := w.taskSite
+            w.taskSite = I64(tc.Site) if tc != null else -1
             w.expr(s.Task)
+            w.taskSite = wasT
             for c in s.Clauses {
                 if c.Handler != null: w.expr(c.Handler!)
             }
@@ -3929,15 +3933,22 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         wasRead := w.readArg
         w.readArg = tempCall(a) if j < ps.Len() and w.T().IsRef(ps[j]) and not w.writable(ps[j]) else -1
         copied := not unknown and copiedArg(a)
-        if copied: w.copying++
+        # (and a view call's value given as it is to a by-value parameter such a callee only reads, of a call whose value
+        # holds no reference - `v[i] = v[j]`'s At: lowering copies it (D9h) into the statement's innermost scope, no value
+        # a store gives a place, dead once the callee returns; or, where nothing in the callee's window writes what it
+        # views (lower.readHere, windowQuiet), gives it as it is, dead as soon. Not a task's, read beside its spawner)
+        viewArg := not copied and not unknown and b2 >= 0 and not w.holds(ty) and I64(c.Site) != w.taskSite and j < ps.Len()
+        viewArg = viewArg and not w.T().IsRef(ps[j]) and copiedCall(a) >= 0 and f.Keeps != null and f.Keeps!(b2, j)
+        if copied or viewArg: w.copying++
         # (O8f, gap 22: a by-value argument's copy a callee only reads - Preserves: written through nowhere, kept nowhere,
         # handed back nowhere - is let go through no place: the callee's parameter is all that holds it, until the scope
         # it was built in closes; what the callee copies out of it is judged where that copy goes)
-        wasP := w.preservedArg
+        wasP, wasE := w.preservedArg, w.exemptSite
         if copied and f.Keeps != null and f.Keeps!(b2, j): w.preservedArg = copySiteOf(a)
+        if viewArg: w.exemptSite = copiedCall(a)
         o := w.expr(a)
-        w.preservedArg = wasP
-        if copied: w.copying--
+        w.preservedArg, w.exemptSite = wasP, wasE
+        if copied or viewArg: w.copying--
         w.readArg = wasRead
         # (a feeder handed to a call the body of which is known: what it builds there is built in its region - feedFits)
         fd := w.feederArg(a) if b2 >= 0 and not unknown and c.Site >= typed.SiteId(0) else -1
@@ -6460,6 +6471,15 @@ fn copiedItem(x typed.Expr&) Bool {
         case typed.Expr.Read(_, _, _, _), typed.Expr.Call(_, _, _): true
         case typed.Expr.Away(_, _, y): copiedItem(y)
         case _: false
+    }
+}
+
+# the site of the call an argument's value is, as it is (through a move's Away), -1 for none
+fn copiedCall(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Call(_, _, c): I64(c.Site)
+        case typed.Expr.Away(_, _, y): copiedCall(y)
+        case _: -1
     }
 }
 

@@ -1,0 +1,33 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): an element's value copied into another, `v[i] = v[j]` and `v[i] = v[i]`, and a user
+# function forwarding its by-value Q to SetAt (`put(v, i, v[j])`, `put(v, i, p)`): At's value given as it is to a
+# parameter its callee only reads is copied in the statement's own scope (lower.readHere), no value a store gives Q.a
+# and no view in use across the old element's let-go (free.call's viewArg) - each let-go of an element's Q.a frees
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn put(d mut Vec<Q>&, i I64, x Q) { d[i] = x }
+
+fn main() {
+    q0 := Q()
+    q0.a = Vec<I64>[1, 1]
+    v Vec<Q>
+    for _ in range 10: v.Push(q0)
+    t := 0
+    for i in range N {
+        p := Q()
+        p.a = Vec<I64>[i, i]
+        v[i % 10] = p
+        v[(i + 3) % 10] = v[i % 10]
+        v[(i + 5) % 10] = v[(i + 5) % 10]
+        t += v[i % 10].a[1] + v[(i + 3) % 10].a[0] + v[(i + 5) % 10].a[1]
+        w := Q()
+        w.a = Vec<I64>[i, i + 1]
+        put(v, (i + 7) % 10, w)
+        put(v, (i + 1) % 10, v[(i + 7) % 10])
+        t += v[(i + 1) % 10].a[1] + w.a[0]
+    }
+    io.PutLn($t + " " + $v[3].a.Len() + " " + $q0.a[0])!
+}
