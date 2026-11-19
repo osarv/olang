@@ -71,7 +71,6 @@ or test data; settings chosen on validation, test reported once. Please check ro
 ## 2026-11-18 23:10 CET: pacing and the night
 
 The user: this week stops at 95% weekly usage (the reset is saved for next week, when we "really max out and use as much
-as we can"). Overnight the PC (GPU) is off; cloud sessions run olang/oann work (OLang Cloud), football and trotting v2
-(OBetting), and e13-grids (oagent: settling on 2-D spreading and constraint tasks, building on e5 and your e2 sphere
+as we can"). Overnight the PC (GPU) is off; cloud sessions run olang/oann work (OLang Cloud) and e13-grids (oagent: settling on 2-D spreading and constraint tasks, building on e5 and your e2 sphere
 EP - it won't touch e2-ebr). Pick up e2 scaling from your MAP when the PC is on.
 
