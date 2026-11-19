@@ -2837,7 +2837,8 @@ fn (f mut Free&) blockCopies(b I64) {
 
 # whether reference local i of body b, read-only, keeps what it names within its own block: declared once (no other
 # value given it, nothing written through it), handed back nowhere, stored nowhere, captured by nothing, in no value
-# made or given that may be kept, given only to bodies keeping nothing of it (typed.RefsKept)
+# made that may be kept (a value holding it linked to it), given only to bodies keeping nothing of it past the call
+# (typed.RefsKept.NoneKept)
 fn (f mut Free&) blockView(u typed.LocalUses&, b I64, i I64) Bool {
     t := f.T()
     l := f.Bodies[b].Locals[i]
@@ -2848,14 +2849,14 @@ fn (f mut Free&) blockView(u typed.LocalUses&, b I64, i I64) Bool {
     for s in u.StoreAt {
         if s == i: return false
     }
-    for s in u.GiveAt {
-        if s == i: return false
-    }
     for s in u.LinkTo {
         if s == i: return false
     }
     for j in range u.RefAt.Len() {
-        if u.RefAt[j] == i and not f.refsKept.None(t, f.Bodies, u.RefBody[j], u.RefParam[j]): return false
+        if u.RefAt[j] == i and not f.refsKept.NoneKept(t, f.Bodies, u.RefBody[j], u.RefParam[j]): return false
+    }
+    for j in range u.GiveAt.Len() {
+        if u.GiveAt[j] == i and not f.refsKept.NoneKept(t, f.Bodies, u.GiveBody[j], u.GiveParam[j]): return false
     }
     return true
 }
