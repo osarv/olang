@@ -2411,9 +2411,14 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
 
 # a value holding owners made with no store into their places (a copy, a call's value copied, D9h): those places keep
 fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made Bool = false, filled Bool = false
-                             block Bool = false) {
+                             block Bool = false, site I64 = -1) {
     if not w.Final or w.quiet > 0: return
     fills := w.F.fillOwners(ty, block) if filled else Vec<I64>()
+    # (O8f, gap 22: a fixed fill whose elements' owner fields are not built as their stores build them - one returned,
+    # or stored where an owner's region may hold it - has each element's parts in part regions (lower.fill's
+    # ownersCopy): its owners keep for RSplit alone, freeing through their parts)
+    parted := filled and fills.Len() == 0 and site >= 0 and w.F.fillParted(ty)
+    if parted: w.F.ownersAt.Put(pair.Pair(w.Id, site), true)
     # (O8f, round 8: a copy lowering makes - made: not a fill's, nor one a declared Copy makes, E31d - builds the text
     # of a place built in slots in slots of where it goes, as the place's own stores do: lower.copySlots)
     slots := made and not w.T().RunsCopy(ty)
@@ -2423,6 +2428,10 @@ fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made 
         if slots and w.F.SlotPlace(k): continue
         # (gap 22: nor a fill's element's owner field - built as the place's stores build it: lower.fillCopy)
         if filled and has(fills, k): continue
+        if parted {
+            w.F.keep(k, RSplit, w.body().File, sp, $"a value holding it is made with no store into it, its parts each built for their own places, by " + $how + ": '" + $w.text(sp) + "'")
+            continue
+        }
         if w.F.Debug { try io.PutErr($"untracked " + $k + " at " + $w.F.P.L.Diags.Locate(w.body().File, I64(sp.Start)) + "\n") catch io.Error { } }
         w.F.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by " + $how + ": '" + $w.text(sp) + "'")
     }
@@ -2957,6 +2966,24 @@ fn (f mut Free&) ownersSplit(ty types.TypeId, owners Vec<I64>&) Bool {
         }
     }
     return true
+}
+
+# O8f (gap 22): whether a fill of fixed array type ty can have each element's parts split (lower.fill's ownersCopy): its
+# element a struct whose every owner leaf ownersSplit takes, holding no other place a copy would make values of
+fn (f mut Free&) fillParted(ty types.TypeId) Bool {
+    t := f.T()
+    r := t.Plain(f.arrayOf(ty))
+    if t.KindOf(r) != types.Kind.Array or t.Length(r) == types.TypeId(0): return false
+    el := t.Elem(r)
+    owners Vec<I64>
+    for lf in f.leaves(el) {
+        if lf.Path.Len() != 1 or not f.IsOwner(lf.PlaceId): return false
+        owners.Push(lf.PlaceId)
+    }
+    for k in f.heldPlaces(ty) {
+        if not f.PartPlace(k) and not has(owners, k): return false
+    }
+    return owners.Len() > 0 and f.ownersSplit(el, owners)
 }
 
 # whether every place of ks is a part place (PartPlace)
@@ -3844,7 +3871,7 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     # (gap 22: a fill of a value owning storage holds each element's own copy of it, made where the array is - QCE,
     # lower.fill's ownCopyOf or fillCopy - deep as a copy is: no view of what the item's owners hold)
     if filled and w.ownsStorage(w.T().Elem(w.T().Plain(w.F.arrayOf(ty)))): out = w.F.unowned(out)
-    if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it", not filled, filled, I64(m.Site) == w.plainFill) }
+    if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it", not filled, filled, I64(m.Site) == w.plainFill, I64(m.Site)) }
     w.makeStores(m, ty, sp)
     return out
 }

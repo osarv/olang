@@ -1,0 +1,31 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): a fixed fill returned, `Array<Q>(3, base)` handed back by `made` - no block's, so its
+# elements' owner fields are not built as their stores build them; each element's Vec buffer is built in a part region
+# of its own (free.fillParted, lower.fill's ownersCopy), and every let-go of Q.a - the elements', a local's - frees
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn made(i I64) Array<Q> {
+    base := Q()
+    base.a = Vec<I64>[i, i + 1]
+    u := Array<Q>(3, base)
+    return u
+}
+
+fn main() {
+    v Vec<Q>
+    for _ in range 4: v.Push(Q())
+    rows := made(0)
+    t := 0
+    for i in range N {
+        m := made(i)
+        m[1].a.Push(5)
+        t += m[2].a[1] + m[1].a[2]
+        rows[i % 3] = m[i % 3]
+        v[i % 4] = m[1]
+        t += rows[i % 3].a[0] + v[i % 4].a.Len()
+    }
+    io.PutLn($t + " " + $rows[1].a.Len())!
+}

@@ -6573,6 +6573,8 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
         split := owned and ln.blockBuilt(m.Site)
         for i in range fixed {
             c := ln.fillCopy(fv, el, ln.madeAt(m.Site), sp) if split else mir.Operand.None
+            # (O8f, gap 22: else, where early freeing asks, each element's parts in part regions - free.fillParted)
+            if c == mir.Operand.None and owned: c = ln.ownersCopy(I64(m.Site), fv, el, ln.madeAt(m.Site), sp)
             if c == mir.Operand.None: c = ln.ownCopyOf(fv, el, ln.madeAt(m.Site), sp) if owned else fv
             ops[i] = c
         }
