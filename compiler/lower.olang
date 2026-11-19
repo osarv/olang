@@ -1152,6 +1152,19 @@ fn (ln mut lowering&) ownerCopy(site I64, v mir.Operand, ty types.TypeId, at mir
     return mir.Operand.Copy(mir.Lvalue.L(d))
 }
 
+# O8f (gap 22): a copy of v made at site of a value with several owner leaves (free.OwnersSite: a struct holding two Vecs
+# by value, copied into an element) - its bytes, each part place's array in a part region of its own, a kid of at, where
+# that place is decided sole (partsCopied), so that a let-go of each owner, sole for none, releases its parts. None where
+# the copy is no such one
+fn (ln mut lowering&) ownersCopy(site I64, v mir.Operand, ty types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
+    if not ln.freeing or site < 0: return mir.Operand.None
+    fr := ln.L.Free!
+    if not fr.OwnersSite(I64(ln.B.Id), site) or not fr.PartsOnly(ty) or ln.T.RunsCopy(ty): return mir.Operand.None
+    d := ln.local(ln.into(ty, mir.Rvalue.Use(v), sp), ty, sp)
+    ln.partsCopied(pl(mir.Base.Local(d)), ty, at, sp)
+    return mir.Operand.Copy(mir.Lvalue.L(d))
+}
+
 # partCopy's parts of the bytes copied at p, of type ty: the array path leads to copied into at, its elements' storage
 # and every other part into rest. A Vec's buffer (free.VecFields) has its elements below the count copied and the room
 # after them left empty, as a Vec keeps it - text a copy's room held would be built in a slot no walk puts back
@@ -6443,6 +6456,8 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             if pv != mir.Operand.None: return pv
             ov := ln.ownerCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
             if ov != mir.Operand.None: return ov
+            wv := ln.ownersCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
+            if wv != mir.Operand.None: return wv
             return ln.ownCopyOf(v, ty, ln.madeAt(m.Site), sp)
         }
     }

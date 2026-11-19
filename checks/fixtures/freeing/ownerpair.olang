@@ -1,0 +1,27 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): a struct holding two Vecs by value, `Q struct() { a Vec<I64>, b Vec<I64> }`, copied
+# into a Vec's element - Push's and SetAt's copies, `v[i] = p` - each Vec's buffer built in a part region of its own
+# (free.ownersSplit, lower.ownersCopy): neither owner field is sole, but every let-go of either releases its buffer
+# (partsFree), the element's as the local's
+N I64 = 400000
+
+type Q struct() { a Vec<I64>, b Vec<I64> }
+
+fn main() {
+    v Vec<Q>
+    for _ in range 10: v.Push(Q())
+    t := 0
+    for i in range N {
+        p := Q()
+        p.a = Vec<I64>[i, i]
+        p.b = Vec<I64>[i + 1]
+        p.a = Vec<I64>[i, i, i]
+        t += v[i % 10].b.Len()
+        v[i % 10] = p
+        v.SetAt((i + 3) % 10, v[i % 10])
+        t += v[i % 10].a[2] + v[(i + 3) % 10].b[0]
+        if i % 100000 == 0: v.Push(p)
+    }
+    io.PutLn($t + " " + $v.Len())!
+}
