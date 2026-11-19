@@ -481,4 +481,5 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   could be a part place built split as the element arrays are) and the closure's `x` (O27 placement, named). Then (2):
   review4 a5-a7 (a view local handed to a closure, generator or task in its block - `free.blockView` refuses EscHard;
   following needs LocalUses to say which lambda captures the local and that the local holding it stays in the block);
-  then the scenarios (freeing, earlyfree), scopesan, make quick (goldens: tokens/ast for arrayelems).
+  Checked on d5f75e912: the freeing and earlyfree scenarios, `make scopesan`, `make quick` (tokens/ast goldens
+  recaptured; compiler/olang.olang and jupyter.olang, OOM-killed beside other builds, pass run alone).
