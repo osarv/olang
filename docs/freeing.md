@@ -437,3 +437,20 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   fieldfeed).
   Still named: a Vec of fixed arrays of owners changed in place (c1's `keep`, `Vec<Array<Q>>`: not PartsOnly), and
   the D9h copy above (copying At's value into the view local's own block would free it).
+- 2026-11-19, wt-d9h: the D9h copy of a view local frees. Where a read-only reference local holds what it names only in
+  its own block - never written, assigned, stored, handed back, captured or spawned with, in no value made of it that
+  may be kept, lent only to bodies keeping nothing of it past the call (`typed.RefsKept.NoneKept`) - the temporary its
+  declaration lends through fields to the call it is given (`r := v[i].a.View()`: At's value) is recorded
+  (`free.BlockCopy`), and lowering makes its copy, where it makes one, in that local's block (`lower.blockCopy`): dead
+  with the local, a loop turn's with the turn. The free pass takes that temporary as lent (no `untracked`), its value
+  as no view of the collection's places (`borrowOf`'s `tempReach`, the call's `through` left out): lowering copies it
+  wherever anything in the body may change what it views, and reads it in place only where nothing in the body changes
+  that storage at all (heldSrc), so no let-go there releases what the local names. review4's a1, h1 and h6 pass
+  `-memory -check` and run flat (a1 at 400,000 turns 52 MB to 13 MB, flat from 20,000); checks' freeing viewlocals
+  (a store, a callee given the Vec, a lend to `total`, a deferred read) runs under 8 MB (master: out of memory).
+  Still named: such a local handed on to a closure, a generator or a task in its block (a5, a6, a7 - their escape
+  would need following into the local or join holding them), and `Vec<Array<Q>>` (c1's `keep`): a fixed array as an
+  element is no part place - its buffer is no struct field, its count its length, not a Vec's `n` - so a walk of the
+  Vec's live elements cannot release each array's buffer and its Q's parts; closing it needs element arrays as part
+  places of their own (a walk kind counting by length, a split copy for Push/SetAt/fill/`v[i] = w`, views judged
+  against it) - a round of its own, no language question.

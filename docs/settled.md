@@ -1000,8 +1000,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `lower.ownerParts`); ownerpair, fillreturn, nestedowners, ownervecs (wt-checkshapes2). A view of one owner field kept
   while a sibling of the same type is reassigned keeps that type's part place (places are by type): a named view keep,
   never a gap. A temporary is lent read-only through its fields (`tempPlaceCall`) only to a call whose value holds no
-  reference: `x := v[i].a.View()` keeps At's copy (D9h) in the collection's scope, a copy a turn, named (RCopied) - it
-  had passed `-memory -check` while growing; freeing it needs the copy in the view local's block (open).
+  reference, or to the call a reference local holding its view only in its own block is declared with
+  (`free.BlockCopy`): `x := v[i].a.View()` read, lent to bodies keeping nothing of it, read in a deferred block - At's
+  copy (D9h), where one is made, goes into that block, dead with the local (viewlocals, wt-d9h). Such a local handed on
+  to a closure, a generator or a task (review4 a5-a7) keeps At's copy in the collection's scope, named (RCopied); so
+  does a Vec of fixed arrays of owners (`Vec<Array<Q>>`, not PartsOnly) changed in place.
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

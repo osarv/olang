@@ -5162,12 +5162,23 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
             # views - is dead by the statement's end: its copy in the innermost scope open, never where the callee's
             # result would live, the collection's)
             if ln.readWin.Has(I64(c.Site)) and ln.levels.Len() > 0 and not heldRef(at): at = mir.ScopeRef.Scope(ln.top().S)
+            # (D9h, O2: a temporary lent through its fields to the call a reference local holding it in its own block is
+            # declared with, `r := v[i].a.View()` - copied into that block, dead with the local: free.BlockCopy)
+            bl := ln.blockCopy(c.Site)
+            if bl >= 0 and not heldRef(at): at = ln.scopeRef(typed.Scope.Block(ln.B.Locals[bl].In))
             sv := ln.splitCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
             if sv != mir.Operand.None: return sv
             return ln.arrayCopy(mir.Operand.Copy(mir.Lvalue.L(dest)), ty, sp, at, true)
         }
     }
     return mir.Operand.Copy(mir.Lvalue.L(dest))
+}
+
+# the reference local holding what the view call at site hands back, through a call it is lent to, in its own block
+# (free.BlockCopy), -1 for none
+fn (ln mut lowering&) blockCopy(site typed.SiteId) I64 {
+    if not ln.planned or ln.L.Free == null: return -1
+    return ln.L.Free!.BlockCopy(I64(ln.B.Id), I64(site))
 }
 
 # whether a scope is a region early freeing made (O8d), held in a local

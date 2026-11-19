@@ -247,6 +247,11 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # driver gives none; and by body, the locals lowering surely copies a view call's value into (copiedLocals)
     Keeps fn?&(b I64, k I64) Bool = null
     copiedAt Map<I64, Array<Bool>>
+    # D9h (O2): by (body, site), the reference local holding a view of the view call's temporary in its own block
+    # (BlockCopy); by body, whether they were found; what a body keeps of a read-only reference (typed.RefsKept)
+    blockAt Map<pair.Pair<I64, I64>, I64>
+    blockDone Map<I64, Bool>
+    refsKept typed.RefsKept
     # by body: its module, whether its code is emitted in the root's object - lowered by every build, so the decisions are
     # written into it as they are, where every other body's code reads them as link-time constants - whether it is the
     # program's own (not std)
@@ -2801,6 +2806,79 @@ fn (f mut Free&) copiedLocals(b I64) Array<Bool> {
     return out
 }
 
+# D9h (O2): the reference local of body b whose declaration lends the temporary of the view call at site read-only
+# through its fields to the call it is given (`r := v[i].a.View()`), holding what that call hands back in its own
+# block only (blockView); -1 for none. Where something may change what the temporary views while the local lives, the
+# copy lowering makes of it is made in that block - dead with the local, a loop turn's with the turn - never where the
+# callee's result would live (the collection's scope, a copy a turn kept until it closes): no store gives it a place
+fn (f mut Free&) BlockCopy(b I64, site I64) I64 {
+    if site < 0 or b < 0 or b >= f.Bodies.Len() or f.Bodies[b].Root == null: return -1
+    if not f.blockDone.Has(b): f.blockCopies(b)
+    return try f.blockAt.Get(pair.Pair(b, site)) catch default -1
+}
+
+fn (f mut Free&) blockCopies(b I64) {
+    f.blockDone.Put(b, true)
+    t := f.T()
+    u := typed.LocalUses.Uses(t, f.Bodies[b])
+    for i in range f.Bodies[b].Locals.Len() {
+        x := u.Init[i]
+        if x == null or not f.blockView(u, b, i): continue
+        k := initCall(x)
+        if k == null or typed.CalleeBody(k) < 0: continue
+        ps := t.Items(t.Params(f.Bodies[typed.CalleeBody(k)].Ty))
+        for j in range k.Args.Len().Min(ps.Len()) {
+            if not t.IsRef(ps[j]) or (t.PermOf(ps[j]) & types.Writable) != 0: continue
+            s := borrowedTemp(k.Args[j])
+            if s >= 0: f.blockAt.Put(pair.Pair(b, s), i)
+        }
+    }
+}
+
+# whether reference local i of body b, read-only, keeps what it names within its own block: declared once (no other
+# value given it, nothing written through it), handed back nowhere, stored nowhere, captured by nothing, in no value
+# made that may be kept (a value holding it linked to it), given only to bodies keeping nothing of it past the call
+# (typed.RefsKept.NoneKept)
+fn (f mut Free&) blockView(u typed.LocalUses&, b I64, i I64) Bool {
+    t := f.T()
+    l := f.Bodies[b].Locals[i]
+    k := l.Kind
+    if k != typed.LocalKind.Var and k != typed.LocalKind.Hidden and k != typed.LocalKind.Held: return false
+    if l.Unset or not t.IsRef(l.Ty) or (t.PermOf(l.Ty) & types.Writable) != 0: return false
+    if u.EscHard[i] or u.Ret[i] or u.WrOther[i] or u.Whole[i] or u.EscRefs[i]: return false
+    for s in u.StoreAt {
+        if s == i: return false
+    }
+    for s in u.LinkTo {
+        if s == i: return false
+    }
+    for j in range u.RefAt.Len() {
+        if u.RefAt[j] == i and not f.refsKept.NoneKept(t, f.Bodies, u.RefBody[j], u.RefParam[j]): return false
+    }
+    for j in range u.GiveAt.Len() {
+        if u.GiveAt[j] == i and not f.refsKept.NoneKept(t, f.Bodies, u.GiveBody[j], u.GiveParam[j]): return false
+    }
+    return true
+}
+
+# the call a declaration's value is, through what passes it on as it is (lower.viewCallIn's)
+fn initCall(x typed.Expr&) typed.Call?& {
+    return match x {
+        case typed.Expr.Call(_, _, c): c
+        case typed.Expr.Away(_, _, y): initCall(y)
+        case _: null
+    }
+}
+
+# the site of the call whose temporary a read-only borrow is of, through fields only (`v[i].a`), -1 for none
+fn borrowedTemp(a typed.Expr&) I64 {
+    return match a {
+        case typed.Expr.Borrow(_, _, p): tempPlaceCall(p)
+        case typed.Expr.Away(_, _, y): borrowedTemp(y)
+        case _: -1
+    }
+}
+
 # O8f: the constructor call local l is declared with where its instance views what it is given and its caller copies it
 # (D9h) into a struct local with candidate leaves - the copy is their new value, as at a store into a struct held in
 # place (viewCtor) - null for any other declaration
@@ -3747,8 +3825,11 @@ fn (w mut walker&) movedRead(p typed.Lvalue&, ty types.TypeId) Bool {
 fn (w mut walker&) borrowOf(p typed.Lvalue&) Vec<I64> {
     f := w.F
     k := f.placeOfPlace(p)
-    if k >= 0: return w.readOf(p, p.Type())
-    o := w.reach(p)
+    # (a field of a temporary a reference local holding it in its own block is declared with, BlockCopy, is no place's
+    # value: the temporary's own, copied into that block, or storage nothing in the body changes)
+    block := f.BlockCopy(w.Id, tempPlaceCall(p)) >= 0
+    if k >= 0 and not block: return w.readOf(p, p.Type())
+    o := w.tempReach(p) if block else w.reach(p)
     # (O8f: a place holding by value, through no reference, an array of a part place - a Vec local, a Vec element -
     # holds its own: borrowing it reads no view of that place's values, and a call growing it through the borrow gives
     # it the new storage)
@@ -3763,6 +3844,14 @@ fn (w mut walker&) borrowOf(p typed.Lvalue&) Vec<I64> {
     }
     w.viewRead(o)
     return o
+}
+
+# what a field of a temporary, through fields only, names: the temporary's value's own - its fields no places' values
+fn (w mut walker&) tempReach(p typed.Lvalue&) Vec<I64> {
+    return match p {
+        case typed.Lvalue.Field(_, _, base, _): w.tempReach(base)
+        case _: w.reach(p)
+    }
 }
 
 # a place vacated: its value moved out - no longer a view of the place, a value moved out of it
@@ -4057,6 +4146,9 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         # (lent only where the call's own value holds no reference: one that may hand back a view of the temporary -
         # `v[i].a.View()` kept in a local - has lowering keep its copy (D9h) where the view may live)
         lends := j < ps.Len() and w.T().IsRef(ps[j]) and not w.writable(ps[j]) and not w.T().IsRef(ty) and not w.T().HoldsRefs(ty)
+        # (or where the call's value is a reference local's that holds it in its own block - lowering's copy, if it
+        # makes one, is made there: BlockCopy)
+        if not lends and c.Site >= typed.SiteId(0) and f.BlockCopy(w.Id, borrowedTemp(a)) >= 0: lends = true
         w.readArg = tempCall(a) if lends else -1
         copied := not unknown and copiedArg(a)
         # (and a view call's value given as it is to a by-value parameter such a callee only reads, of a call whose value
@@ -4108,7 +4200,13 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
                 f.taOrig.Push(copyOf(args[j]))
             }
         }
-        for y in f.resFrom[b2]: f.through(y, args, out)
+        # (a temporary a reference local holding it in its own block is declared with, BlockCopy: lowering copies it
+        # into that block wherever anything in the body may change what it views - a copy no let-go reaches - and reads
+        # it in place only where nothing in the body changes that storage at all (heldSrc), so no let-go here releases
+        # what the local names either way: what it views is no place of the collection's)
+        if not lent or f.BlockCopy(w.Id, I64(c.Site)) < 0 {
+            for y in f.resFrom[b2]: f.through(y, args, out)
+        }
         # a constructor's stores are into the instance it makes: its candidate leaves hold them - places of their own,
         # wherever the instance goes - so they are no escape of the parameter
         ctor := w.T().Role(f.Bodies[b2].Ty) == types.RoleCtor

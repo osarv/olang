@@ -1,0 +1,48 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, D9h): a reference local holding a view of an element's field, `r := v[i].a.View()`,
+# while something changes the element - a store, a callee given the Vec writably: At's value is copied (D9h), and the
+# copy is made in the local's own block (free.BlockCopy), dead with it, a loop turn's with the turn - not in the
+# collection's scope, a copy a turn. The local is read, lent to a body keeping nothing of it, read in a deferred block
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn total(xs Array<I64>&) I64 {
+    s := 0
+    for x in xs: s += x
+    return s
+}
+
+fn grow(v mut Vec<Q>&, i I64) {
+    p := Q()
+    p.a = Vec<I64>[i, i + 1, i + 2]
+    v[i % 4] = p
+}
+
+fn main() {
+    v Vec<Q>
+    for k in range 4 {
+        q := Q()
+        q.a = Vec<I64>[k, k + 1]
+        v.Push(q)
+    }
+    t := 0
+    for i in range N {
+        r := v[i % 4].a.View()
+        p := Q()
+        p.a = Vec<I64>[i, i]
+        v[i % 4] = p
+        t += r[0] + r[r.Len() - 1] + v[i % 4].a[1]
+        s := v[(i + 1) % 4].a.View()
+        grow(v, i + 1)
+        t += total(s) + s.Len()
+        {
+            u := v[i % 4].a.View()
+            defer { t += u[0] }
+            grow(v, i)
+            t += u[1]
+        }
+    }
+    io.PutLn($t + " " + $v[1].a.Len())!
+}
