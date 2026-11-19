@@ -494,4 +494,5 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   nothing (`Next`) and yielding no reference. `c := v[j]` read after the element's let-go keeps as a named view: the pass
   would need lowering's view-local decision (`lower.viewLocals`' heldSrc) to know the copy is made. A program with tasks
   still frees nothing early (a7).
-  Checked: (pending)
+  Checked on e45a5ad6c: the freeing and earlyfree scenarios, `make scopesan`, `make quick` (tokens/ast goldens recaptured); review4/review5's 60
+  probes print the same built, `-free late`, `-sanitize` and interpreted, `-memory -check` now passing for a5, a7, b4, r5_s1.
