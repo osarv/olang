@@ -2742,6 +2742,11 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
                 w.storeInside = -1
                 w.go(k, LAssign, p.Span(), source.Span(0, 0), -1)
                 w.goParts(k, p.Span())
+                # (c1's s.qs: a split field's elements' parts, released by its walk - SplitField)
+                if w.F.SplitField(k) {
+                    et := w.T().Elem(w.T().Repr(p.Type()))
+                    for k2 in w.F.PartsLet(et): w.go(k2, LLeaf if w.F.PartPlace(k2) else LAssign, p.Span(), source.Span(0, 0), -1, false, WalkIn, p.Type())
+                }
                 return
             }
             # a struct held in place given another value: its candidate leaves let go of theirs, and are given the
@@ -2878,7 +2883,16 @@ fn (f mut Free&) blockView(u typed.LocalUses&, b I64, i I64) Bool {
     k := l.Kind
     if k != typed.LocalKind.Var and k != typed.LocalKind.Hidden and k != typed.LocalKind.Held: return false
     if l.Unset or not t.IsRef(l.Ty) or (t.PermOf(l.Ty) & types.Writable) != 0: return false
-    if u.EscHard[i] or u.Ret[i] or u.WrOther[i] or u.Whole[i] or u.EscRefs[i]: return false
+    return f.keepsNone(u, b, i, 0)
+}
+
+# whether reference local i of body b (uses u) holds what it names in its own block only: never written, assigned,
+# stored, handed back or escaping, in no value made of it that may be kept, lent only to bodies keeping nothing of it
+# past the call (typed.RefsKept.NoneKept) - and captured only by lambdas a value local of its block holds (holderStays)
+# whose bodies keep nothing of the capture in turn
+fn (f mut Free&) keepsNone(u typed.LocalUses&, b I64, i I64, depth I64) Bool {
+    t := f.T()
+    if u.EscBesides[i] or u.Ret[i] or u.WrOther[i] or u.Whole[i] or u.EscRefs[i]: return false
     for s in u.StoreAt {
         if s == i: return false
     }
@@ -2891,7 +2905,31 @@ fn (f mut Free&) blockView(u typed.LocalUses&, b I64, i I64) Bool {
     for j in range u.GiveAt.Len() {
         if u.GiveAt[j] == i and not f.refsKept.NoneKept(t, f.Bodies, u.GiveBody[j], u.GiveParam[j]): return false
     }
+    for j in range u.HoldAt.Len() {
+        if u.HoldAt[j] != i: continue
+        lb := u.HoldBody[j]
+        if depth > 3 or lb < 0 or lb >= f.Bodies.Len() or f.Bodies[lb].Root == null: return false
+        if not f.holderStays(u, b, i, u.HoldBy[j]): return false
+        u2 := typed.LocalUses.Uses(t, f.Bodies[lb])
+        if not f.keepsNone(u2, lb, u.HoldInner[j], depth + 1): return false
+    }
     return true
+}
+
+# whether value local h of body b, holding a lambda that captures local i, lives no longer than i: declared in i's
+# block or one inside it, never assigned again, stored, copied, handed back, given a call or captured itself - only
+# called
+fn (f Free&) holderStays(u typed.LocalUses&, b I64, i I64, h I64) Bool {
+    bd := f.Bodies[b]
+    if h < 0 or h >= bd.Locals.Len() or bd.Locals[h].Kind != typed.LocalKind.Var: return false
+    if u.EscHard[h] or u.EscRefs[h] or u.Ret[h] or u.RetRefs[h] or u.Whole[h] or u.WrOther[h]: return false
+    if has(u.StoreAt, h) or has(u.LinkTo, h) or has(u.GiveAt, h) or has(u.RefAt, h) or has(u.LendAt, h) or has(u.HoldAt, h): return false
+    at := bd.Locals[h].In
+    for at >= typed.BlockId(0) {
+        if at == bd.Locals[i].In: return true
+        at = bd.Blocks[I64(at)].Parent
+    }
+    return false
 }
 
 # the call a declaration's value is, through what passes it on as it is (lower.viewCallIn's)
@@ -4976,7 +5014,7 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     }
     # (c1's keep: an element array of PartsOnly values - a Vec<Array<Q>>'s - is built split, its elements' parts each in
     # a part region of its own where their place is sole: lower.partCopy, elemArrayCopy)
-    if kind == SFresh and f.arr[k] and not f.plainElems(k) and not movesOnly(x) and not (f.keyField[k] == -1 and f.PartPlace(k)) {
+    if kind == SFresh and f.arr[k] and not f.plainElems(k) and not movesOnly(x) and not (f.keyField[k] == -1 and f.PartPlace(k)) and not f.SplitField(k) {
         kind = SFail
         why = $"its elements may hold storage built with it: '" + $w.text(x.Span()) + "'"
     }
@@ -6439,6 +6477,15 @@ fn (f mut Free&) elemArray(ty types.TypeId) Bool {
     el := t.Elem(r)
     if not t.OwnsParts(el) and not t.OwnedPart(el): return not t.HoldsRefs(el)
     return not f.refsBeyondParts(el) and f.PartsOnly(el)
+}
+
+# O8f (c1's s.qs): whether place k is a struct's field holding a run-time array of PartsOnly values (`S{qs Array<Q>}`):
+# a part place whose values are built split as an element array's are - the array in its part region, each element's
+# parts in part regions of their own (lower.partCopy) - so that its let-go releases its elements' parts by its length,
+# then the array (lower.releases)
+fn (f mut Free&) SplitField(k I64) Bool {
+    if k < 0 or k >= f.keyField.Len() or f.keyField[k] < 0 or not f.arr[k] or not f.PartPlace(k): return false
+    return f.partsArray(f.valTy[k])
 }
 
 # O8f (c1's keep): whether ty is a run-time array of PartsOnly values that is an element array (elemArray) - a copy of

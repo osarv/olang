@@ -866,6 +866,17 @@ type LocalUses struct(T types.Table&, B Body&) {
     Whole Vec<Bool>
     Esc Vec<Bool>
     EscHard Vec<Bool>    # Esc but for the read-only references given a body's call (RefAt)
+    # EscHard but for a capture by a lambda a Let declares a local with (`f := fn() I64 { return r[1] }`): each such
+    # capture by the captured local (HoldAt), the local holding the lambda (HoldBy), the lambda's body and its Capture
+    # local (HoldBody, HoldInner) - a reader that follows the holder and the lambda's body judges it (free.blockView)
+    EscBesides Vec<Bool>
+    HoldAt Vec<I64>
+    HoldBy Vec<I64>
+    HoldBody Vec<I64>
+    HoldInner Vec<I64>
+    holding I64 = -1        # the local the lambda walked is declared into, -1 for none (a capture's escape a hold)
+    holdBody I64 = -1
+    holdInner I64 = -1
     # EscHard but for a reference read out of a part of its storage (`v.data`), which names what that part refers to,
     # never the storage: what escapes is the local's storage itself (RefsKept)
     EscSelf Vec<Bool>
@@ -938,6 +949,7 @@ fn LocalUses.Uses(t types.Table&, b Body&) LocalUses {
         u.Whole.Push(false)
         u.Esc.Push(false)
         u.EscHard.Push(false)
+        u.EscBesides.Push(false)
         u.EscSelf.Push(false)
         u.Ret.Push(false)
         u.AliasOf.Push(-1)
@@ -1264,6 +1276,16 @@ fn (u mut LocalUses&) aliasInto(i I64, a I64) {
     if u.WrScalar[i]: u.WrScalar[a] = true
     if u.Esc[i] or u.Ret[i]: u.Esc[a] = true
     if u.EscHard[i] or u.Ret[i]: u.EscHard[a] = true
+    if u.EscBesides[i] or u.Ret[i]: u.EscBesides[a] = true
+    # (an alias's holds are its source's)
+    nh := u.HoldAt.Len()
+    for j in range nh {
+        if u.HoldAt[j] != i: continue
+        u.HoldAt.Push(a)
+        u.HoldBy.Push(u.HoldBy[j])
+        u.HoldBody.Push(u.HoldBody[j])
+        u.HoldInner.Push(u.HoldInner[j])
+    }
     # (an alias holding a reference read out of a part names what that part refers to: its escape is no escape of
     # the source's storage)
     part := RefReadOut(u.T, u.Init[i])
@@ -1365,7 +1387,11 @@ fn (u mut LocalUses&) let(l LocalId, x Expr&) {
     k := u.B.Local(l).Kind
     alias := u.T.IsRef(u.B.Local(l).Ty) or k == LocalKind.Held or k == LocalKind.Binding
     if madeBy(x): u.letInto = I64(l)
+    # (a lambda declared into a value local: its captures' escapes are holds by that local - EscBesides)
+    was := u.holding
+    if x == Expr.Fn and k == LocalKind.Var and not alias: u.holding = I64(l)
     u.expr(x, Ctx.Alias(l) if alias else Ctx.Store)
+    u.holding = was
     u.letInto = -1
 }
 
@@ -1513,7 +1539,11 @@ fn (u mut LocalUses&) use(p Lvalue&, ctx Ctx, ref Bool) {
     held := not ref and mayHold(u.T, u.readTy, 0)
     if u.spawning > 0 {
         own, part := u.EscOwn[root], u.EscPart[root]
+        # (a reference to a local outlasting the task's join given the spawned call, GiveAt: the task is waited for
+        # there, so it keeps the storage only where the callee does - no escape besides that, EscBesides)
+        besides := u.EscBesides[root]
         u.escape(root)
+        if u.quiet and u.outlasts(root): u.EscBesides[root] = besides
         if not ref: u.EscOwn[root] = own
         if not ref: u.EscPart[root] = part
         if held and not u.quiet: u.EscRefs[root] = true
@@ -1546,6 +1576,13 @@ fn (u mut LocalUses&) use(p Lvalue&, ctx Ctx, ref Bool) {
 fn (u mut LocalUses&) escape(root I64) {
     u.Esc[root] = true
     u.EscHard[root] = true
+    if u.holding < 0: u.EscBesides[root] = true
+    if u.holding >= 0 {
+        u.HoldAt.Push(root)
+        u.HoldBy.Push(u.holding)
+        u.HoldBody.Push(u.holdBody)
+        u.HoldInner.Push(u.holdInner)
+    }
     if not u.partRef: u.EscSelf[root] = true
     if u.quiet: return
     if u.partRef: u.EscPart[root] = true
@@ -1932,13 +1969,20 @@ fn (u mut LocalUses&) prim(op PrimOp, args Array<Expr&>&, ctx Ctx) {
 }
 
 fn (u mut LocalUses&) fnVal(f FnVal&) {
+    h := u.holding
+    u.holding = -1
     match f {
-        case FnVal.Lambda(_, caps, _) {
-            for cp in caps: u.expr(cp.Outer, Ctx.Esc)
+        case FnVal.Lambda(b, caps, _) {
+            for cp in caps {
+                u.holding, u.holdBody, u.holdInner = h, I64(b), I64(cp.Inner)
+                u.expr(cp.Outer, Ctx.Esc)
+                u.holding = -1
+            }
         }
         case FnVal.Adapter(_, recv, _) { u.expr(recv, Ctx.Esc) }
         case FnVal.Named(_) { }
     }
+    u.holding = h
 }
 
 fn PassesRefs(op PrimOp) Bool { return op == PrimOp.Convert or op == PrimOp.AnyMake or op == PrimOp.AnyInstance }
