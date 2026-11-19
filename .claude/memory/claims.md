@@ -27,4 +27,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e11 integrate (cloud, 2026-11-18): oagent experiments/e11-integrate (wt-e11) - done: integrated system exact to 10000 on mix and S5; a no-settle BPTT cell with the same priors matches it (README conclusion)
 - e12-language cloud session (2026-11-18): done - oagent 6ace9b5 (experiments/e12-language): not promising at pilot scale
 - e13-grids cloud session (2026-11-18): done (paused) - oagent main f66c925 (experiments/e13-grids, README + MAP "Where to pick up"): gated settle exact on reach to 64x64; vor 53.5/38.7 % 32x32; no oann changes
-- OLang Cloud (2026-11-19): olang wt-splitfield - gap 22: s.qs field as a split part place, then a5-a7
+- OLang Cloud (2026-11-19): olang wt-viewmut - for x in v.ViewMut() binds a copy (bug or design)
