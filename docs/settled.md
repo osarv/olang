@@ -979,10 +979,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reads (`Preserves`) keeps no place - made for none, never let go through one (`free.preservedArg`); a fill builds each
   element's owner fields as stores into their places do (`lower.fillCopy`, `ownerField`: a region of its own where the
   place is sole, parts in part regions) - a run-time array's always, a fixed array's where it is a plain local's value
-  built in a block (an owner's region around it would be hidden by one inside, `free.plainFillOf`); a by-value
+  built in a block, or a temporary built in a block and only read or lent through (an owner's region around it would
+  be hidden by one inside, `free.plainFillOf`, `blockFillOf`), and a fill of a value owning storage is its own copy, no
+  view of what its item's owner places hold (`free.makeOf`, as a copy's); a by-value
   argument's read is no view in use across its statement's let-goes (`free.copiedArg`); a temporary lent read-only
   through its fields is no copy kept (`tempPlaceCall`). checks' freeing structelems, copyelems under `-memory -check`
-  (wt-freecopies).
+  (wt-freecopies); fillelems (wt-fillcopy).
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

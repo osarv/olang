@@ -39819,3 +39819,28 @@ of its own, which its let-go releases; a copy made in no region is a value of th
 Measured: structelems, copyelems (`v[i] = p` at its last use and read after, `w[i] = r`, a fill), ownerelems,
 soleelems and the probes flat under 8 MB at 400,000 turns, interpreted alike, clean under `-sanitize`. A fill's item
 copied from a local (`Array<Q>(4, base)`) still keeps for that copy (a temporary the fill copies), named.
+
+## 2026-11-19: freeing gap 22's fills copying a local (O8f, B18a; mine; wt-fillcopy)
+
+wt-freecopies left a fill whose item copies a local (`Array<Q>(4, base)`, `Q struct() { a Vec<I64> }`) named by
+`-memory -check`. Probing it found two shapes, neither a leak at run time (each ran flat under 8 MB) but each keeping
+`Q.a` in the proof:
+- **A fill local read after a let-go of the place.** `u := Array<Q>(4, base)`, then `p.a = ...` and `v[i] = p` (let-goes
+  of `Q.a`), then `u[3].a[1]`: the free pass took u for a view of `Q.a`'s values ("'u' is used here, after it lets go
+  of it") because the fill's value carried its item's origins - base's owner places among them. But a fill of a value
+  owning storage holds each element's own copy (QCE: lowering's `ownCopyOf`, or `fillCopy` where it splits), deep as
+  a copy is. `free.makeOf` now unowns a fill's origins as it does a copy's: no owner or array place of the item, the
+  rest (references the element holds) kept.
+- **A fill given storage only to be read** (`Array<Q>(4, base)[3].a[1]`, an `Lvalue.Temp`): lowering already split
+  it where its site is built in a block (`lower.blockBuilt` asks nothing of the local), but the free pass counted on the
+  split only for a plain local's fill (`plainFillOf`), so the copies kept `Q.a` (RCopied). A temporary read or lent
+  through stays where it is built - never moved whole into an owner, which is what the plain-local condition (no
+  field, owner or feeder place) guards against - so `free.blockFillOf` (the site test split out of `plainFillOf`)
+  marks it in `reach`'s `Temp` case too. A value stored from such a temporary is copied by the store.
+
+Left named: a fixed fill that is no block's (a function's returned array, review4's c1 `made`) - its elements may land
+inside an owner's region, which a region of its own inside would hide - and a run-time fill whose item is read out of
+a Vec (review4's h5, At's copy, D9h). Also fixed: `tempPlaceCall`'s comment named array elements, but the code sees
+through fields only. Measured: checks' freeing fillelems (both shapes, base read after) flat under 8 MB at 400,000
+turns, interpreted alike at 200, clean under `-sanitize`; review4's 35 adversarial programs agree built, sanitized and
+interpreted.
