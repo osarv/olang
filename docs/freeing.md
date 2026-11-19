@@ -460,12 +460,17 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   elements is a let-go of their place for condition 5 (`partWalked`) - `Vec<String>` and `Vec<Array<I64>>` pushed to,
   then given another value, had kept (no let-go of the element place but the walk's). Fixture: checks' freeing
   arrayelems.
-  **Where to pick up (c1's `keep`, `Vec<Array<Q>>`)**: `elemArray` takes only plain elements. Next: let it take
-  arrays of PartsOnly structs (`Array<Q>`) - the walk of such an element releases each of its own elements' parts first,
-  counting by the array's length (`lower.textWalk` loops over a Vec's `n`; an array's walk needs `Len`), then the array
-  (partReleases for an Array type: an inner walk, then the ReleasePart); a store into such an element builds the array
-  in a part region and each Q's parts split (`lower.elemCopy` for an OwnedPart element whose element is PartsOnly:
-  `splitArray` into a part region); `PartsLet` for it adds the Q's own; probe /tmp/claude-0/ae/k1.olang (c1 cut down).
-  Then (2): review4 a5-a7 (a view local handed to a closure, generator or task in its block - `free.BlockCopy`'s
-  conditions, follow the escape into the holder).
-
+- 2026-11-19, wt-arrelems (step 2): `elemArray` takes arrays of PartsOnly structs (`Array<Q>`, `refsBeyondParts`, not
+  HoldsRefs, which counts owned arrays): such an element's let-go walks its own elements by its length, each one's
+  parts, then releases the array (`lower.partReleases`' relPath Data -2, `releaseOn`); a store into the place is built
+  split (no `plainElems` keep for it; `lower.elemArrayCopy`, `partCopy`), and a copy of such an array anywhere (the
+  occupy's, a by-value argument's D9b copy) is built with each element's parts in part regions (`free.partsArray`,
+  `arraysAt`, `lower.arraysCopy`) - its owners keep for RSplit only, freeing through their parts.
+  **Where to pick up (c1's `keep`, `Vec<Array<Q>>`)**: /tmp/claude-0/ae/k1.olang (c1's keep cut down; also
+  /tmp/claude-0/review4/c1keep.olang) runs flat in every mode but `-memory -check` still names `Q.a` (RCopied) for
+  At's D9h copy of a call's value in `keep[keep.Len() - 1][1].a[1]` (free.olang's call walk, `untracked(ty, sp, "a
+  call's value copied", ...)` with no site, so `arrays` cannot apply): pass the call's site there and split that copy in
+  lowering where D9h copies a call's value (find it from `viewCopyAt`; `arraysCopy` keyed by the call site), or treat
+  `[i]` after At as a chain of reads (gap 20) so no copy is made. Then rerun c1 whole (its other rows: `s.qs` named,
+  the closure's `x` placement) and the probes. Then (2): review4 a5-a7 (a view local handed to a closure, generator or
+  task in its block - `free.BlockCopy`'s conditions, follow the escape into the holder).

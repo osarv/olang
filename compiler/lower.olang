@@ -1165,6 +1165,17 @@ fn (ln mut lowering&) ownersCopy(site I64, v mir.Operand, ty types.TypeId, at mi
     return mir.Operand.Copy(mir.Lvalue.L(d))
 }
 
+# O8f (c1's keep): a copy of v made at site of an element array of PartsOnly values stored into its element place
+# (free.ArraysSite) where the place is not decided sole (partCopy splits it where it is): the array in at, each
+# element's parts in a part region of its own, a kid of at, where its place is decided sole (splitArray, elemCopy). None
+# where the copy is no such one
+fn (ln mut lowering&) arraysCopy(site I64, v mir.Operand, ty types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
+    if not ln.freeing or site < 0 or not ln.L.Free!.ArraysSite(I64(ln.B.Id), site) or ln.T.RunsCopy(ty): return mir.Operand.None
+    d := ln.local(ln.into(ty, mir.Rvalue.Use(v), sp), ty, sp)
+    src := pl(mir.Base.Local(d))
+    return ln.splitArray(src, ty, at, at, mir.Operand.None, sp, src, false)
+}
+
 # partCopy's parts of the bytes copied at p, of type ty: the array path leads to copied into at, its elements' storage
 # and every other part into rest. A Vec's buffer (free.VecFields) has its elements below the count copied and the room
 # after them left empty, as a Vec keeps it - text a copy's room held would be built in a slot no walk puts back
@@ -1273,11 +1284,37 @@ fn (ln mut lowering&) splitArray(a pl, ty types.TypeId, at mir.ScopeRef, rest mi
 # it is (gap 17's walk)
 fn (ln mut lowering&) elemCopy(src pl, el types.TypeId, into mir.ScopeRef, rest mir.ScopeRef, sp source.Span) mir.Operand {
     fr := ln.L.Free!
-    if ln.T.OwnedPart(el): return ln.copyAt(src, el, into, sp)
+    if ln.T.OwnedPart(el) {
+        k := fr.ElemPlace(ln.T.Array(el, types.TypeId(0)))
+        if not fr.PartPlace(k): return ln.copyAt(src, el, into, sp)
+        return ln.elemArrayCopy(src, el, k, rest, sp)
+    }
     if not fr.PartsOnly(el) and fr.EntryOnly(el): return ln.entryCopy(src, el, rest, sp)
     if not fr.PartsOnly(el): return ln.copyAt(src, el, into, sp)
     d := ln.local(ln.into(el, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(src))), sp), el, sp)
     ln.partsCopied(pl(mir.Base.Local(d)), el, rest, sp)
+    return mir.Operand.Copy(mir.Lvalue.L(d))
+}
+
+# O8f (c1's keep): an element array at src, of type el, its element place k a part place (free.elemArray), copied as a
+# store into the place builds it - in a part region of its own, a kid of rest, where k is decided sole (settled at once
+# where it holds nothing), its elements' parts split in turn - so that a walk of its Vec's live elements releases it
+fn (ln mut lowering&) elemArrayCopy(src pl, el types.TypeId, k I64, rest mir.ScopeRef, sp source.Span) mir.Operand {
+    at := rest
+    g := ln.guardOf(k)
+    h := mir.NoLocal
+    if g != free.NotSole {
+        h = ln.temp(mir.I64T, sp)
+        ln.guarded(h, g, mir.Rvalue.Part(rest), rest, sp)
+        at = mir.ScopeRef.Held(h)
+    }
+    own := ln.ownsStorage(ln.T.Elem(ln.T.Repr(el)))
+    arr := ln.splitArray(src, el, at, rest, mir.Operand.None, sp, src, false) if own else ln.copyAt(src, el, at, sp)
+    d := ln.local(arr, el, sp)
+    if h == mir.NoLocal: return mir.Operand.Copy(mir.Lvalue.L(d))
+    after := ln.whenSole(g, true, sp) if g >= 0 else mir.NoBlock
+    ln.emit(mir.Stmt.Settle(sp, h, mir.Lvalue.L(d)))
+    if after != mir.NoBlock: ln.joinAt(after)
     return mir.Operand.Copy(mir.Lvalue.L(d))
 }
 
@@ -1469,7 +1506,8 @@ type relPath struct(At I64, Path Array<I64>, Slot Bool = false, Part Bool = fals
     Slot        # a text place's value built in a slot (free.SlotPlace): put back on its list, no region released
     Part        # an array place's value built in a part region (free.PartPlace): found from its address, O8f
     Data        # a Vec at Path (free.VecWalks): its buffer's field, whose live elements - below the count in field Count -
-    Count       # each let go of before the buffer goes (O8f, gap 17): a slot put back (Slot), or an Elem's parts; -1 for none
+    Count       # each let go of before the buffer goes (O8f, gap 17): a slot put back (Slot), or an Elem's parts; -1 for none;
+                # -2: the array at Path walked by its length, each element's (an Elem's) parts let go of (c1's keep)
     Elem
     Next        # a Map's entries at Path: the field of each slot's link, the slot live where it is -1 or more; -1 for a Vec
 }
@@ -1486,11 +1524,10 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
     # text elements, each value its own slot (O8f)
     # (and an element owning storage only in part places - a Vec<I64> - its parts, O8f's gap 17)
     if assign and p == typed.Lvalue.Elem and not fr.SlotPlace(fr.PlaceOf(p)) {
-        # (c1's keep: a run-time array of plain elements, its own part region - free.elemArray)
+        # (c1's keep: a run-time array, its own part region, its elements' parts walked first - free.elemArray)
         if fr.PartPlace(fr.PlaceOf(p)) {
-            g := ln.guardOf(fr.PlaceOf(p))
-            if g != free.NotSole: out.Push(relPath(g, Array<I64>(0), false, true))
-            return out
+            kt, _ := fr.PlaceKey(fr.PlaceOf(p))
+            return ln.partReleases(kt)
         }
         if not fr.PartsOnly(p.Type()): return out
         return ln.partReleases(p.Type())
@@ -1561,8 +1598,14 @@ fn (ln mut lowering&) partReleases(ty types.TypeId, depth I64 = 0, entry Bool = 
     # (c1's keep: a Vec<Array<I64>>'s walk, ty its buffer's type - each live element's array, built in a part region
     # where its element place is decided sole: free.arrayBuffer)
     if ln.T.KindOf(ln.T.Repr(ty)) == types.Kind.Array {
+        if not fr.PartPlace(fr.ElemPlace(ty)): return out
+        # (an element array of PartsOnly values - a Vec<Array<Q>>'s - each of its elements' parts first, by its length)
+        et := ln.T.Elem(ln.T.Repr(ln.T.Elem(ln.T.Repr(ty))))
+        if depth < 8 and fr.PartsOnly(et) and ln.partReleases(et, depth + 1).Len() > 0 {
+            out.Push(relPath(-1, Array<I64>(0), false, false, -2, -1, et))
+        }
         g := ln.guardOf(fr.ElemPlace(ty))
-        if fr.PartPlace(fr.ElemPlace(ty)) and g != free.NotSole: out.Push(relPath(g, Array<I64>(0), false, true))
+        if g != free.NotSole: out.Push(relPath(g, Array<I64>(0), false, true))
         return out
     }
     lvs := fr.ReleaseLeaves(ty)
@@ -1645,6 +1688,14 @@ fn (ln mut lowering&) releaseOn(base pl, paths Vec<relPath>&, sp source.Span) {
         for i in r.Path: q = ln.with(q, mir.Proj.Field(i))
         if r.Data >= 0 {
             ln.textWalk(q, r, sp)
+            if after != mir.NoBlock: ln.joinAt(after)
+            continue
+        }
+        # (c1's keep: an element array's walk - each of its elements' parts, by its length)
+        if r.Data == -2 {
+            inner := ln.partReleases(r.Elem)
+            n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(q))], sp)
+            ln.eachIndex(n, sp, fn(i mir.LocalId) { ln.releaseOn(ln.with(q, mir.Proj.Index(i)), inner, sp) })
             if after != mir.NoBlock: ln.joinAt(after)
             continue
         }
@@ -6500,6 +6551,8 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             if ov != mir.Operand.None: return ov
             wv := ln.ownersCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
             if wv != mir.Operand.None: return wv
+            av := ln.arraysCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
+            if av != mir.Operand.None: return av
             return ln.ownCopyOf(v, ty, ln.madeAt(m.Site), sp)
         }
     }
