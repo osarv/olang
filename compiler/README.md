@@ -34,7 +34,7 @@ which builds the optimized one); `make fixedpoint` checks that compiler builds i
 | `typed.olang`, `mir.olang` | the typed core language and the mid-level IR (contracts) |
 | `check.olang` | the checker: the resolved tree elaborated into the typed core |
 | `definit.olang` | D13d: whether a local or field with no value is read before every path assigns it, judged structurally as D10a judges leaving |
-| `free.olang` | early freeing (O8d, docs/memory.md): which places are the only holders of what they hold, so a let-go frees at once; the `-memory` report |
+| `free.olang` | early freeing (O8d, docs/memory.md): which places are the only holders of what they hold, so a let-go frees at once; the `-memory` report; `-free late` (B18b) runs it with no root, deciding nothing |
 | `scope.olang` | section 8: scope terms, obligations over the call graph's components, the O rules, placement; placements and field bindings inferred, no scope written (O28; docs/rework.md 9, 20 and 21; `OLANG_SCOPESTATS`, `OLANG_INFERDUMP`; a component's judging taken again by later rounds, `OLANG_SCOPECHECK` checking it, `OLANG_NOREUSE` turning it off; judgings kept in records across builds, B3i W3b - `OLANG_NOSCOPEREC` turning them off, `OLANG_CHECKINCR` holding the pass with them to the pass without, `OLANG_SCOPEDEBUG` saying what a component read) |
 | `views.olang` | M19g: a Vec's view used after the same Vec may have grown, from summaries over the call graph's components and a dataflow walk of each body, once a program has checked cleanly |
 | `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function; which clones pay (docs/fnvalues.md 4.4: `KnownValues`, `LoopDepths`, `DecideClones`) |
