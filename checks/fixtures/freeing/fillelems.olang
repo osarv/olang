@@ -1,0 +1,28 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): fills whose item copies a local, `Array<Q>(4, base)` - one a local read after the turn
+# lets go of other values of `Q.a` (the fill's copies are its own, no view of base's field: free.makeOf), one a
+# temporary read through (`Array<Q>(4, base)[3]`, split as a plain local's fill: free.blockFillOf); base read after both
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn main() {
+    q0 := Q()
+    q0.a = Vec<I64>[1, 1]
+    v Vec<Q>
+    for _ in range 10: v.Push(q0)
+    t := 0
+    for i in range N {
+        base := Q()
+        base.a = Vec<I64>[i, i + 1]
+        u := Array<Q>(4, base)
+        u[1].a.Push(i)
+        p := Q()
+        p.a = Vec<I64>[i, i]
+        v[i % 10] = p
+        t += u[3].a[1] + u[1].a[2] + base.a[0] + v[i % 10].a[1]
+        t += Array<Q>(4, base)[3].a[1] + base.a.Len()
+    }
+    io.PutLn($t + " " + $v[3].a.Len() + " " + $q0.a[0])!
+}
