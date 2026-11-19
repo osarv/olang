@@ -1500,6 +1500,12 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
         if g >= 0: ln.ownerParts(k, Array<I64>(0), out)
         return out
     }
+    # (gap 22: an owner not decided sole, its value PartsOnly - a Vec<Q> local changed in place - releases what its value
+    # holds: its Vecs' live elements' own storage too, ownerParts)
+    if k >= 0 and fr.IsOwner(k) and fr.PartsOnly(p.Type()) {
+        ln.ownerParts(k, Array<I64>(0), out)
+        return out
+    }
     return ln.leafPaths(p.Type())
 }
 
@@ -1509,19 +1515,26 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
 fn (ln mut lowering&) ownerParts(k I64, path Array<I64>&, out mut Vec<relPath>&) {
     fr := ln.L.Free!
     if not fr.IsOwner(k): return
-    lvs := fr.ReleaseLeaves(fr.PlaceValue(k))
-    # (the owners its value holds - an R's Q's Vec - each one's region first, where it is decided sole, leaving the field
-    # empty for the parts under it, as an element's partReleases does)
-    for owners in Array<Bool>[true, false] {
-        for lf in lvs {
-            if fr.IsOwner(lf.PlaceId) != owners or (not owners and not fr.PartPlace(lf.PlaceId)): continue
-            g := ln.guardOf(lf.PlaceId)
-            if g == free.NotSole: continue
-            full := Array<I64>(path.Len() + lf.Path.Len())
+    vt := fr.PlaceValue(k)
+    # (a PartsOnly value's every release - the owners it holds, an R's Q, each one's region first where it is decided
+    # sole, leaving the field empty for the parts under it; its Vecs' live elements; its parts - as an element's)
+    if fr.PartsOnly(vt) {
+        for r in ln.partReleases(vt) {
+            full := Array<I64>(path.Len() + r.Path.Len())
             for j in range path.Len(): full[j] = path[j]
-            for j in range lf.Path.Len(): full[path.Len() + j] = lf.Path[j]
-            out.Push(relPath(g, full, false, not owners))
+            for j in range r.Path.Len(): full[path.Len() + j] = r.Path[j]
+            out.Push(relPath(r.At, full, r.Slot, r.Part, r.Data, r.Count, r.Elem, r.Next))
         }
+        return
+    }
+    for lf in fr.ReleaseLeaves(vt) {
+        if not fr.PartPlace(lf.PlaceId): continue
+        g := ln.guardOf(lf.PlaceId)
+        if g == free.NotSole: continue
+        full := Array<I64>(path.Len() + lf.Path.Len())
+        for j in range path.Len(): full[j] = path[j]
+        for j in range lf.Path.Len(): full[path.Len() + j] = lf.Path[j]
+        out.Push(relPath(g, full, false, true))
     }
 }
 

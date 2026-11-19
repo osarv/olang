@@ -1,0 +1,34 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): an owner local whose elements own storage, changed through a writable reference - a
+# `Vec<Q>` (`Q struct() { a Vec<I64> }`) and a `Vec<Vec<I64>>` local pushed to, then given another value or cleared - is
+# changed in place, so not sole; its let-go releases what its value holds all the same, each Vec's live elements' own
+# storage first, then its buffer (free.partsFree's walks, lower.ownerParts)
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn main() {
+    v Vec<Q>
+    vv Vec<Vec<I64>>
+    t := 0
+    for i in range N {
+        for k in range 4 {
+            q := Q()
+            q.a = Vec<I64>[i + k, k]
+            v.Push(q)
+            vv.Push(Vec<I64>[k, i])
+        }
+        t += v[1].a[0] + vv[2][1]
+        v = Vec<Q>()
+        vv = Vec<Vec<I64>>()
+        for k in range 3 {
+            q := Q()
+            q.a = Vec<I64>[i, k]
+            v.Push(q)
+        }
+        t += v[2].a[1]
+        v.Clear()
+    }
+    io.PutLn($t + " " + $v.Len())!
+}
