@@ -319,6 +319,7 @@
 |   -library           builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why, and the storage built where a view of it is kept (B18)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
+|   -free MODE         early (the default) or late: late reclaims storage only as its scope closes, no let-go freeing early - an oracle for early freeing, whose output must match (B18b)
 | stderr:
 | status 0
 === olang help file
@@ -340,6 +341,7 @@
 |   -continue          with a notebook: goes on past a cell that failed, running the cells after it (B24)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
 |   -runs COUNT        with -bench: runs the program N times, the later runs' output discarded, and gives the run time as the median with its spread (B19b)
+|   -free MODE         early (the default) or late: late reclaims storage only as its scope closes, no let-go freeing early - an oracle for early freeing, whose output must match (B18b)
 | stderr:
 | status 0
 === olang help compile
@@ -378,6 +380,7 @@
 |   -fuzztime SECONDS  with -fuzz: stops fuzzing after SECONDS (B19)
 |   -bench             measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; in scripting mode, its build and run time, user and system time and peak memory (B19b)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
+|   -free MODE         early (the default) or late: late reclaims storage only as its scope closes, no let-go freeing early - an oracle for early freeing, whose output must match (B18b)
 | stderr:
 | status 0
 === olang help run
@@ -400,6 +403,7 @@
 |   -continue          with a notebook: goes on past a cell that failed, running the cells after it (B24)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
 |   -runs COUNT        with -bench: runs the program N times, the later runs' output discarded, and gives the run time as the median with its spread (B19b)
+|   -free MODE         early (the default) or late: late reclaims storage only as its scope closes, no let-go freeing early - an oracle for early freeing, whose output must match (B18b)
 | stderr:
 | status 0
 === olang help format
@@ -503,6 +507,7 @@
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sanitize" | "-target" NAME
 |             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
 |             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-runs" COUNT | "-install" | "-continue"
+|             | "-free" ( "early" | "late" )
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run, and one ending in `.ipynb` a notebook to run (B24); any
@@ -527,6 +532,7 @@
 | | `-html DIR` | doc | B14 |
 | | `-library` | build | §11 X14 |
 | | `-memory` | scripting mode, build, test, run | B18 |
+| | `-free early`, `-free late` | scripting mode, build, test, run | B18b |
 | | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
 | | `-bench` | scripting mode, test, run | B19b |
 | | `-runs COUNT` | scripting mode, run | B19b |

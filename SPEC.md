@@ -8313,6 +8313,7 @@ server    ::= "lsp" | "mcp" | "jupyter"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-runs" COUNT | "-install" | "-continue"
+            | "-free" ( "early" | "late" )
 ```
 
 A word ending in `.olang` in the mode's place is a file to run, and one ending in `.ipynb` a notebook to run (B24); any
@@ -8337,6 +8338,7 @@ beginning with `-` that is no option is an error:
 | `-html DIR` | doc | B14 |
 | `-library` | build | §11 X14 |
 | `-memory` | scripting mode, build, test, run | B18 |
+| `-free early`, `-free late` | scripting mode, build, test, run | B18b |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
 | `-bench` | scripting mode, test, run | B19b |
 | `-runs COUNT` | scripting mode, run | B19b |
@@ -9213,6 +9215,16 @@ a field of a kind it does not follow - or a B18 row of a place kept for no condi
 O8f's (its value changed in place, a value holding it copied), its row ending `: a let-go early freeing does not follow
 (O8f)`, or a row at a call of the program's own code - a removal, a `Put`, a `SetAt` - whose collection's place keeps
 what it lets go of for a reason in the library's code. A line counts the gaps before B18's count of places.
+
+**B18b (early freeing off).** `-free late` builds the program with early freeing (O8d, O8e, O8f) off: storage is
+reclaimed only as its scope closes (O2b) - no let-go frees what it lets go of, no collection's growth or removal puts
+storage back, no generational instance is reclaimed early. Destructors run where they run in any build (O15): only
+when storage is reclaimed changes, so a program prints under `-free late` what it prints built as usual, and needs at
+most the memory a scope's whole life holds. It is the oracle reviews compare a build against: early freeing runs no
+code of its own under it, so a read of storage a let-go released wrongly - which the build, `-sanitize` and the
+evaluator, all running the same releases, agree on - shows as an output that differs. `-free early` is the default.
+`-memory` beside `-free late` reports no place as freeing (nothing is decided). A word after `-free` that is neither is
+an error.
 
 **B19 (fuzzing).** `test -fuzz NAME FILE` fuzzes one test of one file: the test NAME names - as a word of B3a's
 names a test, by its target, its target's type or text of its description; naming none, or several, is an error at

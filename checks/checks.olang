@@ -574,6 +574,7 @@ fn earlyfree(r mut report&) ? Failed {
         try r.expect(outOf(dir) == full[i], $p + " output", dir)
         try r.expect(sh(dir, $"env OLANG_EVALUATE=1 \"$OLANG\" -define N=" + $small[i] + " " + $p + ".olang > out.txt 2>&1") == 0, $p + " interpreted", dir)
         try r.expect(outOf(dir) == part[i], $p + " interpreted output", dir)
+        try late(r, dir, p, small[i], part[i])
         try split(r, dir, p, full[i])
     }
 }
@@ -612,6 +613,7 @@ fn freeing(r mut report&) ? Failed {
         try r.expect(outOf(dir) == full[i], $p + " output", dir)
         try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 " + $p + ".olang > out.txt 2>&1") == 0, $p + " interpreted", dir)
         try r.expect(outOf(dir) == part[i], $p + " interpreted output", dir)
+        try late(r, dir, p, "200", part[i])
     }
     # (threads reserve address space of their own: these read their own growth, or their peak)
     try r.expect(sh(dir, "\"$OLANG\" -check joins.olang > out.txt 2>&1") == 0, "joins", dir)
@@ -639,6 +641,16 @@ fn freeing(r mut report&) ? Failed {
     o := outOf(dir)
     try r.expect(o.Contains("gaps.olang:8:9: memory: 'rows[i % 10]' keeps what it lets go of until main's scope closes: a let-go early freeing does not follow (O8f)"), "no row for the element", dir)
     try r.expect(o.Contains("error[B18]: 2 let-goes early freeing does not follow (O8f)"), "no B18 error", dir)
+}
+
+# B18b: an oracle that runs no freeing code - the program built at size N as usual and built with early freeing off
+# (-free late, every let-go kept until its scope closes) prints the same, what the evaluator prints there; memory
+# limits apply only to the usual build
+fn late(r mut report&, dir String&, p String&, n String&, want String&) ? Failed {
+    try r.expect(sh(dir, $"\"$OLANG\" -define N=" + $n + " " + $p + ".olang > out.txt 2>&1") == 0, $p + " built at " + $n, dir)
+    try r.expect(outOf(dir) == want, $p + " output built at " + $n, dir)
+    try r.expect(sh(dir, $"\"$OLANG\" -free late -define N=" + $n + " " + $p + ".olang > out.txt 2>&1") == 0, $p + " -free late", dir)
+    try r.expect(outOf(dir) == want, $p + " -free late output differs from the build's", dir)
 }
 
 # wholeprog 2.1: an earlyfree program's code as a module of its own (splitlib, its main named Run), the root only

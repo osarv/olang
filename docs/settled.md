@@ -941,7 +941,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   global or element, a removal, a `Put` or `SetAt` replacing, a turn left, a destructor value ended; a place keeps only
   for a condition (not made for it, kept elsewhere, a view in use, a task or C calling back, a destructor to run) or a
   function value nothing of which is followed and not `pure`. A let-go the compiler does not follow is a gap:
-  `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. Built 2026-11-15:
+  `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. **The oracle, `-free late` (B18b, 2026-11-19, mine):** a build with early freeing off (no
+  root decisions: every place keeps until its scope closes); its output must equal the usual build's - checks'
+  earlyfree and freeing compare both at a small size, and reviews run their probes both ways, since the build,
+  `-sanitize` and the evaluator share the releases and agree on a wrong one (review5 F1). Built 2026-11-15:
   text and array locals and globals are places (`s = s + $i`: 850 MB to 13 MB), an immut array replaced whole (a slice
   of its old value had read the new), a task whose callee builds nothing given no stand-ins (oann's joinleak), the
   joiner sharing its pool at each join, a temporary only a call needs built in the block (oann's tempref); round 2: a
