@@ -1,0 +1,30 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): a Vec's element holding a struct with a Vec field given a local through SetAt - at its
+# last use (moved into the argument) and read after it (copied) - and an array filled with copies of one: a copy builds
+# the field's value as a store into its place does (lower.ownerField), and the statement's read of the local is no view
+# in use when the old element is let go (free.copiedArg); each kept the owner place before
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn main() {
+    q0 := Q()
+    q0.a = Vec<I64>[1, 1]
+    v Vec<Q>
+    for _ in range 10: v.Push(q0)
+    u := Array<Q>(10, q0)
+    w Vec<Q>
+    for x in u: w.Push(x)
+    t := 0
+    for i in range N {
+        p := Q()
+        p.a = Vec<I64>[i, i]
+        v[i % 10] = p
+        r := Q()
+        r.a = Vec<I64>[i, i + 1]
+        w[i % 10] = r
+        t += v[i % 10].a[1] + w[i % 10].a[1] + r.a[0]
+    }
+    io.PutLn($t + " " + $v[3].a.Len() + " " + $q0.a[0])!
+}
