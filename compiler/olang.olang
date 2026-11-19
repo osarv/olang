@@ -139,14 +139,15 @@ ModeWhat Array<String&> = Array<String&>[
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
 OptWords Array<String&> = Array<String&>["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
-    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps", "-asm", "-ir", "-bench", "-install", "-continue", "-checked", "-runs"]
+    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps", "-asm", "-ir", "-bench", "-install", "-continue", "-checked", "-runs", "-free"]
 OptValues Array<String&> = Array<String&>["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS", "", "", ""
     ""
     ""
     ""
     ""
-    "COUNT"]
-OptModes Array<I64> = Array<I64>[12310, 31, 31, 31, 1887, 42847, 42847, 2107, 41055, 256, 2, 27, 8, 8, 64, 64, 64, 25, 32768, 17, 32799, 17]
+    "COUNT"
+    "MODE"]
+OptModes Array<I64> = Array<I64>[12310, 31, 31, 31, 1887, 42847, 42847, 2107, 41055, 256, 2, 27, 8, 8, 64, 64, 64, 25, 32768, 17, 32799, 17, 27]
 OptWhat Array<String&> = Array<String&>[
     "writes the executable, the object, bindgen's declarations, profile's flame graph or run's notebook to PATH (B3h, X16, B20, B24)"
     "builds unoptimized, with debug information, indexes, divisions and shifts checked (B2c, B2e, E16g)"
@@ -170,6 +171,7 @@ OptWhat Array<String&> = Array<String&>[
     "with a notebook: goes on past a cell that failed, running the cells after it (B24)"
     "builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)"
     "with -bench: runs the program N times, the later runs' output discarded, and gives the run time as the median with its spread (B19b)"
+    "early (the default) or late: late reclaims storage only as its scope closes, no let-go freeing early - an oracle for early freeing, whose output must match (B18b)"
 ]
 
 fn modeName(m I64) String { return "scripting mode" if m == Run else $ModeWords[m] }
@@ -315,6 +317,10 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
             if o == 18: cl.Install = true
             if o == 19: cl.Continue = true
             if o == 20: c.Checked = true
+            if o == 22 {
+                if v != "early" and v != "late": try usage(d, msgs.FreeNotMode(v))
+                c.Late = v == "late"
+            }
             if o == 21 {
                 n := try v.ParseInt(10) catch default -1
                 if n < 1: try usage(d, msgs.RunsNotNumber(v))
@@ -1300,7 +1306,8 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
     fr.Tests = cfg.Tests
     fr.Alone = alone
     fr.Keeps = parts
-    fr.Decide(sc.Plans, root)
+    # B18b: -free late decides nothing - every place keeps until its scope closes, as a module compiled on its own does
+    fr.Decide(sc.Plans, -1 if cfg.Late else root)
     return fr
 }
 

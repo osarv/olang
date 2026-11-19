@@ -114,6 +114,7 @@ type Config struct() {
     San Bool = false
     Memory Bool = false # -memory: the early-free report printed after the build (B18)
     MemoryCheck Bool = false    # -check beside -memory: a let-go early freeing does not follow fails the build (B18a)
+    Late Bool = false   # -free late: nothing reclaimed before its scope closes - early freeing off, the reviews' oracle (B18b)
     Library Bool = false    # -library: a shared library of the export fns, and its C header (X14)
     Cell Bool = false       # B22: a session's cell - a shared object the cell worker loads, without the runtime (cells.olang)
     Fuzz String& = ""   # -fuzz NAME: the test fuzzed, built with libFuzzer (B19); "" for none
@@ -227,7 +228,7 @@ fn (c Config&) paint(code String&, text String&) String {
 # ".race", ".debug", ".quick", ".san" - which modes an object or a binary was built for, for a reader (its hash says it
 # anyway)
 fn (c Config&) modeSuffix() String {
-    return $(".race" if c.Race else "") + $(".debug" if c.Debug else "") + $(".quick" if c.Quick else "") + $(".san" if c.San else "") + $(".lib" if c.Library else "") + $(".cell" if c.Cell else "") + $(".fuzz" if c.Fuzz != "" else "") + $(".prof" if c.Profile else "") + $(".listing" if c.Listing else "") + $(".bench" if c.Bench else "") + $(".checked" if c.Checked else "")
+    return $(".race" if c.Race else "") + $(".debug" if c.Debug else "") + $(".quick" if c.Quick else "") + $(".san" if c.San else "") + $(".lib" if c.Library else "") + $(".cell" if c.Cell else "") + $(".fuzz" if c.Fuzz != "" else "") + $(".prof" if c.Profile else "") + $(".listing" if c.Listing else "") + $(".bench" if c.Bench else "") + $(".checked" if c.Checked else "") + $(".late" if c.Late else "")
 }
 
 # what every function of the build carries (B12): the target's CPU and features, and in a profile build (B20) a frame
