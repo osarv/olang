@@ -1,0 +1,25 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, review4's c1 `keep`): a Vec of run-time arrays of plain elements - each element's array
+# a part place's value (free.elemArray), built in a part region, released alone where the element is given another
+# (`v[i] = w`) or where the Vec's let-go walks its live elements; and a Vec pushed to
+# only, then given another value (its walk the one let-go of its elements' place: a Vec<String> as well)
+N I64 = 400000
+
+fn main() {
+    keep Vec<Array<I64>>
+    texts Vec<String>
+    t := 0
+    for i in range N {
+        w := Array<I64>(2, i)
+        keep.Push(w)
+        texts.Push("x" + $(i % 10))
+        keep[0] = Array<I64>(3, i + 1)
+        t += keep[keep.Len() - 1][1] + keep[0][2] + texts[texts.Len() - 1].Len()
+        if keep.Len() > 6 {
+            keep = Vec<Array<I64>>()
+            texts = Vec<String>()
+        }
+    }
+    io.PutLn($t + " " + $keep.Len())!
+}

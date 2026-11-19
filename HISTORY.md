@@ -40005,3 +40005,20 @@ its buffer, its count is its length), so the Vec's walk of its live elements can
 its Qs' parts. Closing that needs element arrays as part places of their own - a walk counting by length, a split copy
 at every store into such an element, views judged against it - a round of its own, no language question
 (docs/freeing.md, gap 22's log).
+
+## 2026-11-19: freeing - a Vec of run-time arrays, and a Vec pushed to only (O8f, B18a; mine; wt-arrelems)
+
+Toward review4's c1 `keep` (`Vec<Array<Q>>`). Taking it apart, even `Vec<Array<I64>>` and `Vec<String>` failed
+`-memory -check` when the Vec is only pushed to and then given another value (`keep = Vec<...>()`), growing 33-65 MB at
+4,000,000 turns: the owner local keeps for its change in place (RInPlace) and frees through its parts only where
+everything its let-go releases is sole (`partsFree`), and the element place had no let-go but the owner's walk, which
+was judged for views only - so it was never decided sole (condition 5: a place let go of). Two changes. An array's
+elements that are run-time arrays of plain elements are a part place of their own, by type, as text elements are a slot
+place (`free.elemArray`; `PartPlace` takes a place with no field for them): each value built in a part region, released
+alone where an element is given another (`lower.releases`), and a Vec's buffer of them walked at its let-go, each live
+element's array released (`arrayBuffer`, a `VecWalk` whose `Elem` is the buffer's type, `PartsLet`,
+`lower.partReleases`). And a walk's let-go of a Vec's live elements (goParts' `WalkIn`) counts as a let-go of their
+place for the decision (`partWalked`), though the report and the views still judge it as the owner's. Measured at
+4,000,000 turns: `Vec<Array<I64>>` 64.8 MB to 12.9 MB, `Vec<String>` 33.4 MB to 13.0 MB, flat from 400,000. Fixture:
+checks' freeing arrayelems (master's build runs out of memory under 8 MB).
+

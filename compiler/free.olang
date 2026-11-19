@@ -325,6 +325,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # (review5) by body: the places it lets go of through a walk of a Vec's live elements (goParts, an element's parts) -
     # a let-go a view of that Vec's buffer is in use across too, since the walk leaves the buffer as it is (bufReach)
     walkLets Vec<mut Vec<I64>&>
+    partWalked Vec<I64>                     # O8f (c1's keep): the places an owner's let-go walks (goParts): the live elements of its Vecs
     bufReachAt Map<I64, Vec<I64>>   # bufReach by buffer place
     # docs/fnvalues.md 4.6, item (3): by body, its calls through a function parameter it never assigns, composed at each
     # call by the argument given - the parameters (bit p) a call through which may let go (letsVia), those of them given
@@ -589,6 +590,12 @@ fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
             }
             # (O8f: text elements - each value built in slots, freed alone where an element is given another)
             if not cand and f.arrayCand(vt) and f.slotText(vt) {
+                cand = true
+                ar = true
+            }
+            # (O8f: run-time arrays of plain elements - a Vec<Array<I64>>'s - each value built in a part region,
+            # released alone where an element is given another or its Vec's walk lets go of it)
+            if not cand and f.arrayCand(vt) and f.elemArray(vt) {
                 cand = true
                 ar = true
             }
@@ -3529,6 +3536,10 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
         return
     }
     if w.quiet > 0: return
+    # (O8f: a walk's let-go of a Vec's live elements, where its owner is not decided sole, is a let-go of their place -
+    # condition 5's, though the report and the views judge it as the owner's: a Vec<String> or Vec<Array<I64>> pushed to
+    # and given another value)
+    if viewsOnly and via == WalkIn and k >= 0: addTo(f.partWalked, k)
     w.goVia.Push(via)
     w.goWalkTy.Push(walkTy)
     w.goPlace.Push(k)
@@ -5624,6 +5635,7 @@ fn (f mut Free&) decide() {
     for g in f.goes {
         if g.Kind != LCall and g.PlaceId >= 0 and not (g.Kind == LLeaf and f.prelude[g.Body] and not f.PartPlace(g.PlaceId)) { letsHere[g.PlaceId] = true }
     }
+    for k in f.partWalked: letsHere[k] = true
     for k in range n {
         if f.tasks { f.keep(k, RTask, -1, source.Span(0, 0), "a task can reach it: nothing is freed early where a program has tasks") }
         # C may call an export fn (X12) from a thread of its own - one it is given (X13), or any of a library's (X14) -
@@ -6377,8 +6389,29 @@ fn (f mut Free&) SlotPlace(k I64) Bool {
 # part region. And an owner's release reads an anchor in a part region as part of the region that is a kid of
 # (__olang_region_home): its growth's buffers go with it. A property of the place's type alone
 fn (f mut Free&) PartPlace(k I64) Bool {
-    if k < 0 or k >= f.keyField.Len() or f.keyField[k] < 0 or not f.arr[k] or f.owner[k] or f.handle[k]: return false
+    if k < 0 or k >= f.keyField.Len() or f.keyField[k] < -1 or not f.arr[k] or f.owner[k] or f.handle[k]: return false
+    # (an array's run-time array elements of plain elements: by their type alone, every array of them - elemArray)
+    if f.keyField[k] == -1: return f.elemArray(f.valTy[k])
     return not f.SlotPlace(k)
+}
+
+# O8f (c1's keep): whether a value of type ty, an array's element, is a run-time array of plain elements that is no
+# text - a Vec<Array<I64>>'s element: each value of its element place built in a part region (PartPlace), so that a
+# let-go of the element, or a walk of its Vec's live elements, releases that array alone
+fn (f mut Free&) elemArray(ty types.TypeId) Bool {
+    t := f.T()
+    r := t.Repr(ty)
+    if t.KindOf(r) != types.Kind.Array or not t.OwnedPart(ty) or f.slotText(ty): return false
+    el := t.Elem(r)
+    return not t.HoldsRefs(el) and not t.OwnsParts(el) and not t.OwnedPart(el)
+}
+
+# O8f (c1's keep): whether field i of struct type r is the prelude Vec's buffer of run-time arrays whose element place is
+# a part place (elemArray): its let-go releases each live element's array before the buffer goes
+fn (f mut Free&) arrayBuffer(r types.TypeId, i I64) Bool {
+    d, _ := f.VecFields(r)
+    if d != i: return false
+    return f.PartPlace(f.placeKey(f.T().Items(f.T().Fields(r))[i], -1))
 }
 
 # O8f: whether all the storage a value of type ty owns is held in part places (PartPlace) - arrays of plain elements (a
@@ -6410,7 +6443,7 @@ fn (f mut Free&) partsField(r types.TypeId, i I64, ft types.TypeId) Bool {
         el := t.Elem(t.Repr(ft))
         if not f.PartPlace(f.placeKey(r, i)): return false
         if not t.OwnedPart(el) and not t.OwnsParts(el): return true
-        return f.textBuffer(r, i) >= 0 or f.nestedBuffer(r, i) or f.entryBuffer(r, i)
+        return f.textBuffer(r, i) >= 0 or f.nestedBuffer(r, i) or f.entryBuffer(r, i) or f.arrayBuffer(r, i)
     }
     return f.PartsOnly(ft)
 }
@@ -6508,7 +6541,7 @@ fn (f mut Free&) VecFields(ty types.TypeId) I64, I64 {
 # O8f (gap 17): a Vec a PartsOnly value holds whose live elements own storage - the fields reaching it from the value,
 # its buffer's and count's fields, and what a let-go of the value releases of each live element: its slot, into the
 # text element place Texts (a Vec of text), or the parts of an element of type Elem (a Vec of Vecs, a Map's entries;
-# Texts -1). A Map's slots below its count are live where their link (field Next) is -1 or more; -1 for a Vec
+# Texts -1), or - Elem the buffer's own array type - each element's array (a Vec<Array<I64>>, arrayBuffer). A Map's slots below its count are live where their link (field Next) is -1 or more; -1 for a Vec
 type VecWalk struct(Path Array<I64>, Data I64, Count I64, Texts I64, Elem types.TypeId, Next I64 = -1) {
     Path
     Data
@@ -6658,6 +6691,11 @@ fn (f mut Free&) PartsLet(ty types.TypeId, depth I64 = 0, entry Bool = false) Ve
     if entry {
         for lf in f.leaves(ty): addTo(out, lf.PlaceId)
     }
+    # (a Vec<Array<I64>>'s walk: each live element's array, its buffer's element place - arrayBuffer)
+    if f.T().KindOf(f.T().Repr(ty)) == types.Kind.Array {
+        addTo(out, f.placeKey(ty, -1))
+        return out
+    }
     for lf in f.ReleaseLeaves(ty): addTo(out, lf.PlaceId)
     for vw in f.VecWalks(ty) {
         if vw.Texts >= 0: addTo(out, vw.Texts)
@@ -6683,6 +6721,7 @@ fn (f mut Free&) vecWalksAt(ty types.TypeId, path Vec<I64>&, out mut Vec<VecWalk
         q := f.textBuffer(r, i)
         if q >= 0: out.Push(VecWalk(path.ToArray(), i, n, q, types.UnknownT))
         else if f.nestedBuffer(r, i): out.Push(VecWalk(path.ToArray(), i, n, -1, t.Elem(t.Repr(fs[i]))))
+        else if f.arrayBuffer(r, i): out.Push(VecWalk(path.ToArray(), i, n, -1, fs[i]))
         if not f.entryBuffer(r, i): continue
         _, mn, mx := f.MapFields(r)
         out.Push(VecWalk(path.ToArray(), i, mn, -1, t.Elem(t.Repr(fs[i])), mx))

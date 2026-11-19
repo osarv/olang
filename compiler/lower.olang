@@ -1486,6 +1486,12 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
     # text elements, each value its own slot (O8f)
     # (and an element owning storage only in part places - a Vec<I64> - its parts, O8f's gap 17)
     if assign and p == typed.Lvalue.Elem and not fr.SlotPlace(fr.PlaceOf(p)) {
+        # (c1's keep: a run-time array of plain elements, its own part region - free.elemArray)
+        if fr.PartPlace(fr.PlaceOf(p)) {
+            g := ln.guardOf(fr.PlaceOf(p))
+            if g != free.NotSole: out.Push(relPath(g, Array<I64>(0), false, true))
+            return out
+        }
         if not fr.PartsOnly(p.Type()): return out
         return ln.partReleases(p.Type())
     }
@@ -1550,6 +1556,13 @@ fn (ln mut lowering&) partReleases(ty types.TypeId, depth I64 = 0, entry Bool = 
     if entry {
         ln.walkReleases(ty, depth, out)
         for r in ln.leafPaths(ty): out.Push(r)
+        return out
+    }
+    # (c1's keep: a Vec<Array<I64>>'s walk, ty its buffer's type - each live element's array, built in a part region
+    # where its element place is decided sole: free.arrayBuffer)
+    if ln.T.KindOf(ln.T.Repr(ty)) == types.Kind.Array {
+        g := ln.guardOf(fr.ElemPlace(ty))
+        if fr.PartPlace(fr.ElemPlace(ty)) and g != free.NotSole: out.Push(relPath(g, Array<I64>(0), false, true))
         return out
     }
     lvs := fr.ReleaseLeaves(ty)

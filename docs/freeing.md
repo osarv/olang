@@ -454,3 +454,18 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   Vec's live elements cannot release each array's buffer and its Q's parts; closing it needs element arrays as part
   places of their own (a walk kind counting by length, a split copy for Push/SetAt/fill/`v[i] = w`, views judged
   against it) - a round of its own, no language question.
+- 2026-11-19, wt-arrelems (step 1): a Vec of run-time arrays of plain elements and a Vec pushed to only free. An
+  array's run-time array elements of plain elements are a part place by type (`free.elemArray`, `PartPlace` for a place
+  with no field), a Vec's buffer of them walked (`arrayBuffer`, `lower.partReleases`); a walk's let-go of a Vec's live
+  elements is a let-go of their place for condition 5 (`partWalked`) - `Vec<String>` and `Vec<Array<I64>>` pushed to,
+  then given another value, had kept (no let-go of the element place but the walk's). Fixture: checks' freeing
+  arrayelems.
+  **Where to pick up (c1's `keep`, `Vec<Array<Q>>`)**: `elemArray` takes only plain elements. Next: let it take
+  arrays of PartsOnly structs (`Array<Q>`) - the walk of such an element releases each of its own elements' parts first,
+  counting by the array's length (`lower.textWalk` loops over a Vec's `n`; an array's walk needs `Len`), then the array
+  (partReleases for an Array type: an inner walk, then the ReleasePart); a store into such an element builds the array
+  in a part region and each Q's parts split (`lower.elemCopy` for an OwnedPart element whose element is PartsOnly:
+  `splitArray` into a part region); `PartsLet` for it adds the Q's own; probe /tmp/claude-0/ae/k1.olang (c1 cut down).
+  Then (2): review4 a5-a7 (a view local handed to a closure, generator or task in its block - `free.BlockCopy`'s
+  conditions, follow the escape into the holder).
+
