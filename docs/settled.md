@@ -1002,14 +1002,21 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   never a gap. A temporary is lent read-only through its fields (`tempPlaceCall`) only to a call whose value holds no
   reference, or to the call a reference local holding its view only in its own block is declared with
   (`free.BlockCopy`): `x := v[i].a.View()` read, lent to bodies keeping nothing of it, read in a deferred block - At's
-  copy (D9h), where one is made, goes into that block, dead with the local (viewlocals, wt-d9h). Such a local handed on
-  to a closure, a generator or a task (review4 a5-a7) keeps At's copy in the collection's scope, named (RCopied).
+  copy (D9h), where one is made, goes into that block, dead with the local (viewlocals, wt-d9h); so too where the
+  local is captured by a lambda a value local of its block holds and only calls, the lambda's body keeping nothing of
+  the capture (`typed.LocalUses` holds, `free.keepsNone`), or given a task spawned in a join of its block (viewholders,
+  wt-splitfield). Handed to a generator (review4 a6) it keeps At's copy in the collection's scope, named (RCopied).
+  A plain value local declared with a view call's PartsOnly value (`c := v[j]`) has its copy built split
+  (`free.splitLetOf`, `lower.ownersCopy`): its owners keep for RSplit; read after the element is let go of it keeps as
+  a named view (the pass cannot tell lowering's copy from a view local).
   An array's run-time array elements of plain elements or of PartsOnly structs (a `Vec<Array<I64>>`'s, a
   `Vec<Array<Q>>`'s) are a part place by type (`free.elemArray`): each built in a part region, its elements' parts split
   (every copy of such an array, `arraysCopy`), released - its elements' parts first, by its length - where an element is
   given another or the Vec's walk lets it go (`arrayBuffer`); a walk's let-go of a Vec's live
   elements counts as a let-go of their place (`partWalked`), so a `Vec<String>` or `Vec<Array<I64>>` pushed to and
-  given another value frees (arrayelems, wt-arrelems).
+  given another value frees (arrayelems, wt-arrelems). A struct field holding such an array (`S{qs Array<Q>}`) is a
+  split field (`free.SplitField`): its values built split, its let-go releasing its elements' parts by its length, then
+  the array (splitfield, wt-splitfield).
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

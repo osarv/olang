@@ -476,10 +476,22 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   kept for "its elements may hold storage built with it"), where part regions only cost: splitting every copy made c1
   3x worse than master (160 MB against 52 MB at 100,000 turns); now 33 MB. review4/review5's 60 probes print the same
   built, `-free late`, `-sanitize` and interpreted; `-memory -check` changed only for c1 (passes now).
-  **Where to pick up**: c1 still grows (33 MB at 100,000 turns) for two named keeps: `s.qs` (a struct field holding
-  `Array<Q>`: a field array place whose elements own storage, SFail "its elements may hold storage built with it" -
-  could be a part place built split as the element arrays are) and the closure's `x` (O27 placement, named). Then (2):
-  review4 a5-a7 (a view local handed to a closure, generator or task in its block - `free.blockView` refuses EscHard;
-  following needs LocalUses to say which lambda captures the local and that the local holding it stays in the block);
-  Checked on d5f75e912: the freeing and earlyfree scenarios, `make scopesan`, `make quick` (tokens/ast goldens
-  recaptured; compiler/olang.olang and jupyter.olang, OOM-killed beside other builds, pass run alone).
+- 2026-11-19, wt-splitfield: c1's `s.qs` and review4's a5, a7. A struct field holding a run-time array of PartsOnly
+  structs (`S{qs Array<Q>}`) is a split field (`free.SplitField`): a store into it is a fresh value, built split as
+  lowering's partCopy already built it (the array in the place's part region, each element's parts in part regions of
+  their own where sole), and its let-go walks the old array by its length releasing each element's parts (relPath Data
+  -2) before the array, the free pass judging the elements' part places there (`PartsLet`). c1 at 400,000 turns 128 MB
+  to 12.7 MB, passing `-memory -check` (its closure's `x` stays named, O27). A view local captured by a lambda a value
+  local of its block holds and only calls (`f := fn() I64 { return r[1] }`): `typed.LocalUses` records the capture as
+  a hold (`EscBesides`, HoldAt/By/Body/Inner), and `free.blockView` accepts it where the holder lives no longer than
+  the local (`holderStays`) and the lambda's body keeps nothing of its Capture local (`keepsNone`, recursively); given
+  a task spawned in a join of its block (GiveAt, P1a) likewise. `c := v[j]` (a plain value local of a PartsOnly view
+  value) has its copy split (`free.splitLetOf`, `lower.ownersCopy`): owners keep for RSplit, and a read after the
+  element's let-go is a named view keep. Fixtures: checks' freeing splitfield, viewholders (master: 322 MB, 103 MB).
+  **Where to pick up**: review4 a6 - a view handed to a generator (`g := each(v[i].a.View())`) keeps At's copy in the
+  collection's scope (RCopied): no local holds the view, the generator value does; following it needs BlockCopy for a
+  value local declared with a call whose result carries the temporary's view, the holder only lent to bodies keeping
+  nothing (`Next`) and yielding no reference. `c := v[j]` read after the element's let-go keeps as a named view: the pass
+  would need lowering's view-local decision (`lower.viewLocals`' heldSrc) to know the copy is made. A program with tasks
+  still frees nothing early (a7).
+  Checked: (pending)
