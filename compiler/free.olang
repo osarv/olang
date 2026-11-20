@@ -2546,6 +2546,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
     wasSp := w.stmtSp
     w.cur = n
     w.stmtSp = st.Span()
+    if w.Final and w.quiet == 0 and w.F.programCode[w.Id]: w.movedGaps(st)
     match st {
         case typed.Stmt.Let(sp, l, x) {
             w.declLoops.Put(I64(l), w.loops)
@@ -3243,6 +3244,19 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
         w.copyLeaves(lvs, cm, sp)
         return o
     }
+    # (gap 22: a value moved out of a place of its type that is no candidate - the prelude's shifts, Insert's and
+    # TakeAt's `v.data[k].occupy(v.data[k + 1].vacate())` - takes each leaf's value with it: moved out of the same leaf
+    # place, as made()'s SMove. What it was moved out of, if it goes on, is a dropped or ended value - DroppedLeaves,
+    # EndsMoved - or a gap the report names, movedGaps)
+    tk := takenOf(x)
+    if tk != null and f.placeOfPlace(tk) < 0 and t.Same(t.Repr(tk.Type()), t.Repr(ty)) {
+        if w.Final and w.quiet == 0 {
+            for lf in lvs {
+                if not f.PartPlace(lf.PlaceId): f.stores.Push(store(lf.PlaceId, w.Id, w.body().File, sp, SMove, lf.PlaceId, -1, x, null))
+            }
+        }
+        return o
+    }
     c := typed.Call.Of(x)
     b2 := typed.CalleeBody(c) if c != null else -1
     if b2 >= 0 and f.Bodies[b2].Root != null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
@@ -3271,6 +3285,113 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
         }
     }
     return o
+}
+
+# ---- values moved out of a collection that nothing lets go of (gap 22) ----
+
+# O8f: a value a call moves out of a collection (Pop, TakeAt - a result that is a value moved out of a place, holding
+# leaves) is let go of where a statement drops it (DroppedMove, DroppedLeaves), where a local holding it ends with its
+# block (EndsMoved), or where it is stored or handed back (judged there); anywhere else - an argument, an operand, a
+# local that outlives none of those - nothing releases it: a row of the report (gap)
+fn (w mut walker&) movedGaps(st typed.Stmt&) {
+    match st {
+        case typed.Stmt.Let(_, l, x) { w.movedIn(x, w.F.EndsLocal(w.Id, I64(l))) }
+        case typed.Stmt.Eval(_, x) { w.movedIn(x, true) }
+        case typed.Stmt.Assign(_, p, x) {
+            w.movedPlace(p)
+            w.movedIn(x, p != typed.Lvalue.Local)
+        }
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { w.movedIn(x, true) }
+        case typed.Stmt.If(_, i) { w.movedIn(i.Test, false) }
+        case typed.Stmt.Assert(_, c, _) { w.movedIn(c, false) }
+        case typed.Stmt.Yield(_, x) { w.movedIn(x, false) }
+        case _ { }
+    }
+}
+
+# whether call c hands back a value moved out of a place, holding leaves
+fn (f mut Free&) movedCall(c typed.Call&, ty types.TypeId) Bool {
+    b2 := typed.CalleeBody(c)
+    if b2 < 0 or f.Bodies[b2].Root == null: return false
+    m := f.mustRes[b2]
+    return (m >= MovBase or m == MovLeaves) and f.leaves(ty).Len() > 0
+}
+
+# the moved values expression x makes that nothing lets go of - x itself let go of where it is (top) - each a gap row
+fn (w mut walker&) movedIn(x typed.Expr?&, top Bool) {
+    if x == null: return
+    match x {
+        case typed.Expr.Call(sp, ty, c) {
+            if not top and w.F.movedCall(c, ty): w.gap(sp, "moves a value out of its collection that nothing here lets go of: drop it, or hold it in a local to its block's end")
+            match c.Target {
+                case typed.Callee.Value(y) { w.movedIn(y, false) }
+                case _ { }
+            }
+            for a in c.Args: w.movedIn(a, false)
+        }
+        case typed.Expr.Try(_, _, t) {
+            w.movedIn(t.X, top)
+            for k in t.Clauses {
+                for d in k.Defaults: w.movedIn(d, false)
+            }
+        }
+        case typed.Expr.Away(_, _, y) { w.movedIn(y, top) }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { w.movedPlace(p) }
+        case typed.Expr.Promote(_, _, pr) { w.movedIn(pr.X, false) }
+        case typed.Expr.Make(_, _, m) {
+            for y in m.Items: w.movedIn(y, false)
+            w.movedIn(m.Length, false)
+        }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for y in args: w.movedIn(y, false)
+        }
+        case typed.Expr.Slice(_, _, sl) {
+            w.movedPlace(sl.Base)
+            w.movedIn(sl.Lo, false)
+            w.movedIn(sl.Hi, false)
+        }
+        case typed.Expr.Cond(_, _, k) {
+            w.movedIn(k.C, false)
+            w.movedIn(k.A, false)
+            w.movedIn(k.B, false)
+        }
+        case typed.Expr.Seq(_, _, q) { w.movedIn(q.X, false) }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms: w.movedIn(a.Value, false)
+        }
+        case typed.Expr.Text(_, _, t) {
+            for pc in t.Pieces {
+                match pc {
+                    case typed.Piece.Render(y) { w.movedIn(y, false) }
+                    case typed.Piece.Lit(_) { }
+                }
+            }
+        }
+        case _ { }
+    }
+}
+
+fn (w mut walker&) movedPlace(p typed.Lvalue&) {
+    match p {
+        case typed.Lvalue.Deref(_, _, r) { w.movedIn(r, false) }
+        case typed.Lvalue.Field(_, _, base, _) { w.movedPlace(base) }
+        case typed.Lvalue.Elem(_, _, e) {
+            w.movedPlace(e.Base)
+            w.movedIn(e.Index, false)
+        }
+        case typed.Lvalue.Payload(_, _, pl) { w.movedPlace(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, _) { w.movedIn(v, false) }
+        case _ { }
+    }
+}
+
+# the place an expression vacates, through what was written in another file - null for any other expression
+fn takenOf(x typed.Expr&) typed.Lvalue?& {
+    return match x {
+        case typed.Expr.Take(_, _, p): p
+        case typed.Expr.Away(_, _, y): takenOf(y)
+        case _: null
+    }
 }
 
 # origins o less the views of (and values moved out of) owner and array places: what a copy leaves behind, owning
@@ -5424,7 +5545,8 @@ fn (w mut walker&) views() {
         # in the statement itself
         # (a destructor walked as a call where its holder lets go - dtorCalls - reads the value it ends: its own body's
         # views are judged in its walk)
-        if kind != LAssign and kind != LLeaf and kind != LYield and kind != LHeld and not f.isDtor(w.goCallee[g]) {
+        # (a drop is the statement's last step - or the block's end: what the statement reads is read before it)
+        if kind != LAssign and kind != LLeaf and kind != LYield and kind != LHeld and kind != LDrop and not f.isDtor(w.goCallee[g]) {
             for i in range readFrom[s], readFrom[s + 1] {
                 q := reads[i]
                 if (k >= 0 and q != k) or not f.unkept(q): continue
