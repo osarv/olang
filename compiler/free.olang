@@ -417,6 +417,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     Tests Bool = false
     dtorOf Map<I64, I64>
     registered Map<I64, Bool>
+    endsOf Map<I64, Map<I64, Vec<I64>>>   # O8f: by body, EndsMoved's locals by their block, once its decisions are final
 }
 
 fn (f mut Free&) T() mut types.Table& { return f.P.T }
@@ -2401,6 +2402,11 @@ fn (w mut walker&) block(bl typed.Block&) {
         if i + 1 < bl.Stmts.Len() and leaves(bl.Stmts[i + 1]): w.lastAt.Push(w.no)
         if w.Final: nums.Push(w.no)
         w.stmt(bl.Stmts[i])
+    }
+    # (gap 22: a value local holding a value moved out of a place to the block's end lets go of its leaves there)
+    for l in w.F.EndsMoved(w.Id, I64(bl.Id), w.Final) {
+        loc := w.body().Locals[l]
+        for lf in w.F.leaves(loc.Ty): w.go(lf.PlaceId, LDrop, loc.Sp, source.Span(0, 0), -1)
     }
     w.closeAt(bl)
     if not w.Final: return
@@ -7289,8 +7295,90 @@ fn (f mut Free&) DroppedMove(c typed.Call&) I64 {
 
 # whether every value local l of body b holds is a value moved out of a place (a must-fact: a vacate's, or a call's
 # handing one back) - what its body hands back as it is, with no copy, where nothing else writes it (lower.movedRets)
-fn (f Free&) MovedLocal(b I64, l I64) Bool {
-    if not f.Done or b < 0 or b >= f.mustLocals.Len() or l < 0 or l >= f.mustLocals[b].Len(): return false
+fn (f Free&) MovedLocal(b I64, l I64) Bool { return f.Done and f.movedLocal(b, l) }
+
+# O8f (gap 22): the value locals block blk of body b ends holding a value moved out of a place (TakeAt's or Pop's result,
+# `x := v.TakeAt(0)!`) - each lets go of its leaves at the block's end (walker.block's LDrop), released there by lowering
+# (lower.endMoved). Final: the walk deciding (or lowering, Done) - the answer kept, so the two agree
+fn (f mut Free&) EndsMoved(b I64, blk I64, final Bool) Vec<I64> {
+    m := f.endsFor(b, final)
+    return try m.Get(blk) catch default Vec<I64>()
+}
+
+# whether value local l of body b is one EndsMoved ends at its block's end (lowering makes no last-use move of it, D9i)
+fn (f mut Free&) EndsLocal(b I64, l I64) Bool {
+    for en in f.endsFor(b, true) {
+        if l in en.Value: return true
+    }
+    return false
+}
+
+fn (f mut Free&) endsFor(b I64, final Bool) Map<I64, Vec<I64>> {
+    if b < 0 or b >= f.Bodies.Len(): return Map<I64, Vec<I64>>()
+    if not final and not f.Done: return f.endsMovedIn(b)
+    if not f.endsOf.Has(b): f.endsOf.Put(b, f.endsMovedIn(b))
+    return try f.endsOf.Get(b) catch default Map<I64, Vec<I64>>()
+}
+
+# EndsMoved's locals of body b by block: in its root, a block statement's, a loop's body, an if's branches (each lowered
+# by lowering's block) - none where a value of the program is registered with a scope (O16), whose destructor, run as
+# the scope closes, could read what the block's end released
+fn (f mut Free&) endsMovedIn(b I64) Map<I64, Vec<I64>> {
+    out Map<I64, Vec<I64>>
+    body := f.Bodies[b]
+    if body.Root == null or f.registered.Len() > 0: return out
+    cands := false
+    for l in range body.Locals.Len() {
+        if f.movedLocal(b, l): cands = true
+    }
+    if not cands: return out
+    u := typed.LocalUses.Uses(f.T(), body)
+    f.endsWalk(b, body.Root!, u, out)
+    return out
+}
+
+# the locals block bl declares at its top level that hold a moved value to its end: nothing after the declaration may
+# leave the block but by its end (typed.RestLeaves), and the block has no deferred code - a holder's drop or a defer
+# runs after its end, and could read the value
+fn (f mut Free&) endsWalk(b I64, bl typed.Block&, u typed.LocalUses&, out mut Map<I64, Vec<I64>>&) {
+    found Vec<I64>
+    deferred := false
+    for st in bl.Stmts {
+        if st == typed.Stmt.Defer: deferred = true
+    }
+    for i in range bl.Stmts.Len() {
+        match bl.Stmts[i] {
+            case typed.Stmt.Let(_, l, _) {
+                if not deferred and f.endsHere(b, I64(l), u) and not typed.RestLeaves(bl.Stmts, i + 1): found.Push(I64(l))
+            }
+            case typed.Stmt.Block(_, b2) { f.endsWalk(b, b2, u, out) }
+            case typed.Stmt.Loop(_, b2, _) { f.endsWalk(b, b2, u, out) }
+            case typed.Stmt.If(_, x) {
+                f.endsWalk(b, x.Then, u, out)
+                if x.Else != null: f.endsWalk(b, x.Else!, u, out)
+            }
+            case _ { }
+        }
+    }
+    if found.Len() > 0: out.Put(I64(bl.Id), found)
+}
+
+# whether value local l of body b holds a moved value with leaves until its block ends: every value it holds one moved
+# out of a place (movedLocal), handed back nowhere, written nowhere, lent nowhere, escaping nowhere but to calls keeping
+# nothing of it, named by no alias
+fn (f mut Free&) endsHere(b I64, l I64, u typed.LocalUses&) Bool {
+    loc := f.Bodies[b].Locals[l]
+    if loc.Kind != typed.LocalKind.Var or f.T().IsRef(loc.Ty) or not f.movedLocal(b, l) or f.leaves(loc.Ty).Len() == 0: return false
+    if u.Ret[l] or u.EscHard[l] or u.WrOther[l] or u.WrScalar[l] or u.Whole[l] or l in u.LendAt or l in u.AliasOf: return false
+    # (a read-only reference to it given a call keeping nothing of it past the call: `x[1]`, `x.a.Len()`)
+    for j in range u.RefAt.Len() {
+        if u.RefAt[j] == l and not f.refsKept.NoneKept(f.T(), f.Bodies, u.RefBody[j], u.RefParam[j]): return false
+    }
+    return true
+}
+
+fn (f Free&) movedLocal(b I64, l I64) Bool {
+    if b < 0 or b >= f.mustLocals.Len() or l < 0 or l >= f.mustLocals[b].Len(): return false
     v := f.mustLocals[b][l]
     return v >= MovBase or v == MovLeaves
 }

@@ -707,6 +707,7 @@ fn (ln mut lowering&) run() {
     ln.readEntryRoots()
     ln.settleViews()
     for s in root!.Stmts: ln.stmt(s)
+    ln.endMoved(root!)
     if ln.dead: return
     # falling off the end
     ctor := match b.Of {
@@ -1756,6 +1757,7 @@ fn (ln mut lowering&) block(bl typed.Block&) {
     if ln.dead: return
     if ln.levels.Len() > 0 and ln.top().Block == bl.Id {
         for s in bl.Stmts: ln.stmt(s)
+        ln.endMoved(bl)
         return
     }
     kind := match ln.B.Blocks[I64(bl.Id)].Kind {
@@ -1765,7 +1767,18 @@ fn (ln mut lowering&) block(bl typed.Block&) {
     }
     ln.openBlock(bl, kind)
     for s in bl.Stmts: ln.stmt(s)
+    ln.endMoved(bl)
     ln.closeBlock()
+}
+
+# O8f (gap 22): what the value locals block bl ends holding a value moved out of a place hold (free.EndsMoved: TakeAt's
+# result held by a local), released as the block's statements end - free's walk let go of their leaves there
+fn (ln mut lowering&) endMoved(bl typed.Block&) {
+    if not ln.freeing or ln.dead: return
+    for l in ln.L.Free!.EndsMoved(I64(ln.B.Id), I64(bl.Id), true) {
+        loc := ln.B.Locals[l]
+        ln.releaseAt(mir.LocalId(I32(l)), ln.leafPaths(loc.Ty), loc.Sp)
+    }
 }
 
 fn (ln mut lowering&) openBlock(bl typed.Block&, kind mir.ScopeKind, errors types.ListId = types.ListId(0)) {
@@ -6048,6 +6061,8 @@ fn (ln mut lowering&) movable(u typed.LocalUses&, l I64, site I64) Bool {
     loc := ln.B.Locals[l]
     if loc.Kind != typed.LocalKind.Var or ln.T.IsRef(loc.Ty) or loc.Unset: return false
     if ln.vl.Has(l) or ln.rvl.Has(l) or ln.noLetCopy.Has(l) or u.Whole[l] or ln.escapes(u, l): return false
+    # (a local ended at its block's end holding a moved value releases it there - free.EndsMoved)
+    if ln.freeing and ln.L.Free!.EndsLocal(I64(ln.B.Id), l): return false
     for j in range u.AliasOf.Len() {
         if u.AliasOf[j] == l: return false
         if (ln.vl.Has(j) or ln.rvl.Has(j)) and u.Init[j] != null and valueRootLocal(u.Init[j]!) == l: return false

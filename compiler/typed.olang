@@ -4707,6 +4707,18 @@ type leaveWalk struct() {
     inner Vec<BlockId>
     normal Bool = false
     ends Bool = false
+    tasks Bool = false   # a join or a task started counts too (RestLeaves)
+}
+
+# O8f (gap 22): whether a statement of ss from i on may leave the block they are in other than by its end - a return, a
+# jump out, a yield, an error passed on - or starts a task (free.EndsMoved: a value local ended at its block's end)
+fn RestLeaves(ss Array<Stmt&>&, i I64) Bool {
+    w := leaveWalk()
+    w.tasks = true
+    for k in range i, ss.Len() {
+        if w.stmtLeaves(ss[k]): return true
+    }
+    return false
 }
 
 # G42: whether every way through b fails - it ends in an error raised or an ending (a noreturn call, an unreachable), or
@@ -4817,9 +4829,9 @@ fn (w mut leaveWalk&) stmtLeaves(s Stmt&) Bool {
         case Stmt.Assert(_, c, _): w.ends and not assertTrue(c)
         case Stmt.Block(_, b): w.openLeaves(b)
         case Stmt.Defer(_, b): w.blockLeaves(b)
-        case Stmt.Join(_, j): (j.Tried and not w.normal and not clausesTakeAll(j.Clauses)) or w.blockLeaves(j.Code) or
+        case Stmt.Join(_, j): w.tasks or (j.Tried and not w.normal and not clausesTakeAll(j.Clauses)) or w.blockLeaves(j.Code) or
                                 w.clausesLeave(j.Clauses)
-        case Stmt.Spawn(_, sp): w.exprLeaves(sp.Task)
+        case Stmt.Spawn(_, sp): w.tasks or w.exprLeaves(sp.Task)
     }
 }
 
