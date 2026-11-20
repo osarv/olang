@@ -40097,3 +40097,21 @@ that does not preserve it (Keeps), means lowering copies, so the local's value i
 Locals handed back (which lowering may keep as views, rvl) and calls viewing more than their arguments (ViewOther) are
 left as they were. Fixture: checks' freeing copyread (its `-memory -check` reports nothing kept; master named the
 element's field). `c` captured by a lambda (a5's `g`) still keeps as a named view.
+
+Then the next shapes review4/review5's probes named, cheapest first. A view call's value given as it is to a by-value
+parameter of a callee that only reads it (Keeps), where the callee's result holds references and a value local holds
+it (review4 b3, `z := filled(v[j], 2)`): the free pass's viewArg needs a result holding no reference, since the result
+may view the argument, so At's copy stayed in the collection's scope. `free.blockArgs` now records such an argument's
+view call too (`viewCallSite`: a body handing back a view of its arguments alone, a value) for a holder local, and the
+pass exempts it from `untracked` and leaves out its `through` (`blockLent`) as for a read-only lend: lowering copies it
+into the holder's block. And lowering's `keepsParts` (Preserves, which free.Keeps asks) refused any parameter with Esc,
+which every read through a method sets (`x.a[0]` gives a read-only reference to At: RefAt, Esc but not EscHard), so a
+callee reading its by-value Q's field was never "only reads". Now an escape only by such references (`lower.refsOnly`:
+no EscHard, no alias closed into it, nothing handed back as a view, each reference given a body keeping none past the
+call - RefsKept.None) is no keeping. That closed review4 b3 and review5 v1, v2, v3, v5 and v6 (`-memory -check`
+passing; each callee letting go of the viewed element through a global gets a copy dead with the statement, its
+window not quiet). A first try that also refused EscOwn, GiveAt and the like when Esc was false made Push's parameter
+"kept" and broke every fixture's `v.Push(q)`; the extra conditions apply only where Esc is set. Fixture: checks'
+freeing argholders. Still named among the probes: a callee handing back its parameter's field (b1's `giveField`, Ret),
+stores (c2, g2: `v[i] = plus(v[i], i)`, `v[i].a = v[i].a`), a view chain read in an expression (e1), tasks (h8, n1,
+t1), `?&`/`any` holders (t2), a Map's own value put (v8, v9), and the shapes behind g1, j1, k1, o1, o2, ov1, s3.

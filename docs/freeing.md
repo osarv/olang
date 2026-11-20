@@ -498,5 +498,12 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   Then `c := v[j]` read after the element is replaced: where an argument the view call views is rooted at a local
   the body writes, stores or lends to a body changing it, lowering surely copies (`lower.heldViews`' heldSrc fails),
   and the pass takes the copy for no view (`free.unheldViews` in `copiedView`); fixture copyread (`-memory -check`: 0
-  kept). **Where to pick up**: `c` captured by a lambda (a5's `g`) still keeps as a named view; a program with tasks
-  still frees nothing early (a7). Steps 1-2 committed; the freeing/earlyfree scenarios run on step 1 only so far.
+  kept). Then a view call's value given by value to a callee only reading it, its result held by a local
+  (`z := filled(v[j], 2)`, review4 b3): BlockCopy through by-value parameters (`free.viewCallSite`, `blockLent`); and
+  Preserves takes an escape only by read-only references given calls keeping none (`x.a[0]`) as no keeping
+  (`lower.refsOnly`) - review5 v1, v2, v3, v5, v6 pass `-memory -check`; fixture argholders.
+  **Where to pick up**: `c` captured by a lambda (a5's `g`) keeps as a named view - the capture views c's own storage,
+  which is `Q.a`'s place by type (places by path would tell them apart); a callee handing back its parameter's field
+  (b1's `giveField`: BlockCopy needs "kept only in the result" for a by-value parameter, not Preserves); stores of an
+  element's own value (c2, g2); a view chain read in an expression (e1); `?&`/`any` holders (t2); a Map's own value put
+  (v8, v9); tasks (a7, h8, n1, t1) still free nothing early. Steps 1-3 committed; scenarios run on step 1 only so far.

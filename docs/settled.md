@@ -1008,7 +1008,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   wt-splitfield). The same holds for a value local holding the view through what its declaration's call hands back - a
   generator walking it (`g := each(v[i].a.View())`, review4 a6), its for-in walk too - where it is lent only to bodies
   keeping nothing of it and the call keeps the view only in its result, a generator's Next only in its frame, yielding
-  no reference (`free.blockHolder`, `keptInResult`; genviews, wt-genview).
+  no reference (`free.blockHolder`, `keptInResult`; genviews, wt-genview) - and for a view call's value given as it is
+  to a by-value parameter its callee only reads, whose result the local holds (`z := filled(v[j], 2)`; argholders). A
+  callee only reads a parameter (`Preserves`) also where its only escape is read-only references to it given calls
+  keeping none past the call (`x.a[0]`, `x.a.Len()`: `lower.refsOnly`, typed.RefsKept.None).
   A plain value local declared with a view call's PartsOnly value (`c := v[j]`) has its copy built split
   (`free.splitLetOf`, `lower.ownersCopy`): its owners keep for RSplit; where what the call views is a local something
   writes, stores or lends to a body changing it while the local lives, lowering surely copies, and the pass takes the

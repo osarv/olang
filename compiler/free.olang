@@ -2934,7 +2934,14 @@ fn (f mut Free&) blockArgs(b I64, i I64, k typed.Call&, depth I64) {
     if typed.CalleeBody(k) < 0 or depth > 3: return
     ps := t.Items(t.Params(f.Bodies[typed.CalleeBody(k)].Ty))
     for j in range k.Args.Len().Min(ps.Len()) {
-        if not t.IsRef(ps[j]) or (t.PermOf(ps[j]) & types.Writable) != 0: continue
+        if not t.IsRef(ps[j]) {
+            # (a view call's value given as it is to a by-value parameter the callee only reads - its result may view it,
+            # held by the local: `z := filled(v[j], 2)`)
+            s := f.viewCallSite(k.Args[j])
+            if s >= 0 and f.Keeps != null and f.Keeps!(typed.CalleeBody(k), j): f.blockAt.Put(pair.Pair(b, s), i)
+            continue
+        }
+        if (t.PermOf(ps[j]) & types.Writable) != 0: continue
         s := borrowedTemp(k.Args[j])
         if s >= 0: f.blockAt.Put(pair.Pair(b, s), i)
         k2 := initCall(k.Args[j]) if s < 0 else null
@@ -2995,6 +3002,15 @@ fn (f mut Free&) genFrameKeeps(lb I64, caps Array<typed.Capture&>&, par I64) Boo
         return true
     }
     return false
+}
+
+# the site of the call a value is, through Away, where it hands back a view of its arguments alone (D9h, a value
+# holding storage: lower.viewCall), -1 for any other value
+fn (f mut Free&) viewCallSite(x typed.Expr&) I64 {
+    c := initCall(x)
+    if c == null or c.Site < typed.SiteId(0) or typed.CalleeBody(c) < 0 or f.T().IsRef(x.Type()): return -1
+    v := f.viewsOf(typed.CalleeBody(c))
+    return I64(c.Site) if v > 0 and (v & typed.ViewOther) == 0 else -1
 }
 
 # the local a value reads as it is (through Away), -1 for any other value
@@ -4403,6 +4419,11 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         wasP, wasE := w.preservedArg, w.exemptSite
         if copied and f.Keeps != null and f.Keeps!(b2, j): w.preservedArg = copySiteOf(a)
         if viewArg: w.exemptSite = copiedCall(a)
+        # (or one a value local holding the call's value in its own block is declared with: lowering copies it into
+        # that block, dead with the local - BlockCopy - no value a store gives a place, no view of the collection's)
+        if not copied and not unknown and not viewArg and I64(c.Site) != w.taskSite and j < ps.Len() and not w.T().IsRef(ps[j]) and f.BlockCopy(w.Id, f.viewCallSite(a)) >= 0 {
+            w.exemptSite = f.viewCallSite(a)
+        }
         # (c1's keep: a by-value argument's own copy (D9b) of an element array of PartsOnly values, its elements' parts
         # in part regions - lower.arraysCopy - as the store it is made for builds them)
         wasS := w.splitArr
@@ -4448,7 +4469,8 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         # into that block wherever anything in the body may change what it views - a copy no let-go reaches - and reads
         # it in place only where nothing in the body changes that storage at all (heldSrc), so no let-go here releases
         # what the local names either way: what it views is no place of the collection's)
-        if not lent or f.BlockCopy(w.Id, I64(c.Site)) < 0 {
+        blockLent := (lent or I64(c.Site) == w.exemptSite) and f.BlockCopy(w.Id, I64(c.Site)) >= 0
+        if not blockLent {
             for y in f.resFrom[b2]: f.through(y, args, out)
         }
         # a constructor's stores are into the instance it makes: its candidate leaves hold them - places of their own,

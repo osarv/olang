@@ -6492,11 +6492,23 @@ fn (lw mut Lowerer&) keepsNothing(b typed.Body&, k I64) Bool {
     return true
 }
 
+# whether local p's escape (Esc) is only by read-only references to it given calls - `x.a[0]`, `x.a.Len()` - each to a
+# body keeping none past the call (typed.RefsKept.None): no other escape (EscHard) and no local aliasing it, whose
+# escapes are closed into it unrecorded
+fn (lw mut Lowerer&) refsOnly(u typed.LocalUses&, p I64) Bool {
+    if u.EscHard[p] or u.RetView[p] or u.RetRefs[p] or p in u.AliasOf: return false
+    for j in range u.RefAt.Len() {
+        if u.RefAt[j] == p and not lw.keepsNoRef(u.RefBody[j], u.RefParam[j]): return false
+    }
+    return true
+}
+
 fn (lw mut Lowerer&) keepsParts(b typed.Body&, k I64) Bool {
     if b.Root == null or k >= b.Params.Len(): return false
     u := typed.LocalUses.Uses(lw.P.T, b)
     p := I64(b.Params[k])
-    if u.WrOther[p] or u.Whole[p] or u.Esc[p] or u.Ret[p]: return false
+    if u.WrOther[p] or u.Whole[p] or u.Ret[p]: return false
+    if u.Esc[p] and not lw.refsOnly(u, p): return false
     for j in range u.StoreAt.Len() {
         if u.StoreAt[j] == p: return false
     }

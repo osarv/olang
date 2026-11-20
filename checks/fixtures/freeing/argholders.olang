@@ -1,0 +1,38 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, review4's b3): a view call's value given as it is to a by-value parameter of a callee
+# that only reads it, whose result may still hold views (`z := filled(v[j], 2)`), the element replaced before the
+# result is read: At's copy (D9h) is made in the block of the value local holding the result (free.BlockCopy through
+# blockArgs' by-value parameters), dead with it - not in the collection's scope
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn filled(x Q, n I64) Array<Q> { return Array<Q>(n, x) }
+
+fn firsts(x Q, n I64) Array<I64> { return Array<I64>(n, x.a[0]) }
+
+fn main() {
+    v Vec<Q>
+    for k in range 4 {
+        q := Q()
+        q.a = Vec<I64>[k, k + 1]
+        v.Push(q)
+    }
+    t := 0
+    for i in range N {
+        z := filled(v[(i + 1) % 4], 2)
+        p := Q()
+        p.a = Vec<I64>[i, i]
+        v[(i + 1) % 4] = p
+        t += z[1].a[1]
+        {
+            y := firsts(v[i % 4], 3)
+            w := Q()
+            w.a = Vec<I64>[i + 1, i + 2]
+            v[i % 4] = w
+            t += y[0] + y[2]
+        }
+    }
+    io.PutLn($t + " " + $v[1].a.Len())!
+}
