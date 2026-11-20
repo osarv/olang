@@ -1,0 +1,41 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, review4's e1): a struct holding a split field and a Vec (`S{qs Array<Q>, b Vec<I64>}`)
+# as a Vec's element - PartsOnly (free.partsField: a split field walked by its length, VecWalk's SplitCount), its copy
+# split part by part (free.splitOwner takes a part place leaf); a run-time fill of a local stored into a split field -
+# the fill holds each element's own copy, so its item lives where it is declared, not where the fill goes (the scope
+# pass's valMake, which had built `base` in main's scope, a Vec a turn); and a view chain read in an expression
+# (`v[i].qs[2].a[0]`: free.readCall follows elements as lowering's readPlace does)
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+type S struct() { qs Array<Q>, b Vec<I64> }
+
+fn S.Mk(n I64, base Q) S {
+    s := S()
+    s.qs = Array<Q>(n, base)
+    s.b = Vec<I64>[n]
+    return s
+}
+
+fn main() {
+    n := 4
+    s := S()
+    v Vec<S>
+    for _ in range 4: v.Push(S.Mk(n, Q()))
+    t := 0
+    for i in range N {
+        base := Q()
+        base.a = Vec<I64>[i, i + 1]
+        s.qs = Array<Q>(n, base)
+        q := Q()
+        q.a = Vec<I64>[i, 3]
+        s.qs[i % n] = q
+        v[i % 4] = S.Mk(n, base)
+        w := Q()
+        w.a = Vec<I64>[5, i]
+        v[(i + 1) % 4].qs[1] = w
+        t += s.qs[(i + 1) % n].a[1] + s.qs[i % n].a[1] + v[i % 4].qs[2].a[0] + v[(i + 1) % 4].qs[1].a[1] + v[(i + 1) % 4].qs[0].a.Len()
+    }
+    io.PutLn($t)!
+}

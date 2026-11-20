@@ -3350,7 +3350,7 @@ fn (w mut walker&) copyLeaves(lvs Vec<leaf>&, cm typed.Expr&, sp source.Span) {
         if owners.Has(k) {
             f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh if one else SFail, -1, site if one else -1, cm, null))
             # (O8f: a part place's copy built with other owners is in no part region: left where it is at a let-go)
-            if split: f.keep(k, RSplit, w.body().File, sp, $"its new value is a copy holding other owners too, its parts each built for their own places: '" + $w.text(cm.Span()) + "'")
+            if split and not f.PartPlace(k): f.keep(k, RSplit, w.body().File, sp, $"its new value is a copy holding other owners too, its parts each built for their own places: '" + $w.text(cm.Span()) + "'")
             else if not one and not f.PartPlace(k): f.keep(k, RMade, w.body().File, sp, $"its new value is a copy holding other owners too: '" + $w.text(cm.Span()) + "'")
             continue
         }
@@ -3371,6 +3371,9 @@ fn (f mut Free&) ownersSplit(ty types.TypeId, owners Vec<I64>&) Bool {
 }
 
 fn (f mut Free&) splitOwner(k I64, depth I64) Bool {
+    # (review4's e1: an array leaf that is a part place - a split field, `S{qs Array<Q>, b Vec<I64>}`'s qs - copied
+    # into a part region of its own where sole, its elements' parts split (lower.partOf's splitArray))
+    if depth == 0 and f.PartPlace(k) and not f.owner[k]: return true
     if depth > 8 or not f.owner[k] or f.handle[k] or not f.PartsOnly(f.valTy[k]) or f.VecWalks(f.valTy[k]).Len() > 0: return false
     for lf in f.leaves(f.valTy[k]) {
         if not f.PartPlace(lf.PlaceId) and not f.splitOwner(lf.PlaceId, depth + 1): return false
@@ -6787,7 +6790,8 @@ fn (f mut Free&) partsField(r types.TypeId, i I64, ft types.TypeId) Bool {
         el := t.Elem(t.Repr(ft))
         if not f.PartPlace(f.placeKey(r, i)): return false
         if not t.OwnedPart(el) and not t.OwnsParts(el): return true
-        return f.textBuffer(r, i) >= 0 or f.nestedBuffer(r, i) or f.entryBuffer(r, i) or f.arrayBuffer(r, i)
+        # (review4's e1: or a split field, `S{qs Array<Q>}` held by an element - walked by its length, SplitField)
+        return f.textBuffer(r, i) >= 0 or f.nestedBuffer(r, i) or f.entryBuffer(r, i) or f.arrayBuffer(r, i) or f.SplitField(f.placeKey(r, i))
     }
     return f.PartsOnly(ft)
 }
@@ -6886,6 +6890,9 @@ fn (f mut Free&) VecFields(ty types.TypeId) I64, I64 {
 # its buffer's and count's fields, and what a let-go of the value releases of each live element: its slot, into the
 # text element place Texts (a Vec of text), or the parts of an element of type Elem (a Vec of Vecs, a Map's entries;
 # Texts -1), or - Elem the buffer's own array type - each element's array (a Vec<Array<I64>>, arrayBuffer). A Map's slots below its count are live where their link (field Next) is -1 or more; -1 for a Vec
+# a VecWalk's Count where its Data field is a split field (SplitField) - an array walked by its own length, no Vec's
+SplitCount I64 = -2
+
 type VecWalk struct(Path Array<I64>, Data I64, Count I64, Texts I64, Elem types.TypeId, Next I64 = -1) {
     Path
     Data
@@ -7073,6 +7080,8 @@ fn (f mut Free&) vecWalksAt(ty types.TypeId, path Vec<I64>&, out mut Vec<VecWalk
         if q >= 0: out.Push(VecWalk(path.ToArray(), i, n, q, types.UnknownT))
         else if f.nestedBuffer(r, i): out.Push(VecWalk(path.ToArray(), i, n, -1, t.Elem(t.Repr(fs[i]))))
         else if f.arrayBuffer(r, i): out.Push(VecWalk(path.ToArray(), i, n, -1, fs[i]))
+        # (a split field's elements, walked by the array's own length: Count SplitCount)
+        else if f.SplitField(f.placeKey(r, i)): out.Push(VecWalk(path.ToArray(), i, SplitCount, -1, t.Elem(t.Repr(fs[i]))))
         if not f.entryBuffer(r, i): continue
         _, mn, mx := f.MapFields(r)
         out.Push(VecWalk(path.ToArray(), i, mn, -1, t.Elem(t.Repr(fs[i])), mx))

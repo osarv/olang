@@ -524,7 +524,15 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   second value-semantics bug, `v[0].a = w.a` then a write to `w.a` showing in `v[0].a`: the held value is now the
   store's own copy (`check.writeBack`'s storeCopy), given the place where it is stored (`free.made` through heldCopy).
   Fixture ownvalues; tests/valueparts.
-  **Where to pick up**: a view chain read in an expression (e1: `v[i].qs[2].a[0]` - free's `readCall` now follows
-  elements and payloads as lowering's `readPlace` does; e1 still keeps `s.b` and `s.qs` in `S.Mk` and the element of
-  `v[i % 4] = S.Mk(n, base)`); `?&`/`any` holders (t2); a Map's own value put (v8, v9); `c` captured by a lambda (a5's
-  `g`) keeps as a named view (places by path would tell it from `Q.a`); tasks (a7, h8, n1, t1) still free nothing early.
+  Then review4's e1. A view chain read in an expression (`v[i].qs[2].a[0]`): free's `readCall` follows elements and
+  payloads to the temporary as lowering's `readPlace` does. A struct holding a split field beside a Vec
+  (`S{qs Array<Q>, b Vec<I64>}`) as a Vec's element is PartsOnly (`free.partsField` takes a split field, walked by its
+  length - `VecWalk`'s `SplitCount`, `lower.walkReleases`), and its copy is split part by part (`free.splitOwner`
+  takes a part place leaf; `lower.partOf` already split it). And a hole `-memory -check` passed: a fill of a value
+  owning storage stored into a place of a longer scope (`s.qs = Array<Q>(n, base)`, s outside the loop) had the scope
+  pass build its item `base` there - a fill holds each element's own copy (QCE, `lower.fill`), yet `valMake` fitted the
+  item as an element slot, so every turn's `base` and its Vec stayed in main's scope (~0.5 KB a turn, built, -free
+  late and interpreted alike). A fill of owning elements is now judged as a copy (`scope.valMake`, as `ownCopy`: only
+  the references the item shares must outlive it). Fixture splitelems (e1 at 400,000 turns: master out of memory).
+  **Where to pick up**: `?&`/`any` holders (t2); a Map's own value put (v8, v9); `c` captured by a lambda (a5's `g`)
+  keeps as a named view (places by path would tell it from `Q.a`); tasks (a7, h8, n1, t1) still free nothing early.

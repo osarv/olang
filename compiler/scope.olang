@@ -10193,6 +10193,13 @@ fn (s mut Scoper&) valMake(m typed.Make&, ty types.TypeId, d Term, whole I64, wh
     vs := Array<Val>(m.Items.Len())
     for k in range m.Items.Len(): vs[k] = s.val(m.Items[k], d)
     agreed := m.Kind != typed.MakeKind.Case or not s.report or s.payloadAgree(m.Items, vs)
+    # (QCE, gap 22: a fill of a value owning storage holds each element's own copy of its item - lower.fill - as a
+    # value's own copy does (ownCopy): what it still shares is the references the item holds, which must outlive d)
+    filled := m.Kind == typed.MakeKind.Fill and m.Items.Len() == 1 and (s.P.T.OwnedPart(m.Items[0].Type()) or s.P.T.OwnsParts(m.Items[0].Type()))
+    if filled {
+        if vs[0].K == ValKind.Existing and s.P.T.SharesRefs(m.Items[0].Type()): s.fit(vs[0].T, d, s.storeThrough(m.Items[0].Type()), m.Items[0], FitValue)
+        return Val.fresh(d)
+    }
     for k in range m.Items.Len() {
         # an "any"'s copy of an array holding no reference keeps nothing of where it was (T32a)
         copied := kind == FitAnyCopy and not s.holds(m.Items[k].Type())

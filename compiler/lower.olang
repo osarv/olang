@@ -1638,9 +1638,15 @@ fn (ln mut lowering&) walkReleases(ty types.TypeId, depth I64, out mut Vec<relPa
             if g != free.NotSole: out.Push(relPath(g, vw.Path, true, false, vw.Data, vw.Count))
             continue
         }
-        if depth < 8 and ln.partReleases(vw.Elem, depth + 1, vw.Next >= 0).Len() > 0 {
-            out.Push(relPath(-1, vw.Path, false, false, vw.Data, vw.Count, vw.Elem, vw.Next))
+        if depth >= 8 or ln.partReleases(vw.Elem, depth + 1, vw.Next >= 0).Len() == 0: continue
+        # (a split field held by the value - e1's `S{qs Array<Q>}` element - each of its elements' parts, by its length)
+        if vw.Count == free.SplitCount {
+            sub := Array<I64>(vw.Path.Len() + 1, vw.Data)
+            for j in range vw.Path.Len(): sub[j] = vw.Path[j]
+            out.Push(relPath(-1, sub, false, false, -2, -1, vw.Elem))
+            continue
         }
+        out.Push(relPath(-1, vw.Path, false, false, vw.Data, vw.Count, vw.Elem, vw.Next))
     }
 }
 
