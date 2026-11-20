@@ -109,6 +109,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     # result storage made for it (freshResult: -1 - body), nothing of what its parameter names (freshParam: below -2^40)
     preserved Map<I64, Bool>
     handed Map<I64, Bool>      # HandsOnly's answers, by body and parameter
+    writes Map<I64, Bool>      # writesParam's, likewise
     refsKept typed.RefsKept     # keepsNoRef's answers (typed.RefsKept)
     keptLends Map<I64, Bool>    # keepsNoLend's
     CopyLog Vec<String&>         # each of those two, by place, for -memory
@@ -5085,10 +5086,10 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     gone mut Vec<typed.Stmt&>& = Vec<typed.Stmt&>()
     for i in range c.Args.Len() {
         a := ln.handedOver(c.Args[i], gone)
-        # (a by-value parameter only where its callee keeps its parts as they are - Preserves: one it writes is its own
-        # copy, never the caller's storage read where it stands, D9a)
+        # (a by-value parameter only where its callee writes nothing of it - one it writes is its own copy, never the
+        # caller's storage read where it stands, D9a; what it stores of it is copied there, QCE)
         byValue := i < ps.Len() and not t.IsRef(ps[i])
-        if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) and (not byValue or ln.L.preserves(body, i)) {
+        if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) and (not byValue or not ln.L.writesParam(body, i)) {
             ln.readHere(a, c if plain else null)
         } else if byValue and not task and ln.unviewedArg(body, ty, i) {
             # (gap 22, review4's c2: nor is one for a by-value parameter the callee preserves and hands back no view of,
@@ -6540,6 +6541,28 @@ fn (lw mut Lowerer&) HandsOnly(body I64, k I64) Bool {
         ok := lw.handsBack(lw.Bodies[body], k)
         lw.handed.Put(key, ok)
         return ok
+    }
+    return known
+}
+
+# whether a body writes its by-value parameter k or its parts: through it, a part or a scalar field stored into, whole,
+# or lent writably to a body changing them
+# (an unknown body - a function value's, a dispatch's - may). Asked once a body and parameter
+fn (lw mut Lowerer&) writesParam(body I64, k I64) Bool {
+    if body < 0 or body >= lw.Bodies.Len() or k >= 64 or lw.Bodies[body].Root == null: return true
+    key := body * 64 + k
+    known := try lw.writes.Get(key) catch {
+        lw.writes.Put(key, true)
+        b := lw.Bodies[body]
+        if k >= b.Params.Len(): return true
+        u := typed.LocalUses.Uses(lw.P.T, b)
+        p := I64(b.Params[k])
+        w := u.WrOther[p] or u.WrScalar[p] or u.Whole[p] or has(u.StoreAt, p)
+        for j in range u.LendAt.Len() {
+            if u.LendAt[j] == p and not lw.preserves(u.LendBody[j], u.LendParam[j]): w = true
+        }
+        lw.writes.Put(key, w)
+        return w
     }
     return known
 }

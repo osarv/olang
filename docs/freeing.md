@@ -514,8 +514,9 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   the element. b1 passes `-memory -check`; fixture resultargs (master: out of memory under 8 MB).
   Found on the way, a D9a bug: an argument for a by-value parameter of a call whose result holds no storage was read
   where it stands whatever the callee did with it - `whisper(ps[0])` writing its parameter wrote the Vec's element
-  (built and interpreted alike, both reading lowering's MIR). Lowering reads it in place only where the callee
-  preserves the parameter (`args`, as free's viewArg already asked); tests/valueparts.
+  (built and interpreted alike, both reading lowering's MIR). Lowering reads it in place only where the callee writes
+  nothing of the parameter (`lower.writesParam`: through it, a part or scalar field stored into, whole, or lent
+  writably to a body changing it - a store of it copies, QCE); free's viewArg still asks Preserves; tests/valueparts.
   Then an element stored from its own value (review4 c2, g2). `v[i] = plus(v[i], i)`, a callee preserving its by-value
   parameter and handing back no view of it whatever its result holds: lowering reads the argument where it stands or
   copies it into the statement's innermost scope (`lower.unviewedArg`), free's viewArg taking it as before. A copy of a
@@ -534,5 +535,12 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   item as an element slot, so every turn's `base` and its Vec stayed in main's scope (~0.5 KB a turn, built, -free
   late and interpreted alike). A fill of owning elements is now judged as a copy (`scope.valMake`, as `ownCopy`: only
   the references the item shares must outlive it). Fixture splitelems (e1 at 400,000 turns: master out of memory).
-  **Where to pick up**: `?&`/`any` holders (t2); a Map's own value put (v8, v9); `c` captured by a lambda (a5's `g`)
+  **Where to pick up**: `?&`/`any` holders (t2: `Box(v[j].b)` held as `any Summer&`, its Sum called through the
+  table - BlockCopy would need the any local and dispatch followed); a Map's own value put (v8: `m.Put(k, m.Get(j)!)`,
+  the Get under a try given a parameter Put stores - copied there, so lowering reads it in place, but free's viewArg
+  asks Preserves and copiedCall stops at the try). v9's keep is Vec.Insert/RemoveAt/TakeAt shifting elements
+  (`occupy(vacate())`), judged existing storage; judging those leaves as moves (SMove, tried) passes -memory -check
+  while TakeAt's result leaks - a value moved out of a collection by a library call and dropped (`v.TakeAt(0)!`, or held
+  by a local) releases nothing and is no let-go the pass counts (master grows too: the shift's keep is what names it).
+  That drop needs a let-go of the moved value's leaves first; `c` captured by a lambda (a5's `g`)
   keeps as a named view (places by path would tell it from `Q.a`); tasks (a7, h8, n1, t1) still free nothing early.
