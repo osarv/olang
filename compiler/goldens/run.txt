@@ -1392,6 +1392,8 @@
 | ok - a whole copy is its own
 | ok - a comprehension's elements are its own
 | ok - a by-value parameter owns its parts
+| ok - a by-value parameter given an element owns its parts
+| ok - a store into an element's part read through At is its own copy
 | ok - a part stored through a parameter outlives the call
 | ok - a clone of an array is its own, its elements' parts too
 | ok - a walk of a Vec reads elements in place only where nothing can write them

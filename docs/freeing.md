@@ -544,3 +544,7 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   by a local) releases nothing and is no let-go the pass counts (master grows too: the shift's keep is what names it).
   That drop needs a let-go of the moved value's leaves first; `c` captured by a lambda (a5's `g`)
   keeps as a named view (places by path would tell it from `Q.a`); tasks (a7, h8, n1, t1) still free nothing early.
+  Checked on the step's last commit: `make scopesan`, `make quick` (tokens/ast/layout/run goldens recaptured), the
+  freeing and earlyfree scenarios; review4/review5's 60 probes print the same built, `-free late`, `-sanitize` and
+  interpreted as master, `-memory -check` now passing for b1, c2, e1, g2, k1 and review4's o1 (still named: g1, h8,
+  j1, n1, review5's o1, o2, ov1, s3, t1, t2, v8, v9).
