@@ -506,4 +506,4 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   which is `Q.a`'s place by type (places by path would tell them apart); a callee handing back its parameter's field
   (b1's `giveField`: BlockCopy needs "kept only in the result" for a by-value parameter, not Preserves); stores of an
   element's own value (c2, g2); a view chain read in an expression (e1); `?&`/`any` holders (t2); a Map's own value put
-  (v8, v9); tasks (a7, h8, n1, t1) still free nothing early. Steps 1-3 committed; scenarios run on step 1 only so far.
+  (v8, v9); tasks (a7, h8, n1, t1) still free nothing early. Steps 1-3 committed; freeing and earlyfree pass on step 3 (addbd5b6a).
