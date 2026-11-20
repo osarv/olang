@@ -572,9 +572,8 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     argOps Vec<mir.Operand>
     entryRoots Map<I64, mir.Operand>   # O23a: the plan's roots read as the body is entered (Plan.AtEntry), by index
     retiring Bool = false            # a retire() being lowered past its O8d guard (retire)
-    tryRel I64 = -1                 # a try statement with clauses releasing its value on its success path (O8d): -1 not,
-                                    # else 1 + the place's guard (free.Guard) << 2, 2 where the place is a part place
-                                    # (free.PartPlace), and 0 the value or 1 the handle's state (free.IsHandle)
+    tryRels Vec<relPath>            # a try statement with clauses releasing its value on its success path (O8d): what
+                                    # the next try lowered releases there, none for none
     # O44: the slices, by span, whose bounds the versioned loop being lowered proved on entry (provenOn its fast copy)
     proven Map<I64, Bool>
     provenOn Bool = false
@@ -611,6 +610,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     readWin Map<I64, Bool>
     winOk Bool = false
     moved Map<I64, I64>      # D9i: the copies of a value local left out as its last use, by site, with the local
+    movedRet Map<I64, Bool>  # the value locals holding only a value moved out of a place, handed back as they are (movedRets)
 }
 
 fn (ln mut lowering&) gap(sp source.Span, what String&) {
@@ -3022,6 +3022,7 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
     # (a value owning parts is handed back from a whole local as it is, as before retOwns: its local is the
     # function's own storage - only an array's second names are proved, RetSole)
     id := I64(p.id)
+    if ln.movedRet.Has(id): return false
     return ln.retHome(id) != ln.resultScope() or (ln.valueArray(ty) and not ln.plan.RetSole[id])
 }
 
@@ -4468,8 +4469,8 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     ty := x.Type()
     slot := mir.NoLocal
     if ty != types.VoidT and ty != types.NoreturnT: slot = ln.temp(ty, sp)
-    relK := ln.tryRel
-    ln.tryRel = -1
+    rels := ln.tryRels
+    ln.tryRels = Vec<relPath>()
     tc mut tryCtx& = tryCtx(ln.levels.Len(), t.Clauses, t.Ends, t.Passes)
     for _ in t.Clauses: tc.entries.Push(mir.NoBlock)
     ln.tries.Push(tc)
@@ -4479,11 +4480,7 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     ends Vec<mir.BlockId>
     if not ln.dead and slot != mir.NoLocal and v != mir.Operand.None {
         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(slot), mir.Rvalue.Use(v)))
-        if relK >= 0 {
-            rel Vec<relPath>
-            rel.Push(relPath((relK >> 2) - 1, Array<I64>[0] if (relK & 1) == 1 else Array<I64>(0), false, (relK & 2) != 0))
-            ln.releaseAt(slot, rel, sp)
-        }
+        if rels.Len() > 0: ln.releaseAt(slot, rels, sp)
     }
     ln.leaveOpen(ends)
     ln.clauses(done, t.Clauses, slot, ty, ends)
@@ -4750,14 +4747,17 @@ fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
                 if g == free.NotSole: k = -1
                 handle := k >= 0 and ln.L.Free!.IsHandle(k)
                 part := k >= 0 and ln.L.Free!.PartPlace(k)
+                if k >= 0 { rel.Push(relPath(g, Array<I64>[0] if handle else Array<I64>(0), ln.L.Free!.SlotPlace(k), part)) }
+                # (a value moved out of a place that is no candidate - a Vec<Vec<I64>>'s element - lets go of its leaves,
+                # as a vacate statement of it does)
+                if k < 0 and ln.L.Free!.DroppedLeaves(c): rel = ln.leafPaths(x.Type())
                 # a try statement with clauses has its value only on its success path - where a clause takes the
                 # error there is nothing to release - so the try releases it there, before the paths join
-                if k >= 0 and clausedTry(x) {
-                    ln.tryRel = ((g + 1) << 2) | (2 if part else 0) | (1 if handle else 0)
+                if rel.Len() > 0 and clausedTry(x) {
+                    ln.tryRels = rel
                     ln.val(x)
                     return
                 }
-                if k >= 0 { rel.Push(relPath(g, Array<I64>[0] if handle else Array<I64>(0), ln.L.Free!.SlotPlace(k), part)) }
             }
         }
     }
@@ -5756,6 +5756,23 @@ fn (ln mut lowering&) settleViews() {
     ln.viewLocals(u)
     ln.viewTemps(u)
     ln.movesAtLastUse(u)
+    ln.movedRets(u)
+}
+
+# the value locals whose every value is one moved out of a place (free.MovedLocal: TakeAt's `x := v.data[i].vacate()`),
+# written nowhere, lent nowhere, escaping nowhere and given no other value: a return hands each back as it is, as Pop's
+# `return v.data[v.n].vacate()` does - its storage is the value's own, moved out, which a copy would leave behind with
+# nothing to release it (the caller's drop of the result lets go of the moved value's leaves, free.DroppedLeaves)
+fn (ln mut lowering&) movedRets(u typed.LocalUses&) {
+    if not ln.freeing: return
+    fr := ln.L.Free!
+    for l in range ln.B.Locals.Len() {
+        loc := ln.B.Locals[l]
+        if loc.Kind != typed.LocalKind.Var or ln.T.IsRef(loc.Ty) or not u.Ret[l]: continue
+        if u.Esc[l] or u.WrOther[l] or u.WrScalar[l] or u.Whole[l] or not fr.MovedLocal(I64(ln.B.Id), l): continue
+        if l in u.LendAt or l in u.AliasOf: continue
+        ln.movedRet.Put(l, true)
+    }
 }
 
 # the temporaries holding a view call's result lent whole to a body keeping its parts as they are (a walk made and

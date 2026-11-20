@@ -81,6 +81,7 @@ fn has(s Vec<I64>&, x I64) Bool {
 MustTop I64 = -2
 MustNone I64 = -1
 MovBase I64 = 1 << 30   # place k's moved value: MovBase + k
+MovLeaves I64 = -3      # a value moved out of a place that is no candidate (a Vec<Vec<I64>>'s element): its leaves'
 
 fn meet(a I64, b I64) I64 {
     if a == MustTop: return b
@@ -5769,13 +5770,21 @@ fn (m mut mustW&) exprMust(x typed.Expr&) I64 {
     return match x {
         case typed.Expr.Lit(_, _, _): MustTop
         case typed.Expr.Read(_, _, p, _): m.placeMust(p)
-        case typed.Expr.Take(_, _, p): MovBase + f.placeOfPlace(p) if f.placeOfPlace(p) >= 0 else MustNone
+        case typed.Expr.Take(_, ty, p): f.takeMust(p, ty)
         case typed.Expr.Call(_, _, c): m.callMust(c)
         case typed.Expr.Try(_, _, t): m.tryMust(t)
         case typed.Expr.Away(_, _, y): m.exprMust(y)
         case typed.Expr.Prim(_, _, op, _, args): m.exprMust(args[0]) if isConversion(op, args) else MustNone
         case _: MustNone
     }
+}
+
+# what a value moved out of place p is: the place's moved value, else - a place that is no candidate - its leaves' where
+# it has some (walker.takeOf's origins)
+fn (f mut Free&) takeMust(p typed.Lvalue&, ty types.TypeId) I64 {
+    k := f.placeOfPlace(p)
+    if k >= 0: return MovBase + k
+    return MovLeaves if f.leaves(ty).Len() > 0 else MustNone
 }
 
 # a conversion of one value: a reference made nullable, a nominal type's - the value it converts, as it is
@@ -7276,6 +7285,23 @@ fn (f mut Free&) DroppedMove(c typed.Call&) I64 {
     m := f.mustRes[b2]
     if m < MovBase: return -1
     return m - MovBase
+}
+
+# whether every value local l of body b holds is a value moved out of a place (a must-fact: a vacate's, or a call's
+# handing one back) - what its body hands back as it is, with no copy, where nothing else writes it (lower.movedRets)
+fn (f Free&) MovedLocal(b I64, l I64) Bool {
+    if not f.Done or b < 0 or b >= f.mustLocals.Len() or l < 0 or l >= f.mustLocals[b].Len(): return false
+    v := f.mustLocals[b][l]
+    return v >= MovBase or v == MovLeaves
+}
+
+# whether a dropped call's result is a value moved out of a place that is no candidate - its leaves let go of where the
+# statement drops it (walker.eval's LDrop of each), released by lowering as a vacate statement's are (leafPaths)
+fn (f mut Free&) DroppedLeaves(c typed.Call&) Bool {
+    if not f.Done: return false
+    b2 := typed.CalleeBody(c)
+    if b2 < 0 or f.Bodies[b2].Root == null: return false
+    return f.mustRes[b2] == MovLeaves
 }
 
 # ---- the report (B18): the places that keep what they let go of, and why ----
