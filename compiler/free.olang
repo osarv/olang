@@ -3295,7 +3295,8 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
 # local that outlives none of those - nothing releases it: a row of the report (gap)
 fn (w mut walker&) movedGaps(st typed.Stmt&) {
     match st {
-        case typed.Stmt.Let(_, l, x) { w.movedIn(x, w.F.EndsLocal(w.Id, I64(l))) }
+        # (a holder of a value with a destructor lets go of its leaves where it ends it, O15's drop - Part C)
+        case typed.Stmt.Let(_, l, x) { w.movedIn(x, w.F.EndsLocal(w.Id, I64(l)) or w.F.destructs(w.body().Locals[I64(l)].Ty)) }
         case typed.Stmt.Eval(_, x) { w.movedIn(x, true) }
         case typed.Stmt.Assign(_, p, x) {
             w.movedPlace(p)
