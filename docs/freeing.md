@@ -506,4 +506,7 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   which is `Q.a`'s place by type (places by path would tell them apart); a callee handing back its parameter's field
   (b1's `giveField`: BlockCopy needs "kept only in the result" for a by-value parameter, not Preserves); stores of an
   element's own value (c2, g2); a view chain read in an expression (e1); `?&`/`any` holders (t2); a Map's own value put
-  (v8, v9); tasks (a7, h8, n1, t1) still free nothing early. Steps 1-3 committed; freeing and earlyfree pass on step 3 (addbd5b6a).
+  (v8, v9); tasks (a7, h8, n1, t1) still free nothing early.
+  Checked on addbd5b6a: the freeing and earlyfree scenarios, `make scopesan`, `make quick` (tokens/ast goldens
+  recaptured; compiler/olang.olang OOM-killed under load, passing alone); review4/review5's 60 probes print the same
+  built, `-free late`, `-sanitize` and interpreted, `-memory -check` now passing for a6, b3, v1, v2, v3, v5, v6.
