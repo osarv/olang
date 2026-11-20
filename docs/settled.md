@@ -1005,7 +1005,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   copy (D9h), where one is made, goes into that block, dead with the local (viewlocals, wt-d9h); so too where the
   local is captured by a lambda a value local of its block holds and only calls, the lambda's body keeping nothing of
   the capture (`typed.LocalUses` holds, `free.keepsNone`), or given a task spawned in a join of its block (viewholders,
-  wt-splitfield). Handed to a generator (review4 a6) it keeps At's copy in the collection's scope, named (RCopied).
+  wt-splitfield). The same holds for a value local holding the view through what its declaration's call hands back - a
+  generator walking it (`g := each(v[i].a.View())`, review4 a6), its for-in walk too - where it is lent only to bodies
+  keeping nothing of it and the call keeps the view only in its result, a generator's Next only in its frame, yielding
+  no reference (`free.blockHolder`, `keptInResult`; genviews, wt-genview).
   A plain value local declared with a view call's PartsOnly value (`c := v[j]`) has its copy built split
   (`free.splitLetOf`, `lower.ownersCopy`): its owners keep for RSplit; read after the element is let go of it keeps as
   a named view (the pass cannot tell lowering's copy from a view local).

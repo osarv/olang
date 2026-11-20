@@ -2874,20 +2874,124 @@ fn (f mut Free&) BlockCopy(b I64, site I64) I64 {
 
 fn (f mut Free&) blockCopies(b I64) {
     f.blockDone.Put(b, true)
-    t := f.T()
-    u := typed.LocalUses.Uses(t, f.Bodies[b])
+    u := typed.LocalUses.Uses(f.T(), f.Bodies[b])
     for i in range f.Bodies[b].Locals.Len() {
         x := u.Init[i]
-        if x == null or not f.blockView(u, b, i): continue
+        if x == null or not (f.blockView(u, b, i) or f.blockHolder(u, b, i)): continue
         k := initCall(x)
-        if k == null or typed.CalleeBody(k) < 0: continue
-        ps := t.Items(t.Params(f.Bodies[typed.CalleeBody(k)].Ty))
-        for j in range k.Args.Len().Min(ps.Len()) {
-            if not t.IsRef(ps[j]) or (t.PermOf(ps[j]) & types.Writable) != 0: continue
-            s := borrowedTemp(k.Args[j])
-            if s >= 0: f.blockAt.Put(pair.Pair(b, s), i)
+        if k != null: f.blockArgs(b, i, k, 0)
+    }
+}
+
+# the temporaries call k lends read-only through their fields, for local i of body b - and, through a reference
+# argument that is a call's value (`each(v[i].a.View())`), those that call lends: what the inner call hands back is
+# held by what k hands back, which the local holds in its own block
+fn (f mut Free&) blockArgs(b I64, i I64, k typed.Call&, depth I64) {
+    t := f.T()
+    if typed.CalleeBody(k) < 0 or depth > 3: return
+    ps := t.Items(t.Params(f.Bodies[typed.CalleeBody(k)].Ty))
+    for j in range k.Args.Len().Min(ps.Len()) {
+        if not t.IsRef(ps[j]) or (t.PermOf(ps[j]) & types.Writable) != 0: continue
+        s := borrowedTemp(k.Args[j])
+        if s >= 0: f.blockAt.Put(pair.Pair(b, s), i)
+        k2 := initCall(k.Args[j]) if s < 0 else null
+        if k2 != null and f.keptInResult(typed.CalleeBody(k), j): f.blockArgs(b, i, k2, depth + 1)
+    }
+}
+
+# whether body cb keeps nothing of what its read-only reference parameter j names past the call but in the value it
+# hands back: nothing at all (typed.RefsKept.NoneKept, a value result's view its caller follows), or a generator's
+# (D18, `return Generator(next)`) whose Next holds it in its own frame only - its local given the capture, keeping
+# nothing past its body (keepsNone) - and gives no element holding a reference
+fn (f mut Free&) keptInResult(cb I64, j I64) Bool {
+    t := f.T()
+    if f.refsKept.NoneKept(t, f.Bodies, cb, j): return true
+    r := f.Bodies[cb].Root
+    if r == null or r.Stmts.Len() == 0 or j >= f.Bodies[cb].Params.Len(): return false
+    par := I64(f.Bodies[cb].Params[j])
+    for st in r.Stmts {
+        match st {
+            case typed.Stmt.Let(_, l, _) { if f.Bodies[cb].Locals[I64(l)].Kind != typed.LocalKind.Hidden: return false }
+            case typed.Stmt.Return(_, x) { return x != null and f.genHolds(x, par) }
+            case _ { return false }
         }
     }
+    return false
+}
+
+# whether x is a generator's value (D18: its Next a lambda, the constructor's one argument) whose Next keeps what
+# the capture of parameter local par names in its own frame only (keptInResult)
+fn (f mut Free&) genHolds(x typed.Expr&, par I64) Bool {
+    k := initCall(x)
+    if k == null or k.Args.Len() != 1: return false
+    return match k.Args[0] {
+        case typed.Expr.Fn(_, _, fv): match fv {
+            case typed.FnVal.Lambda(lb, caps, _): f.genFrameKeeps(I64(lb), caps, par)
+            case _: false
+        }
+        case _: false
+    }
+}
+
+fn (f mut Free&) genFrameKeeps(lb I64, caps Array<typed.Capture&>&, par I64) Bool {
+    t := f.T()
+    if lb < 0 or lb >= f.Bodies.Len() or not f.Bodies[lb].Gen or f.Bodies[lb].Root == null: return false
+    el := t.Result(f.Bodies[lb].Ty)
+    if t.IsRef(el) or t.HoldsRefs(el): return false
+    u := typed.LocalUses.Uses(t, f.Bodies[lb])
+    for c in caps {
+        if readsLocal(c.Outer) != par: continue
+        ci := I64(c.Inner)
+        if f.Bodies[lb].GenElem == c.Inner or not f.keepsNone(u, lb, ci, 0): return false
+        # (the parameter's own local, given the capture as the body begins - check.genLambda)
+        for l in range f.Bodies[lb].Locals.Len() {
+            x := u.Init[l]
+            if x == null or readsLocal(x) != ci: continue
+            if not f.blockView(u, lb, l): return false
+        }
+        return true
+    }
+    return false
+}
+
+# the local a value reads as it is (through Away), -1 for any other value
+fn readsLocal(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Read(_, _, p, _): match p {
+            case typed.Lvalue.Local(_, _, id): I64(id)
+            case _: -1
+        }
+        case typed.Expr.Away(_, _, y): readsLocal(y)
+        case _: -1
+    }
+}
+
+# whether value local i of body b holds what its declaration's call hands back - a generator walking a view, a value
+# holding one (`g := each(v[i].a.View())`) - in its own block only: declared once, never assigned, stored, handed back,
+# given by value, captured or escaping, in no value made of it that may be kept, and lent or given read-only only to
+# bodies keeping nothing of it past the call - what such a call hands back (a generator's Next, an element) holding no
+# reference to it (no Link)
+fn (f mut Free&) blockHolder(u typed.LocalUses&, b I64, i I64) Bool { return f.holderIn(u, b, i, 0) }
+
+# blockHolder, a copy of the value into another local holding it so in turn allowed - a for-in's hidden walk over a
+# generator local (`for y in g`, the Link of a Let reading it), declared in the local's block or one inside it
+fn (f mut Free&) holderIn(u typed.LocalUses&, b I64, i I64, depth I64) Bool {
+    t := f.T()
+    bd := f.Bodies[b]
+    l := bd.Locals[i]
+    if l.Kind != typed.LocalKind.Var and l.Kind != typed.LocalKind.Hidden: return false
+    if depth > 3 or l.Unset or t.IsRef(l.Ty) or not t.HoldsRefs(l.Ty): return false
+    if u.EscHard[i] or u.EscOwn[i] or u.EscPart[i] or u.RetView[i] or u.RetRefs[i] or has(u.GiveAt, i): return false
+    for j in range u.LendAt.Len() {
+        if u.LendAt[j] == i and not f.refsKept.NoneKept(t, f.Bodies, u.LendBody[j], u.LendParam[j]): return false
+    }
+    for j in range u.LinkTo.Len() {
+        m := u.LinkFrom[j]
+        if u.LinkTo[j] != i: continue
+        if m < 0 or m >= bd.Locals.Len() or u.Init[m] == null or readsLocal(u.Init[m]!) != i: return false
+        if not bd.Encloses(bd.Locals[i].In, bd.Locals[m].In) or not f.holderIn(u, b, m, depth + 1): return false
+    }
+    return f.keepsNone(u, b, i, 0, true)
 }
 
 # whether reference local i of body b, read-only, keeps what it names within its own block: declared once (no other
@@ -2907,14 +3011,14 @@ fn (f mut Free&) blockView(u typed.LocalUses&, b I64, i I64) Bool {
 # stored, handed back or escaping, in no value made of it that may be kept, lent only to bodies keeping nothing of it
 # past the call (typed.RefsKept.NoneKept) - and captured only by lambdas a value local of its block holds (holderStays)
 # whose bodies keep nothing of the capture in turn
-fn (f mut Free&) keepsNone(u typed.LocalUses&, b I64, i I64, depth I64) Bool {
+fn (f mut Free&) keepsNone(u typed.LocalUses&, b I64, i I64, depth I64, linked Bool = false) Bool {
     t := f.T()
     if u.EscBesides[i] or u.Ret[i] or u.WrOther[i] or u.Whole[i] or u.EscRefs[i]: return false
     for s in u.StoreAt {
         if s == i: return false
     }
     for s in u.LinkTo {
-        if s == i: return false
+        if s == i and not linked: return false
     }
     for j in range u.RefAt.Len() {
         if u.RefAt[j] == i and not f.refsKept.NoneKept(t, f.Bodies, u.RefBody[j], u.RefParam[j]): return false

@@ -488,11 +488,13 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   a task spawned in a join of its block (GiveAt, P1a) likewise. `c := v[j]` (a plain value local of a PartsOnly view
   value) has its copy split (`free.splitLetOf`, `lower.ownersCopy`): owners keep for RSplit, and a read after the
   element's let-go is a named view keep. Fixtures: checks' freeing splitfield, viewholders (master: 322 MB, 103 MB).
-  **Where to pick up**: review4 a6 - a view handed to a generator (`g := each(v[i].a.View())`) keeps At's copy in the
-  collection's scope (RCopied): no local holds the view, the generator value does; following it needs BlockCopy for a
-  value local declared with a call whose result carries the temporary's view, the holder only lent to bodies keeping
-  nothing (`Next`) and yielding no reference. `c := v[j]` read after the element's let-go keeps as a named view: the pass
-  would need lowering's view-local decision (`lower.viewLocals`' heldSrc) to know the copy is made. A program with tasks
-  still frees nothing early (a7).
   Checked on e45a5ad6c: the freeing and earlyfree scenarios, `make scopesan`, `make quick` (tokens/ast goldens recaptured); review4/review5's 60
   probes print the same built, `-free late`, `-sanitize` and interpreted, `-memory -check` now passing for a5, a7, b4, r5_s1.
+- 2026-11-20, wt-genview: a view handed to a generator (review4 a6, `g := each(v[i].a.View())`). BlockCopy follows a
+  value local holding what its declaration's call hands back (`free.blockHolder`: lent only to bodies keeping nothing,
+  copied only into such a local of its block - a for-in's walk), through a call nested in the declaration whose callee
+  keeps the view only in its result (`keptInResult`: NoneKept, or a generator's Next holding it in its frame only,
+  yielding no reference). a6 174 MB to 1.7 MB at 2,000,000 turns, `-memory -check` passing; fixture genviews.
+  **Where to pick up**: `c := v[j]` read after the element's let-go keeps as a named view: the pass would need
+  lowering's view-local decision (`lower.viewLocals`' heldSrc) to know the copy is made. A program with tasks still
+  frees nothing early (a7). Step 1 (genview) committed; the freeing/earlyfree scenarios not yet run on it.

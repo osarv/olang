@@ -40069,3 +40069,20 @@ view local (`lower.viewLocals`, heldSrc), which reads in place where nothing cha
 Not closed: a view handed to a generator (a6, `g := each(v[i].a.View())`) - no local holds the view, the generator value
 does; following it needs BlockCopy for a value local declared with a call carrying the temporary's view in its result,
 with the holder's lends (`Next`) keeping nothing and its yields holding no reference.
+
+## 2026-11-20: freeing - a view handed to a generator (O8f, D9h; mine; wt-genview)
+
+review4's a6 (`g := each(v[i].a.View())`, the element replaced between two `g.Next()`) kept At's D9h copy in the
+collection's scope: no local holds the view, the generator value does, so BlockCopy (which follows a reference local
+declared with the view call) never saw it. `free.blockCopies` now also takes a value local holding references
+(`blockHolder`): declared once, never assigned, stored, handed back, given by value, captured or escaping, lent or
+given read-only only to bodies keeping nothing of it (`g.Next()`), and copied only into another such local declared in
+its block or inside it - a for-in's hidden walk over it (`for y in g`, the Link of a Let reading it). The temporaries
+it records are those lent through fields to a call nested in its declaration (`blockArgs`): through a reference
+argument that is a call's value, where the outer callee keeps what that parameter names only in what it hands back
+(`keptInResult`) - nothing at all (RefsKept.NoneKept), or a generator's body (`return Generator(next)`, D18) whose Next
+lambda holds the capture in its frame only (the capture and the parameter's own local keeping nothing, `keepsNone`,
+`blockView`), its elements holding no reference and borrowed from no parameter (GenElem). Lowering then makes At's
+copy in the holder's block (lower.blockCopy, unchanged), dead with it. a6 at 2,000,000 turns: 174 MB to 1.7 MB,
+passing `-memory -check`; checks' freeing genviews (a generator's Next called twice around the element's
+replacement, a for-in over a generator in an inner block) runs under 8 MB.

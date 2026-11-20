@@ -1,0 +1,49 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, review4's a6): a generator handed a view of an element's field while the element is
+# replaced between its Next calls (`g := each(v[i].a.View())`): no local holds the view, the generator value does -
+# At's value is copied (D9h) in that value local's own block (free.BlockCopy, blockHolder), dead with it, where the
+# local is lent only to bodies keeping nothing of it and the generator's Next holds the view in its own frame only,
+# giving elements that hold no reference (free.keptInResult)
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn each(xs Array<I64>&) Iterator<I64> {
+    for x in xs: yield x
+}
+
+fn sums(xs Array<I64>&) Iterator<I64> {
+    s := 0
+    for x in xs {
+        s += x
+        yield s
+    }
+}
+
+fn main() {
+    v Vec<Q>
+    for k in range 4 {
+        q := Q()
+        q.a = Vec<I64>[k, k + 1, k + 2]
+        v.Push(q)
+    }
+    t := 0
+    for i in range N {
+        g := each(v[i % 4].a.View())
+        a := try g.Next() catch default 0
+        p := Q()
+        p.a = Vec<I64>[i, i, i]
+        v[i % 4] = p
+        b := try g.Next() catch default 0
+        t += a + b
+        {
+            h := sums(v[(i + 1) % 4].a.View())
+            w := Q()
+            w.a = Vec<I64>[i, i + 1]
+            v[(i + 1) % 4] = w
+            for y in h: t += y
+        }
+    }
+    io.PutLn($t + " " + $v[1].a.Len())!
+}
