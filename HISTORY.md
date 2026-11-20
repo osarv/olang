@@ -40167,3 +40167,50 @@ dropped (or held by a local) releases nothing and is no let-go the pass counts -
 because of the shift's keep. Reverted; recorded in docs/freeing.md with v8 (a Get under a try given Put) and t2 (a
 holder behind `any`). Tasks (a7, h8, n1, t1) not reached.
 
+## 2026-11-20: freeing - a value moved out of a collection, dropped or ended with its block (O8f, D9i; mine; wt-freeopen2)
+
+Continued from wt-freeopen's "where to pick up": v9's shifts could not be judged as moves while a value TakeAt hands
+back leaked unnamed, so that came first.
+
+What leaked. `v.Pop()!` on a `Vec<Vec<I64>>` freed nothing, though the pass counted its drop (the walker's LDrop of the
+moved value's leaf, `Vec<I64>.data`, decided sole): Pop's must-fact - what every value it hands back is - was none,
+because its vacate is of an element that is no candidate place (`placeOfPlace` of an `Array<Vec<I64>>` element is -1),
+so lowering's `DroppedMove` gave nothing to release. A report counting a let-go that frees nothing is the worst kind of
+hole. Such a vacate is now `MovLeaves` (`free.takeMust`), and a dropped call's result of one releases the moved
+value's leaves (`free.DroppedLeaves`, lowering's leafPaths, as a vacate statement's are); a try statement's release on
+its success path, an encoded single path before, is now a list (`lower.tryRels`) - and keeps SlotPlace, which the
+encoding dropped. TakeAt still leaked: it holds the vacated value in a local before the shift and returns it, and the
+return copied that local into the result scope (`retCopies`: the local is not in the result scope), leaving the
+original in its part region with nothing to release it. A local whose every value is a moved one (`free.MovedLocal`),
+written, lent, aliased and escaping nowhere, is now handed back as it is (`lower.movedRets`) - as Pop's
+`return v.data[v.n].vacate()` always was.
+
+A local holding a moved value (`x := v.TakeAt(0)!`) leaked a turn's worth each turn and no let-go was counted at all.
+It now lets go of the value's leaves where its block's statements end (`free.EndsMoved`, `lower.endMoved`, the walker's
+LDrop at the block's end), under conditions that make that its last moment: declared at the top level of a block
+lowering lowers whole (the root, a block statement, a loop's body, an if's branch); handed back, written, lent,
+aliased nowhere, escaping only as a read-only reference to calls keeping nothing of it (`x[1]`, RefsKept.NoneKept);
+nothing after it able to leave the block other than by its end - a return, a jump out, a yield, an error passed on, a
+task started (`typed.RestLeaves`, leaveWalk with `tasks`); no deferred code in the block (a holder's drop or a defer
+runs after the end and could read it); and no value registered with a scope in the program (a destructor run as a
+scope closes could too). Lowering makes no last-use move of such a local (D9i), so a by-value argument of it is a
+copy, the local still holding its own. A drop is judged after its statement's reads - the statement computes the
+dropped value first - so `v.TakeAt(0)!` no longer keeps for reading `v`. Considered and left: re-homing the moved
+value's part regions into the local's scope at the declaration (a runtime call; simpler, every exit covered) - the
+scope pass placed such a local in the collection's scope (Pop's result scope was main's), so its scope closes no
+sooner; and a drop flag on every exit, as a holder's (O15) - the checker inserts those before the free pass knows
+which calls hand back moved values.
+
+Then v9. The prelude's shifts (`v.data[k].occupy(v.data[k + 1].vacate())`, Insert's, RemoveAt's, TakeAt's) store a
+value moved out of another element of the same type: each of its leaves' values moves with it, out of the same leaf
+place - judged SMove now (`walker.copyInto`, `takenOf`). Q.a is sole and v9 frees: 200,000 turns at 13 MB, `-free
+late` 116 MB. So that no such leak passes -check again, a call handing back a moved value with leaves anywhere but
+dropped, the value of a local the block's end ends, stored into a place (judged there) or handed back is a gap row
+naming the call (`walker.movedGaps`): `t += sum(v.TakeAt(0)!)`, `v.TakeAt(0)!.a[1]`, a local leaving early. And a
+value local holding a moved value holds its storage alone - the slot it left is empty - so another value's let-go of
+the same place no longer counts it as a view (`y := vv.TakeAt(0)!` then `vv.Pop()!` kept before). Fixture
+movedvalues (400,000 turns under 8 MB; master out of memory).
+
+Found and left: a `Vec<String>`'s popped text (`v.Pop()!`, `x := v.Pop()!`) frees nothing and no let-go is counted -
+the call's result origins carry no OMov of the text place (master the same); recorded in docs/freeing.md.
+

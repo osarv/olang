@@ -1038,6 +1038,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   so the scope pass judges its item as a copy's (`scope.valMake`), not built where the fill goes (wt-freeopen).
   An argument for a by-value parameter is read where it stands only where the callee writes nothing of it
   (`lower.writesParam`, D9a; wt-freeopen).
+  A value moved out of a collection (Pop, TakeAt, SwapTake) lets go of what it holds where a statement drops it
+  (`free.DroppedMove`; an element that is no candidate place, a `Vec<Vec<I64>>`'s, by its leaves - `MovLeaves`,
+  `free.DroppedLeaves`) or where a value local holding it to its block's end ends (`free.EndsMoved`, `lower.endMoved`:
+  declared at the top level of the root, a block, a loop's body or a branch, written, lent, aliased, handed back and
+  escaping nowhere but to calls keeping nothing of it, nothing after it leaving the block but its end, no deferred code
+  in the block, no value registered with a scope in the program); a local holding only such a value is handed back
+  with no copy (`lower.movedRets`). Anywhere else - an argument, an operand, another local - it is a row of the report
+  (`walker.movedGaps`). The prelude's shifts move each element's leaves (SMove), and a value local holding a moved value
+  is no view of its place for another let-go (movedvalues, wt-freeopen2). A `Vec<String>`'s popped text is not yet
+  followed.
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by
