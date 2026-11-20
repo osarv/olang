@@ -108,6 +108,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     # ... per body: whether it keeps its parameter's referent's parts as they are (preserves: body * 64 + k), its reference
     # result storage made for it (freshResult: -1 - body), nothing of what its parameter names (freshParam: below -2^40)
     preserved Map<I64, Bool>
+    handed Map<I64, Bool>      # HandsOnly's answers, by body and parameter
     refsKept typed.RefsKept     # keepsNoRef's answers (typed.RefsKept)
     keptLends Map<I64, Bool>    # keepsNoLend's
     CopyLog Vec<String&>         # each of those two, by place, for -memory
@@ -5070,7 +5071,12 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     gone mut Vec<typed.Stmt&>& = Vec<typed.Stmt&>()
     for i in range c.Args.Len() {
         a := ln.handedOver(c.Args[i], gone)
-        if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a, c if plain else null) }
+        # (a by-value parameter only where its callee keeps its parts as they are - Preserves: one it writes is its own
+        # copy, never the caller's storage read where it stands, D9a)
+        byValue := i < ps.Len() and not t.IsRef(ps[i])
+        if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) and (not byValue or ln.L.preserves(body, i)) {
+            ln.readHere(a, c if plain else null)
+        }
         if not task: ln.argView(a, body, i)
         ro := i < ps.Len() and t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) == 0
         v := ln.stackArg(a, body, i) if reads and plain and ro else mir.Operand.None
@@ -6499,6 +6505,38 @@ fn (lw mut Lowerer&) refsOnly(u typed.LocalUses&, p I64) Bool {
     if u.EscHard[p] or u.RetView[p] or u.RetRefs[p] or p in u.AliasOf: return false
     for j in range u.RefAt.Len() {
         if u.RefAt[j] == p and not lw.keepsNoRef(u.RefBody[j], u.RefParam[j]): return false
+    }
+    return true
+}
+
+# a body keeping its by-value parameter k nowhere but in the value it hands back: keepsParts, a return of it or of a
+# view of it allowed - what its caller copies where it keeps the result (D9h). Asked once a body and parameter - for
+# early freeing, which then has a view call's copy given as that argument made in the block of the value local the
+# call's result is declared into (free.BlockCopy)
+fn (lw mut Lowerer&) HandsOnly(body I64, k I64) Bool {
+    if body < 0 or body >= lw.Bodies.Len() or k >= 64: return false
+    key := body * 64 + k
+    known := try lw.handed.Get(key) catch {
+        lw.handed.Put(key, false)
+        ok := lw.handsBack(lw.Bodies[body], k)
+        lw.handed.Put(key, ok)
+        return ok
+    }
+    return known
+}
+
+fn (lw mut Lowerer&) handsBack(b typed.Body&, k I64) Bool {
+    if b.Root == null or k >= b.Params.Len(): return false
+    u := typed.LocalUses.Uses(lw.P.T, b)
+    p := I64(b.Params[k])
+    # (what it hands back - Ret, RetView, RetRefs: a value result's parts, the caller copying them where it keeps them -
+    # is the one place it may keep it)
+    if u.WrOther[p] or u.Whole[p] or u.EscHard[p] or p in u.AliasOf or has(u.StoreAt, p): return false
+    for j in range u.RefAt.Len() {
+        if u.RefAt[j] == p and not lw.keepsNoRef(u.RefBody[j], u.RefParam[j]): return false
+    }
+    for j in range u.LendAt.Len() {
+        if u.LendAt[j] == p and not lw.preserves(u.LendBody[j], u.LendParam[j]): return false
     }
     return true
 }

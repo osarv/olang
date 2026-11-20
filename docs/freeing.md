@@ -502,11 +502,22 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   (`z := filled(v[j], 2)`, review4 b3): BlockCopy through by-value parameters (`free.viewCallSite`, `blockLent`); and
   Preserves takes an escape only by read-only references given calls keeping none (`x.a[0]`) as no keeping
   (`lower.refsOnly`) - review5 v1, v2, v3, v5, v6 pass `-memory -check`; fixture argholders.
-  **Where to pick up**: `c` captured by a lambda (a5's `g`) keeps as a named view - the capture views c's own storage,
-  which is `Q.a`'s place by type (places by path would tell them apart); a callee handing back its parameter's field
-  (b1's `giveField`: BlockCopy needs "kept only in the result" for a by-value parameter, not Preserves); stores of an
-  element's own value (c2, g2); a view chain read in an expression (e1); `?&`/`any` holders (t2); a Map's own value put
-  (v8, v9); tasks (a7, h8, n1, t1) still free nothing early.
   Checked on addbd5b6a: the freeing and earlyfree scenarios, `make scopesan`, `make quick` (tokens/ast goldens
   recaptured; compiler/olang.olang OOM-killed under load, passing alone); review4/review5's 60 probes print the same
   built, `-free late`, `-sanitize` and interpreted, `-memory -check` now passing for a6, b3, v1, v2, v3, v5, v6.
+- 2026-11-20, wt-freeopen: a callee handing back its by-value parameter or a field of it (review4 b1,
+  `h := giveField(v[j])`). Lowering's `HandsOnly` (a by-value parameter kept nowhere but in what the body hands back:
+  written nowhere, stored nowhere, lent only to bodies preserving it) lets BlockCopy follow a value local of no
+  reference beyond its parts declared with such a call (`free.resultArgs`, not a constructor's, whose instance may hold
+  views in place): At's copy is made in that local's block, dead with it. The local holds lowering's copy of the
+  result - a call's value is never storage `heldSrc` takes as stable (`free.unheldViews`' `heldShape`) - so no view of
+  the element. b1 passes `-memory -check`; fixture resultargs (master: out of memory under 8 MB).
+  Found on the way, a D9a bug: an argument for a by-value parameter of a call whose result holds no storage was read
+  where it stands whatever the callee did with it - `whisper(ps[0])` writing its parameter wrote the Vec's element
+  (built and interpreted alike, both reading lowering's MIR). Lowering reads it in place only where the callee
+  preserves the parameter (`args`, as free's viewArg already asked); tests/valueparts.
+  **Where to pick up**: stores of an element's own value (c2, g2: `v[i] = plus(v[i], i)`, a callee only reading and
+  handing back fresh storage; `v[i].a = v[i].a`, a copy of a temporary's field); a view chain read in an expression
+  (e1: `v[i].qs[2].a[0]` - free's `tempPlaceCall` follows fields only where lowering's `readPlace` follows elements and
+  payloads too); `?&`/`any` holders (t2); a Map's own value put (v8, v9); `c` captured by a lambda (a5's `g`) keeps as
+  a named view (places by path would tell it from `Q.a`); tasks (a7, h8, n1, t1) still free nothing early.

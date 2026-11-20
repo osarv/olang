@@ -768,7 +768,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     # (B22: a session's cell decides nothing - its values outlive its program, read and let go by the cells after it,
     # which decide otherwise: a place one cell decides sole may hold a value an earlier cell built where none is)
     fr := try placement(c, cfg, -1 if cfg.Cell else l.Root, kind == build.Kind.Module or cfg.Cell, keys
-                        fn(b I64, k I64): return lw.Preserves(b, k))
+                        fn(b I64, k I64): return lw.Preserves(b, k), fn(b I64, k I64): return lw.HandsOnly(b, k))
     lw.Plans = fr.Plans
     twinsTo(lw, fr)
     lw.DecideDerived()
@@ -1261,7 +1261,7 @@ fn apartModules(l load.Loader&, cfg build.Config&, out mut Map<I64, Bool>&) {
 }
 
 fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alone Bool = false
-    keys Array<String&>& = Array<String&>(0), parts fn?&(b I64, k I64) Bool = null) mut free.Free& ? build.Failed {
+    keys Array<String&>& = Array<String&>(0), parts fn?&(b I64, k I64) Bool = null, hands fn?&(b I64, k I64) Bool = null) mut free.Free& ? build.Failed {
     sc mut scope.Scoper& = scoper(c, cfg, alone)
     # B3i (W3b): the judgings records of earlier builds give, under each module's key - not for -memory, which lists
     # what every judging placed
@@ -1306,6 +1306,7 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, alo
     fr.Tests = cfg.Tests
     fr.Alone = alone
     fr.Keeps = parts
+    fr.Hands = hands
     # B18b: -free late decides nothing - every place keeps until its scope closes, as a module compiled on its own does
     fr.Decide(sc.Plans, -1 if cfg.Late else root)
     return fr

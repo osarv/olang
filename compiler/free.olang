@@ -246,6 +246,8 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # D9h: whether a body keeps its parameter k's referent's parts as they are (lowering's preserves) - null where the
     # driver gives none; and by body, the locals lowering surely copies a view call's value into (copiedLocals)
     Keeps fn?&(b I64, k I64) Bool = null
+    # ... and whether it keeps its by-value parameter k nowhere but in the value it hands back (lowering's HandsOnly)
+    Hands fn?&(b I64, k I64) Bool = null
     copiedAt Map<I64, Array<Bool>>
     # D9h (O2): by (body, site), the reference local holding a view of the view call's temporary in its own block
     # (BlockCopy); by body, whether they were found; what a body keeps of a read-only reference (typed.RefsKept)
@@ -2852,6 +2854,9 @@ fn (f mut Free&) unheldViews(b I64, l I64, c typed.Call&, b2 I64) Bool {
     if u.Ret[l] or u.RetView[l] or u.RetRefs[l]: return false
     for k in range c.Args.Len().Min(typed.ViewBits) {
         if (v & (I64(1) << k)) == 0: continue
+        # (an argument lowering can never take for stable storage - another call's value, `giveField(v[j])`'s At: the
+        # local holds no view in place, heldSrc failing on it)
+        if not heldShape(c.Args[k]): return true
         r := argRoot(c.Args[k])
         if r < 0 or bd.Locals[r].Kind == typed.LocalKind.Param or t.IsRef(bd.Locals[r].Ty): continue
         if u.WrOther[r] or u.Whole[r] or has(u.StoreAt, r): return true
@@ -2860,6 +2865,18 @@ fn (f mut Free&) unheldViews(b I64, l I64, c typed.Call&, b2 I64) Bool {
         }
     }
     return false
+}
+
+# whether a value is of a shape lower.heldSrc may take for storage changed by nothing while a local holding a view of
+# it lives - constant data, a place read or borrowed, a slice, a promoted read; never a call's value
+fn heldShape(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Data(_, _, _, _), typed.Expr.Read(_, _, _, _), typed.Expr.Borrow(_, _, _), typed.Expr.Slice(_, _, _): true
+        case typed.Expr.Promote(_, _, pr): heldShape(pr.X)
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and heldShape(args[0])
+        case typed.Expr.Away(_, _, y): heldShape(y)
+        case _: false
+    }
 }
 
 # the local a borrow or a read of a place is rooted at through fields, elements and payloads, -1 for any other
@@ -2920,9 +2937,39 @@ fn (f mut Free&) blockCopies(b I64) {
     u := typed.LocalUses.Uses(f.T(), f.Bodies[b])
     for i in range f.Bodies[b].Locals.Len() {
         x := u.Init[i]
-        if x == null or not (f.blockView(u, b, i) or f.blockHolder(u, b, i)): continue
+        if x == null: continue
         k := initCall(x)
-        if k != null: f.blockArgs(b, i, k, 0)
+        if k == null: continue
+        if f.blockView(u, b, i) or f.blockHolder(u, b, i): f.blockArgs(b, i, k, 0)
+        if f.ownedHolder(b, i): f.resultArgs(b, i, k)
+    }
+}
+
+# whether value local i of body b holds what its declaration's call hands back as a value of its own: no reference,
+# no reference held beside the storage it holds by value - a copy lowering makes of a view call's result where it is
+# kept (D9h; a view held in place of the copy only of storage that outlives the local, lower.heldViews)
+fn (f mut Free&) ownedHolder(b I64, i I64) Bool {
+    t := f.T()
+    l := f.Bodies[b].Locals[i]
+    if l.Kind != typed.LocalKind.Var and l.Kind != typed.LocalKind.Hidden: return false
+    return not l.Unset and not t.IsRef(l.Ty) and not f.refsBeyondParts(l.Ty)
+}
+
+# (b1's giveField) the view calls whose values call k, declaring value local i of body b (ownedHolder), is given for
+# by-value parameters it keeps nowhere but in what it hands back (Hands, or only reads: Keeps) - not a constructor's,
+# whose instance may hold its views in place of copies (D9h): what k hands back is the local's own copy, or no view of
+# them at all, so the copy of each lowering makes is dead with the local - made in its block (lower.blockCopy)
+fn (f mut Free&) resultArgs(b I64, i I64, k typed.Call&) {
+    t := f.T()
+    cb := typed.CalleeBody(k)
+    if cb < 0 or f.Bodies[cb].Root == null or t.Role(f.Bodies[cb].Ty) == types.RoleCtor: return
+    if f.refsBeyondParts(t.Result(f.Bodies[cb].Ty)): return
+    ps := t.Items(t.Params(f.Bodies[cb].Ty))
+    for j in range k.Args.Len().Min(ps.Len()) {
+        if t.IsRef(ps[j]): continue
+        s := f.viewCallSite(k.Args[j])
+        if s < 0: continue
+        if (f.Keeps != null and f.Keeps!(cb, j)) or (f.Hands != null and f.Hands!(cb, j)): f.blockAt.Put(pair.Pair(b, s), i)
     }
 }
 

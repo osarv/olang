@@ -145,6 +145,19 @@ test "a by-value parameter owns its parts" {
     assert shout(p) == "Xmy" and p.name == "amy"
 }
 
+# ... given an element read out of a collection - a view call's value - it is still its own: written, the element is not
+fn whisper(p person) I64 {
+    p.name[0] = 'Y'
+    return p.name.Len() if p.name[0] == 'Y' else 0
+}
+
+test "a by-value parameter given an element owns its parts" {
+    ps Vec<person>
+    ps.Push(person($"amy", 9))
+    assert whisper(ps[0]) == 3 and ps[0].name == "amy"
+    assert shout(ps[0]) == "Xmy" and ps[0].name == "amy"
+}
+
 # a part stored through a "&" parameter is built where its container is - so a caller must say exactly where that is,
 # even through a local found by a lookup (the store needs the scope exact, as a reference field's does: O25g)
 type opt struct(name String) {

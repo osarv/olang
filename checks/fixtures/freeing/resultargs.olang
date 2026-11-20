@@ -1,0 +1,36 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, review4's b1): an element given by value to a callee keeping it nowhere but in what it
+# hands back (`h := field(v[j])`, `w := same(v[j])`): At's value is copied (D9h) in the block of the value local the
+# call's result is declared into (free.BlockCopy's resultArgs, lowering's HandsOnly), dead with it, and the local holds
+# its own copy of what the callee hands back - a call's value is no stable storage (free.unheldViews), so no view of
+# the element the next store lets go of
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn field(x Q) Vec<I64> { return x.a }
+
+fn same(x Q) Q { return x }
+
+fn main() {
+    v Vec<Q>
+    for k in range 4 {
+        q := Q()
+        q.a = Vec<I64>[k, k + 1]
+        v.Push(q)
+    }
+    t := 0
+    for i in range N {
+        h := field(v[i % 4])
+        w := same(v[(i + 1) % 4])
+        p := Q()
+        p.a = Vec<I64>[i, i + 5]
+        v[i % 4] = p
+        p2 := Q()
+        p2.a = Vec<I64>[i, i + 6]
+        v[(i + 1) % 4] = p2
+        t += h[1] + w.a[0]
+    }
+    io.PutLn($t + " " + $v[1].a.Len())!
+}
