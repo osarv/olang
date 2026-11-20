@@ -553,7 +553,10 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   prelude's shifts (`v.data[k].occupy(v.data[k + 1].vacate())`) move each leaf's value out of the same leaf place -
   SMove (`walker.copyInto`) - so `Q.a` is sole and v9 frees (200,000 turns: 13 MB, -free late 116 MB). A moved value
   anywhere else - an argument, an operand, a local the block's end does not end - is a gap row naming the call
-  (`walker.movedGaps`), so -check cannot pass such a leak.
+  (`walker.movedGaps`), so -check cannot pass such a leak (a holder whose drop ends it, O15, is none: maptake).
+  Checked on the step's last commit: the freeing and earlyfree scenarios, `make scopesan`, `make quick`
+  (tokens/ast/layout goldens recaptured); review4/review5's 60 probes print the same built, `-free late`, `-sanitize`
+  and interpreted, `-memory -check` now passing for v9 too.
   **Where to pick up**: a `Vec<String>`'s popped text (`v.Pop()!`, `x := v.Pop()!`) still frees nothing and the pass
   counts no let-go (the call's result origins carry no OMov of the text place; master the same); `?&`/`any` holders
   (t2: `Box(v[j].b)` held as `any Summer&`, its Sum called through the table - BlockCopy would need the any local and

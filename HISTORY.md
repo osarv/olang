@@ -40206,7 +40206,8 @@ value moved out of another element of the same type: each of its leaves' values 
 place - judged SMove now (`walker.copyInto`, `takenOf`). Q.a is sole and v9 frees: 200,000 turns at 13 MB, `-free
 late` 116 MB. So that no such leak passes -check again, a call handing back a moved value with leaves anywhere but
 dropped, the value of a local the block's end ends, stored into a place (judged there) or handed back is a gap row
-naming the call (`walker.movedGaps`): `t += sum(v.TakeAt(0)!)`, `v.TakeAt(0)!.a[1]`, a local leaving early. And a
+naming the call (`walker.movedGaps`): `t += sum(v.TakeAt(0)!)`, `v.TakeAt(0)!.a[1]`, a local leaving early. A holder
+whose drop ends the value (O15, Part C's LHeld - earlyfree's maptake, `r Res = m.Take(k)!`) is no gap. And a
 value local holding a moved value holds its storage alone - the slot it left is empty - so another value's let-go of
 the same place no longer counts it as a view (`y := vv.TakeAt(0)!` then `vv.Pop()!` kept before). Fixture
 movedvalues (400,000 turns under 8 MB; master out of memory).
