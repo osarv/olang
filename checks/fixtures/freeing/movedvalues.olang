@@ -1,0 +1,36 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, review5's v9): a value moved out of a collection by a removal and dropped
+# (`vv.Pop()!`, `v.TakeAt(0)!`) lets go of its leaves there (free.DroppedLeaves) - an element that is no candidate place,
+# a Vec<Vec<I64>>'s, too; one held by a local to its block's end (`x := v.TakeAt(1)!`) lets go of them as the block ends
+# (free.EndsMoved); and the shifts of Insert, RemoveAt and TakeAt move each element's leaves (SMove), so Q.a is sole
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.a = Vec<I64>[i, i + 1]
+    return q
+}
+
+fn main() {
+    v Vec<Q>
+    vv Vec<Vec<I64>>
+    t := 0
+    for i in range N {
+        v.Push(Q.Mk(i))
+        v.Push(Q.Mk(i + 1))
+        v.Insert(0, Q.Mk(i + 2))!
+        v.TakeAt(0)!
+        x := v.TakeAt(1)!
+        t += x.a[1] + v[0].a[0]
+        v.RemoveAt(0)!
+        vv.Push(Vec<I64>[i, i + 3])
+        vv.Push(Vec<I64>[i, i + 4])
+        y := vv.TakeAt(0)!
+        vv.Pop()!
+        t += y[1]
+    }
+    io.PutLn($t + " " + $v.Len() + " " + $vv.Len())!
+}

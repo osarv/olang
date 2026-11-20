@@ -5511,8 +5511,12 @@ fn (w mut walker&) views() {
         # place reaches it - and its own growth gives it the new storage)
         ty := body.Locals[l].Ty if l < body.Locals.Len() else types.UnknownT
         ownParts := Vec<I64>() if ty == types.UnknownT or f.refsBeyondParts(ty) else f.heldPlaces(ty)
+        # (gap 22: and a value local holding a value moved out of a place holds that value's storage alone - the slot it
+        # left is empty - so no other value's let-go of the place reaches it: `y := vv.TakeAt(0)!` then `vv.Pop()!`)
+        moved := ty != types.UnknownT and not f.T().IsRef(ty) and body.Locals[l].Kind == typed.LocalKind.Var
         for y in w.origins[l] {
             if okind(y) == OPl and f.PartPlace(oval(y)) and has(ownParts, oval(y)): continue
+            if okind(y) == OMov and moved: continue
             if okind(y) == OPl or okind(y) == OMov: viewed[l].Push(oval(y))
         }
     }
