@@ -40115,3 +40115,55 @@ window not quiet). A first try that also refused EscOwn, GiveAt and the like whe
 freeing argholders. Still named among the probes: a callee handing back its parameter's field (b1's `giveField`, Ret),
 stores (c2, g2: `v[i] = plus(v[i], i)`, `v[i].a = v[i].a`), a view chain read in an expression (e1), tasks (h8, n1,
 t1), `?&`/`any` holders (t2), a Map's own value put (v8, v9), and the shapes behind g1, j1, k1, o1, o2, ov1, s3.
+
+## 2026-11-20: freeing - by-value arguments, an element's own value, split fields in elements (O8f, D9a, D9h, QCE; mine; wt-freeopen)
+
+Continued from wt-genview's "where to pick up", cheapest first, against review4/review5's probes.
+
+A callee handing back its by-value parameter or a field of it (review4 b1, `h := giveField(v[j])`): At's value was
+copied into the collection's scope, a copy a turn. BlockCopy now follows a value local of no reference beyond its
+parts declared with such a call (`free.resultArgs`; not a constructor's, whose instance may hold views in place): the
+callee keeps the parameter nowhere but in what it hands back - lowering's `HandsOnly`, keepsParts without the return
+(written nowhere, stored nowhere, lent only to bodies preserving it; Ret, RetView and RetRefs allowed) - so At's copy
+is made in the local's block. The local itself holds lowering's copy of the result: `lower.heldSrc` never takes a
+call's value for stable storage, so `free.unheldViews` now says so (`heldShape`), and the local is no view of the
+element's places. First tried: putting the new holder only where blockView and blockHolder failed - a Vec<I64> local
+HoldsRefs (owned arrays count), so blockHolder took it and blockArgs asked Keeps; both now run.
+
+A value-semantics bug found there (D9a): an argument for a by-value parameter of a call whose result holds no
+storage was read where it stands (readHere) whatever the callee did, so `whisper(ps[0])` writing its parameter wrote
+the Vec's element - built and interpreted alike, since the evaluator runs lowering's MIR. Requiring Preserves fixed it
+but copied every `v.Push(v[0])` argument twice (Push stores its parameter, a copy already); the condition is now that
+the callee writes nothing of the parameter (`lower.writesParam`: WrOther, WrScalar, a part stored into, whole, or lent
+writably to a body changing it). tests/valueparts.
+
+An element stored from its own value (c2, g2). `v[i] = plus(v[i], i)`, plus preserving q and handing back no view of
+it: the argument is now read in place or copied into the statement's innermost scope whatever the result holds
+(`lower.unviewedArg`), free's viewArg taking a call whose value holds no reference beyond its parts and no view of the
+argument. A copy of a temporary's part (`p.a = v[j].a`) reads the temporary only until the copy is made
+(`lower.make`'s readHere; free's readCopy exempts the temporary). `v[i].a = v[j].a` goes through E31b's write-back,
+which held the value and stored it as it was: a second bug, `v[0].a = w.a` then `w.a[0] = 99` showed in `v[0].a`
+(a fixed array's element store copied). The held value is now the store's own copy (`check.writeBack`'s storeCopy,
+SPEC's QCE as written), and the free pass judges a held copy stored into a place of its own as that copy
+(`free.made` through heldCopy; `assign` reads it as copyRead). Fixture ownvalues.
+
+review4 e1. A view chain read in an expression (`v[i].qs[2].a[0]`): lowering's readPlace followed elements to the
+temporary, free's `tempPlaceCall` fields only; free's lends now use `readCall`, which follows both. A struct holding
+a split field beside a Vec, `S{qs Array<Q>, b Vec<I64>}`, as a Vec's element: PartsOnly takes a split field
+(`partsField`), its walk by the array's own length (`VecWalk` with Count `SplitCount`, `lower.walkReleases` making a
+by-length relPath at the field's path), and a copy of S is split part by part (`free.splitOwner` takes a part place
+leaf - `lower.partOf` already split the array and its elements). Then e1 passed `-memory -check` and still ran out of
+8 MB: a hole. `s.qs = Array<Q>(n, base)` with s outside the loop had the scope pass build `base` (site 1) in main's
+scope - `valMake` fitted a fill's item as an element slot, though a fill of values owning storage holds each element's
+own copy (QCE, lower.fill). Every turn's base and its Vec stayed there, ~0.5 KB a turn, in master too, built,
+`-free late` and interpreted alike; nothing let go of them, so no report named them. `valMake` now judges such a fill's
+item as `ownCopy` does - only the references it shares must outlive the fill. Fixture splitelems (e1 at 400,000
+turns).
+
+v9 (Vec.Insert, RemoveAt, TakeAt on a Vec<Q>): their shifts (`v.data[k].occupy(v.data[k - 1].vacate())`) store a Take
+of another element, judged existing storage for Q.a. Judging each leaf as a move of its own place (SMove) passed
+`-memory -check`, but TakeAt's result then leaked unnamed: a value moved out of a collection by a library call and
+dropped (or held by a local) releases nothing and is no let-go the pass counts - master grows there too, named only
+because of the shift's keep. Reverted; recorded in docs/freeing.md with v8 (a Get under a try given Put) and t2 (a
+holder behind `any`). Tasks (a7, h8, n1, t1) not reached.
+

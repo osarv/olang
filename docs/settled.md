@@ -1024,7 +1024,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   elements counts as a let-go of their place (`partWalked`), so a `Vec<String>` or `Vec<Array<I64>>` pushed to and
   given another value frees (arrayelems, wt-arrelems). A struct field holding such an array (`S{qs Array<Q>}`) is a
   split field (`free.SplitField`): its values built split, its let-go releasing its elements' parts by its length, then
-  the array (splitfield, wt-splitfield).
+  the array (splitfield, wt-splitfield); a struct holding one beside other parts is PartsOnly as an element, walked by
+  the array's length (`VecWalk`'s SplitCount), its copy split part by part (splitelems, wt-freeopen).
+  A view call's value given to a by-value parameter its callee keeps nowhere but in what it hands back
+  (`lower.HandsOnly`), the result held by a value local of no reference beyond its parts (`h := giveField(v[j])`): At's
+  copy made in that local's block (`free.resultArgs`), the local holding lowering's copy of the result - a call's value
+  is never stable storage (`free.unheldViews`' heldShape) - resultargs. One its callee preserves and hands back no
+  view of, whatever its result holds (`v[i] = plus(v[i], i)`, `lower.unviewedArg`), and the temporary a copy of its
+  part reads (`p.a = v[j].a`, `lower.make`'s readHere, free's readCopy), are read where they stand or copied into the
+  statement's innermost scope; E31b's write-back stores its own copy (`check.writeBack`), given the place where it is
+  stored (`free.made` through heldCopy) - ownvalues. A temporary is lent for reading through fields, elements and
+  payloads (`free.readCall`, as lowering's readPlace). A fill of values owning storage holds each element's own copy,
+  so the scope pass judges its item as a copy's (`scope.valMake`), not built where the fill goes (wt-freeopen).
+  An argument for a by-value parameter is read where it stands only where the callee writes nothing of it
+  (`lower.writesParam`, D9a; wt-freeopen).
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by
