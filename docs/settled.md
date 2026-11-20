@@ -1010,8 +1010,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   keeping nothing of it and the call keeps the view only in its result, a generator's Next only in its frame, yielding
   no reference (`free.blockHolder`, `keptInResult`; genviews, wt-genview).
   A plain value local declared with a view call's PartsOnly value (`c := v[j]`) has its copy built split
-  (`free.splitLetOf`, `lower.ownersCopy`): its owners keep for RSplit; read after the element is let go of it keeps as
-  a named view (the pass cannot tell lowering's copy from a view local).
+  (`free.splitLetOf`, `lower.ownersCopy`): its owners keep for RSplit; where what the call views is a local something
+  writes, stores or lends to a body changing it while the local lives, lowering surely copies, and the pass takes the
+  copy for no view (`free.unheldViews`), so a read after the element's let-go keeps nothing (copyread, wt-genview);
+  captured by a lambda it still keeps as a named view (review4 a5).
   An array's run-time array elements of plain elements or of PartsOnly structs (a `Vec<Array<I64>>`'s, a
   `Vec<Array<Q>>`'s) are a part place by type (`free.elemArray`): each built in a part region, its elements' parts split
   (every copy of such an array, `arraysCopy`), released - its elements' parts first, by its length - where an element is

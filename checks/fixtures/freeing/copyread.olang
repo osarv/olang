@@ -1,0 +1,40 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): a plain value local declared with an element's value (`c := v[j]`, At's view copied,
+# D9h) read after the element is replaced: lowering copies it - what it views is changed while it lives
+# (lower.heldViews' heldSrc) - and the free pass, knowing that (free.unheldViews), takes the copy for a value of its
+# own, no view of the element's places: the element's let-go frees at once, with no named keep
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+type S struct() { qs Vec<Q> }
+
+fn main() {
+    v Vec<Q>
+    for k in range 4 {
+        q := Q()
+        q.a = Vec<I64>[k, k + 3]
+        v.Push(q)
+    }
+    s := S()
+    for k in range 3 {
+        q := Q()
+        q.a = Vec<I64>[k]
+        s.qs.Push(q)
+    }
+    t := 0
+    for i in range N {
+        c := v[i % 4]
+        p := Q()
+        p.a = Vec<I64>[i, i]
+        v[i % 4] = p
+        t += c.a[0] + c.a.Len()
+        d := s.qs[i % 3]
+        w := Q()
+        w.a = Vec<I64>[i + 1]
+        s.qs[i % 3] = w
+        t += d.a[0]
+    }
+    io.PutLn($t + " " + $v[1].a.Len())!
+}

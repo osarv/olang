@@ -40086,3 +40086,14 @@ lambda holds the capture in its frame only (the capture and the parameter's own 
 copy in the holder's block (lower.blockCopy, unchanged), dead with it. a6 at 2,000,000 turns: 174 MB to 1.7 MB,
 passing `-memory -check`; checks' freeing genviews (a generator's Next called twice around the element's
 replacement, a for-in over a generator in an inner block) runs under 8 MB.
+
+Then `c := v[j]` read after the element is replaced (`v[j] = p`), which kept as a named view ("read what you need from
+'c' before"): the free pass could not tell lowering's copy from a view local. Lowering holds views in place only where
+every argument the call may view is stable while the local lives (`lower.heldViews`' heldSrc: for a value local,
+`heldUnchanged` - written by nothing, assigned, stored or lent to a body changing its parts by nothing). The pass now
+takes the negation of that as a sufficient condition (`free.unheldViews`, in `copiedView`): an argument the call views,
+rooted through fields, elements and payloads at a value local the body writes, assigns, stores or lends to a body
+that does not preserve it (Keeps), means lowering copies, so the local's value is no view of the element's places.
+Locals handed back (which lowering may keep as views, rvl) and calls viewing more than their arguments (ViewOther) are
+left as they were. Fixture: checks' freeing copyread (its `-memory -check` reports nothing kept; master named the
+element's field). `c` captured by a lambda (a5's `g`) still keeps as a named view.

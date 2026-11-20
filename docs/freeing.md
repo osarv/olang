@@ -495,6 +495,8 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   copied only into such a local of its block - a for-in's walk), through a call nested in the declaration whose callee
   keeps the view only in its result (`keptInResult`: NoneKept, or a generator's Next holding it in its frame only,
   yielding no reference). a6 174 MB to 1.7 MB at 2,000,000 turns, `-memory -check` passing; fixture genviews.
-  **Where to pick up**: `c := v[j]` read after the element's let-go keeps as a named view: the pass would need
-  lowering's view-local decision (`lower.viewLocals`' heldSrc) to know the copy is made. A program with tasks still
-  frees nothing early (a7). Step 1 (genview) committed; the freeing/earlyfree scenarios not yet run on it.
+  Then `c := v[j]` read after the element is replaced: where an argument the view call views is rooted at a local
+  the body writes, stores or lends to a body changing it, lowering surely copies (`lower.heldViews`' heldSrc fails),
+  and the pass takes the copy for no view (`free.unheldViews` in `copiedView`); fixture copyread (`-memory -check`: 0
+  kept). **Where to pick up**: `c` captured by a lambda (a5's `g`) still keeps as a named view; a program with tasks
+  still frees nothing early (a7). Steps 1-2 committed; the freeing/earlyfree scenarios run on step 1 only so far.

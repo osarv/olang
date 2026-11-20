@@ -2835,7 +2835,50 @@ fn (w mut walker&) copiedView(l I64, x typed.Expr&) Bool {
     if c == null: return false
     b2 := typed.CalleeBody(c)
     if b2 < 0 or f.Bodies[b2].Root == null or f.viewsOf(b2) == 0 or f.freshCtor(c, b2, w.Id): return false
-    return f.copiedLocals(w.Id)[l]
+    return f.copiedLocals(w.Id)[l] or f.unheldViews(w.Id, l, c, b2)
+}
+
+# whether a value local l of body b declared with view call c (callee b2) surely holds lowering's copy because what
+# the call views is not stable while it lives: an argument it may hand back a view of is rooted, through fields,
+# elements and payloads, at a value local of the body something writes, assigns, stores or lends to a body changing
+# its parts (`c := v[j]` before `v[j] = p`) - lower.heldViews' heldSrc fails there (heldUnchanged), so the local holds
+# no view in place and the call is copied. Never a local handed back (one lowering may keep holding views, rvl)
+fn (f mut Free&) unheldViews(b I64, l I64, c typed.Call&, b2 I64) Bool {
+    v := f.viewsOf(b2)
+    if (v & typed.ViewOther) != 0: return false
+    t := f.T()
+    bd := f.Bodies[b]
+    u := typed.LocalUses.Uses(t, bd)
+    if u.Ret[l] or u.RetView[l] or u.RetRefs[l]: return false
+    for k in range c.Args.Len().Min(typed.ViewBits) {
+        if (v & (I64(1) << k)) == 0: continue
+        r := argRoot(c.Args[k])
+        if r < 0 or bd.Locals[r].Kind == typed.LocalKind.Param or t.IsRef(bd.Locals[r].Ty): continue
+        if u.WrOther[r] or u.Whole[r] or has(u.StoreAt, r): return true
+        for j in range u.LendAt.Len() {
+            if u.LendAt[j] == r and f.Keeps != null and not f.Keeps!(u.LendBody[j], u.LendParam[j]): return true
+        }
+    }
+    return false
+}
+
+# the local a borrow or a read of a place is rooted at through fields, elements and payloads, -1 for any other
+fn argRoot(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Borrow(_, _, p), typed.Expr.Read(_, _, p, _): placeRoot(p)
+        case typed.Expr.Away(_, _, y): argRoot(y)
+        case _: -1
+    }
+}
+
+fn placeRoot(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): I64(id)
+        case typed.Lvalue.Field(_, _, base, _): placeRoot(base)
+        case typed.Lvalue.Elem(_, _, e): placeRoot(e.Base)
+        case typed.Lvalue.Payload(_, _, py): placeRoot(py.Base)
+        case _: -1
+    }
 }
 
 # by local of body b: whether lowering can never make it a view local (lower.viewCand) - it is written but in a scalar
