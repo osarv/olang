@@ -516,8 +516,15 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   where it stands whatever the callee did with it - `whisper(ps[0])` writing its parameter wrote the Vec's element
   (built and interpreted alike, both reading lowering's MIR). Lowering reads it in place only where the callee
   preserves the parameter (`args`, as free's viewArg already asked); tests/valueparts.
-  **Where to pick up**: stores of an element's own value (c2, g2: `v[i] = plus(v[i], i)`, a callee only reading and
-  handing back fresh storage; `v[i].a = v[i].a`, a copy of a temporary's field); a view chain read in an expression
-  (e1: `v[i].qs[2].a[0]` - free's `tempPlaceCall` follows fields only where lowering's `readPlace` follows elements and
-  payloads too); `?&`/`any` holders (t2); a Map's own value put (v8, v9); `c` captured by a lambda (a5's `g`) keeps as
-  a named view (places by path would tell it from `Q.a`); tasks (a7, h8, n1, t1) still free nothing early.
+  Then an element stored from its own value (review4 c2, g2). `v[i] = plus(v[i], i)`, a callee preserving its by-value
+  parameter and handing back no view of it whatever its result holds: lowering reads the argument where it stands or
+  copies it into the statement's innermost scope (`lower.unviewedArg`), free's viewArg taking it as before. A copy of a
+  part of a view call's temporary (`p.a = v[j].a`) reads the temporary only until it is made (`lower.make`'s readHere,
+  free's `readCopy`). `v[i].a = v[j].a` goes through E31b's write-back, which stored the value it held as it was - a
+  second value-semantics bug, `v[0].a = w.a` then a write to `w.a` showing in `v[0].a`: the held value is now the
+  store's own copy (`check.writeBack`'s storeCopy), given the place where it is stored (`free.made` through heldCopy).
+  Fixture ownvalues; tests/valueparts.
+  **Where to pick up**: a view chain read in an expression (e1: `v[i].qs[2].a[0]` - free's `readCall` now follows
+  elements and payloads as lowering's `readPlace` does; e1 still keeps `s.b` and `s.qs` in `S.Mk` and the element of
+  `v[i % 4] = S.Mk(n, base)`); `?&`/`any` holders (t2); a Map's own value put (v8, v9); `c` captured by a lambda (a5's
+  `g`) keeps as a named view (places by path would tell it from `Q.a`); tasks (a7, h8, n1, t1) still free nothing early.

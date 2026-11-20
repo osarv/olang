@@ -1,0 +1,38 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, review4's c2 and g2): an element stored from its own value. `v[i] = plus(v[i], i)`, a
+# callee only reading its by-value parameter and handing back no view of it (lower.unviewedArg, free's viewArg): At's
+# value read where it stands or copied into the statement's innermost scope. `v[i].a = v[j].a`, through E31b's
+# write-back: the store's own copy (check.storeCopy) held before the element is taken, then given the place (free.made
+# through heldCopy), the temporary it copies read only until it is made (lower.make's readHere, free's readCopy)
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn plus(q Q, i I64) Q {
+    r := Q()
+    r.a = Vec<I64>[q.a[0] + i, q.a.Len()]
+    return r
+}
+
+fn main() {
+    v Vec<Q>
+    for k in range 4 {
+        q := Q()
+        q.a = Vec<I64>[k, k + 1]
+        v.Push(q)
+    }
+    p := Q()
+    t := 0
+    for i in range N {
+        v[i % 4] = plus(v[i % 4], i % 7)
+        v[(i + 1) % 4].a = v[(i + 2) % 4].a
+        v[(i + 2) % 4].a = v[(i + 2) % 4].a
+        p.a = v[(i + 3) % 4].a
+        w := Q()
+        w.a = Vec<I64>[i % 5, 1, 2]
+        v[(i + 3) % 4] = w
+        t += v[i % 4].a[0] + v[(i + 1) % 4].a[1] + p.a.Len()
+    }
+    io.PutLn($t + " " + $v[1].a.Len())!
+}

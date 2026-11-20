@@ -158,6 +158,16 @@ test "a by-value parameter given an element owns its parts" {
     assert shout(ps[0]) == "Xmy" and ps[0].name == "amy"
 }
 
+test "a store into an element's part read through At is its own copy" {
+    ts Vec<team>
+    ts.Push(team("a"))
+    w := team("b")
+    w.members.Push("x")
+    ts[0].members = w.members
+    w.members[0] = "y"
+    assert ts[0].members[0] == "x" and w.members[0] == "y"
+}
+
 # a part stored through a "&" parameter is built where its container is - so a caller must say exactly where that is,
 # even through a local found by a lookup (the store needs the scope exact, as a reference field's does: O25g)
 type opt struct(name String) {

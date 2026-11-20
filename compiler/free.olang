@@ -2713,6 +2713,9 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         w.copyExempt = ownCopySite(cm)
         w.copyRead = readLocalOf(x)
     }
+    # (and one stored into a place of its own - check.writeBack's held value, `v[i].a = w.a`: the store's own copy, made
+    # for the place, judged there - made)
+    if cm == null and w.F.placeOfPlace(p) >= 0 and w.heldCopy.Has(readLocalOf(x)): w.copyRead = readLocalOf(x)
     wasA := w.splitArr
     w.splitArr = w.splitArrOf(p, x)
     o := w.expr(x)
@@ -4300,16 +4303,20 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     # (lower.fill's readHere): no value a store gives a place, no view in use across the statement's let-goes)
     readFill := m.Kind == typed.MakeKind.Fill and m.Items.Len() == 1 and not dead and copiedCall(m.Items[0]) >= 0
     readFill = readFill and w.ownsStorage(w.T().Elem(w.T().Plain(w.F.arrayOf(ty))))
+    # (review4's g2: a copy of a part of a view call's temporary - `v[i].a = v[j].a` - reads it only until it is made,
+    # or as the argument it is left out for: the temporary read where it stands or copied into the statement's innermost
+    # scope, lower.make's readHere)
+    readCopy := m.Kind == typed.MakeKind.Copy and m.Items.Len() == 1 and copiedCall(m.Items[0]) < 0 and readCall(m.Items[0]) >= 0
     outerE := w.exemptSite
-    if readFill {
-        w.exemptSite = copiedCall(m.Items[0])
+    if readFill or readCopy {
+        w.exemptSite = copiedCall(m.Items[0]) if readFill else readCall(m.Items[0])
         w.copying++
     }
     for it in m.Items {
         o := w.expr(it)
         if not dead: addAllTo(out, o)
     }
-    if readFill: w.copying--
+    if readFill or readCopy: w.copying--
     w.exemptSite = outerE
     if m.Length != null: w.expr(m.Length!)
     if m.Site >= typed.SiteId(0): addTo(out, orig(ONew, I64(m.Site)))
@@ -4451,13 +4458,16 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         # (or where the call's value is a reference local's that holds it in its own block - lowering's copy, if it
         # makes one, is made there: BlockCopy)
         if not lends and c.Site >= typed.SiteId(0) and f.BlockCopy(w.Id, borrowedTemp(a)) >= 0: lends = true
-        w.readArg = tempCall(a) if lends else -1
+        w.readArg = readCall(a) if lends else -1
         copied := not unknown and copiedArg(a)
         # (and a view call's value given as it is to a by-value parameter such a callee only reads, of a call whose value
         # holds no reference - `v[i] = v[j]`'s At: lowering copies it (D9h) into the statement's innermost scope, no value
         # a store gives a place, dead once the callee returns; or, where nothing in the callee's window writes what it
         # views (lower.readHere, windowQuiet), gives it as it is, dead as soon. Not a task's, read beside its spawner)
-        viewArg := not copied and not unknown and b2 >= 0 and not w.holds(ty) and I64(c.Site) != w.taskSite and j < ps.Len()
+        # (or, review4's c2, of any call whose value holds no reference beside its parts and no view of the argument -
+        # lower.unviewedArg: the result is storage of its own, `v[i] = plus(v[i], 1)`)
+        unviewed := j < typed.ViewBits and (f.viewsOf(b2) & (I64(1) << j)) == 0 and not f.refsBeyondParts(ty) if b2 >= 0 else false
+        viewArg := not copied and not unknown and b2 >= 0 and (not w.holds(ty) or unviewed) and I64(c.Site) != w.taskSite and j < ps.Len()
         viewArg = viewArg and not w.T().IsRef(ps[j]) and copiedCall(a) >= 0 and f.Keeps != null and f.Keeps!(b2, j)
         if copied or viewArg: w.copying++
         # (O8f, gap 22: a by-value argument's copy a callee only reads - Preserves: written through nowhere, kept nowhere,
@@ -5230,6 +5240,12 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
             why = "its new value has a default"
         }
         case _ {
+            # (a store's own copy held before the store - check.writeBack's, Part C's heldCopy - is what the place is given)
+            hl := readLocalOf(x)
+            if hl >= 0 and w.heldCopy.Has(hl) {
+                w.made(k, w.heldCopy.Get(hl)!, sp, multi)
+                return
+            }
             site, why = w.freshSite(x)
             if site >= 0 {
                 kind = SFresh
@@ -6632,6 +6648,9 @@ fn (f mut Free&) RetirePlaces(b I64, sp source.Span) Vec<I64> {
 # whether a candidate place holds an owner (types.Anchors): its let-go releases the region its anchors name
 fn (f Free&) IsOwner(k I64) Bool { return k >= 0 and k < f.owner.Len() and f.owner[k] }
 
+# refsBeyondParts, for lowering (lower.unviewedArg)
+fn (f mut Free&) RefsBeyond(ty types.TypeId) Bool { return f.refsBeyondParts(ty) }
+
 # whether a value of type ty holds a reference beside the arrays it holds by value (HoldsRefs counts those: a part's
 # storage lives where its container's references do) - a reference, a function value, an any, a type variable, through
 # fields, elements and payloads. A type met again while asked holds nothing new
@@ -7139,6 +7158,28 @@ fn copiedCall(x typed.Expr&) I64 {
     return match x {
         case typed.Expr.Call(_, _, c): I64(c.Site)
         case typed.Expr.Away(_, _, y): copiedCall(y)
+        case _: -1
+    }
+}
+
+# the site of the call whose temporary an argument lent for reading reads, through fields, elements and payloads as
+# lowering's readHere follows it (readPlace: `v[i].qs[2].a[0]`), -1 for none
+fn readCall(a typed.Expr&) I64 {
+    return match a {
+        case typed.Expr.Promote(_, _, pr): readCall(pr.X)
+        case typed.Expr.Borrow(_, _, p), typed.Expr.Read(_, _, p, _): readPlaceCall(p)
+        case typed.Expr.Away(_, _, y): readCall(y)
+        case typed.Expr.Call(_, _, c): I64(c.Site)
+        case _: -1
+    }
+}
+
+fn readPlaceCall(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Temp(_, _, v, _): readCall(v)
+        case typed.Lvalue.Field(_, _, base, _): readPlaceCall(base)
+        case typed.Lvalue.Elem(_, _, e): readPlaceCall(e.Base)
+        case typed.Lvalue.Payload(_, _, py): readPlaceCall(py.Base)
         case _: -1
     }
 }

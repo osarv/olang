@@ -20971,6 +20971,9 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&, val
     if op == token.Tok.Assign {
         x = c.exprTo(value!, pt)
         if pt == c.textType() and c.isRef(typeOf(x)): x = c.read(sp, typed.Lvalue.Deref(sp, pt, x!))
+        # (QCE: the store into the element read is a part store as any other - its own copy where the part owns what it
+        # holds, never the storage the value names: `v[i].a = w.a` then a write to w.a leaves v[i].a as it was)
+        if setM < 0: x = c.storeCopy(p, x!)
     } else if value != null and c.laneArray(pt) and laneTok(compoundOp(op)) {
         # E39 through x[i] (an inline array of the element): the operand's lanes evaluated and held, then the element
         # read, the loop storing into it, and it written back - none of the program's code between the read and the

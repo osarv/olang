@@ -5045,6 +5045,14 @@ fn (ln mut lowering&) helperCallee(k typed.Helper, ht types.TypeId) mir.Callee, 
     return mir.Callee.Fn(mir.FnKey.Helper(kind, ht), ty), ty
 }
 
+# whether body's by-value parameter i is one it preserves (Preserves) and hands back no view of (load.ViewResults) in a
+# result (of function type fty) holding no reference beside the storage it holds by value - free.viewArg's judgement
+fn (ln mut lowering&) unviewedArg(body I64, fty types.TypeId, i I64) Bool {
+    if body < 0 or i >= typed.ViewBits or not ln.planned or ln.L.Free == null or not ln.L.preserves(body, i): return false
+    if (ln.L.ViewsOf(typed.BodyId(I32(body))) & (I64(1) << i)) != 0: return false
+    return not ln.L.Free!.RefsBeyond(ln.T.Result(fty))
+}
+
 # a call's arguments, left to right: a helper's taken as references to their values held (its ABI, DESIGN.md 1.8.1)
 fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mir.Range {
     t := ln.T
@@ -5076,6 +5084,11 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         byValue := i < ps.Len() and not t.IsRef(ps[i])
         if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) and (not byValue or ln.L.preserves(body, i)) {
             ln.readHere(a, c if plain else null)
+        } else if byValue and not task and ln.unviewedArg(body, ty, i) {
+            # (gap 22, review4's c2: nor is one for a by-value parameter the callee preserves and hands back no view of,
+            # whatever its result holds - `v[i] = plus(v[i], 1)`: the result is storage of its own, the argument dead
+            # once the call returns; its window the whole statement)
+            ln.readHere(a)
         }
         if not task: ln.argView(a, body, i)
         ro := i < ps.Len() and t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) == 0
@@ -6598,6 +6611,9 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
         case typed.MakeKind.Fill { return ln.fill(m, ty, sp) }
         case typed.MakeKind.Copy {
             x := m.Items[0]
+            # (gap 22, review4's g2: a copy of a part of a view call's temporary - `v[i].a = v[j].a` - reads the
+            # temporary only until it is made, or as the argument it is left out for (argView): its window the statement)
+            ln.readHere(x)
             v := ln.val(x)
             if ln.dead: return mir.Operand.None
             if not t.Same(x.Type(), ty): return ln.derefCopy(v, x.Type(), ty, ln.madeAt(m.Site), sp)
