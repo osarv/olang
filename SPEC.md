@@ -7109,7 +7109,8 @@ program defines when it is linked, so the object is the same in every program th
 **O8f (the freeing guarantee).** Where O8d's conditions hold, what a place lets go of **is** reclaimed at the let-go;
 an implementation may not keep it until its scope closes. The let-goes are a place given another value (S4) - a local,
 a field, a global, an element of an array or of a collection (`v[i] = x` through `SetAt`, a `Map`'s `Put` replacing a
-value); an entry removed from a collection (M19d's removals); a collection's growth replacing its own storage, wherever
+value); an entry removed from a collection (M19d's removals), and the value a removal hands back (`Pop`, `TakeAt`) where
+a statement drops it or the block of the local holding it ends; a collection's growth replacing its own storage, wherever
 the collection is held; a block or a loop's turn left (O2b); and
 a value with a destructor ended where its holder lets go of it (O15). A place keeps what it lets go of only for a
 condition of O8d's - storage not made for it (1), a reference into it kept elsewhere (2), a thread or C that may call
