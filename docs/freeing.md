@@ -535,16 +535,29 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   item as an element slot, so every turn's `base` and its Vec stayed in main's scope (~0.5 KB a turn, built, -free
   late and interpreted alike). A fill of owning elements is now judged as a copy (`scope.valMake`, as `ownCopy`: only
   the references the item shares must outlive it). Fixture splitelems (e1 at 400,000 turns: master out of memory).
-  **Where to pick up**: `?&`/`any` holders (t2: `Box(v[j].b)` held as `any Summer&`, its Sum called through the
-  table - BlockCopy would need the any local and dispatch followed); a Map's own value put (v8: `m.Put(k, m.Get(j)!)`,
-  the Get under a try given a parameter Put stores - copied there, so lowering reads it in place, but free's viewArg
-  asks Preserves and copiedCall stops at the try). v9's keep is Vec.Insert/RemoveAt/TakeAt shifting elements
-  (`occupy(vacate())`), judged existing storage; judging those leaves as moves (SMove, tried) passes -memory -check
-  while TakeAt's result leaks - a value moved out of a collection by a library call and dropped (`v.TakeAt(0)!`, or held
-  by a local) releases nothing and is no let-go the pass counts (master grows too: the shift's keep is what names it).
-  That drop needs a let-go of the moved value's leaves first; `c` captured by a lambda (a5's `g`)
-  keeps as a named view (places by path would tell it from `Q.a`); tasks (a7, h8, n1, t1) still free nothing early.
   Checked on the step's last commit: `make scopesan`, `make quick` (tokens/ast/layout/run goldens recaptured), the
   freeing and earlyfree scenarios; review4/review5's 60 probes print the same built, `-free late`, `-sanitize` and
-  interpreted as master, `-memory -check` now passing for b1, c2, e1, g2, k1 and review4's o1 (still named: g1, h8,
-  j1, n1, review5's o1, o2, ov1, s3, t1, t2, v8, v9).
+  interpreted as master, `-memory -check` now passing for b1, c2, e1, g2, k1 and review4's o1.
+- 2026-11-20, wt-freeopen2: a value moved out of a collection and dropped. `v.Pop()!` on a `Vec<Vec<I64>>` (an element
+  that is no candidate place) freed nothing though the pass counted its drop: Pop's must-fact was none, so lowering
+  released nothing. A vacate of a place that is no candidate is now `MovLeaves` (`free.takeMust`), a dropped call's
+  result of it releases the leaves (`free.DroppedLeaves`, lowering's leafPaths, a try's release now any list -
+  `tryRels`). TakeAt and SwapTake hand back a local holding the vacated value: it was copied into the result scope at
+  the return, the original never released - a local whose every value is a moved one, written, lent and aliased
+  nowhere, is handed back as it is (`lower.movedRets`, `free.MovedLocal`). A local holding such a value to its block's
+  end (`x := v.TakeAt(0)!`) lets go of its leaves there (`free.EndsMoved`, `lower.endMoved`): declared at the block's
+  top level (the root, a block statement, a loop's body, an if's branch), handed back, written, lent, aliased and
+  escaping nowhere but to calls keeping nothing of it, nothing after it leaving the block but its end
+  (`typed.RestLeaves`), no deferred code in the block, no value registered with a scope in the program; lowering makes
+  no last-use move of one (D9i). A drop is judged after its statement's reads (they come first). Then v9: the
+  prelude's shifts (`v.data[k].occupy(v.data[k + 1].vacate())`) move each leaf's value out of the same leaf place -
+  SMove (`walker.copyInto`) - so `Q.a` is sole and v9 frees (200,000 turns: 13 MB, -free late 116 MB). A moved value
+  anywhere else - an argument, an operand, a local the block's end does not end - is a gap row naming the call
+  (`walker.movedGaps`), so -check cannot pass such a leak.
+  **Where to pick up**: a `Vec<String>`'s popped text (`v.Pop()!`, `x := v.Pop()!`) still frees nothing and the pass
+  counts no let-go (the call's result origins carry no OMov of the text place; master the same); `?&`/`any` holders
+  (t2: `Box(v[j].b)` held as `any Summer&`, its Sum called through the table - BlockCopy would need the any local and
+  dispatch followed); a Map's own value put (v8: `m.Put(k, m.Get(j)!)`, the Get under a try given a parameter Put
+  stores - copied there, so lowering reads it in place, but free's viewArg asks Preserves and copiedCall stops at the
+  try); `c` captured by a lambda (a5's `g`) keeps as a named view (places by path would tell it from `Q.a`); tasks
+  (a7, h8, n1, t1) still free nothing early; still named: g1, h8, j1, n1, review5's o1, o2, ov1, s3, t1, t2, v8.
