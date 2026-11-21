@@ -46,7 +46,7 @@ compiler/msgs.olang 287
 compiler/names.olang 1028
 compiler/needs.olang 2273
 compiler/notebook.olang 3890
-compiler/olang.olang 5081
+compiler/olang.olang 4710
 compiler/paint.olang 396
 compiler/parse.olang 843
 compiler/profile.olang 768

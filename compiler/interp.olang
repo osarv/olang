@@ -927,6 +927,7 @@ type Exec struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&, When eval
 fn (x mut Exec&) start() {
     if x.started: return
     x.started = true
+    if x.When == eval.Mode.Compile: x.M.Supply = fn(k mir.FnKey) Bool { return x.supply(k) }
     x.M.Gen = x.Lw.Gen()   # T13d, T2d: the whole program's, read once checking has scanned every module
     # M19g: the library's files - where the program grew a collection is the innermost frame outside them
     for mo in x.P.L.Mods {
@@ -998,7 +999,8 @@ fn (x mut Exec&) bakeMutable(m I64, n source.NameId) eval.Image ? eval.NotBaked 
     return img
 }
 
-# k and everything its code can reach lowered and defined in the machine
+# k and everything its code can reach lowered and defined in the machine - while compiling, k alone: what its code calls
+# is lowered where the machine first reaches it (Supply), so a request stopping early (at an extern) lowers nothing more
 fn (x mut Exec&) Need(k mir.FnKey) {
     x.start()
     work Vec<mir.FnKey>
@@ -1019,7 +1021,16 @@ fn (x mut Exec&) Need(k mir.FnKey) {
         if key == mir.FnKey.Body and x.ReadsBuild.Has(I64(key.id)): x.M.BuildFns.Put(key, true)
         x.reach(f, work)
         x.M.Define(f)
+        if x.When == eval.Mode.Compile: break
     }
+}
+
+# a function the machine reached while compiling and does not have (eval.Machine.Supply): lowered and defined now,
+# whether it was
+fn (x mut Exec&) supply(k mir.FnKey) Bool {
+    if x.defined.Has(k): return false
+    x.Need(k)
+    return true
 }
 
 # what f's code can reach: its calls' and tasks' callees, the code of the function values it makes, the destructors it

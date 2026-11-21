@@ -2437,7 +2437,7 @@ db407b9ec2aacf25 d850fbb42d0e8294 compiler/diag.olang
 b02b474ae1593a73 a4a8294e6adfbb54 compiler/doc.olang
 689243901b94a8f3 3dcc5d853c7b3af7 compiler/effects.olang
 071640d31479ecab 2bd5435e6b25f9a6 compiler/emit.olang
-773cd6c8d047c2e1 f0b8479e97ee01bd compiler/eval.olang
+1b467ae362567bb1 b4100b70351f3afb compiler/eval.olang
 eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
 f8904f06be8de907 9c47d36eb9c4740f compiler/facts.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
@@ -2445,7 +2445,7 @@ b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
 d4bd8c9fc2fe9663 3dadf0aa5430ab47 compiler/free.olang
 1b58c42eb72c9af5 d44fd9cf171506fb compiler/generic.olang
-5b111314ea0faa97 411d018af3a3506b compiler/interp.olang
+47fb7c219d28bceb 53557355686b67f3 compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang
 8299f0d6f657ceae 5fcac26072ce57dd compiler/lineedit.olang
 211de0b5ecb13aac 9a12ce3d06dabd21 compiler/listing.olang

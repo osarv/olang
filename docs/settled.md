@@ -1239,7 +1239,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Anything computable at compile time may be (K1/K1a, the user's request); no function colouring.** The evaluator
   interprets the checked program with the run time's semantics and refuses only what it must (effects skipping would
   show, externs but libm, undefined behaviour, a step and memory budget). Whether a function is evaluable is a
-  property of the function (K1a); it must handle everything it can (the user's rule).
+  property of the function (K1a); it must handle everything it can (the user's rule). While compiling, a function is
+  lowered for the evaluator where a request first reaches it (`eval.Machine.Supply`, 2026-11-21), never ahead for all
+  it could reach.
 - **`comptime e` and `comptime for` (K3, K3a, survey2 item 8, the user's decision 2026-10-27: "comptime is a good
   word").** A keyword at the use site only: `comptime e` takes the whole expression after it, is computed while
   compiling and is constant data; what the evaluator cannot compute is an error at it. `comptime for x in e` (a range

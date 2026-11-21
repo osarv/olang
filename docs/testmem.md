@@ -105,8 +105,10 @@ child builds, four at a time):
   then more than seventeen `lowering` methods that keep a local copy of `ln.L` or `ln.L.P` or build into the function
   from inside the lowering (the same pattern as fnEm's). The fix is the fnEm one applied method by method; left for its
   own round.
-- **evaluate** in `compiler/olang.olang`'s test build: +1.27 GB (the values and asserts its tests decide while
-  compiling).
+- **evaluate** in `compiler/olang.olang`'s test build was +1.17 GB: deciding the B11b test's `assert explained(...)`
+  lowered everything the compiler's code could reach before the evaluation stopped at its first extern. Since
+  2026-11-21 the evaluator lowers a function where it first reaches it (`eval.Machine.Supply`): +0.27 GB, the build
+  5.2 -> 4.2 GB (HISTORY.md, "the evaluator lowers a function where it first reaches it").
 - The front end's memory is never given back before clang runs (the compiles and the link run beside the 3 GB).
 
 ## The suite's parallelism: the memory gate
