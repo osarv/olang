@@ -2492,7 +2492,7 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
 
 # a value holding owners made with no store into their places (a copy, a call's value copied, D9h): those places keep
 fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made Bool = false, filled Bool = false
-                             block Bool = false, site I64 = -1, split Bool = false) {
+                             block Bool = false, site I64 = -1, split Bool = false, capture Bool = false) {
     if not w.Final or w.quiet > 0: return
     # (O8f, gap 22: a copy stored whole into an owner place - judged once its store says whether it is made for the
     # place, ownerSettle)
@@ -2507,7 +2507,7 @@ fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made 
     parted := filled and fills.Len() == 0 and site >= 0 and w.F.fillParted(ty)
     # (review4's a5: the copy of a view call's value a plain value local is declared with, `c := v[j]` - its parts split
     # as well, lower.ownersCopy)
-    parted = parted or (made and site >= 0 and site == w.splitLet and w.F.PartsOnly(ty) and not w.T().RunsCopy(ty))
+    parted = parted or (made and site >= 0 and (site == w.splitLet or capture) and w.F.PartsOnly(ty) and not w.T().RunsCopy(ty))
     if parted: w.F.ownersAt.Put(pair.Pair(w.Id, site), true)
     # (O8f, round 8: a copy lowering makes - made: not a fill's, nor one a declared Copy makes, E31d - builds the text
     # of a place built in slots in slots of where it goes, as the place's own stores do: lower.copySlots)
@@ -2549,8 +2549,10 @@ fn (w mut walker&) splitLetOf(l I64, x typed.Expr&) I64 {
     lc := w.body().Locals[l]
     if lc.Kind != typed.LocalKind.Var or w.T().IsRef(lc.Ty) or w.fields.Has(l) or w.ownLocal(l) >= 0 or w.feeder(l) >= 0: return -1
     c := initCall(x)
-    if c == null or not w.F.PartsOnly(x.Type()) or w.T().RunsCopy(x.Type()): return -1
-    return I64(c.Site)
+    # (review5's o1, ov1: or a copy of a place's value, `w := v` - lower.make's ownersCopy)
+    site := I64(c.Site) if c != null else ownCopySite(x)
+    if site < 0 or not w.F.PartsOnly(x.Type()) or w.T().RunsCopy(x.Type()): return -1
+    return site
 }
 
 # O8f (gap 22, v8): the site of the copy x is, where it is stored whole into owner place k - a Map entry's Value given a
@@ -4458,11 +4460,23 @@ fn (w mut walker&) lambdaMade(lb typed.BodyId) {
     if w.F.regOut[I64(lb)]: w.F.setRegOut(w.Id)
 }
 
-# what a lambda made at sp captures (x): escaping into it
-fn (w mut walker&) captured(sp source.Span, x typed.Expr&) Vec<I64> {
+# what a lambda made at sp captures (x): escaping into it. A value captured is the lambda's own copy (D16c): one
+# lowering builds split (capSplit) holds none of the owners x's value holds, which keep for that copy alone (RSplit)
+fn (w mut walker&) captured(sp source.Span, x typed.Expr&, site I64 = -1, gen Bool = true) Vec<I64> {
     o := w.expr(x)
+    if not gen and w.capSplit(x) {
+        o = w.F.unowned(o)
+        w.untracked(x.Type(), sp, "a lambda's copy of what it captures", true, false, false, site, false, true)
+    }
     w.escape(o, sp, "", false)
     return o
+}
+
+# O8f (review4's a5, h8): whether capture x of a lambda (no generator) is copied split by lowering - a PartsOnly value
+# read whole, its parts each in a part region of its own where the lambda lives (lower.lambda's ownersCopy)
+fn (w mut walker&) capSplit(x typed.Expr&) Bool {
+    ty := x.Type()
+    return x == typed.Expr.Read and not w.T().IsRef(ty) and w.T().OwnsParts(ty) and w.F.PartsOnly(ty) and not w.T().RunsCopy(ty)
 }
 
 fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
@@ -4617,7 +4631,8 @@ fn (w mut walker&) fnValOf(sp source.Span, fv typed.FnVal&) Vec<I64> {
         case typed.FnVal.Lambda(lb, caps, site) {
             # a lambda that may register in what it captured: its maker may, where it is called is not known
             if not w.Final: w.lambdaMade(lb)
-            for c in caps: addAllTo(out, w.captured(sp, c.Outer))
+            gen := w.F.Bodies[I64(lb)].Gen
+            for c in caps: addAllTo(out, w.captured(sp, c.Outer, I64(site), gen))
             addTo(out, orig(ONew, I64(site)))
         }
         case typed.FnVal.Named(b) { w.F.named[I64(b)] = true }
@@ -5729,6 +5744,8 @@ fn (w mut walker&) views() {
                 if k >= 0 and has(bufs, q) and has(f.bufReach(q), k) and f.unkept(k): byBuf = true
             }
             if not found and not byBuf: continue
+            # (a local a Let declares with a call letting go of k is given its value after that let-go)
+            if kind == LCall and w.goEnd[g] < 0 and w.declLet[l] and w.declAt[l] == s: continue
             u := w.usedAfter(l, s, usesOf[l])
             if u < 0: continue
             name := f.P.L.Names.Text(body.Locals[l].Name)

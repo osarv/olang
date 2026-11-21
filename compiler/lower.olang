@@ -7328,6 +7328,10 @@ fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, sit
     # D18: a generator's Next is its walk - its storage (its coroutine's frame, its locals, the scopes it holds open)
     # where the generator lands, which its captures outlive (O14a); a value array it is given copied there (D18b)
     if gen: s = ln.resultScope()
+    # (one held in the frame - a local only ever called, or made for a call keeping nothing of it (scope.onFrameAt) -
+    # is dead by the end of the innermost scope open where it is made: its copies there, one a turn in a loop never
+    # kept to the frame's end)
+    home := ln.innermost() if s == mir.ScopeRef.Frame else s
     ops := Array<mir.Operand>(caps.Len())
     for i in range caps.Len() {
         ops[i] = ln.val(caps[i].Outer)
@@ -7336,7 +7340,10 @@ fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, sit
         if gen and ln.valueArray(ct): ops[i] = ln.arrayCopy(ops[i], ct, sp, s)
         # D16c, E31d (bulk review 7, F8): a value captured is the lambda's own copy - what it owns copied (a struct's
         # arrays, a Vec's buffer), by its declared Copy - made where the lambda lives; a value array is borrowed (above)
-        if caps[i].Outer == typed.Expr.Read and not ln.T.IsRef(ct) and ln.T.OwnsParts(ct) { ops[i] = ln.ownCopyOf(ops[i], ct, ln.copyHome(s), sp) }
+        if caps[i].Outer != typed.Expr.Read or ln.T.IsRef(ct) or not ln.T.OwnsParts(ct): continue
+        # (O8f, review4's a5: its parts each in a part region of its own, a kid of the lambda's - free.capSplit)
+        wv := mir.Operand.None if gen else ln.ownersCopy(I64(site), ops[i], ct, home, sp)
+        ops[i] = wv if wv != mir.Operand.None else ln.ownCopyOf(ops[i], ct, home, sp)
     }
     if ln.dead: return mir.Operand.None
     return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops), ln.capScopes(site)), sp)

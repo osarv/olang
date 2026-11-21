@@ -1,0 +1,31 @@
+import "std/io"
+
+# O8f (docs/freeing.md, review4's a5 and h8): a value a lambda captures is the lambda's own copy (D16c), made where the
+# lambda lives with each part in a part region of its own (lower.lambda's ownersCopy) - it holds nothing of the element
+# it was copied from, so the element replaced while the lambda lives frees at once (free.capSplit)
+N I64 = 400000
+
+type Q struct() { a Vec<I64>, b Vec<I64> }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.a = Vec<I64>[i, i + 1]
+    q.b = Vec<I64>[i + 2, 1]
+    return q
+}
+
+fn main() {
+    v Vec<Q>
+    for k in range 10: v.Push(Q.Mk(k))
+    t := 0
+    for i in range N {
+        c := v[(i + 1) % 10]
+        f := fn() I64 { return c.a[1] + c.b[0] }
+        v[(i + 1) % 10] = Q.Mk(i)
+        d := Q.Mk(i + 3)
+        g := fn(k I64) I64 { return d.a[0] * k + c.b[1] }
+        v[i % 10] = d
+        t += f() + g(2)
+    }
+    io.PutLn($t + " " + $v.Len())!
+}

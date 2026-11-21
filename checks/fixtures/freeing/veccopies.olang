@@ -1,0 +1,30 @@
+import "std/io"
+
+# O8f (docs/freeing.md, review5's o1 and ov1): a plain value local declared with a copy of a Vec<Q> local (`w := v`, Q
+# holding a Vec) has each element's parts in a part region of their own (lower's ownersCopy, free.splitLetOf) - so the
+# Vec given another value, and an element of the copy replaced, free at once
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.a = Vec<I64>[i, i + 1]
+    return q
+}
+
+fn main() {
+    v Vec<Q>
+    t := 0
+    for i in range N {
+        for k in range 4: v.Push(Q.Mk(i + k))
+        w := v
+        v = Vec<Q>()
+        w[2] = Q.Mk(i)
+        t += w[1].a[0] + w[2].a[1] + w.Len()
+        for k in range 3: v.Push(Q.Mk(k))
+        t += v[2].a[1]
+        v.Clear()
+    }
+    io.PutLn($t + " " + $v.Len())!
+}
