@@ -329,6 +329,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # a let-go a view of that Vec's buffer is in use across too, since the walk leaves the buffer as it is (bufReach)
     walkLets Vec<mut Vec<I64>&>
     partWalked Vec<I64>                     # O8f (c1's keep): the places an owner's let-go walks (goParts): the live elements of its Vecs
+    inSoleOwner Vec<I64>                    # (the array places kept because a sole owner's value holds them: ownerCovered)
     bufReachAt Map<I64, Vec<I64>>   # bufReach by buffer place
     # docs/fnvalues.md 4.6, item (3): by body, its calls through a function parameter it never assigns, composed at each
     # call by the argument given - the parameters (bit p) a call through which may let go (letsVia), those of them given
@@ -4686,6 +4687,10 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         # (lent only where the call's own value holds no reference: one that may hand back a view of the temporary -
         # `v[i].a.View()` kept in a local - has lowering keep its copy (D9h) where the view may live)
         lends := j < ps.Len() and w.T().IsRef(ps[j]) and not w.writable(ps[j]) and not w.T().IsRef(ty) and not w.T().HoldsRefs(ty)
+        # (review4's j1: or where the call is itself a temporary lent for reading - `v[i].a[0][1]`'s middle At, whose
+        # Vec<I64> lowering reads where it stands (readWin), and so the arguments it reads: lower.args' reads)
+        if not lends and j < ps.Len() and w.T().IsRef(ps[j]) and not w.writable(ps[j]) and wasRead == I64(c.Site) and
+           c.Site >= typed.SiteId(0) and I64(c.Site) != w.taskSite { lends = true }
         # (or where the call's value is a reference local's that holds it in its own block - lowering's copy, if it
         # makes one, is made there: BlockCopy)
         if not lends and c.Site >= typed.SiteId(0) and f.BlockCopy(w.Id, borrowedTemp(a)) >= 0: lends = true
@@ -6296,6 +6301,7 @@ fn (f mut Free&) decide() {
             if f.arr[a] and f.Sole[a] and not f.PartPlace(a) {
                 f.Sole[a] = false
                 f.keep(a, RCopied, -1, source.Span(0, 0), "what holds it is an owner held in a place of early freeing, whose storage is one region")
+                addTo(f.inSoleOwner, a)
             }
         }
     }
@@ -7725,7 +7731,7 @@ fn (f mut Free&) Report() String {
         }
         if first < 0: continue
         places++
-        if f.IsSole(k) or f.partsFree(k): continue
+        if f.IsSole(k) or f.partsFree(k) or f.ownerCovered(k): continue
         kept++
         row := first
         if f.whyKind[k] == RView { row = try f.viewGo.Get(k) catch default first }
@@ -7776,6 +7782,30 @@ fn (f mut Free&) Report() String {
     frees := places - kept
     b.Push($"memory: " + $places + " place" + $("" if places == 1 else "s") + " let" + $("s" if places == 1 else "") + " go of storage in code that runs again - " + $frees + " free" + $("s" if frees == 1 else "") + " it at once, " + $kept + " keep" + $("s" if kept == 1 else "") + " it" + $(" (above)" if kept > 0 else "") + "\n")
     return b.ToString()
+}
+
+# O8f (review4's j1): whether array place k, kept only because a sole owner's value holds it (decide's one region),
+# lets go only together with such an owner, in the same statement - `ss[i] = s`, S holding a Vec<String>: the owner's
+# region, released there, holds the texts its walk lets go of, so each of those let-goes frees what it lets go of
+fn (f mut Free&) ownerCovered(k I64) Bool {
+    if not has(f.inSoleOwner, k) or f.whyKind[k] != RCopied: return false
+    seen := false
+    for g in f.goes {
+        if g.PlaceId != k or not f.shown(g) or not g.Again: continue
+        if g.Kind == LCall or not f.coveredBy(g, k): return false
+        seen = true
+    }
+    return seen
+}
+
+# whether let-go g of place k is in a statement that also lets go - itself, not through a call - of a sole owner place
+# whose value holds k
+fn (f mut Free&) coveredBy(g letGo, k I64) Bool {
+    for o in f.goes {
+        if o.Body != g.Body or o.Kind == LCall or o.PlaceId < 0 or o.At != g.At: continue
+        if f.IsSole(o.PlaceId) and f.owner[o.PlaceId] and has(f.heldPlaces(f.valTy[o.PlaceId]), k): return true
+    }
+    return false
 }
 
 # O8f: the rows for a library's place (a Map entry's value, a collection's element) the program's own call lets go of in

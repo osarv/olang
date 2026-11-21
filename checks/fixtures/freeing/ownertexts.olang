@@ -1,0 +1,31 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, review4's j1): soleelems with the owner field a Vec of Vecs, read back through two
+# view calls (`v[i].a[0][1]`: the middle At's Vec is itself a temporary lent for reading, so its own argument is too),
+# and one a Vec of text, whose texts the owner's region holds - released with it where the element is given another
+# value, which -memory -check counts as freeing (ownerCovered)
+N I64 = 200000
+
+type Q struct() { a Vec<Vec<I64>> }
+type S struct() { s Vec<String> }
+
+fn main() {
+    rows := Array<Q>(10)
+    ss := Array<S>(10)
+    v Vec<Q>
+    for _ in range 10: v.Push(Q())
+    t := 0
+    for i in range N {
+        q := Q()
+        q.a = Vec<Vec<I64>>[Vec<I64>[i, i], Vec<I64>[i]]
+        rows[i % 10] = q
+        s := S()
+        s.s = Vec<String>[$i + "-x", "y"]
+        ss[i % 10] = s
+        p := Q()
+        p.a = Vec<Vec<I64>>[Vec<I64>[i, 2]]
+        v[i % 10] = p
+        t += rows[i % 10].a[0][1] + rows[i % 10].a[1][0] + ss[i % 10].s[0].Len() + v[i % 10].a[0][1]
+    }
+    io.PutLn($t + " " + $rows[3].a.Len() + " " + ss[7].s[0])!
+}

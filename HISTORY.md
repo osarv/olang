@@ -40280,7 +40280,7 @@ block's end nor handed back as it is by `lower.movedRets`), and a return of such
 
 - 2026-11-21 sanfix: checks' `earlyfree` and `freeing` also build each fixture with `-sanitize` at the small size and require the usual output (review6: a double release only `-sanitize` caught; `-free late` cannot see one); docs/freeing.md 1.3 names both oracles.
 
-## 2026-11-21: freeing - a Map<K, Q>'s values replaced by Put (O8f; mine; wt-mapput)
+## 2026-11-21: freeing - a Map<K, Q>'s values replaced by Put, review4's j1 (O8f; mine; wt-mapput)
 
 From wt-freeopen3's "where to pick up": review5's v8, a `Map<K, Q>` with Q a struct holding a Vec, freed nothing on
 Put by the report (master too). The memory was mostly fine - Put replaces the entry's Value, an owner place decided
@@ -40315,3 +40315,27 @@ gives a place. Free's viewArg, which exempts that copy, found the call with copi
 now uses `argCall`, which follows a try (copiedCall is unchanged for its other users). Fixture mapowners: a
 `Map<I64, Q>` given new values and one of its own values, a `Map<String, Q>` with removals, 200,000 turns under 8 MB
 (master out of memory on the Get put); the same output built, `-free late`, `-sanitize` and interpreted.
+
+Then review4's j1, two shapes. `v[i].a[0][1]` with Q holding a `Vec<Vec<I64>>`: three At calls, the outer one lent
+its receiver for reading (its value, an I64, holds nothing), so the middle one's Vec is a temporary read where it
+stands. The walker lends a call's read-only reference argument only where the call's own value holds no reference
+(`not HoldsRefs(ty)`), and a Vec<I64> does by that test, so `v[i]` was taken for At's value copied and Q.a kept. But
+lowering reads such a call's arguments wherever the call itself is read where it stands (`reads := plain or
+readWin.Has(site)` in `lower.args`), and the outer call's readHere puts the middle one in readWin. The walker now lends
+a read-only reference argument of a call that is itself the temporary its caller is lent (its site the readArg in
+effect when the call is walked), as lowering does (not a task's site, which lowering never reads in place). Then
+`ss[i] = s` with S holding a `Vec<String>`: decide keeps an array place a sole owner's value holds (the owner's storage
+is one region, released through its anchors; a text in a slot of its own would leave them naming another region), as
+RCopied - a gap by the report - although the let-go it names, the old element's texts, is released with the owner's
+region in that very statement. The report now counts such a place as freeing where every shown let-go of it is its own
+(no call) in a statement that also lets go, itself, of a sole owner place whose value holds it (`free.ownerCovered`,
+`coveredBy`); a let-go of it anywhere else stays a row. Report only: no decision or plan changes. Fixture ownertexts
+(j1 at 200,000 turns under 8 MB; master fails -check).
+
+g1 and the tasks were looked at and not built; docs/freeing.md's "where to pick up" has both. g1's T holds itself in a
+Vec (`kids Vec<T>`), so it is no PartsOnly type (the walk of its parts is a cycle) and every element let-go is a gap row;
+the walks would have to recurse through such a type. Tasks: O8f keeps storage a task can reach, and the compiler keeps
+everything in a program with tasks. A reach by types is sound but nearly useless (a task borrows its own copies in
+every prelude call, so its types are the spawner's); a reach by origins at each spawn, with task-side let-goes judged
+by which thread made the region (runtime.ll's region links are one thread's), would free h8, n1 and t1's spawner-side
+replacements and keep a7's (a view handed to the task) - recorded as the recommendation, for an Opus section-8 round.

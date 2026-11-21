@@ -1056,7 +1056,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   constructor's instance copied for its one owner leaf (a `Map<K, Q>`'s Put and add), is built with its parts in part
   regions and its owners judged RSplit (`walker.ownerSettle`, `viewCtor`, `lower.ownerCopy`, `free.LeafParts`); a view
   call's value given through a try to a by-value parameter its callee only reads is read where it stands (`argCall`;
-  mapowners, wt-mapput).
+  mapowners, wt-mapput). A call that is itself a temporary lent for reading lends its read-only reference arguments
+  too (`v[i].a[0][1]`), and `-memory -check` counts an array place kept only because a sole owner's region holds it as
+  freeing where each let-go of it comes with that owner's own (`free.ownerCovered`; ownertexts).
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

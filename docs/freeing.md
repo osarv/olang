@@ -595,6 +595,33 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   `m.Put(k, m.Get(j)!)`: lowering reads the Get's value where it stands or copies it into the statement's innermost
   scope (readHere passes a try on), but free's viewArg found the call with copiedCall, which stops at a try - now
   `argCall` follows it. Fixture mapowners (both Maps, 200,000 turns under 8 MB; master out of memory on the Get put).
+  Then review4's j1. `v[i].a[0][1]` (Q holding a `Vec<Vec<I64>>`): the outer At is lent its receiver (its value holds
+  nothing), but the middle At's value, a Vec, holds references by HoldsRefs, so free did not lend its own argument
+  (`v[i]`) and judged At's value copied - while lowering reads the middle call where it stands (readWin) and so the
+  arguments it reads (`lower.args`' reads). A call that is itself the temporary its caller is lent lends its read-only
+  reference arguments too (the walker's `lends`). And `ss[i] = s`, S holding a `Vec<String>`: the text element place
+  keeps because a sole owner's value holds it (decide's "one region" rule: the owner's region holds the texts), so the
+  report named its let-go a gap - though the owner's let-go in the same statement releases that region, texts and all.
+  The report counts such a place as freeing where every let-go of it is one of those (`free.ownerCovered`: kept for
+  that reason alone, each let-go its own - no call's - in a statement that lets go of a sole owner place whose value
+  holds it). Fixture ownertexts (j1 at 200,000 turns; master fails -check).
   **Where to pick up**: `c` captured by a lambda (a5's `g`) keeps as a named view (places by path would tell it from `Q.a`); tasks
-  (a7, h8, n1, t1) still free nothing early; still named: g1, h8, j1, n1, review5's o1, o2, ov1, s3, t1 (review5's probes were lost with /tmp; t2 and v8
-  rewritten in wt-freeopen3, the rest to rewrite from review5.md's descriptions).
+  (a7, h8, n1, t1) still free nothing early - see "Tasks" below; g1 (a recursive owner, `T{a Vec<I64>, kids Vec<T>}`: T
+  is no PartsOnly type - its parts walk is a cycle - so an element's let-go is a gap row, and `t.kids.Push` in T.Mk
+  changes T.kids in place) needs the walks to recurse through a type holding itself in a Vec; still named: g1, h8, n1,
+  review5's o1, o2, ov1, s3, t1 (review5's probes were lost with /tmp; t2 and v8 rewritten in wt-freeopen3, the rest to
+  rewrite from review5.md's descriptions).
+  **Tasks** (wt-mapput's look, nothing built): O8f keeps "storage a task can reach" (condition 3); the compiler keeps
+  every place of a program with tasks (`decide`'s RTask), and h8, n1 and t1 also fail -check before that, the task's
+  by-value argument (`spawn n = sumQ(v[i])`, At's value copied, D9h) judged untracked since viewArg excludes a task's
+  site. What a task reaches is not a matter of types: its own copies are borrowed by every prelude call it makes, so a
+  type-level reach (A: places whose types no task's code mentions free as in a program without tasks) is sound but
+  frees almost nothing in practice. Recommended (B): reach by origins - at each spawn the walker's origins of every
+  argument (what a reference argument, or a reference inside a by-value one, may refer into), and what the task's code
+  reaches through globals, keep for RTask; a place let go of in a task's own code keeps unless its values there are the
+  task's own (built in its stand-ins' or its own scopes - a region's parent's kids list is one thread's, runtime.ll's
+  region links are plain); a task's by-value argument copy is no value a store gives a place where it is built in a
+  scope no let-go during the join can release (its site's region checked after writePlans' redirects, never a sole
+  place's region) - then h8, n1 and t1's spawner-side replacements free, and a7 keeps (a view handed to the task), as
+  the rule says. Not built: it is section-8 design (Opus, xhigh by rules.md), and the runtime's thread-local pools make
+  a release on the wrong thread a silent corruption that neither `-free late` nor the evaluator would show.
