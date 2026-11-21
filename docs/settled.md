@@ -1186,7 +1186,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (ThinLTO for a program of 32 MB of IR or more, `ThinFrom`,
   raised from 8 MB 2026-11-16: ThinLTO inlined a kernel's helpers in other objects only up to its import limit, oann's
   gemm 3x slower in a 10 MB program, and neither a higher limit nor vectorizing at the link closed it; full LTO did, its
-  link 1.4x ThinLTO's on oann's largest program; objects are still cut into parts from 8 MB, `SplitFrom`); under full
+  link 1.4x ThinLTO's on oann's largest program; objects are still cut into parts from 8 MB, `SplitFrom`, and under
+  ThinLTO each object's functions a backend may import apart from the bulky ones, `identity-bK`, so an edit to a large
+  function redoes one backend, 2026-11-21); under full
   LTO a module's own compile neither vectorizes nor unrolls a loop by a factor, so the link inlines across modules before
   it vectorizes (2026-11-15);
   `-debug` is `-O0` with DWARF describing olang's values (types by olang's names, payload cases by name, lexical blocks;
