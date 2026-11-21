@@ -40339,3 +40339,16 @@ everything in a program with tasks. A reach by types is sound but nearly useless
 every prelude call, so its types are the spawner's); a reach by origins at each spawn, with task-side let-goes judged
 by which thread made the region (runtime.ll's region links are one thread's), would free h8, n1 and t1's spawner-side
 replacements and keep a7's (a view handed to the task) - recorded as the recommendation, for an Opus section-8 round.
+
+## 2026-11-21: joinflat's bound above a huge page; plan.md's queue audited (P2b; mine; wt-joinflat)
+
+checks/cases/joinflat.olang asserted that 200,000 joins grow the resident set (VmRSS) by under 1024 kB; under load it
+read 2048 kB - one transparent huge page found free, not a leak (the growth and chunkpool checks had the same flake,
+2026-11-17). The plan said to read VmPeak as growth's check does, but that would blind this one: the leak it guards
+against (56 bytes a join, 11 MB over the loop) is in small pieces, which land in slots of the range the runtime
+reserves at the start, where VmPeak never moves. So the check keeps the resident set and the bound is 4096 kB, two
+huge pages, still far under the leak. Passes built and interpreted.
+
+The same day, plan.md's queue was audited against this file and the code: compile-time range analysis (E16h), the
+cache caps, B15's import completion and M10's quick fix, M5a, G42's cold paths (FailAllocates/Running) and the O10c
+global getter were all done earlier (their entries above); the closed entries moved to archive/next_steps_log.md.
