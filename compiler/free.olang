@@ -2547,7 +2547,13 @@ fn (w mut walker&) splitArrOf(p typed.Lvalue&, x typed.Expr&) I64 {
 # parts, rather than for a value made with no store into it (RCopied); -1 for none
 fn (w mut walker&) splitLetOf(l I64, x typed.Expr&) I64 {
     lc := w.body().Locals[l]
-    if lc.Kind != typed.LocalKind.Var or w.T().IsRef(lc.Ty) or w.fields.Has(l) or w.ownLocal(l) >= 0 or w.feeder(l) >= 0: return -1
+    if lc.Kind != typed.LocalKind.Var or w.T().IsRef(lc.Ty) or w.fields.Has(l) or w.feeder(l) >= 0: return -1
+    # (a field read into a local assigned again, `nm2 := v[j].n; nm2 = ...`: the call's copy split all the same - the
+    # owner local keeps its first value by the rule, existing storage, and lets go of the ones made for it)
+    if w.ownLocal(l) >= 0 {
+        tv := fieldTemp(x)
+        return tempCall(tv) if tv != null and initCall(x) == null and w.F.mapFree(tv.Type(), 0) else -1
+    }
     c := initCall(x)
     # (review5's o1, ov1: or a copy of a place's value, `w := v` - lower.make's ownersCopy)
     site := I64(c.Site) if c != null else ownCopySite(x)
@@ -2870,10 +2876,13 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     # (and one stored into a place of its own - check.writeBack's held value, `v[i].a = w.a`: the store's own copy, made
     # for the place, judged there - made)
     if cm == null and w.F.placeOfPlace(p) >= 0 and w.heldCopy.Has(readLocalOf(x)): w.copyRead = readLocalOf(x)
-    wasA := w.splitArr
+    wasA, wasL := w.splitArr, w.splitLet
     w.splitArr = w.splitArrOf(p, x)
+    # (an owner local given a field of a view call's value again, `nm2 = v[k].n`: that copy split as its declaration's)
+    ol0 := w.ownLocal(localOf(p))
+    if ol0 >= 0: w.splitLet = w.splitLetOf(localOf(p), x)
     o := w.expr(x)
-    w.splitArr = wasA
+    w.splitArr, w.splitLet = wasA, wasL
     # (the copy, read out of its held local, is the value made for those leaves - no view of them)
     if cm != null: o = w.F.unowned(o)
     w.copyExempt, w.copyRead = wasE, wasR
@@ -5860,6 +5869,14 @@ fn readLocalOf(x typed.Expr&) I64 {
             case typed.Lvalue.Local(_, _, l): I64(l)
             case _: -1
         }
+        case _: -1
+    }
+}
+
+# the local a place is, -1 for any other place
+fn localOf(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Local(_, _, l): I64(l)
         case _: -1
     }
 }
