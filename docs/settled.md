@@ -1049,7 +1049,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   is no view of its place for another let-go (movedvalues, wt-freeopen2). Text moved out of a `Vec<String>` (a value
   of no struct, which carries no origins) is let go of whole, by the callee's must-fact, where it is dropped or its local
   ends (`free.EndPlace`, `lower.movedPath`), and counted (poptexts, wt-freeopen3). A view call's value read through a try
-  (`v.Get(j)!.a[1]`) is read where it stands, as lowering's readHere passes a try on (`free.readCall`; tryreads).
+  (`v.Get(j)!.a[1]`) is read where it stands, as lowering's readHere passes a try on (`free.readCall`; tryreads). A
+  reference or `any` local given storage for a call's value (`s any Summer& = Box(v[j].b)`) holds its view copy in its
+  block (BlockCopy through `promotedCall`); a read-only reference given through an any's table whose signature writes no
+  keeps is no escape (`typed.LocalUses.tableRef`; anyholders).
 - **No reference counting (the user, 2026-11-08: "doing ref counting is a bad idea"; QCR (2) answered).** Truly shared
   ownership keeps memory until its scope closes; for structures that churn, `weak` back links (below) - the count they
   use is of owning places, in a header only generational types carry, never per copy. The memory model may grow by

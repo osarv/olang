@@ -40249,3 +40249,17 @@ the constructor's field copy is left out (D9h) and add's call copies the instanc
 Put store's copy as split (lower.ownersCopy, Q.a kept for RSplit, freeing through its parts) cleared the first keep
 only; reverted, because add's copy is built by splitCopy/partCopy before ownersCopy is reached, and an RSplit judgement
 that does not match the copy lowering actually builds would release a part through a region it is not in.
+
+Then t2 (review5): `s any Summer& = Box(v[j].b)`, its Sum called through the table, kept Q.b - and so did the plain
+`s Box& = Box(v[j].b)`, while `s := Box(v[j].b)` already freed. BlockCopy (a view call's copy made in the block of the
+local holding what its declaration's call hands back) looked for the call with `initCall`, which stops at the Promote
+a reference local's value is given storage by, and at an any's AnyMake. `free.blockCopies` now takes, for a reference
+local that is a block view, the call through those two (`promotedCall`); initCall itself is unchanged (its other users
+want the call a value is). The any local still failed: its one use, `s.Sum()`, went through the table, and
+`LocalUses.arg` walks an argument with no known body as an escape (EscHard, EscBesides) even where `unkept` says the
+call keeps nothing of it. A trait's signature with no keeps binds every body its table reaches (T21c, T32b), so a
+read-only reference given that way is only read during the call: `typed.LocalUses.tableRef` records the use (Esc, the
+place's expressions) without the escape, as a RefAt kept by none would be. Only for a table; a function value's or an
+extern's arguments are as they were. Fixture anyholders: the element the view was taken of is replaced, the Vec grown
+and popped while the holder lives, its Sum read after - the same built, `-free late`, `-sanitize` and interpreted;
+400,000 turns under 8 MB (master: Q.b kept).
