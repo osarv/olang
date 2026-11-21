@@ -3605,6 +3605,34 @@ localtypename.olang:8:5: help: choose another
 compilation failed with 1 error
 === longflag.olang
 olang: error[B1]: unknown option '-x' - 'olang help' lists the options of build
+=== lostloopwrite.olang
+lostloopwrite.olang:6:9: error[S9g]: the write to 'x' is lost: nothing reads 'x' after it
+    6 |         x = x * 10
+      |         ^~~~~~~~~~
+lostloopwrite.olang:6:9: note: 'x' holds a copy of what the walk gives (S9a), and nothing reads it again this turn
+lostloopwrite.olang:6:9: help: write the element where it is - 'for i, x in a: a[i] = ...', or a field through a writable walk's reference - or store the value somewhere read later
+compilation failed with 1 error
+=== lostloopwritecopy.olang
+lostloopwritecopy.olang:10:9: error[S9g]: the write to 'p' is lost: nothing reads 'p' after it
+   10 |         p.x = 7
+      |         ^~~~~~~
+lostloopwritecopy.olang:10:9: note: 'p' holds a copy of what the walk gives (S9a), and nothing reads it again this turn
+lostloopwritecopy.olang:10:9: help: write the element where it is - 'for i, p in a: a[i] = ...', or a field through a writable walk's reference - or store the value somewhere read later
+compilation failed with 1 error
+=== lostloopwriteindex.olang
+lostloopwriteindex.olang:7:9: error[S9g]: the write to 'i' is lost: nothing reads 'i' after it
+    7 |         i = 0
+      |         ^~~~~
+lostloopwriteindex.olang:7:9: note: 'i' holds a copy of what the walk gives (S9a), and nothing reads it again this turn
+lostloopwriteindex.olang:7:9: help: keep a count of your own in a local declared before the loop
+compilation failed with 1 error
+=== lostloopwriterepoint.olang
+lostloopwriterepoint.olang:11:9: error[S9g]: the write to 'p' is lost: nothing reads 'p' after it
+   11 |         p = twice(p)
+      |         ^~~~~~~~~~~~
+lostloopwriterepoint.olang:11:9: note: 'p' refers to the element, and '=' repoints the name (S4a), never writing the element
+lostloopwriterepoint.olang:11:9: help: write the element where it is - 'for i, p in a: a[i] = ...', or a field through a writable walk's reference - or store the value somewhere read later
+compilation failed with 1 error
 === m10stdimport.olang
 m10stdimport.olang:5:10: error[M10]: 'filepath' is no import here - std has it: 'import "std/filepath"'
     5 |     m := filepath.Base("a/b")

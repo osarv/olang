@@ -21570,6 +21570,8 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr?&, ce types.
     if at != types.UnknownT {
         # the collection, borrowed once (S9a)
         rt := st if c.isRef(st) else c.P.T.Ref(st, types.ReadOnly)
+        # T25c: a writable reference a read-only copy holds is walked read-only - its elements named by value (S9a)
+        if c.isRef(st) and (c.P.T.PermOf(st) & types.Writable) != 0 and c.roRef(src) { rt = c.P.T.Ref(c.P.T.Referent(st), types.ReadOnly) }
         coll := c.hidden(sp, rt)
         c.roBorrows.Put(c.roKey(coll), c.roRef(src) if c.isRef(st) else c.roPlace(readPlace(src)))   # T25c
         fx := c.fit(src, rt, f.Source.Span())
@@ -23005,7 +23007,10 @@ fn (c mut Checker&) walkBody(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
 
 fn (c mut Checker&) walkTurn(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
     if cm == null {
+        from := c.stmts.Len()
         if f.Body.Len() > 0: c.stmtsOf(f.Body)
+        c.lostWrites(f.Name, c.stmts, from, false)
+        if f.Key != source.NameId(0): c.lostWrites(f.Key, c.stmts, from, true)
         return
     }
     sp := cm.Value.Span()
@@ -23035,6 +23040,18 @@ fn (c mut Checker&) walkTurn(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
     c.stmts.Push(give)
     y typed.Block& = typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, from))
     c.emit(typed.Stmt.If(cm.Filter!.Span(), typed.If(k, y, null)))
+}
+
+# S9g: a write to a loop's name n, or into what it holds by value, that nothing in the turn reads after it - the
+# statements of the body from position from on - is lost, and an error
+fn (c mut Checker&) lostWrites(n source.NameId, ss Vec<typed.Stmt&>&, from I64, counter Bool) {
+    if n == source.NameId(0) or c.text(n) == "_": return
+    id := c.localNamed(n)
+    if id < 0: return
+    w := typed.LostStores(typed.LocalId(I32(id)))
+    for i in range from, ss.Len(): w.Walk(ss[i])
+    ref := c.isRef(c.localType(id))
+    for k in w.Lost(): c.err(w.Spans[k], msgs.LostLoopWrite(c.text(n), ref and w.Whole[k], counter))
 }
 
 # a comprehension's element against its element type ce: an entry "k: v" its MapEntry(k, v) (E19, E27)
@@ -23260,7 +23277,7 @@ fn (c mut Checker&) walkRuns(sp source.Span, f ast.ForIn&, src typed.Expr&, runs
     ra := c.arrayOf(rt)
     base typed.Lvalue& = typed.Lvalue.Deref(sp, c.deref(rt), c.readLocal(sp, run))
     e := c.read(sp, typed.Lvalue.Elem(sp, c.P.T.Elem(ra), typed.Elem(base, c.readLocal(sp, j), typed.Check.None)))
-    c.elementLocals(sp, f, k, e)
+    c.elementLocals(sp, f, k, e if cm != null else c.elemName(e, sp))
     c.walkBody(f, cm, ce)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
@@ -23305,6 +23322,17 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&, a
     c.emit(c.addTo(sp, k, c.lit(sp, c.i64(), 1)))
     pb := c.close(pid, pouter, pmark, pfrom)
     c.emit(typed.Stmt.Loop(sp, b, pb))
+}
+
+# S9a: what a walk of an array names each element by - where the array is reached writably and the element is a struct
+# held by value, a writable reference to it where the array holds it; anything else, its value (no reference names a
+# number, a reference or a function, T24; an immut value is never written, T13a; an array element is copied, T7a)
+fn (c mut Checker&) elemName(e typed.Expr&, sp source.Span) typed.Expr& {
+    t := typeOf(e)
+    if t == types.UnknownT or c.isRef(t) or c.P.Immut(t) or c.P.Unique(t) or not c.isStruct(t): return e
+    p := readPlace(e)
+    if p == null or not c.placeWritable(p): return e
+    return c.fit(e, c.P.T.Ref(t, types.Writable), sp)
 }
 
 # T13b: the Ref a walk of an indexable collection holding unique elements names each one with - one index, a reference
@@ -23453,6 +23481,7 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
         base typed.Lvalue& = typed.Lvalue.Deref(sp, c.P.T.Referent(ct), c.readLocal(sp, coll))
         e = c.read(sp, typed.Lvalue.Elem(sp, c.P.T.Elem(at), typed.Elem(base, c.readLocal(sp, k), typed.Check.None)))
         e = c.uniqueRef(e, sp, false)   # T13b: a unique element is named where the array holds it
+        if cm == null: e = c.elemName(e!, sp)
     } else {
         e = c.prim(sp, kt, typed.PrimOp.Add, c.readLocal(sp, lo), c.prim(sp, kt, typed.PrimOp.Mul, c.readLocal(sp, k), c.readLocal(sp, st)))
     }

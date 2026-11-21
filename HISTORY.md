@@ -40403,3 +40403,65 @@ calls while a task holds a view (p5), a task building a Q (p6), a lambda task (p
 `-free late`, `-sanitize` and interpreted, and the `-race` builds report nothing. Fixture tasks (checks' freeing): n1's
 and t1's shapes, the peak address space over a second half of 100,000 turns - flat, where -free late grows 139 MB -
 with the oracles and a `-race` run at a smaller size.
+## 2026-11-21: a for loop's name has the type its walk gives; a write to it nothing reads is an error (S9a, S9g; the user's call; wt-loopref)
+
+docs/viewmut.md put the trap: `for x in v.ViewMut()` bound `x` as a copy (S9a), so `x = f(x)` and `p.x = 7` were
+silently lost, and offered A (a dead store to the copy is an error), B (a loop's names are read-only) and C (a writable
+array's walk binds references), recommending B. The user (2026-11-21): "I want x to become what the iterator spits
+out. That can be a reference at times, although it should be a value. If we get a value and update it but never store
+it, that is an error. But loop variables get the type of what the iterator produces." So C and A together, not B.
+
+**Which walks give references.** Only the array walk (S9a's first bullet, and a run of S9f, which is walked as one)
+over an array reached through a writable reference - `mut Array<T>&`: a `ViewMut()`, a `mut` parameter, a slice of
+one - and only where the element is a struct held by value that is neither `immut` nor unique (a unique element was
+already named by reference, T13b). Then `x` is a `mut T&` made where the array holds the element (`check.elemName`,
+the same E12 borrow `r mut P& = w[i]` makes), so `x.f = 7` writes the element and `x = ...` repoints the name (S4a).
+Everything else stays a value: numbers, references and function values (T24 lets no reference name a primitive, so a
+`Vec<I64>`'s ViewMut still gives copies - the index form `for i, x in w: w[i] = ...` writes them), enums (`==` on a
+reference would compare identity, T26, and `x = E.B` would only repoint), array elements held by value (T7a: an array
+of inline rows reached through a reference reads the wrong row length - `rows mut Array<Array<I64>>& = m;
+rows[1].Len()` gives 3 for rows of 2 on master too, a bug of its own, recorded below), an array value or one reached
+read-only (T25c: a writable reference a read-only copy holds is walked read-only - the array path now applies the same
+test borrowedSource did), an iterator's `Next()` and an indexable's `At` (their results are already the names' types),
+and a comprehension's names (its elements would otherwise become references).
+
+**The liveness rule (S9g), its exact scope - a reviewer note.** `typed.LostStores`, run by `check.lostWrites` over the
+typed statements of each `for ... in` body (not a comprehension, a G33 unrolled list or a comptime `for`), once for the
+name and once for the counter `i`. A store is an `Assign` whose place is the name itself, or a field, element or
+payload of it reached through no `Deref` (storage the name holds by value; a write through a reference name is a read
+of it). Every other mention of the name is a read: a `Read`, `Borrow` or `Take` of a place rooted at it (so a method
+call on it, an argument, a copy, a comparison, a store elsewhere of its value), the indexes of a store into it, and
+the value assigned (evaluated before the store, so `x = f(x)` is lost). Order is the order written; a store is kept
+when any read comes later, when it is inside a loop of the body (or a comprehension) that reads the name anywhere, or
+when any mention is in deferred code, a task, a `join`'s clauses or a lambda's capture or adapter (counted as after
+everything). It is decided from the text alone and errs only one way: a read later in another branch, or after a
+`break`, keeps a store that is in fact lost; nothing a program reads is ever called lost. Writes made by a call - a
+`mut` receiver (`x.Push(1)` on a copy), a writable argument - count as reads, so they are never refused. A store to a
+name repointed (a reference name) gets the note naming S4a; to a counter, a help naming a count of one's own.
+
+Corpus: tests/loopref.olang (a ViewMut over a Vec of structs writing fields and building text in them, read back after a
+churn; a `mut` parameter's walk; an array value's walk copying; numbers by the index form; a struct holding an array;
+a repoint read later; `assert walked() == 810` decided while compiling and a baked global - the evaluator follows the
+same typed tree, so it agrees). checks/cases lostloopwrite (a number in a ViewMut), lostloopwritecopy (a field of a
+copy), lostloopwriterepoint (`p = twice(p)` over a ViewMut), lostloopwriteindex (the counter).
+
+What changed for existing code: a temporary trace of every loop the new rule binds by reference, over every .olang file
+of olang (tests, std, compiler, tools, bench, checks), oann and oagent, found 6 loops besides the new tests
+(bench/dispatch, bench/nbody's offsetMomentum, lower.payPlan's `for h in hands`, the three `for e in sorted` of
+results/scopes/syntax_migrate) - all only read the name, so they mean what they did, minus the copy. No file was
+refused by S9g (the suite passes unchanged). So no `olang fix` tool: the one meaning change - code writing into a
+struct copy over a writable array and reading it back, or copying the name with `y := x` (now the same reference, as
+`:=` gives the value's type) and writing that - occurs nowhere, and a migration could not tell it from code wanting the
+new meaning. The compiler's own sources and std build under the rule (the bootstrap).
+
+Checked: tests/loopref.olang built, interpreted (`OLANG_EVALUATE=1`), under `-debug -sanitize`; a program replacing
+the text of 1000 structs' fields through a ViewMut walk 20,000 times passes `-memory -check` and peaks at 2.2 MB.
+
+Found, not fixed (a bug of its own, master too): an array of inline rows reached through a reference loses the rows'
+length - `m := Array<Array<I64>>[[1, 2], [3, 4]]; rows mut Array<Array<I64>>& = m; rows[1].Len()` gives 3, and writing
+`rows[1][0]` crashes; passing `m` to a `mut Array<Array<I64>>&` parameter is refused (G29), but the local's declared
+type is accepted. It is why array elements stay copies here.
+
+Verified: the bootstrap from the seed and its fixed point, `make test` (every test block, checks.olang included), the
+rest of the suite (interpreter runs, runner, the diffs, checkir) and `make scopesan` pass. The full `make verify` was run
+in those parts: run whole it filled the disk beside another worktree's build (build/checks takes ~5 GB).

@@ -1,0 +1,12 @@
+# check: fail error[S9g]: the write to 'p' is lost: nothing reads 'p' after it
+# S9g: a walk of an array value names copies - a field written into the copy and never read again is lost
+type P struct(x I64) {
+    x
+}
+fn main() {
+    a := Array<P>[P(1), P(2)]
+    for p in a {
+        Println(p.x)
+        p.x = 7
+    }
+}

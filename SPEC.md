@@ -5549,9 +5549,15 @@ block around the loop, every evaluation's storage stayed while the loop ran.)
 holding it; `for i, x in e` also declares `i`, an `I64` counting iterations from `0`. The names are
 scoped to the body. `e` is evaluated once, before the first iteration, and must be one of:
 
-- an **array**, of any shape (T11, including a slice and a declared array type): `x` is each element in
-  order, **copied** — assigning to `x` does not change the array; `a[i] = ...` through the index form does. An element
-  of a unique type (T13b), never copied, is named where the array holds it: `x` is a read-only reference to it.
+- an **array**, of any shape (T11, including a slice and a declared array type): `x` is each element in order, with
+  the type the walk gives. Over an array reached through a **writable reference** (`mut Array<T>&`: what `ViewMut()`
+  gives, a `mut` parameter, a slice of either) whose element is a struct held by value and not `immut`, the walk
+  gives **references**: `x` is a `mut T&` naming the element where the array holds it, so `x.f = 7` writes the
+  element, and `x = ...` repoints the name (S4a). Anything else gives **values**: `x` is the element **copied** - over
+  an array value or one reached read-only, an element that is a number, a reference or a function (no reference names
+  one, T24), an enum, or an array held by value (T7a) - so assigning to `x` does not change the array; `a[i] = ...`
+  through the index form does. An element of a unique type (T13b), never copied, is named where the array holds it: `x` is a reference to
+  it, writable where the array is reached writably.
   The array is borrowed for the loop (E12c), never copied, so its length is read once per iteration from
   the same storage.
 - an **`Iterator<T>`** (T35b): a value whose type satisfies the built-in trait - or whose type declares the private
@@ -5562,7 +5568,7 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   is). The element type of a generic iterator is its instantiated `Next()`'s.
 - a value **stored in runs** (S9f): one whose type has `RunFrom(at I64) Array<T>& ? Exhausted` and no `Next()` of its
   own. The loop asks for the run at position `0`, walks it as an array (a counted loop over the slice, `x` each
-  element **copied**), then asks for the run where that one ended, and so on until `RunFrom` fails with `Exhausted`,
+  element as an array's walk gives it - **copied** from a read-only run), then asks for the run where that one ended, and so on until `RunFrom` fails with `Exhausted`,
   which the loop takes itself; `i` counts across runs. The collection is borrowed (E12c), never copied, and each run
   is asked for when the last is done - so an element added at the end while the loop runs is walked too. `break`
   leaves the whole loop. A type with `RunFrom` and `Iter()` must give the same elements in the same order by both; the
@@ -5581,6 +5587,20 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
 Each method the loop calls - `Next`, `Iter`, `RunFrom`, `At`, `Len` - may be the type's private spelling, which only
 a loop in its own module calls (M6b). Anything else after `in` is a compile-time error. `break` and `continue` (S11)
 apply as in every loop; `continue` moves to the next value.
+
+**S9g (a write to a loop's name nothing reads).** A `for ... in` loop's names (`x`, and `i` in `for i, x`) have
+exactly the type the walk gives (S9a, S9b): a reference where it gives references, a value otherwise. A **store** to
+one of them - assigning it (`x = ...`, `x += 1`, `x++`), or storage it holds by value (`x.f = ...`, `x[j] = ...`,
+a payload, reached following no reference) - that nothing in the turn **reads after it** is a compile-time
+error: it changes a copy no one sees again, or repoints a reference no one follows. Read after it means a mention of
+the name, other than as a store's own target, that comes later in the body in the order written - a copy, a borrow, a
+call's argument or receiver, a comparison - or anywhere inside a loop of the body around the store; a mention in
+deferred code (D14), a task (P1), a `join`'s clauses or a lambda's capture (D16c) counts as after every store. It is
+decided from the text alone: a mention later in another branch counts, and so one later on no path the store is on
+keeps it legal. A write **through** a reference name (`x.f = 7` where `x` is a `mut T&`) is no store to the name and
+is always kept. A comprehension (E27) writes no statements, so has none. The fix is the index form, `for i, x in a:
+a[i] = ...`, a writable walk (`ViewMut()`) for a struct's fields, or a local declared outside the loop for a value to
+keep.
 
 **S9e (`for ... in try`).** `for x in try e block { catch-clause }`. A loop calls methods by itself - `e` when it is
 a call, `Iter()`, `Next()`, `At()` - and any of them may declare errors. `try` here, as anywhere (R8), turns no check

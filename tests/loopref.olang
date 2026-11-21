@@ -1,0 +1,110 @@
+# A for loop's name has the type its walk gives (S9a, S9g): over an array reached writably (a ViewMut, a mut
+# parameter), a struct element is named by a writable reference into it; anything else is a value, and a
+# write to a value name that nothing reads after it is refused (checks/cases/lostloopwrite*.olang)
+
+type P struct(x I64, name String) {
+    x
+    name
+}
+
+# storage made and dropped, so a reference to reclaimed storage would read it overwritten
+fn churn() I64 {
+    n I64 = 0
+    for i in range 100 {
+        s := $"xyzw" + $i
+        n += s.Len()
+    }
+    return n
+}
+
+fn people() Vec<P> {
+    ps := Vec<P>[]
+    ps.Push(P(1, $"a"))
+    ps.Push(P(2, $"b"))
+    return ps
+}
+
+test "a ViewMut walk names each struct element, writes reaching the Vec" {
+    ps := people()
+    for p in ps.ViewMut() {
+        n := churn()
+        p.x = p.x * 10 + n
+        p.name = $p.name + "!" + $n
+    }
+    m := churn()
+    assert ps[0].x == 10 + m and ps[1].x == 20 + m
+    assert ps[0].name == $"a!" + $m and ps[1].name == $"b!" + $m
+}
+
+fn bump(w mut Array<P>&, by I64) {
+    for p in w: p.x += by
+}
+
+test "a mut parameter's walk writes through" {
+    a := Array<P>[P(1, $"a"), P(2, $"b")]
+    bump(a, 5)
+    assert a[0].x == 6 and a[1].x == 7
+}
+
+test "a walk of an array value names copies" {
+    a := Array<P>[P(1, $"a")]
+    for p in a {
+        p.x = 9
+        assert p.x == 9
+    }
+    assert a[0].x == 1
+}
+
+test "numbers are values: the index form writes them" {
+    v := Vec<I64>[1, 2, 3]
+    w := v.ViewMut()
+    for i, x in w: w[i] = x * 10
+    assert v[0] == 10 and v[2] == 30
+    total I64 = 0
+    for x in v.ViewMut() {
+        x += 1          # read after: legal, the copy changed
+        total += x
+    }
+    assert total == 63 and v[0] == 10
+}
+
+type Row struct(cells Array<I64>) {
+    cells
+}
+
+test "an array element is a copy, a struct holding one is named" {
+    rs := Vec<Row>[]
+    rs.Push(Row([1, 2]))
+    rs.Push(Row([3, 4]))
+    for r in rs.ViewMut(): r.cells[0] = r.cells[1] * 2
+    assert churn() > 0
+    assert rs[0].cells[0] == 4 and rs[1].cells[0] == 8 and rs[1].cells[1] == 4
+}
+
+test "repointing a reference name read later is kept" {
+    a := Array<P>[P(1, $"a"), P(2, $"b")]
+    other := P(7, $"o")
+    seen I64 = 0
+    w mut Array<P>& = a
+    for p in w {
+        if p.x == 2: p = other
+        seen += p.x
+    }
+    assert seen == 8 and a[1].x == 2 and other.x == 7
+}
+
+fn walked() I64 {
+    a := Array<P>[P(1, "a"), P(2, "b")]
+    bump(a, 3)
+    w mut Array<P>& = a
+    for p in w: p.x *= 2
+    return a[0].x * 100 + a[1].x
+}
+
+# decided while compiling (S18c): the evaluator names the elements as the build does
+assert walked() == 810
+Walked I64 = walked()
+
+test "the baked global agrees" {
+    assert Walked == 810 and walked() == 810
+}
