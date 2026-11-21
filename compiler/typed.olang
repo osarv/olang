@@ -1976,7 +1976,9 @@ fn (u mut LocalUses&) prim(op PrimOp, args Array<Expr&>&, ctx Ctx) {
         }
         match op {
             case PrimOp.Convert { u.expr(a, ctx) }
-            case PrimOp.AnyMake { u.expr(a, Ctx.Esc) }
+            # (a trait value made of a read-only reference a reference local is declared with names what that does: an
+            # alias of it, as a conversion's - review5's t2, `s any Summer& = bx`)
+            case PrimOp.AnyMake { u.expr(a, ctx if ctx == Ctx.Alias and u.T.IsRef(a.Type()) and (u.T.PermOf(a.Type()) & types.Writable) == 0 else Ctx.Esc) }
             # (a holder's drop, O15: its destructors given the value where it is - lent for the call, kept nowhere)
             case PrimOp.Drop { u.expr(a, Ctx.Arg) }
             case _ { u.expr(a, Ctx.Op) }
