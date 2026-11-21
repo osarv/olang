@@ -719,10 +719,10 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   walked T to its depth limit and answered true; a named type it is already walking adds nothing now (as ReachesCode).
   Fixtures fieldagain (400,000 turns) and owntrees (T trees of depth 2 and R's Vec<U>, 200,000 turns), under 8 MB;
   master fails -check on each; built, `-free late`, `-sanitize` and interpreted print the same.
-  **Found, not fixed (a scope-pass bug, on master and every older compiler):** a store into a field of a Vec's element
-  in a loop, `for i in range 20 { v[i % 4].n = $"m" + $i }` (Q{n String}), builds the text in the turn's scope - the
-  Vec then names freed storage (prints "m19 m19" for "m18 m19"; the interpreter stops: "uses storage after the scope it
-  was made in closed"); `v.RefMut(i % 4).n = s` and a fixed array's `a[i].n = s` are right. check.writeBack's in-place
-  path (RefMut into a hidden local, the store through it) is where it differs. A §8 fix for the scope pass.
-  **Where to pick up**: a copy holding a Map stays untracked (gaps.olang's shape); the writeBack scope bug above; tasks
+  **Fixed (wt-writeback):** a store into a field of a Vec's element in a loop, `for i in range 20 { v[i % 4].n = $"m" +
+  $i }`, built the text in the turn's scope (check.writeBack's held value: scope.letBody built a held local holding no
+  reference where it was held) - now built at the store's slot (`ownsStorage`, `arenaCall`) and its let-go freed at
+  once (free's `heldNew`). Fields of fields, elements of elements and a call's text alike; fixture writeback.
+  Left: a conditional of two new values stored into a part keeps until its scope closes (the RefMut form too).
+  **Where to pick up**: a copy holding a Map stays untracked (gaps.olang's shape); a conditional's new value stored; tasks
   as wt-taskfree left them.

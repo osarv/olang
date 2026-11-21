@@ -40622,3 +40622,32 @@ turn's scope - v then names freed storage (prints "m19 m19" for "m18 m19"; inter
 it was made in closed") - on master and on the compilers in .bootcache alike; `v.RefMut(i % 4).n = s` is right, as is a
 fixed array's `a[i].n = s`. It is check.writeBack's in-place path (RefMut into a hidden local, the store through it);
 making that local a Var did not change it. Left for a scope-pass agent (docs/freeing.md).
+
+## 2026-11-21: a value stored into a part of x[i] is built where the collection is (O18a, E31b, O8f; mine; wt-writeback)
+
+The bug wt-freeg1 found and left: `for i in range 20 { v[i % 4].n = $"m" + $i }` with v a Vec<Q{n String}> printed
+"m19 m19 m19 m19" (every element naming the last turn's storage; -sanitize: "use after scope closed"; interpreted:
+"uses storage after the scope it was made in closed"), on master and every older compiler. check.writeBack holds the
+value in a Held local before the element is read (RefMut into a hidden local, the store through it), and a Held
+local's temporary is built where its one use puts it (O18a) - but scope.letBody returned for any local whose type holds
+no reference before it looked at held locals, so a held String, Array or value owning one was built where it was
+held: the turn's block. The hidden RefMut local was not the cause (making it, or the held value, a Var changed nothing:
+an unnamed Var is not lifted as `s := ...; r := v.RefMut(j); r.n = s` lifts s). Now a held local of a type owning
+storage (`ownsStorage`: an array value, an owned part, a value owning parts) is held too when it is new - text, a make,
+a comprehension, a conditional of new values - or a call giving an array value (T7b, `arenaCall`), and built at the
+store's slot, where the collection's parts live.
+
+Siblings, each wrong before and right now: a field of a field (`rs[i].q.n = $...`), an element of an element
+(`vv[i][j].n`, `ts[i][1] = $...`), a call's text (`v[i].n = mk(i)`), a conditional's (`"c" + $i if c else "d"`), a
+collection with At/SetAt and no RefMut (was right: the copy goes through SetAt), a text field and an Array<Char> field
+alike. Map has no index (`try m.RefMut(k)` was right). Compound stores (`x[i].n += $i`, `x[i].ns.Push(...)`) are E31b's
+refusals, unchanged.
+
+Built there, the store's text was then kept until the function's scope closed - a million turns, 128 MB - since the
+freeing analysis saw the store's value, a read of the held local, as existing storage. free's walker records a Held
+local's initializer (`heldNew`, beside Part C's heldCopy) and judges the store by it, as it judges the RefMut form
+written out: freed at once, 13 MB. Tests: tests/valueparts ("a value stored into a part of x[i] in a loop lives where
+the collection does", a global baked beside it), fixture freeing/writeback (200,000 turns under 8 MB; master prints the
+last turn's text). Found, not fixed: a conditional of two new texts stored into a part keeps until the scope closes, in
+the RefMut form too (made() has one site; "its new value is existing storage"); and a fill `Array<String>(2, "")` in a
+file storing into another Array<String> element in a loop fails -check (the element place is shared by type).
