@@ -765,7 +765,7 @@ d41d1e66acab7a66 65e6423c73cde1db checks/cases/inttoolarge.olang
 223a22b354cee139 01d6c7bcc9b94e91 checks/cases/isnulls.olang
 e6e5b5ce2312f5ca 230e29329d71c7e6 checks/cases/itnotmut.olang
 f3d783e9890ce24d 364fb2269a326196 checks/cases/itredecl.olang
-d2832d559ba79d7b c6005bcceb621909 checks/cases/joinflat.olang
+368127434dc4bfe7 46ce1cf48980ab8d checks/cases/joinflat.olang
 0c4f1dc20d56f3e7 4406dc7a3b82a947 checks/cases/joinwritesafter.olang
 eef05b5ae1ecda1f 5421e6ecf24d21b2 checks/cases/jsonprivatefields.olang
 931edc0d1f6a73a8 de4b4f097cae74c7 checks/cases/k1assertaborts.olang

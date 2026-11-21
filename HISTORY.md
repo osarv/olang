@@ -40352,3 +40352,10 @@ huge pages, still far under the leak. Passes built and interpreted.
 The same day, plan.md's queue was audited against this file and the code: compile-time range analysis (E16h), the
 cache caps, B15's import completion and M10's quick fix, M5a, G42's cold paths (FailAllocates/Running) and the O10c
 global getter were all done earlier (their entries above); the closed entries moved to archive/next_steps_log.md.
+
+**The weekly full verify (2026-11-21, master 969e372aa).** It failed on two things, neither in the compiler. First, this
+container lacked libclang-rt-18-dev: `olang test -fuzz`, the checked build's sanitizer runtime and the race detector
+could not link, and the "tsan not installed" note on stderr made drvdiff and the evaluator's agreement check differ.
+Second, the joinflat edit above had not recaptured its token and tree goldens (`make tokgold astgold`; DEPENDENTS.md
+names them for any checks/cases edit). With the package installed and the goldens recaptured, every failed target
+passes: checks 97/97, tokdiff, astdiff and drvdiff clean.
