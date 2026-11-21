@@ -444,6 +444,12 @@
 | ok - constructors and methods take arguments by name
 | ok - a generic's, a reference's and an any's parameters by name
 | ok - arguments are evaluated in the order written
+=== test tests/nestref.olang
+| status 0
+| ok - a reference local names rows held in place
+| ok - a read-only reference, one taken from another and a slice
+| ok - passed on to functions, an instance per length
+| ok - rows of a run-time length keep their own
 === test tests/nll.olang
 | status 0
 | ok - click: walks the parents to the button

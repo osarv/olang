@@ -1283,6 +1283,7 @@ fe77995cd1c424b5 ff7bf25db2e44852 checks/cases/reflunknownhead.olang
 46fa91ecee4221c0 35012a8a00589dab checks/cases/retire03outside.olang
 ee4f65b19f9bdd80 64dea785c97f783b checks/cases/returnintest.olang
 1a44823d7b464edc a5f93462e363188b checks/cases/roglobaltext.olang
+0b4581b284e0236e fef6d2f241040cf9 checks/cases/rowsinplacelent.olang
 bff2e3a6635a114c 1f2c8048f9b9c6a1 checks/cases/runonstackdebug.olang
 83eeef68018c283b 97cb939cb075f87d checks/cases/rv3assigncopy.olang
 1bd909f4083cdeb4 e5afa0529ce575c3 checks/cases/rv3condstore.olang
@@ -2422,7 +2423,7 @@ e20178f94e07dfed ff5ec0fbe401eade compiler/bindgen.olang
 172122c174426433 4abdab88d5005e0a compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 a63bb2cbd4c666c1 32f8e5565363d2f2 compiler/cells.olang
-5f713622a770150f 9fe0fc38b2c39db1 compiler/check.olang
+0e0cfb52841e7792 ba26eda6392bedc0 compiler/check.olang
 da018e972c2ecc90 402dd6cf0de7cca1 compiler/cond.olang
 2ab98962469bc960 f235e148eac3e4ba compiler/definit.olang
 db407b9ec2aacf25 d850fbb42d0e8294 compiler/diag.olang
@@ -2448,7 +2449,7 @@ e4b47cfb37792aa7 c15edc7148433880 compiler/lower.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
 e584497ebb497531 0f081d3bdae48bfc compiler/mir.olang
-ea9051771bf62d06 eb0b393eeb52094d compiler/msgs.olang
+10445d32ae35d402 2777c26e207165e8 compiler/msgs.olang
 e12e0b7843a4d69e 3609653e0e4a8b34 compiler/names.olang
 3f072b84e716c304 202ed56cc066d701 compiler/needs.olang
 79acbc010c9bf08a a1be4111ef62bcb1 compiler/notebook.olang
@@ -2685,6 +2686,7 @@ cb1a5845ede026cf 0791c61597117220 tests/match.olang
 bd604793a79e1dd0 03c02f86e953d049 tests/membermod.olang
 43716d6db39bbcf8 469215721341423b tests/members.olang
 94e697619ecc82db 0f769ebecadf585e tests/namedargs.olang
+af5affca68c4be03 07f59572dd940313 tests/nestref.olang
 b1bcaf8d86a15d05 f21ef5f178a1a176 tests/nll.olang
 23682d829b564f02 7dac4f4f5d74a229 tests/nulltest.olang
 7727ff12f32a7504 77c0e3136b3a48e7 tests/packed.olang
