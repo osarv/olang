@@ -40566,3 +40566,42 @@ Corpus: tests/loopref.olang (rows in place through a reference local, a slice an
 through ViewMut, each read back after a churn; a read-only walk copying; `assert rowsWalked() == 1020` decided while
 compiling and a baked global) - built, interpreted (`OLANG_EVALUATE=1`), under `-debug -sanitize` and
 `-memory -check`.
+
+## 2026-11-21: the self-build measured per phase; three front-end hot spots (B3, B3i, O43; mine; wt-buildspeed)
+
+Compile speed is a first-class goal, so the compiler's cold self-build (`build/olang build compiler/olang.olang`, no
+build/rec, no objects, no ThinLTO cache) was measured per phase with `OLANG_TIMES` on the 4-core cloud box, with another
+agent's suite running beside it (so user CPU time and alternated runs were compared, not wall time alone). Before:
+load 0.3 s (2.3 s with the C-import cache empty), check 3.2-4.1 s (views 1.8), evaluate 0.6, scope judged 3.1-3.9,
+scope records 0.5, scope 3.7-4.2, lower+emit 5.4-6.0, compile (clang, 350 objects, 4 at once) 52-63 s, link (ThinLTO,
+4 back ends) 94-131 s - 166-214 s in all, 371 s of CPU. The front end is ~17 s of one core; the rest is LLVM, already
+tuned (ThinFrom, ImportLimit 70, heaviest compile first) and saturating the cores, so nothing in it can go without
+changing the binary. A `profile -quick` of the self-build named the front end's hot spots outside scope/freeing:
+
+- **A fact's value hashed for every reader (B3i).** facts.Table.Record wrote each "read VALUE NAME" line with Token(value),
+  a SHA-256 of any value longer than 40 characters, for each module, twice (own and carried reads); the mutable-globals
+  fact (typed.MutGlobalsFact) is one long value every module reads, so ~1.5 s of the profile was hashing it again and
+  again. ReaderRecords now takes every value's token once (Table.Tokens) and hands them to Record. And lowering's
+  reads whose value it does not want (mutGlobals, mutStorage - read on every view judgement - T13d and derived facts)
+  copied the value out of the map each time (memcpy of the long value, ~0.5 s): Table.Note records the read without
+  the copy. ReaderRecords 1.86 -> 0.42 s in the profile.
+- **Exclusive parameters worked out per body (O43).** effects.ExclusiveShapes was asked twice per body (DecideExclusive
+  and Exclusive), and depends only on the function's type; each time it walked reachOf over every parameter's types and
+  heldIn over every type reached. Now the mask is kept by function type, reachOf by type (a flat list per type), and the
+  overlap test by (type, referent) pair. DecideExclusive 4.1 -> ~1.5 s in the profile.
+- **The units' IR hashed one after another (B3).** Each object is named by the SHA-256 of its IR (110 MB for the compiler,
+  ~0.7 s at ~160 MB/s, about plain C's speed for scalar SHA-256); the modules' hashes were taken in olang.olang's loop
+  and the rest in Objects, one unit at a time. build.IrHashes hashes them side by side on every core: ~0.2 s off.
+
+After (the same measurement): check 3.3-3.7 s, evaluate 0.6, scope judged 3.4-3.6, scope records 0.5-0.7, scope
+2.1-2.5, lower+emit 4.7-5.1 - the front end ~13-15 s of user CPU against ~15-18 (front-end-only runs alternated three
+times: base 16.1/17.1/18.3 s user, after 12.9/14.2/15.1); the back end unchanged. The IR of every unit was byte for
+byte the same before and after the first two (the third changes only the compiler's own source), the binary built is
+the same, and the compiler builds itself identically (the fixed point). Left, measured: placement/scope (~9 s of the
+profile, another session's), emit's writeBody and foldSlots (~5 s), views (~3 s), the records written (~0.5 s), and a
+SHA-256 with the CPU's SHA extensions, which olang cannot name today (~0.5 s).
+Verified: the fixed point (the final compiler builds itself byte for byte), the facts and effects tests, `make quick`
+(50 min beside another agent's suite) - passing but for tokdiff/astdiff, whose goldens the edited files moved
+(captured again), and checks that need ThreadSanitizer's and libFuzzer's runtimes, not installed on the cloud box
+(tasks -race, the freeing check's -race step, test -fuzz, and the checked/-evaluate output that carries the missing
+runtime's notice).
