@@ -3,13 +3,15 @@ import "std/os"
 
 # O8f (docs/freeing.md, condition 3 by origins): elements replaced in a program with tasks are freed at once where no
 # task can reach them - review4's n1, a task given an element by value (its own copy, made in the join's scope) while
-# the join's code replaces it, and review5's t1, a task given a view of one, replaced once the join has waited. A place
-# a join's tasks may reach keeps through that join (review4's a7). Threads reserve address space of their own: the
-# measure is the peak address space (VmPeak) gained over a second half of the turns, after a first that settles the
-# pools and the workers - flat is under 2 MB beside up to four workers' stacks (8196 KB each, which a loaded machine
-# may start in the second half); kept, about 140 MB. At a smaller size (the oracles, the sanitizer's
-# address space its own) only the sum is printed
-N I64 = 100000
+# the join's code replaces it, and review5's t1, a task given a view of one, replaced once the join has waited - and a
+# task's view of an element (`v[j].a`) is copied in the join's scope, not one a turn in the frame. A place a join's
+# tasks may reach keeps through that join (review4's a7). The measure is the resident peak (VmHWM) gained over each of
+# the last two quarters of the turns, after a first half that settles the pools and the workers: flat where either
+# quarter gains under 2 MB - what is kept a turn grows in both (-free late about 6 MB each; the 63 bytes a spawn the
+# frame kept, 3 MB), a one-off step (a worker a loaded machine starts) in one only. The address space (VmPeak) cannot
+# tell: a worker's stack and malloc arena reserve 8 and 64 MB whatever they hold. At a smaller size (the oracles, the
+# sanitizer's address space its own) only the sum is printed
+N I64 = 200000
 
 type Q struct() { a Vec<I64> }
 
@@ -23,11 +25,11 @@ fn reads(q Q) I64 { return q.a[0] + q.a[1] }
 
 fn readsRef(x Vec<I64>&) I64 { return x[0] + x[1] }
 
-# the peak address space, in KB (VmPeak)
+# the resident peak, in KB (VmHWM)
 fn peak() I64 {
     st := try os.ReadFile("/proc/self/status") catch default ""
     for line in st.Lines() {
-        if line.StartsWith("VmPeak:"): return try line[7:line.Len() - 3].Trim().ParseInt(10) catch default 0
+        if line.StartsWith("VmHWM:"): return try line[6:line.Len() - 3].Trim().ParseInt(10) catch default 0
     }
     return 0
 }
@@ -37,8 +39,10 @@ fn main() {
     for k in range 4: v.Push(Q.Mk(k))
     t := 0
     p0 := 0
+    p1 := 0
     for i in range N {
         if i == N / 2: p0 = peak()
+        if i == N * 3 / 4: p1 = peak()
         j := i % 4
         a := 0
         b := 0
@@ -50,7 +54,7 @@ fn main() {
         v[(j + 1) % 4] = Q.Mk(i + 1)
         t += a + b
     }
-    grew := peak() - p0
+    p2 := peak()
     io.PutLn($t)!
-    if N >= 100000: io.PutLn("flat" if grew < 2048 + 4 * 8196 else "grew by " + $grew + " KB")!
+    if N >= 100000: io.PutLn("flat" if p1 - p0 < 2048 or p2 - p1 < 2048 else "grew by " + $(p2 - p0) + " KB")!
 }

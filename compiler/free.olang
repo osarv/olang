@@ -7091,12 +7091,48 @@ fn (w mut walker&) taskCopy(c typed.Call&, b2 I64, unknown Bool, copied Bool, j 
                             record Bool = true) Bool {
     f := w.F
     if I64(c.Site) != w.taskSite or c.Site < typed.SiteId(0) or copied or unknown or b2 < 0 or j >= ps.Len(): return false
-    if w.T().IsRef(ps[j]) or argCall(a) < 0 or f.Keeps == null or not f.Keeps!(b2, j): return false
+    ref := w.T().IsRef(ps[j])
+    if ref: return w.taskRefCopy(b2, j, ps, a, record)
+    if argCall(a) < 0 or f.Keeps == null or not f.Keeps!(b2, j): return false
     if record and w.Final and w.quiet == 0 {
         f.taskCopies.Push(pair.Pair(w.Id, argCall(a)))
         f.taskCopyCallee.Push(argCallee(a))
     }
     return true
+}
+
+# a task's read-only reference argument naming a view call's value, given storage or a field of it borrowed (`v[j]`,
+# `v[j].a`): lowering makes its copy in the join's scope too (lower's promotedSite), so it is recorded for taskCopied;
+# judged as before otherwise - what the task reaches through it stays its reach (false)
+fn (w mut walker&) taskRefCopy(b2 I64, j I64, ps Array<types.TypeId>&, a typed.Expr&, record Bool) Bool {
+    f := w.F
+    if (w.T().PermOf(ps[j]) & types.Writable) != 0 or f.Keeps == null or not f.Keeps!(b2, j): return false
+    x := taskRefCall(a)
+    if x == null or argCall(x) < 0: return false
+    if record and w.Final and w.quiet == 0 {
+        f.taskCopies.Push(pair.Pair(w.Id, argCall(x)))
+        f.taskCopyCallee.Push(argCallee(x))
+    }
+    return false
+}
+
+# the call a read-only reference argument names, as lowering's promotedSite finds it, else null
+fn taskRefCall(x typed.Expr&) typed.Expr?& {
+    return match x {
+        case typed.Expr.Promote(_, _, pr): pr.X
+        case typed.Expr.Borrow(_, _, p): taskRefPlace(p)
+        case typed.Expr.Away(_, _, y): taskRefCall(y)
+        case _: x
+    }
+}
+
+fn taskRefPlace(p typed.Lvalue&) typed.Expr?& {
+    return match p {
+        case typed.Lvalue.Field(_, _, base, _): taskRefPlace(base)
+        case typed.Lvalue.Deref(_, _, r): r
+        case typed.Lvalue.Temp(_, _, x, _): x
+        case _: null
+    }
 }
 
 # a task's call c of body b2 (its arguments' origins args): what its code lets go of or stores into keeps, as it may run

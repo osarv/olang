@@ -3391,6 +3391,26 @@ fn callSiteOf(x typed.Expr&) I64 {
     }
 }
 
+# the site of the call a task's argument is: as it is, given storage (a read-only reference's, E12c), or a field of it
+# borrowed (`v[j].a`)
+fn promotedSite(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Promote(_, _, pr): callSiteOf(pr.X)
+        case typed.Expr.Borrow(_, _, p): borrowedSite(p)
+        case typed.Expr.Away(_, _, y): promotedSite(y)
+        case _: callSiteOf(x)
+    }
+}
+
+fn borrowedSite(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Field(_, _, base, _): borrowedSite(base)
+        case typed.Lvalue.Deref(_, _, r): callSiteOf(r)
+        case typed.Lvalue.Temp(_, _, x, _): callSiteOf(x)
+        case _: -1
+    }
+}
+
 # whether some target of a spawn holds an array by value (P1g)
 fn (ln mut lowering&) valueTargets(sw typed.Spawn&) Bool {
     for tg in sw.Targets {
@@ -5182,10 +5202,10 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         ro := i < ps.Len() and t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) == 0
         v := ln.stackArg(a, body, i) if reads and plain and ro else mir.Operand.None
         wasCopy := ln.taskCopy
-        # (O8f: a task's by-value argument its callee preserves, of a task handing back no reference beside its parts:
-        # dead when the task returns, its copy made in the join's scope - free.taskCopy)
-        if task and byValue and ln.L.preserves(body, i) and ln.L.Free != null and not ln.L.Free!.RefsBeyond(t.Result(ty)) {
-            ln.taskCopy = callSiteOf(a)
+        # (O8f: a task's by-value or read-only reference argument its callee preserves, of a task handing back no
+        # reference beside its parts: dead when the task returns, its copy made in the join's scope - free.taskCopy)
+        if task and (byValue or ro) and ln.L.preserves(body, i) and ln.L.Free != null and not ln.L.Free!.RefsBeyond(t.Result(ty)) {
+            ln.taskCopy = promotedSite(a)
         }
         if v == mir.Operand.None: v = ln.val(a)
         ln.taskCopy = wasCopy
