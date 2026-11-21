@@ -626,3 +626,33 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   place's region) - then h8, n1 and t1's spawner-side replacements free, and a7 keeps (a view handed to the task), as
   the rule says. Not built: it is section-8 design (Opus, xhigh by rules.md), and the runtime's thread-local pools make
   a release on the wrong thread a silent corruption that neither `-free late` nor the evaluator would show.
+- 2026-11-21, wt-taskfree: **condition 3 by origins** (B of wt-mapput's "Tasks" above). A program with tasks no longer
+  keeps every place: `decide`'s blanket RTask is `taskKeeps`. Every place keeps, as before, where C is given a function
+  value (`cAt`, reached: `cThreads`) or a task's code is not known (`taskAll`: a lambda or function value spawned, a
+  task's callee calling through a function value or an `any`, or not checked - effects' Unknown, Back, Through,
+  Unchecked, Calls - one letting go of any place, a result holding a reference beside its parts). Else: (a) what the
+  tasks' code changes keeps - each spawned body and all it may run (`reached` over the scope pass's calls and the walks'
+  callers, every destructor, Str, Eq and Hash among the roots): its stores, let-goes (`lets`, `walkLets`), stores
+  through a sole place's value, feeders; at the spawn itself the callee's `lets`, `walkLets` and `parStored`, a feeder
+  or an owner local as a target, the places a target's type holds and the target's own place (P1g: the store is on the
+  task's thread), and a sole place's value given to the task's call to build into (`orCallOf` records no region under
+  a task) - so a region is made and released on the spawner's thread only; (b) a let-go in a join block's code (its
+  calls' let-goes included, recorded by the join's number: `joinGoes`) keeps where that join's tasks may reach the
+  spawner's storage (`joinReach`: an argument's origins - a by-value one's but its owned parts, `unowned` - or a target
+  other than a local) or any task reads a global (effects' ReadsGlobals, RefGlobals, WritesGlobals: `taskReach`). A
+  join's tasks end at its wait (P1a, P1b), so a let-go after it is the spawner's alone (t1). A task's by-value argument
+  copy its callee preserves (`taskCopy`: lowering's preserves, a view call's value, D9h) is no untracked value - it is
+  the task's alone, dead when it returns - and refers into nothing but its own storage where its type holds no
+  reference beside its parts; `taskCopied` checks after writePlans that no region is made at its site (else every place
+  keeps). Found on the way, also on master: that copy was made where At's result would live - main's frame - one a
+  spawn for the run (~63 bytes, 27 MB at 400,000 joins); lowering's `taskCopy` now makes it in the join's scope, for
+  a task handing back no reference beside its parts. n1 and t1 pass -check and free at once; a7 keeps (a view handed to
+  the task, its element replaced in the join); h8's task frees, its lambda's capture keeps (a5's named view). Probes
+  p1-p8 (a task replacing elements, a global read by a task, a target a field, a let-go in a callee of the join, a task
+  building values, a lambda task) each keep. Fixture tasks (n1's and t1's shapes, VmPeak over a second half: flat
+  against 139 MB kept; -free late, -sanitize, interpreted and `-race` agree).
+  **Where to pick up**: `c` captured by a lambda (a5's `g`, h8's `f`) keeps as a named view; g1 (a recursive owner)
+  needs the walks to recurse through a type holding itself in a Vec; review5's o1, o2, ov1 and t2 still fail -check.
+  Tasks, sharper later: reach is per join and all-or-nothing (any origin of a join's tasks keeps every place its code
+  lets go of; places by origin would keep only those reached), a global read by any task counts for every join, and a
+  task's own let-goes of values it built itself keep (its stand-ins' regions are its own - the rule's refinement).

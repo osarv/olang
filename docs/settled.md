@@ -940,7 +940,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   keyword; docs/freeing.md):** where O8d's conditions hold, a let-go IS reclaimed - an assignment of a local, field,
   global or element, a removal, a `Put` or `SetAt` replacing, a turn left, a destructor value ended; a place keeps only
   for a condition (not made for it, kept elsewhere, a view in use, a task or C calling back, a destructor to run) or a
-  function value nothing of which is followed and not `pure`. A let-go the compiler does not follow is a gap:
+  function value nothing of which is followed and not `pure`. **Tasks, condition 3 by origins (2026-11-21, mine;
+  docs/freeing.md):** a program with tasks frees what no other thread can reach - what a task's code (destructors,
+  Str, Eq, Hash among it, a spawn's target) gives a value or lets go of keeps, and a let-go in a join's code keeps
+  where that join's tasks are handed a reference (a by-value argument its callee keeps nothing of is the task's own
+  copy, made in the join's arena - before, in main's frame, ~63 B a spawn for the run) or store into anything but a
+  local, or any task reads a global; a lambda task, one calling through a function value or an `any`, and C given a
+  function value keep everything, as all tasks did. A let-go the compiler does not follow is a gap:
   `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. **The oracle, `-free late` (B18b, 2026-11-19, mine):** a build with early freeing off (no
   root decisions: every place keeps until its scope closes); its output must equal the usual build's - checks'
   earlyfree and freeing compare both at a small size, and reviews run their probes both ways, since the build,

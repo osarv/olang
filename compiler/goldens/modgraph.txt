@@ -2240,6 +2240,34 @@
 | module tests/shared
 |   arith std/arith
 |   pair std/pair
+===  tests/slicehoist.olang
+| module <math.h>
+| module <string.h>
+| module <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/display
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/slicehoist
 ===  tests/slotfacts.olang
 | module <math.h>
 | module <string.h>
@@ -4207,6 +4235,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -4933,6 +4962,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -5797,6 +5827,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -6345,6 +6376,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -6723,6 +6755,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -7323,6 +7356,11 @@
 |   source compiler/source
 | module compiler/diagmsg
 |   msgs compiler/msgs
+| module compiler/effects
+|   generic compiler/generic
+|   source compiler/source
+|   typed compiler/typed
+|   types compiler/types
 | module compiler/facts
 |   sha std/sha256
 | module compiler/fetch
@@ -7330,6 +7368,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -7797,6 +7836,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -8160,6 +8200,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -8997,6 +9038,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -9315,6 +9357,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -9725,6 +9768,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -10736,6 +10780,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -11257,6 +11302,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -12107,6 +12153,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -13237,6 +13284,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -15101,6 +15149,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -15717,6 +15766,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -16662,6 +16712,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -20894,6 +20945,34 @@
 | module tests/shared
 |   arith std/arith
 |   pair std/pair
+=== -t tests/slicehoist.olang
+| module <math.h>
+| module <string.h>
+| module <unistd.h>
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/axis
+| module std/prelude/columns
+| module std/prelude/complex
+| module std/prelude/display
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/input
+|   unistd <unistd.h>
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+|   cmath <math.h>
+| module std/prelude/place
+| module std/prelude/print
+|   unistd <unistd.h>
+| module std/prelude/reflect
+| module std/prelude/text
+|   cstring <string.h>
+| module std/prelude/vec
+| module tests/slicehoist
 === -t tests/slotfacts.olang
 | module <math.h>
 | module <string.h>
@@ -22936,6 +23015,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -23679,6 +23759,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -24559,6 +24640,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -25123,6 +25205,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -25509,6 +25592,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -26159,6 +26243,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -26636,6 +26721,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -27013,6 +27099,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -27868,6 +27955,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -28194,6 +28282,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -28618,6 +28707,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -29647,6 +29737,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -30182,6 +30273,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -31046,6 +31138,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -32243,6 +32336,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -34168,6 +34262,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -34798,6 +34893,7 @@
 |   os std/os
 |   spin compiler/spin
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir
@@ -35759,6 +35855,7 @@
 |   token compiler/token
 |   unparse compiler/unparse
 | module compiler/free
+|   effects compiler/effects
 |   generic compiler/generic
 |   io std/io
 |   mir compiler/mir

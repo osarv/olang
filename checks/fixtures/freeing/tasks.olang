@@ -6,7 +6,8 @@ import "std/os"
 # the join's code replaces it, and review5's t1, a task given a view of one, replaced once the join has waited. A place
 # a join's tasks may reach keeps through that join (review4's a7). Threads reserve address space of their own: the
 # measure is the peak address space (VmPeak) gained over a second half of the turns, after a first that settles the
-# pools and the workers - flat is under 2 MB; kept, each turn holds on to two buffers, about 10 MB a half
+# pools and the workers - flat is under 2 MB; kept, about 140 MB. At a smaller size (the oracles, the sanitizer's
+# address space its own) only the sum is printed
 N I64 = 100000
 
 type Q struct() { a Vec<I64> }
@@ -49,5 +50,6 @@ fn main() {
         t += a + b
     }
     grew := peak() - p0
-    io.PutLn($("flat" if grew < 2048 else "grew by " + $grew + " KB") + " " + $t)!
+    io.PutLn($t)!
+    if N >= 100000: io.PutLn("flat" if grew < 2048 else "grew by " + $grew + " KB")!
 }

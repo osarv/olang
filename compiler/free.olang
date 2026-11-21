@@ -7057,8 +7057,10 @@ fn (f mut Free&) taskKeeps() {
         for k in range n: f.keep(k, RTask, -1, source.Span(0, 0), $f.taskAll + ": nothing is freed early where it does")
         return
     }
+    # (every body running where no call is written, and - whatever effects follows of a function value - every lambda
+    # and every function named as a value)
     for b in range f.Bodies.Len() {
-        if f.implicit(b): roots.Push(b)
+        if f.implicit(b) or f.named[b] or f.Bodies[b].Of == typed.BodyOf.Lambda: roots.Push(b)
     }
     run := f.reached(roots)
     own := "a task's code changes it, on a thread of its own"

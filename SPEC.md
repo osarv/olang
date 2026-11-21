@@ -2555,7 +2555,9 @@ reference local given what a call hands back from such a view (`kids := v[i].xs.
 where nothing changes what the view covers while the local lives. A value given storage only for a call's read-only
 parameter that the callee keeps nothing of, whose result holds no reference, is given it in the frame (`inside(v[k],
 x, y)`), not in an arena of the block - but never a spawned call's argument, which its task reads beside the spawner
-(and each turn's task its own). Where a copy is made, it is built where the value is kept: a local's copy in the
+(and each turn's task its own): a by-value one its callee keeps nothing of, of a task handing back no reference beside
+the arrays it owns, is copied into the `join` block's arena, the task's alone until the wait (P2). Where a copy is
+made, it is built where the value is kept: a local's copy in the
 local's block - so a loop turn's copy is reclaimed with the turn (O2) - whatever storage it was read from; and the copy
 of a temporary a read-only reference local's declaration lends to the call it is given (`r := v[i].a.View()`), where
 that local takes what it names out of its block by no store, return, capture, task or lend to a body keeping it, in
@@ -7036,9 +7038,16 @@ holder**:
    another value of the same place included (each value is its own: a node one holder holds linked from another
    holder's node is stored elsewhere), a global, a closure kept past the call that made it, a task, or a call that may
    keep it (O10b, O26a);
-3. nothing it holds is reached by more than one thread (§6.8) - nor is anything in a program C may call back (X12):
-   one giving an export fn to a C function (X13), built as a library (X14), or linking C of its own that may name
-   one (a `.c` import, a `link`, X9, X21) - C may call it from a thread of its own;
+3. nothing it holds is reached by more than one thread (§6.8): the place is given no value and lets go of nothing in
+   a task's code (a spawned call and all it may call, every destructor, `Str`, `Eq` and `Hash` among it, and the
+   store into a spawn's target, P1g), and no let-go of it runs in a `join` block's code - all it calls included -
+   whose tasks may reach the spawner's storage: one handed a reference, or a by-value argument holding one beside
+   the arrays it owns (a by-value argument a task's callee keeps nothing of is the task's own copy), one storing its
+   result into anything but a local, or - any task of the program - reading a global. After the wait a join's tasks
+   reach nothing. A program with a task whose code is not known (a lambda or a function value spawned, a task calling
+   through a function value or an `any`) frees nothing early, nor does a program C may call back (X12): one giving
+   an export fn or any function value to a C function (X13), built as a library (X14), or linking C of its own that
+   may name one (a `.c` import, a `link`, X9, X21) - C may call it from a thread of its own;
 4. nothing it holds, nor anything built where it lives - an instance a constructor builds and no reference takes
    (O16) among it - is an instance whose destructor is still to run (O15) - but a value held by value, ended where its holder lets go of it, is reclaimed right after its destructor runs, where
    no value of its type (or of a type holding it) is ever registered with a scope (O16) and no test build may run its
