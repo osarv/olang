@@ -3384,7 +3384,10 @@ collections (the prelude's and std's) say what they stop using, and how a buffer
 library has:
 `a.grown(n)`, a new array of `n` elements whose first `a.Len()` are `a`'s, moved out of it as `vacate` moves them, and
 whose rest is never filled - the prelude's claim that it writes each of those before reading it, as a `Vec`'s room past
-its count is, so a doubling writes each byte once; `a.retire()`, where they stop using an
+its count is, so a doubling writes each byte once - and, where `a` is all of what a part region built for a place
+(O8f) and ends its storage with room after it, that storage lengthened where it lies, nothing moved or copied (as a
+realloc grows; never under `-sanitize`): a view of `a` kept across it, the hazard M19g and the sanitizer report, then
+reads the new array; for elements owning storage it always builds a new array; `a.retire()`, where they stop using an
 array - nothing at run time, it is what the evaluator and the sanitizer learn a replaced buffer from - `p.vacate()`,
 which gives what the place `p` holds and leaves `p` empty, and as a statement lets go of it (O8d) - a value with a
 destructor to run ended there (O15) - and `p.occupy(x)`, which stores `x` into a place holding no value - room past a

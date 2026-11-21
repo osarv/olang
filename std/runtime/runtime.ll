@@ -575,6 +575,13 @@ done:
 ; whether the range was reserved PROT_NONE, each slot to be made writable as it is first carved; and whether the
 ; reservation was tried (once, under the lock)
 @__olang_slot_rw = global i64 0
+; M19d: set by a growth that could not lengthen its buffer where it lies (__olang_grow_in_place), and taken by the next
+; chunk made: a mapped one then has address space reserved behind it, for the growths that follow
+@__olang_grow_hint = thread_local(initialexec) global i64 0
+; whether address space may be reserved at all: 0 not yet asked, 1 yes, 2 no - the process's address space is limited
+; (RLIMIT_AS), where a reservation would take from what its allocations may have
+@__olang_reserve_ok = global i64 0
+declare i32 @getrlimit(i32, ptr)
 @__olang_slot_tried = global i64 0
 ; the slots given back, linked through their first word
 @__olang_slot_free = global ptr null
@@ -1283,6 +1290,8 @@ entry:
 ; @if san
   call void @__olang_san_check_size(i64 %size)
 ; @end
+  %hint = load i64, ptr @__olang_grow_hint
+  store i64 0, ptr @__olang_grow_hint
   %small = icmp ule i64 %size, 4096
   br i1 %small, label %search, label %sized
   ; the class of a size s above 4KB: with e the top bit of s - 1 and q the two bits below it plus 4 (4 to 7),
@@ -1360,6 +1369,30 @@ other:
 map:
   %mt1 = add i64 %total0, 4095
   %mtotal = and i64 %mt1, -4096
+; @if !san
+  ; M19d: for a buffer a growth makes, address space for 16 times the chunk reserved behind it (PROT_NONE, MAP_PRIVATE |
+  ; MAP_ANONYMOUS | MAP_NORESERVE: no memory, no commit charge), its first mtotal bytes opened - so that the buffer, the
+  ; last thing in the chunk, grows where it lies (__olang_grow_in_place) as a realloc moves no page; plainly mapped
+  ; for anything else, where the address space is limited, and where the system will not reserve it
+  %hinted = icmp ne i64 %hint, 0
+  br i1 %hinted, label %mayreserve, label %plainmap
+mayreserve:
+  %rok = call i1 @__olang_reserve_allowed()
+  br i1 %rok, label %reserve, label %plainmap
+reserve:
+  %rtotal = shl i64 %mtotal, 4
+  %r = call ptr @mmap(ptr null, i64 %rtotal, i32 0, i32 16418, i32 -1, i64 0)
+  %rfailed = icmp eq ptr %r, inttoptr (i64 -1 to ptr)
+  br i1 %rfailed, label %plainmap, label %open
+open:
+  %po = call i32 @mprotect(ptr %r, i64 %mtotal, i32 3)
+  %opened = icmp eq i32 %po, 0
+  br i1 %opened, label %got, label %unreserve
+unreserve:
+  %ur = call i32 @munmap(ptr %r, i64 %rtotal)
+  br label %plainmap
+plainmap:
+; @end
   ; PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS (Linux)
   %m = call ptr @mmap(ptr null, i64 %mtotal, i32 3, i32 34, i32 -1, i64 0)
   %mfailed = icmp eq ptr %m, inttoptr (i64 -1 to ptr)
@@ -1376,18 +1409,28 @@ heap:
   %h = call ptr @aligned_alloc(i64 64, i64 %htotal)
   br label %got
 got:
+; @if !san
+  %new = phi ptr [ %mchunk, %plainmap ], [ %h, %heap ], [ %slot, %slotted ], [ %r, %open ]
+  %total = phi i64 [ %mtotal, %plainmap ], [ %htotal, %heap ], [ %stotal, %slotted ], [ %mtotal, %open ]
+  %maplen = phi i64 [ %mtotal, %plainmap ], [ 0, %heap ], [ %stotal, %slotted ], [ %rtotal, %open ]
+  %zeroed = phi i64 [ 1, %plainmap ], [ 0, %heap ], [ 1, %slotted ], [ 1, %open ]
+  %inslotted = phi i1 [ false, %plainmap ], [ false, %heap ], [ true, %slotted ], [ false, %open ]
+; @else
   %new = phi ptr [ %mchunk, %map ], [ %h, %heap ], [ %slot, %slotted ]
   %total = phi i64 [ %mtotal, %map ], [ %htotal, %heap ], [ %stotal, %slotted ]
   %maplen = phi i64 [ %mtotal, %map ], [ 0, %heap ], [ %stotal, %slotted ]
   %zeroed = phi i64 [ 1, %map ], [ 0, %heap ], [ 1, %slotted ]
   %inslotted = phi i1 [ false, %map ], [ false, %heap ], [ true, %slotted ]
+; @end
   ; the allocator declining is a broken guarantee, as a thread that will not start is (P1c): reported, never
   ; written through - a null chunk used to be filled in as though it were one
   call void @__olang_alloc_check(ptr %new)
-  ; O29: a chunk in no slot is found through the large table
+  ; O29: a chunk in no slot is found through the large table - all of its mapping, the part reserved behind it too
   br i1 %inslotted, label %head, label %table
 table:
-  call void @__olang_large_add(ptr %new, i64 %total)
+  %mapped = icmp ne i64 %maplen, 0
+  %entered = select i1 %mapped, i64 %maplen, i64 %total
+  call void @__olang_large_add(ptr %new, i64 %entered)
   br label %head
 head:
   %usedptr.n = getelementptr %olang.chunk, ptr %new, i32 0, i32 1
@@ -3843,12 +3886,176 @@ flag:
   %fp = getelementptr %olang.region, ptr %o, i32 0, i32 7
   %f = load i64, ptr %fp
   %part = icmp ne i64 %f, 0
-  br i1 %part, label %drop, label %done
+  br i1 %part, label %grown, label %done
+  ; M19d: an array shorter than the one its storage was lengthened to in place (the flag's count, __olang_grow_in_place)
+  ; is what that growth replaced - the storage is the new array's, kept
+grown:
+  %live = lshr i64 %f, 1
+  %old = icmp ult i64 %n, %live
+  br i1 %old, label %done, label %drop
 drop:
   tail call void @__olang_region_drop(ptr %o)
   br label %done
 done:
   ret void
+}
+
+; M19d: whether address space may be reserved behind a chunk - not where the process's is limited (RLIMIT_AS, 9: its
+; soft limit not RLIM_INFINITY), asked once
+define i1 @__olang_reserve_allowed() noinline {
+entry:
+  %k = load i64, ptr @__olang_reserve_ok
+  %known = icmp ne i64 %k, 0
+  br i1 %known, label %done, label %ask
+ask:
+  %lim = alloca [2 x i64]
+  %rc = call i32 @getrlimit(i32 9, ptr %lim)
+  %cur = load i64, ptr %lim
+  %ok = icmp eq i32 %rc, 0
+  %inf = icmp eq i64 %cur, -1
+  %yes = and i1 %ok, %inf
+  %v = select i1 %yes, i64 1, i64 2
+  store i64 %v, ptr @__olang_reserve_ok
+  br label %done
+done:
+  %r = phi i64 [ %k, %entry ], [ %v, %ask ]
+  %allowed = icmp eq i64 %r, 1
+  ret i1 %allowed
+}
+
+; M19d: a collection's buffer at p, of oldbytes, lengthened to newbytes (n elements) where it lies - p, or null where it
+; cannot be: it is in no part region of this thread's (O8f), it is not the last thing the region's newest chunk holds,
+; the chunk has no room for the rest (a slot's chunk takes the whole slot, a mapped one the address space reserved
+; behind it, __olang_new_chunk), or p is not aligned as newbytes would be (O8a). No page moves and nothing is copied, so
+; what still reads p reads the buffer. The region's flag keeps the new count (n), so the let-go of the array it
+; replaced, at the same address, keeps the storage (__olang_region_release_part). Never under -s, where the replaced
+; buffer is poisoned
+define ptr @__olang_grow_in_place(ptr %p, i64 %oldbytes, i64 %newbytes, i64 %n) noinline {
+entry:
+; @if san
+  br label %no
+; @else
+  store i64 1, ptr @__olang_grow_hint
+  %none = icmp eq i64 %oldbytes, 0
+  br i1 %none, label %no, label %find
+find:
+  %h = call ptr @__olang_chunk_of(ptr %p)
+  %noh = icmp eq ptr %h, null
+  br i1 %noh, label %no, label %owner
+owner:
+  %op = getelementptr %olang.chunk, ptr %h, i32 0, i32 6
+  %o = load ptr, ptr %op
+  %noo = icmp eq ptr %o, null
+  br i1 %noo, label %no, label %kind
+  ; storage built for a part place only (a part region's, O8f): a growth into a part region from storage built anywhere
+  ; else would keep the new buffer where that place's let-go does not reclaim it
+kind:
+  %oh = load ptr, ptr %o
+  %isreg = icmp eq ptr %oh, @__olang_region_chunk
+  br i1 %isreg, label %ispart, label %no
+ispart:
+  %pfp = getelementptr %olang.region, ptr %o, i32 0, i32 7
+  %pf = load i64, ptr %pfp
+  %partof = icmp ne i64 %pf, 0
+  br i1 %partof, label %up, label %no
+  ; this thread's storage only: the scope the owner is (a region's, the scope up its parents that is none) opened here
+  ; or claimed by this thread (P2) - another thread may be bumping another's chunk
+up:
+  %u = phi ptr [ %o, %ispart ], [ %upp, %upward ]
+  %uh = load ptr, ptr %u
+  %ureg = icmp eq ptr %uh, @__olang_region_chunk
+  br i1 %ureg, label %upward, label %whose
+upward:
+  %uparp = getelementptr %olang.region, ptr %u, i32 0, i32 4
+  %upp = load ptr, ptr %uparp
+  br label %up
+whose:
+  %uop = getelementptr %olang.scope, ptr %u, i32 0, i32 3
+  %uo = load atomic ptr, ptr %uop monotonic, align 8
+  %me = load ptr, ptr @__olang_self
+  %prog = load ptr, ptr @__olang_prog_scope
+  %mine = icmp eq ptr %uo, %me
+  %fresh = icmp eq ptr %uo, null
+  %isprog = icmp eq ptr %u, %prog
+  %m1 = or i1 %mine, %fresh
+  %m2 = or i1 %m1, %isprog
+  br i1 %m2, label %scope, label %no
+  ; the scope bumping the chunk: a region's inner one, else the owner itself - p must be its newest chunk's last thing
+scope:
+  %inner = getelementptr %olang.region, ptr %o, i32 0, i32 1
+  %head = load ptr, ptr %inner
+  %ishead = icmp eq ptr %head, %h
+  br i1 %ishead, label %last, label %no
+last:
+  %data = getelementptr %olang.chunk, ptr %h, i32 1
+  %di = ptrtoint ptr %data to i64
+  %pi = ptrtoint ptr %p to i64
+  %off = sub i64 %pi, %di
+  %ob7 = add i64 %oldbytes, 7
+  %ob8 = and i64 %ob7, -8
+  %oend = add i64 %off, %ob8
+  %usedp = getelementptr %olang.chunk, ptr %h, i32 0, i32 1
+  %used = load i64, ptr %usedp
+  %islast = icmp eq i64 %oend, %used
+  %nb7 = add i64 %newbytes, 7
+  %nb8 = and i64 %nb7, -8
+  %nend = add i64 %off, %nb8
+  %a32 = icmp uge i64 %nb8, 32
+  %a64 = icmp uge i64 %nb8, 64
+  %alnA = select i1 %a32, i64 31, i64 7
+  %alnm = select i1 %a64, i64 63, i64 %alnA
+  %mis = and i64 %pi, %alnm
+  %aligned = icmp eq i64 %mis, 0
+  %can = and i1 %islast, %aligned
+  br i1 %can, label %room, label %no
+room:
+  %capp = getelementptr %olang.chunk, ptr %h, i32 0, i32 2
+  %cap = load i64, ptr %capp
+  %fits = icmp ule i64 %nend, %cap
+  br i1 %fits, label %grow, label %wider
+  ; past the chunk's capacity: a slot's chunk (a class of its own, not a slab's block) widened to the whole slot, a
+  ; mapped one to as much of what is reserved behind it as it needs, opened by the page
+wider:
+  %clsp = getelementptr %olang.chunk, ptr %h, i32 0, i32 5
+  %cls = load i64, ptr %clsp
+  %own = icmp sge i64 %cls, 0
+  br i1 %own, label %where, label %no
+where:
+  %hi = ptrtoint ptr %h to i64
+  %inslot = call i1 @__olang_in_slots(i64 %hi)
+  br i1 %inslot, label %slot, label %mapped
+slot:
+  %sfits = icmp ule i64 %nend, 131008
+  br i1 %sfits, label %slotwide, label %no
+slotwide:
+  store i64 131008, ptr %capp
+  br label %grow
+mapped:
+  %mapp = getelementptr %olang.chunk, ptr %h, i32 0, i32 3
+  %maplen = load i64, ptr %mapp
+  %whole = add i64 %nend, 64
+  %mfits = icmp ule i64 %whole, %maplen
+  br i1 %mfits, label %open, label %no
+open:
+  %w1 = add i64 %whole, 4095
+  %wpages = and i64 %w1, -4096
+  %pr = call i32 @mprotect(ptr %h, i64 %wpages, i32 3)
+  %opened = icmp eq i32 %pr, 0
+  br i1 %opened, label %mapwide, label %no
+mapwide:
+  %ncap = sub i64 %wpages, 64
+  store i64 %ncap, ptr %capp
+  br label %grow
+grow:
+  store i64 0, ptr @__olang_grow_hint
+  store i64 %nend, ptr %usedp
+  %n2 = shl i64 %n, 1
+  %nf = or i64 %n2, 1
+  store i64 %nf, ptr %pfp
+  ret ptr %p
+; @end
+no:
+  ret ptr null
 }
 
 ; O8f: the region a value whose anchor is in region r is built in - r, or, for a part region (an array of the value grown

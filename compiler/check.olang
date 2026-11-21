@@ -15400,7 +15400,8 @@ fn (c mut Checker&) suppliedGrown(sp source.Span, nsp source.Span, x ast.Expr&, 
     c.emit(typed.Stmt.Yield(sp, typed.Expr.Take(sp, el, ep)))
     c.laneLoopClose(sp, i, id, outer, mark, lfrom)
     b := c.close(cid, couter, cmark, cfrom)
-    r := typed.Expr.Collect(sp, at, typed.Collect(c.readLocal(sp, nh), b, c.site(typed.SiteKind.Collect, sp), typed.Check.None, true))
+    r := typed.Expr.Collect(sp, at, typed.Collect(c.readLocal(sp, nh), b, c.site(typed.SiteKind.Collect, sp), typed.Check.None, true
+                                                 c.readLocal(sp, h)))
     return typed.Expr.Seq(sp, at, typed.Seq(gather(c.stmts, from), r))
 }
 
