@@ -1777,8 +1777,21 @@ fn (ln mut lowering&) endMoved(bl typed.Block&) {
     if not ln.freeing or ln.dead: return
     for l in ln.L.Free!.EndsMoved(I64(ln.B.Id), I64(bl.Id), true) {
         loc := ln.B.Locals[l]
-        ln.releaseAt(mir.LocalId(I32(l)), ln.leafPaths(loc.Ty), loc.Sp)
+        k := ln.L.Free!.EndPlace(I64(ln.B.Id), l)
+        ln.releaseAt(mir.LocalId(I32(l)), ln.movedPath(k) if k >= 0 else ln.leafPaths(loc.Ty), loc.Sp)
     }
+}
+
+# the release of a value moved out of candidate place k, whole (a handle's reference, field 0), where k is decided
+# sole - none for k -1
+fn (ln mut lowering&) movedPath(k I64) Vec<relPath> {
+    out Vec<relPath>
+    if k < 0: return out
+    fr := ln.L.Free!
+    g := fr.Guard(I64(ln.B.Id), k)
+    if g == free.NotSole: return out
+    out.Push(relPath(g, Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0), fr.SlotPlace(k), fr.PartPlace(k)))
+    return out
 }
 
 fn (ln mut lowering&) openBlock(bl typed.Block&, kind mir.ScopeKind, errors types.ListId = types.ListId(0)) {
@@ -4756,11 +4769,8 @@ fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
             c := typed.Call.Of(x)
             if ln.freeing and c != null {
                 k := ln.L.Free!.DroppedMove(c)
-                g := ln.L.Free!.Guard(I64(ln.B.Id), k)
-                if g == free.NotSole: k = -1
-                handle := k >= 0 and ln.L.Free!.IsHandle(k)
-                part := k >= 0 and ln.L.Free!.PartPlace(k)
-                if k >= 0 { rel.Push(relPath(g, Array<I64>[0] if handle else Array<I64>(0), ln.L.Free!.SlotPlace(k), part)) }
+                rel = ln.movedPath(k)
+                if ln.L.Free!.Guard(I64(ln.B.Id), k) == free.NotSole: k = -1
                 # (a value moved out of a place that is no candidate - a Vec<Vec<I64>>'s element - lets go of its leaves,
                 # as a vacate statement of it does)
                 if k < 0 and ln.L.Free!.DroppedLeaves(c): rel = ln.leafPaths(x.Type())

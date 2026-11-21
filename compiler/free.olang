@@ -2406,7 +2406,7 @@ fn (w mut walker&) block(bl typed.Block&) {
     # (gap 22: a value local holding a value moved out of a place to the block's end lets go of its leaves there)
     for l in w.F.EndsMoved(w.Id, I64(bl.Id), w.Final) {
         loc := w.body().Locals[l]
-        for lf in w.F.leaves(loc.Ty): w.go(lf.PlaceId, LDrop, loc.Sp, source.Span(0, 0), -1)
+        for k in w.F.endPlaces(w.Id, l): w.go(k, LDrop, loc.Sp, source.Span(0, 0), -1)
     }
     w.closeAt(bl)
     if not w.Final: return
@@ -3315,7 +3315,7 @@ fn (f mut Free&) movedCall(c typed.Call&, ty types.TypeId) Bool {
     b2 := typed.CalleeBody(c)
     if b2 < 0 or f.Bodies[b2].Root == null: return false
     m := f.mustRes[b2]
-    return (m >= MovBase or m == MovLeaves) and f.leaves(ty).Len() > 0
+    return m >= MovBase or (m == MovLeaves and f.leaves(ty).Len() > 0)
 }
 
 # the moved values expression x makes that nothing lets go of - x itself let go of where it is (top) - each a gap row
@@ -3850,11 +3850,15 @@ fn (w mut walker&) eval(sp source.Span, x typed.Expr&) {
         case _ { }
     }
     c := typed.Call.Of(x)
-    if c != null {
-        for y in o {
-            if okind(y) == OMov: w.go(oval(y), LDrop, x.Span(), receiverSpan(c), typed.CalleeBody(c))
-        }
+    if c == null: return
+    for y in o {
+        if okind(y) == OMov: w.go(oval(y), LDrop, x.Span(), receiverSpan(c), typed.CalleeBody(c))
     }
+    # (a value of a type holding no reference - text popped from a Vec<String> - carries no origins: the callee's
+    # must-fact names the place it was moved out of, released whole as DroppedMove's)
+    b2 := typed.CalleeBody(c)
+    if w.holds(x.Type()) or b2 < 0 or w.F.Bodies[b2].Root == null or w.F.mustRes[b2] < MovBase: return
+    w.go(w.F.mustRes[b2] - MovBase, LDrop, x.Span(), receiverSpan(c), b2)
 }
 
 # the call an expression is, under a try, null for none
@@ -7495,13 +7499,30 @@ fn (f mut Free&) endsWalk(b I64, bl typed.Block&, u typed.LocalUses&, out mut Ma
 # nothing of it, named by no alias
 fn (f mut Free&) endsHere(b I64, l I64, u typed.LocalUses&) Bool {
     loc := f.Bodies[b].Locals[l]
-    if loc.Kind != typed.LocalKind.Var or f.T().IsRef(loc.Ty) or not f.movedLocal(b, l) or f.leaves(loc.Ty).Len() == 0: return false
+    if loc.Kind != typed.LocalKind.Var or f.T().IsRef(loc.Ty) or not f.movedLocal(b, l) or f.endPlaces(b, l).Len() == 0: return false
     if u.Ret[l] or u.EscHard[l] or u.WrOther[l] or u.WrScalar[l] or u.Whole[l] or l in u.LendAt or l in u.AliasOf: return false
     # (a read-only reference to it given a call keeping nothing of it past the call: `x[1]`, `x.a.Len()`)
     for j in range u.RefAt.Len() {
         if u.RefAt[j] == l and not f.refsKept.NoneKept(f.T(), f.Bodies, u.RefBody[j], u.RefParam[j]): return false
     }
     return true
+}
+
+# the places value local l of body b, holding a moved value, lets go of as its block ends: its leaves', else - a value
+# of no struct, text moved out of a Vec<String> - the place it was moved out of, whole
+fn (f mut Free&) endPlaces(b I64, l I64) Vec<I64> {
+    out Vec<I64>
+    for lf in f.leaves(f.Bodies[b].Locals[l].Ty): out.Push(lf.PlaceId)
+    if out.Len() == 0 and f.EndPlace(b, l) >= 0: out.Push(f.EndPlace(b, l))
+    return out
+}
+
+# the place value local l of body b lets go of whole as its block ends (endPlaces: a value with no leaves moved out of
+# a candidate place), -1 for none
+fn (f mut Free&) EndPlace(b I64, l I64) I64 {
+    if not f.movedLocal(b, l) or f.leaves(f.Bodies[b].Locals[l].Ty).Len() > 0: return -1
+    v := f.mustLocals[b][l]
+    return v - MovBase if v >= MovBase else -1
 }
 
 fn (f Free&) movedLocal(b I64, l I64) Bool {
@@ -7655,8 +7676,8 @@ fn (f mut Free&) reported(k I64) Bool {
         if st.PlaceId == k and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove): owns = true
     }
     if not owns: return false
-    # (text elements: where the program's own code gives one another value - its removals are the collection's, kept
-    # with what holds them where that is an owner)
+    # (text elements: where the program's own code gives one another value, or drops or ends one moved out of the
+    # collection - its other removals are the collection's, kept with what holds them where that is an owner)
     if f.keyField[k] == -1 and f.arr[k]: return f.assignedHere(k)
     if f.isContents(k): return true
     if f.isOwnLocal(k): return true
@@ -7672,10 +7693,11 @@ fn (f mut Free&) reported(k I64) Bool {
     return m >= 0 and m < f.P.L.Mods.Len() and not f.P.L.Mods[m].Identity.StartsWith("std/")
 }
 
-# whether the program's own code gives place k another value (an assignment's let-go)
+# whether the program's own code gives place k another value (an assignment's let-go) or lets go of a value moved out
+# of it (a dropped Pop's, a local holding one to its block's end)
 fn (f Free&) assignedHere(k I64) Bool {
     for g in f.goes {
-        if g.PlaceId == k and g.Kind == LAssign and f.programCode[g.Body]: return true
+        if g.PlaceId == k and (g.Kind == LAssign or g.Kind == LDrop) and f.programCode[g.Body]: return true
     }
     return false
 }
