@@ -357,6 +357,10 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     dtorsNoted Bool = false
     ownC I64 = -1                 # whether the program links C of its own and has an export fn (cMayCallBack), -1 unknown
     dtorOf Map<types.TypeId, I64> # by type: its destructor's body (C9)
+    shapes Map<I64, I64>          # by function type: ExclusiveShapes's mask, which its type alone decides
+    reachAt Map<I64, I64>         # by type: where reachOf's types start in reachFlat - their count, then each
+    reachFlat Vec<I64>
+    holdsMemo Map<I64, Bool>      # by (u << 32 | r): whether storage of type u may hold an r in place (overlaps)
     # T22d: the fixed fields - (a struct type's representation, a field) any body assigns after construction, -1 a
     # whole instance written through a reference - scanned once, where first asked; by type, the paths of fixed fields
     # from it to a function value; by body, its field slots, and what its returns put along each path of its result
@@ -2622,6 +2626,16 @@ fn (e mut Effects&) ExclusiveShapes(b I64) I64 {
     t types.Table& = e.P.T
     ty := body.Ty
     if t.KindOf(t.Repr(ty)) != types.Kind.Func: return 0
+    return try e.shapes.Get(I64(ty)) catch {
+        mask := e.shapesOf(ty)
+        e.shapes.Put(I64(ty), mask)
+        return mask
+    }
+}
+
+# ...of a function type
+fn (e mut Effects&) shapesOf(ty types.TypeId) I64 {
+    t types.Table& = e.P.T
     ps := t.Items(t.Params(ty))
     cand := 0
     for i in range (ps.Len() if ps.Len() < 62 else 62) {
@@ -2630,9 +2644,9 @@ fn (e mut Effects&) ExclusiveShapes(b I64) I64 {
     if cand == 0: return 0
     # what each parameter, and the result, may reach (-1: anything) - plain data passed as a value, nothing
     reach Vec<Map<I64, Bool>>
-    for p in ps: reach.Push(Map<I64, Bool>() if plainData(t, p) and not t.ViaMemory(p) else reachOf(t, p))
+    for p in ps: reach.Push(Map<I64, Bool>() if plainData(t, p) and not t.ViaMemory(p) else e.reach(p))
     res := t.Result(ty)
-    out := reachOf(t, res) if res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res) else Map<I64, Bool>()
+    out := e.reach(res) if res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res) else Map<I64, Bool>()
     mask := 0
     for i in range ps.Len() {
         if cand & (I64(1) << i) == 0: continue
@@ -2640,9 +2654,9 @@ fn (e mut Effects&) ExclusiveShapes(b I64) I64 {
         held := Map<I64, Bool>()
         try heldIn(t, r, held, 0) catch { continue }
         # (what its own references lead to too: a node whose next is itself)
-        clash := overlaps(t, r, held, out) or overlaps(t, r, held, reachBeyond(t, held))
+        clash := e.overlaps(r, held, out) or e.overlaps(r, held, e.reachBeyond(held))
         for j in range ps.Len() {
-            if j != i and not clash: clash = overlaps(t, r, held, reach[j])
+            if j != i and not clash: clash = e.overlaps(r, held, reach[j])
         }
         if not clash: mask = mask | (I64(1) << i)
     }
@@ -2665,19 +2679,30 @@ fn exclusiveShape(t types.Table&, p types.TypeId) Bool {
 
 # whether storage of type r, holding held in place, may overlap storage reach names: a type reached holds r, or r holds
 # it; true where reach may be anything (-1)
-fn overlaps(t types.Table&, r types.TypeId, held Map<I64, Bool>&, reach Map<I64, Bool>&) Bool {
+fn (e mut Effects&) overlaps(r types.TypeId, held Map<I64, Bool>&, reach Map<I64, Bool>&) Bool {
     if reach.Has(-1): return true
     for u in reach.Keys() {
-        if held.Has(u): return true
-        inner := Map<I64, Bool>()
-        try heldIn(t, types.TypeId(I32(u)), inner, 0) catch { return true }
-        if inner.Has(I64(r)): return true
+        if held.Has(u) or e.holds(u, r): return true
     }
     return false
 }
 
+# whether storage of type u may hold an r in place (where what it holds is not known, it may), asked once each
+fn (e mut Effects&) holds(u I64, r types.TypeId) Bool {
+    key := (u << 32) | I64(r)
+    return try e.holdsMemo.Get(key) catch {
+        inner := Map<I64, Bool>()
+        known := true
+        try heldIn(e.P.T, types.TypeId(I32(u)), inner, 0) catch { known = false }
+        v := not known or inner.Has(I64(r))
+        e.holdsMemo.Put(key, v)
+        return v
+    }
+}
+
 # what the references and run-time-length arrays among held lead to
-fn reachBeyond(t types.Table&, held Map<I64, Bool>&) Map<I64, Bool> {
+fn (e mut Effects&) reachBeyond(held Map<I64, Bool>&) Map<I64, Bool> {
+    t types.Table& = e.P.T
     all := Map<I64, Bool>()
     for k in held.Keys() {
         u := types.TypeId(I32(k))
@@ -2685,9 +2710,30 @@ fn reachBeyond(t types.Table&, held Map<I64, Bool>&) Map<I64, Bool> {
         if t.IsRef(u): x = t.Referent(u)
         else if t.KindOf(u) == types.Kind.Array and t.Length(u) == types.TypeId(0): x = t.Elem(u)
         if x == types.TypeId(0): continue
-        for v in reachOf(t, x).Keys(): all.Put(v, true)
+        at := e.reachIndex(x)
+        for i in range e.reachFlat[at]: all.Put(e.reachFlat[at + 1 + i], true)
     }
     return all
+}
+
+# reachOf, worked out once for each type
+fn (e mut Effects&) reach(ty types.TypeId) Map<I64, Bool> {
+    at := e.reachIndex(ty)
+    out := Map<I64, Bool>()
+    for i in range e.reachFlat[at]: out.Put(e.reachFlat[at + 1 + i], true)
+    return out
+}
+
+# where reachOf(ty)'s types start in reachFlat
+fn (e mut Effects&) reachIndex(ty types.TypeId) I64 {
+    return try e.reachAt.Get(I64(ty)) catch {
+        found := reachOf(e.P.T, ty)
+        at := e.reachFlat.Len()
+        e.reachFlat.Push(found.Len())
+        for k in found.Keys(): e.reachFlat.Push(k)
+        e.reachAt.Put(I64(ty), at)
+        return at
+    }
 }
 
 # the storage types a value of type ty may lead to: those it holds in place and, through each reference and
