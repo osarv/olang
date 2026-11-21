@@ -40398,3 +40398,7 @@ Found, not fixed (a bug of its own, master too): an array of inline rows reached
 length - `m := Array<Array<I64>>[[1, 2], [3, 4]]; rows mut Array<Array<I64>>& = m; rows[1].Len()` gives 3, and writing
 `rows[1][0]` crashes; passing `m` to a `mut Array<Array<I64>>&` parameter is refused (G29), but the local's declared
 type is accepted. It is why array elements stay copies here.
+
+Verified: the bootstrap from the seed and its fixed point, `make test` (every test block, checks.olang included), the
+rest of the suite (interpreter runs, runner, the diffs, checkir) and `make scopesan` pass. The full `make verify` was run
+in those parts: run whole it filled the disk beside another worktree's build (build/checks takes ~5 GB).
