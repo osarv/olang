@@ -58,6 +58,31 @@ fn IrHash(ir String&) String {
     return s.Sum()
 }
 
+# the hash naming each unit's object: the one it carries, else its IR's (IrHash) - of every unit, or of those which
+# names (the others "") - taken on every core side by side, as hashing the compiler's 110 MB of IR one unit after
+# another took most of a second of each build
+fn IrHashes(units Vec<Unit>&, which Vec<I64>?& = null) Array<String&> {
+    out mut Array<String&>& = Array<String&>(units.Len(), "")
+    picked Vec<I64>
+    if which != null { for i in which: picked.Push(i) } else { for i in range units.Len(): picked.Push(i) }
+    cores := unistd.sysconf(84) # _SC_NPROCESSORS_ONLN
+    workers := cores.Max(1).Min(picked.Len())
+    join {
+        for w in range workers: spawn hashUnits(units, picked, out, w, workers)
+    }
+    return out
+}
+
+# ...those of the units picked[from], picked[from + step], picked[from + 2 step]...
+fn hashUnits(units Vec<Unit>&, picked Vec<I64>&, out mut Array<String&>&, from I64, step I64) {
+    i := from
+    for i < picked.Len() {
+        u := picked[i]
+        out[u] = $units[u].Hash if units[u].Hash != "" else IrHash(units[u].Ir)
+        i += step
+    }
+}
+
 # what the front end made of a program: its objects' IR, the runtime's (std/runtime filled in for this build), and the
 # dynamic call's (S3) - empty where the program declares none
 type Program struct() {
@@ -690,7 +715,8 @@ fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) Vec<String&> 
     c.Thin = not c.Debug and not c.Race and not c.Quick and size >= ThinFrom
     j := compiles()
     paths Vec<String&>
-    for i, u in prog.Units: paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d, u.Hash, i))
+    hashes := IrHashes(prog.Units)
+    for i, u in prog.Units: paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d, hashes[i], i))
     n := prog.Units.Len()
     if prog.Runtime != "": paths.Push(try c.want(j, "olang_runtime", UnitKind.Module, prog.Runtime, d, "", n))
     if prog.Dyncall != "": paths.Push(try c.want(j, "olang_dyncall", UnitKind.Module, prog.Dyncall, d, "", n + 1))
