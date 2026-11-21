@@ -977,7 +977,7 @@ fn LocalUses.Uses(t types.Table&, b Body&) LocalUses {
 # answers are kept by body * 64 + k; one asked again while it is being found is no
 type RefsKept struct() {
     known Map<I64, Bool>
-    kept Map<I64, Bool>      # NoneKept's answers, kept the same way
+    kept Map<I64, Bool>      # NoneKept's answers, by (body * 64 + k) * 2 + 1 where the storage alone is asked
     asking Map<I64, I64>     # ... the questions being answered, by the depth each was asked at
     assumed I64 = I64.Max    # ... the least depth of those an answer being found took to keep nothing
     carried Map<I64, I64>    # carries' answers
@@ -1012,9 +1012,9 @@ fn (r mut RefsKept&) noneIn(t types.Table&, bodies Vec<mut Body&>&, b Body&, k I
 # where it goes, LocalUses.carried) are no keeping. The answers are kept by body * 64 + k. One asked again while it is
 # being found (recursion) is taken to keep nothing - a cycle of calls stores nothing of its own, a store on it is found
 # where it is - and a yes found on that assumption is kept only once the call the assumption was about is answered
-fn (r mut RefsKept&) NoneKept(t types.Table&, bodies Vec<mut Body&>&, body I64, k I64) Bool {
+fn (r mut RefsKept&) NoneKept(t types.Table&, bodies Vec<mut Body&>&, body I64, k I64, storage Bool = false) Bool {
     if body < 0 or body >= bodies.Len() or k >= 64: return false
-    key := body * 64 + k
+    key := (body * 64 + k) * 2 + (1 if storage else 0)
     if r.kept.Has(key): return try r.kept.Get(key) catch default false
     at := try r.asking.Get(key) catch default -1
     if at >= 0 {
@@ -1025,7 +1025,7 @@ fn (r mut RefsKept&) NoneKept(t types.Table&, bodies Vec<mut Body&>&, body I64, 
     r.asking.Put(key, depth)
     outer := r.assumed
     r.assumed = I64.Max
-    ok := r.noneKeptIn(t, bodies, bodies[body], k)
+    ok := r.storageKeptIn(t, bodies, bodies[body], k) if storage else r.noneKeptIn(t, bodies, bodies[body], k)
     r.asking.Remove(key)
     if not ok or r.assumed >= depth: r.kept.Put(key, ok)
     if r.assumed >= depth: r.assumed = I64.Max
@@ -1052,6 +1052,43 @@ fn (r mut RefsKept&) noneKeptIn(t types.Table&, bodies Vec<mut Body&>&, b Body&,
         if r.escapes(t, bodies, u, u.LinkFrom[j], true, 0): return false
     }
     return true
+}
+
+# NoneKept's question asked of the storage alone (storage set): whether a body keeps nothing of the storage its
+# parameter k names past the call - Kept's question of a value local lent to it, as Kept asks it of the local itself.
+# What the references a part of that storage holds name is no part of it (`j.products[t]` handed to a body keeping
+# the workspace it names keeps nothing of j's storage): a reference to it, or to a part of it, escaping or handed back
+# in a reference result (EscOwn), given read-only or writably to a body keeping that storage, or carried whole in a
+# value made of it (a Link of its storage, or a Give of more than the references it holds) that is kept - a Give to a
+# reference parameter asked the storage question, to a value one the whole (refParam)
+fn (r mut RefsKept&) storageKeptIn(t types.Table&, bodies Vec<mut Body&>&, b Body&, k I64) Bool {
+    if b.Root == null or k >= b.Params.Len(): return false
+    u := LocalUses.Uses(t, b)
+    p := I64(b.Params[k])
+    if u.EscOwn[p]: return false
+    for j in range u.RefAt.Len() {
+        if u.RefAt[j] == p and not u.RefPart[j] and not r.NoneKept(t, bodies, u.RefBody[j], u.RefParam[j], true): return false
+    }
+    for j in range u.LendAt.Len() {
+        if u.LendAt[j] == p and not r.NoneKept(t, bodies, u.LendBody[j], u.LendParam[j], true): return false
+    }
+    for j in range u.GiveAt.Len() {
+        if u.GiveAt[j] != p or u.GiveRefs[j]: continue
+        if not r.NoneKept(t, bodies, u.GiveBody[j], u.GiveParam[j], refParam(t, bodies, u.GiveBody[j], u.GiveParam[j])): return false
+    }
+    for j in range u.LinkTo.Len() {
+        if u.LinkTo[j] != p or r.linkLevel(t, bodies, u, j) < 2: continue
+        if r.escapes(t, bodies, u, u.LinkFrom[j], true, 0): return false
+    }
+    return true
+}
+
+# whether body's parameter k is a reference: given a local's storage (a spawned call's argument, a fixed array
+# converted, a part sliced), it names that storage itself, so what it keeps of it is the storage question alone; a value
+# holding references given by value holds the storage among what its parts name, the whole question
+fn refParam(t types.Table&, bodies Vec<mut Body&>&, body I64, k I64) Bool {
+    if body < 0 or body >= bodies.Len() or k < 0 or k >= bodies[body].Params.Len(): return false
+    return t.IsRef(bodies[body].Locals[I64(bodies[body].Params[k])].Ty)
 }
 
 # how much of what a call's parameter k names its value result may hold (LocalUses' Link): 0 nothing, 1 the references
@@ -1156,14 +1193,14 @@ fn (r mut RefsKept&) Kept(t types.Table&, bodies Vec<mut Body&>&, b Body&, u Loc
     if u.EscOwn[l] or u.RetView[l]: return true
     if u.RetWhole[l] and not u.byValue: return true
     for j in range u.RefAt.Len() {
-        if u.RefAt[j] == l and not u.RefPart[j] and not r.NoneKept(t, bodies, u.RefBody[j], u.RefParam[j]): return true
+        if u.RefAt[j] == l and not u.RefPart[j] and not r.NoneKept(t, bodies, u.RefBody[j], u.RefParam[j], true): return true
     }
     for j in range u.LendAt.Len() {
-        if u.LendAt[j] == l and not r.NoneKept(t, bodies, u.LendBody[j], u.LendParam[j]): return true
+        if u.LendAt[j] == l and not r.NoneKept(t, bodies, u.LendBody[j], u.LendParam[j], true): return true
     }
     for j in range u.GiveAt.Len() {
         if u.GiveAt[j] != l or u.GiveRefs[j]: continue
-        if not r.NoneKept(t, bodies, u.GiveBody[j], u.GiveParam[j]): return true
+        if not r.NoneKept(t, bodies, u.GiveBody[j], u.GiveParam[j], refParam(t, bodies, u.GiveBody[j], u.GiveParam[j])): return true
     }
     for j in range u.LinkTo.Len() {
         if u.LinkTo[j] != l or r.linkLevel(t, bodies, u, j) < 2: continue

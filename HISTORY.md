@@ -40871,3 +40871,29 @@ the fused schedule alone (old loads, 60 `vpinsrb` left) 1.17; both 1.16-1.25 - 0
 then cost nothing either way, and one load per word is what the code means. Tests: std/sha256's three (FIPS 180-4,
 RFC 4231, pieces) at run time and under OLANG_EVALUATE=1; goldens: the sha256 rows of compiler/goldens/ast.txt and
 tokens.txt (the rest of those files is stale on master for other files and left alone).
+
+## 2026-11-21: a local is kept only where a callee keeps its storage (G42; mine; wt-chunkfacts)
+
+oann's repro/chunkfacts: `DeltaRuleChunked<F32, F32>.Allocates` was true though every part asserted alone was
+allocation-free and the resident memory stayed flat over 20000 calls. The driver builds a job locally (`job :=
+deltaJob(args, out, state, keep, z, per, kind, ws.products)`) and hands it to `spread`, whose tasks run `j.run`, which
+hands `j.products[task]` (a workspace) down to gemm, whose tasks take slices of the workspace's panels. effects'
+keptLocals asked typed.RefsKept.Kept of the job, and Kept asked NoneKept of the callees - the question "keeps nothing of
+what the parameter names, nor of what the references in it name". The workspace a reference read out of the job names
+is kept by gemm's tasks (through a Link of level 1, the references alone), so the job counted as kept and as given
+arena storage. Lowering never homed it (the object code: the job on the stack, no build into the frame scope).
+
+Kept's question is the local's storage alone; at its own top level it already skipped a reference read out of a part
+(RefPart), a Give of the references alone (GiveRefs) and a Link below level 2, but the callees it asked were asked the
+whole question. Now NoneKept takes `storage`, answered by storageKeptIn: the parameter's own escape (EscOwn), a
+read-only or writable lend of it (but not of a reference read out of a part) to a body keeping that storage, a Give of
+more than its references to a body keeping it - the storage question where the receiving parameter is a reference
+(a spawned call given the job, a fixed array converted, a part sliced: refParam), the whole one where it is a value
+holding references - and a Link of its storage (level 2) into a value that escapes. Kept asks it for RefAt, LendAt and
+Gives to a reference parameter. Answers are kept by (body * 64 + k) * 2 + storage. The whole question (free.olang's
+callers, a Give to a value parameter) is unchanged.
+
+tests/keptfacts.olang: the shape reduced from scan (a job of a Vec of workspace references, spread to tasks, each
+handing a workspace to a body whose tasks take panel slices) asserts `not driveJob.Allocates` (true before), and a job
+a task keeps (`spawn holdJob(h, j)`, storing it into a holder) `keepJob.Allocates`; both decided while compiling, the
+evaluator agrees (OLANG_EVALUATE=1). oann's repro reads false with the same 72 kB.
