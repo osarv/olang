@@ -2551,8 +2551,47 @@ fn (w mut walker&) splitLetOf(l I64, x typed.Expr&) I64 {
     c := initCall(x)
     # (review5's o1, ov1: or a copy of a place's value, `w := v` - lower.make's ownersCopy)
     site := I64(c.Site) if c != null else ownCopySite(x)
+    # (review5's o2: or a view call's value the local is given a field of, `nm := v[0].n` - the call's value copied
+    # whole, its own type judged at the copy: untracked)
+    if site < 0 and x == typed.Expr.Read {
+        tv := fieldTemp(x)
+        return tempCall(tv) if tv != null and w.F.mapFree(tv.Type(), 0) else -1
+    }
     if site < 0 or not w.F.PartsOnly(x.Type()) or w.T().RunsCopy(x.Type()): return -1
+    # (a Map's entries split so are let go of by a Put as a gap - gaps.olang's `c := rows[j]`, kept as untracked)
+    if c == null and not w.F.mapFree(x.Type(), 0): return -1
     return site
+}
+
+# whether a value of type ty holds no Map, by value, through structs and arrays (false past a depth)
+fn (f mut Free&) mapFree(ty types.TypeId, depth I64) Bool {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    if depth > 6: return false
+    d, _, _ := f.MapFields(r)
+    if d >= 0: return false
+    if t.KindOf(r) == types.Kind.Array: return f.mapFree(t.Elem(r), depth + 1)
+    if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return true
+    for ft in t.Items(t.Fields(r)) {
+        if not t.IsRef(ft) and not f.mapFree(ft, depth + 1): return false
+    }
+    return true
+}
+
+# the temporary whose field a value reads as it is (`v[0].n`: At's value), null for any other value
+fn fieldTemp(x typed.Expr&) typed.Expr?& {
+    return match x {
+        case typed.Expr.Read(_, _, p, _): placeTemp(p) if p == typed.Lvalue.Field else null
+        case _: null
+    }
+}
+
+fn placeTemp(p typed.Lvalue&) typed.Expr?& {
+    return match p {
+        case typed.Lvalue.Temp(_, _, v, _): v
+        case typed.Lvalue.Field(_, _, base, _): placeTemp(base)
+        case _: null
+    }
 }
 
 # O8f (gap 22, v8): the site of the copy x is, where it is stored whole into owner place k - a Map entry's Value given a

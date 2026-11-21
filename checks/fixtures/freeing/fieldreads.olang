@@ -1,0 +1,49 @@
+import "std/io"
+
+# O8f (docs/freeing.md, review5's o2 and t2): a plain value local given a field of a view call's value
+# (`nm := v[j].n`, At's value copied whole, D9h) has that copy's parts each in a part region of their own
+# (free.splitLetOf's fieldTemp, lower's ownersCopy); and a value local holding a view of such a copy, a trait value made
+# of a read-only reference to it (`s any Summer& = bx`), stays in its block (typed.LocalUses: the any an alias of the
+# local) - so the elements replaced while those live free at once
+N I64 = 400000
+
+type Q struct() { a Vec<I64>, b Vec<I64>, n String }
+
+type Summer trait {
+    Sum() I64
+}
+
+type Box struct(v Vec<I64>&) {
+    v
+}
+
+fn (b Box&) Sum() I64 { return b.v[0] + b.v[1] }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.a = Vec<I64>[i, i + 1]
+    q.b = Vec<I64>[i + 5, 1]
+    q.n = $"n" + $(i % 100)
+    return q
+}
+
+fn refill(d mut Vec<Q>&, i I64) {
+    d.Clear()
+    for k in range 4: d.Push(Q.Mk(i + k))
+}
+
+fn main() {
+    v Vec<Q>
+    refill(v, 0)
+    t := 0
+    for i in range N {
+        j := i % 4
+        nm := v[j].n
+        refill(v, i)
+        bx := Box(v[j].b)
+        s any Summer& = bx
+        v[(j + 2) % 4] = Q.Mk(i + 2)
+        t += s.Sum() + nm.Len()
+    }
+    io.PutLn($t + " " + $v.Len())!
+}
