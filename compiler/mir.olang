@@ -2007,6 +2007,11 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
             if v.arrayOf(x) == types.UnknownT: v.bad("Retire of a " + $v.canon(a))
             if ty != types.VoidT: v.bad("Retire typed " + $v.canon(ty))
         }
+        case typed.PrimOp.GrowInPlace {
+            x := t.Referent(ra) if t.IsRef(ra) else a
+            if v.arrayOf(x) == types.UnknownT: v.bad("GrowInPlace of a " + $v.canon(a))
+            if v.arrayOf(ty) == types.UnknownT: v.bad("GrowInPlace typed " + $v.canon(ty))
+        }
         case typed.PrimOp.IsCase {
             ok := HasCases(v.T, a)
             if not ok: v.bad("IsCase of a " + $v.canon(a))

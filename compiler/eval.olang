@@ -2213,6 +2213,13 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
                 m.wrPtr(dst, m.rdPtr(m.addr(fi, m.arg(fi, args, 0), 1)))
                 return
             }
+            if op == typed.PrimOp.GrowInPlace {
+                # M19d: no storage lengthened in place here - an empty array, so a new buffer is made and the elements
+                # moved into it, as the run time does where its storage cannot grow
+                m.wr(dst, 8, 0)
+                m.wrPtr(Ptr(dst.Id, dst.Off + 8), NullPtr)
+                return
+            }
             if satOp(op) {
                 m.saturate(fi, dst, op, ty, args)
                 return

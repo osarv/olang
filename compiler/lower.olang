@@ -6980,12 +6980,17 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
         # room past a Vec's count, M19d) copies empty parts rather than whatever the bytes held
         # (a grown buffer's room naming generational instances cleared too: copied, it is counted - T13d)
         fill0 := mir.Operand.Const(el, 0) if ln.ownsStorage(el) or ln.L.Gen().HoldsGen(t, el) else mir.Operand.None
+        after := mir.NoBlock
+        if c.Grown != null and fill0 == mir.Operand.None and not t.IsRef(t.Repr(ty)) {
+            after = ln.growInPlace(c.Grown!, ty, out0, cap, sp)
+        }
         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(out0), mir.Rvalue.NewArray(s0, ty, cap, fill0)))
         n0 := ln.temp(mir.I64T, sp)
         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(n0), mir.Rvalue.Use(ln.constI64(0))))
         ln.collects.Push(collectCtx(out0, n0, el, ty, s0, true, t.IsRef(t.Repr(ty))))
         ln.block(c.Loop)
         try ln.collects.Pop() catch { }
+        if after != mir.NoBlock: ln.joinAt(after)
         if ln.dead: return mir.Operand.None
         return mir.Operand.Copy(mir.Lvalue.L(out0))
     }
@@ -7023,6 +7028,26 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
     }
     ln.emit(mir.Stmt.CopyElems(sp, dst, src, mir.Operand.Copy(mir.Lvalue.L(n))))
     return mir.Operand.Copy(mir.Lvalue.L(out))
+}
+
+# M19d: a grown's source lengthened where it lies, when the run time can (GrowInPlace): out0 is then that array, its
+# elements where they were and its room unfilled, as a new buffer's - and the block after the collect is jumped to. The
+# block left open is the one making a new buffer, entered where the storage could not grow. Only for elements owning
+# nothing (a new buffer of those is cleared, M19d) - so nothing is moved that a copy would have emptied
+fn (ln mut lowering&) growInPlace(grown typed.Expr&, ty types.TypeId, out0 mir.LocalId, n mir.Operand
+                                  sp source.Span) mir.BlockId {
+    src := ln.val(grown)
+    if ln.dead: return mir.NoBlock
+    ext := ln.prim(typed.PrimOp.GrowInPlace, ty, Array<mir.Operand>[src, n], sp)
+    got := ln.prim(typed.PrimOp.Ne, types.BoolT, Array<mir.Operand>[ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[ext], sp)
+                                                                   ln.constI64(0)], sp)
+    yes, no, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(got, yes, no))
+    ln.start(yes)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(out0), mir.Rvalue.Use(ext)))
+    ln.goto(after)
+    ln.start(no)
+    return after
 }
 
 fn (ln mut lowering&) yield(sp source.Span, x typed.Expr&) {
