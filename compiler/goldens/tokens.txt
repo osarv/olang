@@ -3,6 +3,7 @@ f9203b1f4884dad0 06345922dd93e956 bench/benchlib.olang
 be1d4dcf25424c37 a8f90759e90a29f3 bench/binarytrees.olang
 52897c4439280484 bec66b8a19f49d12 bench/dispatch.olang
 4348f3c569e60492 1a8424cb88bf10fb bench/fannkuch.olang
+a776ae76ce7c2606 201528dd81cfaa17 bench/fasta.olang
 b03c5ac5378d1817 8b74e41be23fbba7 bench/gen.olang
 e0bdc1d65df2c8df 548e01acc0f1cf4a bench/ir.olang
 b75e53143d0a5d35 a9f02019e39306d1 bench/knucleotide.olang
@@ -30,6 +31,7 @@ e97f8c23aeb61662 542e4c34e84302dc bench/repro/opt.olang
 7bcfc7ec633cf09c 2cae49b34c44b01d bench/repro/text_local_copy.olang
 383bb384d647ddab ea195f7b08bced38 bench/repro/turn_temporaries.olang
 39c4ba4cd06cbda5 f2336a078a402de7 bench/repro/wrapping_div.olang
+cc628cd94cfef2cc 8c62a20fb0c7d513 bench/revcomp.olang
 353ece48832a6c76 0678d58febe36bdb bench/run.olang
 b5e1cc6598052d6f 21e12c9d551f0885 bench/sha256.olang
 794cc0718242e88f e4a7c783dd5822fc bench/spectral.olang
@@ -2444,7 +2446,7 @@ eba7fd72c9763b72 4d7260221f3478bb compiler/explain.olang
 b8bc27635ac86610 348eb08fc0410154 compiler/fix.olang
 e16765f56912e3a6 22d3690134ecf863 compiler/fmt.olang
 2f7ade12d41d767f 986963ff1b7668d0 compiler/free.olang
-1b58c42eb72c9af5 e5ef499ffb639fe1 compiler/generic.olang
+7dcf3f3fd8db67e5 a4cd64ed0e69aa44 compiler/generic.olang
 47fb7c219d28bceb 00ca6e686b0a6d37 compiler/interp.olang
 23a885a6497e989e 121d5f76d127824b compiler/jupyter.olang
 8299f0d6f657ceae ba0b78c0c7122d77 compiler/lineedit.olang
@@ -2592,7 +2594,7 @@ c40abb18bd5bc0e8 3da9661e69859951 std/json.olang
 b55e49533472817d ac0b0e500a4d6cc8 std/list.olang
 e2af3c272668511f 5cc8d85171be2a0a std/net.olang
 e9aa94e405345e7a 4927fbcc42dcb6a9 std/order.olang
-eaf752333158c780 b16ccf05f0e30c87 std/os.olang
+27bfbac2c6546055 26bd90420b1ebadc std/os.olang
 17c08f79ab55afc4 3582f78520a746d0 std/pair.olang
 6d63e48e89ab2815 a6f0f6bf11a5db33 std/plot.olang
 3ea631f369fef41e 9b46acf3eb0d51c6 std/pool.olang
@@ -2710,7 +2712,7 @@ b5ef26df71c5e9d8 d290f513fc2e56b4 tests/reflect.olang
 5075b8937e6628c4 bb505fad95c5ed7c tests/reflmod.olang
 3d5f36715ff3e78e d965d9c6969da76f tests/refltextindex.olang
 835ba0f57f4caddd ffb7322c928edb6c tests/runner.olang
-0c4c3adea751bf6a 75ac204e9b845a85 tests/shared.olang
+d4c2eb02c98f2303 88172b277df99c29 tests/shared.olang
 65be2149dd87b5aa 85d6cedda5cdc0fe tests/slicehoist.olang
 307585c2d6e47496 ad7d080b0a55df0c tests/slotfacts.olang
 c452c9cb509c23e1 dca352c6c89a7600 tests/structpat.olang

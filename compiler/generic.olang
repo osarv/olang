@@ -1990,7 +1990,9 @@ fn (p mut Program&) readsLocal(c Context&, e ast.Expr?&) Bool {
 # whether a call is x.Len() of an array an instance takes by value - its length a variable the context binds (G29)
 fn (p mut Program&) instanceLen(c Context&, f ast.Expr&, args Array<ast.Expr&>&) Bool {
     k := p.LenKey(f, args)
-    return k != "" and c.Vars.Has(p.L.Names.Intern(k))
+    if k == "": return false
+    v := try c.Vars.Get(p.L.Names.Intern(k)) catch default types.TypeId(-1)
+    return v >= types.TypeId(0) and v != p.T.RunLength()
 }
 
 fn (p mut Program&) anyReadsLocal(c Context&, xs Array<ast.Expr&>&) Bool {
@@ -2160,6 +2162,8 @@ fn (p mut Program&) evalCall(c Context&, f ast.Expr&, args Array<ast.Expr&>&) fo
     k := p.LenKey(f, args)
     if k != "" {
         v := try c.Vars.Get(p.L.Names.Intern(k)) catch default types.TypeId(-1)
+        # (an instance for lengths known only at run time binds it to RunLength, no constant: the running program's)
+        if v == p.T.RunLength(): return folded.unfolded()
         if v >= types.TypeId(0) {
             if p.T.KindOf(v) == types.Kind.Const: return folded(Folded, p.T.ConstValue(v), p.T.ConstType(v))
             return folded(Pending, 0, types.UnknownT)
