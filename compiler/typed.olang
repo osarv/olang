@@ -1760,8 +1760,11 @@ fn (u mut LocalUses&) call(c Call&, ty types.TypeId, ctx Ctx) {
         if carry: u.carried(c.Args[i], into, ctx, body, i)
         u.made(c.Args[i], into, ctx if carry else Ctx.Op, body, i, u.unkept(c.Args[i], sig, i, table, ext))
         was := u.quiet
-        u.quiet = u.given(c.Args[i], body, i, helper) or u.unkept(c.Args[i], sig, i, table, ext)
-        u.arg(c.Args[i], body, i, helper)
+        unk := u.unkept(c.Args[i], sig, i, table, ext)
+        u.quiet = u.given(c.Args[i], body, i, helper) or unk
+        # (a read-only reference given through an any's table whose signature writes no keeps: every body the table may
+        # reach keeps nothing of it (T21c, T32b) - read during the call only, as a RefAt kept by none)
+        if not (table and unk and u.tableRef(c.Args[i])): u.arg(c.Args[i], body, i, helper)
         u.quiet = was
     }
 }
@@ -1892,6 +1895,19 @@ fn (u mut LocalUses&) arg(a Expr&, body I64, i I64, helper Bool) {
     kept := u.T.IsRef(a.Type()) and not helper
     if kept and body >= 0 and u.spawning == 0 and u.refArg(a, body, i): return
     u.expr(a, Ctx.Esc if kept else Ctx.Arg)
+}
+
+# a read-only reference to a place of a local given through an any's table keeping nothing of it (call): used, no escape
+fn (u mut LocalUses&) tableRef(a Expr&) Bool {
+    p := match a {
+        case Expr.Borrow(_, ty, q): q if (u.T.PermOf(ty) & types.Writable) == 0 else null
+        case Expr.Read(_, ty, q, _): q if u.T.IsRef(ty) and (u.T.PermOf(ty) & types.Writable) == 0 else null
+        case _: null
+    }
+    if p == null or u.rootOf(p) < 0: return false
+    u.placeExprs(p)
+    u.Esc[u.rootOf(p)] = true
+    return true
 }
 
 # a read-only reference to a place of a local given parameter k of a body's call: Esc (the callee may keep it), recorded

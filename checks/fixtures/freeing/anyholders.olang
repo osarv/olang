@@ -1,0 +1,50 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, review5's t2): a reference local given storage for what a call hands back, held as a
+# trait value too (`s any Summer& = Box(v[j].b)`, its Sum called through the table), holds the copy of the element its
+# view call makes in its own block (BlockCopy through promotedCall): a table whose signature writes no keeps keeps
+# nothing of a read-only reference (typed.LocalUses tableRef) - so Q.b is sole, the element replaced and popped meanwhile
+N I64 = 400000
+
+type Summer trait {
+    Sum() I64
+}
+
+type Q struct() { b Vec<I64> }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.b = Vec<I64>[i, i + 1]
+    return q
+}
+
+type Box struct(src Vec<I64>&) {
+    xs Vec<I64>& = src
+}
+
+fn (b Box&) Sum() I64 {
+    t := 0
+    for x in b.xs: t += x
+    return t
+}
+
+fn main() {
+    v Vec<Q>
+    for k in range 4: v.Push(Q.Mk(k))
+    t := 0
+    for i in range N {
+        v[i % 4] = Q.Mk(i)
+        s any Summer& = Box(v[(i + 1) % 4].b)
+        v[(i + 1) % 4] = Q.Mk(i * 2)
+        v.Push(Q.Mk(i))
+        t += s.Sum()
+        if i % 3 == 0 {
+            r any Summer& = Box(v[i % 4].b)
+            v.Pop()!
+            t += r.Sum() * 2
+        } else {
+            v.Pop()!
+        }
+    }
+    io.PutLn($t + " " + $v.Len())!
+}

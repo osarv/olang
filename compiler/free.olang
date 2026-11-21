@@ -2950,6 +2950,9 @@ fn (f mut Free&) blockCopies(b I64) {
         x := u.Init[i]
         if x == null: continue
         k := initCall(x)
+        # (a reference local given storage for what the call hands back - `s Box& = Box(v[j].b)`, held as a trait
+        # value too: the instance read through the local only, in its block)
+        if k == null and f.blockView(u, b, i): k = promotedCall(x)
         if k == null: continue
         if f.blockView(u, b, i) or f.blockHolder(u, b, i): f.blockArgs(b, i, k, 0)
         if f.ownedHolder(b, i): f.resultArgs(b, i, k)
@@ -3175,6 +3178,17 @@ fn initCall(x typed.Expr&) typed.Call?& {
     return match x {
         case typed.Expr.Call(_, _, c): c
         case typed.Expr.Away(_, _, y): initCall(y)
+        case _: null
+    }
+}
+
+# the call a reference value is given storage for, through a conversion of one value or a trait value made of it (T32a's
+# AnyMake of a reference: its instance is that storage), null for none
+fn promotedCall(x typed.Expr&) typed.Call?& {
+    return match x {
+        case typed.Expr.Promote(_, _, pr): initCall(pr.X)
+        case typed.Expr.Away(_, _, y): promotedCall(y)
+        case typed.Expr.Prim(_, _, op, _, args): promotedCall(args[0]) if isConversion(op, args) or op == typed.PrimOp.AnyMake else null
         case _: null
     }
 }
