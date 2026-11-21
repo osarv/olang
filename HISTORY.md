@@ -40448,3 +40448,7 @@ lambdas that may let go of any place. A lambda made in the tasks' code is reache
 (lambdaMade) - and one made elsewhere reaches a task only as an argument, which effects reports (taskAll), or through a
 global (taskReach); so every lambda is a root only where some task reads a global. Functions named as values stay
 roots. A probe whose task makes a lambda replacing elements of its own Vec keeps, as the rule says.
+
+`make quick` on a loaded machine then failed the fixture with "grew by 8196 KB": a runtime worker started in the
+second half reserves its 8 MB stack (plus a guard page), which VmPeak counts. The fixture allows up to four workers'
+stacks beside its 2 MB; kept storage grows about 140 MB, far past that.

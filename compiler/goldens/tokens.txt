@@ -2203,7 +2203,7 @@ ba29ad90370e1c2e f8d1b1123f659f0b checks/fixtures/freeing/resultargs.olang
 a279308f7e9120d1 a575d7c230014939 checks/fixtures/freeing/splitelems.olang
 2f6854bbe2909320 fc987f56ce61bea5 checks/fixtures/freeing/splitfield.olang
 d66b7ed7488df41e b94be7d9e0fbf589 checks/fixtures/freeing/structelems.olang
-31dd6606bcd4bb18 eb8ee95bab5f14ab checks/fixtures/freeing/tasks.olang
+f8c89b572e71ed14 a6560a61bec121e2 checks/fixtures/freeing/tasks.olang
 8f42cb1782a3ec6c 5841b675b262b8af checks/fixtures/freeing/tempref.olang
 6f8f63e1e574c89d d1912874adf93448 checks/fixtures/freeing/texts.olang
 65090776a1973a56 56c361525b4610a4 checks/fixtures/freeing/tryreads.olang
