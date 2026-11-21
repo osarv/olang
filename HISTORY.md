@@ -40277,3 +40277,5 @@ there.) Now a value local given a copy of another (`mustW.copyRead`)
 holds no moved value, the local copied out is not its moved value's one holder (`free.copiedOut`: neither ended at its
 block's end nor handed back as it is by `lower.movedRets`), and a return of such a local hands back no moved value
 (the caller's drop releases nothing). Missed frees only for that shape. Run case o8fmovedcopy (`-sanitize`).
+
+- 2026-11-21 sanfix: checks' `earlyfree` and `freeing` also build each fixture with `-sanitize` at the small size and require the usual output (review6: a double release only `-sanitize` caught; `-free late` cannot see one); docs/freeing.md 1.3 names both oracles.

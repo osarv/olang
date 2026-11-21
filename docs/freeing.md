@@ -67,11 +67,12 @@ names: that is the guarantee, checked per build, at compile time only.
   evaluator, which stops on a read of a freed region;
 - `interpret` (B3e): the evaluator models regions and fails a read of a released one; every earlyfree program runs
   interpreted beside the build (checks' `earlyfree`).
-- `-free late` (B18b), the independent oracle: the program built with early freeing off, every let-go kept until its
+- `-free late` (B18b) and `-sanitize`, the independent oracles: the program built with early freeing off, every let-go kept until its
   scope closes. The three above all run the same releases - where the free pass wrongly allows one, the build, the
   sanitized build and the evaluator read the emptied value together and agree (review5's F1). A build with no early
   freeing runs none of that code, so its output is the right one: checks' `earlyfree` and `freeing` build every program
-  at a small size both ways and require the same output (memory limits apply to the usual build only). A review runs
+  at a small size both ways and require the same output (memory limits apply to the usual build only), and also under `-sanitize`, the
+  oracle `-free late` cannot be for a double release (review6: only `-sanitize` caught one). A review runs
   each probe both ways - `olang build P.olang` and `olang build -free late -output late P.olang` - and compares what
   `./build/P` and `./late` print; any difference is a release the analysis allowed wrongly (or, rarely, a program that
   reads past what it may, which `-sanitize` then names).
