@@ -1,4 +1,10 @@
-# Writes to a `for` loop's copy (proposal)
+# Writes to a `for` loop's copy (decided)
+
+**Decided 2026-11-21 (the user): "I want x to become what the iterator spits out. That can be a reference at times,
+although it should be a value. If we get a value and update it but never store it, that is an error. But loop
+variables get the type of what the iterator produces."** Built as C (struct elements of a writable array are named by
+a `mut T&`, SPEC S9a) together with A (a store to a loop's name nothing reads after it is an error, S9g). What follows
+is the proposal as it was put.
 
 ## The pitfall
 
