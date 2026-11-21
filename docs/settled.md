@@ -1406,7 +1406,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   checked build (E16g: test, -debug, interpret) checks indexes, divisions and shifts the program wrote, where speed does
   not matter.
 - **Optimizations are mine to decide (the user, 2026-10-27).** Those that change no meaning are never a question
-  (docs/optsurvey.md lists what was built). Benchmarks against C are in `bench/` (not in verify). No loop alignment
+  (docs/optsurvey.md lists what was built). Benchmarks against C are in `bench/` (not in verify; the Benchmarks Game set with peak memory, HISTORY.md "the Benchmarks Game set", 2026-11-21). No loop alignment
   (`-align-loops=32` measured 2026-11-21: one row's layout bought back, others moved both ways, +2% code) and no SLP off at the
   link (sha256 level with C, the opaque-call rows 25% slower) - HISTORY.md, "after the back end's cut". E39's byte dot
   product (`(x * w).Sum<I32>()` over `U8` x `I8`, `LaneDot`) is one helper over every lane: vectors of `I32` lanes
