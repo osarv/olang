@@ -727,6 +727,14 @@ field, an element of an `Array<Array<T>&>`, a reference parameter outside an ins
 error, except where an array is passed by value (D9a). Where a length is known, `Len()` is that constant (E23), an index
 out of range is a compile-time error (E16), and a condition the length decides is decided (S8a; per instance, G30).
 
+Rows laid out in place are not rows of a run-time length: an array of arrays whose rows have one known length holds
+them in place, where an `Array<Array<T>>` holds each row as its length and storage elsewhere. A reference local
+declared `Array<Array<T>>&` and given such an array - a name, a field, a slice of one - that nothing assigns as a whole
+afterwards names it with its rows' length, as an instance's parameter does (G29): `rows mut Array<Array<I64>>& = m`
+with `m := [[1, 2], [3, 4]]` reads `rows[1].Len()` as 2 and writes `m`'s rows where they are. Any other reference to
+an array of arrays of a run-time length given rows held in place - a field, a reference local assigned again, a
+reference converted from another - is an error naming T7c.
+
 **T7d (fixed storage).** Storage for an array value is **fixed** - laid out with a known length, its elements in
 place - exactly where every value it can hold has one known length:
 

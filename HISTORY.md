@@ -40465,3 +40465,36 @@ type is accepted. It is why array elements stay copies here.
 Verified: the bootstrap from the seed and its fixed point, `make test` (every test block, checks.olang included), the
 rest of the suite (interpreter runs, runner, the diffs, checkir) and `make scopesan` pass. The full `make verify` was run
 in those parts: run whole it filled the disk beside another worktree's build (build/checks takes ~5 GB).
+
+## Rows held in place, named through a reference (T7c, 2026-11-21, wt-nestref)
+
+The bug wt-loopref found: `m := [[1, 2], [3, 4], [5, 6]]; rows mut Array<Array<I64>>& = m` gave `rows[1].Len()` 3 and
+writing `rows[1][0]` crashed (even printing `$rows` did). `m` is fixed storage with its rows in place (T7d: an array of
+arrays takes its rows' length from its value) - `[3 x [2 x i64]]` - while an `Array<Array<I64>>` holds each row as a
+pair (length, storage). The checker's borrow (fitBorrow: a fixed array lent where a run-time one is wanted, "nothing
+copied") took `flowsInto` - which lets an element of a known length flow into one of a run-time length - for a
+representation match at every depth, so the reference was `{3, &m}` and its rows were read as pairs out of `m`'s
+numbers. The emit and evaluator conversions only reinterpret the outer level, so both agreed on the wrong answer. A
+call worked because a function taking `Array<Array<I64>>&` is compiled per argument length (G29, `f<2>`), its
+parameter typed with the rows' length.
+
+The fix gives a reference local what an instance's parameter has: declared `Array<Array<T>>&` and given a name, a
+field or a slice (typed alone first, as T7d's value locals of arrays of arrays are; a literal still takes the declared
+type) whose rows have one known length, with nothing assigning it as a whole afterwards, the local is typed
+`Array<Array<T, n>>&` - outer length at run time, rows in place - so reads, writes and walks reach `m`'s rows where
+they are; passing it on to a function picks the instance per length as `m` itself does. Every other reference to an
+array of arrays of a run-time length given rows in place (a struct field, a reference local assigned again, a reference
+converted from another such reference - fitRefs) is refused with T7c's `RowsInPlaceLent` ("a reference to
+Array<Array<I64>> cannot name rows held in place"), which says to declare a reference local or pass it to a function.
+Building a table of row pairs for those was considered and not done: its storage would have to live as long as the
+reference (a scope the conversion does not know), and replacing a row through it would silently miss `m`. SPEC T7c
+states the rule.
+
+Corpus: tests/nestref.olang (a writable reference local written and read back after a churn, a read-only one, one
+taken from another, a slice, functions given both, a Vec's run-time rows; `assert throughLocal() == 3230` decided
+while compiling) - built, interpreted (`OLANG_EVALUATE=1`) and under `-sanitize`; an inline struct field's rows
+(`b.cells`) checked by hand. checks/cases/rowsinplacelent.olang (a struct's reference field given `m`).
+
+For S9a (wt-loopref): array elements were left copies in a reference walk because of this bug. With it fixed every
+reference to an array of arrays knows how its rows are laid out (in place with their length, or pairs), so a walk's
+name could be a writable reference into a row as it is for a struct element; the exclusion was not lifted here.
