@@ -3466,6 +3466,238 @@ fn wholeLocal(x Expr&) I64 {
     }
 }
 
+# ---- a write to a loop's name that nothing reads (S9g) ----
+
+# the stores a loop's body makes to its name L - L assigned, or storage it holds by value (a field, an element, a
+# payload reached following no reference) - that no mention of L comes after, in the order the body is written. A
+# mention inside deferred code, a task, a join's clauses or a lambda's capture counts as after everything; one inside a
+# loop of the body counts as after every store in that loop. Any mention but a store's own target is a read: a copy, a
+# borrow, a call's argument or receiver
+type LostStores struct(L LocalId) {
+    L
+    seq I64 = 0
+    later I64 = 0
+    lastRead I64 = -1
+    Spans Vec<source.Span>   # each store, where it is written
+    Whole Vec<Bool>          # whether it assigns L itself, not storage in it
+    at Vec<I64>
+    live Vec<Bool>
+}
+
+# the stores nothing reads after, by their index in Spans
+fn (w LostStores&) Lost() Array<I64> {
+    out Vec<I64>
+    for i in range w.at.Len() {
+        if not w.live[i] and w.lastRead < w.at[i]: out.Push(i)
+    }
+    return out.ToArray()
+}
+
+fn (w mut LostStores&) read() {
+    w.seq++
+    w.lastRead = I64.Max if w.later > 0 else w.seq
+}
+
+fn (w mut LostStores&) Stmts(ss Array<Stmt&>&) {
+    for s in ss: w.stmt(s)
+}
+
+fn (w mut LostStores&) Walk(s Stmt&) { w.stmt(s) }
+
+fn (w mut LostStores&) block(b Block?&) {
+    if b != null: w.Stmts(b.Stmts)
+}
+
+fn (w mut LostStores&) laterBlock(b Block?&) {
+    w.later++
+    w.block(b)
+    w.later--
+}
+
+# a loop inside the body: a mention of L anywhere in it keeps every store in it
+fn (w mut LostStores&) loop(body Block?&, post Block?&) {
+    s0 := w.seq
+    w.block(body)
+    w.block(post)
+    if w.lastRead <= s0: return
+    for i in range w.at.Len() {
+        if w.at[i] > s0: w.live[i] = true
+    }
+}
+
+fn (w mut LostStores&) stmt(s Stmt&) {
+    match s {
+        case Stmt.Let(_, _, x): w.expr(x)
+        case Stmt.Assign(sp, p, x) {
+            if not w.ownStore(p) {
+                w.place(p)
+                w.expr(x)
+                return
+            }
+            w.storeParts(p)
+            w.expr(x)
+            w.seq++
+            w.Spans.Push(sp)
+            w.Whole.Push(p == Lvalue.Local)
+            w.at.Push(w.seq)
+            w.live.Push(w.later > 0)
+        }
+        case Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Reraise(_, x, _): w.expr(x)
+        case Stmt.Return(_, x), Stmt.Suspend(_, x), Stmt.Exit(_, _, x): w.expr(x)
+        case Stmt.If(_, f) {
+            w.expr(f.Test)
+            w.block(f.Then)
+            w.block(f.Else)
+        }
+        case Stmt.Loop(_, body, post): w.loop(body, post)
+        case Stmt.Assert(_, c, m) {
+            w.expr(c)
+            w.expr(m)
+        }
+        case Stmt.Block(_, b): w.block(b)
+        case Stmt.Defer(_, b): w.laterBlock(b)
+        case Stmt.Join(_, j) {
+            w.later++
+            w.block(j.Code)
+            w.clauses(j.Clauses)
+            w.later--
+        }
+        case Stmt.Spawn(_, sw) {
+            w.later++
+            for tg in sw.Targets {
+                if tg != null: w.place(tg)
+            }
+            w.expr(sw.Task)
+            for c in sw.Clauses: w.expr(c.Handler)
+            w.later--
+        }
+        case Stmt.Jump(_, _, _), Stmt.Raise(_, _, _) { }
+    }
+}
+
+# whether a store's place is L or storage L holds by value
+fn (w LostStores&) ownStore(p Lvalue&) Bool {
+    return match p {
+        case Lvalue.Local(_, _, id): id == w.L
+        case Lvalue.Field(_, _, base, _): w.ownStore(base)
+        case Lvalue.Elem(_, _, e): w.ownStore(e.Base)
+        case Lvalue.Payload(_, _, py): w.ownStore(py.Base)
+        case _: false
+    }
+}
+
+# what a store into L evaluates besides L: its indexes
+fn (w mut LostStores&) storeParts(p Lvalue&) {
+    match p {
+        case Lvalue.Field(_, _, base, _): w.storeParts(base)
+        case Lvalue.Elem(_, _, e) {
+            w.storeParts(e.Base)
+            w.expr(e.Index)
+        }
+        case Lvalue.Payload(_, _, py): w.storeParts(py.Base)
+        case _ { }
+    }
+}
+
+fn (w mut LostStores&) clauses(cs Array<Clause&>&) {
+    for c in cs {
+        w.block(c.Code)
+        w.exprs(c.Defaults)
+    }
+}
+
+fn (w mut LostStores&) exprs(xs Array<Expr&>&) {
+    for x in xs: w.expr(x)
+}
+
+fn (w mut LostStores&) expr(x Expr?&) {
+    if x == null: return
+    match x {
+        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _) { }
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): w.place(p)
+        case Expr.Promote(_, _, pr): w.expr(pr.X)
+        case Expr.Call(_, _, c) {
+            match c.Target {
+                case Callee.Value(f) { w.expr(f) }
+                case _ { }
+            }
+            w.exprs(c.Args)
+        }
+        case Expr.Make(_, _, m) {
+            w.exprs(m.Items)
+            w.expr(m.Length)
+        }
+        case Expr.Collect(_, _, c) {
+            w.expr(c.Reserve)
+            w.loop(c.Loop, null)
+        }
+        case Expr.Prim(_, _, _, _, args): w.exprs(args)
+        case Expr.Slice(_, _, sl) {
+            w.place(sl.Base)
+            w.expr(sl.Lo)
+            w.expr(sl.Hi)
+        }
+        case Expr.Cond(_, _, k) {
+            w.expr(k.C)
+            w.expr(k.A)
+            w.expr(k.B)
+        }
+        case Expr.Seq(_, _, q) {
+            w.Stmts(q.Stmts)
+            w.expr(q.X)
+        }
+        case Expr.Match(_, _, m) {
+            w.Stmts(m.Held)
+            for a in m.Arms: w.arm(a)
+            if m.NoMatch != null: w.arm(m.NoMatch!)
+        }
+        case Expr.Try(_, _, tr) {
+            w.expr(tr.X)
+            w.clauses(tr.Clauses)
+        }
+        case Expr.Fn(_, _, f) {
+            w.later++
+            match f {
+                case FnVal.Lambda(_, caps, _) { for cp in caps { w.expr(cp.Outer) } }
+                case FnVal.Adapter(_, recv, _) { w.expr(recv) }
+                case FnVal.Named(_) { }
+            }
+            w.later--
+        }
+        case Expr.Text(_, _, tx) {
+            for pc in tx.Pieces {
+                if pc == Piece.Render: w.expr(pc.x)
+            }
+        }
+        case Expr.Away(_, _, y): w.expr(y)
+    }
+}
+
+fn (w mut LostStores&) arm(a Arm&) {
+    for alt in a.Alts {
+        w.expr(alt.Test)
+        for bd in alt.Binds: w.expr(bd.From)
+    }
+    w.expr(a.Guard)
+    w.block(a.Code)
+    w.expr(a.Value)
+}
+
+fn (w mut LostStores&) place(p Lvalue&) {
+    match p {
+        case Lvalue.Local(_, _, id) { if id == w.L: w.read() }
+        case Lvalue.Deref(_, _, r): w.expr(r)
+        case Lvalue.Field(_, _, base, _): w.place(base)
+        case Lvalue.Elem(_, _, e) {
+            w.place(e.Base)
+            w.expr(e.Index)
+        }
+        case Lvalue.Payload(_, _, py): w.place(py.Base)
+        case Lvalue.Temp(_, _, v, _): w.expr(v)
+        case Lvalue.Global(_, _, _, _), Lvalue.Target(_, _) { }
+    }
+}
+
 # the copies of a whole value local body b's check made where it is mentioned last (D9i's candidates), by site: the
 # local each copies - lowering moves such a copy where nothing could tell (movable), and the scope pass builds the
 # local where a copy kept beyond its block goes (item 17)

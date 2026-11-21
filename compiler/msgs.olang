@@ -738,6 +738,7 @@ type Diag enum {
     ForInClauseExit
     ForInNameExists
     NotIterable
+    LostLoopWrite
     AltBindsOtherNames
     BoundTwice
     AltBindingType
@@ -1859,6 +1860,7 @@ fn ForInTryNothing() r.Msg { return r.Msg(Diag.ForInTryNothing, "S9e", "nothing 
 fn ForInClauseExit() r.Msg { return r.Msg(Diag.ForInClauseExit, "S9e", "a loop's catch clause has no loop to break or continue", "it runs after the loop has ended", "set a flag") }
 fn ForInNameExists(tok String&, text String&) r.Msg { return r.Msg(Diag.ForInNameExists, "D3a, E29", $tok + " is already declared, and a for-in declares new names", "", "choose another, or to loop while it is in c write 'for { if " + $text + " not in c { break } }'") }
 fn NotIterable(ty String&) r.Msg { return r.Msg(Diag.NotIterable, "S9a", $ty + " cannot be walked", "'for ... in' takes an array, a range, an iterator ('mut Next() T ? Exhausted') or a type with Iter()") }
+fn LostLoopWrite(n String&, repoints Bool, counter Bool) r.Msg { return r.Msg(Diag.LostLoopWrite, "S9g", "the write to '" + n + "' is lost: nothing reads '" + n + "' after it", ("'" + n + "' refers to the element, and '=' repoints the name (S4a), never writing the element" if repoints else "'" + n + "' holds a copy of what the walk gives (S9a), and nothing reads it again this turn"), ("keep a count of your own in a local declared before the loop" if counter else "write the element where it is - 'for i, " + n + " in a: a[i] = ...', or a field through a writable walk's reference - or store the value somewhere read later")) }
 fn AltBindsOtherNames() r.Msg { return r.Msg(Diag.AltBindsOtherNames, "S13c", "the alternatives of a clause bind different names", "every alternative binds the same names", "bind it in each, write '_', or split the case") }
 fn BoundTwice(tok String&) r.Msg { return r.Msg(Diag.BoundTwice, "S13c", $tok + " is bound twice in one alternative") }
 fn AltBindingType(tok String&, ty String&) r.Msg { return r.Msg(Diag.AltBindingType, "S13c", $tok + " is bound as " + $ty + " by an earlier alternative - split the case") }

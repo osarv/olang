@@ -1,0 +1,14 @@
+# check: fail error[S9g]: the write to 'p' is lost: nothing reads 'p' after it
+# S9g: over a ViewMut a struct element is named by reference, and '=' repoints the name (S4a) - never read again, lost
+type P struct(x I64) {
+    x
+}
+fn twice(p P) P { return P(p.x * 2) }
+fn main() {
+    ps := Vec<P>[]
+    ps.Push(P(1))
+    for p in ps.ViewMut() {
+        p = twice(p)
+    }
+    Println(ps[0].x)
+}

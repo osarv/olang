@@ -1,0 +1,10 @@
+# check: fail error[S9g]: the write to 'i' is lost: nothing reads 'i' after it
+# S9g: a loop's counter is a value too
+fn main() {
+    s I64 = 0
+    for i, x in Array<I64>[1, 2] {
+        s += x * i
+        i = 0
+    }
+    Println(s)
+}

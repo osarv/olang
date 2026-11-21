@@ -1,0 +1,9 @@
+# check: fail error[S9g]: the write to 'x' is lost: nothing reads 'x' after it
+# S9g: a number is a value even in a ViewMut walk - assigning the copy changes nothing; the index form writes the element
+fn main() {
+    v := Vec<I64>[1, 2, 3]
+    for x in v.ViewMut() {
+        x = x * 10
+    }
+    Println(v)
+}
