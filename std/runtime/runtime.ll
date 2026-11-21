@@ -4223,10 +4223,10 @@ forward:
   ret void
 }
 
-; walks and calls this scope's own dtor-node list first, LIFO - most-recently-registered first, the order a stack
-; unwind would give - then gives each of its chunks to the pool (O8b) and resets the scope to empty
-; (P2: first, every part other threads made of it - __olang_scope_fold_parts)
-define void @__olang_scope_close(ptr %scope) alwaysinline {
+; what __olang_scope_close runs out of line: every part other threads made of the scope folded in (P2,
+; __olang_scope_fold_parts), then its own dtor-node list walked and called, LIFO - most-recently-registered first, the
+; order a stack unwind would give; its regions and chunks are the close's own, after this
+define void @__olang_scope_close_owned(ptr %scope) noinline {
 entry:
   %fptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 4
   %f = load ptr, ptr %fptr, !tbaa !59
@@ -4262,7 +4262,7 @@ start:
 dloop:
   %dcur = load ptr, ptr %dheadptr, !tbaa !59
   %dempty = icmp eq ptr %dcur, null
-  br i1 %dempty, label %chunks, label %dcall
+  br i1 %dempty, label %out, label %dcall
 dcall:
   %dnextptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 0
   %dnext = load ptr, ptr %dnextptr
@@ -4302,6 +4302,26 @@ dparts:
   store ptr %wft, ptr %wtp, !tbaa !59
   store ptr null, ptr %fptr, !tbaa !59
   br label %dloop
+out:
+  ret void
+}
+
+; what a scope still owns beyond memory - parts other threads made of it (P2) and destructors (C9a) - is run out of
+; line (__olang_scope_close_owned), so the close inlined at every scope is two tests ahead of its regions and chunks:
+; where the header never escapes, both heads are provably null and the call folds away as the loop did
+define void @__olang_scope_close(ptr %scope) alwaysinline {
+entry:
+  %fptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 4
+  %f = load ptr, ptr %fptr, !tbaa !59
+  %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1
+  %dh = load ptr, ptr %dheadptr, !tbaa !59
+  %hasf = icmp ne ptr %f, null
+  %hasd = icmp ne ptr %dh, null
+  %owns = or i1 %hasf, %hasd
+  br i1 %owns, label %owned, label %chunks
+owned:
+  call void @__olang_scope_close_owned(ptr %scope)
+  br label %chunks
   ; the regions made in this scope (O8d), after its destructors - which may read what this scope's objects hold there -
   ; and before its chunks: given the list, not the header, so the header does not escape into the call
 chunks:

@@ -17,14 +17,32 @@ import "generic"
 import typecheck "check"
 
 # what every module's object depends on beyond the modules it reaches: this compiler (where it is, its size and when
-# it was made), the build's modes, target and constants, where it runs and where the standard library is
+# it was made), the build's modes, target and constants, where it runs and where the standard library is, and the
+# runtime's files there (runtimeStamp)
 fn BuildInputs(cfg build.Config&, tests Bool) String {
     exe := try os.RealPath("/proc/self/exe") catch default ""
     info := try os.FileInfo.Stat(exe) catch os.Error { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
     return ($exe + " " + $info.Size + " " + $info.ModTime + "\n" + $cfg.Debug + " " + $cfg.Race + " " + $cfg.San + " " + $cfg.Quick + " " + $cfg.Library + " " + $tests + $(" prof" if cfg.Profile else "") + $(" listing" if cfg.Listing else "") + $(" fuzz" if cfg.Fuzz != "" else "") + $(" bench" if cfg.Bench else "") + $(" checked" if cfg.Checked else "") + $(" late" if cfg.Late else "") + "\n" + $
-            t.Triple + "\n" + $t.Arch + "\n" + $t.Cpu + "\n" + $t.Attrs + "\n" + $cfg.Consts.Fingerprint() + "\n" + $cwd + "\n" + $load.StdDir())
+            t.Triple + "\n" + $t.Arch + "\n" + $t.Cpu + "\n" + $t.Attrs + "\n" + $cfg.Consts.Fingerprint() + "\n" + $cwd + "\n" + $load.StdDir() + "\n" + $runtimeStamp())
+}
+
+# the runtime's files (std/runtime) by name, size and time: each module's IR carries what the runtime marks for
+# inlining (runtime.Decls), read from them as each build runs, so a record written before one of them changed holds
+# no more
+fn runtimeStamp() String {
+    dir := $load.StdDir() + "/runtime"
+    found := try os.ReadDir(dir) catch os.Error { return "" }
+    names Vec<String&>
+    for n in found: names.Push(n)
+    names.Sort(fn(a String&, b String&) Bool { return a < b })
+    b := StringBuilder()
+    for n in names {
+        info := try os.FileInfo.Stat($dir + "/" + $n) catch os.Error { continue }
+        b.Push($n + " " + $info.Size + " " + $info.ModTime + "\n")
+    }
+    return b.ToString()
 }
 
 # each module's key, "" for the root's (never reused): the hash of buildInputs, then of its own text, identity and
