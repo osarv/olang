@@ -69,8 +69,8 @@ firstChunk I64 = 8
 
 fn (l mut List<T>&) Push(x T) {
     s := l.s
-    if s.used == s.room: s.grow(x)
-    s.tail[s.used] = x
+    if s.used == s.room: s.grow()
+    s.tail[s.used].occupy(x)
     s.used++
     s.count++
 }
@@ -80,17 +80,17 @@ fn (l mut List<T>&) Push(x T) {
 fn (l mut List<T>&) PushAll(a Array<T>&) {
     s := l.s
     if a.Len() <= s.room - s.used { # it fits in the tail: the common case, kept short
-        for j in range a.Len(): s.tail[s.used + j] = a[j]
+        for j in range a.Len(): s.tail[s.used + j].occupy(a[j])
         s.used += a.Len()
         s.count += a.Len()
         return
     }
     from I64 = 0
     for from < a.Len() {
-        if s.used == s.room: s.grow(a[from])
+        if s.used == s.room: s.grow()
         n I64 = a.Len() - from
         if s.room - s.used < n: n = s.room - s.used
-        for j in range n: s.tail[s.used + j] = a[from + j]
+        for j in range n: s.tail[s.used + j].occupy(a[from + j])
         s.used += n
         from += n
     }
@@ -98,14 +98,14 @@ fn (l mut List<T>&) PushAll(a Array<T>&) {
 }
 
 # a new tail, twice the size of the last - the one made before, when Pop or Clear left it; the array of chunks doubles
-# when it has no room for another. A new chunk is filled with fill, the element about to be pushed, rather than with
-# T's zero value: no slot is read before it is written, and an element type whose constructor cannot run on zeros has
-# no zero value at all (D13c) - a List of such values is as ordinary as any other
-fn (s mut listState<T>&) grow(fill T) {
+# when it has no room for another. A new chunk is grown from nothing (M19d) and never filled: no slot is read before
+# Push or PushAll stores into it (occupy), so an element type whose constructor cannot run on zeros - one with no zero
+# value at all (D13c) - is as ordinary as any other, and each slot's bytes are written once, by the Push reaching it
+fn (s mut listState<T>&) grow() {
     if s.nChunks < s.made {
         s.tail = s.chunk(s.nChunks)
     } else if s.made == 0 {
-        s.first = Array<T>(firstChunk, fill)
+        s.first = s.first[:0].grown(firstChunk)
         s.tail = s.first
         s.made = 1
     } else {
@@ -116,7 +116,7 @@ fn (s mut listState<T>&) grow(fill T) {
             for k in range s.made: more[k] = s.chunks[k]
             s.chunks = more
         }
-        s.chunks[s.made] = Array<T>(firstChunk << s.made, fill)
+        s.chunks[s.made] = s.first[:0].grown(firstChunk << s.made)
         s.tail = s.chunks[s.made]
         s.made++
     }
