@@ -947,7 +947,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   copy, made in the join's arena - before, in main's frame, ~63 B a spawn for the run) or store into anything but a
   local, or any task reads a global; a lambda task, one calling through a function value or an `any`, and C given a
   function value keep everything, as all tasks did. A let-go the compiler does not follow is a gap:
-  `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. **The oracle, `-free late` (B18b, 2026-11-19, mine):** a build with early freeing off (no
+  `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. **Captures and local copies
+  (2026-11-21, mine; docs/freeing.md):** a value a lambda captures is the lambda's own copy, its parts split, made in
+  the innermost scope open where a lambda held in the frame is made (before, the frame's scope: one copy a turn for the
+  run); a plain local given a copy of a Vec of structs or a field of a view call's value has its parts split too; a
+  trait value of a read-only reference is an alias of the reference. **The oracle, `-free late` (B18b, 2026-11-19, mine):** a build with early freeing off (no
   root decisions: every place keeps until its scope closes); its output must equal the usual build's - checks'
   earlyfree and freeing compare both at a small size, and reviews run their probes both ways, since the build,
   `-sanitize` and the evaluator share the releases and agree on a wrong one (review5 F1). Built 2026-11-15:

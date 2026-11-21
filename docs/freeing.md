@@ -656,3 +656,30 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   Tasks, sharper later: reach is per join and all-or-nothing (any origin of a join's tasks keeps every place its code
   lets go of; places by origin would keep only those reached), a global read by any task counts for every join, and a
   task's own let-goes of values it built itself keep (its stand-ins' regions are its own - the rule's refinement).
+- 2026-11-21, wt-freecap: **a value a lambda captures** (review4's a5, h8's remaining part). D16c makes the capture the
+  lambda's own copy (lower.lambda's ownCopyOf), but the walker escaped what the captured local's value refers into, so
+  `c := v[j]; f := fn() I64 { return c.a[1] }` kept Q.a for "a reference into it is kept here". A capture lowering
+  copies that is a PartsOnly value read whole (`free.capSplit`, no generator's) now refers into nothing it owns
+  (`unowned`), and its copy is built split - each part place's array in a part region of its own (lowering's
+  ownersCopy at the lambda's site, untracked's `capture`): its owners keep for RSplit alone. Found on the way, on master
+  too: a lambda held in the frame (a local only ever called, or made for a call keeping nothing of it - scope's
+  onFrameAt) had its captures' copies made in the frame's scope, one a turn for the run (`f := fn() I64 { return c[1] }`
+  with `c` a Vec: out of memory at 400,000 turns under 8 MB); they are made in the innermost scope open where the lambda
+  is made, which it never outlives. And a local a Let declares with a call letting go of a place (`d := Q.Mk(i)`, its
+  `q.a = ...`) was judged in use after that let-go (condition 6) - its value is made after it; `views` passes it. a5
+  still keeps by the rule (its `r`, a view of the element, is read after the element is replaced); h8 frees. Then
+  review5's o1 and ov1: `w := v` (a Vec<Q>) was a copy made with no store into Q.a (RCopied); `splitLetOf` takes a copy
+  of a place's value too, where the type holds no Map (`mapFree`: a Map's entries split so are let go of by a Put as a
+  gap - gaps.olang's `c := rows[j]` stays untracked), built split by lower.make's ownersCopy. o2: `nm := v[0].n` copies
+  At's value whole (D9h) - `splitLetOf` takes the call whose temporary's field a plain local is given (`fieldTemp`),
+  where its type holds no Map. t2: `bx := Box(v[j].b); s any Summer& = bx` - the any made of a read-only reference to
+  `bx` was an escape of `bx` (typed.LocalUses: AnyMake's argument escapes), so BlockCopy did not take Box's argument
+  copy; a trait value of a read-only reference a reference local is declared with is now an alias of it, as a
+  conversion is. o1, o2, ov1 and t2 pass -check (o1's and ov1's views, o2's generator and t2's `?&` keep by the rule);
+  probes (a copy moved on, `keep = w`, pushed, a capture beside a store of the captured local, a field read into a local
+  reassigned or stored) print the same built, `-free late`, `-sanitize` and interpreted. Fixtures captures, veccopies
+  and fieldreads (400,000 turns under 8 MB; master fails -check on each).
+  **Where to pick up**: g1 (a recursive owner, `T{a Vec<I64>, kids Vec<T>}`) needs the walks to recurse through a type
+  holding itself in a Vec - not started. A copy holding a Map stays untracked (gaps.olang's shape: Put on a split
+  copy's entries is a gap row). A field read into a local assigned again (`nm2 := v[j].n; nm2 = nm2 + "x"`) keeps the
+  call's copy untracked (splitLetOf's ownLocal). Tasks: as wt-taskfree left them.

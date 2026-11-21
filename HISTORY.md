@@ -40403,3 +40403,40 @@ calls while a task holds a view (p5), a task building a Q (p6), a lambda task (p
 `-free late`, `-sanitize` and interpreted, and the `-race` builds report nothing. Fixture tasks (checks' freeing): n1's
 and t1's shapes, the peak address space over a second half of 100,000 turns - flat, where -free late grows 139 MB -
 with the oracles and a `-race` run at a smaller size.
+
+## 2026-11-21: freeing - captures, local copies and a trait value's reference (O8f, D16c, D16d, D9h; mine; wt-freecap)
+
+What was left of `-memory -check`'s list after wt-taskfree: a value captured by a lambda (review4's a5, h8's lambda
+part) and review5's o1, o2, ov1 and t2.
+
+Captures. D16c makes a captured value the lambda's own copy, and lowering built it so (ownCopyOf), but the walker
+escaped what the captured local referred into: `c := v[j]` captured kept Q.a as a view kept. A capture lowering copies
+that is a PartsOnly struct read whole (`free.capSplit`; generators left as they were) now refers into none of what its
+copy owns (`unowned`), and the copy is built split, each part place's array in a part region of its own (ownersCopy at
+the lambda's site, recorded by untracked's new `capture` flag): its owners keep for RSplit only, freeing through their
+parts. The fixture then still ran out of memory under 8 MB: a lambda held in the frame (a local only ever called, or
+made for a call keeping nothing of it - scope.onFrameAt) had its captures' copies made in the frame's scope
+(`copyHome`), one copy a turn for the run - on master too, for any capture owning storage (a Vec captured in a loop:
+out of memory at 400,000 turns). Such a lambda never outlives the innermost scope open where it is made, so its copies
+go there now. And with the capture's keep gone, condition 6 showed one more: `d := Q.Mk(i)` was judged used after
+Q.Mk's own let-go of Q.a (its `q.a = ...`), though the local is given its value after that call; `views` now passes a
+local a Let declares when the let-go is a call in that same statement. a5 still keeps, by the rule: its other lambda
+reads `r`, a view of the element, after the element is replaced.
+
+o1 and ov1: `w := v`, v a Vec<Q>, was a copy made with no store into Q.a (RCopied, a gap). `splitLetOf`, which already
+split `c := v[j]` (At's value copied), takes a copy of a place's value too; lowering's make already tries ownersCopy at
+that site. The freeing scenario's gaps.olang showed the limit: `c := rows[j]`, a Map of Vecs of text, split, made its
+`c.Put` a gap row - so a copy holding a Map stays untracked (`mapFree`). o2: `nm := v[0].n` copies At's value whole
+(D9h) to keep the text past `reset(v)`; `splitLetOf` takes the call whose temporary's field a plain local is given
+(`fieldTemp`), its type holding no Map. t2: `bx := Box(v[j].b); s any Summer& = bx` - LocalUses counted the AnyMake's
+argument an escape, so `bx` was no block holder and BlockCopy did not take the D9h copy of `v[j]`; a trait value made
+of a read-only reference that a reference local is declared with is now an alias of that reference, as a conversion is
+(its uses and escapes are the source's, closeAliases). o1, o2, ov1 and t2 pass -check; what they still keep is the
+rule's (views read after a let-go, a generator across one, a `Q?&` used after an element is replaced).
+
+Probes beside them - a split copy moved on (`keep = w`, pushed into a Vec of Vecs), a captured local stored after the
+lambda is made, a field read into a local reassigned or stored into a struct, a capture of a call's value - each keep
+or free and print the same built, `-free late`, `-sanitize` and interpreted. Writing one found no bug but a reminder:
+`d = Vec<Q>()` on a `mut Vec<Q>&` parameter repoints the reference (S4a), so the caller's
+Vec is unchanged. Fixtures captures, veccopies and fieldreads (400,000 turns under 8 MB; master fails -check on each).
+g1 (a type holding itself in a Vec) is not started.
