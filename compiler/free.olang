@@ -382,13 +382,16 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     spawned Vec<I64>          # the bodies a task calls directly (Spawned)
     # condition 3 by origins (O8f): C given a function value (cAt, by body; cThreads where one is reached) keeps every
     # place, as a task whose code is not known does (taskAll); else a task's own code changing a place keeps it, and a
-    # place let go of in a join's code (joinGoes, AnyPlace for any) keeps where some task may reach the spawner's storage
-    # (taskReach: what an argument refers into, a target not a plain local, a global its code reads)
+    # place let go of in a join's code (joinGoes: the join, by its number in the final walks, and the place - AnyPlace
+    # for any) keeps where that join's tasks may reach the spawner's storage (joinReach: what an argument refers into, a
+    # target not a plain local) or any task reads a global (taskReach)
     cAt Vec<Bool>
     cThreads Bool = false
     taskAll String = ""
     taskReach String = ""
-    joinGoes Vec<I64>
+    joins I64 = 0
+    joinGoes Vec<pair.Pair<I64, I64>>
+    joinReach Map<I64, String>
     taskCopies Vec<pair.Pair<I64, I64>>   # the by-value argument copies a task only reads, by (body, site): no region's
     taskCopyCallee Vec<I64>               # ...each one's call's callee
     fx mut effects.Effects?& = null       # what the tasks' code may do (effects.Facts), made where a program has tasks
@@ -2207,7 +2210,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     storeInside I64 = -1       # ... the place a value of which it is reached through (insidePlace), -1 none
     exemptSite I64 = -1        # the call a store's value is, whose copy (D9h) is made for the place it is stored into
     taskSite I64 = -1          # a spawn's call (its arguments read beside the spawner: lower.args' task)
-    inJoin I64 = 0             # the join blocks the statement is in: its let-goes may run while their tasks do
+    inJoin Vec<I64>            # the join blocks the statement is in (their numbers): its let-goes may run while their tasks do
     copiedCtor I64 = -1        # ... where it is a constructor viewing what it is given, its instance copied into a struct
                                # held in place (viewCtor): the parameters it views are copied there, never stored
     # Part C: QCE's copy of a value handed on (check.ownCopy) as the value of a store into a struct or an element held in
@@ -2285,6 +2288,7 @@ fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
     w.yieldOrig.Clear()
     w.loops = 0
     w.inDefer = 0
+    w.inJoin.Clear()
     w.quiet = 0
     w.storeWithin = -1
     w.storeInside = -1
@@ -2749,9 +2753,12 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Join(_, j) {
             w.F.taskAt[w.Id] = true
-            w.inJoin++
+            if w.Final and w.quiet == 0 {
+                w.inJoin.Push(w.F.joins)
+                w.F.joins++
+            }
             w.block(j.Code)
-            w.inJoin--
+            if w.Final and w.quiet == 0: try w.inJoin.Pop() catch { }
             for c in j.Clauses {
                 if c.Code != null: w.block(c.Code!)
             }
@@ -4096,7 +4103,7 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
     }
     if w.quiet > 0: return
     # (O8f, condition 3: one a join's tasks may run beside - decide's taskKeeps)
-    if w.inJoin > 0: addTo(f.joinGoes, k)
+    for j in w.inJoin: f.joinGoes.Push(pair.Pair(j, k))
     # (O8f: a walk's let-go of a Vec's live elements, where its owner is not decided sole, is a let-go of their place -
     # condition 5's, though the report and the views judge it as the owner's: a Vec<String> or Vec<Array<I64>> pushed to
     # and given another value)
@@ -6984,10 +6991,20 @@ fn (w mut walker&) taskArgs(c typed.Call&, b2 I64, unknown Bool, args Vec<Vec<I6
         if own >= 0 and not f.refsBeyondParts(ps[j]): continue
         for y in o {
             if okind(y) == ONew and oval(y) == own: continue
-            if f.taskReach == "": f.taskReach = "a task is handed what '" + $w.text(a.Span()) + "' refers into"
+            w.reaches("a task is handed what '" + $w.text(a.Span()) + "' refers into")
             if f.Debug: f.debugOut($"free: task reach " + $okind(y) + ":" + $oval(y) + " at " + $f.P.L.Diags.Locate(file, I64(a.Span().Start)) + "\n")
         }
     }
+}
+
+# the join a spawn is in: its tasks may reach the spawner's storage, as why says
+fn (w mut walker&) reaches(why String) {
+    if w.inJoin.Len() == 0 {
+        if w.F.taskAll == "": w.F.taskAll = "a task is spawned outside a join"
+        return
+    }
+    j := w.inJoin[w.inJoin.Len() - 1]
+    if not w.F.joinReach.Has(j): w.F.joinReach.Put(j, why)
 }
 
 # a spawn: a task not known keeps everything; its targets stored into on the task's thread (P1g) - the places they
@@ -7010,7 +7027,7 @@ fn (w mut walker&) spawnSite(s typed.Spawn&, tc typed.Call?&) {
             }
             case _ {
                 f.keep(f.placeOfPlace(p), RTask, w.body().File, p.Span(), why)
-                if f.taskReach == "": f.taskReach = "a task stores its result into '" + $w.text(p.Span()) + "'"
+                w.reaches("a task stores its result into '" + $w.text(p.Span()) + "'")
             }
         }
     }
@@ -7072,9 +7089,11 @@ fn (f mut Free&) taskKeeps() {
     for fd in f.feeds {
         if run[fd.Body]: f.keep(fd.PlaceId, RTask, -1, source.Span(0, 0), own)
     }
-    if f.taskReach == "": return
-    for k in f.joinGoes {
-        why := $f.taskReach + ", and a join's code lets go of it while the task may run"
+    for jk in f.joinGoes {
+        k := jk.Second
+        why := try f.joinReach.Get(jk.First) catch default f.taskReach
+        if why == "": continue
+        why = $why + ", and the join's code lets go of it while the task may run"
         if k != AnyPlace {
             f.keep(k, RTask, -1, source.Span(0, 0), why)
             continue
