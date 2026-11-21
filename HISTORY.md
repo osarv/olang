@@ -40566,3 +40566,59 @@ Corpus: tests/loopref.olang (rows in place through a reference local, a slice an
 through ViewMut, each read back after a churn; a read-only walk copying; `assert rowsWalked() == 1020` decided while
 compiling and a baked global) - built, interpreted (`OLANG_EVALUATE=1`), under `-debug -sanitize` and
 `-memory -check`.
+
+## 2026-11-21: freeing - a field read into a local assigned again, and owners holding themselves (O8f; mine; wt-freeg1)
+
+The last two cases `-memory -check` named (docs/freeing.md's "Where to pick up").
+
+A field read into a local assigned again, `nm := v[j].n; ... nm = v[k].n; nm = nm + "x"`. wt-freecap split At's whole
+copy for a plain local given a field of it (`fieldTemp`), but splitLetOf left out an owner local - a local assigned
+again is one - so the copy stayed untracked and Q.a kept for "made with no store into it", a gap. The owner local's
+own first value is existing storage, which keeps by the rule whatever is done; the copy it reads from need not keep
+Q.a: splitLetOf now takes an owner local's field read (fieldTemp alone, never a whole copy, whose parts would be the
+local's own), at its declaration and, through assignTo, at every assignment of it. Fixture fieldagain.
+
+g1, `T{a Vec<I64>, kids Vec<T>}`. T was no PartsOnly type: PartsOnly answered false for a type while asking about it,
+so a type holding itself in a Vec was never one, and an element's let-go was a gap. It now answers true while asking -
+the greatest answer: every value is finite, so what holds at each level holds for the whole - and forgets every answer
+found under that assumption where the type turns out false. Lowering writes a split copy and an element's release out
+level by level (partOf, splitArray, elemCopy; textWalk's partReleases from depth 0), which for such a type never ends:
+the self-build crashed on the compiler's own self-holding types. `free.SelfHolding` names them, and their elements go
+through two new helpers of the type's, `Split` (fn(x mut T&), the scope the parts go in its one scope: partsCopied)
+and `Release` (fn(x mut T&), no scope: releaseOn of partReleases), each calling itself for the elements its Vecs hold.
+Their guards read the place decisions as link-time constants (Guard of a helper's stand-in body), as every module's
+code does, so a helper is the same in every program.
+
+That made g1 pass -check and still run out of memory; four more things stood in the way, found one by one with
+smaller programs:
+
+- splitOwner refused an owner whose value walks a Vec's elements (T.kids, and R.kids in `R{a, kids Vec<U>}`), a limit
+  f1 had already dropped from partsFree and splitPart; the copy splits it as any other (partOf's splitArray), and its
+  let-goes walk it. Then condition 6 kept Vec<I64>'s buffers in `t.kids.Push(U.Mk(i + k))`: the statement reads
+  t.kids, and both calls let go of that place. U.Mk is given plain data alone and reaches no global (effects: no global
+  read, write or reference, no WritesOut, no function value not followed, no task) - what it lets go of it built
+  itself, so no view of the caller's can name it (`ownGoes`, the let-go judged against no view). Push lets go through
+  its receiver, a place of a local's lent writably to it: what it lets go of through that reference is the container's
+  value as it is then (`writableLend`; the read is the call's own argument). Both shapes fail -check on master for the
+  non-recursive R too.
+- T.kids, changed in place by Push, frees through its parts where partsFree says so; partsFree asked of T.kids asked it
+  again through T's own elements, to its depth limit. Asked again while asked, a place is taken to free (the same
+  greatest answer).
+- A struct element holding an empty Vec - kids left as T() made it - leaked ~1.3 KB a turn, on master too, while
+  -check passed: the element's split copy made a part region for the empty buffer and copied it there, a zero-length
+  allocation that names the region, so settling (meant to release a part region holding nothing) kept it, and an
+  empty array's release_part finds nothing to release. Lowering makes such an array zero bits before it settles
+  (`zeroEmpty`, in partOf, elemArrayCopy and settled); an empty array is the same value either way.
+- `rows[j] = T.Leaf(i)` placed T.Leaf's value in main's frame, one a turn, with or without early freeing: SetAt's
+  by-value x had to outlive the Vec because types.SharesRefs walked T to its depth limit (16) and answered true. A named
+  type SharesRefs is already walking adds nothing now, as ReachesCode's walk does.
+
+Fixture owntrees: trees of depth 2 replaced, and R's with a Vec<U>, 200,000 turns under 8 MB; with fieldagain, master
+fails -check on each, and built, `-free late`, `-sanitize` and interpreted print the same. Probes beside them (the
+leaves alone, empty kids, a non-recursive maker, a local holding the tree) agree too.
+
+Found, not fixed: `for i in range 20 { v[i % 4].n = $"m" + $i }` with v a Vec<Q{n String}> builds the text in the
+turn's scope - v then names freed storage (prints "m19 m19" for "m18 m19"; interpreted, "uses storage after the scope
+it was made in closed") - on master and on the compilers in .bootcache alike; `v.RefMut(i % 4).n = s` is right, as is a
+fixed array's `a[i].n = s`. It is check.writeBack's in-place path (RefMut into a hidden local, the store through it);
+making that local a Var did not change it. Left for a scope-pass agent (docs/freeing.md).

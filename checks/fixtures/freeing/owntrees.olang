@@ -1,0 +1,53 @@
+import "std/io"
+
+# O8f (docs/freeing.md, review4's g1): a type holding itself in a Vec (`T{a Vec<I64>, kids Vec<T>}`) is PartsOnly - its
+# copies split each part into a part region of its own, its elements' let-goes release them, both through a helper of
+# the type's calling itself (lowering's Split and Release); a Vec<U> field of U's PartsOnly too (`R{a, kids Vec<U>}`);
+# and a call given plain data alone, reaching no global, lets go only of what it built (free.ownGoes) - so the trees
+# replaced, and the leaves holding an empty Vec, free at once
+N I64 = 200000
+
+type T struct() { a Vec<I64>, kids Vec<T> }
+
+type U struct() { b Vec<I64> }
+
+type R struct() { a Vec<I64>, kids Vec<U> }
+
+fn T.Mk(i I64, d I64) T {
+    t := T()
+    t.a = Vec<I64>[i, i + 1]
+    if d > 0 {
+        for k in range 2: t.kids.Push(T.Mk(i + k, d - 1))
+    }
+    return t
+}
+
+fn U.Mk(i I64) U {
+    u := U()
+    u.b = Vec<I64>[i, i + 3]
+    return u
+}
+
+fn R.Mk(i I64) R {
+    r := R()
+    r.a = Vec<I64>[i, i + 1]
+    for k in range 2: r.kids.Push(U.Mk(i + k))
+    return r
+}
+
+fn main() {
+    rows Vec<T>
+    cols Vec<R>
+    for k in range 4 {
+        rows.Push(T.Mk(k, 2))
+        cols.Push(R.Mk(k))
+    }
+    s := 0
+    for i in range N {
+        j := i % 4
+        rows[j] = T.Mk(i, 2)
+        cols[(j + 1) % 4] = R.Mk(i)
+        s += rows[j].kids[1].kids[0].a[0] + rows[(j + 1) % 4].a[1] + cols[j].kids[1].b[1] + rows[j].kids[0].kids[1].kids.Len()
+    }
+    io.PutLn($s + " " + $rows.Len() + " " + $cols.Len())!
+}

@@ -954,7 +954,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (2026-11-21, mine; docs/freeing.md):** a value a lambda captures is the lambda's own copy, its parts split, made in
   the innermost scope open where a lambda held in the frame is made (before, the frame's scope: one copy a turn for the
   run); a plain local given a copy of a Vec of structs or a field of a view call's value has its parts split too; a
-  trait value of a read-only reference is an alias of the reference. **The oracle, `-free late` (B18b, 2026-11-19, mine):** a build with early freeing off (no
+  trait value of a read-only reference is an alias of the reference. **Owners holding themselves (2026-11-21, mine;
+  docs/freeing.md):** a struct holding itself in a Vec (`T{a Vec<I64>, kids Vec<T>}`) is PartsOnly, found as the
+  greatest answer; its split copy and its let-go's release recurse at run time through two helpers of the type's
+  (Split, Release); a field read into a local assigned again (`nm = v[k].n`) splits that copy at each assignment; a call
+  given plain data alone and reaching no global lets go only of what it built (no view of the caller's is judged
+  against it), nor does a call let go through a place lent to it writably; an empty array left in a part region is made
+  zero bits so its region is released at once. **The oracle, `-free late` (B18b, 2026-11-19, mine):** a build with early freeing off (no
   root decisions: every place keeps until its scope closes); its output must equal the usual build's - checks'
   earlyfree and freeing compare both at a small size, and reviews run their probes both ways, since the build,
   `-sanitize` and the evaluator share the releases and agree on a wrong one (review5 F1). Built 2026-11-15:

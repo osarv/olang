@@ -759,7 +759,9 @@ kind, not by `ScopeVarsOf`: `Render`, `fn(x T&, depth I64)`, writes `$x` into th
 calling a `Str` through `Inert`, section 1.8), `depth` the references followed to reach it - at 8 a reference is
 written `...`; `Equal`, `fn(a T&, b T&) Bool`, and `Hash`, `fn(x T&) I64`, pass no
 scope and call nothing; `Zero`, `fn() T`, a type's zero value (D13c), passes its result scope where the value holds
-references. A constructor's assembly is an `Aggregate` in the constructor's own function, not a helper.
+references; `Split`, `fn(x mut T&)`, and `Release`, `fn(x mut T&)`, for a PartsOnly type holding itself in a Vec
+(free.SelfHolding, O8f): its parts copied into part regions of the one scope `Split` passes, and what an element's
+let-go of it releases (`Release` passes none) - each calling itself for the elements its Vecs hold. A constructor's assembly is an `Aggregate` in the constructor's own function, not a helper.
 
 **Keys.** A decision about a node is kept under a key (`Key`), never written onto the tree or the MIR: an assert S18c
 decided (`BodyId`, span), a baked global K2 (module, name), a literal's constructor T29d (`BodyId`, `SiteId`), a type's

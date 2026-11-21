@@ -208,6 +208,7 @@ type Table struct(Names mut source.Names&) {
     promiseKeys Map<Array<I64>&, I64>
     refHolds Vec<U8>                    # HoldsRefs, once asked, by type: 1 being asked, 2 no, 3 yes (0 not asked)
     holdsUnsure Bool = false            # HoldsRefs met a part whose type is not known yet: nothing it found is kept
+    sharesWalk Vec<TypeId>              # the named types SharesRefs is walking, outermost first
     ints Vec<TypeId>                   # T4a: the integer type of each width, I1 .. I128 at 1 .. 128, U1 .. U128 above
     copyDecls Map<I64, Bool>           # E31d: the declared types (by DeclId) that declare their own Copy
     uniqueDecls Map<I64, Bool>         # T13b: the declared types (by DeclId) declared unique
@@ -1373,12 +1374,20 @@ fn (t mut Table&) sharesRefs(id TypeId, depth I64) Bool {
     match k {
         case Kind.Named {
             if not t.HasBody(id): return true
-            return match t.DeclKindOf(t.DeclOf(id)) {
+            # (a type holding itself through an array - `T{a Vec<I64>, kids Vec<T>}` - adds nothing where it comes
+            # round again: what it shares is what one level of it shares, each value being finite)
+            for w in t.sharesWalk {
+                if w == id: return false
+            }
+            t.sharesWalk.Push(id)
+            r := match t.DeclKindOf(t.DeclOf(id)) {
                 case DeclKind.Struct: t.listShares(t.Fields(id), depth, false)
                 case DeclKind.Enum: t.listShares(t.Cases(id), depth, true)
                 case DeclKind.Over: t.sharesRefs(t.Base(id), depth + 1)
                 case _: false
             }
+            try t.sharesWalk.Pop() catch { }
+            return r
         }
         case Kind.Array { return t.sharesRefs(t.Elem(id), depth + 1) }
         case Kind.Tuple, Kind.Record { return t.listShares(t.Parts(id), depth, false) }
