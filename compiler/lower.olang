@@ -1121,7 +1121,7 @@ fn (ln mut lowering&) splitCopy(site I64, v mir.Operand, ty types.TypeId, at mir
         }
         ln.copyPart(ln.with(pl(mir.Base.Local(d)), mir.Proj.Field(e >> 32)), ln.partsOf(ty)[e >> 32], into, sp)
     }
-    ln.splitParts(pl(mir.Base.Local(d)), ty, path, 0, at, rest, sp, fr.SlotParts(I64(ln.B.Id), site))
+    ln.splitParts(pl(mir.Base.Local(d)), ty, path, 0, at, rest, sp, fr.SlotParts(I64(ln.B.Id), site), fr.LeafParts(I64(ln.B.Id), site))
     return mir.Operand.Copy(mir.Lvalue.L(d))
 }
 
@@ -1435,15 +1435,18 @@ fn (ln mut lowering&) partOf(p pl, ty types.TypeId, i I64, rest mir.ScopeRef, sp
     if after != mir.NoBlock: ln.joinAt(after)
 }
 
+# (leafParts: the leaf's value copied with each part place's array in a part region of its own, a kid of at -
+# free.LeafParts, partsCopied - so that the owners it holds free through their parts)
 fn (ln mut lowering&) splitParts(p pl, ty types.TypeId, path Array<I64>&, depth I64, at mir.ScopeRef, rest mir.ScopeRef
-                                 sp source.Span, slotted Array<I64> = Array<I64>(0)) {
+                                 sp source.Span, slotted Array<I64> = Array<I64>(0), leafParts Bool = false) {
     fs := ln.partsOf(ty)
     for i in range fs.Len() {
         q := ln.with(p, mir.Proj.Field(i))
         if depth == 0 and slottedField(slotted, i): continue
         if i != path[depth]: ln.copyPart(q, fs[i], rest, sp)
+        else if depth + 1 == path.Len() and leafParts: ln.partsCopied(q, fs[i], at, sp)
         else if depth + 1 == path.Len(): ln.copyPart(q, fs[i], at, sp)
-        else: ln.splitParts(q, fs[i], path, depth + 1, at, rest, sp)
+        else: ln.splitParts(q, fs[i], path, depth + 1, at, rest, sp, Array<I64>(0), leafParts)
     }
 }
 
@@ -5286,6 +5289,10 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
             if bl >= 0 and not heldRef(at): at = ln.scopeRef(typed.Scope.Block(ln.B.Locals[bl].In))
             sv := ln.splitCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
             if sv != mir.Operand.None: return sv
+            # (gap 22, v8: a constructor's instance made for its one owner leaf - add's `MapEntry<K, V>(key, value)` - its
+            # parts in part regions, free.viewCtor's split)
+            ov := ln.ownerCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
+            if ov != mir.Operand.None: return ov
             # (review4's a5: a plain value local's copy, its parts in part regions - free.splitLetOf)
             wv := ln.ownersCopy(I64(c.Site), mir.Operand.Copy(mir.Lvalue.L(dest)), ty, at, sp)
             if wv != mir.Operand.None: return wv

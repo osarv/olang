@@ -581,9 +581,20 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   and a read-only reference given through an any's table whose signature writes no keeps is a use, not an escape
   (`typed.LocalUses.tableRef`: every body the table reaches keeps nothing of it, T21c/T32b), so `s.Sum()` leaves the
   local a block view. anyholders (the element replaced and popped while the holder lives; 400,000 turns under 8 MB).
-  **Where to pick up**: v8 needs the `Map<K, Q>` Put shape above first (both copies built split for Q.a, lowering's
-  order splitCopy/partCopy/ownerCopy/ownersCopy checked at both sites); a Map's own value put (v8: `m.Put(k, m.Get(j)!)`, the Get under a try given a parameter Put
-  stores - copied there, so lowering reads it in place, but free's viewArg asks Preserves and copiedCall stops at the
-  try); `c` captured by a lambda (a5's `g`) keeps as a named view (places by path would tell it from `Q.a`); tasks
-  (a7, h8, n1, t1) still free nothing early; still named: g1, h8, j1, n1, review5's o1, o2, ov1, s3, t1, v8 (review5's probes were lost with /tmp; t2 and v8
+- 2026-11-21, wt-mapput: v8, a `Map<K, Q>`'s value replaced by Put (Q a struct holding a Vec). Put's copy into the
+  entry's Value (an owner place of its own) was already built split by lowering (`lower.ownerCopy`: Q's bytes in the
+  Value's region, the Vec's buffer in a part region of its own, a kid of it), but the walker judged the copy untracked,
+  so Q.a kept for RCopied - every Q.a in the program, Q.Mk's own `q.a = ...` too. A copy stored whole into an owner
+  place (`walker.ownerSplitOf`) has its judgement held until its store is pushed (`ownerSettle`): made for the place
+  there (SFresh at the copy's site, so OwnerSite is set and lowering's ownerCopy builds it), the owners its value holds
+  keep for RSplit alone, freeing through their parts; else as untracked says. add's `MapEntry<K, V>(key, value)`, an
+  instance viewing its parameters whose call is copied (D9h), had that copy built whole: the view call's copy now tries
+  ownerCopy after splitCopy (one owner leaf that is all the storage the instance owns, a `Map<I64, Q>`'s), and a split
+  copy (a `Map<String, Q>`'s entry, its key text in slots) has the owner leaf's value copied with its parts in part
+  regions (`free.LeafParts`, `lower.splitParts`' partsCopied); `walker.viewCtor` judges both RSplit. Then
+  `m.Put(k, m.Get(j)!)`: lowering reads the Get's value where it stands or copies it into the statement's innermost
+  scope (readHere passes a try on), but free's viewArg found the call with copiedCall, which stops at a try - now
+  `argCall` follows it. Fixture mapowners (both Maps, 200,000 turns under 8 MB; master out of memory on the Get put).
+  **Where to pick up**: `c` captured by a lambda (a5's `g`) keeps as a named view (places by path would tell it from `Q.a`); tasks
+  (a7, h8, n1, t1) still free nothing early; still named: g1, h8, j1, n1, review5's o1, o2, ov1, s3, t1 (review5's probes were lost with /tmp; t2 and v8
   rewritten in wt-freeopen3, the rest to rewrite from review5.md's descriptions).

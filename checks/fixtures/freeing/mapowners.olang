@@ -1,0 +1,30 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22, review5's v8): a Map<K, Q>'s value, Q a struct holding a Vec, replaced by Put - with a
+# new value and with one of its own values read through a try (Get's value, read where it stands) - frees the old
+# value's Vec at once: Put's copy into the entry and add's entry built with the Vec's buffer in a part region of its
+# own (lower.ownerCopy), the struct's owner field freeing through its parts. Master: every turn's Vec kept
+N I64 = 200000
+
+type Q struct() { a Vec<I64> }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.a = Vec<I64>[i, i + 1, i + 2, i + 3]
+    return q
+}
+
+fn main() {
+    m Map<I64, Q>
+    s Map<String, Q>
+    t := 0
+    for i in range N {
+        m.Put(i % 5, Q.Mk(i))
+        m.Put((i + 1) % 5, m.Get(i % 5)!)
+        t += m.Get((i + 1) % 5)!.a[1] + m.Get(i % 5)!.a.Len()
+        s.Put("k" + $(i % 3), Q.Mk(i))
+        if i % 7 == 0: s.Remove("k" + $(i % 3))
+        t += (try s.Get("k1") catch default Q()).a.Len()
+    }
+    io.PutLn($t + " " + $m.Len() + " " + $s.Len())!
+}

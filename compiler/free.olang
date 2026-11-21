@@ -399,6 +399,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     slotAt Map<pair.Pair<I64, I64>, Array<I64>>   # O8f: a split copy's slot parts, by (body, site): field << 32 | place
     partAt Map<pair.Pair<I64, I64>, I64>    # O8f: the sites a part place's value is built at, in a part region (PartPlace): the place
     ownerAt Map<pair.Pair<I64, I64>, I64>   # O8f (gap 22): the copies made for an owner place, by (body, site): the place (OwnerSite)
+    leafPartsAt Map<pair.Pair<I64, I64>, Bool>   # (and the split copies whose owner leaf's value has its parts split too: LeafParts)
     ownersAt Map<pair.Pair<I64, I64>, Bool> # O8f (gap 22): copies of a value with several owner leaves, parts split (OwnersSite)
     arraysAt Map<pair.Pair<I64, I64>, Bool> # O8f (c1's keep): copies stored into an element array place, its elements' parts split (ArraysSite)
     partsAsked Map<types.TypeId, Bool>      # O8f: PartsOnly by type - false while it is being found (a type holding itself)
@@ -2185,6 +2186,10 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     copyExempt I64 = -1
     splitArr I64 = -1          # the site of a copy stored into an element array place of PartsOnly values (untracked's split)
     splitLet I64 = -1          # the site of the view call a plain value local is declared with (splitLetOf)
+    ownerSplit I64 = -1        # the site of a copy stored whole into an owner place (ownerSplitOf), judged after its store
+    ownerHeld types.TypeId = types.UnknownT  # (that copy's type, untracked's judgement held until the store says how it is built)
+    ownerHeldSp source.Span
+    ownerHeldHow String& = ""
     readArg I64 = -1           # the call whose value is the argument walked, a temporary lent read-only (tempCall)
     copyRead I64 = -1
     # Part C: by let-go, the Defer statement whose block's end it stands at (a holder's drop), -1 for its own statement;
@@ -2454,6 +2459,12 @@ fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
 fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made Bool = false, filled Bool = false
                              block Bool = false, site I64 = -1, split Bool = false) {
     if not w.Final or w.quiet > 0: return
+    # (O8f, gap 22: a copy stored whole into an owner place - judged once its store says whether it is made for the
+    # place, ownerSettle)
+    if made and site >= 0 and site == w.ownerSplit {
+        w.ownerHeld, w.ownerHeldSp, w.ownerHeldHow = ty, sp, how
+        return
+    }
     fills := w.F.fillOwners(ty, block) if filled else Vec<I64>()
     # (O8f, gap 22: a fixed fill whose elements' owner fields are not built as their stores build them - one returned,
     # or stored where an owner's region may hold it - has each element's parts in part regions (lower.fill's
@@ -2505,6 +2516,45 @@ fn (w mut walker&) splitLetOf(l I64, x typed.Expr&) I64 {
     c := initCall(x)
     if c == null or not w.F.PartsOnly(x.Type()) or w.T().RunsCopy(x.Type()): return -1
     return I64(c.Site)
+}
+
+# O8f (gap 22, v8): the site of the copy x is, where it is stored whole into owner place k - a Map entry's Value given a
+# struct holding a Vec, Put's `m.ents[i].Value = value`: a store that makes it for the place has it built with each
+# part place's array in a part region of its own (lower.ownerCopy, OwnerSite), so that the owners it holds keep for that
+# alone (RSplit), freeing through their parts; -1 for none
+fn (w mut walker&) ownerSplitOf(k I64, x typed.Expr&) I64 {
+    f := w.F
+    if k < 0 or not f.IsOwner(k) or f.PartPlace(k) or f.SlotPlace(k): return -1
+    site := ownCopySite(x)
+    if site < 0 or not f.PartsOnly(x.Type()) or w.T().RunsCopy(x.Type()): return -1
+    return site
+}
+
+# the judgement untracked held for the copy at ownerSplit, once its store into place k is pushed: made for the place
+# there (SFresh at that site - lowering's ownerCopy builds it split), its owners keep for RSplit; anything else, as
+# untracked says
+fn (w mut walker&) ownerSettle(k I64) {
+    site := w.ownerSplit
+    ty := w.ownerHeld
+    w.ownerSplit = -1
+    w.ownerHeld = types.UnknownT
+    if ty == types.UnknownT or not w.Final or w.quiet > 0: return
+    f := w.F
+    fresh := false
+    for i := f.stores.Len() - 1, i >= 0, i-- {
+        st := f.stores[i]
+        if st.PlaceId != k or st.Body != w.Id: continue
+        fresh = st.Kind == SFresh and st.X != null and f.topSite(st.X!) == site
+        break
+    }
+    if not fresh {
+        w.untracked(ty, w.ownerHeldSp, w.ownerHeldHow, true, false, false, site)
+        return
+    }
+    for k2 in f.heldPlaces(ty) {
+        if f.PartPlace(k2) or f.SlotPlace(k2): continue
+        f.keep(k2, RSplit, w.body().File, w.ownerHeldSp, $"a value holding it is made with no store into it, its parts each built for their own places, by " + $w.ownerHeldHow + ": '" + $w.text(w.ownerHeldSp) + "'")
+    }
 }
 
 # O8f (gap 22): the site of the fill local l is declared with, where lowering builds its elements' owner fields as
@@ -2581,6 +2631,8 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             wasF, wasL := w.plainFill, w.splitLet
             w.plainFill = w.plainFillOf(I64(l), x)
             w.splitLet = w.splitLetOf(I64(l), x)
+            wasO := w.ownerSplit
+            w.ownerSplit = w.ownerSplitOf(w.F.placeKey(w.ctorTy, fk), x) if fk >= 0 else -1
             o := Vec<I64>() if unset else w.expr(x)
             w.plainFill, w.splitLet = wasF, wasL
             w.copyExempt = exemptWas
@@ -2600,6 +2652,8 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             w.give(I64(l), o)
             k := try w.fields.Get(I64(l)) catch default -1
             if k >= 0: w.storeField(k, x, o, sp)
+            if w.ownerHeld != types.UnknownT: w.ownerSettle(-1)
+            w.ownerSplit = wasO
             if k >= 0: w.wholeField(k, x)
             ol := w.ownLocal(I64(l))
             if ol >= 0 and unset and w.Final and w.quiet == 0: w.F.stores.Push(store(ol, w.Id, w.body().File, sp, SOk, -1, -1, x, null))
@@ -2709,6 +2763,14 @@ fn (w mut walker&) result(o Vec<I64>&) {
 }
 
 fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
+    wasO := w.ownerSplit
+    w.ownerSplit = -1 if p == typed.Lvalue.Local else w.ownerSplitOf(w.F.placeOfPlace(p), x)
+    w.assignTo(sp, p, x)
+    if w.ownerHeld != types.UnknownT: w.ownerSettle(-1)
+    w.ownerSplit = wasO
+}
+
+fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     w.unfollowed(sp, p)
     w.targets.Push(p)
     c0 := typed.Call.Of(x)
@@ -3693,10 +3755,27 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
         if f.IsOwner(lf.PlaceId): owners.Push(lf.PlaceId)
         if f.arr[lf.PlaceId] and not f.IsOwner(lf.PlaceId): arrs.Push(lf.PlaceId)
     }
+    # (O8f, gap 22, v8: the copy made for its one owner leaf whole - a Map entry's Value holding a struct with a Vec, add's
+    # `MapEntry<K, V>(key, value)` - built with each part place's array in a part region of its own, lower.ownerCopy at
+    # the call's site: the owners its value holds keep for that alone, RSplit)
+    split := owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.topSite(x) == I64(c.Site) and not f.PartPlace(owners[0]) and
+             not f.SlotPlace(owners[0]) and f.onlyLeaf(x.Type(), lvs, owners[0]) and f.PartsOnly(x.Type()) and not w.T().RunsCopy(x.Type())
+    # (...or beside other leaves - a Map<String, Q>'s entry, its key text in slots: the copy split (SplitPath), the owner
+    # leaf's value copied into its region with its own parts in part regions, LeafParts)
+    if not split and owners.Len() == 1 and c.Site >= typed.SiteId(0) and f.topSite(x) == I64(c.Site) and not f.PartPlace(owners[0]) and
+       not f.SlotPlace(owners[0]) and not w.T().RunsCopy(x.Type()) and f.PartsOnly(f.valTy[owners[0]]) and not w.T().RunsCopy(f.valTy[owners[0]]) and f.splitLeaf(w.Id, I64(c.Site), x.Type(), lvs, owners[0]) {
+        split = true
+        f.leafPartsAt.Put(pair.Pair(w.Id, I64(c.Site)), true)
+    }
     # (the places the copy's parts hold in turn - a Vec part's buffer, an array part's text elements - are given values
     # with no store into them, as at any copy: untracked, which the call this copy is exempt from would have said)
     for k in f.heldPlaces(x.Type()) {
-        if k not in leafIds and not f.PartPlace(k): f.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by a call's value copied: '" + $w.text(x.Span()) + "'")
+        if k in leafIds or f.PartPlace(k): continue
+        if split and not f.SlotPlace(k) {
+            f.keep(k, RSplit, w.body().File, sp, $"a value holding it is made with no store into it, its parts each built for their own places, by a call's value copied: '" + $w.text(x.Span()) + "'")
+            continue
+        }
+        f.keep(k, RCopied, w.body().File, sp, $"a value holding it is made with no store into it, by a call's value copied: '" + $w.text(x.Span()) + "'")
     }
     # an array leaf that is the only storage the copy owns (a Map entry's key text beside a reference) is made for as an
     # owner leaf is: built in its region, released where the entry is removed
@@ -4620,14 +4699,14 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         # lower.unviewedArg: the result is storage of its own, `v[i] = plus(v[i], 1)`)
         unviewed := j < typed.ViewBits and (f.viewsOf(b2) & (I64(1) << j)) == 0 and not f.refsBeyondParts(ty) if b2 >= 0 else false
         viewArg := not copied and not unknown and b2 >= 0 and (not w.holds(ty) or unviewed) and I64(c.Site) != w.taskSite and j < ps.Len()
-        viewArg = viewArg and not w.T().IsRef(ps[j]) and copiedCall(a) >= 0 and f.Keeps != null and f.Keeps!(b2, j)
+        viewArg = viewArg and not w.T().IsRef(ps[j]) and argCall(a) >= 0 and f.Keeps != null and f.Keeps!(b2, j)
         if copied or viewArg: w.copying++
         # (O8f, gap 22: a by-value argument's copy a callee only reads - Preserves: written through nowhere, kept nowhere,
         # handed back nowhere - is let go through no place: the callee's parameter is all that holds it, until the scope
         # it was built in closes; what the callee copies out of it is judged where that copy goes)
         wasP, wasE := w.preservedArg, w.exemptSite
         if copied and f.Keeps != null and f.Keeps!(b2, j): w.preservedArg = copySiteOf(a)
-        if viewArg: w.exemptSite = copiedCall(a)
+        if viewArg: w.exemptSite = argCall(a)
         # (or one a value local holding the call's value in its own block is declared with: lowering copies it into
         # that block, dead with the local - BlockCopy - no value a store gives a place, no view of the collection's)
         if not copied and not unknown and not viewArg and I64(c.Site) != w.taskSite and j < ps.Len() and not w.T().IsRef(ps[j]) and f.BlockCopy(w.Id, f.viewCallSite(a)) >= 0 {
@@ -5245,6 +5324,7 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wh
     }
     if w.Final and has(o, orig(OPl, k)) and k != w.storeInside and w.paramOf(x) < 0 {
         w.made(k, x, sp, multi)
+        if w.ownerHeld != types.UnknownT and ownCopySite(x) == w.ownerSplit: w.ownerSettle(k)
         f.keep(k, RStore, w.body().File, sp, $"a reference into it is stored here, in '" + $where + "'; store a copy, '$(...)'" if where != "" else "a reference into it is stored here; store a copy, '$(...)'")
         return
     }
@@ -5271,6 +5351,7 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wh
         return
     }
     w.made(k, x, sp, multi)
+    if w.ownerHeld != types.UnknownT and ownCopySite(x) == w.ownerSplit: w.ownerSettle(k)
 }
 
 # ---- a parameter stored on one path more than once ----
@@ -7192,6 +7273,11 @@ fn (f Free&) OwnerSite(b I64, site I64) I64 { return try f.ownerAt.Get(pair.Pair
 # splits (copyLeaves' ownersSplit, lower.ownersCopy)
 fn (f Free&) OwnersSite(b I64, site I64) Bool { return f.Done and f.ownersAt.Has(pair.Pair(b, site)) }
 
+# O8f (gap 22): whether the split copy made at site of body b (SplitPath) has its owner leaf's value copied with each
+# part place's array in a part region of its own (lower.splitCopy's partsCopied - free.viewCtor), so that the owners that
+# value holds free through their parts
+fn (f Free&) LeafParts(b I64, site I64) Bool { return f.Done and f.leafPartsAt.Has(pair.Pair(b, site)) }
+
 # O8f (c1's keep): whether a copy made at site of body b is of an element array of PartsOnly values stored into its
 # element place (elemArray) - lowering builds each element's parts in part regions where their places are decided sole,
 # whatever the element place's decision (lower.arraysCopy)
@@ -7355,6 +7441,16 @@ fn copiedCall(x typed.Expr&) I64 {
         case typed.Expr.Call(_, _, c): I64(c.Site)
         case typed.Expr.Away(_, _, y): copiedCall(y)
         case _: -1
+    }
+}
+
+# the site of the call an argument is, through a try that passes its value on as it is (lower.readHere: `m.Put(k,
+# m.Get(j)!)`, a clause running only where the call gave none) - copiedCall's otherwise; -1 for none
+fn argCall(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Try(_, _, tr): argCall(tr.X!) if tr.X != null else -1
+        case typed.Expr.Away(_, _, y): argCall(y)
+        case _: copiedCall(x)
     }
 }
 

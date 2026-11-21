@@ -40279,3 +40279,39 @@ block's end nor handed back as it is by `lower.movedRets`), and a return of such
 (the caller's drop releases nothing). Missed frees only for that shape. Run case o8fmovedcopy (`-sanitize`).
 
 - 2026-11-21 sanfix: checks' `earlyfree` and `freeing` also build each fixture with `-sanitize` at the small size and require the usual output (review6: a double release only `-sanitize` caught; `-free late` cannot see one); docs/freeing.md 1.3 names both oracles.
+
+## 2026-11-21: freeing - a Map<K, Q>'s values replaced by Put (O8f; mine; wt-mapput)
+
+From wt-freeopen3's "where to pick up": review5's v8, a `Map<K, Q>` with Q a struct holding a Vec, freed nothing on
+Put by the report (master too). The memory was mostly fine - Put replaces the entry's Value, an owner place decided
+sole, whose region holds the whole value - but Q.a was kept for RCopied, "made with no store into it", so `-memory
+-check` failed and every other let-go of Q.a (Q.Mk's own `q.a = ...`) kept. Three copies made Q.a values with no store
+into Q.a.
+
+Put's `m.ents[i].Value = value` copies the parameter into the Value place. Lowering already built that copy split
+(`lower.ownerCopy`: the copy made for an owner place, OwnerSite, Q's bytes in the place's region and the Vec's buffer
+in a part region of its own, a kid of it), as a Vec<Q>'s SetAt is; the walker judged it untracked before its store was
+known. A copy stored whole into an owner place (`walker.ownerSplitOf`: the place an owner and no part or slot place,
+the value PartsOnly and running no declared Copy) now has its judgement held until the store is pushed
+(`walker.ownerSettle`): where the store makes it for the place - SFresh at the copy's own site, exactly what writePlans
+reads to set OwnerSite - the owners it holds keep for RSplit alone, freeing through their parts; anything else is
+judged as untracked always did. The constructor's own field copy (`Value V = value`) is the same shape and is judged
+the same way.
+
+add's `m.ents[i].occupy(MapEntry<K, V>(key, value))`: the instance views its parameters (CtorViews), so the
+constructor's copy is left out and the call's value is copied where it is kept (D9h) - in the view-call path, which
+tried splitCopy, ownersCopy and arraysCopy and else copied whole, the Vec's buffer in the Value's region. The view
+call's copy now tries ownerCopy after splitCopy: where the instance's one owner leaf is all the storage it owns (a
+`Map<I64, Q>`'s entry) the whole instance is copied with its parts in part regions. Where it owns more (a `Map<String,
+Q>`'s entry, the key text in slots) the copy is split (SplitPath) and the owner leaf's value is now copied with its
+parts in part regions too (`free.LeafParts`, `lower.splitParts`' partsCopied in place of copyPart at the leaf).
+`walker.viewCtor` judges both shapes RSplit, under the same conditions lowering reads. wt-freeopen3's attempt judged
+only Put's copy and stopped at add's, whose copy did not match an RSplit judgement; here both sites build what the
+judgement says.
+
+Then `m.Put(k, m.Get(j)!)`: Put's result holds nothing and it writes nothing of `value`, so lowering reads the Get's
+value where it stands or copies it into the statement's innermost scope (readHere passes a try on), no value a store
+gives a place. Free's viewArg, which exempts that copy, found the call with copiedCall, which stops at a try; viewArg
+now uses `argCall`, which follows a try (copiedCall is unchanged for its other users). Fixture mapowners: a
+`Map<I64, Q>` given new values and one of its own values, a `Map<String, Q>` with removals, 200,000 turns under 8 MB
+(master out of memory on the Get put); the same output built, `-free late`, `-sanitize` and interpreted.
