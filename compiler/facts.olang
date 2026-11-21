@@ -48,6 +48,14 @@ fn (t mut Table&) Read(reader I64, name String&) String ? Undecided {
     return v
 }
 
+# Read's record of a read where the value itself is not wanted (the code reads what it decides from elsewhere): the
+# value is not copied out - a whole-program value every function's lowering reads is a long one
+fn (t mut Table&) Note(reader I64, name String&) ? Undecided {
+    if not t.values.Has(name): error Undecided
+    t.Reads++
+    t.reads.Put($reader + " " + $name, true)
+}
+
 # every fact of a kind forgotten, with the reads of it - a pass deciding them again (the checker's next attempt)
 fn (t mut Table&) Forget(kind String&) {
     gone Vec<String&>
@@ -67,18 +75,28 @@ fn (t mut Table&) Forget(kind String&) {
 }
 
 # reader's record: a "read VALUE NAME" line for each fact it read (only those an importer carries, without own),
-# sorted - "" for none. VALUE is the value where it is short and a word, else "#" and its hash
-fn (t Table&) Record(reader I64, own Bool) String {
+# sorted - "" for none. VALUE is the value where it is short and a word, else "#" and its hash - taken from tokens
+# (Tokens) where given, so a value every module reads is hashed once, not once for each
+fn (t Table&) Record(reader I64, own Bool, tokens Map<String, String>?& = null) String {
     at := $reader + " "
     lines Vec<String&>
     for rk in t.reads.Keys() {
         if not rk.StartsWith(at): continue
         k := rk[at.Len():]
         if not own and not t.carried.Has(k): continue
-        lines.Push($"read " + $Token(try t.values.Get(k) catch default "") + " " + $k)
+        v := try t.values.Get(k) catch default ""
+        tok := (try tokens.Get(k) catch default Token(v)) if tokens != null else Token(v)
+        lines.Push($"read " + $tok + " " + $k)
     }
     lines.Sort(fn(a String&, b String&) Bool { return a < b })
     return lines.Join("\n")
+}
+
+# every decided fact's VALUE as a record writes it (Token), by name
+fn (t Table&) Tokens() Map<String, String> {
+    out := Map<String, String>()
+    for k in t.values.Keys(): out.Put(k, Token(try t.values.Get(k) catch default ""))
+    return out
 }
 
 # whether every "read VALUE NAME" line of a record holds in this table: each name decided, with that value. A line of
@@ -110,7 +128,10 @@ test Table "records only what was read, and holds a record only where every valu
     assert t.Record(7, true) == "read copy E31b a@9\nread true G42 a@3 Allocates"
     assert t.Record(7, false) == "read true G42 a@3 Allocates"
     assert t.Record(8, true) == ""
+    assert t.Record(7, true, t.Tokens()) == t.Record(7, true)
     assert t.Reads == 2 and t.Decided == 3
+    try t.Note(9, "E31b a@9") catch Undecided { unreachable }
+    assert t.Record(9, true) == "read copy E31b a@9" and t.Reads == 3
     other := Table()
     other.Decide("G42 a@3 Allocates", "true", true)
     other.Decide("E31b a@9", "place", false)

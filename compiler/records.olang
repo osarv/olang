@@ -71,10 +71,11 @@ fn ReaderRecords(l mut load.Loader&, c typecheck.Checker&) Array<String&>& {
     # each module's own reads and those an importer carries, asked once each
     own := Array<String&>(mods.Len(), "")
     carried := Array<String&>(mods.Len(), "")
+    tokens := c.P.Facts.Tokens()
     for x in range mods.Len() {
         if mods[x].File < 0: continue
-        own[x] = c.P.Facts.Record(mods[x].File, true)
-        carried[x] = c.P.Facts.Record(mods[x].File, false)
+        own[x] = c.P.Facts.Record(mods[x].File, true, tokens)
+        carried[x] = c.P.Facts.Record(mods[x].File, false, tokens)
     }
     for m in range mods.Len() {
         if m == l.Root: continue
