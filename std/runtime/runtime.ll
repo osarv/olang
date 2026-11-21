@@ -3904,7 +3904,7 @@ done:
 ; soft limit not RLIM_INFINITY), asked once
 define i1 @__olang_reserve_allowed() noinline {
 entry:
-  %k = load i64, ptr @__olang_reserve_ok
+  %k = load atomic i64, ptr @__olang_reserve_ok monotonic, align 8
   %known = icmp ne i64 %k, 0
   br i1 %known, label %done, label %ask
 ask:
@@ -3915,7 +3915,7 @@ ask:
   %inf = icmp eq i64 %cur, -1
   %yes = and i1 %ok, %inf
   %v = select i1 %yes, i64 1, i64 2
-  store i64 %v, ptr @__olang_reserve_ok
+  store atomic i64 %v, ptr @__olang_reserve_ok monotonic, align 8
   br label %done
 done:
   %r = phi i64 [ %k, %entry ], [ %v, %ask ]

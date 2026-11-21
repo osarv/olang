@@ -5594,8 +5594,9 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         }
         case typed.PrimOp.GrowInPlace {
             # M19d: a grown's source lengthened where it lies - the run time's answer, null where it cannot (an empty
-            # array then); never under -sanitize, where the old storage is poisoned as it is retired
-            if fe.E.San: return "zeroinitializer"
+            # array then); never under -sanitize, where the old storage is poisoned as it is retired, nor for a source
+            # held otherwise than as its length and address
+            if fe.E.San or lt != "{ i64, ptr }": return "zeroinitializer"
             el := t.Elem(fe.arrayOf(ty))
             n := fe.val(fe.arg(args, 1), mir.I64T)
             ob := fe.let("mul i64 " + $fe.let("extractvalue { i64, ptr } " + $x + ", 0") + ", " + $fe.size(el))
