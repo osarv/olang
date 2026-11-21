@@ -422,6 +422,10 @@
 | ok - an array element is a copy, a struct holding one is named
 | ok - repointing a reference name read later is kept
 | ok - the baked global agrees
+| ok - a writable walk of rows in place writes them
+| ok - a ViewMut walk of a Vec's rows writes them
+| ok - rows walked read-only are copies
+| ok - the baked rows global agrees
 === test tests/match.olang
 | status 0
 | ok - a value match's clauses give their values after ':', a value running on over lines
