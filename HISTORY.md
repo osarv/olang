@@ -40783,3 +40783,38 @@ shapes flat; an a7 shape with both reference kinds prints the same built, `-sani
 interpreted. The fixture now reads VmHWM at the half and three quarters of 200,000 turns and the end: flat where
 either quarter gains under 2 MB - a one-off step (a worker, a huge page) lands in one quarter, anything kept a turn in
 both. -free late reads "grew by 12600 KB", cb77bff6a's compiler 6300 KB, this one flat.
+
+## 2026-11-21: after the back end's cut - oann's benches, loop alignment, the worst olang/C rows (O8b; mine; wt-runperf)
+
+Measured on the cloud box (4 cores, Xeon @ 2.1 GHz, AVX-512; another agent building beside, load 2-7), nothing changed
+in the compiler.
+
+- **oann on the compiler before and after wt-backend** (a3ca48864^1 against master 081292694; each compiler's binary of
+  bench/storage, int8, sweep, adjoint, sample, smallgraph and scan, alternated, median of 3, storage and sweep 3 more):
+  no row moves beyond noise. The first three rounds put sweep's H 256 rows 1.5x slower on the new compiler, but only in
+  two runs under another build; three runs more measured 49.6-56.9 us against 50.7-55.0 (H 256 B 32 packed ahead).
+  The oann binaries are 2-8% smaller.
+- **`gen: filter, iterator` is layout.** Its loop (`Thirds.Next` inlined into main: cmp/je, inc, mulx, shr, lea,
+  cmp/jne, add, jmp back) is the same instructions before and after; it sits at 0x1f10-0x1f32, across a 32-byte line.
+  Linking with `-align-loops=32` (the LTO plugin's option; `-falign-loops=32` for an object) puts it at 0x1f80 and
+  takes the row from 0.248 to 0.193 s (C 0.137-0.143; 0.157 before wt-backend), but over the whole of bench/run (-r 5,
+  each run against C beside it) it moves other rows both ways within about 8% (spectral-norm 1.16 -> 1.24 of C,
+  k-nucleotide 1.17 -> 1.24, dispatch one type 1.16 -> 1.27; mandelbrot 1.02 -> 0.94, List push 1.84 -> 1.58), and the
+  self-built compiler grows 13.96 -> 14.24 MB (+2%). Not adopted: it costs elsewhere and buys back only part of one
+  row; recorded as layout noise.
+- **The worst olang/C rows of bench/run** (-r 5, beside C; gen's row aside):
+  1. *List push* 1.84 (0.173 s against 0.094, 20M pushes). Level at 1M (12.0 ms against 12.4); at 20M olang touches
+     ~1.7x the pages and writes them twice: each chunk (8 << k elements, 33.5M in all for 20M) is made by
+     `Array<T>(n, fill)`, every element written once by the fill and once by Push, and the last chunk mostly never
+     used, while C's realloc grows one buffer in place (mremap) and touches only what it writes (sys 0.093 s against
+     0.076). The per-push stores of `used` and `count` back to the list's state (the element store might alias them)
+     are a smaller share. Not fixed here: leaving a chunk unfilled means elements entered by `occupy`, as Vec's are,
+     through Push, PushAll, grow, Clear and the moves - the element lifecycle and freeing code another session owns.
+  2. *Vec push* 1.53 (0.741 s against 0.483, 50M): a growth copies the elements into a new buffer twice the size
+     (`grown`) and retires the old one; C's realloc moves none past the mmap threshold (mremap). Same territory.
+  3. *sha256* 1.45 (1.80 s against 1.24): all of it is the link's SLP vectorizer in `Hasher.block` - it turns the 16
+     big-endian word loads into 60 `vpinsrb` byte gathers (C's are 16 `movbe`, the X86 back end's load combining of the
+     scalar or-tree) and the schedule loop into 8-byte vector stores reloaded 4 bytes at a time. Linked with
+     `-vectorize-slp=false` the row is 1.24 s, level with C (1.03); over the whole of bench/run that costs the opaque
+     call rows 0.149 -> 0.186 s (1.25 of C), so not adopted. Writing the loads another way in std/sha256 (a slice of
+     the block, a slice per word, a 4-byte accumulating loop) leaves the gathers as they are.
