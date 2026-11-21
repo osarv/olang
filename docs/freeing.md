@@ -688,3 +688,41 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   holding itself in a Vec - not started. A copy holding a Map stays untracked (gaps.olang's shape: Put on a split
   copy's entries is a gap row). A field read into a local assigned again (`nm2 := v[j].n; nm2 = nm2 + "x"`) keeps the
   call's copy untracked (splitLetOf's ownLocal). Tasks: as wt-taskfree left them.
+- 2026-11-21, wt-freeg1: **a field read into a local assigned again, and an owner holding itself** (review4's g1).
+  `nm := v[j].n; ...; nm = v[k].n; nm = nm + "x"`: nm is an owner local, which splitLetOf left out, so At's value copied
+  whole (D9h) kept Q.a for "made with no store into it" (RCopied, a gap). splitLetOf now takes an owner local's field
+  read too (fieldTemp only), at its declaration and at every assignment (assignTo sets `splitLet` for an owner local's
+  value): the copy is built split, its owners keep for RSplit alone. The local's own first value is existing storage -
+  it keeps by the rule (condition 1), and the text joined for it later is in its block. g1: `T` was no PartsOnly type
+  (PartsOnly found false while it was being asked); it is now found as the greatest answer - true while asked, every
+  answer found under that assumption forgotten where the type turns out false - and `free.SelfHolding` names a PartsOnly
+  type holding itself by value through the arrays its parts own. Lowering's walks would write such a type out level by
+  level forever (a split copy: partOf, splitArray, elemCopy; an element's release: textWalk's partReleases from depth
+  0), so for a self-holding element both go through a helper of the type's (`mir.HelperKind.Split`, fn(x mut T&) with
+  the scope its parts go in; `Release`, fn(x mut T&) with none), each calling itself for the elements its Vecs hold; a
+  helper's guards read the place decisions as link-time constants, as every module's code does. Three more keeps stood
+  in the way, the first two also for a non-recursive `R{a Vec<I64>, kids Vec<U>}` (master fails -check on it): an owner
+  whose value walks a Vec's elements was no owner a copy could split (splitOwner; partsFree and splitPart had dropped
+  that limit in f1) - it splits as any other now; T.kids, changed in place by `t.kids.Push(...)`, asked partsFree of
+  itself through its own elements - asked again while asked, it is taken to free; and condition 6 judged
+  `t.kids.Push(T.Mk(...))` reading t.kids while T.Mk let go of Vec<I64> buffers it made and while Push let go of them through the
+  receiver. A call given plain data alone (no reference, no storage of its own) whose callee reaches no global and no
+  code not followed (effects: no global read, write or reference, no WritesOut, no function value not followed, no
+  task) lets go only of storage it built itself (`ownGoes`: such let-goes are judged against no view of the caller's);
+  and a place lent writably to the very call that lets go (`writableLend`) reaches the container's value as it is
+  then, never an old one. Running the fixture found two leaks on master too, each against -check's word: a struct
+  element holding an empty Vec (`T{a Vec<I64>, kids Vec<I64>}` with kids left empty) grew ~1.3 KB a turn - a copy of an
+  empty array into a part region allocated a zero-length object there, so settling kept the region, and an empty
+  array's release_part finds nothing; lowering now makes such an array zero bits before it settles (`zeroEmpty`: the
+  part copies, element arrays and `settled`). And a by-value argument of a type holding itself was placed in the
+  callee's other argument's scope (`rows[j] = T.Leaf(i)`: the value in main's frame, one a turn): types.SharesRefs
+  walked T to its depth limit and answered true; a named type it is already walking adds nothing now (as ReachesCode).
+  Fixtures fieldagain (400,000 turns) and owntrees (T trees of depth 2 and R's Vec<U>, 200,000 turns), under 8 MB;
+  master fails -check on each; built, `-free late`, `-sanitize` and interpreted print the same.
+  **Found, not fixed (a scope-pass bug, on master and every older compiler):** a store into a field of a Vec's element
+  in a loop, `for i in range 20 { v[i % 4].n = $"m" + $i }` (Q{n String}), builds the text in the turn's scope - the
+  Vec then names freed storage (prints "m19 m19" for "m18 m19"; the interpreter stops: "uses storage after the scope it
+  was made in closed"); `v.RefMut(i % 4).n = s` and a fixed array's `a[i].n = s` are right. check.writeBack's in-place
+  path (RefMut into a hidden local, the store through it) is where it differs. A §8 fix for the scope pass.
+  **Where to pick up**: a copy holding a Map stays untracked (gaps.olang's shape); the writeBack scope bug above; tasks
+  as wt-taskfree left them.
