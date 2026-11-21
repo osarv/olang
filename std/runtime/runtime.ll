@@ -4223,9 +4223,9 @@ forward:
   ret void
 }
 
-; walks and calls this scope's own dtor-node list first, LIFO - most-recently-registered first, the order a stack
-; unwind would give - then gives each of its chunks to the pool (O8b) and resets the scope to empty
-; (P2: first, every part other threads made of it - __olang_scope_fold_parts)
+; what __olang_scope_close runs out of line: every part other threads made of the scope folded in (P2,
+; __olang_scope_fold_parts), then its own dtor-node list walked and called, LIFO - most-recently-registered first, the
+; order a stack unwind would give; its regions and chunks are the close's own, after this
 define void @__olang_scope_close_owned(ptr %scope) noinline {
 entry:
   %fptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 4

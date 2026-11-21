@@ -1167,7 +1167,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   verify). **Built (W3a)**: front records beside the IR's, under the same key and facts read - each body's M19g
   summary (a taken body is not walked again), signatures with inferred error sets and baked values - written from a
   program that checked cleanly; `OLANG_CHECKINCR` compares every record taken with checking afresh (in `incremental`,
-  `reuseall`, `records` and the edit fuzzer). Keyed by the texts a module reaches. **Built (W3b)**: scope records
+  `reuseall`, `records` and the edit fuzzer). Keyed by the texts a module reaches and the runtime's files (whose inlined
+  bodies every module's IR carries); D9h's mutable-globals fact is the globals' types and the shapes of the types they
+  reach, so an edit changing none of them (a comment, a body) keeps every other module's IR record (2026-11-21). **Built (W3b)**: scope records
   (`build/rec/NAME.KEY.s...`, `compiler/records.olang`): every judging of a component of section 8's call graph,
   in every round of the field inference, kept with what it read (other bodies' summaries, marks, the whole-program
   sets, the judgings of its bodies before it, by name) and the state it leaves its bodies in; taken where all of it

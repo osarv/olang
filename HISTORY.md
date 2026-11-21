@@ -40720,3 +40720,43 @@ an interpreted run (`OLANG_EVALUATE=1`, the prompt) still lowers everything firs
 resident set saw the lowering land mid-run - checks' freeing/joins.olang, interpreted, read 225 pages of growth where
 its bound is 100. The self-build's evaluate phase fell too (1.2 -> 1.1 GB; the build 3.8 GB at most); the fixed
 point holds. The suite's memory gate figure for the file (its process tree, `compiler/tools/peaks.txt`): 5081 -> 4710 MB.
+## 2026-11-21: the back end's share of the self-build cut by what is emitted; an edit's records kept (O8b, B3i; mine; wt-backend)
+
+The cold self-build (`build/olang build compiler/olang.olang`, build/ emptied, 4 cores, nothing else running) was
+110 s: the front end ~17 s, clang's compiles 28.3 s, the ThinLTO link 63.7 s, 361 s of CPU. The IR is 114 MB in 351
+units; by item: 92 MB of function bodies (11.9k), 6.5 MB of linkonce_odr helpers and 1.8 MB of the runtime's inlined
+bodies (each copied into every object naming it - 6.5 MB duplicated in all), 3.4 MB of declarations, 3.8 MB of
+globals. Functions defined and never named anywhere: 550, 1.2 MB - not worth a pass. The largest bodies are
+constructors of the big passes' structs (Scoper's 420 KB, Free's 295 KB) - each field's region placed in turn (section
+8's code, another session's) - and emit's and check's long methods.
+
+- **A scope's close, inlined 17,366 times (O8b).** `__olang_scope_close` is `alwaysinline` so that a scope's header
+  never escapes into a call and a scope allocating nothing costs nothing: its 63 lines - folding in the parts other
+  threads made (P2), the destructor loop (C9a), the regions (O8d), the chunks - went into every scope of every function,
+  and LLVM folded most of it away only after optimizing it. Now the close inlined is two tests (parts, destructor list)
+  ahead of the regions and chunks, and what a scope owns beyond memory runs in `__olang_scope_close_owned`, out of line.
+  Where the header never escapes both heads are provably null and the call folds away as the loop did; where it can
+  be non-null, the header had escaped already (the loop handed `%scope` to every destructor). Compile 28.3 -> 20.8 s,
+  link 63.7 -> 54.1 s, the whole build 110 -> ~93 s (~290 s of CPU); the compiler's binary 16.3 -> 14.0 MB.
+  std/bench before and after (median of 5, interleaved runs): every row within noise but `gen: filter, iterator`,
+  0.157 -> 0.257 s, whose loop is the same instructions at another address: main grew (callees got cheaper to inline)
+  and its macro-fused compare-and-branch now straddles a 32-byte boundary (layout, the JCC erratum class), not code.
+- **An edit kept no module's IR record (B3i).** D9h's mutable-globals fact (`typed.MutGlobalsFact`), which every
+  module's lowering reads, was the globals' type names plus the source text of every module their modules reach - for
+  the compiler nearly all of it - so a comment in compiler/fmt.olang re-lowered and re-emitted every module (lower+emit
+  1.0 -> 4.4 s; clang then compiled one object, the IR being the same). The judgement it guards (lower.quietLife,
+  windowFor) reads only the globals' types through objHits and writesCover, so the fact is now those types and the
+  shape of every type they reach, by the same edges (Repr, a named type's embedded parts, tuple and record parts,
+  anonymous enum cases, array elements, referents), each by its canonical text. After a comment in compiler/fmt.olang:
+  9.1 s against 14.8 (lower+emit 1.15 s, 2.66 GB at most against 3.7); after a body edit there, 9.8 s, one object
+  compiled, the link 0.9 s from ThinLTO's cache. An edit in a module most others reach (compiler/check.olang) still
+  recompiles ~15 objects and relinks in ~52 s: ThinLTO's cache entries are keyed by what each module imports.
+- **The runtime's files in a record's key (B3i, a bug).** Every module's IR carries the runtime's inlined bodies,
+  read from std/runtime as the build runs, but a module's key named the compiler and std's directory, not those files:
+  after an edit of runtime.ll a record's IR (here naming `__olang_scope_close_owned`, then reverted) was taken and the
+  link failed. The key now names each runtime file's size and time.
+
+Scripting mode (`olang FILE`, a ten-line script): the first run 1.1 s (0.4 s of it the C import cache), a run again
+75-85 ms (front end ~50 ms, nothing compiled or linked), after an edit of the script 0.45 s (one object, the full-LTO
+link 0.26 s) - nothing to cut that keeps the heavy optimization (the user's call, 2026-11-16). oann is not cloned on
+this machine, so not measured.
