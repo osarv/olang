@@ -40340,6 +40340,7 @@ every prelude call, so its types are the spawner's); a reach by origins at each 
 by which thread made the region (runtime.ll's region links are one thread's), would free h8, n1 and t1's spawner-side
 replacements and keep a7's (a view handed to the task) - recorded as the recommendation, for an Opus section-8 round.
 
+<<<<<<< HEAD
 ## 2026-11-21: joinflat's bound above a huge page; plan.md's queue audited (P2b; mine; wt-joinflat)
 
 checks/cases/joinflat.olang asserted that 200,000 joins grow the resident set (VmRSS) by under 1024 kB; under load it
@@ -40359,3 +40360,49 @@ could not link, and the "tsan not installed" note on stderr made drvdiff and the
 Second, the joinflat edit above had not recaptured its token and tree goldens (`make tokgold astgold`; DEPENDENTS.md
 names them for any checks/cases edit). With the package installed and the goldens recaptured, every failed target
 passes: checks 97/97, tokdiff, astdiff and drvdiff clean.
+=======
+## 2026-11-21: freeing in programs with tasks - condition 3 by origins (O8d, O8f, D9h, P2; mine; wt-taskfree)
+
+The compiler kept every place in any program that spawns (`decide`'s RTask), and wt-mapput recommended reaching by
+origins. Built that way, with every fact not known meaning keep. Two threads only ever touch a region if it is made or
+released in a task's code, or released by the spawner while a task still reads it; the rule closes both.
+
+What a task's code changes keeps. Each spawned body and everything it may run - over the scope pass's calls and the
+walks' callers, every destructor, Str, Eq and Hash added as roots, since they run where no call is written - has its
+stores, let-goes, stores through a sole place's value and feeders keep (RTask). At the spawn, the callee's summaries
+(`lets`, `walkLets`, `parStored`) keep too, and so does the target: P1g stores a task's result on the task's thread,
+so the target's own place, a feeder or owner local given it, and every place its type holds keep. A task's call given
+a sole place's value to build into records no region (`orCallOf`). Where a task's code is not known everything keeps,
+as before: a lambda or a function value spawned, a callee calling through a function value, an `any` or code not
+checked (effects.olang's Unknown, Back, Through, Unchecked, Calls - free.olang now asks effects, as lowering does for
+P2's facts), a task that may let go of any place, or one handing back a reference beside the arrays it owns. C given a
+function value keeps everything as before (`cAt`, split from `taskAt`).
+
+What a join's tasks may reach keeps where the join's code lets it go. A join's tasks end at its wait (P1a: lexical,
+one level; P1b: every way out waits), so only a let-go in the join block's code, its calls' included, can run beside
+them; the walker numbers the joins of the final walks and records each let-go against every join it is inside
+(`joinGoes`). A join reaches the spawner's storage when one of its spawns is handed an argument with an origin - a
+reference's, a by-value value's but the arrays it owns (`unowned`) - or stores into anything but a local; any task
+reading a global (effects) counts for every join. Reach is all-or-nothing per join: one reaching task keeps every place
+its join lets go of. So a7 (a view handed to the task, an element replaced in the join) keeps, and t1 (a view handed,
+the element replaced after the wait) frees.
+
+The task's by-value argument. `spawn n = sumQ(v[i])` copies At's value (D9h) beside the spawner, and the walker judged
+that copy untracked (viewArg excludes a task's site), keeping Q.a for RCopied in h8, n1 and t1. A copy a task's callee
+preserves (lowering's preserves, free's Keeps) is the task's alone and dead when it returns: `taskCopy` exempts it as
+viewArg does, and drops it from the reach where its type holds no reference beside its parts (its storage is all its
+own). Where was it made, though? Looking found a leak on master too: lowering made it where At's result would live -
+here main's frame scope - so every spawn kept ~63 bytes for the run (27 MB at 400,000 joins; an I64 argument, nothing).
+Lowering now makes such a copy in the join block's arena (`taskCopy`, for a task handing back no reference beside its
+parts), reclaimed after the wait; free's `taskCopied` checks, after writePlans, that no region is made at its site, and
+keeps every place if one is (never seen). Tried first: placing it only where the plan said nothing (Built unset) - the
+scope pass passes the frame there, so the override is unconditional for these copies.
+
+Probes: n1 and t1 free at once and pass -check; a7 keeps by the rule; h8's task part frees, its lambda capture keeps
+(a5's named view, not a task matter). Adversarial ones each keep: a task replacing elements through a `mut` reference
+(p1), a task reading a global while the join replaces one (p3), a target a field (p4), a let-go in a function the join
+calls while a task holds a view (p5), a task building a Q (p6), a lambda task (p8). Every probe prints the same built,
+`-free late`, `-sanitize` and interpreted, and the `-race` builds report nothing. Fixture tasks (checks' freeing): n1's
+and t1's shapes, the peak address space over a second half of 100,000 turns - flat, where -free late grows 139 MB -
+with the oracles and a `-race` run at a smaller size.
+>>>>>>> origin/wt-taskfree

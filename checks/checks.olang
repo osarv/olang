@@ -640,6 +640,15 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(outOf(dir).EndsWith(" three buffers\n"), "growth kept the buffers its Vecs grew out of", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=1000 growth.olang > out.txt 2>&1") == 0, "growth interpreted", dir)
     try r.expect(outOf(dir) == "10800 999 three buffers\n", "growth interpreted output", dir)
+    # (tasks, condition 3 by origins: elements replaced beside tasks that cannot reach them are freed at once - its
+    # peak address space over a second half of its joins; the oracles, and ThreadSanitizer, at a smaller size)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check tasks.olang > out.txt 2>&1") == 0, "tasks -memory -check", dir)
+    try r.expect(sh(dir, "./build/tasks > out.txt 2>&1") == 0, "tasks", dir)
+    try r.expect(outOf(dir) == "19999400024\nflat\n", "tasks kept what its joins replaced", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 tasks.olang > out.txt 2>&1") == 0, "tasks interpreted", dir)
+    try r.expect(outOf(dir) == "78824\n", "tasks interpreted output", dir)
+    try late(r, dir, "tasks", "200", "78824\n")
+    try r.expect(sh(dir, "\"$OLANG\" -race -define N=2000 tasks.olang > out.txt 2>&1") == 0 and outOf(dir) == "7988024\n", "tasks -race", dir)
     try r.expect(sh(dir, "\"$OLANG\" -check texts.olang > out.txt 2>&1") == 0, "texts", dir)
     try r.expect(outOf(dir).EndsWith("flat 3097784\n"), "texts kept what its tasks built", dir)
     for p in Array<String&>["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec"

@@ -1,0 +1,55 @@
+import "std/io"
+import "std/os"
+
+# O8f (docs/freeing.md, condition 3 by origins): elements replaced in a program with tasks are freed at once where no
+# task can reach them - review4's n1, a task given an element by value (its own copy, made in the join's scope) while
+# the join's code replaces it, and review5's t1, a task given a view of one, replaced once the join has waited. A place
+# a join's tasks may reach keeps through that join (review4's a7). Threads reserve address space of their own: the
+# measure is the peak address space (VmPeak) gained over a second half of the turns, after a first that settles the
+# pools and the workers - flat is under 2 MB; kept, about 140 MB. At a smaller size (the oracles, the sanitizer's
+# address space its own) only the sum is printed
+N I64 = 100000
+
+type Q struct() { a Vec<I64> }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.a = Vec<I64>[i, i + 1]
+    return q
+}
+
+fn reads(q Q) I64 { return q.a[0] + q.a[1] }
+
+fn readsRef(x Vec<I64>&) I64 { return x[0] + x[1] }
+
+# the peak address space, in KB (VmPeak)
+fn peak() I64 {
+    st := try os.ReadFile("/proc/self/status") catch default ""
+    for line in st.Lines() {
+        if line.StartsWith("VmPeak:"): return try line[7:line.Len() - 3].Trim().ParseInt(10) catch default 0
+    }
+    return 0
+}
+
+fn main() {
+    v Vec<Q>
+    for k in range 4: v.Push(Q.Mk(k))
+    t := 0
+    p0 := 0
+    for i in range N {
+        if i == N / 2: p0 = peak()
+        j := i % 4
+        a := 0
+        b := 0
+        join {
+            spawn a = reads(v[j])
+            v[j] = Q.Mk(i)
+        }
+        join: spawn b = readsRef(v[(j + 1) % 4].a)
+        v[(j + 1) % 4] = Q.Mk(i + 1)
+        t += a + b
+    }
+    grew := peak() - p0
+    io.PutLn($t)!
+    if N >= 100000: io.PutLn("flat" if grew < 2048 else "grew by " + $grew + " KB")!
+}
