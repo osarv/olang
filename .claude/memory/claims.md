@@ -30,3 +30,5 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-21): olang weekly full make verify on master 12795f7fc
 - olang session (cloud, 2026-11-21): wt-mempeak and wt-buildspeed merged (be72d7214)
 - olang session (cloud, 2026-11-21): wt-backend (back-end build time: IR size, incremental cache, scripting start)
+- olang session (cloud, 2026-11-21): wt-mempeak (compiler/olang.olang test peak) and wt-buildspeed (self-build per phase)
+- OLang Cloud (2026-11-21): olang wt-taskgrow - freeing fixture tasks.olang grows 139 MB (regression?)
