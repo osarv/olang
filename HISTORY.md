@@ -40856,3 +40856,18 @@ object's own optimization); the large functions, most of the IR and most of what
   module's part (B3i's records); the cost is ThinLTO's key, which names imported objects' whole hashes and is not ours
   to change. Limiting imports (a lower `-import-instr-limit`, or marking functions not importable) would change what
   is inlined across objects, a run-time cost.
+
+
+## 2026-11-21: std/sha256 level with C - the schedule made in the round, the words byte-swapped (O8b; mine; wt-sha)
+
+The sha256 row (wt-runperf, above: 1.45x C) is fixed in std/sha256 alone, no meaning changed and nothing added to the
+language. `Hasher.block` now makes each schedule word w[16..63] in the round that consumes it (`if i >= 16: w[i] = ...`,
+with `sigma0`/`sigma1` helpers) instead of in a loop of its own: the separate loop was what the link's SLP vectorizer
+paired into 8-byte vector stores reloaded 4 bytes at a time (store-forwarding stalls); folded into the round's serial
+chain it stays scalar. The 16 message words are read as a little-endian or-tree, which LLVM combines into one 32-bit
+load, then `.ByteSwap()` (an existing supplied method, llvm.bswap; the evaluator has it): 16 `movbe`, no byte gathers.
+Measured (min of 5, alternated, 64 MB x 4, loaded machine): before 1.77-1.79 s, C 1.22-1.23; the byte swap alone 1.68-1.72;
+the fused schedule alone (old loads, 60 `vpinsrb` left) 1.17; both 1.16-1.25 - 0.95-1.01x C. Both are kept: the loads
+then cost nothing either way, and one load per word is what the code means. Tests: std/sha256's three (FIPS 180-4,
+RFC 4231, pieces) at run time and under OLANG_EVALUATE=1; goldens: the sha256 rows of compiler/goldens/ast.txt and
+tokens.txt (the rest of those files is stale on master for other files and left alone).
