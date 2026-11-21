@@ -29,3 +29,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e13-grids cloud session (2026-11-18): done (paused) - oagent main f66c925 (experiments/e13-grids, README + MAP "Where to pick up"): gated settle exact on reach to 64x64; vor 53.5/38.7 % 32x32; no oann changes
 - Orchestrator child (cloud, 2026-11-21): olang weekly full make verify on master 12795f7fc
 - olang session (cloud, 2026-11-21): wt-mempeak and wt-buildspeed merged (be72d7214)
+- olang session (cloud, 2026-11-21): wt-backend (back-end build time: IR size, incremental cache, scripting start)
