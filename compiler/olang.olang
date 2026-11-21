@@ -966,6 +966,8 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     # (a cell, B22, starts as a library does - its globals set by its start, which the cell worker calls)
     e.Library = (cfg.Library or cfg.Cell) and kind == build.Kind.Program
     e.SplitFrom = build.SplitFrom  # a large program compiles its large objects in parts
+    # B3i: and one linking by ThinLTO cuts them by classes too
+    if not cfg.Quick and not cfg.Debug and not cfg.Race: e.ImportFrom = build.ThinFrom
     if cfg.Quick or cfg.Debug: e.PartLimit = emit.PartSizeDev
     e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
     if tests {
@@ -1078,7 +1080,8 @@ fn takeRecord(c typecheck.Checker&, path String&, m I64, irs mut Map<String, Str
         } else if line.StartsWith("size ") {
             r.Size = try line[5:].ParseInt() catch default 0
         } else if line.StartsWith("split ") {
-            r.Split = line[6:] == "1"
+            r.Split = line[6:] != "0"         # 2: cut by classes too (emit.Emitter.Classes)
+            r.Classes = line[6:] == "2"
         } else if line.StartsWith("inst ") {
             r.Inst.Push($line[5:])
         } else if line.StartsWith("twin ") {
@@ -1117,7 +1120,7 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, reads A
         if r.Module >= keys.Len() or keys[r.Module] == "": continue
         base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module], reads[r.Module], r.Split)
         b := StringBuilder()
-        b.Push($"olang module record\nsize " + $r.Size + "\nsplit " + $("1" if r.Split else "0") + "\n")
+        b.Push($"olang module record\nsize " + $r.Size + "\nsplit " + $("2" if r.Classes else ("1" if r.Split else "0")) + "\n")
         seen Map<String&, Bool>
         for sym in r.Inst {
             if seen.Has(sym): continue

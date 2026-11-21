@@ -150,6 +150,12 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     Made Vec<Reused>
     Redo Bool = false               # Objects found a reused module cut otherwise than it would now be: emit again without
     Cut Bool = false                # whether Objects cut the program's objects (B3d): what a reused module's must be too
+    # B3i: the program's IR from which its link imports code across objects (ThinLTO, build.ThinFrom), and whether Objects
+    # cut each object's items by class (Classes, bulky): a reused module's must be cut so too
+    ImportFrom I64 = 1 << 62
+    Classes Bool = false
+    bulky Vec<Bool>                 # where cut by classes (weigh): whether each item goes with the bulky functions
+    keyOf Vec<I64>                  # ... and the item whose symbol picks its part: its own, or what it follows
     testSyms Map<I64, String&>      # each test's symbol, by its body (testSym)
     # B3l: a failed check's place kept out of the code naming it - each "FILE:LINE: ..." text an item HomeLoc, named by
     # where it is in its top-level item rather than by its line, defined in an object of its home's own compiled
@@ -173,6 +179,7 @@ type Reused struct(Module I64) {
     Hashes Vec<String&>    # each part's IR's SHA-256, as its record keeps it (the caller's)
     Size I64 = 0
     Split Bool = false
+    Classes Bool = false   # cut by classes too (Emitter.Classes)
     Inst Vec<String&>
     Twins Vec<String&>     # of the instances, each twin's "SYMBOL HASH": the hash of its key in stable names (TwinLine)
     From I64 = -1
@@ -252,8 +259,9 @@ fn (e mut Emitter&) Objects() Vec<Object> {
     }
     split := e.Debug or total >= e.SplitFrom
     e.Cut = split
+    e.Classes = split and total >= e.ImportFrom
     for r in e.Reuse {
-        if e.ReusedAt.Has(r.Module) and r.Split != split {
+        if e.ReusedAt.Has(r.Module) and (r.Split != split or r.Classes != e.Classes) {
             e.Redo = true
             return out
         }
@@ -261,6 +269,7 @@ fn (e mut Emitter&) Objects() Vec<Object> {
     inst := split and used.Has(HomeInst)
     if inst: e.instGroups()
     if not e.dbg(): e.mergeSame()
+    if e.Classes: e.weigh()
     for m in range mods.Len() {
         if m == root: continue
         ri := try e.ReusedAt.Get(m) catch default -1
@@ -271,6 +280,7 @@ fn (e mut Emitter&) Objects() Vec<Object> {
         } else if used.Has(m) {
             made mut Reused& = Reused(m)
             made.Split = split
+            made.Classes = e.Classes
             made.From = out.Len()
             for i in range e.itemSym.Len() {
                 if e.itemHome[i] == m: made.Size += e.itemText[i].Len()
@@ -431,10 +441,12 @@ fn (e mut Emitter&) parts(out mut Vec<Object>&, identity String&, kind ObjectKin
     # them, all of which a ThinLTO link optimizes again when it changes (an edit to a test of tests/shared.olang
     # recompiled a 2 MB part and redid 15 of its 35 modules' code)
     tests := split and e.Tests and home == e.P.L.Root
-    groups := 2 if tests else 1
+    groups Vec<I64>
+    groups.Push(0 if tests or e.Classes else -1)
+    if tests: groups.Push(1)
+    if e.Classes: groups.Push(2)
     locs Map<I64, Bool>
-    for g in range groups {
-        grp := g if tests else -1
+    for grp in groups {
         size I64 = 0
         for i in range e.itemSym.Len() {
             h := e.itemHome[i]
@@ -444,9 +456,10 @@ fn (e mut Emitter&) parts(out mut Vec<Object>&, identity String&, kind ObjectKin
         cut := e.PartLimit / 4 if grp == 1 else e.PartLimit
         n := (size + cut - 1) / cut if split else 1
         if n < 1: n = 1
-        if grp == 1 and size == 0: continue
+        if grp > 0 and size == 0: continue
         for k in range n {
-            name := ($identity if k == 0 else $identity + "-" + $k) if grp != 1 else $identity + "-t" + $k
+            name := $identity + "-t" + $k if grp == 1 else $identity + "-b" + $k
+            if grp <= 0: name = $identity if k == 0 else $identity + "-" + $k
             out.Push(Object($name, kind, e.assemble(home, alsoInst, k, n, inst, grp, locs, ig)))
         }
     }
@@ -468,10 +481,73 @@ fn (e mut Emitter&) locations(locs Map<I64, Bool>&) String {
     return b.ToString()
 }
 
-# which of a test build's root's groups item i is in (parts): 1 a test or the harness, 0 anything else
+# which of an object's groups item i is in (parts): 1 a test or the harness (of a test build's root), 2 a bulky function
+# where cut by classes (weigh), 0 anything else
 fn (e Emitter&) groupOf(i I64) I64 {
     sym := e.itemSym[i]
-    return 1 if sym.StartsWith("olang_test_") or sym == "main" else 0
+    if e.Tests and (sym.StartsWith("olang_test_") or sym == "main"): return 1
+    if not e.Classes: return 0
+    j := (try e.merged.Get(i) catch default i) if e.aliased(i) else i
+    return 2 if e.bulky[j] else 0
+}
+
+# B3i: each item's class where Objects cuts by classes: with the bulky functions - one too large for a ThinLTO backend
+# to import into another object, or a small one named by one such function of its module alone, which follows it into
+# its part - or not. A backend's cache key names the whole IR of every object it imports from, so where one part held
+# both, an edit to any function in it - most often a large one, which nothing imports - redid the code of every part
+# importing a small one beside it: a body edited in compiler/check.olang redid 20 of the link's backends (check's 17
+# parts import each other), 22 s. An alias goes with what it stands for, as partOf puts it
+fn (e mut Emitter&) weigh() {
+    n := e.itemSym.Len()
+    e.bulky.Clear()
+    e.keyOf.Clear()
+    for i in range n {
+        e.bulky.Push(codeSize(e.itemText[i]) > BulkFrom)
+        e.keyOf.Push(i)
+    }
+    # the one item naming each, -2 where more than one does
+    by := Array<I64>(n, -1)
+    for k in range n {
+        text := e.itemText[k]
+        rs := e.refs(k)
+        for r in range 0, rs.Len(), 3 {
+            if rs[r] != 0: continue
+            j := e.itemNamed(text[rs[r + 1]:rs[r + 2]])
+            if j < 0 or j == k: continue
+            by[j] = k if by[j] == -1 or by[j] == k else -2
+        }
+    }
+    # a function followed by one following another in turn, three deep at most
+    for _ in range 3 {
+        for j in range n {
+            k := by[j]
+            if k < 0 or e.bulky[j] or not e.bulky[k] or e.itemHome[j] < 0 or e.itemHome[j] != e.itemHome[k]: continue
+            if not e.itemText[j].StartsWith("define ") or e.merged.Has(j) or e.merged.Has(k): continue
+            e.bulky[j] = true
+            e.keyOf[j] = e.keyOf[k]
+        }
+    }
+}
+
+# the instructions of an item's IR that its object's own optimization leaves, about: every instruction of a function
+# but its allocas, loads, stores, branches, address arithmetic and comparisons with null, most of which that
+# optimization removes or folds - ThinLTO's summary counts the instructions after it, and imports a function of at most
+# build.ImportLimit (70). Measured on the compiler's own objects (2026-11-21): of the 5,367 functions some backend
+# imported, 39 count more than BulkFrom (a match over an enum's cases reading one field of each, 400 lines written,
+# is 15 instructions optimized); the functions at most BulkFrom are a third of the IR
+BulkFrom I64 = 42
+fn codeSize(text String&) I64 {
+    if not text.StartsWith("define "): return 0
+    n I64 = 0
+    for line in text.Lines() {
+        if line.Len() < 3 or line[0] != ' ' or line.EndsWith(":"): continue
+        s := line.TrimStart()
+        if s.StartsWith("store ") or s.StartsWith("br ") or s.StartsWith(";"): continue
+        if s.Contains("= alloca ") or s.Contains("= load ") or s.Contains("= getelementptr "): continue
+        if s.Contains("= icmp ") and s.EndsWith(", null"): continue
+        n++
+    }
+    return n
 }
 
 # the IR of one part an object is cut into, at most (Objects, PartLimit): 1 MB for a build linking by ThinLTO, 512 KB
@@ -487,7 +563,7 @@ PartSizeDev I64 = 512 << 10
 fn (e Emitter&) partOf(i I64, n I64) I64 {
     if n <= 1: return 0
     j := (try e.merged.Get(i) catch default i) if e.aliased(i) else i  # an alias beside what it stands for, which it names
-    sym := e.itemSym[j]
+    sym := e.itemSym[e.keyOf[j] if e.Classes else j]
     h := (I64(0) if sym.StartsWith("G_2e") else sym.Hash()) % n
     return h + n if h < 0 else h
 }
