@@ -40340,7 +40340,6 @@ every prelude call, so its types are the spawner's); a reach by origins at each 
 by which thread made the region (runtime.ll's region links are one thread's), would free h8, n1 and t1's spawner-side
 replacements and keep a7's (a view handed to the task) - recorded as the recommendation, for an Opus section-8 round.
 
-<<<<<<< HEAD
 ## 2026-11-21: joinflat's bound above a huge page; plan.md's queue audited (P2b; mine; wt-joinflat)
 
 checks/cases/joinflat.olang asserted that 200,000 joins grow the resident set (VmRSS) by under 1024 kB; under load it
@@ -40360,7 +40359,6 @@ could not link, and the "tsan not installed" note on stderr made drvdiff and the
 Second, the joinflat edit above had not recaptured its token and tree goldens (`make tokgold astgold`; DEPENDENTS.md
 names them for any checks/cases edit). With the package installed and the goldens recaptured, every failed target
 passes: checks 97/97, tokdiff, astdiff and drvdiff clean.
-=======
 ## 2026-11-21: freeing in programs with tasks - condition 3 by origins (O8d, O8f, D9h, P2; mine; wt-taskfree)
 
 The compiler kept every place in any program that spawns (`decide`'s RTask), and wt-mapput recommended reaching by
@@ -40405,4 +40403,3 @@ calls while a task holds a view (p5), a task building a Q (p6), a lambda task (p
 `-free late`, `-sanitize` and interpreted, and the `-race` builds report nothing. Fixture tasks (checks' freeing): n1's
 and t1's shapes, the peak address space over a second half of 100,000 turns - flat, where -free late grows 139 MB -
 with the oracles and a `-race` run at a smaller size.
->>>>>>> origin/wt-taskfree
