@@ -28,3 +28,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - e12-language cloud session (2026-11-18): done - oagent 6ace9b5 (experiments/e12-language): not promising at pilot scale
 - e13-grids cloud session (2026-11-18): done (paused) - oagent main f66c925 (experiments/e13-grids, README + MAP "Where to pick up"): gated settle exact on reach to 64x64; vor 53.5/38.7 % 32x32; no oann changes
 - OLang Cloud (2026-11-21): olang wt-taskfree - O8f reach by origins for task programs (h8, n1, t1)
+- OLang Cloud (2026-11-21): olang wt-loopref - loop names take the iterator's yielded type; a dead write to a value loop name is an error
