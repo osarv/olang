@@ -260,3 +260,55 @@ test "a walk of a Vec reads elements in place only where nothing can write them"
     assert churn() > 0
     assert vecWalks(VwOne) == VecWalksBaked and VecWalksBaked == 63060033, $VecWalksBaked
 }
+
+# a value built in a loop's turn and stored into a part of x[i] (E31b's write-back, in place through RefMut) is built
+# where the collection's parts live, not in the turn: text, a call's text, a conditional's, an element of an element,
+# a field of a field, through a collection's At and SetAt
+type wbQ struct(n String) { n }
+
+type wbR struct(q wbQ) { q }
+
+type wbS struct(s String) { s }
+
+type wbBag struct() {
+    v Vec<wbQ> = Vec<wbQ>()
+}
+
+fn (b wbBag&) At(i I64) wbQ { return b.v[i] }
+fn (b mut wbBag&) SetAt(i I64, x wbQ) { b.v[i] = x }
+
+fn wbText(i I64) String { return $"f" + $i }
+
+fn elemTexts(k I64) String {
+    v Vec<wbQ>
+    rs Vec<wbR>
+    vv Vec<Vec<wbQ>>
+    ts Vec<Array<wbS>>
+    b wbBag
+    for _ in range 4 {
+        v.Push(wbQ($""))
+        rs.Push(wbR(wbQ($"")))
+        ts.Push(Array<wbS>[wbS($""), wbS($"")])
+        b.v.Push(wbQ($""))
+    }
+    for _ in range 2: vv.Push(Vec<wbQ>[wbQ($""), wbQ($"")])
+    for i in range 20 {
+        v[i % 4].n = $"m" + $(i * k)
+        rs[i % 4].q.n = wbText(i)
+        vv[i % 2][(i / 2) % 2].n = $"e" + $i
+        ts[i % 4][1].s = "c" + $i if i > 10 else "d"
+        b[i % 4].n = $"b" + $i
+    }
+    out := ""
+    for i in range 4: out = out + v[i].n + rs[i].q.n + ts[i][1].s + b.v[i].n + vv[i / 2][i % 2].n + " "
+    return out
+}
+
+ElemTextsBaked := elemTexts(1)
+EtOne mut I64 = 1
+
+test "a value stored into a part of x[i] in a loop lives where the collection does" {
+    got := elemTexts(EtOne)
+    assert churn() > 0
+    assert got == ElemTextsBaked and got == "m16f16c16b16e16 m17f17c17b17e18 m18f18c18b18e17 m19f19c19b19e19 ", got
+}

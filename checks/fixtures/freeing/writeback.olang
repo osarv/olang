@@ -1,0 +1,35 @@
+import "std/io"
+
+# O8f with E31b (docs/freeing.md): a value built in a loop's turn and stored into a part of x[i] - check.writeBack's
+# store in place through RefMut, the value held first - is built where the collection's parts live, not in the turn
+# (whose storage the element would name once it closed), and the text it replaces is let go of at once: a field of an
+# element, a field of a field, an element of an element's array, a call's text
+N I64 = 200000
+
+type Q struct(n String) { n }
+
+type R struct(q Q) { q }
+
+type S struct(s String) { s }
+
+fn named(i I64) String { return $"f" + $i }
+
+fn main() {
+    v Vec<Q>
+    rs Vec<R>
+    ts Vec<Array<S>>
+    for _ in range 4 {
+        v.Push(Q($""))
+        rs.Push(R(Q($"")))
+        ts.Push(Array<S>[S($""), S($"")])
+    }
+    s := 0
+    for i in range N {
+        j := i % 4
+        v[j].n = $"m" + $i
+        rs[j].q.n = named(i)
+        ts[j][1].s = $"d" + $i
+        s += v[(j + 3) % 4].n.Len() + rs[j].q.n.Len() + ts[(j + 1) % 4][1].s.Len()
+    }
+    try io.PutLn($s + " " + v[0].n + " " + rs[1].q.n + " " + ts[3][1].s) catch io.Error { }
+}

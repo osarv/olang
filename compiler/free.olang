@@ -2221,6 +2221,9 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     # place - made right there for the one owner or array leaf it holds (copyInto). check.storeOver holds it in a Held
     # local first (by local, the copy); the copy whose site is exempt from untracked, the held local read as the store's
     heldCopy Map<I64, typed.Expr&>
+    # ... and check.writeBack's new value held before the store (x[i].n = $"..."), built where its use puts it - the
+    # store's new storage
+    heldNew Map<I64, typed.Expr&>
     copyExempt I64 = -1
     splitArr I64 = -1          # the site of a copy stored into an element array place of PartsOnly values (untracked's split)
     splitLet I64 = -1          # the site of the view call a plain value local is declared with (splitLetOf)
@@ -2301,6 +2304,7 @@ fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
     w.storeWithin = -1
     w.storeInside = -1
     w.heldCopy.Clear()
+    w.heldNew.Clear()
     w.heldPar.Clear()
     w.copyExempt = -1
     w.copyRead = -1
@@ -2701,6 +2705,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             lk := w.body().Locals[I64(l)].Kind
             site := ownCopySite(x) if lk == typed.LocalKind.Held or lk == typed.LocalKind.Hidden else -1
             if site >= 0: w.heldCopy.Put(I64(l), x)
+            if site < 0 and lk == typed.LocalKind.Held: w.heldNew.Put(I64(l), x)
             # (a unique value moved out of a parameter into a held local, to be stored: still that parameter's value)
             mp := w.movedPar(x) if lk == typed.LocalKind.Held or lk == typed.LocalKind.Hidden else -1
             if mp >= 0: w.heldPar.Put(I64(l), mp)
@@ -5642,6 +5647,10 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
             hl := readLocalOf(x)
             if hl >= 0 and w.heldCopy.Has(hl) {
                 w.made(k, w.heldCopy.Get(hl)!, sp, multi)
+                return
+            }
+            if hl >= 0 and w.heldNew.Has(hl) {
+                w.made(k, w.heldNew.Get(hl)!, sp, multi)
                 return
             }
             site, why = w.freshSite(x)

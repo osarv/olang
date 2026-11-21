@@ -3883,6 +3883,12 @@ fn (s mut Scoper&) gap(file I64, sp source.Span, what String&) { s.Gaps.Push(Gap
 
 fn (s mut Scoper&) holds(t types.TypeId) Bool { return s.P.T.HoldsRefs(t) }
 
+# whether a value of type t owns storage by value - an array of a run-time length, text, a value holding one (QCE)
+fn (s mut Scoper&) ownsStorage(t types.TypeId) Bool { return s.arenaValue(t) or s.P.T.OwnedPart(t) or s.P.T.OwnsParts(t) }
+
+# whether x is a call giving an array value, built in its result scope (T7b) - where the value goes
+fn (s mut Scoper&) arenaCall(x typed.Expr?&) Bool { return x != null and s.arenaValue(x.Type()) and typed.Call.Of(s.unAway(x)) != null }
+
 fn (s mut Scoper&) isRef(t types.TypeId) Bool { return s.P.T.KindOf(t) == types.Kind.Ref }
 
 fn (s mut Scoper&) isFunc(t types.TypeId) Bool { return s.P.T.KindOf(t) == types.Kind.Func }
@@ -7836,14 +7842,17 @@ fn (s mut Scoper&) letBody(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         s.letMoved(l, t, x, moved, whole)
         return
     }
-    if not s.holds(t) {
+    # (QCE: a held value owning storage and holding no reference - E31b's text stored into x[i].n - is built where its
+    # use puts it too: in the block it is held in, a loop's turn, the element would name storage freed with the turn)
+    heldOwn := loc.Kind == typed.LocalKind.Held and s.ownsStorage(t) and (s.isFresh(x) or s.arenaCall(x))
+    if not s.holds(t) and not heldOwn {
         s.val(x, Term.None)
         return
     }
     # a held local: its temporary is built where its one use puts it (typed.LocalKind.Held) - a call's several results
     # passed on as another's arguments (D8d) where the first of them is
     spreadCall := loc.Kind == typed.LocalKind.Hidden and s.P.T.KindOf(t) == types.Kind.Tuple and typed.Call.Of(x) != null
-    if (loc.Kind == typed.LocalKind.Held or spreadCall) and s.isFresh(x) {
+    if (loc.Kind == typed.LocalKind.Held or spreadCall) and (s.isFresh(x) or heldOwn) {
         s.held.Put(I64(l), x!)
         s.terms[I64(l)] = Term.None
         return
