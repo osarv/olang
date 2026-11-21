@@ -40720,3 +40720,26 @@ an interpreted run (`OLANG_EVALUATE=1`, the prompt) still lowers everything firs
 resident set saw the lowering land mid-run - checks' freeing/joins.olang, interpreted, read 225 pages of growth where
 its bound is 100. The self-build's evaluate phase fell too (1.2 -> 1.1 GB; the build 3.8 GB at most); the fixed
 point holds. The suite's memory gate figure for the file (its process tree, `compiler/tools/peaks.txt`): 5081 -> 4710 MB.
+
+## 2026-11-21: a task's read-only reference to an element copied in the join's scope; fixture tasks reads the resident peak (O8f; mine; wt-taskgrow)
+
+The full verify on eca651e9d failed freeing's "tasks kept what its joins replaced": "grew by 139268 KB". Not a
+regression: the fixture alone passed on master and on cb77bff6a (the last verify that passed), and 139268 KB is two
+glibc malloc arenas (64 MB of address space each) and one worker stack (8196 KB) - a loaded machine starting another
+worker in the second half, which VmPeak counts whatever is touched. Looking closer, VmPeak saw nothing at all: `-free
+late` read flat too. The resident peak (VmHWM) did: -free late 9.4 MB over the second half - and the default build
+3.1 MB, linear in the turns (12.6 MB at 400,000). Bisected by shape: a join whose task takes a read-only reference
+straight from an element (`readsRef(v[j].a)`, `readsQ(v[j])`) kept ~63 bytes a spawn; one given a local naming it, or
+an I64, kept nothing. Lowering copies At's value for a task (D9h, read beside the spawner) where the callee's result
+would live - main's frame - and wt-taskfree's `taskCopy`, which makes the copy in the join's scope, covered only a
+by-value argument (its callSiteOf also saw no call through the Promote or borrowed field naming it).
+
+Now a read-only reference argument the callee preserves, of a task handing back no reference beside its parts, has
+its copy in the join's scope too (lower's `promotedSite` finds the call through a Promote, a Borrow of a field, a
+Deref or a Temp). The copy lives until the wait, past every task's read of it. free's `taskRefCopy` records it for
+`taskCopied` (no region made at its site, else every place keeps) and changes nothing else: what the task reaches
+through the reference stays its reach, so a7 (the element replaced in the join) still keeps. Probes: four argument
+shapes flat; an a7 shape with both reference kinds prints the same built, `-sanitize`, `-race` (clean), `-free late` and
+interpreted. The fixture now reads VmHWM at the half and three quarters of 200,000 turns and the end: flat where
+either quarter gains under 2 MB - a one-off step (a worker, a huge page) lands in one quarter, anything kept a turn in
+both. -free late reads "grew by 12600 KB", cb77bff6a's compiler 6300 KB, this one flat.

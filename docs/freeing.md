@@ -726,3 +726,12 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   Left: a conditional of two new values stored into a part keeps until its scope closes (the RefMut form too).
   **Where to pick up**: a copy holding a Map stays untracked (gaps.olang's shape); a conditional's new value stored; tasks
   as wt-taskfree left them.
+- 2026-11-21, wt-taskgrow: **a task's read-only reference to an element** (`spawn b = readsRef(v[j].a)`, `readsQ(v[j])`)
+  kept ~63 bytes a spawn for the run, here and at wt-taskfree alike: lowering copies the view call's value (D9h) for a
+  task, and only a by-value argument's copy went to the join's scope (`taskCopy`). A read-only reference argument whose
+  callee preserves it, of a task handing back no reference beside its parts, now has its copy there too - through the
+  Promote or the borrowed field that names it (lower's `promotedSite`); free records it for `taskCopied`'s region
+  check (`taskRefCopy`) and judges the reach as before. Fixture tasks missed it: VmPeak counts reserved address space,
+  so -free late read flat too, and a loaded machine's extra worker (two 64 MB malloc arenas and an 8 MB stack: the full
+  verify's "grew by 139268 KB") read as growth. It now reads the resident peak over each of the last two quarters of
+  200,000 turns, flat where either gains under 2 MB: -free late grows 12.6 MB, the compiler before this 6.3 MB.

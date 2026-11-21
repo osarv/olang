@@ -646,7 +646,7 @@ fn freeing(r mut report&) ? Failed {
     # peak address space over a second half of its joins; the oracles, and ThreadSanitizer, at a smaller size)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check tasks.olang > out.txt 2>&1") == 0, "tasks -memory -check", dir)
     try r.expect(sh(dir, "./build/tasks > out.txt 2>&1") == 0, "tasks", dir)
-    try r.expect(outOf(dir) == "19999400024\nflat\n", "tasks kept what its joins replaced", dir)
+    try r.expect(outOf(dir) == "79998800024\nflat\n", "tasks kept what its joins replaced", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 tasks.olang > out.txt 2>&1") == 0, "tasks interpreted", dir)
     try r.expect(outOf(dir) == "78824\n", "tasks interpreted output", dir)
     try late(r, dir, "tasks", "200", "78824\n")
