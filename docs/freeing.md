@@ -608,9 +608,10 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   **Where to pick up**: `c` captured by a lambda (a5's `g`) keeps as a named view (places by path would tell it from `Q.a`); tasks
   (a7, h8, n1, t1) still free nothing early - see "Tasks" below; g1 (a recursive owner, `T{a Vec<I64>, kids Vec<T>}`: T
   is no PartsOnly type - its parts walk is a cycle - so an element's let-go is a gap row, and `t.kids.Push` in T.Mk
-  changes T.kids in place) needs the walks to recurse through a type holding itself in a Vec; still named: g1, h8, n1,
-  review5's o1, o2, ov1, s3, t1 (review5's probes were lost with /tmp; t2 and v8 rewritten in wt-freeopen3, the rest to
-  rewrite from review5.md's descriptions).
+  changes T.kids in place) needs the walks to recurse through a type holding itself in a Vec; still failing -check
+  (wt-mapput's run, every probe printing what master prints built, `-free late`, `-sanitize` and interpreted): review4's
+  g1, h8, n1; review5's o1, o2, ov1, t1 and its own t2 (`?&` beside the any - wt-freeopen3's rewrite passes) - its
+  probes are in /tmp/claude-0/review5 after all; s3 passes now.
   **Tasks** (wt-mapput's look, nothing built): O8f keeps "storage a task can reach" (condition 3); the compiler keeps
   every place of a program with tasks (`decide`'s RTask), and h8, n1 and t1 also fail -check before that, the task's
   by-value argument (`spawn n = sumQ(v[i])`, At's value copied, D9h) judged untracked since viewArg excludes a task's
