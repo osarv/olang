@@ -33,3 +33,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - olang session (cloud, 2026-11-21): wt-mempeak (compiler/olang.olang test peak) and wt-buildspeed (self-build per phase)
 - olang session (cloud, 2026-11-21): wt-runperf, wt-ltokey, wt-sha merged (7ee156575)
 - olang session (cloud, 2026-11-21): wt-bgame merged
+- olang session (cloud, 2026-11-22): wt-mapnode (Map entry+link in one node; FindByte/line copy at memchr/memcpy speed)
