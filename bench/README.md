@@ -1,6 +1,6 @@
 # bench - olang against C
 
-Does olang deliver "C-like performance" (PRINCIPLES.md, principle 2)? Ten classic programs, each written twice - as
+Does olang deliver "C-like performance" (PRINCIPLES.md, principle 2)? Twelve classic programs, each written twice - as
 a good olang programmer would write it (`*.olang`) and as plain idiomatic C (`c/*.c`) - with the same algorithm, the
 same sizes and byte-identical output, timed against each other.
 
@@ -42,6 +42,8 @@ so one differing bit in any result fails the check.
 | `fannkuch` | small I32 arrays: indexing, swapping, rotating (run 4 times) |
 | `binarytrees` | allocation: millions of small nodes built, walked, dropped - scopes against malloc/free, and against a hand-written C arena (`c/binarytrees_arena.c`) |
 | `knucleotide` | a `Map` keyed by text slices, counting k-mers of a generated DNA sequence |
+| `fasta` | generating DNA: an LCG drawing from cumulative tables, lines of 60 through an `io.Writer` (100 MB at 10M) |
+| `revcomp` | reverse-complement: fasta's 10M output read whole (`os.ReadFile`), each sequence reversed through a 256-entry table baked at compile time, written through an `io.Writer`; C reads with `fread` and copies lines with `memcpy` |
 | `matmul` | F32 matrix multiply over flat arrays and row slices (vectorization) |
 | `sum` | a `List` built by `Push`, then summed with `for x in`, and with `Iter().Fold(...)` and a lambda, over the List and over an Array; C pushes onto a realloc'd array and loops |
 | `parallel` | longest Collatz chain, four tasks: `join`/`spawn` against pthreads |

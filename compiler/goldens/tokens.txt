@@ -30,7 +30,7 @@ e97f8c23aeb61662 542e4c34e84302dc bench/repro/opt.olang
 7bcfc7ec633cf09c 2cae49b34c44b01d bench/repro/text_local_copy.olang
 383bb384d647ddab ea195f7b08bced38 bench/repro/turn_temporaries.olang
 39c4ba4cd06cbda5 f2336a078a402de7 bench/repro/wrapping_div.olang
-a7731c214cedf9f2 dd4bacc7640f80cc bench/run.olang
+353ece48832a6c76 0678d58febe36bdb bench/run.olang
 b5e1cc6598052d6f 21e12c9d551f0885 bench/sha256.olang
 794cc0718242e88f e4a7c783dd5822fc bench/spectral.olang
 5eac950e4a96ec1d 18eda5d8448384f8 bench/sum.olang

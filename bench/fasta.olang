@@ -1,0 +1,73 @@
+# fasta: DNA sequences generated three ways (the Benchmarks Game's fasta) - the ALU sequence repeated, and two drawn
+# letter by letter from cumulative frequency tables with a linear congruential generator - written in lines of 60
+# through one io.Writer
+import "std/io"
+import "std/os"
+
+Width I64 = 60
+
+Alu String& = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
+
+# fasta's linear congruential generator
+type Random struct() {
+    last I64 = 42
+}
+
+fn (r mut Random&) Next(max F64) F64 {
+    r.last = (r.last * 3877 + 29573) % 139968
+    return max * F64(r.last) / 139968.0
+}
+
+# n letters of seq, from its start and around again, after a header line
+fn repeat(out mut io.Writer&, header String&, seq String&, n I64) {
+    out.PutLn(header)
+    line := Array<Char>(Width)
+    k I64 = 0
+    for done in range 0, n, Width {
+        m := (n - done).Min(Width)
+        for i in range m {
+            line[i] = seq[k]
+            k = 0 if k + 1 == seq.Len() else k + 1
+        }
+        out.Write(line[:m])
+        out.WriteChar('\n')
+    }
+}
+
+# n letters drawn with the given odds, after a header line
+fn random(out mut io.Writer&, rng mut Random&, header String&, letters String&, odds Array<F64>&, n I64) {
+    out.PutLn(header)
+    cumulative := Array<F64>(odds.Len())
+    total F64 = 0.0
+    for i, p in odds {
+        total += p
+        cumulative[i] = total
+    }
+    last := letters.Len() - 1
+    line := Array<Char>(Width)
+    for done in range 0, n, Width {
+        m := (n - done).Min(Width)
+        for i in range m {
+            r := rng.Next(1.0)
+            k I64 = 0
+            for k < last and r >= cumulative[k]: k++
+            line[i] = letters[k]
+        }
+        out.Write(line[:m])
+        out.WriteChar('\n')
+    }
+}
+
+fn main() ? {
+    args := os.Args()
+    n I64 = 1000
+    if args.Len() > 1: n = try args[1].ParseInt()
+    out := io.Writer(io.Stdout)
+    rng := Random()
+    repeat(out, ">ONE Homo sapiens alu", Alu, 2 * n)
+    iub := Array<F64>[0.27, 0.12, 0.12, 0.27, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02]
+    random(out, rng, ">TWO IUB ambiguity codes", "acgtBDHKMNRSVWY", iub, 3 * n)
+    sapiens := Array<F64>[0.3029549426680, 0.1979883004921, 0.1975473066391, 0.3015094502008]
+    random(out, rng, ">THREE Homo sapiens frequency", "acgt", sapiens, 5 * n)
+    try out.Flush()
+}

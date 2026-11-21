@@ -1,0 +1,60 @@
+# reverse-complement: every sequence of a FASTA file reversed and each letter replaced by its IUPAC complement, written
+# back in lines of 60 under its header (the Benchmarks Game's reverse-complement; the input is fasta's output, read
+# from the file named on the command line instead of standard input)
+import "std/io"
+import "std/os"
+
+Width I64 = 60
+
+# every byte's complement: the IUPAC letters paired, either case to upper case; any other byte stays as it is
+Complement Array<Char> = complements()
+
+fn complements() Array<Char> {
+    t := Array<Char>(256)
+    for i in range 256: t[i] = Char(i)
+    to := "TGVHCDMKNSYAAWBRTGVHCDMKNSYAAWBR"
+    for i, c in "ACBDGHKMNSRUTWVYacbdghkmnsrutwvy": t[I64(c)] = to[i]
+    return t
+}
+
+# seq reversed and complemented, in lines of 60
+fn reversed(out mut io.Writer&, seq Array<Char>&) {
+    line := Array<Char>(Width)
+    n := seq.Len()
+    for done in range 0, n, Width {
+        m := (n - done).Min(Width)
+        for i in range m: line[i] = Complement[I64(seq[n - 1 - done - i])]
+        out.Write(line[:m])
+        out.WriteChar('\n')
+    }
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 2 {
+        try io.PutErrLn("usage: revcomp FILE")
+        os.Exit(2)
+    }
+    text := try os.ReadFile(args[1])
+    out := io.Writer(io.Stdout)
+    seq := Array<Char>(text.Len())    # the sequence being read, its line ends left out
+    n I64 = 0
+    at I64 = 0
+    for at < text.Len() {
+        end := try text[at:].FindByte('\n') catch default text.Len() - at
+        line := text[at:at + end]
+        at += end + 1
+        if line.StartsWith(">") {
+            if n > 0: reversed(out, seq[:n])
+            n = 0
+            out.PutLn(line)
+            continue
+        }
+        for c in line {
+            seq[n] = c
+            n++
+        }
+    }
+    if n > 0: reversed(out, seq[:n])
+    try out.Flush()
+}
