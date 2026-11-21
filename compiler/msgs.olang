@@ -1039,6 +1039,7 @@ type Diag enum {
     SliceNoPlace
     SetValueLast
     SetSliceAxis
+    RowsInPlaceLent
 }
 
 # one function each, under the id it is known by
@@ -1704,6 +1705,7 @@ fn SetatUndeclared(ty String&) r.Msg { return r.Msg(Diag.SetatUndeclared, "E31",
 fn SetatIndexCount(ty String&, have I64, n I64) r.Msg { return r.Msg(Diag.SetatIndexCount, "E31e", $ty + "'s SetAt takes " + $have + (" index" if have == 1 else " indexes") + ", " + $n + " written", "a store into x[i, j], or through it, gives SetAt every index written, then the value", "write one index per parameter, or declare 'SetAt(i ...I64, v E)'") }
 fn WriteThroughAtNoSetat(ty String&) r.Msg { return r.Msg(Diag.WriteThroughAtNoSetat, "E31", "this writes through x[i] on " + $ty + ", which declares At but not SetAt", "the copy At gives back is never written back", "declare SetAt") }
 fn WriteThroughAtBuilds() r.Msg { return r.Msg(Diag.WriteThroughAtBuilds, "E31, O17", "x[i] gives a copy, and the call can build into what it holds", "it builds where the copy is", "hold the elements by reference, or take it in place ('x.RefMut(i)')") }
+fn RowsInPlaceLent(want String&) r.Msg { return r.Msg(Diag.RowsInPlaceLent, "T7c", "a reference to " + $want + " cannot name rows held in place", "each row here is an array of a known length laid out in place; each of the reference's rows is a length and a pointer to storage elsewhere", "declare a reference local, 'rows " + $want + "& = m', which takes the rows' length, or pass it to a function, an instance per length (G29)") }
 fn CondLentWritable() r.Msg { return r.Msg(Diag.CondLentWritable, "E28", "this call would write a copy of what a conditional or a match chose", "a conditional or a match gives a copy of the value it chooses, which the call writes and drops", "call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference") }
 fn WriteThroughAtCall() r.Msg { return r.Msg(Diag.WriteThroughAtCall, "E31b", "this call writes a copy of x[i]", "x[i] gives a copy, and the call can reach the collection another way", "call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference") }
 fn WriteThroughAtOperator(ty String&, method String&) r.Msg { return r.Msg(Diag.WriteThroughAtOperator, "E31b", "this store writes a copy of x[i]", "x[i] gives a copy of the element, and the store would run " + $ty + "'s " + $method + " between reading it and writing it back", "write 't := x[i]', the store into 't', then 'x[i] = t'") }

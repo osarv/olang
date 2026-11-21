@@ -1,0 +1,13 @@
+# check: fail error[T7c]: a reference to Array<Array<I64>> cannot name rows held in place
+# T7c: a field's reference to an array of arrays held by value cannot name rows laid out in place - each of its rows is a
+# length and a pointer; it had borrowed the local as it was and read its rows as pairs (a crash); a reference local
+# takes the rows' length instead (tests/nestref.olang)
+type Grid struct(rows Array<Array<I64>>&) {
+    rows
+}
+
+fn main() {
+    m := [[1, 2], [3, 4]]
+    g := Grid(m)
+    Println($g.rows[1][0])
+}

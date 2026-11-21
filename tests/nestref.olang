@@ -1,0 +1,64 @@
+# a reference to an array of arrays held by value (T7c): rows laid out in place - a local of known-length rows, a slice
+# of one - are named with their length, so the reference reads and writes them where they are, as an instance's
+# parameter does (G29); read back after an arena churn
+
+fn total(rows Array<Array<I64>>&) I64 {
+    t := 0
+    for r in rows { for x in r: t += x }
+    return t
+}
+
+fn bump(rows mut Array<Array<I64>>&) {
+    for i in range rows.Len(): rows[i][0] += 100
+}
+
+# a reference local reads and writes the local's rows, as the evaluator does
+fn throughLocal() I64 {
+    m := [[1, 2], [3, 4], [5, 6]]
+    rows mut Array<Array<I64>>& = m
+    rows[1][0] = 30
+    return rows.Len() * 1000 + rows[1].Len() * 100 + m[1][0]
+}
+
+assert throughLocal() == 3230
+
+test "a reference local names rows held in place" {
+    m := [[1, 2], [3, 4], [5, 6]]
+    rows mut Array<Array<I64>>& = m
+    assert rows.Len() == 3 and rows[1].Len() == 2 and rows[1][0] == 3 and rows[2][1] == 6
+    rows[1][0] = 30
+    rows[2][1] += 60
+    junk := Vec<String>()
+    for i in range 1000: junk.Push($i)
+    assert junk.Len() == 1000 and m[1][0] == 30 and m[2][1] == 66 and rows[1][0] == 30
+    assert $m == "Array<Array<I64>>[Array<I64>[1, 2], Array<I64>[30, 4], Array<I64>[5, 66]]"
+}
+
+test "a read-only reference, one taken from another and a slice" {
+    m := [[1, 2, 3], [4, 5, 6]]
+    r Array<Array<I64>>& = m
+    w mut Array<Array<I64>>& = m
+    w[0][2] = 30
+    r2 Array<Array<I64>>& = w
+    s Array<Array<I64>>& = m[1:]
+    junk := Vec<String>()
+    for i in range 1000: junk.Push($i)
+    assert r[0][2] == 30 and r2[0][2] == 30 and r2[1].Len() == 3
+    assert s.Len() == 1 and s[0].Len() == 3 and s[0][1] == 5
+}
+
+test "passed on to functions, an instance per length" {
+    m := [[1, 2], [3, 4], [5, 6]]
+    bump(m)
+    rows mut Array<Array<I64>>& = m
+    bump(rows)
+    assert total(m) == 621 and total(rows) == 621 and m[2][0] == 205
+}
+
+test "rows of a run-time length keep their own" {
+    v := Vec<Array<I64>>()
+    v.Push([1, 2])
+    v.Push([3, 4, 5])
+    r Array<Array<I64>>& = v.View()
+    assert r[0].Len() == 2 and r[1].Len() == 3 and r[1][2] == 5
+}
