@@ -841,6 +841,10 @@ f9831b655082077d ad31a33b3e9b68c9 checks/cases/lanesumnotnumber.olang
 6c3d403c0f1fb2b1 eeea23e907e2684a checks/cases/litctoreffect.olang
 c077f7c6bec4db2c 6941fb497ab386ef checks/cases/localtypename.olang
 d05e72c40bb876f5 6864678024d5c268 checks/cases/longflag.olang
+3bf20bb8a826e9d0 97c72d225a75f0a1 checks/cases/lostloopwrite.olang
+7cf5395a072a86b2 17fe62aca9d6e714 checks/cases/lostloopwritecopy.olang
+c3cab10cc937587a 8771b6440614cc60 checks/cases/lostloopwriteindex.olang
+e895c18145f03631 50a303417490492f checks/cases/lostloopwriterepoint.olang
 5498acb00521bd41 bb3dc98460c45e4a checks/cases/m10stdimport.olang
 c04f6c112ed0348b b9151b9b539de5ef checks/cases/m19dintexp.olang
 162f78253c79de1a 818deaff638c03a4 checks/cases/m19dintsqrtnotry.olang
@@ -2417,7 +2421,7 @@ e20178f94e07dfed ff5ec0fbe401eade compiler/bindgen.olang
 172122c174426433 4abdab88d5005e0a compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 a63bb2cbd4c666c1 32f8e5565363d2f2 compiler/cells.olang
-94d4ed07bd8d6e7a a29a86b8795fcfc1 compiler/check.olang
+5f713622a770150f 9fe0fc38b2c39db1 compiler/check.olang
 da018e972c2ecc90 402dd6cf0de7cca1 compiler/cond.olang
 2ab98962469bc960 f235e148eac3e4ba compiler/definit.olang
 db407b9ec2aacf25 d850fbb42d0e8294 compiler/diag.olang
@@ -2443,7 +2447,7 @@ fc4cdf34cbc86f98 46e30c30cc91866d compiler/lower.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
 e584497ebb497531 0f081d3bdae48bfc compiler/mir.olang
-a2d192437e6b796d 6a49e8726e8a74f7 compiler/msgs.olang
+ea9051771bf62d06 eb0b393eeb52094d compiler/msgs.olang
 e12e0b7843a4d69e 3609653e0e4a8b34 compiler/names.olang
 3f072b84e716c304 202ed56cc066d701 compiler/needs.olang
 79acbc010c9bf08a a1be4111ef62bcb1 compiler/notebook.olang
@@ -2499,7 +2503,7 @@ bff38ad021d5542d 9c6cd315934193ff compiler/tools/rungold.olang
 67f2c232d9fc22f4 b75c2640c0dbc727 compiler/tools/seed.olang
 d60c568945ef50db bb36039f15d76915 compiler/tools/tokdiff.olang
 b5d5a7ffc3c55aed 778196a5417df71d compiler/tools/toolkit.olang
-da9b51a3ded565b7 b6877cdabe024350 compiler/typed.olang
+65d570cc87d2e4fe ee9568ab4a015163 compiler/typed.olang
 e0222b80e1fe43ba 21f0c035d5b44f43 compiler/types.olang
 ac9569bf452c8a83 6ed8536abd31d32d compiler/unparse.olang
 e2ea203aa101b68f 55a0a86245b469ff compiler/views.olang
@@ -2675,6 +2679,7 @@ ef74496ac1efc479 2597c26849901793 tests/inplace.olang
 3253d9e1f272b7f0 71d68e12eec68060 tests/keyenums.olang
 bcc9ef5a3b4134de 3d9949edfee60676 tests/lanes.olang
 01ffe7335fe6ab32 5ca34c7fbd5883d8 tests/literals.olang
+ec5c29f257947440 7158e7d8028c7830 tests/loopref.olang
 cb1a5845ede026cf 0791c61597117220 tests/match.olang
 bd604793a79e1dd0 03c02f86e953d049 tests/membermod.olang
 43716d6db39bbcf8 469215721341423b tests/members.olang
