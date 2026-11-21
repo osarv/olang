@@ -380,6 +380,9 @@ type Machine struct(T mut types.Table&, When Mode) {
     # B23: where it is set, asked every WatchSteps steps whether to stop - a notebook's interrupt; the step budget is
     # then the next step it is asked at
     Watch fn?&() Bool = null
+    # where it is set, asked for a function the machine reaches that is not defined yet - it defines it (lowered where
+    # first called, not before: what a request never reaches is never lowered) and says whether it did
+    Supply fn?&(k mir.FnKey) Bool = null
     Soles Vec<Bool>             # O8d: by candidate place, whether it is decided sole (mir.Rvalue.Sole) - none while compiling
     Gen mir.GenInfo = mir.GenInfo()    # T13d, T2d: the program's generational types and weak fields
     holderHit Bool = false             # holderCheck's walk met the instance
@@ -536,6 +539,15 @@ fn (m mut Machine&) Define(f mir.Fn&) {
         case mir.FnKey.Helper(k, _) { m.cf[i].Equal = k == mir.HelperKind.Equal }
         case _ { }
     }
+}
+
+# the index in fns of function k, -1 for none: one not defined yet asked of Supply first
+fn (m mut Machine&) fnIndex(k mir.FnKey) I64 {
+    have := try m.fnOf.Get(k) catch default -1
+    if have >= 0: return have
+    s := m.Supply
+    if s == null or not s(k): return -1
+    return try m.fnOf.Get(k) catch default -1
 }
 
 # f decoded (cfn)
@@ -1616,7 +1628,8 @@ fn (m mut Machine&) runDtor(closing I64, t types.TypeId, p Ptr) {
         m.refuse(WhyNoBody)
         return
     }
-    fi := try m.fnOf.Get(k) catch {
+    fi := m.fnIndex(k)
+    if fi < 0 {
         m.refuse(WhyNoBody)
         return
     }
@@ -2744,7 +2757,7 @@ fn (m mut Machine&) codePtr(k mir.FnKey) Ptr {
 # in (D16c); none for a named function
 fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, args mir.Range) {
     cp := m.codePtr(code)
-    gi := try m.fnOf.Get(code) catch default -1
+    gi := m.fnIndex(code)
     if gi >= 0 and m.fns.At(gi).Gen {
         m.genClosure(fi, dst, cp, gi, s, args)
         return
@@ -4420,7 +4433,8 @@ fn (m Machine&) initFrame(fi I64) Bool {
 
 fn (m mut Machine&) startGlobal(g I64) {
     init := m.globals[g].Init
-    fi := try m.fnOf.Get(m.codeKeys[init]) catch {
+    fi := m.fnIndex(m.codeKeys[init])
+    if fi < 0 {
         m.refuse(WhyNoBody)
         return
     }
@@ -4443,7 +4457,7 @@ fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, I64 {
     # the function called (its index in fns, -1 for none), its environment, and the extern it is (-1 for none)
     match c {
         case mir.Callee.Fn(key, _) {
-            i := try m.fnOf.Get(key) catch default -1
+            i := m.fnIndex(key)
             if i < 0: m.refuse(WhyNoBody)
             return i, NullPtr, -1
         }
@@ -4463,7 +4477,7 @@ fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, I64 {
                 return -1, NullPtr, -1
             }
             if a.Extern: return -1, env, a.Code
-            i := try m.fnOf.Get(m.codeKeys[a.Code]) catch default -1
+            i := m.fnIndex(m.codeKeys[a.Code])
             if i < 0: m.refuse(WhyNoBody)
             return i, env, -1
         }
@@ -4482,7 +4496,7 @@ fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, I64 {
                 m.refuse(WhyNotModelled)
                 return -1, NullPtr, -1
             }
-            i := try m.fnOf.Get(m.codeKeys[m.allocOf(code.Id).Code]) catch default -1
+            i := m.fnIndex(m.codeKeys[m.allocOf(code.Id).Code])
             if i < 0: m.refuse(WhyNoBody)
             return i, NullPtr, -1
         }
@@ -5458,13 +5472,13 @@ fn (m mut Machine&) startTask(fi I64, slot I64) {
     callee := -1
     env := NullPtr
     match k.Target {
-        case mir.Callee.Fn(key, _) { callee = try m.fnOf.Get(key) catch default -1 }
+        case mir.Callee.Fn(key, _) { callee = m.fnIndex(key) }
         case mir.Callee.Value(_) {
             vp := Ptr(tk.Buf, total + 8 * nt + 16 * nc + 8 * ns)
             code := m.rdPtr(vp)
             env = m.rdPtr(Ptr(vp.Id, vp.Off + 8))
             if code.Id != 0 and m.al[code.Id & slotMask].Kind == aCode and not m.al[code.Id & slotMask].Extern {
-                callee = try m.fnOf.Get(m.codeKeys[m.al[code.Id & slotMask].Code]) catch default -1
+                callee = m.fnIndex(m.codeKeys[m.al[code.Id & slotMask].Code])
             }
         }
         case _ { }
@@ -5619,7 +5633,8 @@ fn (m mut Machine&) taskEnded(fr frame) {
             m.refuse(WhyNullCall)
             return
         }
-        hf := try m.fnOf.Get(m.codeKeys[m.al[code.Id & slotMask].Code]) catch {
+        hf := m.fnIndex(m.codeKeys[m.al[code.Id & slotMask].Code])
+        if hf < 0 {
             m.refuse(WhyNoBody)
             return
         }
@@ -5751,7 +5766,8 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
     m.TraceDropped = 0
     if m.Result.Id != 0 and m.al[m.Result.Id & slotMask].Kind != aFree: m.release(m.Result.Id & slotMask)
     m.Result, m.ResultTy = NullPtr, types.VoidT
-    fi := try m.fnOf.Get(k) catch {
+    fi := m.fnIndex(k)
+    if fi < 0 {
         m.refuse(WhyNoBody)
         return m.Stopped
     }
@@ -5780,7 +5796,8 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
 fn (m mut Machine&) EndProgram(k mir.FnKey) Stop {
     m.halted = false
     m.Stopped = Stop.None
-    fi := try m.fnOf.Get(k) catch { return Stop.None }
+    fi := m.fnIndex(k)
+    if fi < 0: return Stop.None
     base := m.nFs
     nf := m.pushFrame(fi, rRequest, 0)
     if nf < 0: return m.Stopped
@@ -6408,7 +6425,8 @@ fn (m Machine&) ScopeSlots() I64 { return m.scopes.Len() }
 fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
     seen := Map<I64, Bool>()
     work Vec<I64>
-    start := try m.fnOf.Get(k) catch { return WhyNoBody, 0, source.Span(0, 0) }
+    start := m.fnIndex(k)
+    if start < 0: return WhyNoBody, 0, source.Span(0, 0)
     work.Push(start)
     seen.Put(start, true)
     for work.Len() > 0 {
@@ -6464,7 +6482,8 @@ fn (m mut Machine&) whyCall(target mir.Callee, sp source.Span, seen mut Map<I64,
             if name != "__olang_run_on_stack" and not typed.MathExtern(name, m.T.Items(m.T.Params(ty)).Len()) { return WhyExtern, sp }
         }
         case mir.Callee.Fn(key, _) {
-            g := try m.fnOf.Get(key) catch { return WhyNoBody, sp }
+            g := m.fnIndex(key)
+            if g < 0: return WhyNoBody, sp
             if not (try seen.Get(g) catch default false) {
                 seen.Put(g, true)
                 work.Push(g)

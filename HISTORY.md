@@ -40566,3 +40566,35 @@ Corpus: tests/loopref.olang (rows in place through a reference local, a slice an
 through ViewMut, each read back after a churn; a read-only walk copying; `assert rowsWalked() == 1020` decided while
 compiling and a baked global) - built, interpreted (`OLANG_EVALUATE=1`), under `-debug -sanitize` and
 `-memory -check`.
+
+## 2026-11-21: the evaluator lowers a function where it first reaches it - compiler/olang.olang's test build 5.2 -> 4.2 GB (K1; mine; wt-mempeak)
+
+`compiler/olang.olang`'s test build peaked at ~5.2 GB (the compiler alone; the process tree ~5.6 with clang beside it)
+and was OOM-killed inside the suite. Measured with `OLANG_TIMES=1` and the evaluate phase split (temporary phases
+around `DecideValues`, `DecideAsserts`, `Bake`, and a per-assert resident-set trace):
+
+| phase ends | before | after |
+|---|---|---|
+| check | 945 MB | 907 MB |
+| evaluate | 2110 MB (asserts +923 MB, 1181 ms) | 1172 MB (asserts +58 MB, 114 ms) |
+| scope | 3411 MB | 2472 MB |
+| lower+emit | 5152 MB | 4212 MB |
+| compile, link | 5173 MB | 4233 MB |
+
+The cause was one assert: the B11b test's `assert explained("divmod") == ...` - `explained` runs the whole compiler on a
+file. Deciding asserts while compiling (S18c), `Exec.Need` lowered the condition and *everything its code could reach*
+before evaluating - here most of the compiler, 822 MB of MIR and lowering state, plus ~250 MB decoded for the machine -
+and the evaluation then stopped at once (an extern, so the run time decides it). That memory sits in the checker's scope
+(the `Exec` is placed where `c.P` lives), so it stayed through scope, lowering and emission.
+
+Now, while compiling, `Need(k)` lowers k alone, defining what the machine must know before running it (the externs it
+calls, its any tables, the destructors it registers), and the machine asks for every other function the first time it
+reaches one (`eval.Machine.Supply`, set by `Exec.start`; every lookup of a function by key goes through
+`Machine.fnIndex`, so a call by name, through a value or a table, a destructor, a global's initializer, a task, `Why`'s
+walk all find it as before). What a request reaches is lowered exactly as before; what it never reaches is never
+lowered. Meaning is unchanged: the same functions run, a body that does not lower (a gap, K1a's faulty bodies) is
+refused when reached as it was. It is the compile-time evaluator's only (decided values, asserts, baked globals):
+an interpreted run (`OLANG_EVALUATE=1`, the prompt) still lowers everything first, because a program reading its own
+resident set saw the lowering land mid-run - checks' freeing/joins.olang, interpreted, read 225 pages of growth where
+its bound is 100. The self-build's evaluate phase fell too (1.2 -> 1.1 GB; the build 3.8 GB at most); the fixed
+point holds. The suite's memory gate figure for the file (its process tree, `compiler/tools/peaks.txt`): 5081 -> 4710 MB.
