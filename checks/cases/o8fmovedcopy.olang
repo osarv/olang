@@ -1,0 +1,59 @@
+# check: run
+# flags: -sanitize
+# O8f (gap 22, review6): a value local given a copy of one holding a value moved out of a place (`w := x`, x a popped
+# String or Q) holds the copy, no moved value - a String's copy may share x's text - and x, copied out, is not its
+# moved value's one holder: neither is ended at its block's end (free.EndsMoved) nor handed back as it is
+# (lower.movedRets) as the moved value (free.copiedOut). Before, both were ended - the text released twice, the slot
+# then reused under what was kept
+type Q struct() { a Vec<I64> }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.a = Vec<I64>[i, i + 1]
+    return q
+}
+
+fn popCopy(v mut Vec<String>&) String {
+    x := v.Pop()!
+    w := x
+    return w
+}
+
+fn takeCopy(v mut Vec<Q>&) Q {
+    x := v.TakeAt(0)!
+    y := x
+    return y
+}
+
+fn main() {
+    v Vec<String>
+    for k in range 40: v.Push($"text" + $k)
+    out Vec<String>
+    keep := ""
+    for i in range 6 {
+        x := v.Pop()!
+        w := x
+        out.Push(w)
+        if i == 0: keep = w
+        y := v.Pop()!
+        z := y
+        out.Push(y)
+        assert z == y
+    }
+    popCopy(v)
+    s := popCopy(v)
+    for k in range 20: v.Push($"junkjunk" + $k)
+    assert keep == "text39" and s == "text26" and out.Len() == 12
+    for k in range 12: assert out[k] == "text" + $(39 - k)
+    qs Vec<Q>
+    for k in range 8: qs.Push(Q.Mk(k))
+    takeCopy(qs)
+    c := takeCopy(qs)
+    {
+        x := qs.Pop()!
+        w := x
+        qs.Insert(0, w)!
+    }
+    for k in range 10: qs.Push(Q.Mk(100 + k))
+    assert c.a[0] == 1 and qs[0].a[0] == 7 and qs[1].a[1] == 3
+}

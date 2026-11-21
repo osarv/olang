@@ -367,6 +367,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     mustLocals Vec<mut Vec<I64>&> # by body, by local: what every value it holds is (must)
     withinLocals Vec<mut Vec<I64>&> # by body, by local: the parameter every value it holds is reached from (must)
     freshLocals Vec<mut Vec<Bool>&> # by body, by local: whether every value it holds is an object the body made (must)
+    copiedOut Vec<mut Vec<Bool>&>   # by body, by local: whether a value local is given a copy of it (`w := x`, movedLocal)
     callers Vec<mut Vec<I64>&>    # by body: the bodies calling it, found by the walks
     # by body: its locals' origins where its last walk left them - flattened, local l's from savedAt[b][l] to
     # savedAt[b][l + 1] - so its next walk starts from them (summaries only grow: so does each local's least fixed point)
@@ -896,6 +897,7 @@ fn (f mut Free&) addBody(b I64, root I64) {
         case _ { }
     }
     f.mustLocals.Push(Vec<I64>())
+    f.copiedOut.Push(Vec<Bool>())
     f.withinLocals.Push(Vec<I64>())
     f.freshLocals.Push(Vec<Bool>())
     f.callers.Push(Vec<I64>())
@@ -5761,7 +5763,9 @@ fn (f mut Free&) mustOf(b I64) {
         for a in range m.assigned.Len() {
             l := m.assigned[a]
             if l < 0 or m.isParam(l): continue
-            v := meet(m.must[l], m.exprMust(m.values[a]))
+            # (a value local given a copy of another - `w := x`, x holding a value moved out of a place - holds the copy,
+            # no moved value: its storage is not the place's, and text's copy may share x's - movedLocal)
+            v := meet(m.must[l], MustNone if m.copyRead(m.values[a]) >= 0 else m.exprMust(m.values[a]))
             if v != m.must[l] {
                 m.must[l] = v
                 found = true
@@ -5777,10 +5781,19 @@ fn (f mut Free&) mustOf(b I64) {
     wl := f.withinLocals[b]
     wl.Clear()
     for x in m.within: wl.Push(x)
+    co := f.copiedOut[b]
+    co.Clear()
+    for _ in range body.Locals.Len(): co.Push(false)
+    for x in m.values {
+        c := m.copyRead(x)
+        if c >= 0: co[c] = true
+    }
     r := MustTop
     fresh := true
     for x in m.returned {
-        r = meet(r, m.exprMust(x))
+        # (a local copied into another is handed back copied, lowering's movedRets leaving it out: no moved value)
+        c := m.copyRead(x)
+        r = meet(r, MustNone if c >= 0 and co[c] else m.exprMust(x))
         if not m.fresh(x, 0): fresh = false
     }
     if r != f.mustRes[b] {
@@ -5819,6 +5832,20 @@ type mustW struct(F mut Free&, Id I64) {
     assigned Vec<I64>          # each assignment of a local: the local, its value
     values Vec<typed.Expr&>
     returned Vec<typed.Expr&>
+}
+
+# the value local (no reference) a value reads whole as it is - a copy of it - through Away and a one-value conversion,
+# -1 for any other value
+fn (m mut mustW&) copyRead(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Read(_, _, p, _): match p {
+            case typed.Lvalue.Local(_, ty, id): -1 if m.F.T().IsRef(ty) else I64(id)
+            case _: -1
+        }
+        case typed.Expr.Away(_, _, y): m.copyRead(y)
+        case typed.Expr.Prim(_, _, op, _, args): m.copyRead(args[0]) if isConversion(op, args) else -1
+        case _: -1
+    }
 }
 
 fn (m mut mustW&) isParam(l I64) Bool {
@@ -7546,6 +7573,9 @@ fn (f mut Free&) EndPlace(b I64, l I64) I64 {
 
 fn (f Free&) movedLocal(b I64, l I64) Bool {
     if b < 0 or b >= f.mustLocals.Len() or l < 0 or l >= f.mustLocals[b].Len(): return false
+    # (one copied into another value local is not the moved value's one holder: a String's copy may share its text -
+    # ended or handed back as it is, the other would read storage let go of, or let go of it twice)
+    if l < f.copiedOut[b].Len() and f.copiedOut[b][l]: return false
     v := f.mustLocals[b][l]
     return v >= MovBase or v == MovLeaves
 }

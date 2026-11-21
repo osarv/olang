@@ -40263,3 +40263,17 @@ place's expressions) without the escape, as a RefAt kept by none would be. Only 
 extern's arguments are as they were. Fixture anyholders: the element the view was taken of is replaced, the Vec grown
 and popped while the holder lives, its Sum read after - the same built, `-free late`, `-sanitize` and interpreted;
 400,000 turns under 8 MB (master: Q.b kept).
+
+## 2026-11-21: review6 - a copy of a moved value local is no moved value (O8f; mine; wt-review6)
+
+The soundness review of wt-genview through wt-freeopen3 (/home/user/review6.md) found one bug, in wt-freeopen2/3's
+moved locals. The must-fact of a value local (`free.mustLocals`) followed a read of another local as it is - right
+for references, which name the same storage, wrong for a value local given a copy: `x := v.Pop()!` then `w := x` made
+both "a value moved out of the place", so both were ended at the block's end (`EndsMoved`). A String's copy of a
+local shares its text, so the text was released twice - the slot list then handed the same slot to two strings, and
+`out.Push(x)` or `keep = w` read text another string had overwritten; `-sanitize` stopped on it, while built, `-free
+late` and interpreted printed the right text by luck. (A Q's copy was judged the same way; no probe showed harm
+there.) Now a value local given a copy of another (`mustW.copyRead`)
+holds no moved value, the local copied out is not its moved value's one holder (`free.copiedOut`: neither ended at its
+block's end nor handed back as it is by `lower.movedRets`), and a return of such a local hands back no moved value
+(the caller's drop releases nothing). Missed frees only for that shape. Run case o8fmovedcopy (`-sanitize`).

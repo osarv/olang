@@ -2952,6 +2952,8 @@
 | status 0
 === run o8fbufview.olang
 | status 0
+=== run o8fmovedcopy.olang
+| status 0
 === run opfallible.olang
 | status 0
 === run p1gtargetscope.olang
