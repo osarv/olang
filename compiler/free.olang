@@ -7113,10 +7113,13 @@ fn (f mut Free&) taskKeeps() {
         for k in range n: f.keep(k, RTask, -1, source.Span(0, 0), $f.taskAll + ": nothing is freed early where it does")
         return
     }
-    # (every body running where no call is written, and - whatever effects follows of a function value - every lambda
-    # and every function named as a value)
+    # (every body running where no call is written, and - whatever effects follows of a function value - every function
+    # named as a value, and every lambda where a task reads a global, which may hold one: a lambda made in the tasks'
+    # code is among what that code reaches, its maker its caller - lambdaMade; one made elsewhere reaches a task only
+    # as an argument or through a global, which taskAll and taskReach say)
     for b in range f.Bodies.Len() {
-        if f.implicit(b) or f.named[b] or f.Bodies[b].Of == typed.BodyOf.Lambda: roots.Push(b)
+        lambda := f.Bodies[b].Of == typed.BodyOf.Lambda and f.taskReach != ""
+        if f.implicit(b) or f.named[b] or lambda: roots.Push(b)
     }
     run := f.reached(roots)
     own := "a task's code changes it, on a thread of its own"

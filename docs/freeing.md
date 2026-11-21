@@ -679,6 +679,11 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   probes (a copy moved on, `keep = w`, pushed, a capture beside a store of the captured local, a field read into a local
   reassigned or stored) print the same built, `-free late`, `-sanitize` and interpreted. Fixtures captures, veccopies
   and fieldreads (400,000 turns under 8 MB; master fails -check on each).
+  Found running the scenario: the tasks fixture kept every place on the base too ("a task's code may let go of any
+  place") - taskKeeps took every lambda in the program among the tasks' code, and std/os's imports bring lambdas that
+  may. A lambda made in the tasks' code is reached from its maker (lambdaMade's caller edge), and one made elsewhere
+  reaches a task only as an argument (taskAll) or through a global (taskReach): every lambda is a root only where a
+  task reads a global. A probe whose task makes a lambda replacing elements keeps, as it should.
   **Where to pick up**: g1 (a recursive owner, `T{a Vec<I64>, kids Vec<T>}`) needs the walks to recurse through a type
   holding itself in a Vec - not started. A copy holding a Map stays untracked (gaps.olang's shape: Put on a split
   copy's entries is a gap row). A field read into a local assigned again (`nm2 := v[j].n; nm2 = nm2 + "x"`) keeps the

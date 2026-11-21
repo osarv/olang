@@ -40440,3 +40440,11 @@ or free and print the same built, `-free late`, `-sanitize` and interpreted. Wri
 `d = Vec<Q>()` on a `mut Vec<Q>&` parameter repoints the reference (S4a), so the caller's
 Vec is unchanged. Fixtures captures, veccopies and fieldreads (400,000 turns under 8 MB; master fails -check on each).
 g1 (a type holding itself in a Vec) is not started.
+
+Running the freeing scenario found the tasks fixture failing on the base as well: its program kept every place, "a
+task's code may let go of any place". condition 3's taskKeeps took every lambda and every function named as a value
+among the tasks' code (whatever effects follows of a function value), and the std modules tasks.olang imports bring
+lambdas that may let go of any place. A lambda made in the tasks' code is reached anyway - its maker is its caller
+(lambdaMade) - and one made elsewhere reaches a task only as an argument, which effects reports (taskAll), or through a
+global (taskReach); so every lambda is a root only where some task reads a global. Functions named as values stay
+roots. A probe whose task makes a lambda replacing elements of its own Vec keeps, as the rule says.
