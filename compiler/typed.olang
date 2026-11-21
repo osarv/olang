@@ -327,13 +327,15 @@ type Make struct(Kind MakeKind, Tag I64, Items Array<Expr&>&, Length Expr?&, Sit
     NoClear
 }
 
-type Collect struct(Reserve Expr?&, Loop Block&, Site SiteId, Checked Check, Exact Bool = false) {
+type Collect struct(Reserve Expr?&, Loop Block&, Site SiteId, Checked Check, Exact Bool = false, Grown Expr?& = null) {
     Reserve    # how many it will hold at most, null where not known (E27)
     Loop
     Site
     Checked    # the reservation's length, as Fill's (D14b, E15a)
     Exact      # its loop yields exactly Reserve elements, one each turn (lane operators, E39): made once at that length,
                # each yield stored in place, never grown and never copied
+    Grown      # M19d: a grown's source array (an exact collect moving its elements), which lowering lengthens in place
+               # where the run time can - no elements moved, nothing copied (GrowInPlace); null for any other
 }
 
 # an operation over numbers, Bools and Chars - and the few the compiler supplies over other types (Len, Bits, the
@@ -673,7 +675,7 @@ fn writesFirst(op PrimOp) Bool {
 
 fn storesNothing(op PrimOp) Bool {
     return match op {
-        case PrimOp.AtomicStore, PrimOp.AtomicAdd, PrimOp.AtomicSwap, PrimOp.AtomicCompareSwap, PrimOp.Drop, PrimOp.Retire: false
+        case PrimOp.AtomicStore, PrimOp.AtomicAdd, PrimOp.AtomicSwap, PrimOp.AtomicCompareSwap, PrimOp.Drop, PrimOp.Retire, PrimOp.GrowInPlace: false
         case PrimOp.LaneDots: false
         case _: true
     }
@@ -2078,6 +2080,10 @@ type PrimOp enum {
     # evaluator marks it and stops on a later use of it, or of a view of it (K1, M19g), naming where the program grew
     # the collection
     Retire
+    # M19d, lowering's alone (a grown's collect): args [the array grown, n] - an array of n elements at the same storage,
+    # lengthened where it lies (its storage the last in a chunk with room after it, __olang_grow_in_place), else an empty
+    # one; never under -sanitize, where the old storage is poisoned
+    GrowInPlace
     # O15, T13b: args [a borrow of a place holding a value by value] - the destructors that value has to run run now, in
     # the closing block's scope (its own, then its parts', C9): a by-value holder letting go of what it holds - its
     # block's end, a store over it. Lowered as a call of the type's Drop helper

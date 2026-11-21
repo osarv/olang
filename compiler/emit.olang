@@ -5668,6 +5668,22 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
             id := fe.let("load ptr, ptr " + $at)
             return fe.let("icmp eq ptr " + $id + ", @" + $fe.E.typeid(fe.otype(fe.arg(args, 1))))
         }
+        case typed.PrimOp.GrowInPlace {
+            # M19d: a grown's source lengthened where it lies - the run time's answer, null where it cannot (an empty
+            # array then); never under -sanitize, where the old storage is poisoned as it is retired, nor for a source
+            # held otherwise than as its length and address
+            if fe.E.San or lt != "{ i64, ptr }": return "zeroinitializer"
+            el := t.Elem(fe.arrayOf(ty))
+            n := fe.val(fe.arg(args, 1), mir.I64T)
+            ob := fe.let("mul i64 " + $fe.let("extractvalue { i64, ptr } " + $x + ", 0") + ", " + $fe.size(el))
+            nb := fe.let("mul i64 " + $n + ", " + $fe.size(el))
+            p := fe.let("extractvalue { i64, ptr } " + $x + ", 1")
+            fe.E.runtime("__olang_grow_in_place")
+            q := fe.let("call ptr @__olang_grow_in_place(ptr " + $p + ", i64 " + $ob + ", i64 " + $nb + ", i64 " + $n + ")")
+            got := fe.let("icmp ne ptr " + $q + ", null")
+            len := fe.let("select i1 " + $got + ", i64 " + $n + ", i64 0")
+            return fe.let("insertvalue { i64, ptr } " + $fe.let("insertvalue { i64, ptr } undef, i64 " + $len + ", 0") + ", ptr " + $q + ", 1")
+        }
         case typed.PrimOp.Retire {
             # M19d: an array a collection no longer uses - under -sanitize its storage poisoned and, where it has a
             # chunk of its own, made unreadable until its scope closes (B2f); nothing otherwise

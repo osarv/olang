@@ -637,8 +637,10 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=100 tempref.olang > out.txt 2>&1") == 0, "tempref interpreted", dir)
     try r.expect(outOf(dir) == "flat flat 0\n", "tempref interpreted output", dir)
     # (growth, gap 11: a Vec's growth frees in a program with an owner holding a Vec whole and a copy of one - its peak
-    # address space, which transparent huge pages do not move as they do its resident peak)
-    try r.expect(sh(dir, "\"$OLANG\" -check growth.olang > out.txt 2>&1") == 0, "growth", dir)
+    # address space, which transparent huge pages do not move as they do its resident peak; run with its address space
+    # limited, where no growth reserves any behind its buffer, M19d, so each growth past a chunk makes a new buffer)
+    try r.expect(sh(dir, "\"$OLANG\" build -check growth.olang > out.txt 2>&1 && (ulimit -v 4194304 && ./build/growth) > out.txt 2>&1") == 0
+                 "growth", dir)
     try r.expect(outOf(dir).EndsWith(" three buffers\n"), "growth kept the buffers its Vecs grew out of", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=1000 growth.olang > out.txt 2>&1") == 0, "growth interpreted", dir)
     try r.expect(outOf(dir) == "10800 999 three buffers\n", "growth interpreted output", dir)

@@ -1338,7 +1338,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   shallow at every `&`; sharing is written `&`. Collections are ordinary types with a Copy, unique exactly when their
   elements are. List stays a handle with `Clone()`.
 - **`Vec<T>` is the default growable array (M19d, the user's QAB).** Growth doubles; the old buffer stays until the
-  scope closes, so a stale view reads old elements, never freed memory. `View()`/`ViewMut()` give the elements as an
+  scope closes, so a stale view reads old elements, never freed memory - or, where the buffer grew in place (the last
+  storage of its part region, room or reserved address space behind it: the run time's `__olang_grow_in_place`, never
+  under -sanitize; 2026-11-21), the buffer itself. `View()`/`ViewMut()` give the elements as an
   array. **M19g**: using a view or Ref after the same Vec may have grown is a compile-time error where the compiler
   sees the same Vec on both sides. Array and Vec stay two types (QCV, the user's "Yeah, okay, keep them" 2026-11-06).
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Put`, `io.PutLn(t = "")`,

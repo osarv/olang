@@ -8,7 +8,9 @@ import "std/os"
 # (VmPeak), what the program took from the system - every chunk of 128KB up is mapped for itself (a smaller one is in
 # a slot of the range reserved at the start) and a chunk let go of stays mapped in the pool until it is taken again -
 # not the peak resident memory (VmHWM): with transparent huge pages a chunk's untouched tail is resident or not as the
-# kernel finds a huge page free, which on a loaded machine moved the same run between 24 and 28 MB.
+# kernel finds a huge page free, which on a loaded machine moved the same run between 24 and 28 MB. Run with the
+# address space limited (checks.olang): otherwise a growth reserves address space behind the buffer it makes, for the
+# next to grow into in place (M19d), and the peak address space no longer counts buffers.
 # The limit, from the buffer size: the last buffer holds 2^20 I64s, 8 MB, in a chunk of the class above 8 MB and its
 # header - 10 MB (the classes step by a quarter of a power of two). Three such chunks are 30 MB: v's buffer, w's, and
 # the chunks v grew out of (5 + 2.5 + 1.25 + ... MB, under 10), which w grows into; a program keeping them is at four,
