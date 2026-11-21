@@ -6,7 +6,10 @@
 # stand-in, kept in the long-lived value - holds the stand-in's keeper, which forwards to the scope it stood in for
 import "std/os"
 
-# the resident set, in kB
+# the resident set, in kB. Not the peak address space (VmPeak, as growth's check reads): a leak of small pieces lands
+# in slots of the range the runtime reserves at the start, which VmPeak never sees. The resident set moves by a
+# transparent huge page (2048 kB) as the kernel finds one free, so the bound is 4096 kB - the leak this guards
+# against was 11 MB
 fn rssKb() I64 {
     status := try os.ReadFile("/proc/self/status") catch default ""
     at := try status.Find("VmRSS:") catch default -1
@@ -64,7 +67,7 @@ fn main() ? {
     for i in range 200000: step(src, a, i)
     grew := rssKb() - before
     assert a.xs[3] == 7 + 3 + 199999 and a.failure == ""
-    assert before > 0 and grew < 1024, "200000 joins grew the resident set by " + $grew + "kB"
+    assert before > 0 and grew < 4096, "200000 joins grew the resident set by " + $grew + "kB"
 
     k := Keep()
     tag := "n=" + $src.base
