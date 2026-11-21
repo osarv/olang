@@ -74,3 +74,6 @@ The user: this week stops at 95% weekly usage (the reset is saved for next week,
 as we can"). Overnight the PC (GPU) is off; cloud sessions run olang/oann work (OLang Cloud) and e13-grids (oagent: settling on 2-D spreading and constraint tasks, building on e5 and your e2 sphere
 EP - it won't touch e2-ebr). Pick up e2 scaling from your MAP when the PC is on.
 
+## 2026-11-21 (new week)
+
+The weekly limit reset Sat 05:00 CET; this week has no cap (the user: "really max out and use as much as we can"). When the PC is on, pick up oagent e2 scaling from its MAP ("Where to pick up": rerun the 144-TMAC round first). Cloud sessions run olang freeing (freeopen3, then review6) and oagent e13 round 3. Open question for the user, in osarv/orchestrator decisions.md: the olang loop-copy write fix (A/B/C, recommended B).
