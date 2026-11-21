@@ -1,0 +1,37 @@
+import "std/io"
+
+# O8f (docs/freeing.md, a field read into a local assigned again): an owner local given a field of a view call's value
+# (`nm := v[j].n`, At's value copied whole, D9h) and given one again (`nm = v[k].n`) has each such copy's parts in part
+# regions of their own (free.splitLetOf, at its declaration and at each assignment) - so the elements replaced while
+# those live free at once; the local's own first value, existing storage, keeps by the rule, and the text joined for it
+# is its own
+N I64 = 400000
+
+type Q struct() { a Vec<I64>, n String }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.a = Vec<I64>[i, i + 1]
+    q.n = $"n" + $(i % 100)
+    return q
+}
+
+fn main() {
+    v Vec<Q>
+    for k in range 4: v.Push(Q.Mk(k))
+    t := 0
+    keep String
+    for i in range N {
+        j := i % 4
+        nm := v[j].n
+        v[j] = Q.Mk(i + 7)
+        t += nm.Len()
+        nm = v[(j + 1) % 4].n
+        v[(j + 1) % 4] = Q.Mk(i + 9)
+        t += nm.Len() + I64(nm[1])
+        if i % 1000 == 0: keep = nm
+        nm = nm + "x"
+        t += nm.Len() + v[(j + 2) % 4].a[1]
+    }
+    io.PutLn($t + " " + $v.Len() + " " + $keep)!
+}
