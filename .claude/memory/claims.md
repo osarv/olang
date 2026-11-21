@@ -32,5 +32,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - olang session (cloud, 2026-11-21): wt-backend merged (a3ca48864)
 - olang session (cloud, 2026-11-21): wt-mempeak (compiler/olang.olang test peak) and wt-buildspeed (self-build per phase)
 - olang session (cloud, 2026-11-21): wt-runperf, wt-ltokey, wt-sha merged (7ee156575)
-- OLang Cloud (2026-11-21): olang wt-pushperf - List push (chunks filled twice) and Vec push (growth in place)
 - olang session (cloud, 2026-11-21): wt-bgame (Benchmarks Game set vs C: fasta, revcomp added; worst ratios fixed)
