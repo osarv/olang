@@ -835,6 +835,8 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     t := cfg.Target
     dyncall := false
     hashes Vec<String&>       # each object's IR's hash, where it is a module's (kept in its record), else ""
+    keptAt Vec<I64>           # ...the indices into hashes of those a record keeps, and of their units in prog.Units
+    keptUnit Vec<I64>
     for o in objs {
         if o.From >= 0 {
             # B3i: a reused module's parts, as its record keeps them, each with its IR's hash
@@ -863,12 +865,18 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             case emit.ObjectKind.Instances: build.UnitKind.Instances
             case emit.ObjectKind.Locations: build.UnitKind.Locations
         }
-        u mut build.Unit& = build.Unit(o.Identity, holds, ir)
         if kind != build.Kind.Module and (o.Kind == emit.ObjectKind.Module or o.Kind == emit.ObjectKind.Locations) {
-            u.Hash = build.IrHash(ir)
+            keptAt.Push(hashes.Len())
+            keptUnit.Push(prog.Units.Len())
         }
-        hashes.Push(u.Hash)
-        prog.Units.Push(u)
+        hashes.Push("")
+        prog.Units.Push(build.Unit(o.Identity, holds, ir))
+    }
+    # the modules' IR hashed at once, side by side (build.IrHashes), each hash kept in its record too
+    sums := build.IrHashes(prog.Units, keptUnit)
+    for i, at in keptAt {
+        prog.Units.RefMut(keptUnit[i]).Hash = sums[keptUnit[i]]
+        hashes[at] = sums[keptUnit[i]]
     }
     # (the reader records again: lowering read facts of its own)
     if kind != build.Kind.Module: keep(l, cfg, keys, records.ReaderRecords(l, c), e, objs, hashes)

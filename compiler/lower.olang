@@ -190,7 +190,7 @@ fn (lw mut Lowerer&) ReadGen(file I64) {
         if not lw.genDecided.Has(d): continue
         name := $"T13d " + $lw.declName(d)
         lw.P.Facts.Decide(name, lw.genValue(d), true)
-        try lw.P.Facts.Read(file, name) catch { }
+        try lw.P.Facts.Note(file, name) catch { }
     }
     g.Asked.Clear()
 }
@@ -387,7 +387,7 @@ fn (lw mut Lowerer&) ReadDerived(file I64, k mir.FnKey) {
     }
     if id < 0 or id >= lw.Plans.Len() or file < 0: return
     name := lw.derivedFact(id)
-    if name != "": try lw.P.Facts.Read(file, name) catch { }
+    if name != "": try lw.P.Facts.Note(file, name) catch { }
 }
 
 # O23a, C1: how many derived scopes the code a key names takes after its type's (typed.Plan's DerivedP)
@@ -5536,12 +5536,12 @@ fn (ln mut lowering&) readOut(p typed.Lvalue&, ty types.TypeId) {
 # has checked), read through the table of facts, so the record of the module whose code the judgement goes into holds
 # what it was judged by
 fn (ln mut lowering&) mutGlobals() Vec<I64>& {
-    try ln.L.P.Facts.Read(ln.B.File, typed.MutGlobalsFact) catch { }
+    try ln.L.P.Facts.Note(ln.B.File, typed.MutGlobalsFact) catch { }
     return ln.L.P.L.MutGlobals
 }
 
 fn (ln mut lowering&) mutStorage() Bool {
-    try ln.L.P.Facts.Read(ln.B.File, typed.MutGlobalsFact) catch { }
+    try ln.L.P.Facts.Note(ln.B.File, typed.MutGlobalsFact) catch { }
     return ln.L.P.L.MutStorage
 }
 
