@@ -40818,3 +40818,44 @@ in the compiler.
      `-vectorize-slp=false` the row is 1.24 s, level with C (1.03); over the whole of bench/run that costs the opaque
      call rows 0.149 -> 0.186 s (1.25 of C), so not adopted. Writing the loads another way in std/sha256 (a slice of
      the block, a slice per word, a 4-byte accumulating loop) leaves the gathers as they are.
+
+## 2026-11-21: List and Vec push - each byte written once, a buffer grown where it lies (M19d, O8b, O8f; mine; wt-pushperf)
+
+The two worst push rows of the entry above, fixed without a change to what a program means.
+
+- **List push.** A new chunk was `Array<T>(n, fill)`: every slot written by the fill, then again by the Push reaching
+  it, and the last chunk mostly never used. A chunk is now grown from nothing (`s.first[:0].grown(n)`, M19d, as Deque's
+  ring is) and Push and PushAll store into its room with `occupy`; `grow` takes no fill. No slot past the count is read
+  (Pop and Clear keep chunks, whose old values a later `occupy` overwrites as `=` did - List says nothing of the
+  positions it empties). bench/vec `push list 20000000`, 9 runs alternated with C, medians: 0.266 -> 0.210 s against
+  C's 0.196 (1.36 -> 1.07; an earlier 7-run round under load 10: 0.305 -> 0.219 against 0.211).
+- **Vec push.** A growth made a new part region (O8f), a buffer twice the size, copied the elements and released the
+  old region: every doubling touched twice the pages a realloc touches (mremap moves none). Now a grown (M19d) whose
+  source is all of what a part region of this thread built - the last thing in the region's newest chunk - is first
+  offered to the run time, `__olang_grow_in_place(p, oldbytes, newbytes, n)`: it bumps the chunk where the room is
+  there (a slot's chunk widened to its whole 128 KB slot), or opens pages of address space reserved behind a mapped
+  chunk; nothing moves, nothing is copied. The reservation: a chunk made by the growth that could not grow in place
+  (a thread-local hint the next `__olang_new_chunk` takes) is mapped with 16 times its size reserved behind it
+  (PROT_NONE, MAP_NORESERVE - no memory, no commit charge), the whole entered in the large table and unmapped with it;
+  never where RLIMIT_AS is finite (asked once), never under -sanitize. So a Vec copies once per 16x of growth past 128
+  KB instead of once per doubling.
+  - How it composes. Lowering (collect, `growInPlace`) emits a new MIR prim, `GrowInPlace(source, n)`, before the
+    exact collect: a non-empty answer is the result, else the old path runs; the typed tree carries the source in
+    `Collect.Grown`, set only by `grown`. Only for elements owning nothing (a new buffer of those is cleared, and a
+    lengthened one would not be), and only for a source held as length and address. The compile-time evaluator answers
+    with an empty array - the copying path, the same elements and capacity. The growth's let-go still releases the old
+    value's part region (O8f), at the same address: the region's flag now keeps the lengthened count, and
+    `__olang_region_release_part` keeps the storage for an array shorter than it - the replaced one - and releases it
+    for the current one, so the freeing guarantee holds as before (freeing and earlyfree scenarios, -memory -check).
+    The new region the plan made for the growth is settled empty and dropped. Only part regions: a buffer elsewhere
+    (a copy's, -free late's scopes) keeps the copying growth, so nothing ends up where its place's let-go would not
+    reclaim it; only this thread's (the owner word up the region's parents), as another thread may bump its own chunk.
+  - What changes for a stale view (decided by me): a view of the old buffer kept across a growth - the hazard M19g
+    refuses where it is seen and the evaluator and the sanitizer stop on - reads the buffer itself where it grew in
+    place, not the retired copy; still never freed memory, since no page moves (why MAYMOVE mremap was not used: it
+    would unmap what such a view reads). SPEC M19d and std/prelude/vec.olang say so.
+  - checks' freeing/growth measured peak address space (VmPeak), which a reservation inflates (162 MB): it now runs
+    its program under `ulimit -v`, where nothing is reserved and every growth past a chunk makes a buffer, as the
+    scenario means (30 MB, limit 35).
+  - bench/vec `push vec 50000000`, 9 runs alternated: 0.776 -> 0.542 s against C's 0.479 (1.62 -> 1.13); first round
+    0.795 -> 0.563 against 0.499. 17 mmaps and 18 mprotects for the 400 MB.
