@@ -40818,3 +40818,41 @@ in the compiler.
      `-vectorize-slp=false` the row is 1.24 s, level with C (1.03); over the whole of bench/run that costs the opaque
      call rows 0.149 -> 0.186 s (1.25 of C), so not adopted. Writing the loads another way in std/sha256 (a slice of
      the block, a slice per word, a 4-byte accumulating loop) leaves the gathers as they are.
+## 2026-11-21: a ThinLTO program's objects cut by class - an edit to a large function redoes one backend (B3i, B3d; mine; wt-ltokey)
+
+After wt-backend, a body edit in compiler/check.olang still relinked in ~22 s, and the record said ~15 objects
+recompiled. Measured (main's compiler, the self-build, wt-runperf building beside it): a body edit there recompiles 3
+objects (the part holding the function and its two Locations objects, ~1.4 s); the link's cost is ThinLTO's backends -
+21 of them redone, because a backend's cache key holds the module hash of every object it imports from, and check's 17
+parts, cut by symbol hash, import each other's small functions: any edit in any part changed the key of every part
+importing anything beside it. An edit in compiler/types.olang (one object, imported by most modules) redid 81 backends,
+53 s. The import lists (an index-only link with `--thinlto-emit-imports-files`, set against each function's summary
+`insts`) showed what is imported: 5,367 functions, almost all small (the import limit is 70 instructions after the
+object's own optimization); the large functions, most of the IR and most of what is edited, are imported by no one.
+
+- **Objects cut by class (B3i).** Where the program links by ThinLTO (its own IR at least `ThinFrom`, an optimized
+  build) and its objects are cut, each object's items are cut in two groups before the parts: the functions a backend
+  may import (and every global, all still in the first part) as `identity`, `identity-K`, and the bulky ones as
+  `identity-bK`, each group in parts of `PartSize` by symbol hash as before. A function is bulky by an estimate of what
+  its object's optimization leaves of it - its instructions but allocas, loads, stores, branches, address arithmetic and
+  comparisons with null (`emit.codeSize`) - above 42 (`BulkFrom`): of the imported functions 39 count more (a match
+  reading one field of each case, 400 lines written, is 15 instructions optimized); the functions at most 42 are a third
+  of the IR. Plain line counts did worse (68-200 misses at the same share). A small function named by one bulky
+  function of its own module alone follows it into its part (`keyOf`, three deep), so a helper with one caller is not
+  imported at all - by the import lists, the backends an average body edit redoes (weighted by IR) 13.2 -> 10.5 against
+  the classes alone, check's 8.3 -> 5.4. The module record says how it was cut (`split 2`), and a record cut otherwise
+  is emitted again (Redo), so a warm build is the cold one. A program below ThinFrom - every benchmark, every test file
+  - is emitted as before: tests/shared.olang's test build and bench/binarytrees give byte-identical IR.
+- **Measured** (main's compiler against this one, the same edits never built before, wt-runperf beside both): a body
+  edit of `Checker.CheckProgram` (check.olang) 21 backends, link 22.6 s, build 43.7 s -> 2 backends, 3.1 s, 17.4 s; of
+  `Table.ComputeLayout` (types.olang) 81, 53.2 s, 74.5 s -> 13, 6.6 s, 23.4 s. An edit of a small function is as
+  before: `ctKey` (check) 21 backends, 15.6 s -> 27, 15.8 s; `Table.KeepsHome` (types) 81, 56.6 s -> 87, 52.3 s - its
+  group is imported by every part that calls one of them. Over every function of the compiler, by the import lists,
+  weighted by its IR: 19.9 backends an edit -> 10.5; a large function's 16.2 -> 2.7 (check's 20.5 -> 5.4). The cold
+  self-build is as fast (118.0 s -> 117.8 s under the same load; 351 objects -> 439, compile 27.6 s both, link 72.9 ->
+  70.9 s), the compiler it builds as fast (the front end of its own build 15.2 s median both), the fixed point holds
+  and a warm build after edits and their reverts is byte-identical to the cold one.
+- Not done: keying olang's own objects by an interface hash would not help - olang already recompiles only the edited
+  module's part (B3i's records); the cost is ThinLTO's key, which names imported objects' whole hashes and is not ours
+  to change. Limiting imports (a lower `-import-instr-limit`, or marking functions not importable) would change what
+  is inlined across objects, a run-time cost.
