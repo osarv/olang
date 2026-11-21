@@ -23379,11 +23379,13 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&, a
 }
 
 # S9a: what a walk of an array names each element by - where the array is reached writably and the element is a struct
-# held by value, a writable reference to it where the array holds it; anything else, its value (no reference names a
-# number, a reference or a function, T24; an immut value is never written, T13a; an array element is copied, T7a)
+# or an array (a row, in place or not, T7c) held by value, a writable reference to it where the array holds it;
+# anything else, its value (no reference names a number, a reference or a function, T24; an immut value is never
+# written, T13a; an enum is compared by value, T26)
 fn (c mut Checker&) elemName(e typed.Expr&, sp source.Span) typed.Expr& {
     t := typeOf(e)
-    if t == types.UnknownT or c.isRef(t) or c.P.Immut(t) or c.P.Unique(t) or not c.isStruct(t): return e
+    if t == types.UnknownT or c.isRef(t) or c.P.Immut(t) or c.P.Unique(t): return e
+    if not c.isStruct(t) and c.arrayOf(t) == types.UnknownT: return e
     p := readPlace(e)
     if p == null or not c.placeWritable(p): return e
     return c.fit(e, c.P.T.Ref(t, types.Writable), sp)

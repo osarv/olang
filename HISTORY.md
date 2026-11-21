@@ -40498,3 +40498,23 @@ while compiling) - built, interpreted (`OLANG_EVALUATE=1`) and under `-sanitize`
 For S9a (wt-loopref): array elements were left copies in a reference walk because of this bug. With it fixed every
 reference to an array of arrays knows how its rows are laid out (in place with their length, or pairs), so a walk's
 name could be a writable reference into a row as it is for a struct element; the exclusion was not lifted here.
+
+## A writable walk names rows by reference (S9a, 2026-11-21, wt-looprows)
+
+The user's rule, "loop variables get the type of what the iterator produces", left one exclusion in wt-loopref: over
+an array reached writably, an element that is itself an array stayed a copy, because a reference to an array of arrays
+of a run-time length lost the rows' length when the rows were held in place. T7c (wt-nestref) fixed that - every
+reference to an array of arrays now knows whether its rows are in place with their length or pairs - so the exclusion
+is lifted: `check.elemName` names an array element as it names a struct element, `x` a `mut Array<T>&` made where the
+array holds the row (the same E12 borrow `r mut Array<I64>& = rows[i]` makes). `for r in rows: r[0] = 7` over a
+`mut Array<Array<I64>>&` local, a `mut` parameter, a slice of either, or a Vec's `ViewMut()` writes the rows; `r = o`
+repoints the name and is refused by S9g as lost where nothing reads it. Numbers and enums stay copies, as does a row of
+an array value or one reached read-only (whose write nothing reads is S9g's error as before).
+
+A function taking `mut Array<Array<T>>&` is compiled per row length (G29), so a Vec's run-time rows (or a ragged
+literal) are walked through `ViewMut()` or a local, not passed to one; that is G29's rule, unchanged.
+
+Corpus: tests/loopref.olang (rows in place through a reference local, a slice and a `mut` parameter, a Vec's rows
+through ViewMut, each read back after a churn; a read-only walk copying; `assert rowsWalked() == 1020` decided while
+compiling and a baked global) - built, interpreted (`OLANG_EVALUATE=1`), under `-debug -sanitize` and
+`-memory -check`.

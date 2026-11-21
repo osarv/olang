@@ -5559,12 +5559,12 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
 
 - an **array**, of any shape (T11, including a slice and a declared array type): `x` is each element in order, with
   the type the walk gives. Over an array reached through a **writable reference** (`mut Array<T>&`: what `ViewMut()`
-  gives, a `mut` parameter, a slice of either) whose element is a struct held by value and not `immut`, the walk
-  gives **references**: `x` is a `mut T&` naming the element where the array holds it, so `x.f = 7` writes the
-  element, and `x = ...` repoints the name (S4a). Anything else gives **values**: `x` is the element **copied** - over
-  an array value or one reached read-only, an element that is a number, a reference or a function (no reference names
-  one, T24), an enum, or an array held by value (T7a) - so assigning to `x` does not change the array; `a[i] = ...`
-  through the index form does. An element of a unique type (T13b), never copied, is named where the array holds it: `x` is a reference to
+  gives, a `mut` parameter, a slice of either) whose element is a struct or an array (a row, held in place or not,
+  T7c) held by value and not `immut`, the walk gives **references**: `x` is a `mut T&` naming the element where the
+  array holds it, so `x.f = 7` and `x[j] = 7` write the element, and `x = ...` repoints the name (S4a). Anything else
+  gives **values**: `x` is the element **copied** - over an array value or one reached read-only, an element that is a
+  number, a reference or a function (no reference names one, T24), or an enum - so assigning to `x` does not change
+  the array; `a[i] = ...` through the index form does. An element of a unique type (T13b), never copied, is named where the array holds it: `x` is a reference to
   it, writable where the array is reached writably.
   The array is borrowed for the loop (E12c), never copied, so its length is read once per iteration from
   the same storage.
