@@ -32,6 +32,7 @@ import "generic"
 import "typed"
 import "scope"
 import "mir"
+import "effects"
 
 # ---- origins: what a value may refer into, one number each - its kind above bit 40 ----
 
@@ -379,6 +380,18 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # somewhere in its body, a place of its own: by (body, local), and by body whether it has one
     ownLocalOf Map<pair.Pair<I64, I64>, I64>
     spawned Vec<I64>          # the bodies a task calls directly (Spawned)
+    # condition 3 by origins (O8f): C given a function value (cAt, by body; cThreads where one is reached) keeps every
+    # place, as a task whose code is not known does (taskAll); else a task's own code changing a place keeps it, and a
+    # place let go of in a join's code (joinGoes, AnyPlace for any) keeps where some task may reach the spawner's storage
+    # (taskReach: what an argument refers into, a target not a plain local, a global its code reads)
+    cAt Vec<Bool>
+    cThreads Bool = false
+    taskAll String = ""
+    taskReach String = ""
+    joinGoes Vec<I64>
+    taskCopies Vec<pair.Pair<I64, I64>>   # the by-value argument copies a task only reads, by (body, site): no region's
+    taskCopyCallee Vec<I64>               # ...each one's call's callee
+    fx mut effects.Effects?& = null       # what the tasks' code may do (effects.Facts), made where a program has tasks
     gapRows Vec<String&>      # O8f: the report's rows for let-goes early freeing does not follow (gap)
     Gaps I64 = 0              # ...how many the report printed - with -check, a failed build (B18)
     olBody Vec<I64>           # by place: an owner local's body and local, -1 for any other place
@@ -845,7 +858,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     t3 := time.Now()
     for b in range n: f.walk(b, true)
     t4 := time.Now()
-    f.tasks = f.reachedTasks()
+    f.reachedTasks()
     f.genKeeps()
     f.decide()
     if f.Debug: f.dumpPlaces()
@@ -853,6 +866,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     if f.genOn: f.genDecide()
     f.Done = true
     f.writePlans()
+    f.taskCopied()
     t5 := time.Now()
     if f.Debug: f.debugOut($"free: final " + $((t4 - t3) / 1000000) + " ms, " + $f.goes.Len() + " let-goes, " + $f.stores.Len() + " stores; decide " + $((t5 - t4) / 1000000) + " ms\n")
 }
@@ -904,6 +918,7 @@ fn (f mut Free&) addBody(b I64, root I64) {
     f.freshLocals.Push(Vec<Bool>())
     f.callers.Push(Vec<I64>())
     f.taskAt.Push(false)
+    f.cAt.Push(false)
     f.named.Push(false)
     f.saved.Push(Array<I64>(0))
     f.savedAt.Push(Array<I64>(0))
@@ -1437,7 +1452,7 @@ fn (f mut Free&) genDecide() {
     f.genNeverAgain()
     for i in range f.genTys.Len() {
         x := f.genTys[i]
-        if f.tasks { f.genNever(I64(x), "the program has tasks, which may reach one (O8d's condition 3)", -1, source.Span(0, 0)) }
+        if f.tasks or f.cThreads { f.genNever(I64(x), "the program has tasks, which may reach one (O8d's condition 3)", -1, source.Span(0, 0)) }
         if t.NeedsDrop(x) { f.genNever(I64(x), "it has a destructor, which runs as its scope closes (O8d's condition 4)", -1, source.Span(0, 0)) }
     }
     for b in range n: f.genBodyNever(b)
@@ -1660,16 +1675,31 @@ fn (f mut Free&) genLetsOf() Vec<Vec<I64>> {
 # the (body, type) pairs where reclaiming may run, for the root's decisions object
 fn (f Free&) GenOkNow() Vec<pair.Pair<I64, types.TypeId>> { return f.genOk }
 
-# whether the program may start a task (condition 3): a body that starts one, or gives C a function value, reached from
-# where the program's code may begin - every body but a plain function's (main, a test, an initializer, a lambda, a
-# method a table may call, a constructor, a destructor), a function named as a value or exported - through the calls
-# the scope pass and the walks found. A function nothing reaches starts nothing (std/os's RunOnStack, never called)
-fn (f mut Free&) reachedTasks() Bool {
+# whether the program may start a task (condition 3): a body that starts one (tasks), or gives C a function value
+# (cThreads), reached from where the program's code may begin - every body but a plain function's (main, a test, an
+# initializer, a lambda, a method a table may call, a constructor, a destructor), a function named as a value or
+# exported - through the calls the scope pass and the walks found. A function nothing reaches starts nothing (std/os's
+# RunOnStack, never called)
+fn (f mut Free&) reachedTasks() {
+    roots Vec<I64>
+    for b in range f.Bodies.Len() {
+        if f.entry(b): roots.Push(b)
+    }
+    seen := f.reached(roots)
+    for b in range seen.Len() {
+        if not seen[b]: continue
+        if f.taskAt[b]: f.tasks = true
+        if f.cAt[b]: f.cThreads = true
+    }
+}
+
+# the bodies roots may run: themselves and everything they may call, through the calls the scope pass and the walks found
+fn (f mut Free&) reached(roots Vec<I64>&) Array<Bool> {
     n := f.Bodies.Len()
     seen := Array<Bool>(n)
     work Vec<I64>
-    for b in range n {
-        if not f.entry(b): continue
+    for b in roots {
+        if b < 0 or b >= n or seen[b]: continue
         seen[b] = true
         work.Push(b)
     }
@@ -1682,7 +1712,6 @@ fn (f mut Free&) reachedTasks() Bool {
     }
     for at := 0, at < work.Len(), at++ {
         b := work[at]
-        if f.taskAt[b]: return true
         for c in f.Sc.CalleesOf(b) {
             if c < 0 or c >= n or seen[c]: continue
             seen[c] = true
@@ -1694,7 +1723,7 @@ fn (f mut Free&) reachedTasks() Bool {
             work.Push(c)
         }
     }
-    return false
+    return seen
 }
 
 # whether a body is where the program's code may begin (reachedTasks): anything but a plain function no one names
@@ -2178,6 +2207,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     storeInside I64 = -1       # ... the place a value of which it is reached through (insidePlace), -1 none
     exemptSite I64 = -1        # the call a store's value is, whose copy (D9h) is made for the place it is stored into
     taskSite I64 = -1          # a spawn's call (its arguments read beside the spawner: lower.args' task)
+    inJoin I64 = 0             # the join blocks the statement is in: its let-goes may run while their tasks do
     copiedCtor I64 = -1        # ... where it is a constructor viewing what it is given, its instance copied into a struct
                                # held in place (viewCtor): the parameters it views are copied there, never stored
     # Part C: QCE's copy of a value handed on (check.ownCopy) as the value of a store into a struct or an element held in
@@ -2719,7 +2749,9 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Join(_, j) {
             w.F.taskAt[w.Id] = true
+            w.inJoin++
             w.block(j.Code)
+            w.inJoin--
             for c in j.Clauses {
                 if c.Code != null: w.block(c.Code!)
             }
@@ -2735,6 +2767,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             for c in s.Clauses {
                 if c.Handler != null: w.expr(c.Handler!)
             }
+            if w.Final and w.quiet == 0: w.spawnSite(s, tc)
         }
         case typed.Stmt.Yield(sp, x) {
             o := w.expr(x)
@@ -4062,6 +4095,8 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
         return
     }
     if w.quiet > 0: return
+    # (O8f, condition 3: one a join's tasks may run beside - decide's taskKeeps)
+    if w.inJoin > 0: addTo(f.joinGoes, k)
     # (O8f: a walk's let-go of a Vec's live elements, where its owner is not decided sole, is a let-go of their place -
     # condition 5's, though the report and the views judge it as the owner's: a Vec<String> or Vec<Array<I64>> pushed to
     # and given another value)
@@ -4705,6 +4740,11 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         unviewed := j < typed.ViewBits and (f.viewsOf(b2) & (I64(1) << j)) == 0 and not f.refsBeyondParts(ty) if b2 >= 0 else false
         viewArg := not copied and not unknown and b2 >= 0 and (not w.holds(ty) or unviewed) and I64(c.Site) != w.taskSite and j < ps.Len()
         viewArg = viewArg and not w.T().IsRef(ps[j]) and argCall(a) >= 0 and f.Keeps != null and f.Keeps!(b2, j)
+        # (O8f, condition 3: or a task's, which lowering always copies beside the spawner (lower.args' task) where the
+        # scope pass makes it last until the join - a copy no let-go releases where it is built in no region, checked
+        # once the regions are written: taskCopied)
+        taskArg := w.taskCopy(c, b2, unknown, copied, j, ps, a)
+        viewArg = viewArg or taskArg
         if copied or viewArg: w.copying++
         # (O8f, gap 22: a by-value argument's copy a callee only reads - Preserves: written through nowhere, kept nowhere,
         # handed back nowhere - is let go through no place: the callee's parameter is all that holds it, until the scope
@@ -4728,12 +4768,16 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         w.readArg = wasRead
         # (a feeder handed to a call the body of which is known: what it builds there is built in its region - feedFits)
         fd := w.feederArg(a) if b2 >= 0 and not unknown and c.Site >= typed.SiteId(0) else -1
+        if fd >= 0 and I64(c.Site) == w.taskSite and w.Final {
+            f.keep(w.F.feeds[fd].PlaceId, RTask, w.body().File, a.Span(), "a task is handed what is built for it, and may build into it on a thread of its own")
+        }
         wr := w.writable(a.Type())
         if fd >= 0 and w.Final and w.quiet == 0: w.F.feedCalls.Push(feedCall(w.Id, I64(c.Site), b2, j, fd, wr))
         if wr { w.inOwner(o, w.F.feeds[fd].PlaceId if fd >= 0 else -1, sp, "a writable reference to it handed to a call") }
         args.Push(o)
     }
     if w.holds(ty) and c.Site >= typed.SiteId(0): addTo(out, orig(ONew, I64(c.Site)))
+    if I64(c.Site) == w.taskSite and w.Final and w.quiet == 0: w.taskArgs(c, b2, unknown, args, ps, sp)
     # (a callee handing back a view its caller copies where it keeps it (D9h) - but the value of a store, whose copy is
     # made where the place's value is; a callee not known may hand back any copy)
     fresh := b2 >= 0 and not unknown and f.viewsOf(b2) != 0 and f.freshCtor(c, b2, w.Id)
@@ -4824,7 +4868,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     addTo(out, orig(OUnk, 0))
     if foreign {
         for a in c.Args {
-            if w.T().KindOf(w.T().Repr(a.Type())) == types.Kind.Func: f.taskAt[w.Id] = true
+            if w.T().KindOf(w.T().Repr(a.Type())) == types.Kind.Func: f.cAt[w.Id] = true
         }
         # C may call any export fn (X12) before it returns: where one may let go, the extern call may let go of
         # anything (F6) - walked again when an export fn's summary changes
@@ -6204,6 +6248,11 @@ fn (w mut walker&) orCallOf(c typed.Call&, b2 I64) {
         if r == null: continue
         q := w.rootPlace(r)
         if q < 0: continue
+        # (O8f, condition 3: never in a task's call, whose scopes are stand-ins a task builds into on its own thread)
+        if w.taskSite >= 0 {
+            w.F.keep(q, RTask, w.body().File, c.Args[j].Span(), "a task's call is given a value of it to build where it lives")
+            return
+        }
         w.F.ors.Push(orCall(w.Id, I64(c.Site), b2, j, q, r, c.Args[j]))
         return
     }
@@ -6232,8 +6281,8 @@ fn (f mut Free&) decide() {
         if g.Kind != LCall and g.PlaceId >= 0 and not (g.Kind == LLeaf and f.prelude[g.Body] and not f.PartPlace(g.PlaceId)) { letsHere[g.PlaceId] = true }
     }
     for k in f.partWalked: letsHere[k] = true
+    f.taskKeeps()
     for k in range n {
-        if f.tasks { f.keep(k, RTask, -1, source.Span(0, 0), "a task can reach it: nothing is freed early where a program has tasks") }
         # C may call an export fn (X12) from a thread of its own - one it is given (X13), or any of a library's (X14) -
         # condition 3
         if f.exports.Len() > 0 { f.keep(k, RTask, -1, source.Span(0, 0), "C may call an export fn from a thread of its own: nothing is freed early where C is given one, links C of its own, or is a library") }
@@ -6892,6 +6941,183 @@ fn taskCall(x typed.Expr&) typed.Expr& {
 # the bodies a task calls directly, for the spawners' stand-in facts (lowering's buildsFact)
 fn (f Free&) Spawned() Vec<I64> { return f.spawned }
 
+# ---- condition 3 by origins: what a task can reach (O8f) ----
+
+# whether argument j of call c is a by-value argument a task only reads (Keeps: lowering's preserves), the value of a
+# call - a view call's copied (D9h): lowering copies every argument of a task beside its spawner (lower.args' task), and
+# this one in the join's scope (lower's taskCopy) - no value a store gives a place, dead when the task returns.
+# Recorded, where record, for taskCopied: built in no region
+fn (w mut walker&) taskCopy(c typed.Call&, b2 I64, unknown Bool, copied Bool, j I64, ps Array<types.TypeId>&, a typed.Expr&
+                            record Bool = true) Bool {
+    f := w.F
+    if I64(c.Site) != w.taskSite or c.Site < typed.SiteId(0) or copied or unknown or b2 < 0 or j >= ps.Len(): return false
+    if w.T().IsRef(ps[j]) or argCall(a) < 0 or f.Keeps == null or not f.Keeps!(b2, j): return false
+    if record and w.Final and w.quiet == 0 {
+        f.taskCopies.Push(pair.Pair(w.Id, argCall(a)))
+        f.taskCopyCallee.Push(argCallee(a))
+    }
+    return true
+}
+
+# a task's call c of body b2 (its arguments' origins args): what its code lets go of or stores into keeps, as it may run
+# on a thread of its own; what its arguments refer into - a by-value one's but its owned parts, a copy taskCopy judged
+# but itself - is what it may reach (taskReach)
+fn (w mut walker&) taskArgs(c typed.Call&, b2 I64, unknown Bool, args Vec<Vec<I64>>&, ps Array<types.TypeId>&, sp source.Span) {
+    f := w.F
+    file := w.body().File
+    if b2 < 0 or unknown {
+        if f.taskAll == "": f.taskAll = "a task calls through a function value, or code not known"
+        return
+    }
+    if (f.letsAll[b2] or f.letsVia[b2] != 0) and f.taskAll == "": f.taskAll = "a task may let go of any place"
+    for k in f.lets[b2]: f.keep(k, RTask, file, sp, "a task lets go of it, on a thread of its own: '" + $w.text(sp) + "'")
+    for k in f.walkLets[b2]: f.keep(k, RTask, file, sp, "a task lets go of it, on a thread of its own: '" + $w.text(sp) + "'")
+    for e in f.parStored[b2] {
+        f.keep(e & ((I64(1) << 32) - 1), RTask, file, sp, "a task stores into it, on a thread of its own: '" + $w.text(sp) + "'")
+    }
+    for j in range args.Len() {
+        a := c.Args[j]
+        o := args[j]
+        if j < ps.Len() and not w.T().IsRef(ps[j]): o = f.unowned(args[j])
+        own := argCall(a) if w.taskCopy(c, b2, unknown, false, j, ps, a, false) else -1
+        # (a copy of a value holding no reference beside its parts refers into nothing but its own new storage)
+        if own >= 0 and not f.refsBeyondParts(ps[j]): continue
+        for y in o {
+            if okind(y) == ONew and oval(y) == own: continue
+            if f.taskReach == "": f.taskReach = "a task is handed what '" + $w.text(a.Span()) + "' refers into"
+            if f.Debug: f.debugOut($"free: task reach " + $okind(y) + ":" + $oval(y) + " at " + $f.P.L.Diags.Locate(file, I64(a.Span().Start)) + "\n")
+        }
+    }
+}
+
+# a spawn: a task not known keeps everything; its targets stored into on the task's thread (P1g) - the places they
+# are, and those a result made there holds, keep; one not a plain local is storage the task reaches
+fn (w mut walker&) spawnSite(s typed.Spawn&, tc typed.Call?&) {
+    f := w.F
+    if (tc == null or typed.CalleeBody(tc) < 0) and f.taskAll == "": f.taskAll = "a task runs a lambda or calls through a function value"
+    for p in s.Targets {
+        if p == null: continue
+        ty := p.Type()
+        if f.refsBeyondParts(ty) and f.taskAll == "": f.taskAll = "a task hands back a reference"
+        why := "a task's result is stored into it, made on the task's thread: '" + $w.text(p.Span()) + "'"
+        for k in f.heldPlaces(ty): f.keep(k, RTask, w.body().File, p.Span(), why)
+        for lf in f.leaves(ty): f.keep(lf.PlaceId, RTask, w.body().File, p.Span(), why)
+        match p {
+            case typed.Lvalue.Local(_, _, l) {
+                fd := w.feeder(I64(l))
+                if fd >= 0: f.keep(f.feeds[fd].PlaceId, RTask, w.body().File, p.Span(), why)
+                f.keep(w.ownLocal(I64(l)), RTask, w.body().File, p.Span(), why)
+            }
+            case _ {
+                f.keep(f.placeOfPlace(p), RTask, w.body().File, p.Span(), why)
+                if f.taskReach == "": f.taskReach = "a task stores its result into '" + $w.text(p.Span()) + "'"
+            }
+        }
+    }
+}
+
+# decide's condition 3: C given a function value may run it on a thread of its own, as may a task whose code is not
+# known - every place keeps. Else what the tasks' code (and every body running where no call is written) changes
+# keeps, and - where a task may reach the spawner's storage - what a join's code lets go of while its tasks run
+fn (f mut Free&) taskKeeps() {
+    n := f.keyTy.Len()
+    if f.cThreads {
+        for k in range n: f.keep(k, RTask, -1, source.Span(0, 0), "C is given a function value, which it may call from a thread of its own: nothing is freed early where it is")
+        return
+    }
+    if not f.tasks: return
+    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+    roots Vec<I64>
+    for b in f.spawned {
+        roots.Push(b)
+        fs := f.fx!.Of(b)
+        if (fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0) and f.taskAll == "" {
+            f.taskAll = "a task calls through a function value or an any, or code not checked"
+        }
+        if (fs.ReadsGlobals or fs.RefGlobals or fs.WritesGlobals) and f.taskReach == "": f.taskReach = "a task reads a global"
+    }
+    if f.taskAll != "" {
+        for k in range n: f.keep(k, RTask, -1, source.Span(0, 0), $f.taskAll + ": nothing is freed early where it does")
+        return
+    }
+    for b in range f.Bodies.Len() {
+        if f.implicit(b): roots.Push(b)
+    }
+    run := f.reached(roots)
+    own := "a task's code changes it, on a thread of its own"
+    for b in range run.Len() {
+        if not run[b]: continue
+        if f.letsAll[b] or f.letsVia[b] != 0 {
+            for k in range n: f.keep(k, RTask, -1, source.Span(0, 0), "a task's code may let go of any place")
+        }
+        for k in f.lets[b]: f.keep(k, RTask, -1, source.Span(0, 0), own)
+        for k in f.walkLets[b]: f.keep(k, RTask, -1, source.Span(0, 0), own)
+    }
+    for st in f.stores {
+        if run[st.Body]: f.keep(st.PlaceId, RTask, st.File, st.Sp, own)
+    }
+    for g in f.goes {
+        if not run[g.Body]: continue
+        if g.PlaceId == AnyPlace {
+            for k in range n: f.keep(k, RTask, g.File, g.Sp, "a task's code may let go of any place")
+        }
+        f.keep(g.PlaceId, RTask, g.File, g.Sp, own)
+    }
+    for os in f.orStores {
+        if run[os.Body]: f.keep(os.PlaceId, RTask, -1, source.Span(0, 0), own)
+    }
+    for oc in f.ors {
+        if run[oc.Body]: f.keep(oc.PlaceId, RTask, -1, source.Span(0, 0), own)
+    }
+    for fd in f.feeds {
+        if run[fd.Body]: f.keep(fd.PlaceId, RTask, -1, source.Span(0, 0), own)
+    }
+    if f.taskReach == "": return
+    for k in f.joinGoes {
+        why := $f.taskReach + ", and a join's code lets go of it while the task may run"
+        if k != AnyPlace {
+            f.keep(k, RTask, -1, source.Span(0, 0), why)
+            continue
+        }
+        for q in range n: f.keep(q, RTask, -1, source.Span(0, 0), why)
+    }
+}
+
+# whether what is built at site of body b - a call's value, or what its callee cb builds where the call passes - is in a
+# region early freeing made, or in a scope found while the program runs (taskCopied)
+fn (f mut Free&) regionAt(b I64, site I64, cb I64) Bool {
+    pl := f.Plans.Ref(b)
+    if site < 0 or site >= pl.RegionKind.Len() or pl.RegionKind[site] != 0: return true
+    if inRegion(pl.Built[site]): return true
+    if cb < 0: return true
+    for i in range f.T().ScopeVarsOf(f.Bodies[cb].Ty).Len() {
+        if inRegion(pl.Passed(typed.SiteId(I32(site)), i)): return true
+    }
+    return false
+}
+
+fn inRegion(sc typed.Scope) Bool {
+    return match sc {
+        case typed.Scope.Region(_), typed.Scope.Found(_), typed.Scope.Passed(_, _): true
+        case _: false
+    }
+}
+
+# once the regions are written: a task's argument copy (taskCopy) is built in none - else what a let-go releases there
+# the task may still read, and every place keeps (the regions' code is guarded by the decisions)
+fn (f mut Free&) taskCopied() {
+    for at, bs in f.taskCopies {
+        b, site := bs.First, bs.Second
+        if not f.regionAt(b, site, f.taskCopyCallee[at]): continue
+        for k in range f.Sole.Len() {
+            if not f.Sole[k]: continue
+            f.Sole[k] = false
+            f.keep(k, RTask, -1, source.Span(0, 0), "a task's argument is copied into a region a let-go may release")
+        }
+        return
+    }
+}
+
 # the owner local place local l of body b is, -1 for none
 fn (f mut Free&) LocalPlaceOf(b I64, l I64) I64 {
     if not f.Done or b < 0 or b >= f.olIn.Len() or not f.olIn[b]: return -1
@@ -7457,6 +7683,16 @@ fn argCall(x typed.Expr&) I64 {
         case typed.Expr.Try(_, _, tr): argCall(tr.X!) if tr.X != null else -1
         case typed.Expr.Away(_, _, y): argCall(y)
         case _: copiedCall(x)
+    }
+}
+
+# the body the call argCall finds calls, -1 for none
+fn argCallee(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Try(_, _, tr): argCallee(tr.X!) if tr.X != null else -1
+        case typed.Expr.Away(_, _, y): argCallee(y)
+        case typed.Expr.Call(_, _, c): typed.CalleeBody(c)
+        case _: -1
     }
 }
 

@@ -558,8 +558,8 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     erroring Bool = false   # an error is leaving: a join's failure does not replace it (P4b)
     planned Bool = false    # whether plan is the scope pass's plan for B, not the stand-in
     viewing Bool = false    # the place lowered next is a slice's base or a borrow's (tempLocal)
-    taskArgs Bool = false   # whether the arguments lowered next are a task's (bulk review 5, F7): copies in taskAt
-    taskAt mir.ScopeRef = mir.ScopeRef.Program
+    taskArgs Bool = false   # whether the arguments lowered next are a task's (bulk review 5, F7)
+    taskCopy I64 = -1       # the call whose value a task's by-value argument is: its copy (D9h) made in the join's scope (O8f)
     adoptSite typed.SiteId = typed.SiteId(-1)    # a fresh array promoted (promote): made at the reference's scope
     adoptAt mir.ScopeRef = mir.ScopeRef.Program
     plan typed.Plan = typed.Plan(0, 0, 0)
@@ -3337,6 +3337,16 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
     }
 }
 
+# the site of the call an argument is, through a try passing its value on and a conversion; -1 for none
+fn callSiteOf(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Call(_, _, c): I64(c.Site)
+        case typed.Expr.Away(_, _, y): callSiteOf(y)
+        case typed.Expr.Try(_, _, tr): callSiteOf(tr.X!) if tr.X != null else -1
+        case _: -1
+    }
+}
+
 # whether some target of a spawn holds an array by value (P1g)
 fn (ln mut lowering&) valueTargets(sw typed.Spawn&) Bool {
     for tg in sw.Targets {
@@ -5126,7 +5136,10 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         if not task: ln.argView(a, body, i)
         ro := i < ps.Len() and t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) == 0
         v := ln.stackArg(a, body, i) if reads and plain and ro else mir.Operand.None
+        wasCopy := ln.taskCopy
+        if task and byValue and ln.L.preserves(body, i): ln.taskCopy = callSiteOf(a)
         if v == mir.Operand.None: v = ln.val(a)
+        ln.taskCopy = wasCopy
         if i < ps.Len(): v = ln.fit(v, a, ps[i], a.Span())
         # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
         held := t.IsRef(a.Type()) and t.Same(t.Plain(t.Referent(a.Type())), t.Plain(t.Referent(ps[i]))) if i < ps.Len() and t.IsRef(ps[i]) else true
@@ -5279,6 +5292,10 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
         } else {
             ln.L.ViewCopies++
             at := ln.viewCopyAt(c.Site, ln.resultOf(fty, scopes))
+            # (O8f: a task's by-value argument its callee preserves is held by the task alone, until the wait: its copy
+            # in the join's scope - not where the callee's result would live, a frame's or the program's, one a turn
+            # for the run - and never in a region a let-go may release (free.taskCopy)
+            if I64(c.Site) == ln.taskCopy and ln.joinS.Len() > 0: at = mir.ScopeRef.Scope(ln.joinS[ln.joinS.Len() - 1])
             # (O8f, gap 20: a value only read where it stands, copied - something in its statement may change what it
             # views - is dead by the statement's end: its copy in the innermost scope open, never where the callee's
             # result would live, the collection's)
