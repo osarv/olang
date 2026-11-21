@@ -1,0 +1,21 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): text moved out of a Vec<String> - a value of no struct, holding no reference, so it
+# carries no origins - is let go of whole where a statement drops it (`v.Pop()!`, free.walker.eval by the callee's
+# must-fact) and where a local holding it ends with its block (`x := v.Pop()!`, free.EndPlace): its slot is put back
+N I64 = 400000
+
+fn main() {
+    v Vec<String>
+    t := 0
+    for i in range N {
+        v.Push($"item " + $i + " padded out to some length ......")
+        v.Push($"other " + $i + " padded out to some length .....")
+        v.Push($"third " + $i + " padded out to some length .....")
+        v.Pop()!
+        v.TakeAt(0)!
+        x := v.Pop()!
+        t += x.Len()
+    }
+    io.PutLn($t + " " + $v.Len())!
+}

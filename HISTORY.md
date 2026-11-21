@@ -40215,3 +40215,51 @@ movedvalues (400,000 turns under 8 MB; master out of memory).
 Found and left: a `Vec<String>`'s popped text (`v.Pop()!`, `x := v.Pop()!`) frees nothing and no let-go is counted -
 the call's result origins carry no OMov of the text place (master the same); recorded in docs/freeing.md.
 
+
+## 2026-11-21: freeing - text popped from a Vec<String>, a view read through a try (O8f; mine; wt-freeopen3)
+
+Continued from wt-freeopen2's "where to pick up", cheapest first.
+
+Text moved out of a `Vec<String>` freed nothing and no let-go was counted, built, `-free late` and interpreted alike
+(master the same). A String is an immut array, no struct: it holds no reference, so the walker's `exprOf` drops every
+origin of a value of its type (`holds`), and the OMov of `Array<String>.-1` that Pop's vacate makes never reached the
+dropped statement's `eval`. With no let-go the place was never decided sole, and lowering's DroppedMove, which reads
+the callee's must-fact (MovBase + k, correct all along), released nothing. `eval` now lets go of the place the
+callee's must-fact names where the value carries no origins. A local holding such a value to its block's end
+(`x := v.Pop()!`) was never ended either - `endsHere` asked for leaves, and a String has none: `free.endPlaces` gives
+its leaves, else (a MovBase value with no leaves) the place itself whole (`EndPlace`), which lowering releases as
+DroppedMove's place (`lower.movedPath`, now shared by evalStmt and endMoved). `movedCall` names every MovBase value, so
+a popped string used as an operand or an argument is a gap row as a `Vec<Vec<I64>>`'s already was, and the report
+counts a text place where the program's own code drops or ends a value moved out of it (`assignedHere`, which shows a
+text element place's let-goes only where the program assigns one, takes LDrop too). Fixture poptexts: 400,000 turns
+of Pop, TakeAt and a popped local under 8 MB, master out of memory; references into the Vec taken before the pops and
+read after print the same built, `-free late`, `-sanitize` and interpreted.
+
+Then v8's first piece: `m.Get(k)!.a[1]` kept Q.a "made with no store into it, by a call's value copied". Lowering's
+readHere passes a try's value on as it is (a clause runs only where the call gave none), and a sequence of no
+statements and a one-value conversion; free's `readCall`, which decides whether an argument is a temporary lent for
+reading, stopped at the try, so the view was taken for a copy. It now follows the same three. Fixture tryreads
+(`v.Get(j)!.a[1]` and a try with a default, on a `Vec<Q>` whose elements are replaced each turn; master keeps Q.a).
+
+v8 itself is blocked by a wider gap found on the way: a `Map<K, Q>`, Q a struct holding a Vec, frees nothing on Put
+even with fresh values (master too). Put's `m.ents[i].Value = value` stores a copy into an owner place of its own,
+MapEntry.Value - Part C's `copyStored`, which builds such a copy split for its leaves, takes only parts with no place
+of their own - so Q.a is untracked there; and add's `MapEntry<K, V>(key, value)` instance views its parameters, so
+the constructor's field copy is left out (D9h) and add's call copies the instance, untracked again. Judging the
+Put store's copy as split (lower.ownersCopy, Q.a kept for RSplit, freeing through its parts) cleared the first keep
+only; reverted, because add's copy is built by splitCopy/partCopy before ownersCopy is reached, and an RSplit judgement
+that does not match the copy lowering actually builds would release a part through a region it is not in.
+
+Then t2 (review5): `s any Summer& = Box(v[j].b)`, its Sum called through the table, kept Q.b - and so did the plain
+`s Box& = Box(v[j].b)`, while `s := Box(v[j].b)` already freed. BlockCopy (a view call's copy made in the block of the
+local holding what its declaration's call hands back) looked for the call with `initCall`, which stops at the Promote
+a reference local's value is given storage by, and at an any's AnyMake. `free.blockCopies` now takes, for a reference
+local that is a block view, the call through those two (`promotedCall`); initCall itself is unchanged (its other users
+want the call a value is). The any local still failed: its one use, `s.Sum()`, went through the table, and
+`LocalUses.arg` walks an argument with no known body as an escape (EscHard, EscBesides) even where `unkept` says the
+call keeps nothing of it. A trait's signature with no keeps binds every body its table reaches (T21c, T32b), so a
+read-only reference given that way is only read during the call: `typed.LocalUses.tableRef` records the use (Esc, the
+place's expressions) without the escape, as a RefAt kept by none would be. Only for a table; a function value's or an
+extern's arguments are as they were. Fixture anyholders: the element the view was taken of is replaced, the Vec grown
+and popped while the holder lives, its Sum read after - the same built, `-free late`, `-sanitize` and interpreted;
+400,000 turns under 8 MB (master: Q.b kept).

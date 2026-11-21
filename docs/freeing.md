@@ -557,10 +557,32 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   Checked on the step's last commit: the freeing and earlyfree scenarios, `make scopesan`, `make quick`
   (tokens/ast/layout goldens recaptured); review4/review5's 60 probes print the same built, `-free late`, `-sanitize`
   and interpreted, `-memory -check` now passing for v9 too.
-  **Where to pick up**: a `Vec<String>`'s popped text (`v.Pop()!`, `x := v.Pop()!`) still frees nothing and the pass
-  counts no let-go (the call's result origins carry no OMov of the text place; master the same); `?&`/`any` holders
-  (t2: `Box(v[j].b)` held as `any Summer&`, its Sum called through the table - BlockCopy would need the any local and
-  dispatch followed); a Map's own value put (v8: `m.Put(k, m.Get(j)!)`, the Get under a try given a parameter Put
+- 2026-11-21, wt-freeopen3: text popped from a `Vec<String>` (`v.Pop()!`, `x := v.Pop()!`, `v.TakeAt(0)!`). A String is
+  no struct and holds no reference, so the walker drops every origin of its value (`holds`) and the dropped call's OMov
+  never reached `eval`: no let-go was counted, and with none the place `Array<String>.-1` was never decided sole, so
+  DroppedMove released nothing. `walker.eval` now lets go of the place a dropped call's must-fact names
+  (`mustRes` MovBase + k) where the value carries no origins; a local holding such a value to its block's end lets go
+  of that place whole (`free.EndPlace`, `endPlaces`; lowering's `movedPath`, shared with evalStmt); `movedCall` names
+  any MovBase value (so `t += v.Pop()!.Len()` is a gap row), and the report counts a text place where the program's
+  code drops or ends a value moved out of it (`assignedHere` takes LDrop). poptexts: 400,000 turns under 8 MB (master
+  out of memory). Then a view call's value read through a try (`v.Get(j)!.a[1]`, `(try v.Get(i) catch default
+  Q()).a.Len()`): lowering's readHere passes a try's value on (as a sequence of no statements and a conversion), free's
+  `readCall` did not, so the read was a copy made with no store into Q.a; now it follows them. tryreads (master: Q.a
+  kept). Found: a `Map<K, Q>` with Q a struct holding a Vec frees nothing on Put even with fresh values (`m.Put(k,
+  Q.Mk(i))`, master too): Put's `m.ents[i].Value = value` is a copy into an owner place of its own (MapEntry.Value),
+  untracked for Q.a; add's `MapEntry<K, V>(key, value)` instance views its parameters (CtorViews), so the ctor's field
+  copy is left out and add's call copies the instance (D9h), untracked again. Tried: judging the Put store's copy as
+  split (ownersCopy, RSplit for Q.a) - it clears the first keep, not add's; reverted, since add's copy goes through
+  partSplit/splitCopy first and an RSplit judgement must match the copy lowering actually builds there.
+  Then t2: a reference local given storage for what a call hands back (`s Box& = Box(v[j].b)`, `s any Summer& =
+  Box(...)`) kept Q.b - the D9h copy of `v[j]` was made where At's result would live. `free.blockCopies` now takes such a
+  local's call through its Promote and an any's AnyMake (`promotedCall`), so BlockCopy copies it in the local's block;
+  and a read-only reference given through an any's table whose signature writes no keeps is a use, not an escape
+  (`typed.LocalUses.tableRef`: every body the table reaches keeps nothing of it, T21c/T32b), so `s.Sum()` leaves the
+  local a block view. anyholders (the element replaced and popped while the holder lives; 400,000 turns under 8 MB).
+  **Where to pick up**: v8 needs the `Map<K, Q>` Put shape above first (both copies built split for Q.a, lowering's
+  order splitCopy/partCopy/ownerCopy/ownersCopy checked at both sites); a Map's own value put (v8: `m.Put(k, m.Get(j)!)`, the Get under a try given a parameter Put
   stores - copied there, so lowering reads it in place, but free's viewArg asks Preserves and copiedCall stops at the
   try); `c` captured by a lambda (a5's `g`) keeps as a named view (places by path would tell it from `Q.a`); tasks
-  (a7, h8, n1, t1) still free nothing early; still named: g1, h8, j1, n1, review5's o1, o2, ov1, s3, t1, t2, v8.
+  (a7, h8, n1, t1) still free nothing early; still named: g1, h8, j1, n1, review5's o1, o2, ov1, s3, t1, v8 (review5's probes were lost with /tmp; t2 and v8
+  rewritten in wt-freeopen3, the rest to rewrite from review5.md's descriptions).
