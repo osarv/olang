@@ -1,0 +1,24 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 22): a view call's value read through a try (`v.Get(j)!.a[1]`, a default's too) is read where it
+# stands, as lowering's readHere passes a try's value on - no copy holding Q.a made with no store into it (free.readCall)
+N I64 = 400000
+
+type Q struct() { a Vec<I64> }
+
+fn Q.Mk(i I64) Q {
+    q := Q()
+    q.a = Vec<I64>[i, i + 1]
+    return q
+}
+
+fn main() {
+    v Vec<Q>
+    for k in range 4: v.Push(Q.Mk(k))
+    t := 0
+    for i in range N {
+        v[i % 4] = Q.Mk(i)
+        t += v.Get((i + 1) % 4)!.a[1] + (try v.Get(i % 4) catch default Q()).a.Len()
+    }
+    io.PutLn($t + " " + $v.Len())!
+}

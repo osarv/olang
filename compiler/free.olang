@@ -7325,6 +7325,11 @@ fn readCall(a typed.Expr&) I64 {
         case typed.Expr.Borrow(_, _, p), typed.Expr.Read(_, _, p, _): readPlaceCall(p)
         case typed.Expr.Away(_, _, y): readCall(y)
         case typed.Expr.Call(_, _, c): I64(c.Site)
+        # (as lowering's readHere: a try passes its call's value on as it is - `m.Get(k)!.a[1]` - a clause running only
+        # where the call gave none; a conversion of one value, a sequence of no statements)
+        case typed.Expr.Try(_, _, tr): readCall(tr.X!) if tr.X != null else -1
+        case typed.Expr.Seq(_, _, q): readCall(q.X!) if q.X != null and q.Stmts.Len() == 0 else -1
+        case typed.Expr.Prim(_, _, op, _, args): readCall(args[0]) if isConversion(op, args) else -1
         case _: -1
     }
 }
