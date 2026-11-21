@@ -230,6 +230,63 @@ fn aliasRead(c Bool) F32 {
 assert condAlias.Allocates and condAliasLast.Allocates and condRead.Allocates, "a kept reference local naming either of two locals"
 assert not aliasWritten.Allocates and not aliasRead.Allocates, "a reference local naming one local, written or read"
 
+# a job built locally of references and handed to a task (oann's chunked delta rule): what it keeps is what a reference
+# read out of it names - a workspace whose panels a deeper body's tasks take - never the job's own storage, which
+# stays in the frame; a task given the job itself to keep keeps that storage
+type wspace struct(n I64) {
+    buf mut Array<F32>& = Array<F32>(n)
+}
+
+fn (w mut wspace&) panel(n I64) mut Array<F32>& {
+    if w.buf.Len() < 2 * n: unreachable "the workspace is not reserved"
+    return w.buf
+}
+
+fn fillPanel(q mut Array<F32>&, x F32) { q[0] = x }
+
+fn usePanels(w mut wspace&, n I64) {
+    p := w.panel(n)
+    join {
+        for t in range 2 {
+            q := p[t * n:(t + 1) * n]
+            spawn fillPanel(q, F32(t))
+        }
+    }
+}
+
+type wjob struct(products mut Vec<mut wspace&>&) {
+    products
+}
+
+fn (j wjob&) run(lo I64, hi I64, task I64) {
+    for u in range lo, hi: usePanels(j.products[task], u + 1)
+}
+
+fn spreadJob(j wjob&, units I64, threads I64) {
+    join {
+        for t in range threads: spawn j.run(t, t + 1, t)
+    }
+}
+
+fn driveJob(ps mut Vec<mut wspace&>&, units I64) {
+    j := wjob(ps)
+    spreadJob(j, units, 2)
+}
+
+type jobHolder struct(j wjob&) {
+    j
+}
+
+fn holdJob(h mut jobHolder&, j wjob&) { h.j = j }
+
+fn keepJob(h mut jobHolder&, ps mut Vec<mut wspace&>&) {
+    j := wjob(ps)
+    join { spawn holdJob(h, j) }
+}
+
+assert not driveJob.Allocates, "a local job whose tasks keep what its references name allocates"
+assert keepJob.Allocates, "a local job a task keeps is given storage"
+
 test lent "a local kept by nothing is the frame's, and reads back what was written" {
     assert lent(3) == 1.0 and converted() == 28.0 and viewed(2.5) == 2.5
     # each group 2 * (1 + 2 + 3 + 4) = 20 - four bytes shared by every group, or all 128 bytes - and the atomic 3
@@ -258,4 +315,11 @@ test lent "a local kept by nothing is the frame's, and reads back what was writt
     assert condAlias(hw, y, true) == 7.0 and hw.d[0] == 7.0 and condAliasLast(hw, y, false) == 7.0
     assert condRead(hr, y, true) == 7.0 and hr.d[0] == 7.0 and condRead(hr, y, false) == 7.0 and hr.d.Len() == 8
     assert aliasWritten(true) == 7.0 and aliasRead(true) == 2.0
+    ps := Vec<mut wspace&>()
+    for _ in range 2: ps.Push(wspace(8))
+    driveJob(ps, 2)
+    assert ps[0].buf[0] == 0.0 and ps[1].buf[2] == 1.0
+    hj := jobHolder(wjob(ps))
+    keepJob(hj, ps)
+    assert hj.j.products.Len() == 2
 }
