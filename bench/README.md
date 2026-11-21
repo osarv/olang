@@ -1,6 +1,6 @@
 # bench - olang against C
 
-Does olang deliver "C-like performance" (PRINCIPLES.md, principle 2)? Ten classic programs, each written twice - as
+Does olang deliver "C-like performance" (PRINCIPLES.md, principle 2)? Twelve classic programs, each written twice - as
 a good olang programmer would write it (`*.olang`) and as plain idiomatic C (`c/*.c`) - with the same algorithm, the
 same sizes and byte-identical output, timed against each other.
 
@@ -42,6 +42,8 @@ so one differing bit in any result fails the check.
 | `fannkuch` | small I32 arrays: indexing, swapping, rotating (run 4 times) |
 | `binarytrees` | allocation: millions of small nodes built, walked, dropped - scopes against malloc/free, and against a hand-written C arena (`c/binarytrees_arena.c`) |
 | `knucleotide` | a `Map` keyed by text slices, counting k-mers of a generated DNA sequence |
+| `fasta` | generating DNA: an LCG drawing from cumulative tables, lines of 60 through an `io.Writer` (100 MB at 10M) |
+| `revcomp` | reverse-complement: fasta's 10M output read whole (`os.ReadFile`), each sequence reversed through a 256-entry table baked at compile time, written through an `io.Writer`; C reads with `fread` and copies lines with `memcpy` |
 | `matmul` | F32 matrix multiply over flat arrays and row slices (vectorization) |
 | `sum` | a `List` built by `Push`, then summed with `for x in`, and with `Iter().Fold(...)` and a lambda, over the List and over an Array; C pushes onto a realloc'd array and loops |
 | `parallel` | longest Collatz chain, four tasks: `join`/`spawn` against pthreads |
@@ -49,6 +51,28 @@ so one differing bit in any result fails the check.
 | `sha256` | `std/sha256` over 64 MB, 4 times: U32 arithmetic in the compression loop, against a plain portable C SHA-256 (olang 1.37-1.45 s, C 1.24-1.29 s, 2026-10-24) |
 | `dispatch` | a sum of areas over 1M mixed shapes: through `any Shape&` (T32b, a table call) against C's struct of function pointers, an enum `match` against a tagged union's switch, one type called directly against a plain loop (2026-10-24: 0.98-1.05 s against 0.93-0.97 s, 0.75-0.77 s against 0.63-0.64 s, 0.041 s against 0.040 s) |
 | `regex` | `std/regex` counting two patterns' matches in generated words, against glibc's POSIX `regexec` with `REG_STARTEND` (32 MB: olang 0.72-0.78 s, C 0.76-0.79 s, 2026-10-24) |
+
+## The Benchmarks Game set
+
+Medians of 5 interleaved runs (`build/bench_run -r 5 nbody spectral mandelbrot fannkuch binary k-nuc fasta reverse`),
+in seconds, and peak resident memory (`/usr/bin/time -v`); a 4-vCPU Xeon @ 2.1 GHz with AVX-512, load under 1.5. Why the slower
+rows are slower: HISTORY.md, "the Benchmarks Game set".
+
+| program | olang | C | olang/C | olang peak | C peak |
+|---|---|---|---|---|---|
+| nbody 10M | 0.581 | 0.545 | 1.07 | 1.9 MB | 2.0 MB |
+| spectral-norm 3000 | 0.527 | 0.494 | 1.07 | 1.8 MB | 2.2 MB |
+| mandelbrot 3000 | 0.630 | 0.638 | 0.99 | 2.8 MB | 3.1 MB |
+| fannkuch-redux 10 (x4) | 1.136 | 1.124 | 1.01 | 1.9 MB | 2.0 MB |
+| binary-trees 18, C with malloc | 0.328 | 1.426 | 0.23 | 18.4 MB | 34.8 MB |
+| binary-trees 18, C arena | 0.337 | 0.355 | 0.95 | 18.4 MB | 26.6 MB |
+| k-nucleotide 2M | 0.384 | 0.317 | 1.21 | 26.0 MB | 14.0 MB |
+| fasta 10M | 1.519 | 1.453 | 1.05 | 1.9 MB | 1.8 MB |
+| reverse-complement 10M | 0.308 | 0.269 | 1.14 | 150 MB | 150 MB |
+
+spectral-norm's I64 arithmetic wraps (E6c), so `/ 2` keeps a sign correction C's undefined overflow lets clang drop;
+k-nucleotide's Map reaches a chain's link and entry in two arrays where C's node is one; reverse-complement's line
+search is a byte loop where C calls memchr. Ratios within about 8% move with code layout between builds.
 
 ## Results
 

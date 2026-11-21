@@ -40938,3 +40938,57 @@ The two worst push rows of the entry above, fixed without a change to what a pro
     scenario means (30 MB, limit 35).
   - bench/vec `push vec 50000000`, 9 runs alternated: 0.776 -> 0.542 s against C's 0.479 (1.62 -> 1.13); first round
     0.795 -> 0.563 against 0.499. 17 mmaps and 18 mprotects for the 400 MB.
+
+## 2026-11-21: the Benchmarks Game set - fasta and reverse-complement added, measured with peak memory (G29, B3; mine; wt-bgame)
+
+bench/ gained the two Benchmarks Game programs it lacked: `fasta` (the ALU repeat and two LCG-drawn sequences in lines
+of 60, through an `io.Writer`) and `revcomp` (reverse-complement of fasta's 10M output, ~100 MB, read with
+`os.ReadFile`, a 256-entry complement table baked at compile time as a global). Each has a plain C counterpart in
+bench/c with byte-identical output; run.olang makes revcomp's input once with the C fasta (bench/build/revcomp.fa).
+
+Measured on the cloud box (4 cores, Xeon @ 2.1 GHz, AVX-512, load 0.2-1.5, BENCH_LOCK held), `bench_run -r 5`, medians
+in seconds, peak RSS from `/usr/bin/time -v`:
+
+| program | olang | C | olang/C | olang RSS | C RSS |
+|---|---|---|---|---|---|
+| nbody 10M | 0.581 | 0.545 | 1.07 | 1.9 MB | 2.0 MB |
+| spectral-norm 3000 | 0.527 | 0.494 | 1.07 | 1.8 MB | 2.2 MB |
+| mandelbrot 3000 | 0.630 | 0.638 | 0.99 | 2.8 MB | 3.1 MB |
+| fannkuch-redux 10 x4 | 1.136 | 1.124 | 1.01 | 1.9 MB | 2.0 MB |
+| binary-trees 18 (C malloc) | 0.328 | 1.426 | 0.23 | 18.4 MB | 34.8 MB |
+| binary-trees 18 (C arena) | 0.337 | 0.355 | 0.95 | 18.4 MB | 26.6 MB |
+| k-nucleotide 2M | 0.384 | 0.317 | 1.21 | 26.0 MB | 14.0 MB |
+| fasta 10M | 1.519 | 1.453 | 1.05 | 1.9 MB | 1.8 MB |
+| reverse-complement 10M | 0.308 | 0.269 | 1.14 | 150 MB | 150 MB |
+
+The worst three before any fix (first run): reverse-complement 1.26, spectral-norm 1.17, k-nucleotide 1.15.
+
+- **reverse-complement: `os.ReadFile` copied the whole file.** It read into an `Array<U8>` of size + 1 (so the read
+  finding the end was the next one) and returned `String(text[:got])` - a slice, so D9i's move did not apply and the
+  100 MB were copied into the caller's scope (a memcpy in perf, and 200 MB peak against C's 150); the read buffer's
+  chunk then went back to the pool dirty, so the program's next large `Array<Char>(n)` was memset instead of taken
+  fresh (D13c). ReadFile now reads into an array of exactly the size lseek gives, reads one byte past it to find the
+  end, and returns `String(text)` whole - moved, no copy; a file with more than its size (a pipe, /proc, one growing)
+  goes on in a doubling array as before. D9i is fragile here: the move was lost while any mention of `text` came after
+  the return in the text (a helper given `text` on the growing path), and with `for i, b in text` on that path; an
+  index loop keeps it. Row 0.354 -> 0.275-0.308 s, peak 200 -> 150 MB (= C). What is left: `FindByte` is a byte loop
+  where C calls glibc's AVX2 memchr (an extern in the prelude would leave the compile-time evaluator unable to run it),
+  and the program's line copy is a scalar loop against C's memcpy - no array slice store exists for `Array<T>` (E31e's
+  `x[lo:hi] = v` only where a type declares SetSlice).
+- **spectral-norm: wrapping arithmetic (E6c), not fixable without changing meaning.** `(i + j) * (i + j + 1) / 2`
+  in I64: olang's ops carry no `nsw`, so the `/ 2` keeps its sign correction (`vpsrlq $63` + add) and LLVM cannot narrow
+  the products; C's signed overflow is undefined, so clang proves the value non-negative and divides with one shift.
+  The second and third runs measured 1.05 and 1.07 - inside wt-runperf's layout noise.
+- **k-nucleotide: the Map's layout.** perf puts 90% in `counts`, stalls on chain loads. olang's Map keeps a chain's
+  link (`next`) and its entry (`ents`) in two arrays, so a probe touches bucket, link and entry - three lines where C's
+  malloc'd node is one - and growth holds the old and new arrays at once (26 MB against 14). Merging the link into the
+  slot would change `MapEntry`'s fields (reflection sees them); not done here, recorded. Ratio 1.15-1.21 across runs.
+- **binary-trees**: 0.23 of C's malloc/free and level with the hand-written C arena, at about half C's peak (18 MB) -
+  nothing for the freeing code to answer here.
+- **A compiler bug found on the way (G29), fixed.** A function taking an array by value whose body makes an array from
+  its length (`Array<U8>(a.Len() * 2)` - LengthDecided reads that as a decision) failed to compile when called with an
+  array of run-time length: "an array's length is from 0 to ..., found -2", noted "instantiated here, with a.Len() =
+  -1". The instance for run-time lengths binds the length variable to `RunLength()`, a Const of -1 meant only as a
+  marker, and `evalCall` folded it as the constant -1 (and `instanceLen` counted it as known, so `readsLocal` did not
+  send it to the run-time path). Both now treat RunLength as the running program's value. Test: tests/shared.olang "G29:
+  an array made from a run-time length taken by value", baked and at run time (OLANG_EVALUATE=1 agrees).

@@ -37,6 +37,8 @@ fn table() Array<String&>& {
         "binary-trees|binarytrees|binarytrees|18"
         "binary-trees, C arena|binarytrees|binarytrees_arena|18"
         "k-nucleotide|knucleotide|knucleotide|2000000"
+        "fasta|fasta|fasta|10000000"
+        "reverse-complement|revcomp|revcomp|build/revcomp.fa"
         "matmul F32|matmul|matmul|1536"
         "List push|sum|sum|push 20000000 0"
         "sum: for x in List|sum|sum|list 100000 8000"
@@ -156,6 +158,7 @@ fn main() {
     olang := benchlib.Compiler()
     try os.MkDirAll($benchlib.Dir + "/build") catch os.Error { benchlib.Fail("cannot make bench/build", 1) }
     build(olang, rows, o.base)
+    revcompInput(rows)
     lock := benchlib.TakeLock()          # held to the end of main
     check(rows, o.base)
     if o.quick: return
@@ -187,6 +190,17 @@ fn build(olang String&, rows Vec<String&>&, base Bool) {
             built.Put("c." + $cprog, true)
         }
     }
+}
+
+# reverse-complement's input, fasta's output at 10M (about 100 MB), made once by the C fasta
+fn revcompInput(rows Vec<String&>&) {
+    wanted := false
+    for row in rows {
+        if row.Split("|")[1] == "revcomp": wanted = true
+    }
+    if not wanted or os.Exists($benchlib.Dir + "/build/revcomp.fa"): return
+    if not os.Exists($benchlib.Dir + "/build/fasta_c"): clang(cflags(), "build/fasta_c", "fasta")
+    benchlib.MustInto(Array<String&>["build/fasta_c", "10000000"], benchlib.Dir, "build/revcomp.fa")
 }
 
 fn buildOlang(olang String&, prog String&, extra Array<String&>&) {

@@ -13567,6 +13567,19 @@ test "G29: an instance's lengths are constants, read as any value" {
     assert kScaled(Array<I64>[4, 5, 6]) == (three.Hash() & 7) * 3 + 1 and KScaledBaked == kScaled(Array<I64>[4, 5, 6])
 }
 
+# G29: an array made from the length of one taken by value whose length is known only at run time - the instance for
+# such lengths reads it as the running program's, no constant (it folded RunLength's -1, "found -2" for this one)
+fn kDoubled(a Array<U8>) I64 {
+    b := Array<U8>(a.Len() * 2)
+    return b.Len()
+}
+fn kRunLength(n I64) I64 { return kDoubled(Array<U8>(n)) }
+KDoubledBaked := kRunLength(5)
+test "G29: an array made from a run-time length taken by value" {
+    n I64 = 3
+    assert kRunLength(n) == 6 and kDoubled(Array<U8>(2)) == 4 and KDoubledBaked == 10
+}
+
 # T7c, T7d: inline fields whose lengths a call or a global computed by one give - decided once the program has checked
 fn kPage() I64 { return 64 }
 KPageWords I64 = kPage() / 8

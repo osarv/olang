@@ -1152,6 +1152,7 @@
 | ok - G30: what follows a decided if that leaves is not checked in that instance
 | ok - marker types and match T choose per instantiation
 | ok - G29: an instance's lengths are constants, read as any value
+| ok - G29: an array made from a run-time length taken by value
 | ok - T7d: inline fields whose lengths the compile-time evaluator computes
 | ok - T7d: fixed storage is a value, laid out in place
 | ok - E12, E16a: fixed storage is lent; a slice views part of an array

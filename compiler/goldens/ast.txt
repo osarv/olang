@@ -3,6 +3,7 @@ f9203b1f4884dad0 41f7d7dc75619d5e bench/benchlib.olang
 be1d4dcf25424c37 2ba84e01b2ee5f61 bench/binarytrees.olang
 52897c4439280484 e214214fa762e911 bench/dispatch.olang
 4348f3c569e60492 ded9aebd4d685a85 bench/fannkuch.olang
+a776ae76ce7c2606 062a5594e4f7e083 bench/fasta.olang
 b03c5ac5378d1817 77c550b016dbf2a4 bench/gen.olang
 e0bdc1d65df2c8df c9195d77995f209f bench/ir.olang
 b75e53143d0a5d35 fbb2dcea1f4be1b3 bench/knucleotide.olang
@@ -30,7 +31,8 @@ e97f8c23aeb61662 dc073efd0a584e2c bench/repro/opt.olang
 7bcfc7ec633cf09c be4fa567886417fd bench/repro/text_local_copy.olang
 383bb384d647ddab 72ae9b372c4953ea bench/repro/turn_temporaries.olang
 39c4ba4cd06cbda5 f8f086930d093489 bench/repro/wrapping_div.olang
-a7731c214cedf9f2 8f42bd0f4e9f857f bench/run.olang
+cc628cd94cfef2cc e37ed0d965c1c4ae bench/revcomp.olang
+353ece48832a6c76 de7ba970bf08f3d7 bench/run.olang
 b5e1cc6598052d6f 03dc13aca85ab335 bench/sha256.olang
 794cc0718242e88f 48df084a40025e36 bench/spectral.olang
 5eac950e4a96ec1d 9d1ecc73d4eb7b41 bench/sum.olang
@@ -2444,7 +2446,7 @@ eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
 2f7ade12d41d767f 66e1a5347c12b387 compiler/free.olang
-1b58c42eb72c9af5 d44fd9cf171506fb compiler/generic.olang
+7dcf3f3fd8db67e5 e07e51a6cff33838 compiler/generic.olang
 47fb7c219d28bceb 53557355686b67f3 compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang
 8299f0d6f657ceae 5fcac26072ce57dd compiler/lineedit.olang
@@ -2592,7 +2594,7 @@ c40abb18bd5bc0e8 dde88c3ea060ce90 std/json.olang
 40854ce6087f112c 75a97cd9f2afbb71 std/list.olang
 e2af3c272668511f 5f2fe5aba3f7cb8c std/net.olang
 e9aa94e405345e7a f136bf23c1f483ab std/order.olang
-eaf752333158c780 0d3564c785323155 std/os.olang
+27bfbac2c6546055 b3857496b1b4283e std/os.olang
 17c08f79ab55afc4 b4a22233d00c7e49 std/pair.olang
 6d63e48e89ab2815 27472a692fbe2416 std/plot.olang
 3ea631f369fef41e 930ead3ce67343d4 std/pool.olang
@@ -2710,7 +2712,7 @@ b5ef26df71c5e9d8 7d463a2ea7512fb5 tests/reflect.olang
 5075b8937e6628c4 d03918c8432a449e tests/reflmod.olang
 3d5f36715ff3e78e 0fb70749f4f4b958 tests/refltextindex.olang
 835ba0f57f4caddd ecb456b1ad53bae7 tests/runner.olang
-0c4c3adea751bf6a 77a0fb797b355ed7 tests/shared.olang
+d4c2eb02c98f2303 bfc1411399212bcd tests/shared.olang
 65be2149dd87b5aa c205b1e16386ced7 tests/slicehoist.olang
 307585c2d6e47496 63a9fb9b67c9368a tests/slotfacts.olang
 c452c9cb509c23e1 76ad53a3573a5846 tests/structpat.olang

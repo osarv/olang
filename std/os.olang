@@ -366,25 +366,44 @@ fn readBack(fd I32) String& ? Error {
 fn ReadFile(path String&) String& ? Error {
     if IsDir(path) { error Error.IsDir(path) }      # a directory opens, and its size means nothing
     f := try File.Open(path)
-    # the size is where reading starts from, nothing more: the end is where a read finds it. A byte past the size, so the
-    # read that finds the end is the next one, and room doubled for a file longer than it said - one in /proc, or a pipe,
-    # has no size to give (lseek fails or says 0), and a file may grow while it is read
+    # the size is where reading starts from, nothing more: the end is where a read finds it. Room for exactly the size,
+    # so a file that has it becomes the String in the storage it was read into, not copied (D9i); a read of one byte
+    # past it finds the end - or more: a file in /proc, or a pipe, has no size to give (lseek fails or says 0), and a
+    # file may grow while it is read
     size := unistd.lseek(f.fd, 0, 2)
     if size < 0 { size = 0 } else { unistd.lseek(f.fd, 0, 0) }
-    text := Array<U8>(size + 1)
-    got I64 = 0
-    for {
-        if got == text.Len() {
-            more := Array<U8>(text.Len() * 2)
-            for i in range got: more[i] = text[i]
-            text = more
+    text := Array<U8>(size)
+    got := try readInto(f.fd, text, 0, path)
+    if got < size: return String(text[:got])
+    past := Array<U8>(1)
+    n := unistd.read(f.fd, past, 1)
+    if n < 0: try raise(__olang_err(), path)
+    if n > 0 {
+        grown := Array<U8>((size * 2).Max(4096))
+        for i in range size: grown[i] = text[i]
+        grown[size] = past[0]
+        got = size + 1
+        for {
+            got = try readInto(f.fd, grown, got, path)
+            if got < grown.Len(): return String(grown[:got])
+            bigger := Array<U8>(grown.Len() * 2)
+            for i in range got: bigger[i] = grown[i]
+            grown = bigger
         }
-        n := unistd.read(f.fd, text[got:], U64(text.Len() - got))
+    }
+    return String(text)                             # the file's bytes, read as text (T29c)
+}
+
+# reads from fd into text from "at" until text is full or the input ends, giving back how much text holds then
+fn readInto(fd I32, text mut Array<U8>&, at I64, path String&) I64 ? Error {
+    got := at
+    for got < text.Len() {
+        n := unistd.read(fd, text[got:], U64(text.Len() - got))
         if n < 0: try raise(__olang_err(), path)
         if n == 0: break
         got += n
     }
-    return String(text[:got])        # the file's bytes, read as text (T29c)
+    return got
 }
 
 # closes fd and fails with the Error naming "code" - for a call that failed on an open descriptor, whose errno has
