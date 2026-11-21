@@ -419,7 +419,11 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     leafPartsAt Map<pair.Pair<I64, I64>, Bool>   # (and the split copies whose owner leaf's value has its parts split too: LeafParts)
     ownersAt Map<pair.Pair<I64, I64>, Bool> # O8f (gap 22): copies of a value with several owner leaves, parts split (OwnersSite)
     arraysAt Map<pair.Pair<I64, I64>, Bool> # O8f (c1's keep): copies stored into an element array place, its elements' parts split (ArraysSite)
-    partsAsked Map<types.TypeId, Bool>      # O8f: PartsOnly by type - false while it is being found (a type holding itself)
+    partsAsked Map<types.TypeId, Bool>      # O8f: PartsOnly by type - true while it is being found (a type holding itself)
+    partsNew Vec<types.TypeId>              # ...the types answered, in order (an answer found false forgets those after it)
+    selfAsked Map<types.TypeId, Bool>       # O8f: SelfHolding by type
+    holdSeen Map<types.TypeId, Bool>        # ...the types looked into while one is found
+    pfAsked Vec<I64>                        # O8f: the owner places partsFree is asking about, outermost first
     # feeders (findFeeds): value locals built in the region of the owner place they are stored into, from their
     # declarations - by (body, local), the index in feeds; and the calls given one, judged and redirected into it
     feeds Vec<feed>
@@ -2244,12 +2248,16 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     readPlace Vec<I64>        # view reads: the place, the statement, and the call whose result it is (its span, -1 none)
     readAt Vec<I64>
     readBy Vec<I64>
+    readArgOf Vec<I64>        # ...the call a read was lent writably to, as its span (spanCode), -1 for none
+    argOf I64 = -1            # (the call the argument being walked is lent writably to)
     goPlace Vec<I64>          # let-goes: the place, the statement, the kind, where, the text
     goAt Vec<I64>
     goKind Vec<I64>
     goSp Vec<source.Span>
     goRecv Vec<source.Span>   # a call's receiver (empty for none)
     goCallee Vec<I64>         # a call's callee body (LCall), -1 for none
+    goOwn Vec<Bool>           # ...one letting go only of storage it built itself (ownGoes): no view of this body's reaches it
+    callOwn Bool = false      # (whether the call being walked is one)
     goIdx Vec<I64>            # its index in Free.goes, -1 where it is not recorded there
     goVia Vec<I64>            # a walk's let-go (WalkIn, WalkCall), else WalkNone - and the walked value's type
     goWalkTy Vec<types.TypeId>
@@ -2406,12 +2414,14 @@ fn (w mut walker&) reset() {
     w.readPlace.Clear()
     w.readAt.Clear()
     w.readBy.Clear()
+    w.readArgOf.Clear()
     w.goPlace.Clear()
     w.goAt.Clear()
     w.goKind.Clear()
     w.goSp.Clear()
     w.goRecv.Clear()
     w.goCallee.Clear()
+    w.goOwn.Clear()
     w.goIdx.Clear()
     w.goVia.Clear()
     w.goWalkTy.Clear()
@@ -3046,6 +3056,16 @@ fn heldShape(x typed.Expr&) Bool {
 }
 
 # the local a borrow or a read of a place is rooted at through fields, elements and payloads, -1 for any other
+# whether an argument is a place of a local's lent as it is - no call on the way to it
+fn writableLend(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Borrow(_, _, p): placeRoot(p) >= 0
+        case _: false
+    }
+}
+
+fn spanCode(sp source.Span) I64 { return (I64(sp.Start) << 32) | I64(sp.End) }
+
 fn argRoot(x typed.Expr&) I64 {
     return match x {
         case typed.Expr.Borrow(_, _, p), typed.Expr.Read(_, _, p, _): placeRoot(p)
@@ -3672,7 +3692,9 @@ fn (f mut Free&) splitOwner(k I64, depth I64) Bool {
     # (review4's e1: an array leaf that is a part place - a split field, `S{qs Array<Q>, b Vec<I64>}`'s qs - copied
     # into a part region of its own where sole, its elements' parts split (lower.partOf's splitArray))
     if depth == 0 and f.PartPlace(k) and not f.owner[k]: return true
-    if depth > 8 or not f.owner[k] or f.handle[k] or not f.PartsOnly(f.valTy[k]) or f.VecWalks(f.valTy[k]).Len() > 0: return false
+    # (review4's g1: one whose value walks a Vec's elements - a Vec<U>, U PartsOnly - too: the copy splits each live
+    # element's parts, lower.partOf's splitArray, and its let-goes walk them, partReleases)
+    if depth > 8 or not f.owner[k] or f.handle[k] or not f.PartsOnly(f.valTy[k]): return false
     for lf in f.leaves(f.valTy[k]) {
         if not f.PartPlace(lf.PlaceId) and not f.splitOwner(lf.PlaceId, depth + 1): return false
     }
@@ -4167,6 +4189,7 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
     w.goSp.Push(sp)
     w.goRecv.Push(recv)
     w.goCallee.Push(callee)
+    w.goOwn.Push(kind == LCall and w.callOwn)
     # a call's let-go in the library's code is only this body's views' business: the report and condition 5 read
     # the rest - and so is a yield's, which is no let-go of the generator's own
     if viewsOnly or kind == LYield or (kind == LCall and not f.programCode[w.Id]) {
@@ -4347,6 +4370,7 @@ fn (w mut walker&) viewRead(o Vec<I64>&, by I64 = -1) {
             w.readPlace.Push(oval(y))
             w.readAt.Push(w.cur)
             w.readBy.Push(by)
+            w.readArgOf.Push(w.argOf)
         }
     }
 }
@@ -4829,10 +4853,13 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         }
         # (c1's keep: a by-value argument's own copy (D9b) of an element array of PartsOnly values, its elements' parts
         # in part regions - lower.arraysCopy - as the store it is made for builds them)
-        wasS := w.splitArr
+        wasS, wasG := w.splitArr, w.argOf
         if copySiteOf(a) >= 0 and w.F.partsArray(a.Type()): w.splitArr = copySiteOf(a)
+        # (review4's g1: a place lent writably to the call, `t.kids.Push(...)` - what the call lets go of through it is
+        # the container's value, which the reference reaches as it is then, never an old one: no view read across it)
+        w.argOf = spanCode(sp) if j < ps.Len() and w.writable(ps[j]) and writableLend(a) else -1
         o := w.expr(a)
-        w.splitArr = wasS
+        w.splitArr, w.argOf = wasS, wasG
         w.preservedArg, w.exemptSite = wasP, wasE
         if copied or viewArg: w.copying--
         w.readArg = wasRead
@@ -4904,8 +4931,11 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         if f.letsAll[b2] {
             w.goAll(sp, c, b2)
         } else {
+            # (review4's g1: a call given plain data alone, reaching no global, lets go only of storage it built itself)
+            w.callOwn = w.Final and f.lets[b2].Len() + f.walkLets[b2].Len() > 0 and w.ownGoes(c, b2)
             for k in f.lets[b2]: w.go(k, LCall, sp, receiverSpan(c), b2)
             for k in f.walkLets[b2]: w.go(k, LCall, sp, receiverSpan(c), b2, true, WalkCall)
+            w.callOwn = false
         }
         # (its calls through the function values it is given, judged by what this call gives it)
         w.viaCall(c, b2, 0, args, sp)
@@ -5175,6 +5205,22 @@ fn (w mut walker&) asRecord(c typed.Call&, rb I64, shift I64, args Vec<Vec<I64>>
         for k in f.walkLets[rb]: w.go(k, LCall, sp, receiverSpan(c), rb, true, WalkCall)
     }
     w.viaCall(c, rb, shift, args, sp)
+}
+
+# O8f (review4's g1): whether what a call c of body b2 lets go of is storage the call built itself - which no view this
+# body holds can reach: every argument plain data (no reference, no storage of its own), and the callee reaching no global
+# and no code not followed (effects.Facts, through its callees)
+fn (w mut walker&) ownGoes(c typed.Call&, b2 I64) Bool {
+    f := w.F
+    t := w.T()
+    for a in c.Args {
+        ty := a.Type()
+        if t.IsRef(ty) or t.HoldsRefs(ty) or t.OwnedPart(ty) or t.OwnsParts(ty): return false
+    }
+    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+    fs := f.fx!.Of(b2)
+    if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0 or fs.Spawns: return false
+    return not (fs.ReadsGlobals or fs.RefGlobals or fs.WritesGlobals or fs.WritesOut)
 }
 
 # the parameter a call's function value is - read whole, its body never assigning it (one of the first 62) - -1 for
@@ -5752,11 +5798,13 @@ fn (w mut walker&) views() {
     for i in range 1, readFrom.Len(): readFrom[i] += readFrom[i - 1]
     reads := Array<I64>(w.readPlace.Len(), 0)
     readsBy := Array<I64>(w.readPlace.Len(), -1)
+    readsArg := Array<I64>(w.readPlace.Len(), -1)
     fill := Array<I64>(w.no + 1, 0)
     for r in range w.readPlace.Len() {
         a := w.readAt[r]
         reads[readFrom[a] + fill[a]] = w.readPlace[r]
         readsBy[readFrom[a] + fill[a]] = w.readBy[r]
+        readsArg[readFrom[a] + fill[a]] = w.readArgOf[r]
         fill[a]++
     }
     for g in range w.goPlace.Len() {
@@ -5766,6 +5814,7 @@ fn (w mut walker&) views() {
         # (a holder's drop runs where its block is left: judged from there)
         if w.goEnd[g] >= 0 { s = try w.deferEnd.Get(w.goEnd[g]) catch default s }
         if k >= 0 and (k >= f.whyKind.Len() or not f.unkept(k)): continue
+        if w.goOwn[g]: continue
         at := w.goIdx[g]
         # in the statement itself
         # (a destructor walked as a call where its holder lets go - dtorCalls - reads the value it ends: its own body's
@@ -5776,7 +5825,9 @@ fn (w mut walker&) views() {
                 q := reads[i]
                 if (k >= 0 and q != k) or not f.unkept(q): continue
                 # (a call's own result is made after what the call lets go of)
-                if kind == LCall and readsBy[i] == (I64(w.goSp[g].Start) << 32) | I64(w.goSp[g].End): continue
+                if kind == LCall and readsBy[i] == spanCode(w.goSp[g]): continue
+                # (nor the place lent writably to that call, through which it lets go)
+                if kind == LCall and readsArg[i] == spanCode(w.goSp[g]): continue
                 f.keepView(q, body.File, w.goSp[g], $"a value of it read in this statement is in use when '" + $f.textOf(body.File, w.goSp[g]) + "' lets go of it; read what you need first", at)
             }
         }
@@ -7368,14 +7419,63 @@ fn (f mut Free&) PartsOnly(ty types.TypeId) Bool {
     if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return false
     if not t.OwnsParts(r) or not f.safe(r): return false
     if f.partsAsked.Has(r): return try f.partsAsked.Get(r) catch default false
-    f.partsAsked.Put(r, false)
+    # (review4's g1: a type holding itself through a Vec, `T{a Vec<I64>, kids Vec<T>}`, is taken to be PartsOnly while it
+    # is being found - the greatest answer, each value being finite; one found not to be forgets every answer found
+    # under that assumption)
+    mark := f.partsNew.Len()
+    f.partsAsked.Put(r, true)
+    f.partsNew.Push(r)
     ok := true
     fs := t.Items(t.Fields(r))
     for i in range fs.Len() {
         if ok and not f.partsField(r, i, fs[i]): ok = false
     }
+    for not ok and f.partsNew.Len() > mark + 1: f.partsAsked.Remove(try f.partsNew.Pop() catch default types.UnknownT)
     f.partsAsked.Put(r, ok)
     return ok
+}
+
+# O8f (review4's g1): whether a PartsOnly type holds itself, by value, through the arrays its parts own (`T{a Vec<I64>,
+# kids Vec<T>}`) - its copy splitting its parts and its let-go releasing them recurse at run time, one helper of the
+# type's calling itself (lowering's Split and Release helpers), never written out level by level
+fn (f mut Free&) SelfHolding(ty types.TypeId) Bool {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    if f.selfAsked.Has(r): return try f.selfAsked.Get(r) catch default false
+    f.holdSeen.Clear()
+    yes := f.PartsOnly(r) and f.holds(r, r)
+    f.selfAsked.Put(r, yes)
+    return yes
+}
+
+# whether a value of type ty holds a value of type r by value - through struct fields and the arrays they own - each type
+# looked into once (holdSeen)
+fn (f mut Free&) holds(ty types.TypeId, r types.TypeId) Bool {
+    t := f.T()
+    for ft in f.ownedIn(ty) {
+        q := t.Plain(t.Repr(ft))
+        if q == r: return true
+        if f.holdSeen.Has(q): continue
+        f.holdSeen.Put(q, true)
+        if f.holds(q, r): return true
+    }
+    return false
+}
+
+# the types a value of type ty holds by value one level down: a struct's fields but its references, an array's element
+fn (f mut Free&) ownedIn(ty types.TypeId) Vec<types.TypeId> {
+    t := f.T()
+    out Vec<types.TypeId>
+    r := t.Plain(t.Repr(ty))
+    if t.KindOf(r) == types.Kind.Array {
+        out.Push(t.Elem(r))
+        return out
+    }
+    if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return out
+    for ft in t.Items(t.Fields(r)) {
+        if not t.IsRef(ft): out.Push(ft)
+    }
+    return out
 }
 
 # whether field i of struct type r, of type ft, owns storage only as PartsOnly asks: none, a part place's array of plain
@@ -7621,12 +7721,18 @@ fn (f Free&) ArraysSite(b I64, site I64) Bool { return f.Done and f.arraysAt.Has
 fn (f mut Free&) partsFree(k I64, depth I64 = 0) Bool {
     if depth > 8 or not f.IsOwner(k) or (f.whyKind[k] != RInPlace and f.whyKind[k] != RSplit): return false
     if not f.PartsOnly(f.valTy[k]): return false
+    # (review4's g1: an owner its own value holds again - T.kids in `T{a Vec<I64>, kids Vec<T>}` - is taken to free so
+    # while it is being asked, each value being finite)
+    if has(f.pfAsked, k): return true
+    f.pfAsked.Push(k)
+    ok := true
     # (what its let-go releases - an owner its value holds, an R's Q, its parts, a Vec's live elements' own - each
     # decided sole, or an owner freeing so in turn: lower.ownerParts, partReleases)
     for q in f.PartsLet(f.valTy[k]) {
-        if not f.IsSole(q) and not f.partsFree(q, depth + 1): return false
+        if ok and not f.IsSole(q) and not f.partsFree(q, depth + 1): ok = false
     }
-    return true
+    try f.pfAsked.Pop() catch { }
+    return ok
 }
 
 # the place whose reason owner place k keeps for: where it keeps for RSplit or RInPlace alone, its value owning storage
