@@ -108,3 +108,58 @@ Walked I64 = walked()
 test "the baked global agrees" {
     assert Walked == 810 and walked() == 810
 }
+
+# rows (T7c): over an array of arrays reached writably, x is a writable reference to the row, in place or not
+fn zeroFirst(rows mut Array<Array<I64>>&) {
+    for r in rows: r[0] = 0
+}
+
+test "a writable walk of rows in place writes them" {
+    m := [[1, 2], [3, 4], [5, 6]]
+    rows mut Array<Array<I64>>& = m
+    for r in rows: r[0] = r[1] * 10 + churn()
+    n := churn()
+    assert m[0][0] == 20 + n and m[1][0] == 40 + n and m[2][0] == 60 + n and m[2][1] == 6
+    for r in rows[1:]: r[1] = -1
+    assert m[0][1] == 2 and m[1][1] == -1 and m[2][1] == -1
+    zeroFirst(m)
+    assert churn() > 0
+    assert m[0][0] == 0 and m[2][0] == 0 and m[1].Len() == 2
+}
+
+test "a ViewMut walk of a Vec's rows writes them" {
+    v := Vec<Array<I64>>[]
+    v.Push([1, 2, 3])
+    v.Push([4, 5])
+    for r in v.ViewMut() {
+        n := churn()
+        r[1] = 7 + n
+    }
+    m := churn()
+    assert v[0][1] == 7 + m and v[1][1] == 7 + m and v[0][2] == 3 and v[1].Len() == 2
+}
+
+test "rows walked read-only are copies" {
+    m := [[1, 2], [3, 4]]
+    total I64 = 0
+    for r in m {
+        r[0] = 9
+        total += r[0] + r[1]
+    }
+    assert total == 24 and m[0][0] == 1 and m[1][0] == 3
+}
+
+fn rowsWalked() I64 {
+    m := [[1, 2], [3, 4]]
+    rows mut Array<Array<I64>>& = m
+    for r in rows: r[1] *= 5
+    zeroFirst(m)
+    return m[0][1] * 100 + m[1][1] + m[0][0] + m[1][0]
+}
+
+assert rowsWalked() == 1020
+RowsWalked I64 = rowsWalked()
+
+test "the baked rows global agrees" {
+    assert RowsWalked == 1020 and rowsWalked() == 1020
+}

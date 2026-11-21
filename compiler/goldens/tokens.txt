@@ -2426,7 +2426,7 @@ e20178f94e07dfed 093e0335a8debfcd compiler/bindgen.olang
 172122c174426433 e5024fad4c503847 compiler/build.olang
 9eb8d9916112f375 acad139c7c5a3871 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
-0e0cfb52841e7792 0470a9485d10eca5 compiler/check.olang
+5e29b4b45a75a3c4 a8a8d1b944d99878 compiler/check.olang
 da018e972c2ecc90 2073133fd217ef43 compiler/cond.olang
 2ab98962469bc960 89092d630e387ca2 compiler/definit.olang
 db407b9ec2aacf25 e1e61b9b123ebbaf compiler/diag.olang
@@ -2684,7 +2684,7 @@ ef74496ac1efc479 e44f14abefad5ec5 tests/inplace.olang
 3253d9e1f272b7f0 04f2480b059d1b45 tests/keyenums.olang
 bcc9ef5a3b4134de 6b7e9bc0dd51d4ff tests/lanes.olang
 01ffe7335fe6ab32 05af3c33041bc780 tests/literals.olang
-ec5c29f257947440 b391d3562cb9ff6c tests/loopref.olang
+39a108fffbe46338 456c9994563eff0f tests/loopref.olang
 cb1a5845ede026cf 7846a1adaf912717 tests/match.olang
 bd604793a79e1dd0 d7d4a9777703b2e7 tests/membermod.olang
 43716d6db39bbcf8 d7de16659f863891 tests/members.olang

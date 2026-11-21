@@ -40547,3 +40547,22 @@ roots. A probe whose task makes a lambda replacing elements of its own Vec keeps
 `make quick` on a loaded machine then failed the fixture with "grew by 8196 KB": a runtime worker started in the
 second half reserves its 8 MB stack (plus a guard page), which VmPeak counts. The fixture allows up to four workers'
 stacks beside its 2 MB; kept storage grows about 140 MB, far past that.
+## A writable walk names rows by reference (S9a, 2026-11-21, wt-looprows)
+
+The user's rule, "loop variables get the type of what the iterator produces", left one exclusion in wt-loopref: over
+an array reached writably, an element that is itself an array stayed a copy, because a reference to an array of arrays
+of a run-time length lost the rows' length when the rows were held in place. T7c (wt-nestref) fixed that - every
+reference to an array of arrays now knows whether its rows are in place with their length or pairs - so the exclusion
+is lifted: `check.elemName` names an array element as it names a struct element, `x` a `mut Array<T>&` made where the
+array holds the row (the same E12 borrow `r mut Array<I64>& = rows[i]` makes). `for r in rows: r[0] = 7` over a
+`mut Array<Array<I64>>&` local, a `mut` parameter, a slice of either, or a Vec's `ViewMut()` writes the rows; `r = o`
+repoints the name and is refused by S9g as lost where nothing reads it. Numbers and enums stay copies, as does a row of
+an array value or one reached read-only (whose write nothing reads is S9g's error as before).
+
+A function taking `mut Array<Array<T>>&` is compiled per row length (G29), so a Vec's run-time rows (or a ragged
+literal) are walked through `ViewMut()` or a local, not passed to one; that is G29's rule, unchanged.
+
+Corpus: tests/loopref.olang (rows in place through a reference local, a slice and a `mut` parameter, a Vec's rows
+through ViewMut, each read back after a churn; a read-only walk copying; `assert rowsWalked() == 1020` decided while
+compiling and a baked global) - built, interpreted (`OLANG_EVALUATE=1`), under `-debug -sanitize` and
+`-memory -check`.
