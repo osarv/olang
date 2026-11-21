@@ -32,3 +32,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - olang session (cloud, 2026-11-21): wt-backend merged (a3ca48864)
 - olang session (cloud, 2026-11-21): wt-mempeak (compiler/olang.olang test peak) and wt-buildspeed (self-build per phase)
 - olang session (cloud, 2026-11-21): wt-runperf (oann bench check, filter-iterator alignment, C ratios) and wt-ltokey (ThinLTO cache keyed by interfaces)
+- OLang Cloud (2026-11-21): olang wt-chunkfacts - oann repro/chunkfacts: DeltaRuleChunked.Allocates too coarse
