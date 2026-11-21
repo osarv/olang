@@ -5137,7 +5137,11 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         ro := i < ps.Len() and t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) == 0
         v := ln.stackArg(a, body, i) if reads and plain and ro else mir.Operand.None
         wasCopy := ln.taskCopy
-        if task and byValue and ln.L.preserves(body, i): ln.taskCopy = callSiteOf(a)
+        # (O8f: a task's by-value argument its callee preserves, of a task handing back no reference beside its parts:
+        # dead when the task returns, its copy made in the join's scope - free.taskCopy)
+        if task and byValue and ln.L.preserves(body, i) and ln.L.Free != null and not ln.L.Free!.RefsBeyond(t.Result(ty)) {
+            ln.taskCopy = callSiteOf(a)
+        }
         if v == mir.Operand.None: v = ln.val(a)
         ln.taskCopy = wasCopy
         if i < ps.Len(): v = ln.fit(v, a, ps[i], a.Span())
