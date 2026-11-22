@@ -7096,8 +7096,8 @@ the place lets go of it, under the same conditions, made for the place meaning a
 nothing else is built into it while the place holds it - so a value of it changed in place (a store into it, a writable
 reference to it handed to a call) makes the place keep, and so does a value holding it made with no store into the place
 (a copy of a struct, a `Map` or an array holding it; a value a call hands back as a view, copied where it is kept, D9h -
-but not a constructor's instance viewing only storage made for the call, or unique values moved into it, which it
-owns), and a local's value handed back. A constructor's instance viewing what it is given that a struct local is
+but not a constructor's instance viewing only storage made for the call - text rendered, a fill, another constructor's
+instance viewing nothing, each built where the instance lands - or unique values moved into it, which it owns), and a local's value handed back. A constructor's instance viewing what it is given that a struct local is
 declared with, copied where it is kept (D9h), is that local's value made for its candidate parts, as at a store into a
 struct held in place: the copy is built for them (`d := Doc(""); d.text = d.text + $i` each turn holds one text). A local whose copy at its last mention is such a place's whole new value, by
 a statement of the very block declaring it (`v := Vec<I64>()`, pushes, `h.d = v`), is built for the place from its

@@ -41059,3 +41059,23 @@ turns under 8 MB, master fails -check on each; built, `-free late`, `-sanitize` 
 Vec<I64> owner field given a conditional of calls, a Vec<String> element given a conditional through SetAt, a fill
 returned, a fill of a local's text read after) print the same in every mode. Left: a struct constructed with a fill
 argument (`P(Array<String>(m, "p"))`) is a call's value copied (RCopied) where its field's element is replaced.
+
+## 2026-11-22: a fill given to a constructor frees at once (O8f; mine; wt-fillstruct)
+
+wt-freecond's last named keep. `p := P(Array<String>(m, "p"))`, P a constructor whose instance views its argument, then
+`p.t[j] = ...` in a loop: -memory -check named Array<String>'s element place kept, "a value holding it is made with no
+store into it, by a call's value copied". D9h has the caller copy a constructor's instance viewing what it is given
+unless every viewed argument is storage made for the call (typed.FreshViews), and FreshViews knew rendered text and
+constructor calls viewing nothing, not a fill. So viewCtor judged the caller's copy, whose text elements are values no
+store gives the element place. A fill is storage made for the call the same way - built at its site, its elements each
+their own copy built by lower.fillText as the element place's stores build them, recorded by free as one SOk store -
+so `freshText` now also answers a fill's site, held to the same test (built where the instance lands). Free and
+lowering read the one judgement (freshAt), so no copy is made and the fill's elements are the instance's.
+
+Probed beside it: an Array<Array<I64>> fill as a second argument, constructors with fills pushed into a Vec and
+replaced inside them, a fill handed to a function storing it into a field (freed already), and a field default
+`t Array<String> = Array<String>(n, "d")` with n a parameter - all free; built, `-free late`, `-sanitize` and
+OLANG_EVALUATE=1 print the same. Left as kept, by the rule: a default fill of a constant length is a fixed array
+stored into the instance, not built in a block (wt-freecond's restriction), and `v[j] = P(...)` into a Vec<P> whose P
+holds text elements is SetAt's gap, with or without a fill. Fixture checks/fixtures/freeing/fillargs.olang (master fails
+-check on it).

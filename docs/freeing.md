@@ -743,6 +743,19 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   **Where to pick up**: a copy holding a Map stays untracked (gaps.olang's shape); tasks as wt-taskfree left them; a
   struct constructed with a fill argument (`P(Array<String>(m, "p"))`) is a call's value copied (RCopied) where an
   element of its field is replaced.
+- 2026-11-22, wt-fillstruct: **a fill given to a constructor** (wt-freecond's last RCopied). `P(Array<String>(m, "p"))`
+  with P's instance viewing its argument: the fill was no storage made for the call (typed.FreshViews took rendered text
+  and constructor calls only), so the caller copied P's value (D9h) and the copy's text elements were values made with
+  no store into the element place. A fill whose site is built where the instance lands is now storage made for the call
+  (`freshText`), as rendered text is: no copy, and the fill's elements are the ones lower.fillText built for the place
+  (its SOk store). Covers an array-of-arrays fill beside another field, one pushed whole inside its constructor, and a
+  field default fill of a length known only when it runs; a fill handed to a function storing it already freed. Fixture
+  fillargs (200,000 turns under 8 MB; master fails -check); built, `-free late`, `-sanitize` and interpreted print the
+  same.
+  **Where to pick up**: a field default fill of a constant length (`t Array<String> = Array<String>(4, "d")`) is a
+  fixed fill stored into the instance, not built in a block, so it keeps (RCopied) as wt-freecond's rule says; and
+  `v[j] = P(...)` into a Vec<P> whose P holds an Array<String> is SetAt's gap ("lets go of what the element held": P is
+  no PartsOnly type), fill or not.
 - 2026-11-21, wt-taskgrow: **a task's read-only reference to an element** (`spawn b = readsRef(v[j].a)`, `readsQ(v[j])`)
   kept ~63 bytes a spawn for the run, here and at wt-taskfree alike: lowering copies the view call's value (D9h) for a
   task, and only a by-value argument's copy went to the join's scope (`taskCopy`). A read-only reference argument whose
