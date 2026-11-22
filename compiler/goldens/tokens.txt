@@ -2610,7 +2610,7 @@ bf4439d09464a49e d3b7295c84ebe3c3 std/prelude/float.olang
 02ef8799a43cf737 848f97b80edb3d41 std/prelude/hash.olang
 e2c6c18786ba2b7d 31f81d4ecfb8f70a std/prelude/input.olang
 9bc178df14e040b9 384c8ac462fcdf54 std/prelude/iterator.olang
-657763162ad19c49 f6abd0103870d9dd std/prelude/map.olang
+8d78604ee0f159ce 6f0aef1d355542e2 std/prelude/map.olang
 981cc35618f9ae23 96140841ac0a1718 std/prelude/number.olang
 73d1c1d2113c8ce4 481c5628e82754ca std/prelude/place.olang
 7367a130692c3681 893bc35ee58ad45a std/prelude/print.olang
