@@ -1,11 +1,12 @@
 import "std/io"
 
-# O8f (review9): array literals given each turn to a split local (an array of Vecs), a split field (an array of
-# structs holding a Vec), a text local, a local of numbers and a mutable global, other storage built between. A
-# literal widened to the place's run-time array is built where it is written (its items moved in where each was built,
-# the widened copy made in the statement's scope or the global's), so the place keeps, named by -memory -check; judged
-# the Make's own store, its let-go released storage no region held - a segfault, -sanitize too
-N I64 = 2000
+# O8f (review9, docs/freeing.md 2.4): array literals given each turn to a split local (an array of Vecs), a split field
+# (an array of structs holding a Vec), a text local, a local of numbers and a mutable global, other storage built
+# between. A literal widened to the place's run-time array is the place's store (free.WidenedMake): built in the region
+# its site is given (lower.prim's adopted literal, never copied out of it - regionMade), its items moved in as the element
+# place's stores - so each turn's arrays are freed. Before, the place kept (built where written, the widened copy made in
+# the statement's scope); judged the Make's store with that copy, its let-go released storage no region held - a segfault
+N I64 = 20000
 
 type Q struct() { a Vec<I64> }
 
