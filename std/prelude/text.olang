@@ -87,10 +87,14 @@ fn (a String&) EndsWith(suffix String&) Bool {
 }
 
 # the index of the first occurrence of c - failing with NotFound when there is none, so a miss is never read as a
-# position: "try t.FindByte(c) catch default -1" gives a fallback, "c in t" only asks
+# position: "try t.FindByte(c) catch default -1" gives a fallback, "c in t" only asks. Skipped 32 bytes at a time while
+# none of them is c - a lane total (E39), one vector compare and minimum for each 32 - then found byte by byte
 fn (a String&) FindByte(c U8) I64 ? TextError.NotFound {
-    for i in range a.Len() {
-        if a[i] == c: return i
+    b := a.Bytes()
+    i I64 = 0
+    for i + 32 <= b.Len() and (try (b[i:i + 32] ^ c).Min() catch default 0) != 0: i += 32
+    for j in range i, b.Len() {
+        if b[j] == c: return j
     }
     error TextError.NotFound
 }
