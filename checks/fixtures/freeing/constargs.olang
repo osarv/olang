@@ -1,0 +1,26 @@
+import "std/io"
+
+# O8f (docs/freeing.md, keptlast2): a constructor given constant text - `v[j] = P("a", i)`, its instance viewing its
+# argument - stores constant data into P's text field, which needs nothing, as constant data stored itself does (free's
+# made, ConstRead): the field stays decided sole, so SetAt's copy of the element's text is let go of when the element is
+# replaced - constant and rendered text alternating, in a Vec and in a struct's Vec field
+N I64 = 200000
+
+type P struct(a String, b I64) { t String = a, k I64 = b }
+
+type H struct() { ps Vec<P> }
+
+fn main() {
+    v Vec<P>
+    for i in range 4: v.Push(P($"x" + $i, i))
+    h := H()
+    for i in range 3: h.ps.Push(P("c", i))
+    s := 0
+    for i in range N {
+        j := i % 4
+        v[j] = P("a", i) if i % 2 == 0 else P($"b" + $i + " padded out to some length", i)
+        h.ps[i % 3] = P("k", i)
+        s += v[(j + 1) % 4].t.Len() + v[j].k + h.ps[(i + 1) % 3].k
+    }
+    try io.PutLn($s + " " + v[0].t + " " + v[3].t + " " + h.ps[1].t) catch io.Error { }
+}
