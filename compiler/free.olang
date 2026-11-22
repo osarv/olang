@@ -2921,6 +2921,11 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
                 w.store(ol, x, o, sp, w.localName(I64(l)))
                 w.go(ol, LAssign, p.Span(), source.Span(0, 0), -1)
                 w.goParts(ol, p.Span())
+                # (review4's h5: a split local's elements' parts, released by its walk - SplitLocal)
+                if w.F.SplitLocal(ol) {
+                    et := w.T().Elem(w.T().Repr(p.Type()))
+                    for k2 in w.F.PartsLet(et): w.go(k2, LLeaf if w.F.PartPlace(k2) else LAssign, p.Span(), source.Span(0, 0), -1, false, WalkIn, p.Type())
+                }
             }
             return
         }
@@ -5720,7 +5725,7 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     }
     # (c1's keep: an element array of PartsOnly values - a Vec<Array<Q>>'s - is built split, its elements' parts each in
     # a part region of its own where their place is sole: lower.partCopy, elemArrayCopy)
-    if kind == SFresh and f.arr[k] and not f.plainElems(k) and not movesOnly(x) and not (f.keyField[k] == -1 and f.PartPlace(k)) and not f.SplitField(k) {
+    if kind == SFresh and f.arr[k] and not f.plainElems(k) and not movesOnly(x) and not (f.keyField[k] == -1 and f.PartPlace(k)) and not f.SplitField(k) and not f.SplitLocal(k) {
         kind = SFail
         why = $"its elements may hold storage built with it: '" + $w.text(x.Span()) + "'"
     }
@@ -7501,6 +7506,15 @@ fn (f mut Free&) SplitField(k I64) Bool {
     if k < 0 or k >= f.keyField.Len() or f.keyField[k] < 0 or not f.arr[k] or not f.PartPlace(k): return false
     # (keptlast: or of text built in slots, `P{t Array<String>}` - its walk puts each element's slot back, TextArray)
     return f.partsArray(f.valTy[k]) or f.TextArray(f.valTy[k]) >= 0
+}
+
+# O8f (review4's h5): whether place k is an owner local holding a run-time array of PartsOnly values (`rows :=
+# Array<Q>(4, ...)` given another array): as a split field's, each element's parts are built in part regions of their
+# own as an element's store builds them (lower.fillCopy), so that its let-go releases its elements' parts by its length,
+# then the array's own region (lower.releases)
+fn (f mut Free&) SplitLocal(k I64) Bool {
+    if k < 0 or k >= f.keyField.Len() or f.keyField[k] != -3 or not f.arr[k] or f.owner[k]: return false
+    return f.partsArray(f.valTy[k])
 }
 
 # O8f (c1's keep): whether ty is a run-time array of PartsOnly values that is an element array (elemArray) - a copy of

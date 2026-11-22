@@ -1,0 +1,28 @@
+import "std/io"
+
+# O8f (review4's h5): an array local of structs holding a Vec by value, declared with no value and given a new array
+# each turn - a fill copying a Vec's element - releases each old element's buffer, then the array (free.SplitLocal); it
+# kept every array's elements before
+N I64 = 200000
+
+type Q struct() { a Vec<I64> }
+
+fn main() {
+    src := Vec<Q>()
+    for i in range 3 {
+        q := Q()
+        q.a = Vec<I64>[i, i + 1]
+        src.Push(q)
+    }
+    rows Array<Q>
+    t := 0
+    for i in range N {
+        rows = Array<Q>(4, src[i % 3])
+        rows[i % 4].a.Push(i)
+        q := Q()
+        q.a = Vec<I64>[i, i + 2]
+        rows[(i + 1) % 4] = q
+        t += rows[i % 4].a[2] + rows[(i + 1) % 4].a[1] + rows[(i + 2) % 4].a.Len()
+    }
+    io.PutLn($t + " " + $rows.Len() + " " + $src[2].a.Len())!
+}

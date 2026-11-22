@@ -1595,7 +1595,7 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
     g := ln.guardOf(k)
     if k >= 0 and g != free.NotSole {
         # (c1's s.qs: a split field's elements' parts first, by its length - free.SplitField)
-        if fr.SplitField(k) {
+        if fr.SplitField(k) or fr.SplitLocal(k) {
             et := ln.T.Elem(ln.T.Repr(p.Type()))
             tq := fr.TextArray(p.Type())
             # (keptlast: a split field of text - each element's slot, by its length)
