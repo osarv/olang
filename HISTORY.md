@@ -41105,3 +41105,38 @@ each growing capture was made of (`capGrows`: the capture's Outer expression's p
 (`fs.Push(f)`) counts too - refusing where unsure. Not followed: a lambda held in a struct or a collection, and a
 capture of a capture holding a lambda; the evaluator and the sanitizer still report those. Cases m19gcapture,
 m19gcapturegiven (fail) and m19gcaptureread (a lambda reading its capture and setting an element grows nothing).
+
+## 2026-11-22: growing in place reads nothing another thread rewrites (M19d, O8f, P2b; mine; wt-growrace)
+
+The full `make verify` on master e4f67394d failed `make race`: std/sync's "a Mutex guards a collection, and a copy of it
+is the same lock" reported a data race in `__olang_grow_in_place` (wt-pushperf's). Two tasks push into one `Vec`
+under the `Mutex`; the buffer one built lives in its stand-in's own chunk (a Vec reached through a reference is built
+into the stand-in, not a part region). When that task finished, the joiner folded its stand-in into the spawner's
+scope - rewriting the chunk's owner word (`__olang_chunks_own`) and nulling the stand-in's head - while the other task,
+holding the lock, asked `__olang_grow_in_place` about the same buffer, which read the chunk's owner word and that
+owner's header to learn whether it was a region. A second program (three Vecs the spawner filled, lent to three tasks)
+raced the same way on the spawner's own scope header, read by the walk up a part region's parents while the joiner
+spliced chunks into it.
+
+- **Benign today, a hazard in principle.** Every interleaving read a word whole (old or new owner, old or new head)
+  and every answer was "not here" - the copying path - so nothing was corrupted on x86. It was still a race in LLVM's
+  memory model, and on a weakly ordered target (the aarch64 cross build) the new owner - a keeper header just built -
+  could be seen before its contents. The bump itself was never at risk: a part region's chunk holds only its one
+  array, grown only through the collection, which the program's own lock orders, and the reservation bookkeeping is
+  thread-safe as it was (the hint thread-local, `__olang_reserve_ok` atomic, the large table under its lock, `mprotect`
+  on the grower's own chunk).
+- **The fix: decide from words no other thread writes while the buffer is in use.** A chunk's fourth word (whether it
+  is fresh from the system) gains a second bit, set by `__olang_region_alloc` as a region first bumps the chunk -
+  before anything in it is handed out - and written anew by every take; `__olang_scope_alloc_zeroed` reads bit 0 only.
+  `__olang_grow_in_place` and `__olang_region_release_part` read a chunk's owner only when that mark says a region holds
+  it (a region's chunk's owner word is written once, as the region first bumps it, no longer on every allocation), so a
+  scope's chunk and its header are never read. The ownership walk goes through the regions' own words - a region's
+  owner, the scope it was made in, else its parent region's - never a scope's header; `__olang_kids_move` stores the
+  parent and then the owner atomically (release), and the walk loads them so (acquire), as a join may move the regions
+  of a stand-in while a sibling task reads them. The rule is unchanged (SPEC M19d): only a part region of this thread
+  grows where it lies; nothing is added per push (the mark is read on a growth, set once per chunk).
+- Tested: std/sync gained "a Vec grows from tasks under a Mutex, from tasks it was lent to and in a task's own storage,
+  join after join" (two tasks under one Mutex, two tasks lent Vecs the spawner filled, one growing its own, four joins);
+  under -race the old runtime reports the race 2 runs in 60, the new one 0 in 120; -sanitize passes. Every test file
+  that spawns passes under -race; the Vec, List, Map and Columns tests, and the freeing and earlyfree scenarios pass.
+  bench push, 9 runs: Vec 0.538 s against C's 0.472 (1.14), List 1.01, List in vec.olang 1.05 - unchanged.
