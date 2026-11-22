@@ -44,6 +44,7 @@ one rule that composes over special cases; fix rough edges found while building.
   Arxiv connector frivolously"); paper notes in oagent's papers/.
 - **GPUs are local:** the user's own machine (RTX 4060 8 GB, sm_89 first; Ryzen 5 7600 with AVX-512; 16 GB RAM, 12 GB
   visible in WSL; specs in oagent's machine/specs.txt). No paid cloud GPUs.
+- **Energy-based models are the main line** (the user, 2026-11-22: "Yes, make energy-based models the main line. Keep doing that"): structured and learned energies, local learning (pseudolikelihood, CD, EP), stochastic search (Gibbs, Langevin, diffusion) with learned energies as verifiers, on-chip efficiency; the deterministic settle is one member of the family, kept where it measurably wins.
 - **Settling networks are the main experiment** (2026-10-28: "This is what we are going to be experimenting with
   primarily"): weigh olang by what the settle needs - many small cache-resident GEMVs in an allocation-free loop,
   symmetric reciprocal blocks, low precision, the FPGA path. When experiments start is the user's to say; the
