@@ -34,5 +34,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - olang session (cloud, 2026-11-21): wt-runperf, wt-ltokey, wt-sha merged (7ee156575)
 - olang session (cloud, 2026-11-21): wt-bgame merged
 - olang session (cloud, 2026-11-22): wt-mapnode merged (FindByte kept, Map change dropped)
-- OLang Cloud (2026-11-21): olang wt-freecond - conditional of two new texts into a part; fill + loop store shared by type (-check)
 - olang session (cloud, 2026-11-22): wt-genslow merged (no repro)
