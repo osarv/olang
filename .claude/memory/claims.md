@@ -35,5 +35,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - olang session (cloud, 2026-11-21): wt-bgame merged
 - olang session (cloud, 2026-11-22): wt-mapnode merged (FindByte kept, Map change dropped)
 - olang session (cloud, 2026-11-22): wt-genslow merged (no repro)
-- OLang Cloud (2026-11-22): olang review9 - bulk soundness review since review8
 - OLang Cloud (2026-11-22): olang wt-f32select - F32 select slower than branchy form (oann potts)
