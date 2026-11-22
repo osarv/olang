@@ -4771,7 +4771,7 @@ fn convertArg(x typed.Expr&) typed.Expr& {
 fn (ln mut lowering&) widening(op typed.PrimOp, args Array<typed.Expr&>&, ty types.TypeId) Bool {
     t := ln.T
     return op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(ty) and not t.IsRef(t.Repr(args[0].Type())) and
-           ln.arrayOf(args[0].Type()) != types.UnknownT and ln.fixedLen(ln.arrayOf(args[0].Type())) >= 0
+           ln.arrayOf(args[0].Type()) != types.UnknownT and (ln.fixedLen(ln.arrayOf(args[0].Type())) >= 0 or ln.convertsApart(args[0].Type(), ty))
 }
 
 # whether fit widens x to type to: a fixed array where a run-time one of its element is wanted
@@ -4790,10 +4790,11 @@ fn (ln mut lowering&) fits(x typed.Expr?&, to types.TypeId) Bool {
 fn (ln mut lowering&) widen(v mir.Operand, from types.TypeId, to types.TypeId, sp source.Span, at mir.ScopeRef) mir.Operand {
     src := ln.local(v, from, sp)
     k := ln.fixedLen(ln.arrayOf(from))
-    n := mir.Operand.Const(mir.I64T, k)
-    buf := ln.temp(to, sp)
     fe := ln.T.Elem(ln.T.Repr(from))
     te := ln.T.Elem(ln.T.Repr(to))
+    if k < 0: return ln.widenRows(src, fe, te, to, sp, at)
+    n := mir.Operand.Const(mir.I64T, k)
+    buf := ln.temp(to, sp)
     if ln.laidApart(fe, te) {
         # QCE: rows laid out in place made rows of a run-time length - each widened in turn, made where the array is
         ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
@@ -4807,6 +4808,20 @@ fn (ln mut lowering&) widen(v mir.Operand, from types.TypeId, to types.TypeId, s
     # no fill: every element is copied in at once
     ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
     ln.emit(mir.Stmt.CopyElems(sp, mir.Lvalue.L(buf), mir.Lvalue.L(src), n))
+    return mir.Operand.Copy(mir.Lvalue.L(buf))
+}
+
+# T7d: an array of a run-time length whose rows are laid out in place (fe) made one of rows of run-time lengths (te) -
+# each row widened in turn, made where the array is
+fn (ln mut lowering&) widenRows(src mir.LocalId, fe types.TypeId, te types.TypeId, to types.TypeId, sp source.Span, at mir.ScopeRef) mir.Operand {
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(mir.Lvalue.L(src))], sp)
+    buf := ln.temp(to, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
+    ln.eachIndex(n, sp, fn(i mir.LocalId) {
+        e := ln.into(fe, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(ln.with(pl(mir.Base.Local(src)), mir.Proj.Index(i))))), sp)
+        w := ln.widen(e, fe, te, sp, at)
+        ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(pl(mir.Base.Local(buf)), mir.Proj.Index(i))), mir.Rvalue.Use(w)))
+    })
     return mir.Operand.Copy(mir.Lvalue.L(buf))
 }
 
@@ -6940,6 +6955,11 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
         }
     }
     if ln.dead: return mir.Operand.None
+    # T7d: rows laid out in place given as the fill of rows of a run-time length (a field, a Vec's element, a mutable
+    # global, a local assigned again) - the item made one of a run-time length first, each element then its own copy
+    if m.Items.Len() > 0 and fv != mir.Operand.None and ln.laidApart(m.Items[0].Type(), el) {
+        fv = ln.widen(fv, m.Items[0].Type(), el, sp, into if adopt else ln.madeAt(m.Site))
+    }
     # (QCE: a fill owning storage - text, an array, a value with such parts - is each element's
     # own copy of it, made where the array is)
     owned := m.Items.Len() > 0 and ln.ownsStorage(el) and fv != mir.Operand.None and fv != mir.Operand.Const
@@ -7231,8 +7251,11 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         match args[0] {
             case typed.Expr.Make(_, mt, m) {
                 fa := ln.arrayOf(mt)
+                # (T7d: one of a run-time length whose rows are laid out in place made one of rows of run-time lengths,
+                # its fill widened there)
+                apart := m.Kind == typed.MakeKind.Fill and ln.convertsApart(mt, ty)
                 if (m.Kind == typed.MakeKind.Fill or m.Kind == typed.MakeKind.Array) and not t.IsRef(t.Repr(mt)) and
-                   fa != types.UnknownT and ln.fixedLen(fa) >= 0 and ln.fixedLen(ln.arrayOf(ty)) < 0 and m.Site >= typed.SiteId(0) {
+                   fa != types.UnknownT and (ln.fixedLen(fa) >= 0 or apart) and ln.fixedLen(ln.arrayOf(ty)) < 0 and m.Site >= typed.SiteId(0) {
                     at := ln.built(m.Site)
                     return ln.fill(m, ty, sp, true, at) if m.Kind == typed.MakeKind.Fill else ln.arrayLit(m, ty, sp, true, at)
                 }

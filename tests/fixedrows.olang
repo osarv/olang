@@ -1,0 +1,59 @@
+# T7d: rows an array of arrays lays out in place, stored where rows of a run-time length are held (review8 F2, F3)
+
+fn churn() I64 {
+    n I64 = 0
+    for i in range 100 {
+        s := $"xyzw" + $i
+        n += s.Len()
+    }
+    return n
+}
+
+EtOne mut I64 = 1
+
+# rows a fill gives one known length (T7d: laid out in place) stored where rows of a run-time length are held - a
+# field (given a fill, a literal or a local), a Vec's element, a mutable global, a local assigned again with rows of
+# another length, a returned value - copied into rows of their own at the store (review8 F2: read with the wrong
+# layout; F3: the evaluator refused the global's element replaced)
+type frHold struct(a Array<Array<I64>>) { a }
+
+FrG mut Array<Array<String>> = Array<Array<String>>(2, Array<String>(2, $"z" + $0))
+
+fn frMade(k I64) Array<Array<I64>> {
+    r := Array<Array<I64>>(1, Array<I64>(1, 0))
+    r = Array<Array<I64>>(2, Array<I64>(3, k))
+    return r
+}
+
+fn fixedRows(k I64) String {
+    h := frHold(Array<Array<I64>>(2, Array<I64>(2, 7 + k)))
+    v Vec<Array<Array<I64>>>
+    v.Push(Array<Array<I64>>(2, Array<I64>(2, 5)))
+    v.Push(Array<Array<I64>>(1, Array<I64>(3, k)))
+    a := Array<Array<I64>>(1, Array<I64>(1, 0))
+    a = Array<Array<I64>>(2, Array<I64>(2, 9))
+    m := frMade(k + 1)
+    x := Array<Array<I64>>(2, Array<I64>(2, 4))
+    g := frHold(x)
+    l := frHold(Array<Array<I64>>[Array<I64>[1, 2], Array<I64>[3, 5]])
+    x[0][0] = 9
+    for _ in range 3 {
+        FrG[1] = Array<String>(2, $"g" + $k)
+        assert churn() > 0
+    }
+    FrG[0][1] = $"q"
+    h.a[1][0] = 1
+    v[0][1][1] = 6
+    assert churn() > 0
+    return $h.a[1].Len() + $h.a[1][1] + $h.a[0][0] + $h.a[1][0] + " " + $v[0][1].Len() + $v[0][1][0] + $v[0][1][1] + $v[0][0][1] +
+           $v[1][0].Len() + " " + $a[1].Len() + $a[1][1] + " " + $m[1].Len() + $m[1][2] + " " + FrG[0][0] + FrG[0][1] + FrG[1][1] + " " +
+           $g.a[0][0] + $g.a[1].Len() + $l.a[1][1] + $x[0][0]
+}
+
+FixedRowsBaked := fixedRows(1)
+
+test "rows of a known length stored where rows of a run-time length are held are copied in" {
+    got := fixedRows(EtOne)
+    assert churn() > 0
+    assert got == FixedRowsBaked and got == "2881 25653 29 32 z0qg1 4259", got
+}

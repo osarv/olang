@@ -41278,3 +41278,24 @@ stack address: built and `-sanitize` crashed (tests/textslot.olang under `make s
 now takes only a place whose value type is immutable, as the ConstLocal rule above it does; P's text fields still free
 at once (freeing/constargs flat under -memory -check). checks/cases/constrelit.olang (run: master crashes). Early
 freeing alone changed.
+
+## 2026-11-22: rows held in place are copied in where rows of a run-time length are held (T7d; mine; review8 F2, F3)
+
+review8 F2: an array of arrays whose rows a fill gave one length (`Array<Array<I64>>(2, Array<I64>(2, 7))` - rows laid
+out in place, its outer length run-time) stored where rows of a run-time length are held - a struct field
+`Array<Array<I64>>`, a `Vec` push, a mutable global's initializer or store - was read as pairs: wrong values or a
+segfault. The checker let it fit (flowsInto: element lengths only) and lowering reinterpreted it: the fast path that
+builds a converted fill where it is made took only a fixed outer length, and `widen`, which already copied rows apart
+(QCE), took only a fixed outer length too, so a run-time outer one fell through to a plain Convert. The decision, two
+options weighed (copy at the store, or refuse naming T7d): copy - T7a already says a store copies the parts it is
+given in, and the copy is the store someone wrote, so PRINCIPLES' "a copy of an array is an assignment someone
+wrote" holds. Now lower.fill widens a fill's in-place item to the run-time-row element before copying it into each
+element (each element its own copy, made where the array is), the converted-fill fast path also takes such a fill,
+and `widen` copies a run-time-length array's rows in a loop (`widenRows`). The local half: `a := Array<Array<I64>>(1,
+Array<I64>(1, 0))` then `a = Array<Array<I64>>(2, Array<I64>(2, 7))` gave E12 "expected Array<Array<I64>>, found
+Array<Array<I64>>" (T7d's local rule only made the outer length run-time); a local assigned as a whole now holds its
+rows' lengths at run time too (check.runRows), and SPEC T7d's "a local whose stored values' element lengths disagree
+is a compile-time error" is replaced by the copy rule. F3 (the evaluator refusing `G[1] = ...` on a mutable global
+`Array<Array<String>>` with "reaches outside the storage") was the same reinterpretation in the MIR it runs, fixed with
+it. tests/fixedrows.olang (each shape, baked and run after a churn; built, -sanitize, -free late, OLANG_EVALUATE=1,
+-memory -check). Checker and lowering changed; scopes, the runtime and the evaluator did not.

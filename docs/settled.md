@@ -314,7 +314,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   arrays (the user's call). `x.Len()` is an `I64` (E23/T10). Rows held in place (T7c, 2026-11-21): a reference
   local `Array<Array<T>>&` given an array of known-length rows (a name, field or slice, not assigned again) takes
   their length, as an instance's parameter does; any other such reference is an error naming T7c (it had read the
-  rows as pairs).
+  rows as pairs). Rows held in place stored where rows of a run-time length are held (a field, a `Vec` element, a
+  mutable global, a local assigned again, which holds its rows' lengths at run time too) are copied in at the store,
+  never refused (T7d, 2026-11-22, review8 F2).
 - **Indexing is unchecked, slicing checked once per slice (E16, E16a-E16e).** `a[lo:hi]` is a borrow tagged with the
   base's scope and permission; `try a.Get(i)`, `try a.Set(i, v)`, `try a.SliceOf(lo, hi)` fail with
   `ArrayError.OutOfRange`. An out-of-range index, a wrong `extern` prototype and a data race are the three unchecked

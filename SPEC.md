@@ -765,8 +765,11 @@ A value stored into **fixed field or element storage** must have its length know
 another known length is a compile-time error naming both lengths, and one whose length is known only at run time is a
 compile-time error saying to copy it explicitly through a slice of that length, `s.m = v[0:16]`, whose bounds are
 checked once where it is evaluated (E16b; `v.SliceOf(0, 16)` fails instead, E16c). No store is ever checked for its length
-implicitly. An element length is part of its storage's layout, so a local whose stored values' element lengths
-disagree is a compile-time error, not a length kept at run time.
+implicitly. A local assigned as a whole after its declaration holds its elements' lengths at run time as well as its
+own, so a later store may give it rows of any length. An array whose rows are laid out in place, stored where rows of
+a run-time length are held - a field or element whose declaration gives its rows none, a `Vec`'s element, a mutable
+global, such a local, a by-value parameter - is copied in at the store, each row its own copy (T7a: a store copies the
+parts it is given in); it is never refused.
 
 **T8.** An array is built by `Array<T>(n)` — `n` elements, each `T`'s zero value (D13, D13c) — or `Array<T>(n, v)`,
 each element `v` (§5.4 E13a), or by an array literal (§5.6 E19). `n` is any integer expression; a negative `n`

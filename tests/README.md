@@ -53,6 +53,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   program's own override, an extends type with and without one, a generic owner's member, members declared in place (an
   enum read by reflection with its text values, a struct with a method); baked and decided while compiling beside the
   run time.
+- `fixedrows.olang` - T7d: rows an array of arrays lays out in place, stored where rows of a run-time length are
+  held (a field, a Vec's element, a mutable global, a local assigned again, a returned value), copied in at the store.
 - `valueparts.olang` - QCE: arrays of a run-time length held by value inside values (fields, elements, payloads, type
   arguments, a constructor's by-value parameter) - stores copy in, a copy of the whole copies them, a by-value argument
   is the callee's own copy; `Map<String, V>` owns its keys. Baked and decided while compiling beside the run time.

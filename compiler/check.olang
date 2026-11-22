@@ -8084,8 +8084,17 @@ fn (c mut Checker&) inferred(x ast.Expr&, e typed.Expr&, keep Bool = false) type
             case _ { }
         }
     }
-    if not keep: return c.runLength(t)
+    if not keep: return c.runRows(t)
     return t
+}
+
+# T7d: a local assigned as a whole afterwards holds its length at run time, and so do its rows - a later store may give
+# rows of another length, its rows copied in as they are stored
+fn (c mut Checker&) runRows(t types.TypeId) types.TypeId {
+    if c.P.T.KindOf(t) != types.Kind.Array: return c.runLength(t)
+    e := c.P.T.Elem(t)
+    if c.P.T.KindOf(e) == types.Kind.Array: e = c.runRows(e)
+    return c.P.T.Array(e, types.TypeId(0))
 }
 
 # an array of a known length - a value, or what a reference names - as one holding its length at run time (T7d)
@@ -20619,7 +20628,7 @@ fn (c mut Checker&) putTarget(x ast.Expr&, define Bool, v typed.Expr&, t types.T
             case ast.Expr.Name(nsp, n) {
                 if c.text(n) == "_": return
                 # T7d: a local assigned as a whole afterwards holds its length at run time
-                if c.fr().stored.Has(n) and c.runLength(t) != t: t = c.runLength(t)
+                if c.fr().stored.Has(n) and c.runRows(t) != t: t = c.runRows(t)
                 if c.P.T.KindOf(c.deref(t)) == types.Kind.Array and not c.P.T.Same(t, typeOf(v)): v = c.fit(v, t, nsp)
                 id := c.local(n, nsp, t, typed.LocalKind.Var, typed.Mark.Infer)
                 c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), v))
