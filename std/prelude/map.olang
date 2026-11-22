@@ -4,7 +4,8 @@
 # declaring Eq declares its Hash too.
 #
 # The entries are held in slots, one array of them in the order the slots were first used, and found through buckets of
-# chained slot numbers - a power of two of them, doubled when the map is three-quarters full. A removed key's slot is
+# chained slot numbers - a power of two of them, doubled when the map is three-quarters full. A slot's link to the next
+# of its chain is held in its entry, so a probe reads one bucket and then one entry per key compared. A removed key's slot is
 # emptied and kept for the next key put, so a Map whose keys come and go stays the size of what it holds. Growing makes
 # a slot array twice the size, the entries moved into it, and re-chains the slots into new buckets; the old arrays stay
 # in the scope until it closes, as anything an arena holds does.
@@ -30,16 +31,17 @@ type MapError error {
     Missing
 }
 
-# one key and its value, as a "for ... in" over a Map gives them
-type MapEntry<K, V> struct(key K, value V) {
+# one key and its value, as a "for ... in" over a Map gives them; chain is the link a Map's slot holds (-1 elsewhere)
+type MapEntry<K, V> struct(key K, value V, chain I64 = -1) {
     Key K = key
     Value V = value
+    link I64 = chain                            # in a Map's slot: the next slot of its bucket's chain, -1 at the end
 }
 
 type Map<K Hashable<K>, V> struct() {
     ents Array<MapEntry<K, V>>                  # the slots; the first n are in use or emptied (a removed key's)
-    next Array<I64>                             # by slot: the next of its bucket's chain, -1 at the end - for an emptied
-                                                # slot the next emptied one, below -1 (freeLink)
+    next Array<I64>                             # by slot: -1 for one in use - for an emptied slot the next emptied one,
+                                                # below -1 (freeLink)
     buckets Array<I64>                          # by bucket: its chain's first slot, -1 for none; none before the first Put
     n I64 = 0                                   # the slots used
     count I64 = 0
@@ -71,7 +73,7 @@ fn (m Map<K, V>&) live(i I64) Bool { return m.next[i] >= -1 }
 # the slot holding key - failing with Missing when no slot does
 fn (m Map<K, V>&) slotOf(key K) I64 ? MapError {
     if m.count == 0: error MapError.Missing
-    for i := m.buckets[m.bucketOf(key)], i >= 0, i = m.next[i] {
+    for i := m.buckets[m.bucketOf(key)], i >= 0, i = m.ents[i].link {
         if m.ents[i].Key == key: return i
     }
     error MapError.Missing
@@ -87,8 +89,10 @@ fn (m mut Map<K, V>&) add(b I64, key K, value V) {
         i = m.n
         m.n++
     }
-    m.ents[i].occupy(MapEntry<K, V>(key, value))   # (a slot past n, or one a removal emptied: nothing there to end)
-    m.next[i] = m.buckets[b]
+    # (a slot past n, or one a removal emptied: nothing there to end; the link given to the constructor, as a store into
+    # the entry after it would keep the entry's parts from being built in regions of their own, O8f)
+    m.ents[i].occupy(MapEntry<K, V>(key, value, m.buckets[b]))
+    m.next[i] = -1
     m.buckets[b] = i
     m.count++
     if m.count * 4 > m.buckets.Len() * 3: m.rehash()
@@ -112,7 +116,7 @@ fn (m mut Map<K, V>&) rehash() {
     for i in range m.n {
         if not m.live(i): continue
         b := m.bucketOf(m.ents[i].Key)
-        m.next[i] = m.buckets[b]
+        m.ents[i].link = m.buckets[b]
         m.buckets[b] = i
     }
 }
@@ -121,7 +125,7 @@ fn (m mut Map<K, V>&) rehash() {
 fn (m mut Map<K, V>&) Put(key K, value V) {
     if m.buckets.Len() == 0: m.buckets = Array<I64>(8, -1)
     b := m.bucketOf(key)
-    for i := m.buckets[b], i >= 0, i = m.next[i] {
+    for i := m.buckets[b], i >= 0, i = m.ents[i].link {
         if m.ents[i].Key == key {
             m.ents[i].Value = value
             return
@@ -135,7 +139,7 @@ fn (m mut Map<K, V>&) Put(key K, value V) {
 fn (m mut Map<K, V>&) Update(key K, init V, f fn&(v V) V) {
     if m.buckets.Len() == 0: m.buckets = Array<I64>(8, -1)
     b := m.bucketOf(key)
-    for i := m.buckets[b], i >= 0, i = m.next[i] {
+    for i := m.buckets[b], i >= 0, i = m.ents[i].link {
         if m.ents[i].Key == key {
             m.ents[i].Value = f(m.ents[i].Value)
             return
@@ -167,9 +171,9 @@ fn (m mut Map<K, V>&) unlink(key K) I64 ? MapError {
     if m.count == 0: error MapError.Missing
     b := m.bucketOf(key)
     prev I64 = -1
-    for i := m.buckets[b], i >= 0, i = m.next[i] {
+    for i := m.buckets[b], i >= 0, i = m.ents[i].link {
         if m.ents[i].Key == key {
-            if prev < 0 { m.buckets[b] = m.next[i] } else { m.next[prev] = m.next[i] }
+            if prev < 0 { m.buckets[b] = m.ents[i].link } else { m.ents[prev].link = m.ents[i].link }
             m.next[i] = freeLink(m.free)
             m.free = i
             m.count--
