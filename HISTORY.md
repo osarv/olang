@@ -41017,3 +41017,15 @@ search a byte loop.
   revcomp 0.199 -> 0.192 s (C 0.175, 15 alternated runs); peak unchanged (150 MB). Its line copy stays a byte loop: no
   plain store of an array into a slice exists (E31e) and the lane stores are `op=` only.
 
+
+## 2026-11-22: a generic struct's instance costs nothing - oann's GemmI8 3.5x not reproduced (G-monomorphization; mine; wt-genslow)
+
+oann's docs/redesign.md (2026-11-15) recorded that making GemmI8's operand struct generic slowed batch-1 GemmI8 3.5x
+(1 x 784 x 128, 4.2 -> 15.9 us), "not reduced to a repro"; plan.md queued it. Rebuilt the generic form in a copy of oann
+(`type quant<X> struct(a X, ...)`, every method on `quant<X>&`, GemmI8 making `quant<operand<U8>>`, GemmI8Left
+`quant<foreign<L>>`, the packing source `q.a`) and timed it against the shipped non-generic `quant`, under the installed
+compiler (2026-11-18) and master 2d90594e6: a direct 1 x 784 x 128 GemmI8 loop (best of 9 x 20000 calls) 1.69-1.74 us
+plain against 1.72-1.75 us generic; oann's bench/int8 first row, static INT8, 1.93-2.02 against 1.96-2.84 us (alternated
+runs, the F32 column moving as much - load from other sessions). The instance's kernels compile to the same code
+(groupTiles/tilesI8 of identical sizes in both binaries; rowI8/dot4I8 inlined into GemmI8 either way). No compiler
+change: whatever the 2026-11-15 compiler did is gone; oann's GemmI8Left design (the source a parameter) stays as is.
