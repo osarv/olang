@@ -5376,8 +5376,13 @@ error: it changes the callee's own copy (D9) that no one sees again, or repoints
 caller's value is unchanged. Read after it is S9g's, over the function's body: a mention of the name, other than as a
 store's own target, later in the order written, or anywhere inside a loop around the store; a mention in deferred code,
 a task, a `join`'s clauses or a lambda's capture counts as after every store. A write **through** a reference
-parameter (`p.f = 7` where `p` is a `mut T&`) is no store to the name and is always kept. To change what the caller
-passed, write its fields through a `mut` reference, or return the new value.
+parameter (`p.f = 7` where `p` is a `mut T&`) is no store to the name and is kept - except once `p` has been repointed
+at **storage the callee gives a value** (`p = T()`, E12c) on every path to the write, with no repoint in a loop around
+the write naming other storage: then a write through it (`p.f = ...`, `p.f.g = ...`, `p[j] = ...`, a payload) reaches
+only that storage and is a store too, lost unless something reads `p` after it (reading it back, returning it, passing
+it on, borrowing into it). A repoint at what another reference names (`p = q`) keeps every write through `p` after it.
+S9g's loop name follows the same rule. To change what the caller passed, write its fields through a `mut` reference,
+or return the new value.
 
 **S4.** `assign-stmnt ::= lvalue assign-op expr STMNT_END`, where `lvalue` is a postfix expression
 (§5.1 E1) whose outermost form is a variable read, an index (`E16`), or a member access (`E17`) —

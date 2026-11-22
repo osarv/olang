@@ -1,0 +1,17 @@
+# check: fail error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
+# S4e: a nested field written through a reference parameter repointed at the callee's own storage is a lost store
+type In struct() {
+    B I64 = 0
+}
+type P struct() {
+    A In = In()
+}
+fn setp(p mut P&) {
+    p = P()
+    p.A.B = 1
+}
+fn main() {
+    p := P()
+    setp(p)
+    Println(p.A.B)
+}

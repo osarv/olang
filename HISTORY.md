@@ -41215,3 +41215,18 @@ alone changed; scopes, the runtime and the evaluator did not (the evaluator read
 tests/valueparts.olang "a struct of texts pushed with a joined text built in the call" (baked K2 and run, after a
 churn); checks/fixtures/freeing/pushjoin.olang in the freeing scenario (flat under 8 MB, -memory -check, interpreted,
 -free late, -sanitize).
+
+A gap, found after it merged: `fn setp(p mut P&) { p = P()  p.A = 5 }` still compiled. The field write mentioned `p`,
+and every mention but a store's own target counted as a read, so it kept the repoint alive - yet after the repoint the
+write reaches only storage the callee made, and the caller sees neither. Closed in the same walk: `LostStores` now
+tracks whether L names storage the body gave a value (the repoint's value a `Promote`, E12c) on every path so far, and
+while it does, a write through L (a `Deref` of L's value under fields, elements, payloads - `p.A.B = 1` too) is a store,
+not a read. Kept conservative where the storage could be the caller's: a repoint at anything else (`p = q`, a call
+returning a reference, `+=`) clears it at any depth; a fresh repoint sets it only outside branches (`if`, match arms,
+conditional expressions, `try` clauses, loops), so `if c: p = P()` then `p.A = 5` stays legal; a loop whose body clears
+it counts as a read at its end (its next turn may write through the other storage); deferred code, tasks and lambdas
+never see it. The write through L gets its own note ("repointed at the callee's own storage ... write through it before
+repointing it, or return the new value"); the repoint, unread too, is reported as before. S9g's loop name follows the
+same walk, so the same holds there. checks/cases lostparamwriterepoint, lostparamwritenested; tests/shared.olang
+"S4e: a write through a repointed reference parameter ..." pins read back, `p = other`, a conditional repoint and a
+loop repointing elsewhere. Checker only.

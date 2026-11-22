@@ -23106,7 +23106,7 @@ fn (c mut Checker&) lostParamWrites(root typed.Block&) {
         if l.Name == source.NameId(0) or c.text(l.Name) == "_": continue
         w := typed.LostStores(p)
         w.Stmts(root.Stmts)
-        for k in w.Lost(): c.err(w.Spans[k], msgs.LostParamWrite(c.text(l.Name), c.isRef(l.Ty) and w.Whole[k]))
+        for k in w.Lost(): c.err(w.Spans[k], msgs.LostParamWrite(c.text(l.Name), c.isRef(l.Ty) and w.Whole[k], w.Through[k]))
     }
 }
 

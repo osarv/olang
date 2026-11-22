@@ -3645,6 +3645,30 @@ lostparamwrite.olang:14:5: error[S4e]: the write to 'out' is lost: nothing reads
 lostparamwrite.olang:14:5: note: 'out' is a reference, and '=' repoints the callee's own copy of it (S4a), never writing what the caller passed
 lostparamwrite.olang:14:5: help: write the fields through the reference - 'out.f = ...' - or return the new value
 compilation failed with 1 error
+=== lostparamwritenested.olang
+lostparamwritenested.olang:10:5: error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
+   10 |     p = P()
+      |     ^~~~~~~
+lostparamwritenested.olang:10:5: note: 'p' is a reference, and '=' repoints the callee's own copy of it (S4a), never writing what the caller passed
+lostparamwritenested.olang:10:5: help: write the fields through the reference - 'p.f = ...' - or return the new value
+lostparamwritenested.olang:11:5: error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
+   11 |     p.A.B = 1
+      |     ^~~~~~~~~
+lostparamwritenested.olang:11:5: note: 'p' was repointed at the callee's own storage (S4a), so a write through it never reaches what the caller passed
+lostparamwritenested.olang:11:5: help: write through 'p' before repointing it, or return the new value
+compilation failed with 2 errors
+=== lostparamwriterepoint.olang
+lostparamwriterepoint.olang:8:5: error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
+    8 |     p = P()
+      |     ^~~~~~~
+lostparamwriterepoint.olang:8:5: note: 'p' is a reference, and '=' repoints the callee's own copy of it (S4a), never writing what the caller passed
+lostparamwriterepoint.olang:8:5: help: write the fields through the reference - 'p.f = ...' - or return the new value
+lostparamwriterepoint.olang:9:5: error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
+    9 |     p.A = 5
+      |     ^~~~~~~
+lostparamwriterepoint.olang:9:5: note: 'p' was repointed at the callee's own storage (S4a), so a write through it never reaches what the caller passed
+lostparamwriterepoint.olang:9:5: help: write through 'p' before repointing it, or return the new value
+compilation failed with 2 errors
 === lostparamwritevalue.olang
 lostparamwritevalue.olang:7:5: error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
     7 |     p.A = 5
