@@ -41527,6 +41527,15 @@ Found beside it, not O46's: checks' strheld/globals segfaults in __olang_region_
 (the compiler without O46 too) - `$H + " " + $sameH() + " " + $H` where another function reassigns global G with a
 longer array; left for the freeing work (O8f) that last touched it.
 
+Followed up (wt-f32pick): oann's drawLanes with its pick as an F32 select (oann wt-f32select b15913a) still ran at
+125-132 ns a cell update on bench/potts' 33 x 33 x 11 grid against 37-39 for master's I64 select, both under this
+compiler. olang's IR for the statement is O46's shape (one load of low[l], the choice as a diamond over locals), and a
+repro of the pick loop - the F32 and I64 forms over 16 lanes, local arrays in a caller, 2M draws - runs both at 84-114
+ms with no gap. The gap is LLVM's, once drawLanes is inlined into Sampler.group: the 16-lane loop fully unrolled, u
+and low split into 32 scalar registers, no SLP vectorization (the I64 form gets zmm/ymm compares and masked
+broadcasts), low stored back each step and ~40 register-to-register moves a step from the allocator rotating 32 live
+floats. Nothing in lowering to change; oann keeps its I64 form.
+
 ## 2026-11-22: an array literal widened to a place is its store; a zero fill's empty value copied keeps nothing (O8f; mine; wt-gaps5)
 
 Docs/freeing.md 2.4's open gaps, three of them taken up.
