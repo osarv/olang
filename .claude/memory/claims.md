@@ -35,4 +35,3 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - olang session (cloud, 2026-11-21): wt-bgame merged
 - olang session (cloud, 2026-11-22): wt-mapnode merged (FindByte kept, Map change dropped)
 - olang session (cloud, 2026-11-22): wt-genslow merged (no repro)
-- OLang Cloud (2026-11-22): olang wt-falseb18 - false B18 on a global element store (review8 item 5)
