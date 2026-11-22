@@ -41349,3 +41349,39 @@ as existing storage), the nested owner element (a3), and gaps.olang's Map copy (
 decision is needed for any of them. Freeing and lowering's releases changed; scopes, the runtime and the evaluator did
 not.
 
+## 2026-11-22: a local declared with a fixed fill, and an element read by a function building its own value (O8f; mine; wt-gaps2)
+
+Docs/freeing.md 2.4 left three shapes `-memory -check` named or that grew; the coordinator added a fourth.
+
+**A local declared with a fixed fill** (`rows := Array<I64>(4)` then `rows = Array<I64>(4, i)` each turn) kept every
+array, whatever the element type, where the same local declared with no value freed: the declaration is a T7c
+conversion of a fixed array, which `made` saw as a `Prim` - existing storage - so the local's place kept for its first
+store. The fix judges a conversion widening a fixed fill or literal as the Make's own store (`free.WidenedMake`); the
+free pass then gives the Make's site the place's region (its `redirect`), and lowering widens the array into that
+region rather than the local's block (`lower.widenAt`, read where a Make's site was given a region - both the
+declaration's `fitAt` and a written conversion's `Prim` lowering), the fill's elements (text, a Q's Vec) already built
+there by `fill`. The loop's stores needed nothing: they were already fresh. checks' freeing widenlocal covers
+`Array<I64>`, `Array<String>` and `Array<Q>`; built, `-free late`, `-sanitize` and the evaluator agree.
+
+**An element read by a function building its own value** (the coordinator's item: `fn make(x Grid&) Grid` returning a
+fresh `Grid` of arrays, `y := make(ps[0])` each turn) grew by one Grid a call; a local argument stayed flat. The
+element's At value was copied (D9h) - into where At's result lives, the Vec's scope, one Grid a turn - because only an
+argument of a call whose result "holds no reference" was read where it stands, and a `Grid` holds arrays. But `make`'s
+result views none of its arguments (check's ViewResults is 0) and holds nothing beyond its own storage, so the argument
+is dead when the call returns: such a call's read-only arguments are now read where they stand (`lower.viewsNoArg`, the
+same window as a result holding no reference). With the copy gone the free pass still kept `Grid.a` and `Grid.b`:
+`make` lets go of its zero `g`'s arrays while the statement's view of `ps[0]` - a value of those places - is in use.
+`ownGoes` (review4's g1: a call given plain data alone lets go only of what it built) now also takes an argument for a
+parameter that is a reference the callee cannot write through, to a value holding no reference beyond its parts, with
+the callee writing through no parameter (`Writes`, `Impure`) besides reaching no global. checks' freeing elemarg.
+
+**Still open, analysed** (freeing.md 2.4 says what closes each): the element holding `R struct(q Q, n I64)` built by
+`R(q, i)` leaks because the constructor's instance views `q` and is copied at `w`'s declaration (D9h; `movedViews`
+fails as `w` lands outside `q`'s block), the original instance and `q`'s `Q.a` region left in main's scope - letting
+owner places go with the stored parameter, as tried before, only hides that. Under gaps.olang's Map copy lies a false
+proof: a Map local filled by `Put` and stored into an element grows by the Map a turn while `-memory -check` says
+nothing lets go - the store copies the lent local split, its original (lifted to main's scope, where `Put` built its
+arrays) never released. Both are the same pattern - a value copied at its store, its original placed for where the
+copy lands - and want the scope pass's placement or the free pass's judgement of such a store changed, a round of
+their own; no design decision.
+
