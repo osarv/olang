@@ -285,8 +285,11 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   copies `w` there all the same (its value's call site has a region, `movable`) - ~1 KB a turn, named by -check as a
   lifted copy (`lower.liftedCopy`). A local whose value is a constructor's instance viewing what it is given is no
   longer lifted (`scope.viewCtor` in `lastCopy`): `w`, the instance and `q`'s copy stay in the turn, the store's copy
-  is the element's value. (`rows := Array<R>(10)`, a zero fill, still keeps `R.q` - the fill's value copied with no
-  store into its place, viewCtor's RCopied - a shape of its own.) checks' freeing ctorkept.
+  is the element's value. checks' freeing ctorkept. (`rows := Array<R>(10)`, a zero fill: closed by wt-gaps5. Its value
+  is R's zero, `R(Q(<zero Vec>), 0)` - Q's zero call not fresh (its argument zero bits, no call), so R's call is no
+  fresh view and its value copied (the Zero helper's body, where no fill exempts it) was untracked: RCopied on `R.q`'s
+  places. A constructor's value holding no storage (`free.emptyCtor`) is no copy anything keeps. checks' freeing
+  zerofill.)
 - **A Map built by its literal whose values own storage** (gaps.olang's row since wt-gaps3,
   `Map<String, Vec<String>>[$i: Vec<String>[$i]]`): FromIter's entries are the iterator's values copied (D9h), made
   with no store into `MapEntry.Value`, which keeps (RCopied) - and with it a Put on a copy of the Map. To close: the
@@ -310,7 +313,12 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   freeing assignkept. Still open: a local given a second value (`r := build(0)` then `r = build(i)`) - an owner local
   of the free pass, sole, so the arrays its value holds keep (RCopied) and the move is refused (`MovesLeaves`): the owner
   local's place would have to give its value's leaves to the element as a move does, its let-go at the assignment kept
-  in step. And the join form (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`, checks' freeing taskvals
+  in step. (A `Vec<I64>` local of this shape is freed already, its one part a part place; `Vec<String>` keeps.) Tried by
+  wt-gaps5: FirstSet widened to a `:=` local of a call's value - no owner local, moved at its last mention, its
+  assignment letting go of nothing. Unsound: lifted where its store goes (item 17), the Let's call builds its value there
+  too, a let-go no release follows, and `-memory -check` passed while the program ran out of 8 MB. To close by that road
+  the scope pass must place the Let's call's result in the local's own block while its storage and the assignment's
+  result go where the store is - or keep the owner local and hand its leaves to the element (above). And the join form (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`, checks' freeing taskvals
   part 2, `-define M=127`, still out of its default): the task's own code lets go of `Vec<String>.0` and its text array
   (`build`'s Push grows them on the task's thread) and so they keep program-wide (condition 3 by origins, `taskArgs`),
   besides the spawn target's own keep (`spawnSite`). Narrowing the target's keep to its join frees nothing while the
@@ -324,9 +332,15 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   scope (a global's store copies it into the program's scope), never in the region early freeing gives the literal's
   site - so `WidenedMake` takes a fill only. Judged the Make's own store (wt-gaps2), the place's let-go released storage
   no region held: a segfault (strheld's globals; a split place's walk released parts that were none). A local declared
-  with no value given only literals kept unnamed before (no store gave it storage, `reported`). To close: lowering
-  builds the widened literal in the site's region, its items copied in as `fill` copies its item (fillCopy, partCopy
-  for a split place), or the items' sites are given that region; checks' freeing litstores.
+  with no value given only literals kept unnamed before (no store gave it storage, `reported`). Closed by wt-gaps5:
+  lowering already built a widened literal in its site's region (prim's adopted `arrayLit`, items moved in) and then
+  copied it out at the store (`copiesValue` counted every widening as existing storage); a widened fill or literal made
+  in a region of early freeing's (`lower.regionMade`) is taken uncopied, and `WidenedMake` takes a literal whose items
+  are each built for it (`builtItems`) - its items the element place's stores (`makeStores`), no view of what they own
+  (`makeOf`'s `unowned`, as a fill's). One holding a local's value (`Array<Vec<I64>>[v, ...]`, `v` copied or moved at
+  its last mention where it lives, outside the region) keeps, named, and so does a global's first value (its
+initializer copies it into the program's scope). checks' freeing litstores, now flat. Open: a mutable global made by a
+fill and given another fill in a function is read after its scope closed (`-sanitize`; also before wt-gaps5).
 
 **Question 1 (open; default in effect: a place a task's code lets go of keeps everywhere, condition 3 as built).** A
 value a joined task builds and hands back - a Vec grown by Push on the task's thread - can be freed by the spawner only

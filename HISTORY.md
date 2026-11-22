@@ -41526,3 +41526,41 @@ it: pick's IR loads its two elements once each (three before), and the program's
 Found beside it, not O46's: checks' strheld/globals segfaults in __olang_region_drop on master 0241ccc40 built clean
 (the compiler without O46 too) - `$H + " " + $sameH() + " " + $H` where another function reassigns global G with a
 longer array; left for the freeing work (O8f) that last touched it.
+
+## 2026-11-22: an array literal widened to a place is its store; a zero fill's empty value copied keeps nothing (O8f; mine; wt-gaps5)
+
+Docs/freeing.md 2.4's open gaps, three of them taken up.
+
+**An array literal given to a place each turn** (review9's litstores: a split local, a split field, a text local, a
+local of numbers, a mutable global). Review9 made such a store keep, named, because judging it the Make's store
+released storage no region held. The cause was one step later than recorded: lowering's `prim` already builds a widened
+literal in its site's region (the adopted `arrayLit`, items moved in where each was built), but the store then copied
+it out again - `copiesValue` counted every widening as existing storage - into the place's scope, and the next let-go
+released that copy as a region. Now a widened fill or literal made in a region of early freeing's (`lower.regionMade`)
+is taken uncopied, and `free.WidenedMake` takes literals again. Two things came with it: the literal's origins are its
+items' owned storage, not views of it (`makeOf`'s `unowned`, as for a fill - else the split field `s.qs` kept, `s`
+judged to view its elements' parts read after the walk); and a literal holding a local's value (`Array<Vec<I64>>[v,
+Vec<I64>[7]]`) is left out (`builtItems`): `v`, moved or copied where it lives, is outside the region - judged the store,
+`v` lost its move and was lifted (a B18a row). It keeps, named ("one of whose items is not built for it"). The
+`unowned` is only for the literal an assignment's value widens (`walker.widenLit`): applied to every literal it broke a
+Vec literal's array (`Vec<Vec<I64>>[Vec<I64>[i, i], ...]` stored into an element read wrong values built, ownertexts -
+found by the `-free late` oracle). And a global's initializer still copies its widened value into the program's scope
+(lower `regionMade` is false there), so that store is no region's: judged one, growG's later let-go in strheld's globals
+released the copy - kept, named, as before. checks' freeing litstores joins the flat list (N 20000, under 8 MB; the
+oracles agree). Found, not fixed (also on the installed compiler): a mutable global initialized by a fill and given
+another fill in a function (`G mut Array<I64> = Array<I64>(2, 1)`, `fn growG() { G = Array<I64>(5, 9) }`) is read
+after its scope closed under `-sanitize`.
+
+**A zero fill of a struct holding an owner by value** (`rows := Array<R>(10)`, `R struct(q Q, n I64)`): R's zero is
+`R(Q(<zero Vec>), 0)`; Q's zero call is not fresh for FreshViews (its argument zero bits, no call), so R's is no fresh
+view, and in the Zero helper's body - where no fill exempts the call - its value copied was untracked: RCopied on `R.q`'s
+places, keeping each element's let-go. A constructor's value holding no storage (`free.emptyCtor`, which the fill
+already used) is no copy anything keeps. checks' freeing zerofill.
+
+**A `:=` local given a second value before its store** (`r := build(0)`, `r = build(i)`, `kept[i % 4] = r`): still
+open. A `Vec<I64>` local of the shape frees already; `Vec<String>` keeps (an owner local whose storage is one region).
+Tried: widening `LocalUses.FirstSet` to a local declared with a call's value, so it is no owner local and is moved at its
+last mention, its assignment letting go of nothing. Unsound - the local is lifted where its store goes (item 17), and the
+Let's call builds its value there too: `-memory -check` passed while the program ran out of 8 MB. Reverted. Closing it
+needs the scope pass to place the Let's call result in the local's own block while the local's storage and the
+assignment's result go where the store is, or the owner local handing its leaves to the element (freeing.md 2.4).

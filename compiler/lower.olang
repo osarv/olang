@@ -2271,7 +2271,9 @@ fn (ln mut lowering&) copiesValue(x typed.Expr&) Bool {
         # a conversion names its argument's storage (T29a): a fixed array a reference names, an array of a run-time
         # length (a place) - one of fixed storage made a run-time value is copied out, new storage
         # - and one of fixed storage widened is a temporary of the innermost block, copied where it is kept
-        case typed.Expr.Prim(_, pt, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and (derefOf(args[0]) != null or (ln.valueArray(args[0].Type()) and ln.copiesValue(args[0])) or ln.widening(op, args, pt))
+        # (O8f, 2.4's first gap: but a fill or literal widened in the region early freeing gives its site - the place's store,
+        # free.WidenedMake - whose storage the place takes)
+        case typed.Expr.Prim(_, pt, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and (derefOf(args[0]) != null or (ln.valueArray(args[0].Type()) and ln.copiesValue(args[0])) or ln.widening(op, args, pt) and not ln.regionMade(args[0]))
         case typed.Expr.Away(_, _, y): ln.copiesValue(y)
         case typed.Expr.Seq(_, _, q): q.X != null and ln.copiesValue(q.X!)
         # a choice copies where any value it may give is existing storage (as retCopies)
@@ -4780,6 +4782,14 @@ fn (ln mut lowering&) widenAt(arg typed.Expr&, at mir.ScopeRef) mir.ScopeRef {
         case typed.Scope.Region(_): ln.madeAt(typed.SiteId(I32(site)))
         case _: at
     }
+}
+
+# O8f (2.4's first gap): whether the fill or literal arg is made in a region of early freeing's (widenAt)
+fn (ln mut lowering&) regionMade(arg typed.Expr&) Bool {
+    # (a global's initializer copies its value into the program's scope as ever, globalHeld)
+    if not ln.freeing or not ln.planned or arg != typed.Expr.Make or ln.B.Of == typed.BodyOf.Global: return false
+    site := I64(arg.m.Site)
+    return site >= 0 and site < ln.plan.Built.Len() and ln.plan.Built[site] == typed.Scope.Region
 }
 
 # whether x is a conversion written of a fixed array's value to a run-time-length array value

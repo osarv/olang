@@ -2231,6 +2231,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     quiet I64 = 0              # events not counted: a value walked again for what it refers into
     storeWithin I64 = -1       # the parameter the container being stored into is reached from (withinOf), -1 none
     storeInside I64 = -1       # ... the place a value of which it is reached through (insidePlace), -1 none
+    widenLit I64 = -1          # the site of the literal an assignment's value widens (WidenedMake): its items owned, makeOf
     exemptSite I64 = -1        # the call a store's value is, whose copy (D9h) is made for the place it is stored into
     taskSite I64 = -1          # a spawn's call (its arguments read beside the spawner: lower.args' task)
     inJoin Vec<I64>            # the join blocks the statement is in (their numbers): its let-goes may run while their tasks do
@@ -2890,7 +2891,11 @@ fn (w mut walker&) result(o Vec<I64>&) {
 fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     wasO := w.ownerSplit
     w.ownerSplit = -1 if p == typed.Lvalue.Local else w.ownerSplitOf(w.F.placeOfPlace(p), x)
+    wasW := w.widenLit
+    wm := w.F.WidenedMake(x)
+    w.widenLit = w.F.topSite(wm) if wm != null else -1
     w.assignTo(sp, p, x)
+    w.widenLit = wasW
     if w.ownerHeld != types.UnknownT: w.ownerSettle(-1)
     w.ownerSplit = wasO
 }
@@ -4119,14 +4124,6 @@ fn (f mut Free&) plainElems(k I64) Bool {
     return not t.HoldsRefs(el) and not t.OwnsParts(el)
 }
 
-# whether x is an array literal's Make (`Array<Q>[a, b]`)
-fn arrayLit(x typed.Expr&) Bool {
-    return match x {
-        case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Array
-        case _: false
-    }
-}
-
 # whether a value made for an array place is a comprehension each of whose elements is one already there - moved or
 # read out of other storage (grown()'s), never one built with it in its region: so no element of an array place's
 # value reaches into that value's region, which is why an element read out of one is no view of it (elemRead)
@@ -4760,7 +4757,11 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     if filled and w.F.emptyValue(m.Items[0], null, 0): filled = false
     # (gap 22: a fill of a value owning storage holds each element's own copy of it, made where the array is - QCE,
     # lower.fill's ownCopyOf or fillCopy - deep as a copy is: no view of what the item's owners hold)
-    if filled and w.ownsStorage(w.T().Elem(w.T().Plain(w.F.arrayOf(ty)))): out = w.F.unowned(out)
+    # (O8f, 2.4's first gap: likewise the items owning storage of a literal an assignment's value widens - the place's
+    # store, WidenedMake, each item moved into it as a store into its element place, makeStores - never a literal handed
+    # elsewhere, a Vec literal's array, whose items' storage its new holder reaches)
+    lit := m.Kind == typed.MakeKind.Array and m.Items.Len() > 0 and I64(m.Site) == w.widenLit
+    if (filled or lit) and w.ownsStorage(w.T().Elem(w.T().Plain(w.F.arrayOf(ty)))): out = w.F.unowned(out)
     if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it", not filled, filled, I64(m.Site) == w.plainFill, I64(m.Site)) }
     w.makeStores(m, ty, sp, I64(m.Site) == w.plainFill)
     return out
@@ -4957,7 +4958,10 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     if fresh and w.Final: f.freshAt.Put(pair.Pair(w.Id, I64(c.Site)), true)
     # (nor a temporary only lent for reading: what it holds is no value any store gives a place - gap 17)
     lent := I64(c.Site) == w.readArg and c.Site >= typed.SiteId(0)
-    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite and not lent {
+    # (O8f: nor a constructor's value holding no storage - a type's zero value, D13c, `Array<R>(10)`'s `R(Q(...), 0)`
+    # made of an empty Vec, emptyCtor: its copy holds nothing a place could keep)
+    empty := b2 >= 0 and not unknown and f.viewsOf(b2) != 0 and not fresh and f.emptyCtor(c, 0)
+    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite and not lent and not empty {
         w.untracked(ty, sp, "a call's value copied", b2 >= 0 and not unknown, false, false, I64(c.Site), true)
     }
     if b2 >= 0 and not unknown {
@@ -5702,16 +5706,20 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     # (2.4's first gap: a fixed fill or literal widened to the place's run-time array, `rows := Array<I64>(4)` (T7c), is
     # the Make's store - lowering widens it into the region its site is given, lower.widenAt)
     wm := f.WidenedMake(x)
-    if wm != null {
+    # (a global's initializer copies a widened fill or literal into the program's scope, lower.regionMade: no store of
+    # its region - judged one, a later let-go released that copy as a region, a fill's too)
+    initLit := wm != null and w.body().Of == typed.BodyOf.Global
+    if wm != null and not initLit {
         w.made(k, wm, sp, multi)
         return
     }
-    # (review9: a literal, which WidenedMake leaves out, is built where it is written - kept, and said, as any other:
-    # reported counts its store as one giving the place storage)
+    # (a literal one of whose items is not built for it - a local's value, held outside its region - or a global's
+    # first value: kept, and said)
     wa := f.widened(x)
     if wa != null {
         f.stores.Push(store(k, w.Id, file, sp, SFail, of, site, x, null))
-        f.keep(k, RMade, file, sp, $"its new value is an array literal, built where it is written and widened to an array of a run-time length there: '" + $w.text(wa.Span()) + "'; build the array with a fill, or element by element")
+        lw := "its new value is an array literal one of whose items is not built for it" if not initLit else "its first value is a fixed array widened, copied into the program's scope"
+        f.keep(k, RMade, file, sp, $lw + ": '" + $w.text(wa.Span()) + "'; build each item in the literal, or the array with a fill")
         return
     }
     match x {
@@ -5805,15 +5813,36 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     }
 }
 
-# O8f (2.4's first gap): the Make a conversion widens - a fixed array's fill given where an array of a run-time length
-# of its element is kept (T7c) - null for any other value. Never a literal (review9): lowering builds a literal where it
-# is written - its items moved in where each was built, the widened copy made at the statement's scope or a global's
-# store - not in the region the site is given, so a let-go of it released storage no region held (a segfault; a split
-# place's walk released parts that were none)
+# O8f (2.4's first gap): the Make a conversion widens - a fixed array's fill or literal given where an array of a
+# run-time length of its element is kept (T7c) - null for any other value. Lowering builds it in the region its site is
+# given and the place takes that storage uncopied (lower.widenAt, prim's adopted fill or literal, regionMade): a fill's
+# elements each its item's copy made there, a literal's items moved in where each was built - its element place's stores
+# (review9: copied out of that region into the statement's scope, a literal's let-go released storage no region held)
 fn (f mut Free&) WidenedMake(x typed.Expr&) typed.Expr?& {
     a := f.widened(x)
-    if a == null or arrayLit(a): return null
+    if a == null or not f.builtItems(a): return null
     return a
+}
+
+# whether each item of a literal is built where it stands (a call's value, a Make, text) - one read out of a local is
+# moved or copied in where the local lives, outside the literal's region (lower.movable: no move into a region); true
+# for a fill
+fn (f mut Free&) builtItems(a typed.Expr&) Bool {
+    if a != typed.Expr.Make or a.m.Kind != typed.MakeKind.Array: return true
+    for it in a.m.Items {
+        if not f.T().OwnsParts(it.Type()): continue
+        if f.topSite(it) < 0 or copyMake(it): return false
+    }
+    return true
+}
+
+# whether x is a copy made of a value (D9h: a local's, moved at its last mention instead where lowering may)
+fn copyMake(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Copy
+        case typed.Expr.Away(_, _, y): copyMake(y)
+        case _: false
+    }
 }
 
 # the fixed fill or literal a conversion widens to an array of a run-time length of its element, null for any other
