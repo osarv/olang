@@ -1420,6 +1420,7 @@
 | ok - a clone of an array is its own, its elements' parts too
 | ok - a walk of a Vec reads elements in place only where nothing can write them
 | ok - a value stored into a part of x[i] in a loop lives where the collection does
+| ok - a struct of texts pushed with a joined text built in the call
 === test tests/variadic.olang
 | status 0
 | ok - D8g: a variadic parameter takes any number of arguments, or an array passed on
