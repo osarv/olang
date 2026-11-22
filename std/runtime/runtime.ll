@@ -3928,11 +3928,11 @@ done:
 ; soft limit not RLIM_INFINITY), asked once
 define i1 @__olang_reserve_allowed() noinline {
 entry:
+  %lim = alloca [2 x i64]
   %k = load atomic i64, ptr @__olang_reserve_ok monotonic, align 8
   %known = icmp ne i64 %k, 0
   br i1 %known, label %done, label %ask
 ask:
-  %lim = alloca [2 x i64]
   %rc = call i32 @getrlimit(i32 9, ptr %lim)
   %cur = load i64, ptr %lim
   %ok = icmp eq i32 %rc, 0
