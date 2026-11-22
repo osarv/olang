@@ -317,6 +317,15 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   task's growth keeps the same places; freeing them needs a region a task made, or grew into, released on the spawner's
   thread - question 1 below.
 
+- **An array literal of values owning storage given to a place** (review9, `rows = Array<Vec<I64>>[Vec<I64>[i],
+  Vec<I64>[7]]` each turn, into a local, a split field or a text local): kept, and named by `-memory -check` ("an array
+  literal of values holding storage"). A literal is no fill: lowering moves each item into the array where the item was
+  built (`arrayLit`), never into the region early freeing gives the literal's site, so `WidenedMake` takes a literal
+  only of plain data - judged fresh, a split place's let-go walked parts that were none (a segfault). A local declared
+  with no value given only such literals kept unnamed before (no store gave it storage, `reported`). To close: lowering
+  copies each item into the array's region as `fill` copies its item (fillCopy, partCopy for a split place), or the
+  items' sites are given that region; checks' freeing litstores.
+
 **Question 1 (open; default in effect: a place a task's code lets go of keeps everywhere, condition 3 as built).** A
 value a joined task builds and hands back - a Vec grown by Push on the task's thread - can be freed by the spawner only
 if a region made (or a chunk taken) on one thread may be released on another. The runtime's pools and a region's kids
