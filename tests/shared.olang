@@ -5037,7 +5037,7 @@ test "a collection of mixed types is an enum of them" {
     assert sum == 25
 }
 
-# these are compile errors, so they can only be named here: a trait written as a type ("s Shape&") - it is a
+# these are compile errors, so they can only be named here: a trait written as a type ("s Shape&", checks/cases/t30traitastype.olang) - it is a
 # constraint (T30); a type missing a method (or with the wrong receiver mutability) does not satisfy it; a method
 # signature may not be generic (T35); two methods of the SAME type may not share a name (M21); and no method may be
 # called plainly - "Area(q)" is rejected, only "q.Area()" calls it (M19).
