@@ -35,4 +35,3 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - olang session (cloud, 2026-11-21): wt-bgame merged
 - olang session (cloud, 2026-11-22): wt-mapnode merged (FindByte kept, Map change dropped)
 - olang session (cloud, 2026-11-22): wt-genslow merged (no repro)
-- OLang Cloud (2026-11-22): olang wt-gaps2 - array local reassigned in a loop keeps, R{q Q} element, gaps.olang copied Map row

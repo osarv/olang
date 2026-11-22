@@ -260,22 +260,44 @@ a split array's elements hold (`free.splitInside`: their PartsLet and held place
 walk's let-go of the elements' parts as one through the array's place (`goWalkPl`). checks' freeing splitviews (built,
 `-free late`, `-sanitize`, the evaluator agree).
 
+**Built (wt-gaps2): a local declared with a fixed fill** (`rows := Array<I64>(4)`, then `rows = Array<I64>(4, i)` in a
+loop). The declaration is a conversion of a fixed array (T7c), which `made` read as existing storage, so the place kept
+every array, of any element type. Now a conversion widening a fixed fill or literal is the Make's store
+(`free.WidenedMake`), and lowering widens it into the region the Make's site is given (`lower.widenAt`, the fill's
+elements already built there). checks' freeing widenlocal (`Array<I64>`, `Array<String>`, `Array<Q>`): out of memory
+under 8 MB at 200,000 turns before, flat now.
+
+**Built (wt-gaps2): a function building its own value from an element it reads** (`y := make(ps[0])` with
+`make(x Grid&) Grid`, `Grid` holding arrays): one Grid kept a call, where a local argument kept nothing. Two causes:
+the element's At value was copied (D9h) into where the callee's result would live, the Vec's scope, because `make`'s
+result holds storage (`HoldsRefs`) - but it views none of its arguments (check's ViewResults) and holds no reference
+beyond its own storage, so the argument is dead once the call returns and is read where it stands (`lower.viewsNoArg`);
+and `make`'s let-goes of `Grid.a`, `Grid.b` (its zero `g`'s) kept for the view, though a call given only references it
+cannot write through, to values holding no reference, lets go only of storage it built itself (`free.ownGoes`, now
+with `Writes == 0` and not `Impure`). checks' freeing elemarg.
+
 **Still open** (each a round of its own; no design decision, the analysis and lowering only):
 
-- **A fixed fill widened into a local given new arrays** (found here): `rows := Array<I64>(4)` then `rows =
-  Array<I64>(4, i)` in a loop keeps every array - for `Array<I64>`, `Array<String>` and `Array<Q>` alike. The declaration
-  is a conversion (T7c) of a fixed array, built in the innermost block and copied (`lower.widen`), which `made` reads as
-  existing storage, so the place keeps. To close: widen a fill a place's store makes into that store's region (the
-  fill's site redirected, no temporary copy) and judge the conversion of a Make as the Make. Declared with no value,
-  the local frees.
-- **An element holding a struct that holds an owner by value** (a3, `rows[i % 10] = w` for `R{q Q}`, `w := R(q, i)`):
-  ~1 KB a turn. The constructor's store of its by-value parameter keeps `Q.a` (`storeAs` lets only part places go with a
-  value stored whole); letting owner places go with it too passes `-memory -check` but still grows, so the nested owner's
-  region is not released at the element's let-go - a false proof, not built. A fill of such a struct
-  (`Array<S>(10, S(R(Vec<I64>[0], 0)))`) is named as a copy with no store (RCopied).
+- **An element holding a struct that holds an owner by value** (a3, `rows[i % 10] = w` for `R struct(q Q, n I64)`,
+  `w := R(q, i)`): ~1 KB a turn. Found (wt-gaps2): `R`'s constructor is a view call (its instance views `q`), and `q` is
+  moved in at its last use but its block does not enclose where the instance lands (`movedViews`), so `w`'s declaration
+  copies the instance (D9h, split, `ownersCopy`); the instance itself - built where the scope pass put the call's result,
+  `w`'s landing in main's scope, since `w` is stored into `rows` - and `q`'s `Q.a` region (a kid of main's scope, placed
+  for the instance) are garbage after the copy, released by no let-go. Letting owner places go with a by-value
+  parameter stored whole (`storeAs`) only removes the honest keep. To close: a view call whose value the store copies
+  passes the statement's innermost scope for its result (the scope pass: the result of a D9h-copied call is a temporary,
+  its arguments' storage placed for that), or, where its arguments are all moved in at their last use, the instance kept
+  uncopied (D9i widened to landing outside their blocks, their storage placed where it lands).
 - **A copy of a Map whose values are Vecs of text** (B18a's last gaps.olang row, `c := rows[(i + 3) % 10]` of an
-  `Array<Map<String, Vec<String>>>`): `splitLetOf` leaves Maps out - a split copy's entries would be let go of by a Put as
-  a gap; to close, a copied Map's entries built as `Map.add` builds them (entryCopy) at a local's copy too.
+  `Array<Map<String, Vec<String>>>`): `splitLetOf` leaves Maps out. Found under it (wt-gaps2), a false proof that comes
+  first: **a Map local filled by `Put` and stored into an element** (`m := Map<I64, I64>(); m.Put(i, i); rows[i % 10] =
+  m`) grows by the Map each turn while `-memory -check` reports "no place lets go of storage" (`Array<Vec<I64>>` with
+  `Push` is flat). `m` is lent (its storage lifted to main's scope, where `Put` builds its arrays), and the element store
+  copies it split into part regions (stores of `Map.next`, `Map.buckets` judged a move, `Map.ents` the constructor's
+  site), leaving the original's 72 bytes and arrays in main's scope. To close first: the free pass judges such a store
+  as lowering makes it (a copy of storage built with no store into the element's places - RCopied, named), then build
+  the local's arrays where the element's are (the constructor's site and Put's stores redirected), then the Map copy. To close the Map copy itself: a copied Map's entries
+  built as `Map.add` builds them (entryCopy) at a local's copy too.
 - **A local given a new value before it is stored into an element** (found by wt-taskcheck, review6's task probes):
   `r Vec<String>` (or `r := build(0)`) then `r = build(i)`, then `kept[i % 4] = r` - ~500 bytes a turn, named by
   `-memory -check` as SetAt's gap. `r := build(i)` then the store frees (heldNew records only a Let's value, so a value

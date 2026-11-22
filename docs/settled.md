@@ -1057,7 +1057,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   the array (splitfield, wt-splitfield); a struct holding one beside other parts is PartsOnly as an element, walked by
   the array's length (`VecWalk`'s SplitCount), its copy split part by part (splitelems, wt-freeopen). An owner local
   holding such an array is a split local (`free.SplitLocal`), let go of the same way (splitlocal, wt-gapsb18); a view of
-  a place a split array's elements hold, in use across its let-go, keeps the array (`splitInside`, splitviews).
+  a place a split array's elements hold, in use across its let-go, keeps the array (`splitInside`, splitviews). A fixed
+  fill or literal widened to a local's run-time array (`rows := Array<I64>(4)`, T7c) is the Make's store
+  (`free.WidenedMake`), widened into the region its site is given (`lower.widenAt`; widenlocal, wt-gaps2). An argument
+  for a read-only parameter of a call whose result views no argument and holds no reference beyond its own storage
+  (`lower.viewsNoArg`: `y := make(ps[0])`) is read where it stands, and a call given only such references or plain data,
+  writing through no parameter and reaching no global, lets go only of what it built (`free.ownGoes`; elemarg).
   A view call's value given to a by-value parameter its callee keeps nowhere but in what it hands back
   (`lower.HandsOnly`), the result held by a value local of no reference beyond its parts (`h := giveField(v[j])`): At's
   copy made in that local's block (`free.resultArgs`), the local holding lowering's copy of the result - a call's value
