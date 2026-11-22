@@ -238,6 +238,9 @@
 === test tests/filtered.olang
 | status 0
 | ok - a filtered comprehension's result is an array of its own
+=== test tests/fixedrows.olang
+| status 0
+| ok - rows of a known length stored where rows of a run-time length are held are copied in
 === test tests/fndefaults.olang
 | status 0
 | ok - a call through a value leaves a default off, names it, or gives it

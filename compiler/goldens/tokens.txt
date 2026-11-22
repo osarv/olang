@@ -2448,7 +2448,7 @@ e20178f94e07dfed 093e0335a8debfcd compiler/bindgen.olang
 1c0afe32dcaf03c1 9684b6618b8c6420 compiler/build.olang
 9eb8d9916112f375 acad139c7c5a3871 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
-c625b667f85c14ae 51ed9ff634193a81 compiler/check.olang
+6c32bd7b53314105 afdfb89cd6b70cc3 compiler/check.olang
 da018e972c2ecc90 2073133fd217ef43 compiler/cond.olang
 2ab98962469bc960 89092d630e387ca2 compiler/definit.olang
 db407b9ec2aacf25 e1e61b9b123ebbaf compiler/diag.olang
@@ -2469,7 +2469,7 @@ c24b480e0523effb 79b4574dad6e719a compiler/free.olang
 8299f0d6f657ceae ba0b78c0c7122d77 compiler/lineedit.olang
 211de0b5ecb13aac 4324dd1a83c4b615 compiler/listing.olang
 f25119be92c6587e 3825c2dbc7b7a788 compiler/load.olang
-cd2068e4bc2b358e 891dff68fe8de44b compiler/lower.olang
+ddcd9831ea183891 9ef1de9cc4c90831 compiler/lower.olang
 0a6ba37a53fb9662 26f5ffd009f3d4b4 compiler/lsp.olang
 7dc09dd9a3624990 5eddb899d10cc9ce compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
@@ -2682,6 +2682,7 @@ c57d154cb3bd2766 82bc9b6a6505447d tests/errsets.olang
 23eeb60e39f3015b 999c02873c087884 tests/factsfailing.olang
 93aaa73eb85eac03 bddb19a4bd8aba28 tests/fieldnarrow.olang
 53615d857793d8eb 81eebc3137bd1f44 tests/filtered.olang
+f076b6838bea0f96 b85e74e6619ac51c tests/fixedrows.olang
 4a2423e24091ec53 3dc3a72cf682696f tests/fndefaults.olang
 04dafbddff7a2110 b1d6ff59799ae84e tests/fnref.olang
 2857890196bcd123 75ba29e5fe1a4272 tests/fnrel.olang
