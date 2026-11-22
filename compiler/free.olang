@@ -4957,7 +4957,10 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     if fresh and w.Final: f.freshAt.Put(pair.Pair(w.Id, I64(c.Site)), true)
     # (nor a temporary only lent for reading: what it holds is no value any store gives a place - gap 17)
     lent := I64(c.Site) == w.readArg and c.Site >= typed.SiteId(0)
-    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite and not lent {
+    # (O8f: nor a constructor's value holding no storage - a type's zero value, D13c, `Array<R>(10)`'s `R(Q(...), 0)`
+    # made of an empty Vec, emptyCtor: its copy holds nothing a place could keep)
+    empty := b2 >= 0 and not unknown and f.viewsOf(b2) != 0 and not fresh and f.emptyCtor(c, 0)
+    if (b2 < 0 or unknown or (f.viewsOf(b2) != 0 and not fresh)) and I64(c.Site) != w.exemptSite and not lent and not empty {
         w.untracked(ty, sp, "a call's value copied", b2 >= 0 and not unknown, false, false, I64(c.Site), true)
     }
     if b2 >= 0 and not unknown {

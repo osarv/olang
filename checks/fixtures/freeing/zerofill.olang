@@ -1,0 +1,28 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4): a struct holding an owner by value stored into the elements of an array made by a zero
+# fill - the fill's zero value copied into each element holds no storage, so an element's let-go frees what the last
+# store gave it (it kept R.q, about 1 KB a turn, before: the zero value copied with no store into its place)
+N I64 = 20000
+
+type Q struct(a Vec<I64>) {
+    a
+}
+
+type R struct(q Q, n I64) {
+    q
+    n
+}
+
+fn main() {
+    rows := Array<R>(10)
+    t := 0
+    for i in range N {
+        q := Q(Vec<I64>())
+        for j in range 20: q.a.Push(i + j)
+        w := R(q, i)
+        rows[i % 10] = w
+        t += rows[(i + 3) % 10].n + rows[i % 10].q.a[19] + rows[(i + 7) % 10].q.a.Len()
+    }
+    io.PutLn($t + " " + $rows[4].q.a[2])!
+}
