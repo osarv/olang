@@ -1,0 +1,28 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4's fourth gap): a function building a value of its own from a reference it reads,
+# `make(x Grid&) Grid`, called each turn with a Vec's element, `y := make(ps[0])`: the element is read where it
+# stands - the result views none of the arguments (lower.viewsNoArg) - and what make lets go of is storage it built
+# itself (free.ownGoes, a reference it cannot write through), so each y is freed with its turn. It kept a copy of the
+# element (one Grid) a call before, where a local argument kept nothing
+N I64 = 200000
+
+type Grid struct() { a Array<I64>, b Array<F64> }
+
+fn make(x Grid&) Grid {
+    g := Grid()
+    g.a = Array<I64>(x.a.Len() + 64, 1)
+    g.b = Array<F64>(64, 0.5)
+    return g
+}
+
+fn main() {
+    ps Vec<Grid>
+    ps.Push(make(Grid()))
+    t := 0
+    for i in range N {
+        y := make(ps[0])
+        t += y.a.Len() + I64(y.b[i % 64]) + i % 3
+    }
+    io.PutLn($t + " " + $ps[0].a.Len())!
+}

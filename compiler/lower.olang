@@ -5249,7 +5249,9 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     # before the call returns - not a task's, which is read beside its spawner; nor is one of a call itself only read
     # where it stands (readHere), its result dead by its statement's end whatever it views - `v[i][2][0]`, gap 20 -
     # though its window is then the whole statement's)
-    plain := not t.HoldsRefs(t.Result(ty))
+    # (2.4's fourth gap: nor one of a call whose result views none of its arguments and holds no reference beside the
+    # storage it holds by value - `y := make(ps[0])` with `make(x Grid&) Grid` building a Grid of its own)
+    plain := not t.HoldsRefs(t.Result(ty)) or ln.viewsNoArg(c, t.Result(ty))
     reads := (plain or ln.readWin.Has(I64(c.Site))) and not task
     body := match c.Target {
         case typed.Callee.Body(id): I64(id)
@@ -5577,6 +5579,14 @@ fn (ln mut lowering&) viewCall(c typed.Call&, ty types.TypeId) Bool {
         case _: typed.BodyId(-1)
     }
     return id >= typed.BodyId(0) and ln.L.ViewsOf(id) > 0 and ln.viewValue(ty)
+}
+
+# whether call c's value, of type ty, views none of its arguments (check's ViewResults: none) and holds no reference
+# beside the storage it holds by value - its arguments dead once it returns (free.RefsBeyond)
+fn (ln mut lowering&) viewsNoArg(c typed.Call&, ty types.TypeId) Bool {
+    id := typed.CalleeBody(c)
+    if not ln.planned or id < 0 or ln.L.Free == null or ln.T.IsRef(ty) or ln.L.ViewsOf(typed.BodyId(I32(id))) != 0: return false
+    return not ln.L.Free!.RefsBeyond(ty)
 }
 
 # whether a value of type ty may be handed back as a view (D9h; any value holding storage of its own)

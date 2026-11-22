@@ -5259,19 +5259,30 @@ fn (w mut walker&) asRecord(c typed.Call&, rb I64, shift I64, args Vec<Vec<I64>>
 }
 
 # O8f (review4's g1): whether what a call c of body b2 lets go of is storage the call built itself - which no view this
-# body holds can reach: every argument plain data (no reference, no storage of its own), and the callee reaching no global
-# and no code not followed (effects.Facts, through its callees)
+# body holds can reach: every argument plain data (no reference, no storage of its own) or a reference it cannot write
+# through to a value holding no reference (2.4's fourth gap: `make(ps[0])` given a Vec's element to read), the callee
+# writing through no parameter and reaching no global and no code not followed (effects.Facts, through its callees)
 fn (w mut walker&) ownGoes(c typed.Call&, b2 I64) Bool {
     f := w.F
     t := w.T()
-    for a in c.Args {
-        ty := a.Type()
+    body := f.Bodies[b2]
+    for j in range c.Args.Len() {
+        ty := c.Args[j].Type()
+        if j < body.Params.Len() and w.readOnly(body.Locals[I64(body.Params[j])].Ty): continue
         if t.IsRef(ty) or t.HoldsRefs(ty) or t.OwnedPart(ty) or t.OwnsParts(ty): return false
     }
     if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
     fs := f.fx!.Of(b2)
-    if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0 or fs.Spawns: return false
+    if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0 or fs.Spawns or fs.Writes != 0 or fs.Impure: return false
     return not (fs.ReadsGlobals or fs.RefGlobals or fs.WritesGlobals or fs.WritesOut)
+}
+
+# whether a parameter of type ty is a reference its body cannot write through, to a value holding no reference beyond
+# its own parts' arrays
+fn (w mut walker&) readOnly(ty types.TypeId) Bool {
+    t := w.T()
+    r := t.Repr(ty)
+    return t.IsRef(r) and (t.PermOf(r) & types.Writable) == 0 and not w.F.refsBeyondParts(t.Referent(r))
 }
 
 # the parameter a call's function value is - read whole, its body never assigning it (one of the first 62) - -1 for
