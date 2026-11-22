@@ -870,6 +870,8 @@ type LocalUses struct(T types.Table&, B Body&) {
     WrOther Vec<Bool>
     WrScalar Vec<Bool>
     Whole Vec<Bool>
+    WholeOther Vec<Bool> # Whole by a value other than a call's result (a call builds its result where the local lives)
+    WholeAgain Vec<Bool> # Whole more than once, or where it may run again (a loop or deferred code its declaration is outside)
     Esc Vec<Bool>
     EscHard Vec<Bool>    # Esc but for the read-only references given a body's call (RefAt)
     # EscHard but for a capture by a lambda a Let declares a local with (`f := fn() I64 { return r[1] }`): each such
@@ -938,6 +940,8 @@ type LocalUses struct(T types.Table&, B Body&) {
     LinkParam Vec<I64>
     depth I64 = 0           # how deep the block walked is
     declDepth Vec<I64>      # by local: the depth of the block declaring it, 0 for a parameter (outlasts)
+    declLoop Vec<I64>       # by local: the loops and deferred code around its declaration (again's count there)
+    again I64 = 0           # the loops and deferred code around the statement walked
     joinAt I64 = -1         # the depth of the block holding the innermost join walked in
     letInto I64 = -1        # the value local the Let walked declares, until the call or read making its value takes it
     readInto I64 = -1       # ... as the read walked took it
@@ -947,12 +951,19 @@ type LocalUses struct(T types.Table&, B Body&) {
 }
 
 # the uses of b's locals
+# whether local l is declared with no value (D13d) and given its first by a single assignment of a call's result, running
+# as often as its declaration does: that value is what it holds from there, as a Let's would be (D9i moves it on)
+fn (u LocalUses&) FirstSet(l I64) Bool { return u.Whole[l] and not u.WholeOther[l] and not u.WholeAgain[l] and u.B.Locals[l].Unset }
+
 fn LocalUses.Uses(t types.Table&, b Body&) LocalUses {
     u := LocalUses(t, b)
     for _ in range b.Locals.Len() {
         u.WrOther.Push(false)
         u.WrScalar.Push(false)
         u.Whole.Push(false)
+        u.WholeOther.Push(false)
+        u.WholeAgain.Push(false)
+        u.declLoop.Push(0)
         u.Esc.Push(false)
         u.EscHard.Push(false)
         u.EscBesides.Push(false)
@@ -1388,15 +1399,22 @@ fn (u mut LocalUses&) stmt(st Stmt&) {
             u.block(i.Else)
         }
         case Stmt.Loop(_, body, post) {
+            u.again++
             u.block(body)
             u.block(post)
+            u.again--
         }
         case Stmt.Exit(_, _, msg) { u.expr(msg, Ctx.Op) }
         case Stmt.Assert(_, c, msg) {
             u.expr(c, Ctx.Op)
             u.expr(msg, Ctx.Op)
         }
-        case Stmt.Block(_, bl), Stmt.Defer(_, bl) { u.block(bl) }
+        case Stmt.Block(_, bl) { u.block(bl) }
+        case Stmt.Defer(_, bl) {
+            u.again++
+            u.block(bl)
+            u.again--
+        }
         case Stmt.Join(_, j) {
             was := u.joinAt
             u.joinAt = u.depth
@@ -1427,6 +1445,7 @@ fn (u mut LocalUses&) targets(ps Array<Lvalue?&>&) {
 fn (u mut LocalUses&) let(l LocalId, x Expr&) {
     u.Init[I64(l)] = x
     u.declDepth[I64(l)] = u.depth
+    u.declLoop[I64(l)] = u.again
     k := u.B.Local(l).Kind
     alias := u.T.IsRef(u.B.Local(l).Ty) or k == LocalKind.Held or k == LocalKind.Binding
     if madeBy(x): u.letInto = I64(l)
@@ -1444,7 +1463,9 @@ fn (u mut LocalUses&) assign(p Lvalue&, x Expr&) {
     u.placeExprs(p)
     root := u.valueRoot(p)
     if root >= 0 and p == Lvalue.Local {
+        if u.Whole[root] or u.again != u.declLoop[root]: u.WholeAgain[root] = true
         u.Whole[root] = true
+        if not wholeCall(x): u.WholeOther[root] = true
         return
     }
     if root >= 0 and p != Lvalue.Local and not u.T.IsRef(p.Type()) and not u.scalarField(p) {
@@ -1665,6 +1686,15 @@ Elsewhere I64 = -3 # LinkFrom: the value goes where it may be kept
 
 # whether a Let's value is a call's or a read's, which takes the local declared (letInto): through a try and a default
 # written elsewhere
+# whether a whole assignment's value is a call's result, built where the local lives (no default, no other value)
+fn wholeCall(x Expr&) Bool {
+    return match x {
+        case Expr.Call(_, _, _): true
+        case Expr.Away(_, _, y): wholeCall(y)
+        case _: false
+    }
+}
+
 fn madeBy(x Expr&) Bool {
     return match x {
         case Expr.Call(_, _, _), Expr.Read(_, _, _, _): true
@@ -1700,7 +1730,9 @@ fn (u mut LocalUses&) expr(x Expr?&, ctx Ctx) {
         }
         case Expr.Collect(_, _, c) {
             u.expr(c.Reserve, Ctx.Op)
+            u.again++
             u.block(c.Loop)
+            u.again--
         }
         case Expr.Prim(_, _, op, _, args) { u.prim(op, args, ctx) }
         case Expr.Slice(_, _, sl) {

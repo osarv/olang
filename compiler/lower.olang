@@ -1593,6 +1593,9 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
         if not fr.PartsOnly(p.Type()): return out
         return ln.partReleases(p.Type())
     }
+    # (a local declared with no value given its first by its one assignment lets go of nothing - free.SetOnce; moved at
+    # its last use, its storage holds the value the last turn moved on)
+    if p == typed.Lvalue.Local and assign and fr.SetOnce(I64(ln.B.Id), I64(p.id)): return out
     k := fr.PlaceOf(p)
     # (an owner local given another value: its place's old value, held whole)
     if p == typed.Lvalue.Local and assign: k = fr.LocalPlaceOf(I64(ln.B.Id), I64(p.id))
@@ -6198,7 +6201,8 @@ fn (ln mut lowering&) heldPlace(u typed.LocalUses&, p typed.Lvalue&) Bool {
 # D9i: a value local's copy left out where that copy is the local's last mention - a by-value argument, a store, a part
 # of a value made (`t := mk(n)` then `p := P(t)`): the destination takes the local's storage, Rust's move made by
 # liveness. Only where nothing could tell: the local's storage is its own (no view held in place of its copy), named by
-# no other local, escaping nowhere, assigned nowhere whole, in no region early freeing made (O8d) - and outlives where
+# no other local, escaping nowhere, assigned nowhere whole (but by the one assignment giving its first value,
+# LocalUses.FirstSet), in no region early freeing made (O8d) - and outlives where
 # the copy would be built (the copy's block inside the local's)
 fn (ln mut lowering&) movesAtLastUse(u typed.LocalUses&) {
     if not ln.planned or ln.B.Root == null or ln.B.Gen: return
@@ -6268,8 +6272,9 @@ fn (ln mut lowering&) storageBlock(l I64) typed.BlockId {
 
 fn (ln mut lowering&) movable(u typed.LocalUses&, l I64, site I64) Bool {
     loc := ln.B.Locals[l]
-    if loc.Kind != typed.LocalKind.Var or ln.T.IsRef(loc.Ty) or loc.Unset: return false
-    if ln.vl.Has(l) or ln.rvl.Has(l) or ln.noLetCopy.Has(l) or u.Whole[l] or ln.escapes(u, l): return false
+    if loc.Kind != typed.LocalKind.Var or ln.T.IsRef(loc.Ty): return false
+    # (one declared with no value or assigned whole only where that assignment gives its first value - FirstSet)
+    if ln.vl.Has(l) or ln.rvl.Has(l) or ln.noLetCopy.Has(l) or (u.Whole[l] or loc.Unset) and not u.FirstSet(l) or ln.escapes(u, l): return false
     # (a local ended at its block's end holding a moved value releases it there - free.EndsMoved)
     if ln.freeing and ln.L.Free!.EndsLocal(I64(ln.B.Id), l): return false
     for j in range u.AliasOf.Len() {

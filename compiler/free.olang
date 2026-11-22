@@ -379,6 +379,8 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # owner locals (keyField -3): a local holding an owner by value (ownerCand) - a Vec, a Map - given another value
     # somewhere in its body, a place of its own: by (body, local), and by body whether it has one
     ownLocalOf Map<pair.Pair<I64, I64>, I64>
+    onceFor I64 = -1          # the body onceSet holds, by local: declared with no value and assigned once, that once
+    onceSet Vec<Bool>         # running once with its declaration (LocalUses.WholeAgain)
     spawned Vec<I64>          # the bodies a task calls directly (Spawned)
     # condition 3 by origins (O8f): C given a function value (cAt, by body; cThreads where one is reached) keeps every
     # place, as a task whose code is not known does (taskAll); else a task's own code changing a place keeps it, and a
@@ -2087,6 +2089,9 @@ fn (f mut Free&) ownLocalCand(p typed.Lvalue&) {
             # candidate, so its first let-go releases nothing)
             loc := f.Bodies[f.curBody].Locals[I64(l)]
             if f.ownLocalOf.Has(key) or loc.Kind != typed.LocalKind.Var: return
+            # (nor one declared with no value and given one once, as often as its declaration runs: that value is its
+            # first, nothing let go of, as a Let's would be - and moved where it is stored last, lower.movable)
+            if f.SetOnce(f.curBody, I64(l)): return
             ow := f.ownerCand(ty)
             if not ow and not f.arrayCand(ty): return
             k := f.newPlace(ty, -3, false, ty, false)
@@ -2099,6 +2104,20 @@ fn (f mut Free&) ownLocalCand(p typed.Lvalue&) {
         }
         case _ { }
     }
+}
+
+# whether local l of body b is declared with no value (D13d) and given one by a single assignment of a call's result
+# running as often as its declaration does (LocalUses.FirstSet): that value is its first, its assignment letting go of
+# nothing
+fn (f mut Free&) SetOnce(b I64, l I64) Bool {
+    if b < 0 or b >= f.Bodies.Len() or l < 0 or l >= f.Bodies[b].Locals.Len() or not f.Bodies[b].Locals[l].Unset: return false
+    if f.onceFor != b {
+        f.onceFor = b
+        f.onceSet.Clear()
+        u := typed.LocalUses.Uses(f.T(), f.Bodies[b])
+        for i in range u.Whole.Len(): f.onceSet.Push(u.FirstSet(i))
+    }
+    return l < f.onceSet.Len() and f.onceSet[l]
 }
 
 # an assignment's target that is a mutable global holding an owner by value or a reference freeing can meet, assigned

@@ -10310,12 +10310,12 @@ fn (s mut Scoper&) ownCopy(m typed.Make&, ty types.TypeId, d Term) Val {
 
 # item 17: a value local copied whole at its last mention into storage kept beyond its block - built where that copy
 # goes, so lowering moves it there (D9i) rather than copying it out of a block that closes first. Not a local named
-# another way (assigned whole, escaping, a second name): lowering would keep that copy, the local built longer for
-# nothing
+# another way (assigned whole - but where that assignment gives its first value, LocalUses.FirstSet - escaping, a second
+# name): lowering would keep that copy, the local built longer for nothing
 fn (s mut Scoper&) liftCopied(m typed.Make&, d Term) {
     if not d.Runs() or m.Site < typed.SiteId(0): return
     l := s.lastCopy(I64(m.Site))
-    if l < 0 or not s.liftable(l) or s.isRef(s.B!.Locals[l].Ty) or s.B!.Locals[l].Unset: return
+    if l < 0 or not s.liftable(l) or s.isRef(s.B!.Locals[l].Ty): return
     own := s.blockTerm(s.B!.Locals[l].In)
     if s.joinTerm(own, d) == own: return
     s.liftLocal(l, d, true)
@@ -10328,7 +10328,7 @@ fn (s mut Scoper&) lastCopy(site I64) I64 {
         u := typed.LocalUses.Uses(s.P.T, s.B!)
         for en in typed.LastCopies(s.B!) {
             l := en.Value
-            if u.Whole[l] or u.EscHard[l] or u.AliasOf.View().Some(fn(a): return a == l): continue
+            if (u.Whole[l] or s.B!.Locals[l].Unset) and not u.FirstSet(l) or u.EscHard[l] or u.AliasOf.View().Some(fn(a): return a == l): continue
             s.lastCopied.Put(pair.Pair<I64, I64>(s.Id, en.Key), l)
         }
     }

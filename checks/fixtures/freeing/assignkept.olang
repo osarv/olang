@@ -1,0 +1,34 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4): a local declared with no value, given its value by one assignment of a call's result, and
+# stored into an element at its last mention is moved there as a `:=` local is - the assignment is its first value and
+# lets go of nothing (it kept about 500 bytes a turn, -memory -check naming the element's let-go, before)
+N I64 = 20000
+
+fn build(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push("t" + $(i + k) + " padded out to some length")
+    return v
+}
+
+fn nums(i I64) Vec<I64> {
+    v Vec<I64>
+    for k in range 20: v.Push(i + k)
+    return v
+}
+
+fn main() {
+    kept := Array<Vec<String>>(4)
+    ns := Array<Vec<I64>>(4)
+    t := 0
+    for i in range N {
+        r Vec<String>
+        r = build(i)
+        kept[i % 4] = r
+        n Vec<I64>
+        n = nums(i)
+        ns[i % 4] = n
+        t += kept[(i + 3) % 4].Len() + ns[i % 4][19] + ns[(i + 1) % 4].Len()
+    }
+    io.PutLn($t + " " + kept[2][1])!
+}
