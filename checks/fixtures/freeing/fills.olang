@@ -1,0 +1,26 @@
+import "std/io"
+
+# O8f (docs/freeing.md): a fill of text - each element its own copy, built as a store into the element place builds it
+# (lower.fillText: a slot of the fill's scope for an Array<String>'s elements, else a region of its own) - so that an
+# element replaced in a loop frees what the fill built and every later value at once: a fixed fill, a run-time one, one
+# pushed whole, one of non-empty text whose other elements are read at the end, and a fill of plain arrays
+N I64 = 200000
+
+fn main() {
+    m := 4 + N % 3
+    a := Array<String>(4, "")
+    b := Array<String>(m, $"init")
+    ts Vec<Array<String>>
+    for _ in range 4: ts.Push(Array<String>(2, ""))
+    c := Array<Array<I64>>(m, Array<I64>(m - 2, 7))
+    s := 0
+    for i in range N {
+        j := i % 4
+        a[j] = $"a" + $i + " padded out to some length"
+        b[j % 2] = $"b" + $i + " padded out to some length"
+        ts[j][1] = $"t" + $i + " padded out to some length"
+        c[j % 3] = Array<I64>(m, i)
+        s += a[(j + 1) % 4].Len() + b[j % 2].Len() + ts[(j + 1) % 4][1].Len() + c[j % 3][3]
+    }
+    try io.PutLn($s + " " + a[0] + " " + b[1] + " " + b[2] + " " + b[3] + " " + ts[3][1] + " " + $c[3][1]) catch io.Error { }
+}

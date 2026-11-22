@@ -2515,6 +2515,8 @@ fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made 
         return
     }
     fills := w.F.fillOwners(ty, block) if filled else Vec<I64>()
+    # (a fill of text: its elements built as the element place's stores build them, lower.fillText)
+    text := w.F.FillText(ty, block) if filled else -1
     # (O8f, gap 22: a fixed fill whose elements' owner fields are not built as their stores build them - one returned,
     # or stored where an owner's region may hold it - has each element's parts in part regions (lower.fill's
     # ownersCopy): its owners keep for RSplit alone, freeing through their parts)
@@ -2535,7 +2537,7 @@ fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made 
         if w.F.PartPlace(k): continue
         if slots and w.F.SlotPlace(k): continue
         # (gap 22: nor a fill's element's owner field - built as the place's stores build it: lower.fillCopy)
-        if filled and has(fills, k): continue
+        if filled and (has(fills, k) or k == text): continue
         if parted or (arrays and w.F.IsOwner(k)) {
             w.F.keep(k, RSplit, w.body().File, sp, $"a value holding it is made with no store into it, its parts each built for their own places, by " + $how + ": '" + $w.text(sp) + "'")
             continue
@@ -4697,7 +4699,7 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     # lower.fill's ownCopyOf or fillCopy - deep as a copy is: no view of what the item's owners hold)
     if filled and w.ownsStorage(w.T().Elem(w.T().Plain(w.F.arrayOf(ty)))): out = w.F.unowned(out)
     if (m.Kind == typed.MakeKind.Copy or filled) and not exempt { w.untracked(ty, sp, "a copy of a value holding it", not filled, filled, I64(m.Site) == w.plainFill, I64(m.Site)) }
-    w.makeStores(m, ty, sp)
+    w.makeStores(m, ty, sp, I64(m.Site) == w.plainFill)
     return out
 }
 
@@ -4749,13 +4751,19 @@ fn (w mut walker&) arm(a typed.Arm&) Vec<I64> {
 
 # an array literal's items or a fill's value stored into the array's element place - none for the prelude's fills,
 # whose positions past what a collection holds are never read (3.4: the prelude says what it lets go of)
-fn (w mut walker&) makeStores(m typed.Make&, ty types.TypeId, sp source.Span) {
+fn (w mut walker&) makeStores(m typed.Make&, ty types.TypeId, sp source.Span, block Bool = false) {
     f := w.F
     if m.Kind != typed.MakeKind.Array and m.Kind != typed.MakeKind.Fill: return
     e := f.placeKey(f.arrayOf(ty), -1)
     if e < 0: return
     if m.Kind == typed.MakeKind.Fill {
         if f.prelude[w.Id]: return
+        # (O8f: a fill of text whose every element is its own copy, built as the place's stores build it - FillText,
+        # lower.fillText - or constant data: no value kept in another place)
+        if m.Items.Len() == 1 and f.FillText(ty, block) == e {
+            if w.Final: f.stores.Push(store(e, w.Id, w.body().File, sp, SOk, -1, -1, m.Items[0], null))
+            return
+        }
         for it in m.Items: w.storeOne(e, it, sp, true)
         return
     }
@@ -7726,6 +7734,24 @@ fn (f mut Free&) CopyOwner(ty types.TypeId, i I64) I64 {
 # run-time array's, whose elements no owner's anchors reach (they end at the array); a fixed array's - held by value,
 # so an owner holding it reaches its elements' anchors, whose regions a region of their own inside the owner's would
 # hide - only where block, built in a block it stays in: a plain local's value or a temporary read through (plainFill)
+# O8f: the element place of a fill of type ty whose elements are text or an array of plain elements, each element's copy
+# built by lowering as a store into that place builds it - in a slot of the fill's scope where the place is built in
+# slots (SlotPlace: an Array<String>'s), in a part region of its own where it is a part place (an Array<Array<I64>>'s),
+# else in a region of its own, a kid of the fill's, each where the place is decided sole (lower.fillText) - so that the fill is no value made with no store into it (untracked); a fixed array's only
+# where it is built in a block (no owner's region holds its bytes), as fillOwners'; -1 for none
+fn (f mut Free&) FillText(ty types.TypeId, block Bool) I64 {
+    t := f.T()
+    r := t.Plain(f.arrayOf(ty))
+    if t.KindOf(r) != types.Kind.Array or (t.Length(r) != types.TypeId(0) and not block): return -1
+    el := t.Elem(r)
+    if not t.OwnedPart(el) or t.OwnsParts(el) or t.HoldsRefs(el): return -1
+    e2 := t.Elem(t.Repr(el))
+    if t.OwnedPart(e2) or t.OwnsParts(e2) or t.HoldsRefs(e2): return -1
+    k := f.placeKey(r, -1)
+    if k < 0 or f.owner[k] or f.handle[k]: return -1
+    return k
+}
+
 fn (f mut Free&) fillOwners(ty types.TypeId, block Bool) Vec<I64> {
     out Vec<I64>
     t := f.T()
