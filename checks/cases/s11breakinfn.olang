@@ -1,0 +1,9 @@
+# check: fail error[S11]: 'break' acts on the innermost loop, and there is none here
+# S11: 'break' outside any loop. Pins the shape named in a comment of tests/shared.olang ("fn f() I32 { break }", here
+# without a result so only this rule fires)
+fn f() {
+    break
+}
+fn main() {
+    f()
+}

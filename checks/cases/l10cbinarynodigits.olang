@@ -1,0 +1,5 @@
+# check: fail error[L10c]: '0b' needs binary digits
+# L10c: a binary literal with nothing after the prefix. Pins the shape named in a comment of tests/shared.olang ("0b")
+fn main() {
+    x := 0b
+}

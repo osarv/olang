@@ -1,0 +1,9 @@
+# check: fail error[E12]: expected Txt&, found Array<U8>
+# E12: a VALUE keeps its own type - a declared type over an array is not reached by borrowing the array; Txt(v) is how it
+# changes. Pins the shape named in a comment of tests/shared.olang ("x Txt& = someByteArray")
+type Txt extends Array<U8>
+fn main() {
+    b := Array<U8>(2)
+    x Txt& = b
+    assert x.Len() == 2
+}

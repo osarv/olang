@@ -1,0 +1,11 @@
+# check: fail error[T6b]: Feet does not flow into Meters - convert it, as Meters(x)
+# M19/T6b: two types declared over the same primitive are distinct from each other ("m.AddM(aFeetValue)" is rejected); pins
+# the shape named in a comment of tests/shared.olang ("that is what nominal buys")
+type Meters extends I32
+type Feet extends I32
+fn (m Meters) AddM(o Meters) Meters { return m + o }
+fn main() {
+    m Meters = 3
+    f Feet = 2
+    assert m.AddM(f) == 5
+}
