@@ -1843,3 +1843,4 @@ Moved from plan.md 2026-11-21 (audit for the Orchestrator: all built - os.File u
 Closed 2026-11-21: covered by S9g LostLoopWrite (wt-looprows/wt-loopref, checks/cases/lostloopwrite*.olang):
 - Queued (Orchestrator, 2026-11-19): `for x in v.ViewMut()` binds x as a copy, so writes to x are lost - check bug vs design; if design, a compile error (no warning) for writing a loop copy never read again, as a numbered question if it changes meaning. After wt-splitfield.
 - 2026-11-22: evaluator vs build on S1b's catch one-line body checked on master 5e7918e8a: built, OLANG_EVALUATE and top-level asserts agree (try f(x) catch: return -1) - closed.
+- 2026-11-22: 'making a struct generic slowed batch-1 GemmI8 3.5x' no longer reproduces on master (1.69-1.74 vs 1.72-1.75 us; HISTORY wt-genslow) - closed.
