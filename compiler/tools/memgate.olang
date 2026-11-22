@@ -10,9 +10,9 @@
 # written down: the memory available (MemAvailable in /proc/meminfo, or vm_stat's free and inactive pages where there
 # is no /proc), and the headroom of every cgroup the process is in (memory.max less memory.current, or cgroup v1's
 # limit less its usage and inactive file pages) where that is less. The commands memgate is running hold reservations
-# (DIR/res.PID: the peak expected, then the memory their process tree holds now, written as they run): a command starts once what is available, less what each running one
-# may still grow by, leaves its expected peak and a margin - or at once where none runs, so a command larger than the
-# machine still runs, alone. Each run's peak (the process tree's resident memory at most, sampled) is written for its
+# (DIR/res.PID: the peak expected, then the memory their process tree holds now, written as they run): a command
+# starts once what is available, less what each running one may still grow by, leaves its expected peak and a margin -
+# or at once where none runs, so a command larger than the machine still runs, alone. Each run's peak (the process tree's resident memory at most, sampled) is written for its
 # key when it ends. DIR is OLANG_MEMGATE, else build/memgate. Its status is the command's.
 
 import "std/io"
