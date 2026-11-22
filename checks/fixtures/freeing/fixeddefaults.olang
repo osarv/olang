@@ -1,0 +1,23 @@
+import "std/io"
+
+# O8f (docs/freeing.md, keptlast): a field's default fill of a constant length, `t Array<String> = Array<String>(4,
+# "d")` - a fixed array held in the instance, built outside any block, its elements text built in slots as every copy's
+# text of a slot place is (free.FillText): an element replaced in a loop frees what the fill built and every later value
+# at once - in a local instance and in instances held by a Vec's elements
+N I64 = 200000
+
+type D struct(k I64) { t Array<String> = Array<String>(4, "d"), n I64 = k }
+
+fn main() {
+    d := D(3)
+    ds Vec<D>
+    for i in range 3: ds.Push(D(i))
+    s := 0
+    for i in range N {
+        j := i % 4
+        d.t[j] = $"d" + $i + " padded out to some length"
+        ds[i % 3].t[j] = $"e" + $i + " padded out to some length"
+        s += d.t[(j + 1) % 4].Len() + ds[(i + 1) % 3].t[(j + 2) % 4].Len() + ds[i % 3].n
+    }
+    try io.PutLn($s + " " + d.t[1] + " " + ds[2].t[3] + " " + ds[0].t[0]) catch io.Error { }
+}

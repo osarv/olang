@@ -1589,7 +1589,11 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
         # (c1's s.qs: a split field's elements' parts first, by its length - free.SplitField)
         if fr.SplitField(k) {
             et := ln.T.Elem(ln.T.Repr(p.Type()))
-            if ln.partReleases(et).Len() > 0: out.Push(relPath(g, Array<I64>(0), false, false, -2, -1, et))
+            tq := fr.TextArray(p.Type())
+            # (keptlast: a split field of text - each element's slot, by its length)
+            gt := ln.guardOf(tq) if tq >= 0 else free.NotSole
+            if gt != free.NotSole: out.Push(relPath(gt, Array<I64>(0), true, false, -2))
+            else if tq < 0 and ln.partReleases(et).Len() > 0: out.Push(relPath(g, Array<I64>(0), false, false, -2, -1, et))
         }
         out.Push(relPath(g, Array<I64>[0] if fr.IsHandle(k) else Array<I64>(0), fr.SlotPlace(k), fr.PartPlace(k)))
         # (gap 22: an owner's parts too, where it is not decided sole at the link - its release, where it is, leaves
@@ -1653,6 +1657,12 @@ fn (ln mut lowering&) partReleases(ty types.TypeId, depth I64 = 0, entry Bool = 
     # where its element place is decided sole: free.arrayBuffer)
     if ln.T.KindOf(ln.T.Repr(ty)) == types.Kind.Array {
         if not fr.PartPlace(fr.ElemPlace(ty)): return out
+        # (keptlast: an element array of text - a Vec<Array<String>>'s - each element's slot first, by its length)
+        tq := fr.TextArray(ln.T.Elem(ln.T.Repr(ty)))
+        if tq >= 0 {
+            gt := ln.guardOf(tq)
+            if gt != free.NotSole: out.Push(relPath(gt, Array<I64>(0), true, false, -2))
+        }
         # (an element array of PartsOnly values - a Vec<Array<Q>>'s - each of its elements' parts first, by its length)
         et := ln.T.Elem(ln.T.Repr(ln.T.Elem(ln.T.Repr(ty))))
         if depth < 8 and fr.PartsOnly(et) and (fr.SelfHolding(et) or ln.partReleases(et, depth + 1).Len() > 0) {
@@ -1683,7 +1693,15 @@ fn (ln mut lowering&) walkReleases(ty types.TypeId, depth I64, out mut Vec<relPa
     for vw in fr.VecWalks(ty) {
         if vw.Texts >= 0 {
             g := ln.guardOf(vw.Texts)
-            if g != free.NotSole: out.Push(relPath(g, vw.Path, true, false, vw.Data, vw.Count))
+            if g == free.NotSole: continue
+            # (keptlast: a split field of text, walked by its own length - free.TextArray)
+            if vw.Count == free.SplitCount {
+                sub := Array<I64>(vw.Path.Len() + 1, vw.Data)
+                for j in range vw.Path.Len(): sub[j] = vw.Path[j]
+                out.Push(relPath(g, sub, true, false, -2))
+                continue
+            }
+            out.Push(relPath(g, vw.Path, true, false, vw.Data, vw.Count))
             continue
         }
         held := vw.Next < 0 and fr.SelfHolding(vw.Elem)
@@ -1749,6 +1767,13 @@ fn (ln mut lowering&) releaseOn(base pl, paths Vec<relPath>&, sp source.Span) {
         for i in r.Path: q = ln.with(q, mir.Proj.Field(i))
         if r.Data >= 0 {
             ln.textWalk(q, r, sp)
+            if after != mir.NoBlock: ln.joinAt(after)
+            continue
+        }
+        # (keptlast: an array of text's walk - each element's slot put back, by its length: free.TextArray)
+        if r.Data == -2 and r.Slot {
+            n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(q))], sp)
+            ln.eachIndex(n, sp, fn(i mir.LocalId) { ln.emit(mir.Stmt.ReleaseSlot(sp, ln.mk(ln.with(q, mir.Proj.Index(i))))) })
             if after != mir.NoBlock: ln.joinAt(after)
             continue
         }

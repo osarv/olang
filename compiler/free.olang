@@ -7442,7 +7442,23 @@ fn (f mut Free&) elemArray(ty types.TypeId) Bool {
     if t.KindOf(r) != types.Kind.Array or not t.OwnedPart(ty) or f.slotText(ty): return false
     el := t.Elem(r)
     if not t.OwnsParts(el) and not t.OwnedPart(el): return not t.HoldsRefs(el)
+    # (keptlast: or of text built in slots - a Vec<Array<String>>'s element - its walk putting each slot back, TextArray)
+    if f.slotText(el): return f.TextArray(ty) >= 0
     return not f.refsBeyondParts(el) and f.PartsOnly(el)
+}
+
+# O8f (keptlast): where ty is a run-time array of text, no text itself (an Array<String>), whose text place - an array's
+# text elements, by their type alone (SlotPlace) - is built in slots: that place, else -1. A value of a part place of such
+# arrays (an element array, a split field) is let go of by a walk by its length putting each element's slot back, guarded
+# by the text place's decision as a Vec of text's walk is (TextBuffer), then its own part region
+fn (f mut Free&) TextArray(ty types.TypeId) I64 {
+    t := f.T()
+    r := t.Repr(ty)
+    if t.KindOf(r) != types.Kind.Array or t.Length(r) != types.TypeId(0) or not t.OwnedPart(ty) or f.slotText(ty): return -1
+    el := t.Elem(r)
+    if not f.slotText(el): return -1
+    q := f.placeKey(t.Array(el, types.TypeId(0)), -1)
+    return q if f.SlotPlace(q) else -1
 }
 
 # O8f (c1's s.qs): whether place k is a struct's field holding a run-time array of PartsOnly values (`S{qs Array<Q>}`):
@@ -7451,7 +7467,8 @@ fn (f mut Free&) elemArray(ty types.TypeId) Bool {
 # then the array (lower.releases)
 fn (f mut Free&) SplitField(k I64) Bool {
     if k < 0 or k >= f.keyField.Len() or f.keyField[k] < 0 or not f.arr[k] or not f.PartPlace(k): return false
-    return f.partsArray(f.valTy[k])
+    # (keptlast: or of text built in slots, `P{t Array<String>}` - its walk puts each element's slot back, TextArray)
+    return f.partsArray(f.valTy[k]) or f.TextArray(f.valTy[k]) >= 0
 }
 
 # O8f (c1's keep): whether ty is a run-time array of PartsOnly values that is an element array (elemArray) - a copy of
@@ -7748,17 +7765,21 @@ fn (f mut Free&) CopyOwner(ty types.TypeId, i I64) I64 {
 # built by lowering as a store into that place builds it - in a slot of the fill's scope where the place is built in
 # slots (SlotPlace: an Array<String>'s), in a part region of its own where it is a part place (an Array<Array<I64>>'s),
 # else in a region of its own, a kid of the fill's, each where the place is decided sole (lower.fillText) - so that the fill is no value made with no store into it (untracked); a fixed array's only
-# where it is built in a block (no owner's region holds its bytes), as fillOwners'; -1 for none
+# where it is built in a block (no owner's region holds its bytes), as fillOwners', or where its elements go in slots; -1 for none
 fn (f mut Free&) FillText(ty types.TypeId, block Bool) I64 {
     t := f.T()
     r := t.Plain(f.arrayOf(ty))
-    if t.KindOf(r) != types.Kind.Array or (t.Length(r) != types.TypeId(0) and not block): return -1
+    if t.KindOf(r) != types.Kind.Array: return -1
     el := t.Elem(r)
     if not t.OwnedPart(el) or t.OwnsParts(el) or t.HoldsRefs(el): return -1
     e2 := t.Elem(t.Repr(el))
     if t.OwnedPart(e2) or t.OwnsParts(e2) or t.HoldsRefs(e2): return -1
     k := f.placeKey(r, -1)
     if k < 0 or f.owner[k] or f.handle[k]: return -1
+    # (a fixed fill outside a block - a field default's `Array<String>(4, "d")`, held in the instance - only where its
+    # elements are built in slots, as every copy's text of a slot place is wherever it lands (lower.copySlots): a slot
+    # is no region an owner's release could find in place of its own)
+    if t.Length(r) != types.TypeId(0) and not block and not f.SlotPlace(k): return -1
     return k
 }
 
@@ -7832,6 +7853,12 @@ fn (f mut Free&) splitPart(k I64, depth I64 = 0) I64 {
 fn (f mut Free&) PartsLet(ty types.TypeId, depth I64 = 0, entry Bool = false) Vec<I64> {
     out Vec<I64>
     if depth > 8: return out
+    # (keptlast: text an array's walk puts back - an Array<String>'s elements: the text place, by the type alone)
+    if f.slotText(ty) {
+        q := f.placeKey(f.T().Array(ty, types.TypeId(0)), -1)
+        if f.SlotPlace(q): addTo(out, q)
+        return out
+    }
     # (a Map entry's every leaf, as its removal's vacate lets go of them - EntryOnly)
     if entry {
         for lf in f.leaves(ty): addTo(out, lf.PlaceId)
@@ -7870,7 +7897,11 @@ fn (f mut Free&) vecWalksAt(ty types.TypeId, path Vec<I64>&, out mut Vec<VecWalk
         else if f.nestedBuffer(r, i): out.Push(VecWalk(path.ToArray(), i, n, -1, t.Elem(t.Repr(fs[i]))))
         else if f.arrayBuffer(r, i): out.Push(VecWalk(path.ToArray(), i, n, -1, fs[i]))
         # (a split field's elements, walked by the array's own length: Count SplitCount)
-        else if f.SplitField(f.placeKey(r, i)): out.Push(VecWalk(path.ToArray(), i, SplitCount, -1, t.Elem(t.Repr(fs[i]))))
+        else if f.SplitField(f.placeKey(r, i)) {
+            # (keptlast: a split field of text, `P{t Array<String>}` - each element's slot put back, by its length)
+            tq := f.TextArray(fs[i])
+            out.Push(VecWalk(path.ToArray(), i, SplitCount, tq, t.Elem(t.Repr(fs[i]))))
+        }
         if not f.entryBuffer(r, i): continue
         _, mn, mx := f.MapFields(r)
         out.Push(VecWalk(path.ToArray(), i, mn, -1, t.Elem(t.Repr(fs[i])), mx))

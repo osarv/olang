@@ -1,0 +1,25 @@
+import "std/io"
+
+# O8f (docs/freeing.md, keptlast): a Vec<Array<String>>'s element given a new array of text in a loop - its element
+# place a part place of arrays of text (free.elemArray, TextArray): the let-go walks the old array by its length,
+# putting each element's slot back, then releases its part region - fills of new text, an element's element replaced,
+# and the same Vec held in a struct's field
+N I64 = 200000
+
+type H struct() { rows Vec<Array<String>>, n I64 }
+
+fn main() {
+    ts Vec<Array<String>>
+    for _ in range 4: ts.Push(Array<String>(2, $"q"))
+    h := H()
+    for _ in range 3: h.rows.Push(Array<String>(3, $"r"))
+    s := 0
+    for i in range N {
+        j := i % 4
+        ts[j] = Array<String>(2, $"t" + $i + " padded out to some length")
+        ts[(j + 1) % 4][1] = $"u" + $i + " padded out to some length"
+        h.rows[i % 3] = Array<String>(3, $"h" + $i)
+        s += ts[(j + 2) % 4][1].Len() + h.rows[(i + 1) % 3][2].Len()
+    }
+    try io.PutLn($s + " " + ts[1][0] + " " + ts[2][1] + " " + h.rows[0][2]) catch io.Error { }
+}

@@ -1,0 +1,25 @@
+import "std/io"
+
+# O8f (docs/freeing.md, keptlast): a Vec's element given a struct holding text and an array of text, `v[j] = P(...)`
+# through SetAt - P.t is a split field of text (free.TextArray): the element's let-go walks it by its length, putting
+# each element's slot back, then releases its part region - with a fill of new text, a fill of a constant, and an
+# element of the old value's array replaced in place
+N I64 = 200000
+
+type P struct(n String, t Array<String>) { n, t }
+
+fn main() {
+    v Vec<P>
+    for _ in range 4: v.Push(P($"a", Array<String>(2, $"q")))
+    w Vec<P>
+    for _ in range 3: w.Push(P($"b", Array<String>(3, $"r")))
+    s := 0
+    for i in range N {
+        j := i % 4
+        v[j] = P($"p" + $i + " padded out to some length", Array<String>(2, $"x" + $i + " padded out to some length"))
+        w[i % 3] = P($"c" + $i, Array<String>(3, "k"))
+        w[(i + 1) % 3].t[1] = $"y" + $i + " padded out to some length"
+        s += v[(j + 1) % 4].n.Len() + v[(j + 1) % 4].t[1].Len() + w[(i + 2) % 3].t[1].Len()
+    }
+    try io.PutLn($s + " " + v[1].n + " " + v[2].t[0] + " " + w[0].n + " " + w[1].t[1]) catch io.Error { }
+}
