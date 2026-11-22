@@ -1818,6 +1818,7 @@
 | ok - a Mutex keeps every task's increments
 | ok - With hands the guarded struct over by reference
 | ok - a Mutex guards a collection, and a copy of it is the same lock
+| ok - a Vec grows from tasks under a Mutex, from tasks it was lent to and in a task's own storage, join after join
 | ok - an RWLock lets readers share it and a writer have it alone
 | ok - Once runs its callback once, whoever asks first
 === test std/time.olang
