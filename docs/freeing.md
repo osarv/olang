@@ -788,7 +788,8 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   an element or field holding one that no place follows, given another value whole, lets go of its text place
   (`unfollowed`): lowering puts each element's slot back by the length, guarded by the text place's decision
   (`releases`); a fill is judged by makeStores, anything else as a store. Scope's valMake builds a fill's item where
-  the statement stands, not in the target's scope, so the item's text is a temporary of the turn. (2) A constructor
+  the statement stands, not in the target's scope, so the item's text is a temporary of the turn. (review8: only where
+  the item's type shares no reference - one holding a reference to storage it makes is built where the fill goes.) (2) A constructor
   given constant text (`v[j] = P("a", i)`): the instance views its argument, constant data; `made` takes a ConstRead
   value as SOk, as constant data stored itself is, so the field stays decided sole and SetAt's copy is let go of. The
   report now counts SetAt's let-goes among those "in code that runs again". Fixtures fixedfills and constargs (200,000

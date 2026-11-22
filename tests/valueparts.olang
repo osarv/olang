@@ -342,3 +342,31 @@ test "a struct of texts pushed with a joined text built in the call" {
     assert churn() > 0
     assert got == PushJoinedBaked and got == "a s1/k b s1/s1 item s10/k item s11/k item s12/k ", got
 }
+
+# a fill whose item holds a reference to storage the item makes - `Array<fiRef>(2, fiRef(Vec<I64>(), $"x" + $i))` - holds
+# that storage in each element's copy (the copy is shallow at references): the item's storage is built where the fill
+# goes, not where the statement stands (review8: valMake built it in the loop's turn, then a function's, and the
+# elements read freed text)
+type fiRef struct(v Vec<I64>, t String&) {
+    v, t
+}
+
+fn fiMake(k I64) Array<fiRef> { return Array<fiRef>(3, fiRef(Vec<I64>(), $"y" + $k)) }
+
+fn fillRefs(k I64) String {
+    a := Array<fiRef>(2, fiRef(Vec<I64>(), "init"))
+    for i in range k + 3: a = Array<fiRef>(2, fiRef(Vec<I64>(), $"x" + $i))
+    assert churn() > 0
+    b := fiMake(k)
+    assert churn() > 0
+    a[0].v.Push(7)
+    return a[0].t + "/" + a[1].t + "/" + b[2].t + "/" + $a[0].v[0]
+}
+
+FillRefsBaked := fillRefs(1)
+
+test "a fill whose item holds a reference to text it makes keeps that text where the fill goes" {
+    got := fillRefs(EtOne)
+    assert churn() > 0
+    assert got == FillRefsBaked and got == "x3/x3/y1/7", got
+}

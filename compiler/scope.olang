@@ -10202,10 +10202,13 @@ fn (s mut Scoper&) valMake(m typed.Make&, ty types.TypeId, d Term, whole I64, wh
     # (QCE, gap 22: a fill of a value owning storage holds each element's own copy of its item - lower.fill - as a
     # value's own copy does (ownCopy): what it still shares is the references the item holds, which must outlive d; the
     # item itself, read only to be copied, is a temporary built where the statement stands - keptlast2: a fixed fill
-    # stored into an element, `a[j] = Array<String>(2, $"a" + $i)`, built its item's text in a's scope each turn)
+    # stored into an element, `a[j] = Array<String>(2, $"a" + $i)`, built its item's text in a's scope each turn) -
+    # unless it holds references (review8: `Array<R>(2, R(Vec<I64>(), $"x" + $i))`, R holding a `String&`), which the
+    # copies share: what they name is built in d, as before
     filled := m.Kind == typed.MakeKind.Fill and m.Items.Len() == 1 and (s.P.T.OwnedPart(m.Items[0].Type()) or s.P.T.OwnsParts(m.Items[0].Type()))
+    temp := filled and not s.P.T.SharesRefs(m.Items[0].Type())
     vs := Array<Val>(m.Items.Len())
-    for k in range m.Items.Len(): vs[k] = s.val(m.Items[k], s.here() if filled else d)
+    for k in range m.Items.Len(): vs[k] = s.val(m.Items[k], s.here() if temp else d)
     agreed := m.Kind != typed.MakeKind.Case or not s.report or s.payloadAgree(m.Items, vs)
     if filled {
         if vs[0].K == ValKind.Existing and s.P.T.SharesRefs(m.Items[0].Type()): s.fit(vs[0].T, d, s.storeThrough(m.Items[0].Type()), m.Items[0], FitValue)

@@ -2485,7 +2485,7 @@ e2b2b02653bc4b63 5a8b70218b099dfd compiler/prompt.olang
 7cdf3a1d3967eaa7 10422cdb5ac85119 compiler/records.olang
 0c3f8c24752ad48a 5b5a3902974907e2 compiler/runtime.olang
 74927aaea47abc0f 8100b336b3b50d5c compiler/scan.olang
-42c0494e24d62e68 2717ddf8835de5db compiler/scope.olang
+9b76f89d48dbf431 51dff58466d4990b compiler/scope.olang
 ad0b24259637a1f2 35b31b7c785e8b14 compiler/session.olang
 8981299fcf27ba06 13b1ab50b72ab2a0 compiler/source.olang
 9bee4e94ca053127 882c3c1eac35e714 compiler/spin.olang
@@ -2740,7 +2740,7 @@ b85bbc40e839bded b5a7ded126f0400f tests/tuplefacts.olang
 865512a5b10174be 415d01faaa817e2d tests/typedefaults.olang
 7ffdae4bcc341292 9f9c543d3541d069 tests/unique.olang
 40b8b670318d4478 685c5774d1e2bcf4 tests/unreachable.olang
-9b3e7f1f83f6a1dd e746998fb0594a9a tests/valueparts.olang
+09b2c3ecd056a684 7bd566c298d94e08 tests/valueparts.olang
 9569b91f4fa19da4 facccf0f969ea68b tests/variadic.olang
 52986a8705789b5a 54ce663ba761c550 tests/viewplace.olang
 d1ae414fd9b9498a 5f97ecdad21e9600 tests/weak.olang
