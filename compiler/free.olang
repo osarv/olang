@@ -5639,6 +5639,16 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
                 return
             }
         }
+        # (O8f: a conditional's value is one of its branches', each a store of its own - lowering builds each branch at its
+        # site, in the region its store gives it)
+        case typed.Expr.Cond(_, _, c) {
+            if c.A != null {
+                w.made(k, c.A!, sp, multi)
+                w.made(k, c.B, sp, multi)
+                return
+            }
+            why = $"its new value is existing storage: '" + $w.text(x.Span()) + "'; give it new storage - a constructor call, '$...', 'Copy()'"
+        }
         case typed.Expr.Try(_, _, t) {
             plain := t.X != null
             for c in t.Clauses {
