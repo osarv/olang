@@ -43,7 +43,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "scopesan", "frameenv", "crash", "interp", "interpbuilt", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
                      "chunkpool", "capscope", "reuse", "reusefact", "incremental", "records", "updir", "stale", "osargs", "scanln", "cmdline", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
-                     "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
+                     "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "readfirst", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "freeing", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
@@ -472,6 +472,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "k2" { try k2(r) }
         case "bits" { try bits(r) }
         case "retslot" { try retslot(r) }
+        case "readfirst" { try readfirst(r) }
         case "widealign" { try widealign(r) }
         case "definit" { try definit(r) }
         case "profile" { try profiled(r) }
@@ -2208,6 +2209,18 @@ fn retslot(r mut report&) ? Failed {
     # divmod's every return stores into the one slot and branches to its one exit: a single ret
     once String& = "awk '/^define .*divmod/,/^}/' build/retslot.main.ll | grep -c '^  ret ' | grep -qx 1"
     try r.expect(sh(dir, once) == 0, "divmod returns from more than one block", dir)
+}
+
+# O46: `p[0] = v if u[0] <= 0.0 and p[0] == 1.0 else p[0]` reads p[0] once, before the value - two element loads, not
+# three, so the choice is a select LLVM can make (an element read under a branch it cannot speculate was 3-9x slower)
+test "an assignment reads its own place once" { assert passed("readfirst") }
+
+fn readfirst(r mut report&) ? Failed {
+    dir := fresh("readfirst")
+    os.Run("cp checks/fixtures/readfirst/* " + $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build readfirst.olang > out.txt 2>&1 && ./build/readfirst") == 0, "readfirst", dir)
+    once String& = "awk '/^define .*readfirst_2epick/,/^}/' build/readfirst.main.ll | grep -c 'load float, ptr %t' | grep -qx 2"
+    try r.expect(sh(dir, once) == 0, "pick reads its target more than once", dir)
 }
 
 # T4a: an array of elements LLVM holds 16-aligned (I65 to I128, and what holds them) asks the arena for at least that
