@@ -40992,3 +40992,28 @@ The worst three before any fix (first run): reverse-complement 1.26, spectral-no
   marker, and `evalCall` folded it as the constant -1 (and `instanceLen` counted it as known, so `readsLocal` did not
   send it to the run-time path). Both now treat RunLength as the running program's value. Test: tests/shared.olang "G29:
   an array made from a run-time length taken by value", baked and at run time (OLANG_EVALUATE=1 agrees).
+
+## 2026-11-21: a Map's chain link in its entry, tried and dropped; FindByte by lanes (std, no meaning change; mine; wt-mapnode)
+
+Follow-up of the Benchmarks Game set (wt-bgame, above), which left k-nucleotide at 1.15-1.21 of C and revcomp's line
+search a byte loop.
+
+- **Map: the link in the slot's entry - tried, dropped (2026-11-22).** `MapEntry<K, V>` was given a private `link I64`
+  (the next slot of its bucket's chain), set through an optional constructor parameter, with `Map.next` kept only to
+  mark emptied slots - the compiler's let-go walk of a Map (free.olang `MapFields`, lower.olang `textWalk`) reads it by
+  name, and that freeing code was out of bounds. A probe then read the bucket and one entry per key instead of a link
+  array and an entry array. Found on the way: setting the link by a store after `occupy` (`m.ents[i].link = ...`) kept
+  the new entry's parts from being built in regions of their own (O8f: `-memory` said "removed elements of 'm' are kept
+  until the scope closes"; checks o8dmapkeyfree and o8elru grew 16 MB and 6 MB) - the link had to be given to the
+  constructor. Measured (cloud box, 4 cores, load 1-6 from other sessions, `perf stat` task-clock, medians of 15-31
+  alternated runs): before 0.365-0.396 s, after 0.355-0.391 s, C 0.313-0.334 - 1-4%, at the edge of the noise; perf
+  shows the misses C has too (bucket ~19%, entry ~19%, the key's bytes ~8%). Peak RSS 23.1 -> 24.4 MB (entries 24 -> 32
+  bytes; C 14.0 MB). A third larger entry and more memory for a gain inside the noise goes against the memory goal, so
+  the change was reverted; the Map keeps links and entries in two arrays.
+- **FindByte by lanes.** `String.FindByte` skips 32 bytes at a time while `(b[i:i + 32] ^ c).Min()` is not zero (E39:
+  one fused loop, no array, vectorized), then finds the byte one at a time; a 32-byte `LanesEqual(c).Some()` (early
+  exit, not vectorized) was slower than the byte loop, a `Select(1, 0).Sum()` no faster; 16 and 64 bytes were worse than
+  32 on 61-byte lines. A test checks every position across the steps, baked and at run time (std/prelude/tests/text.olang).
+  revcomp 0.199 -> 0.192 s (C 0.175, 15 alternated runs); peak unchanged (150 MB). Its line copy stays a byte loop: no
+  plain store of an array into a slice exists (E31e) and the lane stores are `op=` only.
+

@@ -2623,9 +2623,9 @@ f66c877fe2b175aa 7fdc15dc5de46184 std/prelude/tests/iterator.olang
 1f259baaa93600a7 f3df90ef37d776e8 std/prelude/tests/map.olang
 6ff0ea9674f730ef d351a437b1c24ef3 std/prelude/tests/number.olang
 fe5b84d4c9b76537 f0a6d742e936bc2a std/prelude/tests/pow.olang
-5e24161cb61a4dcc 5589538e59f50d86 std/prelude/tests/text.olang
+6355680ec0892971 fef78d85ba32e0e6 std/prelude/tests/text.olang
 ecc53430a01cc6c7 fb27f99253bf9509 std/prelude/tests/vec.olang
-7480568b104fea6e 19fc308a11b6301a std/prelude/text.olang
+f206864d97cf5b8e ece5d6c7de8fdadd std/prelude/text.olang
 cc2ac3b62a421bb1 3590b038f36e3ca5 std/prelude/vec.olang
 a933f00380704315 516489bdb742c5ab std/prop.olang
 2b48bebf867f21e2 17fdd299f6b8605e std/rand.olang

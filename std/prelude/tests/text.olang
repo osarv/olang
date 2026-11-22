@@ -417,3 +417,27 @@ test "the F8 types parse as the float they round" {
     assert try F8E5M2.Parse("2") == F8E5M2(2.0)
     assert parseWord<F8E4M3>("x") == "INVALID"
 }
+
+# FindByte skips 32 bytes at a time by a lane total, then looks byte by byte: a byte at every position around and
+# across the 32-byte steps is found where it is, a missing one is NotFound; and the evaluator agrees (K2)
+fn findBytePositions() I64 {
+    total I64 = 0
+    for n in Array<I64>[0, 1, 31, 32, 33, 63, 64, 65, 100] {
+        for at in range n {
+            b := Array<Char>(n, 'a')
+            b[at] = '\n'
+            if at + 1 < n: b[n - 1] = '\n'
+            assert (try String(b).FindByte('\n') catch default -1) == at
+            total += at
+        }
+        assert (try String(Array<Char>(n, 'a')).FindByte('\n') catch default -1) == -1
+    }
+    return total
+}
+
+findByteBaked := findBytePositions()
+
+test "FindByte finds the first occurrence at any position, evaluated while compiling as at run time" {
+    assert findByteBaked == findBytePositions()
+    assert findByteBaked == 0 + 0 + 465 + 496 + 528 + 1953 + 2016 + 2080 + 4950
+}
