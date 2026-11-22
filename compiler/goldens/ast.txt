@@ -2077,7 +2077,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-94485367ede2b45c 0ec10a2949809134 checks/checks.olang
+3a811e9bb41ca49b 2ed5153efea25f6c checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2345,6 +2345,7 @@ ce05a6ba7e351ad4 a7592d7a62264d3e checks/fixtures/print/print.olang
 2581f343a4d5f27f 83f4746729e421c3 checks/fixtures/protopriv/use.olang
 d07e11341e624359 3934139f15866363 checks/fixtures/racetests/clean.olang
 a4bef28899fdbe1f 25965acead41327b checks/fixtures/racetests/race.olang
+11358fbe0214c2be 55bea7780f16a69d checks/fixtures/readfirst/readfirst.olang
 5715d896eb44cb11 f985be0eaa0df2de checks/fixtures/regions/stub.olang
 bfe56a1d437a26d5 915eb8acaf9bdb5e checks/fixtures/remote/mathx/add.olang
 176e74b753db177e 4f600cece110c135 checks/fixtures/remote/mathy/inc.olang
@@ -2480,7 +2481,7 @@ e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
 8299f0d6f657ceae 5fcac26072ce57dd compiler/lineedit.olang
 211de0b5ecb13aac 9a12ce3d06dabd21 compiler/listing.olang
 f25119be92c6587e 4599d1f0b8398118 compiler/load.olang
-abedaf4a914d97ef b6f0c7c84f0de671 compiler/lower.olang
+5cf1efdd50b17b61 5b98f84219d38427 compiler/lower.olang
 0a6ba37a53fb9662 36e2d7fb1015a7d2 compiler/lsp.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
