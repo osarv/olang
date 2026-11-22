@@ -30,7 +30,7 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-21): olang weekly full make verify on master 12795f7fc
 - olang session (cloud, 2026-11-21): wt-mempeak and wt-buildspeed merged (be72d7214)
 - olang session (cloud, 2026-11-21): wt-backend merged (a3ca48864)
-- olang session (cloud, 2026-11-21): wt-mempeak (compiler/olang.olang test peak) and wt-buildspeed (self-build per phase)
+- olang session (cloud, 2026-11-21): wt-mempeak and wt-buildspeed merged (be72d7214)
 - olang session (cloud, 2026-11-21): wt-runperf, wt-ltokey, wt-sha merged (7ee156575)
 - olang session (cloud, 2026-11-21): wt-bgame merged
 - olang session (cloud, 2026-11-22): wt-mapnode merged (FindByte kept, Map change dropped)

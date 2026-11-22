@@ -1842,3 +1842,4 @@ Moved from plan.md 2026-11-21 (audit for the Orchestrator: all built - os.File u
 - (Done 2026-11-18 as O45, wt-bf16vec: the multi-chain BF16 scalarizing is LLVM SLP pairing lane sums after the loop; kernels add chains lane by lane before one lane sum; BF16 >= F32 at cache-resident sizes is port-bound, not reachable.)
 Closed 2026-11-21: covered by S9g LostLoopWrite (wt-looprows/wt-loopref, checks/cases/lostloopwrite*.olang):
 - Queued (Orchestrator, 2026-11-19): `for x in v.ViewMut()` binds x as a copy, so writes to x are lost - check bug vs design; if design, a compile error (no warning) for writing a loop copy never read again, as a numbered question if it changes meaning. After wt-splitfield.
+- 2026-11-22: evaluator vs build on S1b's catch one-line body checked on master 5e7918e8a: built, OLANG_EVALUATE and top-level asserts agree (try f(x) catch: return -1) - closed.
