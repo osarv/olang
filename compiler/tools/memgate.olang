@@ -5,12 +5,12 @@
 #     build/olang build compiler/tools/memgate.olang && build/compiler_tools_memgate -key FILE build/olang test FILE
 #
 # What a command is expected to take is its key's peak (KEY, the command's last argument where -key is not given): the
-# peak its last run here measured (DIR/peaks.txt), else the one compiler/tools/peaks.txt holds, else DefaultMb. What the
-# machine has is read when the command asks to start, never written down: the memory available (MemAvailable in
-# /proc/meminfo, or vm_stat's free and inactive pages where there is no /proc), and the headroom of every cgroup the
-# process is in (memory.max less memory.current, or cgroup v1's limit less its usage and inactive file pages) where that
-# is less. The commands memgate is running hold reservations (DIR/res.PID: the peak expected, then the memory their
-# process tree holds now, written as they run): a command starts once what is available, less what each running one
+# most of what its last few runs here measured (DIR/peaks.txt) and the figure compiler/tools/peaks.txt holds, else
+# DefaultMb; a run a signal killed lowers none. What the machine has is read when the command asks to start, never
+# written down: the memory available (MemAvailable in /proc/meminfo, or vm_stat's free and inactive pages where there
+# is no /proc), and the headroom of every cgroup the process is in (memory.max less memory.current, or cgroup v1's
+# limit less its usage and inactive file pages) where that is less. The commands memgate is running hold reservations
+# (DIR/res.PID: the peak expected, then the memory their process tree holds now, written as they run): a command starts once what is available, less what each running one
 # may still grow by, leaves its expected peak and a margin - or at once where none runs, so a command larger than the
 # machine still runs, alone. Each run's peak (the process tree's resident memory at most, sampled) is written for its
 # key when it ends. DIR is OLANG_MEMGATE, else build/memgate. Its status is the command's.
@@ -59,28 +59,37 @@ fn main() {
     admit(dir, me, mb)
     status, peak := run(dir, me, mb, cmd)
     try os.Remove(resPath(dir, me)) catch os.Error { }
-    record(dir, key, peak)
+    # a run killed by a signal ended before its peak: it is recorded only where it measured more than expected
+    if status < 128 or peak > mb: record(dir, key, peak)
     if status == 137: try io.PutErrLn($"memgate: " + $key + " was killed by signal 9 (usually the kernel's out-of-memory kill: it held " + $peak + " MB at its last measure, and builds outside this gate share the machine) - run it again alone") catch io.Error { }
     os.Exit(status)
 }
 
 # ---- what a command is expected to take ----
 
-# key's expected peak in MB: its last run's here, else the committed table's, else DefaultMb
+# key's expected peak in MB: the most of its last Recent runs here and the committed table's figure, else DefaultMb. A
+# peak is sampled, so one run can read low (and a build's peak moves with what it compiles): the last run's alone let
+# two of the compiler's test builds, measured 4.3 GB on one run and 6.9 GB on another, start together and be killed
 fn expected(dir String&, key String&) I64 {
-    learned := peakIn($dir + "/peaks.txt", key)
-    if learned > 0: return learned
+    mb := peakIn($dir + "/peaks.txt", key)
     committed := peakIn("compiler/tools/peaks.txt", key)
-    return committed if committed > 0 else DefaultMb
+    if committed > mb: mb = committed
+    return mb if mb > 0 else DefaultMb
 }
 
-# the last "KEY MB" line of a file for key, 0 where it has none
+Recent I64 = 4
+
+# the most of the last Recent "KEY MB" lines of a file for key, 0 where it has none
 fn peakIn(path String&, key String&) I64 {
     text := try os.ReadFile(path) catch os.Error { return 0 }
-    mb I64 = 0
+    last Vec<I64>
     for line in text.Lines() {
         w := words(line)
-        if w.Len() == 2 and w[0] == key: mb = try w[1].ParseInt() catch default mb
+        if w.Len() == 2 and w[0] == key: last.Push(try w[1].ParseInt() catch default 0)
+    }
+    mb I64 = 0
+    for i in range last.Len() {
+        if i >= last.Len() - Recent and last[i] > mb: mb = last[i]
     }
     return mb
 }

@@ -1,5 +1,5 @@
 # the peak resident memory, in MB, of each command the memory gate runs in the suite (compiler/tools/memgate.olang): its key, then the MB - measured by make verify 2026-11-14 on a 4-core 15 GB container (docs/testmem.md); a run's own measurement replaces it in build/memgate/peaks.txt, and memgate -table prints those to refresh this file
-build/compiler_olang 2287
+build/compiler_olang 6900
 build/compiler_tools_astdiff 364
 build/compiler_tools_consistency 350
 build/compiler_tools_drvdiff 340

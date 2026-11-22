@@ -118,8 +118,11 @@ builds of 3-4 GB each ran freely beside them. They are replaced by a gate in fro
 run and heavy tool build (`compiler/tools/memgate.olang`, the makefile's `GATE`): `make` still runs a job per core,
 but each job waits until the machine has room for it:
 
-- what it will take is its key's peak - measured by its last run here (`build/memgate/peaks.txt`), else
-  `compiler/tools/peaks.txt`, else 1 GB;
+- what it will take is its key's peak - the most of its last four runs here (`build/memgate/peaks.txt`) and
+  `compiler/tools/peaks.txt`'s figure, else 1 GB; a run killed by a signal (cut short before its peak) lowers nothing.
+  The last run alone was not enough: peaks are sampled and move between runs (`build/compiler_olang` read 4.3 GB on one
+  run and 6.9 GB on another), and two heavy builds admitted on the low figures were killed by the cgroup's
+  out-of-memory killer (the suite's olang.olang, notebook.olang and jupyter.olang, 2026-11-22);
 - what the machine has is read as it asks, never configured: `MemAvailable` (or `vm_stat` on macOS), lowered to the
   headroom of every cgroup the process is in (v2 `memory.max - memory.current`, v1's limit less its usage and
   inactive file pages) - so a 15 GB container, a 16 GB WSL machine showing 7.4 GiB and a large server each get what
