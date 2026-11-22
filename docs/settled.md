@@ -1451,6 +1451,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   only where no task can run beside any call (2026-11-18, the user's "unless the compiler proves we are the only one"):
   nothing in the whole program starts a task and C cannot call back in (effects.Alone, bit 62 of the fact) - elsewhere
   another task writing another field of the referent is legal, which a store LLVM adds would lose. Changes no meaning.
+- **An assignment reads its own place first (O46, mine, 2026-11-22).** `P = e` with P a number or Bool place (not
+  packed, not weak) and e made only of constants, reads of plain places (locals, globals, fields, elements; no `.Get`),
+  arithmetic, comparisons, conversions and choices - no call, no `try`, nothing that leaves - reads P once into a local
+  before e where e reads P (written the same way: one local or constant index, one reference local, or a compound
+  assignment's old value), and e's reads of P use it. e cannot write P and the store follows, so P is read where it is
+  written anyway: changes no meaning. LLVM then makes `p[l] = v if c and p[l] == k else p[l]` a select instead of a
+  load under a branch it cannot speculate (3-9x in oann's Potts pick loop).
 - **Slice bounds tested before the loop (O44, the user's choice over a `mut` exclusivity rule, 2026-11-18).** A
   counted loop (`for k in range`, `for x in a`) that calls nothing, starts no task, defers nothing and stores only
   scalars is versioned where its checked slices' bounds are `start + step * k`, start and step computed from what the

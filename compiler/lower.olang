@@ -554,6 +554,10 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     tries Vec<tryCtx>
     collects Vec<collectCtx>
     targets Vec<pl>    # the places of the Assigns being lowered, innermost last (Lvalue.Target)
+    # O46: an Assign's number place read once before its value, where the value reads it and can neither call nor
+    # leave: the place, and the local its old value is in (innermost last)
+    olds Vec<typed.Lvalue&>
+    oldLocals Vec<mir.LocalId>
     joins Vec<tryCtx>  # the joins being lowered, innermost last: each one's clauses (P4c), beside its scope
     joinS Vec<mir.ScopeId>
     erroring Bool = false   # an error is leaving: a join's failure does not replace it (P4b)
@@ -2155,9 +2159,14 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
         case typed.Stmt.Assign(sp, target, value) {
             p := ln.place(target)
             ln.targets.Push(p)
+            pre := ln.readFirst(target, p, value, sp)
             v := ln.slotted(target, value, sp)
             if v == mir.Operand.None: v = ln.fit(ln.val(value), value, target.Type(), sp)
             try ln.targets.Pop() catch { }
+            if pre {
+                try ln.olds.Pop() catch { }
+                try ln.oldLocals.Pop() catch { }
+            }
             if p.Pk >= 0 {
                 if not ln.dead: ln.packedWrite(p, v, sp)
                 return
@@ -4892,12 +4901,112 @@ fn (ln mut lowering&) away(sp source.Span, file I64, y typed.Expr&) mir.Operand 
 
 fn (ln mut lowering&) read(p typed.Lvalue&, ty types.TypeId, sp source.Span) mir.Operand {
     ln.readOut(p, ty)
+    n := ln.olds.Len()
+    if n > 0 and not ln.dead and samePlace(p, ln.olds[n - 1]) { return ln.into(ty, mir.Rvalue.Use(ln.copyLocal(ln.oldLocals[n - 1])), sp) }
     q := ln.place(p)
     if ln.dead: return mir.Operand.None
     if q.Pk >= 0: return ln.packedRead(q, ty, sp)
     # T2d: a weak place's referent read through its word (genrefs 4.2)
     if p == typed.Lvalue.Field and ln.L.Gen().WeakField(ln.T, p.base.Type(), p.index) { return ln.into(ty, mir.Rvalue.Weak(ln.mk(q), ty), sp) }
     return ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(q))), sp)
+}
+
+# O46: `p[l] = v if u[l] <= 0.0 and p[l] == k else p[l]` reads its number target once, before the value, so the
+# value's reads of it are no loads under a branch LLVM cannot speculate (an element's address is not known valid
+# there) - the choice becomes a select, as written with the old value in a local by hand (3-9x in a hot loop). Only
+# where the value calls nothing and cannot leave: nothing it does can write the place, and the store follows it, so
+# the place is read where it is written anyway. Changes no meaning
+fn (ln mut lowering&) readFirst(target typed.Lvalue&, p pl, value typed.Expr&, sp source.Span) Bool {
+    ty := target.Type()
+    if ln.dead or p.Pk >= 0 or not (ln.T.IsNumber(ty) or ty == types.BoolT): return false
+    if target == typed.Lvalue.Field and ln.L.Gen().WeakField(ln.T, target.base.Type(), target.index): return false
+    if not plainValue(value) or not readsPlace(value, target): return false
+    old := ln.temp(ty, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(old), mir.Rvalue.Use(mir.Operand.Copy(ln.mk(p)))))
+    ln.olds.Push(target)
+    ln.oldLocals.Push(old)
+    return true
+}
+
+# whether x calls nothing, writes nothing and cannot leave (O46): constants, reads of plain places, arithmetic,
+# comparisons, conversions and choices
+fn plainValue(x typed.Expr?&) Bool {
+    if x == null: return true
+    return match x {
+        case typed.Expr.Lit(_, _, _): true
+        case typed.Expr.Read(_, _, p, _): plainPlace(p)
+        case typed.Expr.Prim(_, _, op, ck, args): ck != typed.Check.Try and plainOp(op) and plainAll(args)
+        case typed.Expr.Cond(_, _, k): plainValue(k.C) and plainValue(k.A) and plainValue(k.B)
+        case _: false
+    }
+}
+
+fn plainAll(xs Array<typed.Expr&>&) Bool {
+    for x in xs {
+        if not plainValue(x): return false
+    }
+    return true
+}
+
+fn plainOp(op typed.PrimOp) Bool {
+    return match op {
+        case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Add, typed.PrimOp.Sub: true
+        case typed.PrimOp.Mul, typed.PrimOp.Div, typed.PrimOp.Rem, typed.PrimOp.Shl, typed.PrimOp.Shr: true
+        case typed.PrimOp.BitAnd, typed.PrimOp.BitOr, typed.PrimOp.BitXor, typed.PrimOp.Convert: true
+        case typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt, typed.PrimOp.Ge: true
+        case _: false
+    }
+}
+
+fn plainPlace(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, _, _), typed.Lvalue.Global(_, _, _, _), typed.Lvalue.Target(_, _): true
+        case typed.Lvalue.Deref(_, _, r): plainValue(r)
+        case typed.Lvalue.Field(_, _, base, _): plainPlace(base)
+        case typed.Lvalue.Elem(_, _, e): e.Checked != typed.Check.Try and plainPlace(e.Base) and plainValue(e.Index)
+        case _: false
+    }
+}
+
+# whether x reads place t: the Assign's Target, or a place written the same way (O46)
+fn readsPlace(x typed.Expr?&, t typed.Lvalue&) Bool {
+    if x == null: return false
+    return match x {
+        case typed.Expr.Read(_, _, p, _): samePlace(p, t)
+        case typed.Expr.Prim(_, _, _, _, args): readsAny(args, t)
+        case typed.Expr.Cond(_, _, k): readsPlace(k.C, t) or readsPlace(k.A, t) or readsPlace(k.B, t)
+        case _: false
+    }
+}
+
+fn readsAny(xs Array<typed.Expr&>&, t typed.Lvalue&) Bool {
+    for x in xs {
+        if readsPlace(x, t): return true
+    }
+    return false
+}
+
+# whether a and b are one place written the same way: the same local or global, field, or element at the same
+# constant or local index, through the same reference local; the Target is the Assign's own place (O46)
+fn samePlace(a typed.Lvalue&, b typed.Lvalue&) Bool {
+    if a == typed.Lvalue.Target: return true
+    return match a {
+        case typed.Lvalue.Local(_, ta, x): b == typed.Lvalue.Local and b.id == x and b.ty == ta
+        case typed.Lvalue.Global(_, ta, m, n): b == typed.Lvalue.Global and b.module == m and b.name == n and b.ty == ta
+        case typed.Lvalue.Deref(_, ta, r): b == typed.Lvalue.Deref and b.ty == ta and sameLocal(r, b.ref)
+        case typed.Lvalue.Field(_, ta, base, i): b == typed.Lvalue.Field and b.index == i and b.ty == ta and samePlace(base, b.base)
+        case typed.Lvalue.Elem(_, ta, e): b == typed.Lvalue.Elem and b.ty == ta and sameLocal(e.Index, b.e.Index) and samePlace(e.Base, b.e.Base)
+        case _: false
+    }
+}
+
+# whether two index or reference expressions are one constant or one local's value read
+fn sameLocal(x typed.Expr&, y typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Lit(_, tx, v): y == typed.Expr.Lit and y.bits == v and y.ty == tx
+        case typed.Expr.Read(_, tx, typed.Lvalue.Local(_, _, id), _): y == typed.Expr.Read and y.ty == tx and y.p == typed.Lvalue.Local and y.p.id == id
+        case _: false
+    }
 }
 
 # the prelude's p.vacate() (docs/memory.md 3.4): what the place holds, read. The slot keeps its bits, which nothing

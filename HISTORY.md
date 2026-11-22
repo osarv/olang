@@ -41495,3 +41495,34 @@ place storage - a local declared with no value given only literals kept unnamed 
 site's region, its items copied in as a fill's are), freeing.md 2.4. checks' freeing litstores (a split local, a split
 field, a text local, a number local and a mutable global; built, `-free late`, `-sanitize`, the evaluator, and `-memory
 -check` naming it). Freeing changed; lowering, scopes and the runtime did not.
+
+## 2026-11-22: an assignment reads its own place first (O46; mine; wt-f32select)
+
+oann's Potts sampler (wt-annealprof) measured its softmax pick written as an F32 select at 105 ns a cell update
+against 50 for a branch-free count, "the compiler's code for that loop, not the work". A repro of the pick loop (16
+lanes, 10 values, 2M draws, one thread) timed `p[l] = v if u[l] <= 0.0 and p[l] == k else p[l]` over F32 at 1588 ms,
+the same with `q := p[l]` read first by hand at 154 ms, the `if` form at 153 ms; oann's own form over I64
+(`pick[l] = v if ... and pick[l] == k - 1 ... else pick[l]`) at 298 ms against 112 for the `if`.
+
+The cause: lowering evaluates `and`'s right side and each arm of a choice under branches, so the target's element is
+read under a branch. LLVM folds such a diamond into a select only where the load is safe to speculate, and an element's
+address is not known valid there (it scans for an earlier access to the same pointer, and the store comes after), so
+the loop stayed branchy - two unpredictable branches a lane, each with its own load. Not aliasing: an `if` form over
+the same two `mut Array<F32>&` parameters is fast, and the two may legally be one array (`f(a, a)` compiles).
+
+O46: an Assign whose target is a number or Bool place (not packed, not weak) and whose value is plain - constants,
+reads of plain places, arithmetic, comparisons, conversions and choices; no call, `try`, `.Get`, Seq or anything that
+leaves - and reads the target (a place written the same way: one local, global, field chain, element at one constant
+or local index, through one reference local, or the compound assignment's Target) reads it once into a local right
+after the target's address is computed, and the value's reads of it use that local (lower.olang readFirst, samePlace).
+Nothing the value does can write the place and the store follows unconditionally, so the place is read where it is
+written anyway: changes no meaning, no check added.
+
+After: the repro's five forms run 65-81 ms (the select forms 4-24x faster, the `if` forms faster too through the
+counting loop's `total +=`); oann's bench/potts 33 x 33 x 11 grid at 46-49 ns a cell update with its select form
+against 67 for the `if` form, on a machine at load 14 (PROGRESS's 33.5 ns was measured idle). checks' readfirst pins
+it: pick's IR loads its two elements once each (three before), and the program's answers.
+
+Found beside it, not O46's: checks' strheld/globals segfaults in __olang_region_drop on master 0241ccc40 built clean
+(the compiler without O46 too) - `$H + " " + $sameH() + " " + $H` where another function reassigns global G with a
+longer array; left for the freeing work (O8f) that last touched it.

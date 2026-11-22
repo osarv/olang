@@ -1,0 +1,15 @@
+# O44: an assignment whose value reads its own number place reads it once, before the value
+fn pick(u mut Array<F32>&, p mut Array<F32>&, v F32) {
+    p[0] = v if u[0] <= 0.0 and p[0] == 1.0 else p[0]
+}
+
+fn main() ? {
+    a := Array<F32>[0.0, 5.0]
+    b := Array<F32>[1.0, 1.0]
+    pick(a, b, 7.0)
+    pick(b, b, 3.0)
+    assert a[0] == 0.0 and b[0] == 7.0 and b[1] == 1.0
+    pick(a, a, 9.0)
+    assert a[0] == 0.0
+    Print("ok\n")
+}
