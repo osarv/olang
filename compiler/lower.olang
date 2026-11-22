@@ -1426,7 +1426,10 @@ fn (ln mut lowering&) textInto(q pl, ty types.TypeId, into mir.ScopeRef, sp sour
 fn (ln mut lowering&) regionCopy(q pl, ty types.TypeId, k I64, rest mir.ScopeRef, sp source.Span) {
     g := ln.guardOf(k)
     if g == free.NotSole {
-        ln.copyPart(q, ty, rest, sp)
+        # (an owner not decided sole is released by its parts, each where its own place is sole - ReleaseLeaves: a
+        # PartsOnly value's parts split so, the element's let-go finding each)
+        if ln.L.Free!.PartsOnly(ty) and not ln.T.RunsCopy(ty): ln.partsCopied(q, ty, rest, sp)
+        else: ln.copyPart(q, ty, rest, sp)
         return
     }
     h := ln.temp(mir.I64T, sp)

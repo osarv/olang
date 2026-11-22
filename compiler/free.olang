@@ -2583,8 +2583,6 @@ fn (w mut walker&) splitLetOf(l I64, x typed.Expr&) I64 {
         return tempCall(tv) if tv != null and w.F.mapFree(tv.Type(), 0) else -1
     }
     if site < 0 or not w.F.PartsOnly(x.Type()) or w.T().RunsCopy(x.Type()): return -1
-    # (a Map's entries split so are let go of by a Put as a gap - gaps.olang's `c := rows[j]`, kept as untracked)
-    if c == null and not w.F.mapFree(x.Type(), 0): return -1
     return site
 }
 

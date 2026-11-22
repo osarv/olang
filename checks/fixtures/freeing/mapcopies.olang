@@ -1,0 +1,22 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4): a Map whose values are Vecs of text - stored into an element as a copy, then copied out of
+# another element into a local and given entries by Put - its copies' entries built as Put builds them, each value's
+# parts in their part regions where the value's place is not sole (a copy splits it), so an element's let-go releases
+# them (the out-of-element copy kept every value, -memory -check naming it, before)
+N I64 = 20000
+
+fn main() {
+    rows := Array<Map<String, Vec<String>>>(10)
+    t := 0
+    for i in range N {
+        m Map<String, Vec<String>>
+        m.Put($i, Vec<String>[$i + " padded out to some length"])
+        rows[i % 10] = m
+        c := rows[(i + 3) % 10]
+        c.Put("x", Vec<String>["y"])
+        c.Put("x", Vec<String>["z" + $i])
+        t += c.Len() + c.Get("x")![0].Len() + m.Len()
+    }
+    io.PutLn($t + " " + rows[4].Get("" + $(N - 6))![0])!
+}
