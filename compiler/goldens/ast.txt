@@ -2384,7 +2384,7 @@ b55cbe754c727941 a5a7e807061179d4 checks/fixtures/strheld/lambdafold.olang
 1cb24fedc30167f7 9915d2047f06243e checks/fixtures/strheld/manyplaces.olang
 4ed258f1b74479c8 28dd151338714c0f checks/fixtures/strheld/mapalone.olang
 0a5053ebf8325ed6 fa6347d71910553f checks/fixtures/strheld/opmethods.olang
-c5944bb458926de7 beb8ac57c55ca8b1 checks/fixtures/strheld/order.olang
+01d34720cbc56a2e c32b56c2d2fe9d86 checks/fixtures/strheld/order.olang
 2335388f2b67e316 c18e3d232d8c1700 checks/fixtures/strheld/regbattery.olang
 f20b15d359af1daa 18cd2e6b5853c145 checks/fixtures/strheld/regreturns.olang
 337aba419c0a3963 9e1f8628d77c2b9b checks/fixtures/strheld/samescope.olang
@@ -2440,7 +2440,7 @@ e20178f94e07dfed ff5ec0fbe401eade compiler/bindgen.olang
 1c0afe32dcaf03c1 f4a0a51add52a9f9 compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 a63bb2cbd4c666c1 32f8e5565363d2f2 compiler/cells.olang
-040354f4a03a7faa ba7422377ff4403b compiler/check.olang
+d433b914bdee3af3 55bc8a78f4e6b3d8 compiler/check.olang
 da018e972c2ecc90 402dd6cf0de7cca1 compiler/cond.olang
 2ab98962469bc960 f235e148eac3e4ba compiler/definit.olang
 db407b9ec2aacf25 d850fbb42d0e8294 compiler/diag.olang
@@ -2466,7 +2466,7 @@ dc1803a2600f3b50 f15719b68f14db44 compiler/lower.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
 97a6a1d553a2e49b eac562fd934f2528 compiler/mir.olang
-10445d32ae35d402 2777c26e207165e8 compiler/msgs.olang
+6172d7b1292e02de 289fe81b1368586e compiler/msgs.olang
 e12e0b7843a4d69e 3609653e0e4a8b34 compiler/names.olang
 3f072b84e716c304 202ed56cc066d701 compiler/needs.olang
 79acbc010c9bf08a a1be4111ef62bcb1 compiler/notebook.olang
@@ -2713,7 +2713,7 @@ a519a74d61801dcf 9192a21180551199 tests/promises.olang
 2cda22cdee171a52 984d84ed09f834d8 tests/proven.olang
 50a7f3d57b2373dd d68c3bbc574e0ff9 tests/raised.olang
 2e90cef89cf3ae2d 6d0ffb0d4bb51e23 tests/raisedlex.olang
-43cf2a470b5288e5 959a1d16b2bd31c7 tests/reads.olang
+3381f4793564aed8 e733996f6d3850b5 tests/reads.olang
 6564b20c6fc6b591 f13cbe09f6892443 tests/reclaim.olang
 5464064bf1ff2f9a f194fdd7fee72df5 tests/reclaimarrays.olang
 1ed6c61d621cabe7 a278e8ce0e87fdeb tests/reclaimtasks.olang
@@ -2721,7 +2721,7 @@ b5ef26df71c5e9d8 7d463a2ea7512fb5 tests/reflect.olang
 5075b8937e6628c4 d03918c8432a449e tests/reflmod.olang
 3d5f36715ff3e78e 0fb70749f4f4b958 tests/refltextindex.olang
 835ba0f57f4caddd ecb456b1ad53bae7 tests/runner.olang
-d4c2eb02c98f2303 bfc1411399212bcd tests/shared.olang
+6aaae373582be0d5 33bb910217ac3daa tests/shared.olang
 65be2149dd87b5aa c205b1e16386ced7 tests/slicehoist.olang
 307585c2d6e47496 63a9fb9b67c9368a tests/slotfacts.olang
 c452c9cb509c23e1 76ad53a3573a5846 tests/structpat.olang

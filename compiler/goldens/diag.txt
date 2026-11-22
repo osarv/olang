@@ -2143,6 +2143,11 @@ e31bviewmut.olang:11:24: note: the callee is no view of the element because of t
 e31bviewmut.olang:15:6: help: call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference
 compilation failed with 1 error
 === e31bviewnesteddeep.olang
+e31bviewnesteddeep.olang:8:22: error[S4e]: the write to 'm' is lost: nothing reads 'm' after it
+    8 | fn reset(m mut M&) { m = M(m.d, 0) }
+      |                      ^~~~~~~~~~~~~
+e31bviewnesteddeep.olang:8:22: note: 'm' is a reference, and '=' repoints the callee's own copy of it (S4a), never writing what the caller passed
+e31bviewnesteddeep.olang:8:22: help: write the fields through the reference - 'm.f = ...' - or return the new value
 e31bviewnesteddeep.olang:27:11: error[E31b]: this call writes a copy of x[i]
    27 |     step(s[1])
       |           ^
@@ -2151,7 +2156,7 @@ e31bviewnesteddeep.olang:23:5: note: the callee is no view of the element becaus
    23 |     c.b.Fill(4)
       |     ^~~~~~~~~~~
 e31bviewnesteddeep.olang:27:11: help: call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference
-compilation failed with 1 error
+compilation failed with 2 errors
 === e31bviewnestedwrite.olang
 e31bviewnestedwrite.olang:27:11: error[E31b]: this call writes a copy of x[i]
    27 |     step(s[1])
@@ -3633,6 +3638,20 @@ lostloopwriterepoint.olang:11:9: error[S9g]: the write to 'p' is lost: nothing r
 lostloopwriterepoint.olang:11:9: note: 'p' refers to the element, and '=' repoints the name (S4a), never writing the element
 lostloopwriterepoint.olang:11:9: help: write the element where it is - 'for i, p in a: a[i] = ...', or a field through a writable walk's reference - or store the value somewhere read later
 compilation failed with 1 error
+=== lostparamwrite.olang
+lostparamwrite.olang:14:5: error[S4e]: the write to 'out' is lost: nothing reads 'out' after it
+   14 |     out = Box.Make(3)
+      |     ^~~~~~~~~~~~~~~~~
+lostparamwrite.olang:14:5: note: 'out' is a reference, and '=' repoints the callee's own copy of it (S4a), never writing what the caller passed
+lostparamwrite.olang:14:5: help: write the fields through the reference - 'out.f = ...' - or return the new value
+compilation failed with 1 error
+=== lostparamwritevalue.olang
+lostparamwritevalue.olang:7:5: error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
+    7 |     p.A = 5
+      |     ^~~~~~~
+lostparamwritevalue.olang:7:5: note: 'p' is the callee's own copy (D9), and nothing reads it again
+lostparamwritevalue.olang:7:5: help: return the new value, or take a 'mut' reference to change the caller's
+compilation failed with 1 error
 === m10stdimport.olang
 m10stdimport.olang:5:10: error[M10]: 'filepath' is no import here - std has it: 'import "std/filepath"'
     5 |     m := filepath.Base("a/b")
@@ -3817,6 +3836,28 @@ m19g16forin.olang:7:5: error[M19g]: this reads a view of 'v' taken before 'v' ma
 m19g16forin.olang:7:26: note: 'v' may grow here, in 'Push' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
     7 |     for x in v.View(): v.Push(x)
       |                          ^~~~
+compilation failed with 1 error
+=== m19gcapture.olang
+m19gcapture.olang:14:19: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+   14 |     try io.PutLn($d[0])
+      |                   ^
+m19gcapture.olang:13:5: note: 'v' may grow here, in a call through a function value - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   13 |     f()
+      |     ^
+m19gcapture.olang:10:31: note: a call through a function value may grow it here
+   10 |         for i in range 100: r.Push(i)
+      |                               ^~~~
+compilation failed with 1 error
+=== m19gcapturegiven.olang
+m19gcapturegiven.olang:15:19: error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+   15 |     try io.PutLn($d[0][0])
+      |                   ^
+m19gcapturegiven.olang:14:5: note: 'v' may grow here, in 'callIt' - take the view or the reference after it, or copy the elements first ('v.ToArray()')
+   14 |     callIt(f)
+      |     ^~~~~~
+m19gcapturegiven.olang:11:31: note: 'callIt' may grow it here
+   11 |         for i in range 100: r.Push(Vec<I64>[i])
+      |                               ^~~~
 compilation failed with 1 error
 === m19gelemroute.olang
 m19gelemroute.olang:13:5: error[M19g]: 'r' holds a view of 'vs[...]' taken before 'vs[...]' may have grown
@@ -4988,6 +5029,13 @@ roglobaltext.olang:15:14: error[S6]: V cannot be written - only a local, a param
    15 |     c.strcpy(V, "ab")
       |              ^
 compilation failed with 3 errors
+=== rowsinplacelent.olang
+rowsinplacelent.olang:11:15: error[T7c]: a reference to Array<Array<I64>> cannot name rows held in place
+   11 |     g := Grid(m)
+      |               ^
+rowsinplacelent.olang:11:15: note: each row here is an array of a known length laid out in place; each of the reference's rows is a length and a pointer to storage elsewhere
+rowsinplacelent.olang:11:15: help: declare a reference local, 'rows Array<Array<I64>>& = m', which takes the rows' length, or pass it to a function, an instance per length (G29)
+compilation failed with 1 error
 === rv3roat.olang
 rv3roat.olang:5:7: error[E31b]: this call writes a copy of x[i]
     5 |     ls[0].Push(9)
@@ -5616,6 +5664,11 @@ s8bother.olang:7:15: error[M22]: unknown function or type 'onlyOnSmallBuilds'
       |               ^~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === s8dassignclause.olang
+s8dassignclause.olang:14:30: error[S4e]: the write to 'e' is lost: nothing reads 'e' after it
+   14 |         x := try g() catch { e = Shape.Circle(12345) } default 0
+      |                              ^~~~~~~~~~~~~~~~~~~~~~~
+s8dassignclause.olang:14:30: note: 'e' is the callee's own copy (D9), and nothing reads it again
+s8dassignclause.olang:14:30: help: return the new value, or take a 'mut' reference to change the caller's
 s8dassignclause.olang:15:18: error[S8d]: Shape is an enum, and its payload's 'p' is read through a case
    15 |         return e.p.v + x
       |                  ^
@@ -5626,7 +5679,7 @@ s8dassignclause.olang:22:16: error[T2c]: 'q' is a N?&, which may be null
       |                ^
 s8dassignclause.olang:22:16: note: a test narrowed it, and an assignment since has ended that
 s8dassignclause.olang:22:16: help: read through it where a test says it is not ('if x != null'), or write 'q!'
-compilation failed with 2 errors
+compilation failed with 3 errors
 === s8dassigned.olang
 s8dassigned.olang:9:22: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
     9 |         assert t + s.r == 4
@@ -5640,7 +5693,12 @@ s8ddefercase.olang:10:44: error[S8d]: Shape is an enum, and its payload's 'r' is
       |                                            ^
 s8ddefercase.olang:10:44: note: a test narrowed it, and an assignment since has ended that
 s8ddefercase.olang:10:44: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
-compilation failed with 1 error
+s8ddefercase.olang:11:9: error[S4e]: the write to 'e' is lost: nothing reads 'e' after it
+   11 |         e = Shape.Sq(2.0)
+      |         ^~~~~~~~~~~~~~~~~
+s8ddefercase.olang:11:9: note: 'e' is the callee's own copy (D9), and nothing reads it again
+s8ddefercase.olang:11:9: help: return the new value, or take a 'mut' reference to change the caller's
+compilation failed with 2 errors
 === s8dnarrowlentfield.olang
 s8dnarrowlentfield.olang:11:24: error[S8d]: a narrowed payload field is read, never written or lent writably
    11 |     if e == Shape.Box: e.c.Grow()
@@ -5715,12 +5773,17 @@ s8dwidecond.olang:4:56: error[S8d]: Shape is an enum, and its payload's 'r' is r
 s8dwidecond.olang:4:56: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
 compilation failed with 1 error
 === s8dwidekill.olang
+s8dwidekill.olang:6:5: error[S4e]: the write to 's' is lost: nothing reads 's' after it
+    6 |     s = Shape.Dot
+      |     ^~~~~~~~~~~~~
+s8dwidekill.olang:6:5: note: 's' is the callee's own copy (D9), and nothing reads it again
+s8dwidekill.olang:6:5: help: return the new value, or take a 'mut' reference to change the caller's
 s8dwidekill.olang:7:14: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
     7 |     return s.r
       |              ^
 s8dwidekill.olang:7:14: note: a test narrowed it, and an assignment since has ended that
 s8dwidekill.olang:7:14: help: read it where a test narrows it to the case, 'if e == Case { e.r }'
-compilation failed with 1 error
+compilation failed with 2 errors
 === s8dwideor.olang
 s8dwideor.olang:4:53: error[S8d]: Shape is an enum, and its payload's 'r' is read through a case
     4 | fn wide(s Shape) Bool { return s == Shape.Ring or s.r > 2 }

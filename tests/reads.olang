@@ -163,17 +163,17 @@ type Buf struct(a Array<I64>) {
 
 fn peek(r Buf&, own Buf) I64 {
     own.a[0] = 99
-    return r.a[0]
+    return r.a[0] + own.a[0] - 99
 }
 
 fn (b Buf&) Peek(own Buf) I64 {
     own.a[0] = 99
-    return b.a[0]
+    return b.a[0] + own.a[0] - 99
 }
 
 fn part(a Array<I64>&, own Buf) I64 {
     own.a[0] = 99
-    return a[0]
+    return a[0] + own.a[0] - 99
 }
 
 fn lentAndCopied() I64 {

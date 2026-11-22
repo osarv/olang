@@ -41180,3 +41180,22 @@ spliced chunks into it.
   under -race the old runtime reports the race 2 runs in 60, the new one 0 in 120; -sanitize passes. Every test file
   that spawns passes under -race; the Vec, List, Map and Columns tests, and the freeing and earlyfree scenarios pass.
   bench push, 9 runs: Vec 0.538 s against C's 0.472 (1.14), List 1.01, List in vec.olang 1.05 - unchanged.
+
+## 2026-11-22: a write to a parameter nothing reads is an error (S4e; wt-mutassign)
+
+A report: `fn fill(out mut Box&) { out = Box.Make(3) }` left the caller's `b` unchanged, with no diagnostic. It was not
+a codegen bug: S4a says `=` on a reference repoints, uniformly, and on a parameter it repoints the callee's own copy (a
+cursor), never writing what the caller passed - and the evaluator agreed with the run time. The same held for a plain
+struct with no reference fields, and for the call nested one level (`outer(out)` calling `fill(out)`); writing the
+fields (`out.N = 3`) always reached the caller. Write-through was not taken: S4a's reasons stand (`x = y` must give
+`x == y`, references compare by identity, O15's one holder per value), and a whole-value write through a reference
+would be a second meaning for `=`.
+
+So the trap became an error, by the rule the user chose for loop names the day before (S9g, 2026-11-21): a store to a
+parameter or receiver - repointing a reference one, or into a value one's own copy (D9) - that nothing in the body reads
+after it is S4e, `LostParamWrite`. It reuses S9g's walk (`typed.LostStores`) over the function's body, so "read after"
+means exactly what it means there (later in the order written, anywhere in a loop around the store, any mention in
+deferred code, a task, a join or a lambda). A repoint read later - the cursor S4a describes - stays legal. The message
+says to write the fields through the reference, or return the new value. Constructor and lambda bodies are not walked.
+checks/cases lostparamwrite (the report), lostparamwritevalue (a field of a by-value parameter); tests/shared.olang
+"S4e: ..." pins the legal forms. The checker alone changed; codegen, scopes and the evaluator did not.

@@ -5369,6 +5369,16 @@ T26 compares references by identity. Write-through would satisfy neither that no
 destructors where its one holder lets go precisely so that "which holder ends this" has an answer.
 Copying a reference's contents is written explicitly, field by field.
 
+**S4e (a write to a parameter nothing reads).** A **store** to a parameter or a receiver - assigning it (`p = ...`,
+`p += 1`, `p++`), which repoints a reference one (S4a), or storage a value one holds by value (`p.f = ...`, `p[j] =
+...`, a payload, reached following no reference) - that nothing in the body **reads after it** is a compile-time
+error: it changes the callee's own copy (D9) that no one sees again, or repoints a reference no one follows, and the
+caller's value is unchanged. Read after it is S9g's, over the function's body: a mention of the name, other than as a
+store's own target, later in the order written, or anywhere inside a loop around the store; a mention in deferred code,
+a task, a `join`'s clauses or a lambda's capture counts as after every store. A write **through** a reference
+parameter (`p.f = 7` where `p` is a `mut T&`) is no store to the name and is always kept. To change what the caller
+passed, write its fields through a `mut` reference, or return the new value.
+
 **S4.** `assign-stmnt ::= lvalue assign-op expr STMNT_END`, where `lvalue` is a postfix expression
 (§5.1 E1) whose outermost form is a variable read, an index (`E16`), or a member access (`E17`) —
 anything else on the left of an assignment operator is a compile-time error.

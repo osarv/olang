@@ -19,11 +19,14 @@ fn bumpS(s mut S&) I64 {
 }
 fn bumpE(e mut E&) I64 {
     e = E.Two(7, 8)
-    return 0
+    return match e {
+        case E.Two(x, _): x - 7
+        case _: 1
+    }
 }
 fn growArr(a mut Array<I64>&) I64 {
     a = Array<I64>[9, 9, 9, 9]
-    return 0
+    return a.Len() - 4
 }
 fn sameArr(a mut Array<I64>&) I64 {
     a[0] = 42
