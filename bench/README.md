@@ -67,15 +67,14 @@ rows are slower: HISTORY.md, "the Benchmarks Game set".
 | fannkuch-redux 10 (x4) | 1.136 | 1.124 | 1.01 | 1.9 MB | 2.0 MB |
 | binary-trees 18, C with malloc | 0.328 | 1.426 | 0.23 | 18.4 MB | 34.8 MB |
 | binary-trees 18, C arena | 0.337 | 0.355 | 0.95 | 18.4 MB | 26.6 MB |
-| k-nucleotide 2M | 0.356 | 0.330 | 1.08 | 24.4 MB | 14.0 MB |
+| k-nucleotide 2M | 0.365 | 0.313 | 1.17 | 23.1 MB | 14.0 MB |
 | fasta 10M | 1.519 | 1.453 | 1.05 | 1.9 MB | 1.8 MB |
 | reverse-complement 10M | 0.192 | 0.175 | 1.10 | 150 MB | 150 MB |
 
 spectral-norm's I64 arithmetic wraps (E6c), so `/ 2` keeps a sign correction C's undefined overflow lets clang drop;
-k-nucleotide spends its time on the misses C has too (the bucket, the entry, the key's text in the sequence) - the Map
-holds a chain's link in the entry since 2026-11-21 (0.365 -> 0.355-0.363 s on a loaded box, C 0.313-0.334, peak 23.1 ->
-24.4 MB); reverse-complement's line search skips 32 bytes at a time by a lane total since then (0.199 -> 0.192 s, C
-0.175), and its line copy is a byte loop where C calls memcpy. Ratios within about 8% move with code layout between builds.
+k-nucleotide's Map reaches a chain's link and entry in two arrays where C's node is one (a link in the entry measured
+1-4%, inside the noise, for 24 -> 32 B entries: not taken); reverse-complement's line search skips 32 bytes at a
+time by a lane total since 2026-11-21 (0.199 -> 0.192 s, C 0.175), and its line copy is a byte loop where C calls memcpy. Ratios within about 8% move with code layout between builds.
 
 ## Results
 
