@@ -36,3 +36,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - olang session (cloud, 2026-11-22): wt-mapnode merged (FindByte kept, Map change dropped)
 - olang session (cloud, 2026-11-22): wt-genslow merged (no repro)
 - OLang Cloud (2026-11-22): olang wt-globalfill - global refilled in a function read after its scope (-sanitize), r := build(0) then r = build(i)
+- Orchestrator child (cloud, 2026-11-22): olang wt-debts - plan.md's small known debts (re-export/cycle ordering, hand-checked must-not-compile shapes, structContainsBareScopeField)
