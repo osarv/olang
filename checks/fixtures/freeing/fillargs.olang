@@ -1,0 +1,37 @@
+import "std/io"
+
+# O8f (docs/freeing.md): a fill given to a constructor as the argument its instance views - fresh storage made for the
+# call where the instance lands (typed.FreshViews), so no copy (D9h) of the call's value - whose elements are each their
+# own copy built as the element place's stores build them (lower.fillText): an element replaced in a loop frees what the
+# fill built and every later value at once - a constructor's text array, an array of arrays beside another field, one
+# pushed whole, a fill given to a function storing it, and a field's default fill of a length known when it runs
+N I64 = 200000
+
+type P struct(t Array<String>) { t }
+type R struct(n I64, c Array<Array<I64>>) { n, c }
+type S struct() { t Array<String> }
+type D struct(n I64) { t Array<String> = Array<String>(n, "d"), k I64 = n }
+
+fn put(s mut S&, t Array<String>) { s.t = t }
+
+fn main() {
+    m := 4 + N % 3
+    p := P(Array<String>(m, "p"))
+    r := R(3, Array<Array<I64>>(m, Array<I64>(m - 2, 7)))
+    s := S()
+    put(s, Array<String>(m, "s"))
+    d := D(m)
+    ps Vec<P>
+    for _ in range 4: ps.Push(P(Array<String>(2, "q")))
+    s2 := 0
+    for i in range N {
+        j := i % 4
+        p.t[j] = $"p" + $i + " padded out to some length"
+        r.c[j % 3] = Array<I64>(m, i)
+        s.t[j] = $"s" + $i + " padded out to some length"
+        d.t[j] = $"d" + $i + " padded out to some length"
+        ps[j].t[1] = $"q" + $i + " padded out to some length"
+        s2 += p.t[(j + 1) % 4].Len() + r.c[j % 3][3] + s.t[(j + 1) % 4].Len() + d.t[(j + 1) % 4].Len() + ps[(j + 1) % 4].t[1].Len()
+    }
+    try io.PutLn($s2 + " " + p.t[0] + " " + p.t[3] + " " + $r.c[3][1] + " " + s.t[2] + " " + d.t[1] + " " + ps[3].t[0] + " " + ps[2].t[1]) catch io.Error { }
+}

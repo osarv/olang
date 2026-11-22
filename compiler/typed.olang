@@ -698,6 +698,8 @@ fn FreshViews(plan Plan&, c Call&, views I64, viewsOf fn&(id BodyId) I64, varsOf
         # storage to outlive the instance - the constructor's obligation on it)
         if MovedArg(c.Args[k]): continue
         # (text rendered for the call, where the instance lives - a Map literal's "$i: i", O8f)
+        # (or a fill made for the call, there too - its elements its own copies, built as the element place's stores
+        # build them, free.FillText: `P(Array<String>(m, "p"))`)
         ts := freshText(c.Args[k], 0)
         if ts >= 0 {
             if ts >= plan.Built.Len() or plan.Built[ts] != home: return false
@@ -743,11 +745,13 @@ fn Scope.result(plan Plan&, site SiteId, vs Array<I64>&) Scope {
     return Scope.Unset
 }
 
-# the site of the text an argument renders, past the wrappers that give it storage, -1 for any other argument
+# the site of the text an argument renders or the fill it makes, past the wrappers that give it storage, -1 for any
+# other argument
 fn freshText(x Expr&, depth I64) I64 {
     if depth > 8: return -1
     return match x {
         case Expr.Text(_, _, tx): I64(tx.Site)
+        case Expr.Make(_, _, m): I64(m.Site) if m.Kind == MakeKind.Fill else -1
         case Expr.Promote(_, _, pr): freshText(pr.X, depth + 1)
         case Expr.Away(_, _, y): freshText(y, depth + 1)
         case _: -1
