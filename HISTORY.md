@@ -41299,3 +41299,19 @@ is a compile-time error" is replaced by the copy rule. F3 (the evaluator refusin
 `Array<Array<String>>` with "reaches outside the storage") was the same reinterpretation in the MIR it runs, fixed with
 it. tests/fixedrows.olang (each shape, baked and run after a churn; built, -sanitize, -free late, OLANG_EVALUATE=1,
 -memory -check). Checker and lowering changed; scopes, the runtime and the evaluator did not.
+
+## 2026-11-22: a constructor's value copied keeps no text built in slots (O8f; mine; wt-falseb18)
+
+tests/valueparts.olang with tests/fixedrows.olang's `FrG[1] = Array<String>(...)` beside it failed `-memory -check` with
+B18 on that store, its note at an unrelated `team("b")`; the store alone passed. A real keep, not a false proof: place
+keys are by type, so the elements of every Array<String> are one place, and free.viewCtor - the copy of a constructor's
+value that hands back views of what it is given (D9h) - marked each place the copy's value holds (heldPlaces) as made
+with no store into it (RCopied). team holds a Vec<String>, so that place kept, and the global row's old text stayed
+until the program's end. The minimal shape: a struct of a String and a Vec<String>, `w := team("b")` with a Push into
+`w.members`, and a loop giving a global `Array<Array<String>>`'s row a new array of text. But the copy builds text of a
+place built in slots in slots of where it goes, as the place's own stores do - copyAt's copySlots on the plain path,
+splitArray's slots on the split ones (ownerCopy, splitCopy) - which untracked already exempts (its `slots`). viewCtor now
+skips a SlotPlace the same way, split or not, unless the type runs a declared Copy (E31d). checks/fixtures/freeing/
+ctortexts.olang (the freeing scenario: -memory -check, flat under 8 MB, interpreted, -free late, -sanitize). Freeing
+changed; lowering, scopes and the runtime did not. gaps.olang (B18a) loses its second row - a MapEntry<K, V>(key, value)
+constructor copy at map.olang:90, the same keep - and keeps the one its copy `c := rows[...]` makes.

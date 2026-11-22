@@ -1,0 +1,24 @@
+import "std/io"
+
+# O8f (falseb18): a constructor's value copied (free.viewCtor) - a struct holding a Vec of text - builds its text in
+# slots of where it goes, as the elements' own stores do (lower.copySlots): it keeps no array of text, so a global's row
+# of text given a new array in a loop frees the old one's text at once
+N I64 = 200000
+
+type team struct(title String) {
+    title
+    members Vec<String> = Vec<String>()
+}
+
+Rows mut Array<Array<String>> = Array<Array<String>>(2, Array<String>(2, $"z"))
+
+fn main() {
+    w := team("b")
+    w.members.Push("x")
+    s := 0
+    for i in range N {
+        Rows[1] = Array<String>(2, $"g" + $i + " padded out to some length")
+        s += Rows[1][0].Len()
+    }
+    try io.PutLn($s + " " + w.members[0] + " " + Rows[1][1]) catch io.Error { }
+}

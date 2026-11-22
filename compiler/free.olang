@@ -3891,7 +3891,11 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
     # with no store into them, as at any copy: untracked, which the call this copy is exempt from would have said)
     for k in f.heldPlaces(x.Type()) {
         if k in leafIds or f.PartPlace(k): continue
-        if split and not f.SlotPlace(k) {
+        # (O8f, round 8: the text of a place built in slots, built in slots of where the copy goes as the place's own
+        # stores build it - copyAt's copySlots, split or not: splitArray's slots, as untracked's slots; a team's
+        # Vec<String> part reached the elements of every Array<String>, keeping a global row's let-go, falseb18)
+        if not w.T().RunsCopy(x.Type()) and f.SlotPlace(k): continue
+        if split {
             f.keep(k, RSplit, w.body().File, sp, $"a value holding it is made with no store into it, its parts each built for their own places, by a call's value copied: '" + $w.text(x.Span()) + "'")
             continue
         }
