@@ -41403,3 +41403,36 @@ arrays) never released. Both are the same pattern - a value copied at its store,
 copy lands - and want the scope pass's placement or the free pass's judgement of such a store changed, a round of
 their own; no design decision.
 
+## 2026-11-22: a Map filled by Put moved into an element, a lifted local's copy named, a Map copy's values split (O8f, B18a; mine; wt-gaps3)
+
+Docs/freeing.md 2.4's false proof came first: `m := Map<I64, I64>(); m.Put(i, i); rows[i % 10] = m` grew by the Map a
+turn while `-memory -check` passed. The cause was not the free pass's judgement of the store but lowering refusing a
+move the scope pass had prepared: item 17 lifts a value local copied whole at its last mention to where the copy goes,
+so that lowering moves it there (D9i); `free.MovesLeaves` refused any value whose copy into a part region is split
+(`PartSplit`: a value owning more than the region's one array - a Map's three slot arrays), so lowering copied the
+local out of storage it had lifted to main's scope, which no let-go names. Two changes:
+- **The move is made** where every place the value holds is decided sole (each of its values then built in a region
+  its new holder's let-go releases). Letting it through for any value was tried and measured: a Map whose values own
+  storage, their place not sole because a copy elsewhere splits it (`m.Put(i, Vec<I64>[i]); rows[j] = m; c :=
+  rows[k]`), still grew - `Put` builds the entry's value bytes where the local lives - so the rule stays strict.
+- **-memory -check names the rest**: lowering reports a local built outside a loop's turn for such a move that it
+  copies all the same (`lower.liftedCopy`, a `-memory` row "'m' keeps until its scope closes: ... that copy is made"),
+  counted into B18's error. Run over every freeing and earlyfree fixture before the move was widened, it named only
+  this shape. checks' freeing mapfill (a Map, a struct of two Vecs and a Vec of text built in a turn and stored):
+  out of memory under 8 MB on master, flat now; built, `-free late`, `-sanitize` and the evaluator agree.
+
+**The Map copy** (gaps.olang's row, `c := rows[(i + 3) % 10]` of a `Map<String, Vec<String>>`): `splitLetOf` left
+Maps out, so the copy was untracked and named. With the exclusion gone the copy splits as a PartsOnly one does, and a
+second false proof showed - present on master for `Map<I64, Vec<I64>>`, whose copy -check accepted: an entry's owner
+value whose place is not sole (a split copy makes it RSplit) was copied whole into the element's scope by
+`regionCopy`, while the element's let-go releases such an owner by its parts. It is now copied by its parts
+(`partsCopied`) where the value is PartsOnly. checks' freeing mapcopies (a Map of Vecs of text stored as a copy, copied
+out of an element and given entries by Put): flat, the oracles agree. gaps.olang's row is now the Map literal itself:
+FromIter's entries are the iterator's values copied (D9h), and `MapEntry.Value` keeps for that - with it a Put on the
+copy (two rows; the scenario expects both).
+
+Not reached this round, analysed further in freeing.md 2.4: the element holding `R{q Q, n I64}` (a scope-pass
+placement change - the D9h-copied constructor's result placed as a temporary), and a local given its value by an
+assignment before its store (`r = build(i); kept[j] = r`: a local assigned whole is no move candidate in the scope
+pass or lowering, so the SetAt is given a copy - the move rule, `LastCopies`/`movable`, extended to a local whose last
+assignment builds a fresh value, with the free pass's let-go at that assignment kept in step), and its task form.

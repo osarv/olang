@@ -288,16 +288,20 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   passes the statement's innermost scope for its result (the scope pass: the result of a D9h-copied call is a temporary,
   its arguments' storage placed for that), or, where its arguments are all moved in at their last use, the instance kept
   uncopied (D9i widened to landing outside their blocks, their storage placed where it lands).
-- **A copy of a Map whose values are Vecs of text** (B18a's last gaps.olang row, `c := rows[(i + 3) % 10]` of an
-  `Array<Map<String, Vec<String>>>`): `splitLetOf` leaves Maps out. Found under it (wt-gaps2), a false proof that comes
-  first: **a Map local filled by `Put` and stored into an element** (`m := Map<I64, I64>(); m.Put(i, i); rows[i % 10] =
-  m`) grows by the Map each turn while `-memory -check` reports "no place lets go of storage" (`Array<Vec<I64>>` with
-  `Push` is flat). `m` is lent (its storage lifted to main's scope, where `Put` builds its arrays), and the element store
-  copies it split into part regions (stores of `Map.next`, `Map.buckets` judged a move, `Map.ents` the constructor's
-  site), leaving the original's 72 bytes and arrays in main's scope. To close first: the free pass judges such a store
-  as lowering makes it (a copy of storage built with no store into the element's places - RCopied, named), then build
-  the local's arrays where the element's are (the constructor's site and Put's stores redirected), then the Map copy. To close the Map copy itself: a copied Map's entries
-  built as `Map.add` builds them (entryCopy) at a local's copy too.
+- **A Map built by its literal whose values own storage** (gaps.olang's row since wt-gaps3,
+  `Map<String, Vec<String>>[$i: Vec<String>[$i]]`): FromIter's entries are the iterator's values copied (D9h), made
+  with no store into `MapEntry.Value`, which keeps (RCopied) - and with it a Put on a copy of the Map. To close: the
+  iterator's value split as `c := v[j]`'s is (splitLetOf for a loop's binding), or FromIter's entries built by `Put`
+  from parts moved out of the iterator's element. (Closed by wt-gaps3: a Map local filled by Put and stored into an
+  element at its last use is moved there where every place it holds is sole - `MovesLeaves` refused any value owning
+  more than one part's array; a lifted local lowering copies all the same is now a B18a row, `lower.liftedCopy`, which
+  names the remaining shape: such a Map whose values own storage, their place not sole because a copy elsewhere splits
+  it, `m.Put(i, Vec<I64>[i]); rows[j] = m; c := rows[k]`. A copy of a Map whose values own storage, `c := rows[j]`, is
+  split as a PartsOnly copy is, and an entry's owner value not sole is copied by its parts - `regionCopy` copied it
+  whole into the element's scope, a leak under a passing -check for `Map<I64, Vec<I64>>` on master.)
+- **A Map local moved whose values' place is not sole** (above): to close, the values' parts are already in part
+  regions (Vec.0 sole) but `Put`'s `MapEntry(key, value)` builds the value's bytes where the local lives; a move would
+  need the value place's stores redirected to the element's region, as the Map's own arrays are.
 - **A local given a new value before it is stored into an element** (found by wt-taskcheck, review6's task probes):
   `r Vec<String>` (or `r := build(0)`) then `r = build(i)`, then `kept[i % 4] = r` - ~500 bytes a turn, named by
   `-memory -check` as SetAt's gap. `r := build(i)` then the store frees (heldNew records only a Let's value, so a value

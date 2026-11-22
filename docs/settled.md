@@ -1063,6 +1063,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   for a read-only parameter of a call whose result views no argument and holds no reference beyond its own storage
   (`lower.viewsNoArg`: `y := make(ps[0])`) is read where it stands, and a call given only such references or plain data,
   writing through no parameter and reaching no global, lets go only of what it built (`free.ownGoes`; elemarg).
+  A local moved at its last mention into an element may own several parts' arrays (a Map filled by `Put`) where every
+  place it holds is sole (`free.MovesLeaves`; mapfill); a local the scope pass built outside a loop's turn for such a
+  move that lowering copies is a B18a gap (`lower.liftedCopy`). A Map copy's entries split as Put builds them, an
+  entry's owner value not sole copied by its parts (`lower.regionCopy`; mapcopies, wt-gaps3).
   A view call's value given to a by-value parameter its callee keeps nowhere but in what it hands back
   (`lower.HandsOnly`), the result held by a value local of no reference beyond its parts (`h := giveField(v[j])`): At's
   copy made in that local's block (`free.resultArgs`), the local holding lowering's copy of the result - a call's value
