@@ -1568,6 +1568,14 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false, room Bool =
     # (an occupy's store, into room holding no value, lets go of nothing - C11)
     if not ln.freeing or room: return out
     fr := ln.L.Free!
+    # (keptlast2: a fixed array of text no place follows given another value whole - `a[j] = Array<String>(2, ...)`,
+    # `d.t = ...` - each element's slot, by its length, guarded by its text place's decision: free.FixedText, unfollowed)
+    fq := fr.FixedText(p.Type()) if assign and (p == typed.Lvalue.Elem or p == typed.Lvalue.Field) else -1
+    if fq >= 0 and fr.PlaceOf(p) < 0 {
+        gt := ln.guardOf(fq)
+        if gt != free.NotSole: out.Push(relPath(gt, Array<I64>(0), true, false, -2))
+        return out
+    }
     # an element given a value lets go of nothing: the program's copies between elements are not known positions, and
     # the prelude's chunks are filled with the very value pushed (docs/memory.md 2.6 item 7) - only a vacate does; but
     # text elements, each value its own slot (O8f)
@@ -8113,6 +8121,12 @@ fn (ln mut lowering&) fillTextPlace(at types.TypeId, block Bool) I64 {
 fn (ln mut lowering&) fillText(v mir.Operand, el types.TypeId, k I64, into mir.ScopeRef, sp source.Span) mir.Operand {
     d := ln.local(ln.into(el, mir.Rvalue.Use(v), sp), el, sp)
     q := pl(mir.Base.Local(d))
+    # (keptlast2: a fixed array of text - each of its elements' text in a slot: free.FixedText)
+    if ln.L.Free!.FixedText(el) == k {
+        r := ln.T.Plain(ln.T.Repr(el))
+        for i in range ln.T.ConstValue(ln.T.Length(r)): ln.textInto(ln.with(q, mir.Proj.Index(ln.local(ln.constI64(i), mir.I64T, sp))), ln.T.Elem(r), into, sp)
+        return mir.Operand.Copy(mir.Lvalue.L(d))
+    }
     if ln.L.Free!.PartPlace(k): return ln.elemArrayCopy(q, el, k, into, sp)
     if ln.L.Free!.SlotPlace(k) {
         ln.textInto(q, el, into, sp)

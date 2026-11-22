@@ -2876,7 +2876,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
 }
 
 fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
-    w.unfollowed(sp, p)
+    w.unfollowed(sp, p, x)
     w.targets.Push(p)
     c0 := typed.Call.Of(x)
     outer := w.exemptSite
@@ -4224,8 +4224,18 @@ fn (w mut walker&) ownsStorage(ty types.TypeId) Bool {
 }
 
 # O8f: an assignment's let-go no place follows - a local, a global or a field that is no candidate place, an element
-fn (w mut walker&) unfollowed(sp source.Span, p typed.Lvalue&) {
+fn (w mut walker&) unfollowed(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     if not w.ownsStorage(p.Type()): return
+    # (keptlast2: a fixed array of text no place follows - an element of an array of them, a field holding one - given
+    # another value whole: a let-go of its text place, each element's slot put back by lowering (releases, FixedText); a
+    # fill builds the new value's text in slots, as that place's stores do (makeStores), anything else - a copy of
+    # another element shares its text - is judged a store)
+    tq := w.F.FixedText(p.Type())
+    if tq >= 0 and w.F.placeOfPlace(p) < 0 and (p == typed.Lvalue.Elem or p == typed.Lvalue.Field) {
+        w.go(tq, LAssign, p.Span(), source.Span(0, 0), -1)
+        if w.Final and w.quiet == 0 and not fillOf(x): w.made(tq, x, sp, false)
+        return
+    }
     match p {
         case typed.Lvalue.Local(_, _, l) {
             if w.ownLocal(I64(l)) < 0 and not w.turnLocal(I64(l)): w.gap(p.Span(), "lets go of what it held")
@@ -4239,6 +4249,15 @@ fn (w mut walker&) unfollowed(sp source.Span, p typed.Lvalue&) {
             if (k < 0 or not w.F.arr[k]) and not w.F.PartsOnly(p.Type()): w.gap(p.Span(), "lets go of what the element held")
         }
         case _ { }
+    }
+}
+
+# whether x is a fill (makeStores judges its store, FillText)
+fn fillOf(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Fill
+        case typed.Expr.Away(_, _, y): fillOf(y)
+        case _: false
     }
 }
 
@@ -5613,6 +5632,13 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     why := ""
     # (constant text an immut array local is given: held as it is, ConstLocal)
     if f.isNamed(k) and f.arr[k] and f.P.Immut(f.valTy[k]) and ConstRead(x) {
+        f.stores.Push(store(k, w.Id, file, sp, SOk, of, site, x, null))
+        return
+    }
+    # (keptlast2: constant text a constructor's parameter is given, through its conversion - `P("a", 1)`, its instance
+    # viewing the argument - needs nothing, as constant data stored itself does: a let-go of it releases nothing, the
+    # runtime finding no chunk of its own behind it)
+    if ConstRead(x) {
         f.stores.Push(store(k, w.Id, file, sp, SOk, of, site, x, null))
         return
     }
@@ -7771,6 +7797,10 @@ fn (f mut Free&) FillText(ty types.TypeId, block Bool) I64 {
     r := t.Plain(f.arrayOf(ty))
     if t.KindOf(r) != types.Kind.Array: return -1
     el := t.Elem(r)
+    # (keptlast2: or a fill of fixed arrays of text - `Array<Array<String>>(3, Array<String>(2, "z"))` - each element's
+    # text built in slots: the fixed arrays' text place, where it is built in slots)
+    k2 := f.FixedText(el)
+    if k2 >= 0: return k2 if t.Length(r) == types.TypeId(0) or block or f.SlotPlace(k2) else -1
     if not t.OwnedPart(el) or t.OwnsParts(el) or t.HoldsRefs(el): return -1
     e2 := t.Elem(t.Repr(el))
     if t.OwnedPart(e2) or t.OwnsParts(e2) or t.HoldsRefs(e2): return -1
@@ -7781,6 +7811,16 @@ fn (f mut Free&) FillText(ty types.TypeId, block Bool) I64 {
     # is no region an owner's release could find in place of its own)
     if t.Length(r) != types.TypeId(0) and not block and not f.SlotPlace(k): return -1
     return k
+}
+
+# O8f (keptlast2): where ty is a fixed array of text (`Array<String, 2>`) whose text place is built in slots: that place,
+# else -1 - a fill's copy of such an array puts each of its elements' text in a slot (lower.fillText)
+fn (f mut Free&) FixedText(ty types.TypeId) I64 {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    if t.KindOf(r) != types.Kind.Array or t.Length(r) == types.TypeId(0) or not f.slotText(t.Elem(r)): return -1
+    k := f.placeKey(r, -1)
+    return k if f.SlotPlace(k) else -1
 }
 
 fn (f mut Free&) fillOwners(ty types.TypeId, block Bool) Vec<I64> {
@@ -8250,17 +8290,14 @@ RemovalNames Array<String&> = Array<String&>["Pop", "TakeAt", "RemoveAt", "SwapR
     "SwapTake"]
 
 # whether a let-go is one the report shows: in the program's own code, an assignment, a vacate, a moved value dropped,
-# or a call of one of the program's functions or of a prelude removal
+# or a call of one of the program's functions, of a prelude removal or of an element's replacement (SetAt, `v[j] = x`)
 fn (f mut Free&) shown(g letGo) Bool {
     if not f.programCode[g.Body]: return false
     if g.Kind != LCall: return true
     if g.Callee < 0: return false
     if f.programCode[g.Callee]: return true
     nm := f.fnName(g.Callee)
-    for r in RemovalNames {
-        if r == nm: return true
-    }
-    return false
+    return nm in RemovalNames or nm == "SetAt"
 }
 
 # the report: a row for each place that keeps, a note naming why, and a count
