@@ -1346,7 +1346,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   storage of its part region, room or reserved address space behind it: the run time's `__olang_grow_in_place`, never
   under -sanitize; 2026-11-21), the buffer itself. `View()`/`ViewMut()` give the elements as an
   array. **M19g**: using a view or Ref after the same Vec may have grown is a compile-time error where the compiler
-  sees the same Vec on both sides. Array and Vec stay two types (QCV, the user's "Yeah, okay, keep them" 2026-11-06).
+  sees the same Vec on both sides - a lambda growing a capture grows what the capture was made of, where it is called
+  or given to a call (2026-11-22, review7). Array and Vec stay two types (QCV, the user's "Yeah, okay, keep them" 2026-11-06).
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Put`, `io.PutLn(t = "")`,
   `io.PutErr`, `io.PutErrLn` fail with `io.Error` and are written with `try`. `io.Show<T>(v T, at Place =
   Place.Here) T` (QBP 4) writes `FILE:LINE:COLUMN: $v` to the standard error and gives `v` back. `io.Writer` buffers

@@ -1,0 +1,15 @@
+# check: fail error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+# M19g: a lambda capturing a second name of the Vec ("r mut Vec<I64>& = v") grows what its capture was made of where it
+# is called - here through a local holding it (review7)
+import "std/io"
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    r mut Vec<I64>& = v
+    f := fn() {
+        for i in range 100: r.Push(i)
+    }
+    d := v.View()
+    f()
+    try io.PutLn($d[0])
+}

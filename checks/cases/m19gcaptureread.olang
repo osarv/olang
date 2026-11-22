@@ -1,0 +1,17 @@
+# check: run
+# M19g: a lambda capturing a second name of the Vec that only reads it, or writes its elements, grows nothing - the view
+# stays fresh across its calls
+import "std/io"
+fn callIt(f fn&() I64) I64 { return f() }
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    r mut Vec<I64>& = v
+    f := fn() I64 {
+        r[0] = r[0] + 1
+        return r.Len()
+    }
+    d := v.View()
+    n := f() + callIt(f)
+    try io.PutLn($d[0] + " " + $n)
+}

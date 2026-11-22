@@ -2553,6 +2553,9 @@
 | status 0
 === run m19g20allowed.olang
 | status 0
+=== run m19gcaptureread.olang
+| status 0
+| 3 2
 === run m19gfnpure.olang
 | status 0
 === run m19grefok.olang

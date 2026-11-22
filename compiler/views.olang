@@ -207,6 +207,8 @@ type Viewer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     skip Bool = false  # a body of the prelude's Vec: walked for its summary only
     changed Bool = false
     paramAt Vec<I64> # by local: its parameter index, -1 for none
+    # by local: the lambdas it was ever given, as written - a call of it, or given it, grows what their captures name
+    lambdas Map<I64, Vec<typed.Expr&>>
     loops Vec<mut loopFrame&>
     targets Vec<typed.Lvalue&>   # the places of the Assigns being walked, innermost last (Lvalue.Target)
     reported Map<I64, Bool>      # (file << 32) | offset: an error said there
@@ -314,6 +316,7 @@ fn (v mut Viewer&) walk(b I64, check Bool) {
     v.loops.Clear()
     v.targets.Clear()
     v.paramAt.Clear()
+    v.lambdas.Clear()
     for _ in body.Locals: v.paramAt.Push(-1)
     for i in range body.Params.Len(): v.paramAt[I64(body.Params[i])] = i
     st := state()
@@ -878,6 +881,13 @@ fn (v mut Viewer&) grow(g place, sp source.Span, grewIn I64, innerFile I64, inne
         match g.R {
             case Root.Param(i) { v.factPut(v.sums[v.Id].Grows, i, -1, source.NameId(0), g, sp) }
             case Root.Global(m, n) { v.factPut(v.sums[v.Id].Grows, -1, m, n, g, sp) }
+            # a lambda's capture: what the lambda was given it from grows where it is called (capGrows), as Params.Len()
+            # + the capture's local
+            case Root.Local(id) {
+                if v.B!.Locals[id].Kind == typed.LocalKind.Capture {
+                    v.factPut(v.sums[v.Id].Grows, v.B!.Params.Len() + id, -1, source.NameId(0), g, sp)
+                }
+            }
             case _ { }
         }
     }
@@ -1089,6 +1099,14 @@ fn (v mut Viewer&) spawn(sp source.Span, t typed.Spawn&, st mut state&) {
 
 # what a local holds from now on: the views its value holds, and the places it is a second name of
 fn (v mut Viewer&) bind(id I64, x typed.Expr?&, refs Vec<view>&, whole Bool, st mut state&) {
+    if x != null {
+        lam := lambdaOf(x)
+        if lam != null {
+            ls := try v.lambdas.Get(id) catch default Vec<typed.Expr&>()
+            ls.Push(lam)
+            v.lambdas.Put(id, ls)
+        }
+    }
     if whole {
         # its views of what it named before go: a new value, of another Vec perhaps
         for i in range st.Holds.Len() {
@@ -1386,10 +1404,12 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
     fnRefs := Vec<view>()
     callee I64 = -1
     value := false
+    fval typed.Expr?& = null
     match c.Target {
         case typed.Callee.Body(id) { callee = I64(id) }
         case typed.Callee.Value(f) {
             value = true
+            fval = f
             v.expr(f, st, fnRefs)
             # (a function written where it is called - a named one, a lambda - is followed: it grows what its body grows,
             # docs/fnvalues.md 4.6)
@@ -1460,6 +1480,10 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
             }
         }
     }
+    # (a lambda called, or given to the call, which may call it: what its body grows through its captures - a capture of
+    # a second name of a Vec, "rv mut Vec<I64>& = v" - grows what the capture was made of)
+    if fval != null: v.capGrows(fval, st, grows, innerFile, innerAt)
+    for a in c.Args: v.capGrows(a, st, grows, innerFile, innerAt)
     for g in range grows.Len(): v.grow(grows[g], tok, name, innerFile[g], innerAt[g], st)
     # what its result holds
     for r in fnRefs: viewAdd(out, r)
@@ -1531,6 +1555,70 @@ fn (v mut Viewer&) givenGrowing(at source.Span, p place, of I64, name I64, file 
     rec := v.P.L.Diags.Error(v.at(at), msgs.VecViewGivenGrowing(w, v.strs[name], w, copyHint(of, w)))
     if file < 0 or v.library.Has(file): return
     v.P.L.Diags.Note(rec, diag.Where.Span(file, I64(inner.Start), I64(inner.End)), msgs.NoteVecGrowsInside(v.strs[name]))
+}
+
+# the growths a call of x makes through the captures of the lambdas x is - written there, or a local given them: each
+# capture's growth its body's summary records (grow: Params.Len() + the capture's local), at the places of what the
+# capture was made of
+fn (v mut Viewer&) capGrows(x typed.Expr&, st state&, grows mut Vec<place>&, innerFile mut Vec<I64>&
+                            innerAt mut Vec<source.Span>&) {
+    for lam in v.lambdasOf(x) {
+        match lam {
+            case typed.Expr.Fn(_, _, fv) {
+                if fv == typed.FnVal.Lambda: v.capGrowsOf(I64(fv.body), fv.captures, st, grows, innerFile, innerAt)
+            }
+            case _ { }
+        }
+    }
+}
+
+fn (v mut Viewer&) capGrowsOf(b I64, caps Array<typed.Capture&>&, st state&, grows mut Vec<place>&
+                              innerFile mut Vec<I64>&, innerAt mut Vec<source.Span>&) {
+    if b < 0 or b >= v.sums.Len() or not v.sums[b].Known: return
+    n := v.Bodies[b].Params.Len()
+    for g in v.sums[b].Grows {
+        if g.Param < n: continue
+        for cp in caps {
+            if I64(cp.Inner) != g.Param - n: continue
+            at Vec<place>
+            v.exprPlaces(cp.Outer, st, at)
+            for a in at {
+                grows.Push(v.below(a, g.Path, g.Show, g.Any))
+                innerFile.Push(g.File)
+                innerAt.Push(g.At)
+            }
+        }
+    }
+}
+
+# the lambdas x is: one written there, or those a local it reads or borrows was given
+fn (v mut Viewer&) lambdasOf(x typed.Expr&) Vec<typed.Expr&> {
+    out Vec<typed.Expr&>
+    lam := lambdaOf(x)
+    if lam != null {
+        out.Push(lam)
+        return out
+    }
+    match unAway(x) {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) {
+            match p {
+                case typed.Lvalue.Local(_, _, id): return try v.lambdas.Get(I64(id)) catch default out
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return out
+}
+
+# the lambda written as x, else null
+fn lambdaOf(x typed.Expr&) typed.Expr?& {
+    return match x {
+        case typed.Expr.Fn(_, _, fv): x if fv == typed.FnVal.Lambda else null
+        case typed.Expr.Away(_, _, y): lambdaOf(y)
+        case typed.Expr.Prim(_, _, op, _, args): lambdaOf(args[0]) if op == typed.PrimOp.Convert and args.Len() == 1 else null
+        case _: null
+    }
 }
 
 # the body a function value written where it is called names - a named function, a lambda - -1 for any other value
@@ -1949,7 +2037,9 @@ fn callsExpr(x typed.Expr?&, out mut Vec<I64>&) {
         }
         case typed.Expr.Fn(_, _, f) {
             match f {
-                case typed.FnVal.Lambda(_, caps, _) {
+                # (the lambda's body among them: what it grows through its captures is read where it is called, capGrows)
+                case typed.FnVal.Lambda(lb, caps, _) {
+                    out.Push(I64(lb))
                     for c in caps: callsExpr(c.Outer, out)
                 }
                 case typed.FnVal.Adapter(_, r, _) { callsExpr(r, out) }

@@ -2419,7 +2419,7 @@ ded9ef469abfa24f c5207d72aa1b257a checks/fixtures/vecalias/p3.olang
 cb80360655777d89 e367a75e133662a6 checks/fixtures/vecalias/vlib.olang
 f963a4a36eb35914 de9407ddd44b554a checks/fixtures/vechandle/handle.olang
 37744ba073f9d207 a59f62e1385cc387 checks/fixtures/vechandle/stale.olang
-70b57d1d36777cd5 3dddf1d25b61cf55 checks/fixtures/vechandle/stalecopy.olang
+dcbc691db8d10ef8 a43494121547f85d checks/fixtures/vechandle/stalecopy.olang
 8cb56aa9e411583b 22bc026acf80c5fa checks/fixtures/weak/away.olang
 55a888ab4b04671f 243c5d2d0c2a8097 checks/fixtures/weak/back.olang
 df330339c1e7ba9f b3ef83208047a46a checks/fixtures/weak/byval.olang
@@ -2519,7 +2519,7 @@ b5d5a7ffc3c55aed c3739971a0322646 compiler/tools/toolkit.olang
 4728fdce94d4bb33 0c463b95a48d6004 compiler/typed.olang
 92dfad194f495613 3544e638c5153e68 compiler/types.olang
 ac9569bf452c8a83 824cfe83e800236a compiler/unparse.olang
-e2ea203aa101b68f a5e34ee613900ef3 compiler/views.olang
+d5a8171078a1e0db 781c0b00289a733f compiler/views.olang
 bbb5e3df24f5ea40 69377cf036a6b873 docs/genrefs/dlist.olang
 6694346501eb6c41 25b5dcb834385a00 docs/genrefs/lru.olang
 d34fa4513f30281f 67799a16b763af57 docs/genrefs/peak.olang
