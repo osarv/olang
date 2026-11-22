@@ -4744,11 +4744,26 @@ fn (ln mut lowering&) fitAt(x typed.Expr&, ty types.TypeId, sp source.Span, at m
         arg := convertArg(x)
         a := ln.val(arg)
         if ln.dead: return mir.Operand.None
-        return ln.widen(a, arg.Type(), ty, sp, at)
+        return ln.widen(a, arg.Type(), ty, sp, ln.widenAt(arg, at))
     }
     v := ln.val(x)
     if ln.dead or not ln.fits(x, ty): return v
     return ln.widen(v, x.Type(), ty, sp, at)
+}
+
+# O8f (2.4's first gap): where a fixed fill or literal widened is made - in the region early freeing gives its site where
+# it is a place's store (free.WidenedMake), the elements its fill built already there; else at
+fn (ln mut lowering&) widenAt(arg typed.Expr&, at mir.ScopeRef) mir.ScopeRef {
+    if not ln.freeing or not ln.planned: return at
+    site := match arg {
+        case typed.Expr.Make(_, _, m): I64(m.Site)
+        case _: -1
+    }
+    if site < 0 or site >= ln.plan.Built.Len(): return at
+    return match ln.plan.Built[site] {
+        case typed.Scope.Region(_): ln.madeAt(typed.SiteId(I32(site)))
+        case _: at
+    }
 }
 
 # whether x is a conversion written of a fixed array's value to a run-time-length array value
@@ -7270,7 +7285,7 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         if t.ErrCarries(ty) or t.ErrCarries(args[0].Type()): return ln.errConvert(ops[0], args[0].Type(), ty, sp)
         return ln.into(ty, mir.Rvalue.Recode(ops[0], t.ErrValItems(args[0].Type()), t.ErrValItems(ty)), sp)
     }
-    if ln.widening(op, args, ty): return ln.widen(ops[0], args[0].Type(), ty, sp, ln.innermost())
+    if ln.widening(op, args, ty): return ln.widen(ops[0], args[0].Type(), ty, sp, ln.widenAt(args[0], ln.innermost()))
     if op == typed.PrimOp.IsCase and t.IsRef(t.Repr(args[0].Type())) { return ln.isCaseRef(ops[0], args[0].Type(), ops[1], sp) }
     if chk == typed.Check.Debug {
         if ln.L.Checked: ln.opChecks(op, ops, args, ty, sp)

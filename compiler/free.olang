@@ -5663,6 +5663,13 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
         f.stores.Push(store(k, w.Id, file, sp, SOk, of, site, x, null))
         return
     }
+    # (2.4's first gap: a fixed fill or literal widened to the place's run-time array, `rows := Array<I64>(4)` (T7c), is
+    # the Make's store - lowering widens it into the region its site is given, lower.widenAt)
+    wm := f.WidenedMake(x)
+    if wm != null {
+        w.made(k, wm, sp, multi)
+        return
+    }
     match x {
         case typed.Expr.Lit(_, _, _) { kind = SOk }
         case typed.Expr.Data(_, _, _, _) { kind = SOk }
@@ -5751,6 +5758,29 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
             f.noteAt = -1
         }
         f.keep(k, RMade, rf, rsp, why)
+    }
+}
+
+# O8f (2.4's first gap): the Make a conversion widens - a fixed array's fill or literal given where an array of a
+# run-time length of its element is kept (T7c) - null for any other value
+fn (f mut Free&) WidenedMake(x typed.Expr&) typed.Expr?& {
+    t := f.T()
+    match x {
+        case typed.Expr.Prim(_, pt, op, _, args) {
+            if not isConversion(op, args): return null
+            a := args[0]
+            m := match a {
+                case typed.Expr.Make(_, _, mk): mk.Kind == typed.MakeKind.Fill or mk.Kind == typed.MakeKind.Array
+                case _: false
+            }
+            if not m: return null
+            from := t.Repr(a.Type())
+            to := t.Repr(pt)
+            if t.KindOf(from) != types.Kind.Array or t.KindOf(to) != types.Kind.Array: return null
+            if t.Length(from) == types.TypeId(0) or t.Length(to) != types.TypeId(0) or not t.Same(t.Elem(from), t.Elem(to)): return null
+            return a
+        }
+        case _: return null
     }
 }
 

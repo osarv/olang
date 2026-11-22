@@ -1,0 +1,31 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4's first gap): a local declared with a fixed fill, `rows := Array<I64>(4)` - a conversion of
+# a fixed array to the local's run-time one (T7c) - then given a new array each turn: the declaration is the fill's
+# store (free.WidenedMake), widened into the region its site is given (lower.widenAt), so every array a turn lets go of
+# is freed - of plain values, of text and of structs holding a Vec alike; each kept every array before
+N I64 = 200000
+
+type Q struct() { a Vec<I64> }
+
+fn main() {
+    src := Vec<Q>()
+    for i in range 3 {
+        q := Q()
+        q.a = Vec<I64>[i, i + 1]
+        src.Push(q)
+    }
+    nums := Array<I64>(4)
+    texts := Array<String>(4)
+    rows := Array<Q>(4)
+    t := 0
+    for i in range N {
+        nums = Array<I64>(4, i)
+        nums[i % 4] = i + 1
+        texts = Array<String>(4, "r" + $i + " padded out to some length")
+        rows = Array<Q>(4, src[i % 3])
+        rows[i % 4].a.Push(i)
+        t += nums[0] + nums[(i + 1) % 4] + texts[i % 4].Len() + rows[i % 4].a[2] + rows[(i + 2) % 4].a.Len()
+    }
+    io.PutLn($t + " " + texts[3] + " " + $rows.Len() + " " + $src[2].a.Len())!
+}
