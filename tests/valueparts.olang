@@ -312,3 +312,33 @@ test "a value stored into a part of x[i] in a loop lives where the collection do
     assert churn() > 0
     assert got == ElemTextsBaked and got == "m16f16c16b16e16 m17f17c17b17e18 m18f18c18b18e17 m19f19c19b19e19 ", got
 }
+
+# a struct of two texts pushed with a joined text built in the call (oagent e55): the copy into the element splits the
+# value (free.PartSplit) - the joined text into the element's part region, the other text into its parent's scope - and
+# the part region is settled by the joined text alone, never by the other text, which has no region word before it
+type pjItem struct(name String, tag String) {
+    name, tag
+}
+
+fn pjFill(v mut Vec<pjItem>&, s String) {
+    for i in range 3: v.Push(pjItem("item " + s + $i, "k"))
+}
+
+fn pushJoined(k I64) String {
+    s := "s" + $k
+    v := Vec<pjItem>()
+    v.Push(pjItem("a " + s, "k"))
+    v.Push(pjItem("b " + s, s))
+    pjFill(v, s)
+    out := ""
+    for x in v: out = out + x.name + "/" + x.tag + " "
+    return out
+}
+
+PushJoinedBaked := pushJoined(1)
+
+test "a struct of texts pushed with a joined text built in the call" {
+    got := pushJoined(EtOne)
+    assert churn() > 0
+    assert got == PushJoinedBaked and got == "a s1/k b s1/s1 item s10/k item s11/k item s12/k ", got
+}

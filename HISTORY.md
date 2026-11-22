@@ -41199,3 +41199,19 @@ deferred code, a task, a join or a lambda). A repoint read later - the cursor S4
 says to write the fields through the reference, or return the new value. Constructor and lambda bodies are not walked.
 checks/cases lostparamwrite (the report), lostparamwritevalue (a field of a by-value parameter); tests/shared.olang
 "S4e: ..." pins the legal forms. The checker alone changed; codegen, scopes and the evaluator did not.
+
+## 2026-11-22: a split push settled by its one array (wt-pushjoin)
+
+A report from oagent (e55): `v.Push(S("..." + s, ...))` on a `Vec<S>`, S a struct of two texts, crashed; binding the
+value to a local first and pushing that worked. Minimal: two pushes of `S("item " + s, "k")` in `main`; `-free late`
+ran it, so it was early freeing's. The joined argument made `S.name` a part place, so Push's copy of its element became
+a part copy split by free.PartSplit (lower.partCopy): `name` copied into the element's part region, `tag` - which owns
+storage beyond that one array - into the region's parent, the Vec's scope. `settled` then settled the part region by
+the whole value's anchors (emit.anchorRegion), reading the region word before `tag`'s text - which a scope's
+allocation does not have - and `__olang_region_home` followed the garbage. A split copy (free.SplitPath) was already
+exempt from that settle; a part split was not. Now `settled` settles a part split's region by the array its path leads
+to alone (zeroed first where empty, as any part region's settle), which is exactly what the region was made for. Lowering
+alone changed; scopes, the runtime and the evaluator did not (the evaluator reads a region per object and was right).
+tests/valueparts.olang "a struct of texts pushed with a joined text built in the call" (baked K2 and run, after a
+churn); checks/fixtures/freeing/pushjoin.olang in the freeing scenario (flat under 8 MB, -memory -check, interpreted,
+-free late, -sanitize).

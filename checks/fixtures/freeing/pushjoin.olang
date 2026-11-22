@@ -1,0 +1,28 @@
+import "std/io"
+
+# O8f (docs/freeing.md): a struct of two texts pushed with a text joined in the call, `v.Push(S("..." + s, "k"))` - the
+# element's copy is split (free.PartSplit): the joined text in the element's part region, the other text in its
+# parent's scope; the part region is settled by the joined text alone (oagent e55: settled by both, the other text's
+# missing region word was read and the push crashed)
+N I64 = 200000
+
+type S struct(name String, tag String) { name, tag }
+
+fn fill(v mut Vec<S>&, s String) {
+    for k in range 3: v.Push(S("item " + s + $k + " padded out to some length", "k"))
+}
+
+fn main() {
+    s := 0
+    last := ""
+    for i in range N {
+        t := $"t" + $i
+        v := Vec<S>()
+        v.Push(S("a " + t + " padded out to some length", "k"))
+        v.Push(S("b " + t, t))
+        fill(v, t)
+        for x in v: s += x.name.Len() + x.tag.Len()
+        last = v[4].name + " " + v[1].tag
+    }
+    try io.PutLn($s + " " + last) catch io.Error { }
+}

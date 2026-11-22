@@ -4674,11 +4674,21 @@ fn (ln mut lowering&) settled(rs I64, held mir.ScopeRef, v mir.Operand, ty types
     }
     if h == mir.NoLocal: return v
     l := ln.local(v, ty, sp)
+    # (a part copy split - free.PartSplit - holds the one array its path leads to in the region and its other parts in
+    # the parent's scope, whose anchors name no region: settled by that array alone)
+    q, qt := pl(mir.Base.Local(l)), ty
+    path := ln.L.Free!.PartSplit(I64(ln.B.Id), rs, ty) if ln.freeing else null
+    if path != null {
+        for k in path {
+            q = ln.with(q, mir.Proj.Field(k))
+            qt = ln.partsOf(qt)[k]
+        }
+    }
     # (where the place is not decided sole, h is the parent's scope: nothing to settle)
     g := ln.plan.RegionGuard[rs]
     after := ln.whenSole(g, true, sp) if g >= 0 else mir.NoBlock
-    ln.zeroEmpty(mir.Lvalue.L(l), ty, sp)
-    ln.emit(mir.Stmt.Settle(sp, h, mir.Lvalue.L(l)))
+    ln.zeroEmpty(ln.mk(q), qt, sp)
+    ln.emit(mir.Stmt.Settle(sp, h, ln.mk(q)))
     if after != mir.NoBlock: ln.joinAt(after)
     return mir.Operand.Copy(mir.Lvalue.L(l))
 }
