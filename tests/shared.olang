@@ -1670,7 +1670,10 @@ type RecvP struct(a I32) {
 fn recvByVal(p RecvP) I32 { return p.val }
 fn recvByRef(p RecvP&) I32 { return p.val }
 fn recvMutRef(p mut RecvP&) { p.val = 99 }
-fn recvMutVal(p RecvP) { p.val = 99 }
+fn recvMutVal(p RecvP) I32 {
+    p.val = 99
+    return p.val
+}
 
 test "every combination of value/reference argument and value/reference parameter" {
     v RecvP = RecvP(1)
@@ -1684,8 +1687,8 @@ test "every combination of value/reference argument and value/reference paramete
         # and D9's two axes still read off the signature alone
     recvMutRef(v)
     assert v.val == 99        # wrote through to the caller's own value
-    recvMutVal(r)
-    assert r.val == 2        # wrote to the callee's copy, invisible here
+    assert recvMutVal(r) == 99        # wrote to the callee's copy (S4e: read back there)
+    assert r.val == 2        # invisible here
 }
 
 # P1: "spawn CALL" starts one task; "join { ... }" waits for every spawn written directly inside it. The
@@ -18775,4 +18778,38 @@ test "S1b: one-line bodies of functions, types and loops at run time" {
     assert s1bTwice(n) == 8 and s1bDo(n) == 1200 and s1bJoin() == 3 and s1bMeters(2.5).V == 2.5
     { h := s1bHeld(n) }
     assert s1bGone == 4
+}
+
+# S4e: a reference parameter's caller sees writes through it, never a repoint; a repoint read after it is a cursor
+type ParamBox struct() {
+    Xs mut Array<F64>& = Array<F64>(0)
+    N I64 = 0
+}
+fn paramBoxFill(out mut ParamBox&, n I64) {
+    out.Xs = Array<F64>(n)
+    out.N = n
+}
+fn ParamBox.Made(n I64) ParamBox {
+    b := ParamBox()
+    b.Xs = Array<F64>(n)
+    b.N = n
+    return b
+}
+fn paramCursorLast(xs Array<I64>&) I64 {
+    if xs.Len() > 1: xs = xs[1:]
+    return xs[xs.Len() - 1]
+}
+fn paramBump(n I64) I64 {
+    n += 1
+    return n
+}
+
+test "S4e: writes through a mut reference reach the caller, a repoint read after is kept" {
+    b := ParamBox()
+    paramBoxFill(b, 3)
+    assert b.Xs.Len() == 3 and b.N == 3
+    c := ParamBox.Made(4)
+    assert c.Xs.Len() == 4 and c.N == 4
+    assert paramCursorLast(Array<I64>[1, 2, 3]) == 3
+    assert paramBump(41) == 42
 }

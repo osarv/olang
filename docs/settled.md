@@ -121,7 +121,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Assignment (S4, S4a, S4c, S4d).** Left to right: the target's place, then the value; a compound place is evaluated
   once. Assignment to a reference repoints (S4a). Parallel assignment `a, b = b, a` evaluates every value first;
   `a, b := 1, 2` and `x, y I32` declare several names (S4c/D12b, the user's call); `x[i] = v` on a type declaring
-  `SetAt` stores through it. An assigned value borrowing storage within the place takes its old value as a copy (S4d).
+  `SetAt` stores through it. An assigned value borrowing storage within the place takes its old value as a copy (S4d). A store to a parameter or receiver - repointing a reference one, or into a value one's copy - that
+  nothing in the body reads after it is an error (S4e, `LostParamWrite`, S9g's walk over the body): `out = Box.Make(3)` on
+  a `mut Box&` never wrote the caller's value; write its fields, or return the new value.
 - **Every path of a function with a result must return (D10a)** - structural, loops never count, `for { }` with no
   `break` of its own leaves, a leaving `join` and a `noreturn` call count. `unreachable` is checked, never assumed
   (S16d), and behaves as a failed assert. `os.Exit(code)` for any status (B5b).

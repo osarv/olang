@@ -4108,6 +4108,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     }
     root := c.rootStmts(body)
     c.cur().Root = root
+    c.lostParamWrites(root)
     c.viewBody()
     if nr {
         if not c.fr().Gapped and not leavesBlock(root): c.err(c.nameSpan(fd), msgs.NoreturnFallsOff())
@@ -23095,6 +23096,18 @@ fn (c mut Checker&) walkTurn(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
     c.stmts.Push(give)
     y typed.Block& = typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, from))
     c.emit(typed.Stmt.If(cm.Filter!.Span(), typed.If(k, y, null)))
+}
+
+# S4e: a store to a parameter - repointing a reference one (S4a), or into a value one's own copy - that nothing in
+# the body reads after it is lost, and an error
+fn (c mut Checker&) lostParamWrites(root typed.Block&) {
+    for p in c.cur().Params {
+        l := c.cur().Local(p)
+        if l.Name == source.NameId(0) or c.text(l.Name) == "_": continue
+        w := typed.LostStores(p)
+        w.Stmts(root.Stmts)
+        for k in w.Lost(): c.err(w.Spans[k], msgs.LostParamWrite(c.text(l.Name), c.isRef(l.Ty) and w.Whole[k]))
+    }
 }
 
 # S9g: a write to a loop's name n, or into what it holds by value, that nothing in the turn reads after it - the
