@@ -238,6 +238,45 @@ What round 7 did build for it: the buffer. A by-value argument the callee change
 and over before the call lets go of anything (`free.copiedArg`, the walker's `copying`) - the Vec's buffer place no
 longer keeps for "a value of it read in this statement is in use when 'longest(rows[...])' lets go of it".
 
+### 2.4 Review 4's shapes (wt-gapsb18, 2026-11-22)
+
+Review 4 (/home/user/review4.md) named six shapes `-memory -check` reported. Measured on master 9e3a27fd7: four were
+already closed by later rounds (keptlast, keptlast2, falseb18) - a user function passing its by-value Q on to `SetAt`,
+`v[i] = v[j]`, `v = Vec<Q>()` with owner fields in the elements, a view of one owner field held while a sibling is
+assigned: each passes `-memory -check` and stays under 8 MB at 800,000 turns.
+
+**Built: an array local of PartsOnly elements given another array** (h5, `rows = Array<Q>(4, src[i % 3])`). An owner
+local holding a run-time array whose elements hold storage only in part places (`free.SplitLocal`) is a split field's
+local twin: its elements' parts are built as their stores build them (the fill's `lower.fillCopy`), and its let-go walks
+the old array by its length releasing each element's parts, then the array's own region (`lower.releases`); the free
+pass counts the walk's let-goes as a split field's (`PartsLet`, WalkIn). checks' freeing splitlocal: out of memory under
+8 MB at 200,000 turns before, flat now.
+
+**Found and fixed on the way: a split array released under a view of its elements.** `for x in s.qs[1].a { s.qs =
+Array<Q>(...) }` (c1's split field, wt-keptlast) and the same over a split local: the view the loop walks is of the
+elements' owner place (`Q.a`), not of `S.qs`, so `S.qs` was decided sole and the walk released the array the loop still
+read - `-sanitize` and the evaluator stopped, the plain build read freed storage. condition 6 now takes a view of a place
+a split array's elements hold (`free.splitInside`: their PartsLet and held places) as one of the array itself, and a
+walk's let-go of the elements' parts as one through the array's place (`goWalkPl`). checks' freeing splitviews (built,
+`-free late`, `-sanitize`, the evaluator agree).
+
+**Still open** (each a round of its own; no design decision, the analysis and lowering only):
+
+- **A fixed fill widened into a local given new arrays** (found here): `rows := Array<I64>(4)` then `rows =
+  Array<I64>(4, i)` in a loop keeps every array - for `Array<I64>`, `Array<String>` and `Array<Q>` alike. The declaration
+  is a conversion (T7c) of a fixed array, built in the innermost block and copied (`lower.widen`), which `made` reads as
+  existing storage, so the place keeps. To close: widen a fill a place's store makes into that store's region (the
+  fill's site redirected, no temporary copy) and judge the conversion of a Make as the Make. Declared with no value,
+  the local frees.
+- **An element holding a struct that holds an owner by value** (a3, `rows[i % 10] = w` for `R{q Q}`, `w := R(q, i)`):
+  ~1 KB a turn. The constructor's store of its by-value parameter keeps `Q.a` (`storeAs` lets only part places go with a
+  value stored whole); letting owner places go with it too passes `-memory -check` but still grows, so the nested owner's
+  region is not released at the element's let-go - a false proof, not built. A fill of such a struct
+  (`Array<S>(10, S(R(Vec<I64>[0], 0)))`) is named as a copy with no store (RCopied).
+- **A copy of a Map whose values are Vecs of text** (B18a's last gaps.olang row, `c := rows[(i + 3) % 10]` of an
+  `Array<Map<String, Vec<String>>>`): `splitLetOf` leaves Maps out - a split copy's entries would be let go of by a Put as
+  a gap; to close, a copied Map's entries built as `Map.add` builds them (entryCopy) at a local's copy too.
+
 ## 3. Order of work (phase 2)
 
 1. The gaps that cost real programs: 1-4 (done), 13 (a plain runtime leak), 12, 5, 6-7, then 10, 8-9, 11, 14.

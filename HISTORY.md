@@ -41315,3 +41315,37 @@ skips a SlotPlace the same way, split or not, unless the type runs a declared Co
 ctortexts.olang (the freeing scenario: -memory -check, flat under 8 MB, interpreted, -free late, -sanitize). Freeing
 changed; lowering, scopes and the runtime did not. gaps.olang (B18a) loses its second row - a MapEntry<K, V>(key, value)
 constructor copy at map.olang:90, the same keep - and keeps the one its copy `c := rows[...]` makes.
+
+## 2026-11-22: review 4's shapes - a split local, and a split array released under a view (O8f; mine; wt-gapsb18)
+
+Review 4 named six shapes `-memory -check` reported (/home/user/review4.md). Re-measured on master 9e3a27fd7, four were
+closed by the rounds since (keptlast, keptlast2, falseb18): a user function forwarding its by-value Q to `SetAt`, `v[i] =
+v[j]`, `v = Vec<Q>()` over elements with owner fields, and a view of one owner field held while a sibling is assigned -
+each passes `-memory -check` and stays under 8 MB at 800,000 turns.
+
+Built: an array local of PartsOnly elements given another array (`rows = Array<Q>(4, src[i % 3])`) kept every array's
+elements, "its elements may hold storage built with it". Such a local is now a split local (`free.SplitLocal`, an
+owner local - keyField -3 - whose value is `partsArray`), handled as c1's split field is: the fill builds the elements'
+parts as their stores do, the let-go walks the old array by its length releasing each element's parts (lower.releases'
+SplitField branch), then the array's region; the free pass records the walk's let-goes (PartsLet, WalkIn).
+checks/fixtures/freeing/splitlocal.olang: out of memory under 8 MB at 200,000 turns on master, flat now.
+
+Found on the way, a soundness bug of the split field (wt-keptlast) the split local inherited: `for x in s.qs[1].a {
+s.qs = Array<Q>(...) }` released the array the loop still walked - `-sanitize` stopped with a use after the scope
+closed, the evaluator likewise, `-memory -check` named a keep. The view the loop walks has the elements' owner place
+(`Q.a`) as its origin, not `S.qs`: `Q.a` kept for it (the report's row), `S.qs` was decided sole and its walk ran. Now a
+view of a place a split array's elements hold, in use across the array's let-go, keeps the array (`free.splitInside` -
+the element type's PartsLet and held places - read in `walker.views`), and a walk's let-go of the elements' parts is
+also one through the array's place (`goWalkPl`, set where SplitField, SplitLocal and an element array's walk go).
+checks/fixtures/freeing/splitviews.olang (a split field and a split local, each under such a loop): built, `-free
+late`, `-sanitize` and the evaluator agree.
+
+Tried and not built: letting owner places go with a value stored whole as part places do (`storeAs`'s ownParts) for
+an element holding `R{q Q}` - `-memory -check` then passed, but the program still grew ~1 KB a turn (the nested owner's
+region is not released at the element's let-go): a false proof, so the keep stays named. Left open, with what closes
+each, in docs/freeing.md 2.4: a fixed fill widened into a local given new arrays (`rows := Array<I64>(4)` then `rows =
+Array<I64>(4, i)` keeps for any element type: the declaration is a T7c conversion copied from the innermost block, read
+as existing storage), the nested owner element (a3), and gaps.olang's Map copy (B18a's last row, unchanged). No design
+decision is needed for any of them. Freeing and lowering's releases changed; scopes, the runtime and the evaluator did
+not.
+

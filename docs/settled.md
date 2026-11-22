@@ -1055,7 +1055,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   given another value frees (arrayelems, wt-arrelems). A struct field holding such an array (`S{qs Array<Q>}`) is a
   split field (`free.SplitField`): its values built split, its let-go releasing its elements' parts by its length, then
   the array (splitfield, wt-splitfield); a struct holding one beside other parts is PartsOnly as an element, walked by
-  the array's length (`VecWalk`'s SplitCount), its copy split part by part (splitelems, wt-freeopen).
+  the array's length (`VecWalk`'s SplitCount), its copy split part by part (splitelems, wt-freeopen). An owner local
+  holding such an array is a split local (`free.SplitLocal`), let go of the same way (splitlocal, wt-gapsb18); a view of
+  a place a split array's elements hold, in use across its let-go, keeps the array (`splitInside`, splitviews).
   A view call's value given to a by-value parameter its callee keeps nowhere but in what it hands back
   (`lower.HandsOnly`), the result held by a value local of no reference beyond its parts (`h := giveField(v[j])`): At's
   copy made in that local's block (`free.resultArgs`), the local holding lowering's copy of the result - a call's value
