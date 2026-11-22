@@ -339,8 +339,11 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   are each built for it (`builtItems`) - its items the element place's stores (`makeStores`), no view of what they own
   (`makeOf`'s `unowned`, as a fill's). One holding a local's value (`Array<Vec<I64>>[v, ...]`, `v` copied or moved at
   its last mention where it lives, outside the region) keeps, named, and so does a global's first value (its
-initializer copies it into the program's scope). checks' freeing litstores, now flat. Open: a mutable global made by a
-fill and given another fill in a function is read after its scope closed (`-sanitize`; also before wt-gaps5).
+initializer copies it into the program's scope). checks' freeing litstores, now flat. (A mutable global made by a fill
+and given another fill in a function was read after its scope closed under `-sanitize`: an array place's value read
+where it stands - lent, rendered - across a later operand's let-go was no view to the free pass, an array of plain
+values holding no reference by type; `readOf` now records it, the place keeping, as any field's array place does.
+Closed by wt-globalfill; checks' freeing globalviews.)
 
 **Question 1 (open; default in effect: a place a task's code lets go of keeps everywhere, condition 3 as built).** A
 value a joined task builds and hands back - a Vec grown by Push on the task's thread - can be freed by the spawner only

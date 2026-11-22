@@ -665,6 +665,11 @@ fn freeing(r mut report&) ? Failed {
     # for that view; built, -free late, -sanitize and the evaluator agree)
     try late(r, dir, "splitviews", "200", "9806\n")
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 splitviews.olang > out.txt 2>&1") == 0 and outOf(dir) == "9806\n", "splitviews interpreted", dir)
+    # (globalviews: an array place - a global made by a fill, a struct's array field - lent to a call, or rendered, while a
+    # later operand's call gives it another fill: kept for that view; built, -free late, -sanitize and the evaluator agree)
+    gv := "Array<I64>[7, 7, 7, 7, 7] 0 Array<I64>[199, 199, 199] 158607\n"
+    try late(r, dir, "globalviews", "200", gv)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 globalviews.olang > out.txt 2>&1") == 0 and outOf(dir) == gv, "globalviews interpreted", dir)
     # (copyread: `c := v[j]` read after the element is replaced holds lowering's copy - no named view keep either)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check copyread.olang > out.txt 2>&1") == 0 and outOf(dir).Contains(", 0 keep it"), "copyread frees at once", dir)
     # (threads reserve address space of their own: these read their own growth, or their peak)

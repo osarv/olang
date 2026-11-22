@@ -1,0 +1,39 @@
+import "std/io"
+
+# O8f: an array place's value read where it stands - lent to a call, a piece rendered - while a later operand's call
+# gives the place another fill: a mutable global initialised by a fill, and a struct's array field. The place keeps for
+# that view (condition 6); before, the call's let-go released the storage the earlier operand still read (-sanitize
+# stopped)
+N I64 = 2000
+
+G mut Array<I64> = Array<I64>(2, 1)
+
+type Q struct(a Array<I64>) {
+    a
+}
+
+fn growG(i I64) I64 {
+    G = Array<I64>(5, i)
+    return 0
+}
+
+fn grow(q mut Q&, i I64) I64 {
+    q.a = Array<I64>(3, i)
+    return 0
+}
+
+fn total(a Array<I64>&, n I64) I64 {
+    s := n
+    for x in a: s += x
+    return s
+}
+
+fn main() ? {
+    q := Q(Array<I64>(2, 1))
+    t := 0
+    for i in range N {
+        t += total(G, growG(i))
+        t += total(q.a, grow(q, i))
+    }
+    try io.PutLn($G + " " + $growG(7) + " " + $q.a + " " + $t)
+}

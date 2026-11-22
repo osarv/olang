@@ -41564,3 +41564,16 @@ last mention, its assignment letting go of nothing. Unsound - the local is lifte
 Let's call builds its value there too: `-memory -check` passed while the program ran out of 8 MB. Reverted. Closing it
 needs the scope pass to place the Let's call result in the local's own block while the local's storage and the
 assignment's result go where the store is, or the owner local handing its leaves to the element (freeing.md 2.4).
+
+**An array place read where it stands across a later operand's let-go** (wt-globalfill, 2026-11-22; found by wt-gaps5):
+`G mut Array<I64> = Array<I64>(2, 1)`, `fn growG() I64 { G = Array<I64>(5, 9) ... }`, then `$G + $growG()` or
+`show(G, growG())` read G's old storage after growG's let-go released it (`-sanitize` stopped; the plain build printed
+what the freed chunk held). Not a global's matter: a struct's `Array<I64>` field given a fill by a call in the same
+statement (`total(q.a, grow(q, i))`) did the same. The cause: the free pass records a read in a statement as a view only
+where the value's type holds a reference (`walker.readOf`'s `holds`), and an array of plain values holds none by type -
+but read where it stands (lent to a call, a run-time array's piece rendered) it is the place's storage, so the
+statement's check of reads against a call's let-go (condition 6) never saw it, and the place was decided sole. Fixed:
+`readOf` records the read of an array place (`f.arr`) as a view whatever its element type; such a place keeps where a
+later operand's call lets go of it, as a Vec's would. A literal initializer had hidden it (its value copied into the
+program's scope, never the place's own: RMade). checks' freeing globalviews (built, -free late, -sanitize, the
+evaluator agree; master's build printed a different sum and -sanitize stopped).
