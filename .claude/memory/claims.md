@@ -36,4 +36,3 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - olang session (cloud, 2026-11-22): wt-mapnode merged (FindByte kept, Map change dropped)
 - olang session (cloud, 2026-11-22): wt-genslow merged (no repro)
 - OLang Cloud (2026-11-22): olang wt-globalfill - global refilled in a function read after its scope (-sanitize), r := build(0) then r = build(i)
-- OLang Cloud (2026-11-22): olang wt-f32pick - oann's F32 pick still 3x slower (oann wt-f32select b15913a)
