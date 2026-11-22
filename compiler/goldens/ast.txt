@@ -2072,7 +2072,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-6f6104e1414a6860 2fbd9a22e8150545 checks/checks.olang
+032152517e942e85 cb066a5194246802 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2194,6 +2194,7 @@ ed65e1c871a90895 f027d66ab67504be checks/fixtures/freeing/elements.olang
 96a3c1472dbe3da4 2b41dcaa53b33b78 checks/fixtures/freeing/fillread.olang
 1fa83c8af5767017 cd3e45916c6b1337 checks/fixtures/freeing/fillreturn.olang
 6e8ccc84988a6c76 472f3f071fa0f3e5 checks/fixtures/freeing/fills.olang
+635d890092195116 ee301f1a82942b4c checks/fixtures/freeing/fixeddefaults.olang
 d18097214e652a69 7b0777b61ce1e0fd checks/fixtures/freeing/gaps.olang
 8f51a875a88e3c20 abf5a8fc50ff6728 checks/fixtures/freeing/genviews.olang
 217397296d19aecc 54f099facf748fa7 checks/fixtures/freeing/global.olang
@@ -2220,7 +2221,9 @@ a279308f7e9120d1 e6df593763b44a6f checks/fixtures/freeing/splitelems.olang
 d66b7ed7488df41e dae2ec7771244c85 checks/fixtures/freeing/structelems.olang
 f1c20ff3f5a169be eb36ebc438018c23 checks/fixtures/freeing/tasks.olang
 8f42cb1782a3ec6c b89390ef036f022a checks/fixtures/freeing/tempref.olang
+30d86bf605793cdb 6fce06e636ba2d57 checks/fixtures/freeing/textarrays.olang
 6f8f63e1e574c89d 293ddd3d54b9ec54 checks/fixtures/freeing/texts.olang
+fb2c0fa85ead9c75 d905d25037ac6516 checks/fixtures/freeing/textstructs.olang
 65090776a1973a56 279acdd1025cfdfd checks/fixtures/freeing/tryreads.olang
 394cffd18c1d96c5 2d0d4f787fbf2db4 checks/fixtures/freeing/unset.olang
 4d356536c1ea86a1 3dc396d7a428f1c5 checks/fixtures/freeing/veccopies.olang
@@ -2451,14 +2454,14 @@ eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
-314fc9885f6d6480 3d45bd01f846fc7f compiler/free.olang
+f85ca123782aa086 0067a20073eb4272 compiler/free.olang
 7dcf3f3fd8db67e5 e07e51a6cff33838 compiler/generic.olang
 47fb7c219d28bceb 53557355686b67f3 compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang
 8299f0d6f657ceae 5fcac26072ce57dd compiler/lineedit.olang
 211de0b5ecb13aac 9a12ce3d06dabd21 compiler/listing.olang
 f25119be92c6587e 4599d1f0b8398118 compiler/load.olang
-0dab4a2deb439446 acc33ec140988772 compiler/lower.olang
+dc1803a2600f3b50 f15719b68f14db44 compiler/lower.olang
 0a6ba37a53fb9662 36e2d7fb1015a7d2 compiler/lsp.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
