@@ -41079,6 +41079,46 @@ OLANG_EVALUATE=1 print the same. Left as kept, by the rule: a default fill of a 
 stored into the instance, not built in a block (wt-freecond's restriction), and `v[j] = P(...)` into a Vec<P> whose P
 holds text elements is SetAt's gap, with or without a fill. Fixture checks/fixtures/freeing/fillargs.olang (master fails
 -check on it).
+## 2026-11-22: the last three keeps -memory -check named free at once (O8f; mine; wt-keptlast)
+
+wt-fillstruct and review7 left three shapes keeping what they let go of until the scope closed, each named by
+`-memory -check` (B18):
+
+- **A field default fill of a constant length**, `type D struct(k I64) { t Array<String> = Array<String>(4, "d") }`, then
+  `d.t[j] = ...` in a loop. The field's type takes the fill's length (C2e), so the fill is a fixed array held in the
+  instance, built in no block - and `free.FillText` took a fixed fill only in a block (wt-freecond, after wt-fillcopy's
+  fillOwners): an array held by value inside an owner's region would have its elements' own regions hide the owner's,
+  whose release finds its region from its anchors. That concern is about regions. A text element of a slot place is
+  built in a slot, as every copy's text of a slot place already is wherever the copy lands (lower.copySlots,
+  textSlotCopy), so FillText now takes a fixed fill outside a block where its element place is a slot place; a fill of
+  arrays of plain elements (part regions) or of anything built in a region of its own still needs the block.
+- **`v[j] = P($"p" + $i, Array<String>(2, ...))` into a Vec<P>** - SetAt's gap, "lets go of what the element held": P
+  was no PartsOnly type, since its Array<String> field was neither the prelude Vec's text buffer (walked by the count)
+  nor a split field (an array of PartsOnly values, walked by its length).
+- **`ts[j] = Array<String>(2, $"t" + $i)` into a Vec<Array<String>>** in a loop: the buffer's element place was no
+  part place - `free.elemArray` took run-time arrays of plain elements or of PartsOnly values only.
+
+The last two are one gap: an array of text. Its text elements' place is the type's (`Array<String>.-1`, a slot place by
+the type alone), every store into it builds in a slot, every copy builds its text in slots (splitArray, copySlots) and
+every fill does (fillText). `free.TextArray` names that place for a run-time array of slot text. elemArray now takes
+such an array, so a Vec<Array<String>>'s element place is a part place: each value built in a part region of its own
+(elemArrayCopy), its text in slots of the region's parent; and SplitField takes a struct's field holding one, so P is
+PartsOnly and its copies split (partsCopied). Their let-go is a walk by the array's length putting each element's slot
+back - a relPath with Data -2 and Slot, guarded by the text place's decision exactly as a Vec of text's walk is - before
+the array's part region is released: in partReleases (an element array), at a split field's own store, and in
+walkReleases (a VecWalk of Count SplitCount whose Texts is the text place). On the free pass's side PartsLet of a text
+type names the text place, so a walk's let-goes of it are judged against the views in use as a Vec of text's are.
+
+Fixtures freeing/fixeddefaults (a local instance and instances in a Vec), textstructs (fills of new text and of a
+constant, an element's element replaced in place) and textarrays (elements replaced whole and in place, the Vec held in a
+struct's field): 200,000 turns under 8 MB, master fails -check on each; built, `-free late`, `-sanitize` and interpreted
+print the same. Probes - an element copied out and read after its replacement, one returned by a function, its text
+pushed into another Vec, Push and Pop around the replacements, a struct holding a Vec<Array<String>> replaced whole,
+Vec<Vec<Array<String>>>, a P copied out then replaced - agree in every mode. Left: a fixed outer array of arrays of text
+(a constant-length `Array<Array<String>>` fill whose elements are replaced) keeps by wt-fillcopy's rule; and a keep by
+the rule made in the prelude's code (`v[j] = P("a", 1)`: SetAt copies a constant's text) is not counted among the
+let-goes "in code that runs again" - the report says none where the call is in a loop.
+
 ## 2026-11-22: M19g follows a lambda's growth of what it captured (mine; review7)
 
 The bulk soundness review of the week's freeing merges (review7, /home/user/review7.md) probed every target clean and

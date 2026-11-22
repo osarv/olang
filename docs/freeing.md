@@ -756,6 +756,31 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   fixed fill stored into the instance, not built in a block, so it keeps (RCopied) as wt-freecond's rule says; and
   `v[j] = P(...)` into a Vec<P> whose P holds an Array<String> is SetAt's gap ("lets go of what the element held": P is
   no PartsOnly type), fill or not.
+- 2026-11-22, wt-keptlast: **the last three keeps -memory -check named** (wt-fillstruct's and review7's). (1) A field
+  default fill of a constant length (`t Array<String> = Array<String>(4, "d")`), a fixed array held in the instance
+  and built in no block, kept by wt-freecond's restriction. That restriction guards against a region of its own built
+  inside an owner's region, which an owner's release finding its region from its anchors would take for its own; text
+  of a slot place is built in slots, as every copy's text of such a place already is wherever it lands
+  (lower.copySlots) - so `free.FillText` takes a fixed fill outside a block where its element place is a slot place
+  (arrays of plain elements, built in part regions or regions, still need a block). (2) `v[j] = P(...)` into a Vec<P>
+  whose P holds an Array<String> (SetAt's "lets go of what the element held"): P was no PartsOnly type, an array of
+  text being neither a Vec's text buffer nor a split field of PartsOnly values. (3) `ts[j] = Array<String>(2, ...)`
+  into a Vec<Array<String>>: its element place was no part place (elemArray took arrays of plain or PartsOnly
+  elements). Both are an array of text whose text place - by the type alone, a slot place - is built in slots
+  (`free.TextArray`): an element array of text is now an elemArray (each value built in a part region of its own,
+  its text in slots of the region's parent - splitArray, elemArrayCopy), and a struct's field holding one a split field
+  (SplitField, its VecWalk a SplitCount walk with Texts its text place). Its let-go walks the array by its length putting
+  each element's slot back, guarded by the text place's decision as a Vec of text's walk is (lowering's relPath Data
+  -2 with Slot), then releases its part region; PartsLet of text names the text place, so the walks' let-goes are judged
+  as a Vec of text's are. Fixtures fixeddefaults, textstructs and textarrays (200,000 turns under 8 MB; master fails
+  -check on each); built, `-free late`, `-sanitize` and interpreted print the same; probes (copies of an element held
+  across its replacement, a returned element, an element's text pushed into a Vec, Push/Pop, a struct holding a
+  Vec<Array<String>> replaced whole, Vec<Vec<Array<String>>>, P copied out then replaced) agree in every mode.
+  **Where to pick up**: a fixed outer array of arrays of text (`Array<Array<String>>(3, ...)` with a constant length,
+  its elements replaced) keeps by wt-fillcopy's rule (a fixed fill's elements no store builds, RCopied); a store of
+  existing storage made in the prelude's code - `v[j] = P("a", 1)`, SetAt's copy of a constant's text - keeps by the
+  rule but is not counted among the let-goes "in code that runs again" (the report says none where SetAt's call is in a
+  loop); a copy holding a Map stays untracked (gaps.olang's shape); tasks as wt-taskfree left them.
 - 2026-11-21, wt-taskgrow: **a task's read-only reference to an element** (`spawn b = readsRef(v[j].a)`, `readsQ(v[j])`)
   kept ~63 bytes a spawn for the run, here and at wt-taskfree alike: lowering copies the view call's value (D9h) for a
   task, and only a by-value argument's copy went to the join's scope (`taskCopy`). A read-only reference argument whose
