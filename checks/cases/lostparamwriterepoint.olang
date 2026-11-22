@@ -1,0 +1,15 @@
+# check: fail error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
+# S4e: after '=' repoints a reference parameter at the callee's own storage (S4a), a field written through it is a
+# store too - nothing reads 'p' after it, so the write never reaches the caller
+type P struct() {
+    A I64 = 0
+}
+fn setp(p mut P&) {
+    p = P()
+    p.A = 5
+}
+fn main() {
+    p := P()
+    setp(p)
+    Println(p.A)
+}

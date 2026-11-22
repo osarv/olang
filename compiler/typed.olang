@@ -3521,14 +3521,19 @@ fn wholeLocal(x Expr&) I64 {
 # payload reached following no reference) - that no mention of L comes after, in the order the body is written. A
 # mention inside deferred code, a task, a join's clauses or a lambda's capture counts as after everything; one inside a
 # loop of the body counts as after every store in that loop. Any mention but a store's own target is a read: a copy, a
-# borrow, a call's argument or receiver
+# borrow, a call's argument or receiver. Once L, a reference, is repointed at storage the body itself gives a value
+# (Promote) on every path so far, a write through it - a field, an element, a payload reached through L - is a store
+# into storage only L names, and no read of L
 type LostStores struct(L LocalId) {
     L
     seq I64 = 0
     later I64 = 0
+    depth I64 = 0
+    fresh Bool = false       # L names storage of the body's own, on every path to here
     lastRead I64 = -1
     Spans Vec<source.Span>   # each store, where it is written
-    Whole Vec<Bool>          # whether it assigns L itself, not storage in it
+    Whole Vec<Bool>          # whether it assigns L itself or writes through it, not storage L holds by value
+    Through Vec<Bool>        # whether it writes through L, repointed at the body's own storage
     at Vec<I64>
     live Vec<Bool>
 }
@@ -3557,6 +3562,13 @@ fn (w mut LostStores&) block(b Block?&) {
     if b != null: w.Stmts(b.Stmts)
 }
 
+# a block that may or may not run: a repoint in it cannot make L's storage the body's own after it
+fn (w mut LostStores&) branch(b Block?&) {
+    w.depth++
+    w.block(b)
+    w.depth--
+}
+
 fn (w mut LostStores&) laterBlock(b Block?&) {
     w.later++
     w.block(b)
@@ -3564,10 +3576,16 @@ fn (w mut LostStores&) laterBlock(b Block?&) {
 }
 
 # a loop inside the body: a mention of L anywhere in it keeps every store in it
+# (a loop whose body repoints L at storage not its own - L may name it on the next turn - keeps every store before its
+# end, writes through L in it included)
 fn (w mut LostStores&) loop(body Block?&, post Block?&) {
     s0 := w.seq
+    f0 := w.fresh
+    w.depth++
     w.block(body)
     w.block(post)
+    w.depth--
+    if f0 and not w.fresh: w.read()
     if w.lastRead <= s0: return
     for i in range w.at.Len() {
         if w.at[i] > s0: w.live[i] = true
@@ -3587,16 +3605,20 @@ fn (w mut LostStores&) stmt(s Stmt&) {
             w.expr(x)
             w.seq++
             w.Spans.Push(sp)
-            w.Whole.Push(p == Lvalue.Local)
+            w.Whole.Push(p == Lvalue.Local or w.through(p))
+            w.Through.Push(w.through(p))
             w.at.Push(w.seq)
             w.live.Push(w.later > 0)
+            if p != Lvalue.Local: return
+            if not freshStorage(x): w.fresh = false
+            else if w.depth == 0 and w.later == 0: w.fresh = true
         }
         case Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Reraise(_, x, _): w.expr(x)
         case Stmt.Return(_, x), Stmt.Suspend(_, x), Stmt.Exit(_, _, x): w.expr(x)
         case Stmt.If(_, f) {
             w.expr(f.Test)
-            w.block(f.Then)
-            w.block(f.Else)
+            w.branch(f.Then)
+            w.branch(f.Else)
         }
         case Stmt.Loop(_, body, post): w.loop(body, post)
         case Stmt.Assert(_, c, m) {
@@ -3624,13 +3646,44 @@ fn (w mut LostStores&) stmt(s Stmt&) {
     }
 }
 
-# whether a store's place is L or storage L holds by value
+# whether a store's place is L or storage L holds by value - or, L repointed at the body's own storage, storage
+# reached through L
 fn (w LostStores&) ownStore(p Lvalue&) Bool {
     return match p {
         case Lvalue.Local(_, _, id): id == w.L
+        case Lvalue.Deref(_, _, r): w.fresh and w.later == 0 and readsL(r, w.L)
         case Lvalue.Field(_, _, base, _): w.ownStore(base)
         case Lvalue.Elem(_, _, e): w.ownStore(e.Base)
         case Lvalue.Payload(_, _, py): w.ownStore(py.Base)
+        case _: false
+    }
+}
+
+# whether a store's place is reached through L, which names the body's own storage
+fn (w LostStores&) through(p Lvalue&) Bool {
+    return match p {
+        case Lvalue.Deref(_, _, _): true
+        case Lvalue.Field(_, _, base, _): w.through(base)
+        case Lvalue.Elem(_, _, e): w.through(e.Base)
+        case Lvalue.Payload(_, _, py): w.through(py.Base)
+        case _: false
+    }
+}
+
+# whether an expression is L's value
+fn readsL(x Expr&, l LocalId) Bool {
+    return match x {
+        case Expr.Read(_, _, p, _): p == Lvalue.Local and p.id == l
+        case Expr.Away(_, _, y): readsL(y, l)
+        case _: false
+    }
+}
+
+# whether a value a reference is given is storage given it here (E12c), which nothing else names
+fn freshStorage(x Expr&) Bool {
+    return match x {
+        case Expr.Promote(_, _, _): true
+        case Expr.Away(_, _, y): freshStorage(y)
         case _: false
     }
 }
@@ -3649,10 +3702,12 @@ fn (w mut LostStores&) storeParts(p Lvalue&) {
 }
 
 fn (w mut LostStores&) clauses(cs Array<Clause&>&) {
+    w.depth++
     for c in cs {
         w.block(c.Code)
         w.exprs(c.Defaults)
     }
+    w.depth--
 }
 
 fn (w mut LostStores&) exprs(xs Array<Expr&>&) {
@@ -3688,8 +3743,10 @@ fn (w mut LostStores&) expr(x Expr?&) {
         }
         case Expr.Cond(_, _, k) {
             w.expr(k.C)
+            w.depth++
             w.expr(k.A)
             w.expr(k.B)
+            w.depth--
         }
         case Expr.Seq(_, _, q) {
             w.Stmts(q.Stmts)
@@ -3723,6 +3780,7 @@ fn (w mut LostStores&) expr(x Expr?&) {
 }
 
 fn (w mut LostStores&) arm(a Arm&) {
+    w.depth++
     for alt in a.Alts {
         w.expr(alt.Test)
         for bd in alt.Binds: w.expr(bd.From)
@@ -3730,6 +3788,7 @@ fn (w mut LostStores&) arm(a Arm&) {
     w.expr(a.Guard)
     w.block(a.Code)
     w.expr(a.Value)
+    w.depth--
 }
 
 fn (w mut LostStores&) place(p Lvalue&) {

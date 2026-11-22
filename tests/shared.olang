@@ -18813,3 +18813,40 @@ test "S4e: writes through a mut reference reach the caller, a repoint read after
     assert paramCursorLast(Array<I64>[1, 2, 3]) == 3
     assert paramBump(41) == 42
 }
+
+# S4e: once a reference parameter is repointed at the callee's own storage, a write through it is a store too - kept
+# where something reads the parameter after it, or where the repoint may name the caller's storage
+fn paramRepointRead(b mut ParamBox&) I64 {
+    b = ParamBox()
+    b.N = 5
+    return b.N
+}
+fn paramRepointOther(b mut ParamBox&, other mut ParamBox&) {
+    b = other
+    b.N = 6
+}
+fn paramRepointMaybe(b mut ParamBox&, fresh Bool) {
+    if fresh: b = ParamBox()
+    b.N = 7
+}
+fn paramRepointLoop(b mut ParamBox&, other mut ParamBox&) {
+    b = ParamBox()
+    for i in range 2 {
+        b.N = 8 + i
+        b = other
+    }
+}
+
+test "S4e: a write through a repointed reference parameter, read back or reaching the caller" {
+    b := ParamBox()
+    assert paramRepointRead(b) == 5 and b.N == 0
+    o := ParamBox()
+    paramRepointOther(b, o)
+    assert o.N == 6 and b.N == 0
+    paramRepointMaybe(b, false)
+    assert b.N == 7
+    paramRepointMaybe(o, true)
+    assert o.N == 6
+    paramRepointLoop(b, o)
+    assert o.N == 9
+}
