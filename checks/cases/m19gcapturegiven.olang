@@ -1,0 +1,16 @@
+# check: fail error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+# M19g: a lambda growing its capture of a second name of the Vec, given to a call that may call it (review7: built, it
+# read the buffer the growth replaced - an element owning storage emptied by the move)
+import "std/io"
+fn callIt(f fn&()) { f() }
+fn main() ? {
+    v := Vec<Vec<I64>>()
+    v.Push(Vec<I64>[1])
+    r mut Vec<Vec<I64>>& = v
+    f := fn() {
+        for i in range 100: r.Push(Vec<I64>[i])
+    }
+    d := v.View()
+    callIt(f)
+    try io.PutLn($d[0][0])
+}

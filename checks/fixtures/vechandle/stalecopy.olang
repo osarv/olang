@@ -1,8 +1,10 @@
 # B2f (review 6b F4): a Map's slots copied with the struct holding it (QCE, the Copy helper) are an array of their own
 # chunk, so retiring them at the copy's growth protects them: a reference kept across the growth, made through a
-# hidden route (a closure over a writable reference), is reported where it is next used - it had read the poison
+# hidden route (a closure over a writable reference, held in a struct - M19g follows one called or given to a call, not
+# one a struct holds), is reported where it is next used - it had read the poison
 import "std/io"
 type blk struct(n I64, m I64) { n, m }
+type runner struct(f fn&()) { f }
 type st struct() {
     m Map<I64, blk>
 }
@@ -15,8 +17,9 @@ fn main() {
     grow := fn() {
         for i in range 2, 5000: pm.Put(i, blk(i, i))
     }
+    h := runner(grow)
     r := ss.RefMut(0).m.RefMut(1)!
-    grow()
+    h.f()
     r.n = 77
     io.PutLn("r.n " + $r.n + " r.m " + $r.m)!
 }

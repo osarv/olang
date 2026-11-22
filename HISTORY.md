@@ -41059,3 +41059,30 @@ turns under 8 MB, master fails -check on each; built, `-free late`, `-sanitize` 
 Vec<I64> owner field given a conditional of calls, a Vec<String> element given a conditional through SetAt, a fill
 returned, a fill of a local's text read after) print the same in every mode. Left: a struct constructed with a fill
 argument (`P(Array<String>(m, "p"))`) is a call's value copied (RCopied) where its field's element is replaced.
+
+## 2026-11-22: M19g follows a lambda's growth of what it captured (mine; review7)
+
+The bulk soundness review of the week's freeing merges (review7, /home/user/review7.md) probed every target clean and
+found one M19g hole on the way. A lambda capturing a second name of a Vec and growing it -
+
+    r mut Vec<I64>& = v
+    f := fn() { for i in range 100: r.Push(i) }
+    d := v.View()
+    f()                  # or callIt(f), fn callIt(f fn&()) { f() }
+    io.PutLn($d[0])
+
+- was accepted, though rule 1 (a second name the function made) and rule 2 (a call through a lambda grows what its
+body grows) say the use is an error. The view pass recorded a body's growths only at its parameters and globals, so a
+lambda's growth of its capture (a local of its body) was dropped, and a call through a local holding a lambda - or a
+call given one - was an unknown function value given nothing writable. Built, the program read the buffer the growth
+replaced; with `Vec<Vec<I64>>` elements that is an element the growth moved out, an empty Vec indexed (a segfault).
+`-sanitize` and the evaluator reported it, and nothing was freed under it (the let-go of the old buffer keeps where a
+function value runs code not followed).
+
+Now a lambda body's growth of a capture local is a summary fact like a parameter's, numbered Params.Len() + the
+capture's local; a local remembers the lambdas it was given (bind, flow-insensitive within the body); and a call through
+a lambda written there or a local given lambdas, and a call given one as an argument (which may call it), grows what
+each growing capture was made of (`capGrows`: the capture's Outer expression's places). A call merely storing a lambda
+(`fs.Push(f)`) counts too - refusing where unsure. Not followed: a lambda held in a struct or a collection, and a
+capture of a capture holding a lambda; the evaluator and the sanitizer still report those. Cases m19gcapture,
+m19gcapturegiven (fail) and m19gcaptureread (a lambda reading its capture and setting an element grows nothing).

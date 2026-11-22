@@ -3416,7 +3416,9 @@ compile-time error **where the same `Vec` is visible on both sides**, and nowher
    holding it - through a parameter its body may grow; or a call is given the view itself and, through another
    parameter, its `Vec`. A body may grow a parameter when it grows it as in 1, or hands it (or a part of it) to a callee
    that may - read off the bodies, over calls to any depth. A call through a function written where it is called (a
-   lambda, a named function) grows what its body grows; a call through any other function value, whose body is not
+   lambda, a named function) grows what its body grows; a lambda's body growing what it captured grows what the capture
+   was made of (`r` captured, a second name of `v`, grows `v`), wherever the lambda is called - written there, through
+   a local given it, or by a call given the lambda, which may call it; a call through any other function value, whose body is not
    known here, may grow what it is given by value or writably, and nothing it is not given - one whose type promises
    `pure` (T21c) only what it is given writably, a value it is given that reaches no writable reference being its own.
 3. **A global by name**: the `Vec` is a global's, or reached from one by fields, and a call between the view and its
