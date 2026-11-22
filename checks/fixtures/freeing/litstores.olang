@@ -1,0 +1,46 @@
+import "std/io"
+
+# O8f (review9): array literals given each turn to a split local (an array of Vecs), a split field (an array of
+# structs holding a Vec), a text local, a local of numbers and a mutable global, other storage built between. A
+# literal widened to the place's run-time array is built where it is written (its items moved in where each was built,
+# the widened copy made in the statement's scope or the global's), so the place keeps, named by -memory -check; judged
+# the Make's own store, its let-go released storage no region held - a segfault, -sanitize too
+N I64 = 2000
+
+type Q struct() { a Vec<I64> }
+
+type S struct() { qs Array<Q> }
+
+G mut Array<I64> = Array<I64>[1, 2]
+
+fn Q.mq(i I64) Q {
+    q := Q()
+    q.a = Vec<I64>[i, i + 1]
+    return q
+}
+
+fn churn(i I64) I64 {
+    w Vec<String>
+    for j in range 10: w.Push($"junkjunkjunkjunk" + $j + $i)
+    return w.Len()
+}
+
+fn main() {
+    rows Array<Vec<I64>>
+    s := S()
+    tl Array<String>
+    ns Array<I64>
+    t := 0
+    for i in range N {
+        rows = Array<Vec<I64>>[Vec<I64>[i, i + 1], Vec<I64>[7]]
+        s.qs = Array<Q>[Q.mq(i), Q.mq(7)]
+        tl = Array<String>[$"c" + $i + " padded out to some length", $"d" + $i]
+        ns = Array<I64>[i, i + 2, 3]
+        G = Array<I64>[i, 5]
+        t += churn(i) + rows[0][1] + s.qs[1].a[0] + tl[1].Len() + ns[1] + G[0]
+    }
+    rows[1].Push(3)
+    s.qs[0].a.Push(4)
+    t += churn(N)
+    io.PutLn($t + " " + $rows[0][0] + " " + $rows[1][1] + " " + $s.qs[0].a[2] + " " + tl[0] + tl[1] + " " + $ns[0] + $G[1])!
+}

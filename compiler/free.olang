@@ -4119,6 +4119,14 @@ fn (f mut Free&) plainElems(k I64) Bool {
     return not t.HoldsRefs(el) and not t.OwnsParts(el)
 }
 
+# whether x is an array literal's Make (`Array<Q>[a, b]`)
+fn arrayLit(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Array
+        case _: false
+    }
+}
+
 # whether a value made for an array place is a comprehension each of whose elements is one already there - moved or
 # read out of other storage (grown()'s), never one built with it in its region: so no element of an array place's
 # value reaches into that value's region, which is why an element read out of one is no view of it (elemRead)
@@ -5698,6 +5706,14 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
         w.made(k, wm, sp, multi)
         return
     }
+    # (review9: a literal, which WidenedMake leaves out, is built where it is written - kept, and said, as any other:
+    # reported counts its store as one giving the place storage)
+    wa := f.widened(x)
+    if wa != null {
+        f.stores.Push(store(k, w.Id, file, sp, SFail, of, site, x, null))
+        f.keep(k, RMade, file, sp, $"its new value is an array literal, built where it is written and widened to an array of a run-time length there: '" + $w.text(wa.Span()) + "'; build the array with a fill, or element by element")
+        return
+    }
     match x {
         case typed.Expr.Lit(_, _, _) { kind = SOk }
         case typed.Expr.Data(_, _, _, _) { kind = SOk }
@@ -5789,9 +5805,19 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     }
 }
 
-# O8f (2.4's first gap): the Make a conversion widens - a fixed array's fill or literal given where an array of a
-# run-time length of its element is kept (T7c) - null for any other value
+# O8f (2.4's first gap): the Make a conversion widens - a fixed array's fill given where an array of a run-time length
+# of its element is kept (T7c) - null for any other value. Never a literal (review9): lowering builds a literal where it
+# is written - its items moved in where each was built, the widened copy made at the statement's scope or a global's
+# store - not in the region the site is given, so a let-go of it released storage no region held (a segfault; a split
+# place's walk released parts that were none)
 fn (f mut Free&) WidenedMake(x typed.Expr&) typed.Expr?& {
+    a := f.widened(x)
+    if a == null or arrayLit(a): return null
+    return a
+}
+
+# the fixed fill or literal a conversion widens to an array of a run-time length of its element, null for any other
+fn (f mut Free&) widened(x typed.Expr&) typed.Expr?& {
     t := f.T()
     match x {
         case typed.Expr.Prim(_, pt, op, _, args) {
@@ -8554,7 +8580,7 @@ fn (f mut Free&) reported(k I64) Bool {
     if f.P.Gens.Len() > 0 and f.genPlace(k): return false
     owns := false
     for st in f.stores {
-        if st.PlaceId == k and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove): owns = true
+        if st.PlaceId == k and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove or st.X != null and f.widened(st.X) != null): owns = true
     }
     if not owns: return false
     # (text elements: where the program's own code gives one another value, or drops or ends one moved out of the

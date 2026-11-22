@@ -661,6 +661,11 @@ fn freeing(r mut report&) ? Failed {
     # for that view; built, -free late, -sanitize and the evaluator agree)
     try late(r, dir, "splitviews", "200", "9806\n")
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 splitviews.olang > out.txt 2>&1") == 0 and outOf(dir) == "9806\n", "splitviews interpreted", dir)
+    # (litstores, review9: array literals given each turn to a split local, a split field, a text local, a local of
+    # numbers and a mutable global - kept, and named; built, -free late, -sanitize and the evaluator agree)
+    try late(r, dir, "litstores", "200", "64400 199 3 4 c199 padded out to some lengthd199 1995\n")
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 litstores.olang > out.txt 2>&1") == 0 and outOf(dir) == "64400 199 3 4 c199 padded out to some lengthd199 1995\n", "litstores interpreted", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check litstores.olang > out.txt 2>&1") == 0 and outOf(dir).Contains("its new value is an array literal, built where it is written"), "litstores names its literals' keep", dir)
     # (copyread: `c := v[j]` read after the element is replaced holds lowering's copy - no named view keep either)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check copyread.olang > out.txt 2>&1") == 0 and outOf(dir).Contains(", 0 keep it"), "copyread frees at once", dir)
     # (threads reserve address space of their own: these read their own growth, or their peak)

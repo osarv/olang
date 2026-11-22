@@ -41472,3 +41472,26 @@ the store's copy. Lifting such a local could only help a move of the instance un
 the instance inside its viewed locals' blocks - a lifted `w` puts it outside them. checks' freeing ctorkept: flat, the
 oracles agree. A zero fill `Array<R>(10)` still keeps `R.q` (the fill's value copied with no store - viewCtor's
 RCopied), a shape of its own.
+
+## 2026-11-22: an array literal widened to a place keeps; only a fill is the Make's store (O8f; mine; review9)
+
+Bulk review 9 found that wt-gaps2's `free.WidenedMake` - a conversion widening a fixed fill or literal judged as the
+Make's own store, the place then given the Make's region - is unsound for a literal. `fill` builds the array where its
+site's region is and copies its item into each element there (`fillCopy`: for a split place each element's parts in
+part regions). A literal is built where it is written: `arrayLit` moves each item into the array where the item was
+built, and the widened copy is made in the statement's scope - a mutable global's store copies it into the program's
+scope - so the region the site is given never holds it. With the store fresh, the place's next let-go released
+storage no region held. Shapes: `rows Array<Vec<I64>>` given `Array<Vec<I64>>[Vec<I64>[i, i + 1], Vec<I64>[7]]` each
+turn, a split local (wt-gapsb18) whose walk released each old element's buffer as a part region; a split field
+(`s.qs = Array<Q>[...]`); a text local; a local of numbers given `Array<I64>[i, i + 2, 3]` (each once another call
+built storage in the turn); and two mutable globals initialised with literals and given others - checks' strheld
+globals, which `make quick` failed on master (wt-gaps2 merged on a smaller check). Each a segfault built and under
+`-sanitize`; `-memory -check` passed. Master before wt-gaps2 judged these stores "existing storage" and kept. Now
+`WidenedMake` takes a fill only (widenlocal's shapes, all fills, still free); a literal's store keeps with a reason of
+its own ("its new value is an array literal, built where it is written and widened to an array of a run-time length
+there ...; build the array with a fill, or element by element"), and `reported` counts such a store as one giving the
+place storage - a local declared with no value given only literals kept unnamed before (an older false proof of
+`-check`: 400 MB over 200,000 turns, nothing named). Closing the keep is lowering's (the widened literal built in the
+site's region, its items copied in as a fill's are), freeing.md 2.4. checks' freeing litstores (a split local, a split
+field, a text local, a number local and a mutable global; built, `-free late`, `-sanitize`, the evaluator, and `-memory
+-check` naming it). Freeing changed; lowering, scopes and the runtime did not.
