@@ -21,4 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-(none)
+1. (2026-11-22, asked via the Orchestrator) Freeing a joined task's results early: a value a task builds (a Vec grown by Push on the task's thread) can be freed by the spawner only if a region made on one thread may be released on another; today the pools are per thread. Options in docs/freeing.md 2.4 question 1: (a) keep as is (task results never freed early); (b) the spawner makes the result's regions before the spawn and the task's growth into them takes a lock; (c) hand the task's result regions to the spawner at the join's wait, pools taking releases from other threads via a lock-free return list. Default in effect: (a). Recommendation: (c) - no cost in the task, one step per join; section-8 design (Opus xhigh).
