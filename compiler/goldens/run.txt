@@ -1295,6 +1295,7 @@
 | ok - E31b: a mutating call through x[i] is made on the element in place, as the evaluator makes it
 | ok - S4c, E31: a parallel assignment of elements stores through SetAt
 | ok - S1b: a one-line body for every block of statements
+| ok - S4e: writes through a mut reference reach the caller, a repoint read after is kept
 | ok - two tasks run concurrently and are joined before the block ends
 | ok - several tasks may be handed the same instance
 | ok - the same instance may be shared read-only by several tasks
@@ -1418,6 +1419,7 @@
 | ok - a clone of an array is its own, its elements' parts too
 | ok - a walk of a Vec reads elements in place only where nothing can write them
 | ok - a value stored into a part of x[i] in a loop lives where the collection does
+| ok - a struct of texts pushed with a joined text built in the call
 === test tests/variadic.olang
 | status 0
 | ok - D8g: a variadic parameter takes any number of arguments, or an array passed on
