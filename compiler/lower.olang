@@ -113,6 +113,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     refsKept typed.RefsKept     # keepsNoRef's answers (typed.RefsKept)
     keptLends Map<I64, Bool>    # keepsNoLend's
     CopyLog Vec<String&>         # each of those two, by place, for -memory
+    LiftGaps Vec<String&>        # B18a: locals built outside a loop's turn for a move at their last mention lowering did not make (liftedCopy)
     ViewDump Bool = false        # OLANG_VIEWDUMP: each such call's decision, by place, in ViewLog
     ViewLog Vec<String&>
     gen mir.GenInfo = mir.GenInfo()   # the program's generational types and weak fields (Gen), once read
@@ -6202,11 +6203,30 @@ fn (ln mut lowering&) movesAtLastUse(u typed.LocalUses&) {
     w.Block(ln.B.Root!)
     for k in range w.CopySite.Len() {
         l := w.CopyLocal[k]
-        if w.CopyAt[k] < 0 or w.Last[l] != w.CopyAt[k] or not ln.movable(u, l, w.CopySite[k]): continue
+        if w.CopyAt[k] < 0 or w.Last[l] != w.CopyAt[k]: continue
+        if not ln.movable(u, l, w.CopySite[k]) {
+            ln.liftedCopy(l)
+            continue
+        }
         ln.noCopy.Put(w.CopySite[k], true)
         ln.moved.Put(w.CopySite[k], l)
         ln.L.Moves++
         if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(ln.B.Locals[l].Sp.Start)) + ": local L" + $l + " moved at its last use") }
+    }
+}
+
+# B18a: a local the scope pass built where its copy at its last mention goes (item 17, so that it is moved there) out
+# of a loop's turn, whose copy lowering makes all the same - the local's own storage, built outside the turn, is then
+# kept until that block closes, though no place's let-go names it: a gap -memory -check fails on (LiftGaps)
+fn (ln mut lowering&) liftedCopy(l I64) {
+    if not ln.freeing: return
+    loc := ln.B.Locals[l]
+    at := ln.storageBlock(l)
+    if at == loc.In or not ln.B.Encloses(at, loc.In): return
+    for x := loc.In, x != at and x >= typed.BlockId(0), x = ln.B.Blocks[I64(x)].Parent {
+        if ln.B.Blocks[I64(x)].Kind != typed.BlockKind.Loop: continue
+        ln.L.LiftGaps.Push($ln.L.P.L.Diags.Locate(ln.file, I64(loc.Sp.Start)) + ": '" + $ln.T.Names.Text(loc.Name) + "' keeps until its scope closes: it is built where its copy at its last mention goes, to be moved there (D9i), but that copy is made")
+        return
     }
 }
 

@@ -7835,10 +7835,20 @@ fn (f mut Free&) ReleaseLeaves(ty types.TypeId, depth I64 = 0) Vec<leaf> {
 # part site splitting what the array's elements own - so the local's own value of each such field, a value of the same
 # place, was built for it at its own store: in a region of its own wherever an owner place is decided sole, in a part
 # region wherever a part place is; the element takes it as the copy's would be (the local's storage outliving the
-# element, as any move asks). The local, lifted where the copy goes (the scope pass's item 17), is moved there
+# element, as any move asks). The local, lifted where the copy goes (the scope pass's item 17), is moved there - a
+# copy split across several part places (PartSplit: a Map's slot arrays) too, where every place the value holds is sole;
+# one not moved keeps where it was lifted, which lowering names to -memory -check (lower.liftedCopy)
 fn (f mut Free&) MovesLeaves(b I64, site I64, ty types.TypeId) Bool {
     if f.OwnerSite(b, site) < 0 and not f.PartSite(b, site): return false
-    if f.SplitPath(b, site).Len() > 0 or f.SlotParts(b, site).Len() > 0 or f.PartSplit(b, site, ty) != null: return false
+    if f.SplitPath(b, site).Len() > 0 or f.SlotParts(b, site).Len() > 0: return false
+    # (a value owning more than one part's array - a Map's slot arrays, a Vec's text - moved only where every place it
+    # holds is decided sole: each of its values built for it, where its new holder's let-go releases it; one of a place
+    # not sole is built where the local lives, which that let-go leaves there)
+    if f.PartSplit(b, site, ty) != null {
+        for k in f.heldPlaces(ty) {
+            if not f.IsSole(k): return false
+        }
+    }
     lvs := f.leaves(ty)
     for st in f.stores {
         if st.Body != b or st.X == null or f.topSite(st.X!) != site: continue
