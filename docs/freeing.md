@@ -794,6 +794,8 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   value as SOk, as constant data stored itself is, so the field stays decided sole and SetAt's copy is let go of. The
   report now counts SetAt's let-goes among those "in code that runs again". Fixtures fixedfills and constargs (200,000
   turns under 8 MB; master fails -check on each); built, `-free late`, `-sanitize` and interpreted print the same.
+  (review8: the ConstRead rule takes only a place of immutable text - a mutable array given constant text holds a
+  copy, `t Array<Char> = "abc"` in its frame's slot, which a region release crashed on.)
 - 2026-11-21, wt-taskgrow: **a task's read-only reference to an element** (`spawn b = readsRef(v[j].a)`, `readsQ(v[j])`)
   kept ~63 bytes a spawn for the run, here and at wt-taskfree alike: lowering copies the view call's value (D9h) for a
   task, and only a by-value argument's copy went to the join's scope (`taskCopy`). A read-only reference argument whose

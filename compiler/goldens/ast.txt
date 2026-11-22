@@ -317,6 +317,7 @@ a17cd673701a9480 0e7fa612f4177453 checks/cases/condtypes.olang
 c0e9f8fb09f6744e 89c973c1625e30ed checks/cases/constraintarg.olang
 20c4b9b3e84684cb 9a8bb566a362b3be checks/cases/constraintcall.olang
 dc129a71b0352c53 599cfd6eb12f3b6f checks/cases/constraintnotiface.olang
+265b805356b1fdff db85279d4b9cebea checks/cases/constrelit.olang
 613bbecfdea5e4e8 cf87cdfb585ba3f3 checks/cases/copyoutrefs.olang
 6719644191ae1fe4 8ef5f2ca03cabbb0 checks/cases/csvdecodearray.olang
 a71e33c0268d7761 a3ffa332e7ba1ad0 checks/cases/ctorlambdafield.olang
@@ -2461,7 +2462,7 @@ eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
-278881e5c3953ede b1085a0b603447d9 compiler/free.olang
+c24b480e0523effb 935b68ba0c6ed6db compiler/free.olang
 7dcf3f3fd8db67e5 e07e51a6cff33838 compiler/generic.olang
 47fb7c219d28bceb 53557355686b67f3 compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang
