@@ -208,6 +208,53 @@ type Box struct() {
     n I64 = 0
 }
 
+# M19d: a buffer is lengthened where it lies only by the thread whose storage it is; the others copy it, and none reads
+# what another thread may be rewriting - a join folding a finished task's storage while a sibling still grows (-race)
+fn pushMany(m mut Mutex<Vec<I64>>&, from I64) {
+    for i in range 3000 { m.With(fn(l mut Vec<I64>&) { l.Push(from + i) }) }
+}
+
+fn fillOwn(v mut Vec<I64>&, from I64) {
+    for i in range 3000 { v.Push(from + i) }
+}
+
+fn ownVec(n I64, seen mut Box&) {
+    w := Vec<I64>()
+    for i in range n { w.Push(i) }
+    seen.n.AtomicAdd(w.Len() + w[n - 1])
+}
+
+test "a Vec grows from tasks under a Mutex, from tasks it was lent to and in a task's own storage, join after join" {
+    m mut Mutex<Vec<I64>>& = Mutex(Vec<I64>())
+    seen mut Box& = Box()
+    for round in range 4 {
+        a := Vec<I64>()
+        b := Vec<I64>()
+        for i in range 100 {
+            a.Push(i)
+            b.Push(i)
+        }
+        join {
+            spawn pushMany(m, 0)
+            spawn pushMany(m, 100000)
+            spawn fillOwn(a, 1000)
+            spawn fillOwn(b, 2000)
+            spawn ownVec(50000, seen)
+        }
+        a.Push(round)
+        assert a.Len() == 3101 and b.Len() == 3100
+        assert a[99] == 99 and a[100] == 1000 and a[3099] == 3999 and b[3099] == 4999
+    }
+    total mut Box& = Box()
+    m.With(fn(l mut Vec<I64>&) {
+        for x in l { total.n += x }
+        total.n += l.Len() * 1000000000
+    })
+    # four rounds of two tasks each pushing 0..2999 offset by 0 or 100000
+    assert total.n == 24000 * 1000000000 + 4 * (2 * 4498500 + 3000 * 100000)
+    assert seen.n == 4 * (50000 + 49999)
+}
+
 fn readMany(l mut RWLock<counter>&, seen mut Box&) {
     for _ in range 500 { l.Read(fn(c counter&) { if c.n >= 0: seen.n.AtomicAdd(1) }) }
 }

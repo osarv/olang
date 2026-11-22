@@ -550,8 +550,9 @@ done:
 ; is taken only on that slow path, and only when a relaxed atomic read says the shared pool holds something; nothing
 ; on the paths every allocation and every scope's close take is shared or atomic.
 ; next, used, cap, the length of the pages it spans when mapped or in a slot (0 for one from aligned_alloc), whether it
-; is fresh from the system and zero above "used" (__olang_scope_alloc_zeroed), its class (-1 a region's first block, -2
-; a slab's header, below), then a word that is the pool's prev while the chunk is pooled (a class is a circular list
+; is fresh from the system and zero above "used" (bit 0, __olang_scope_alloc_zeroed) and whether a region holds it
+; (bit 1, set by __olang_region_alloc as it first bumps the chunk, before anything in it is handed out; every take
+; writes the word anew), its class (-1 a region's first block, -2 a slab's header, below), then a word that is the pool's prev while the chunk is pooled (a class is a circular list
 ; through next and prev) and its OWNER while a scope holds it - the scope, part (P2) or region (O8d) whose list holds
 ; it, written where a scope takes it - and the stamp ordering pooled chunks by when they were given back. A chunk is in
 ; exactly one of a scope's list, the pool, the quarantine (-s) or a slab, so the two uses of the word never meet. 64
@@ -2379,7 +2380,8 @@ check:
   %head = load ptr, ptr %headptr
   %freshptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 4
   %fresh = load i64, ptr %freshptr
-  %untouched = icmp ne i64 %fresh, 0
+  %zbit = and i64 %fresh, 1
+  %untouched = icmp ne i64 %zbit, 0
   br i1 %untouched, label %done, label %clear
 clear:
   call void @llvm.memset.p0.i64(ptr %p, i8 0, i64 %rawsize, i1 false)
@@ -2399,7 +2401,8 @@ check:
   %head = load ptr, ptr %headptr
   %freshptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 4
   %fresh = load i64, ptr %freshptr
-  %untouched = icmp ne i64 %fresh, 0
+  %zbit = and i64 %fresh, 1
+  %untouched = icmp ne i64 %zbit, 0
   br i1 %untouched, label %done, label %clear
 clear:
   call void @llvm.memset.p0.i64(ptr %p, i8 0, i64 %rawsize, i1 false)
@@ -3252,7 +3255,8 @@ entry:
 }
 
 ; P2b: the regions made in a stand-in (its kids) handed to dst as it is folded - closed with dst, after its destructors,
-; as dst's own are; each names dst as its parent (and owner, as __olang_region_make names it) from now on
+; as dst's own are; each names dst as its parent (and owner, as __olang_region_make names it) from now on - atomic, the
+; owner last, as a task still running may be reading the two (__olang_grow_in_place)
 define void @__olang_kids_move(ptr %src, ptr %dst) {
 entry:
   %skp = getelementptr %olang.scope, ptr %src, i32 0, i32 6
@@ -3268,13 +3272,13 @@ prep:
 walk:
   %r = phi ptr [ %first, %prep ], [ %nx, %step ]
   %pp = getelementptr %olang.region, ptr %r, i32 0, i32 4
-  store ptr %dst, ptr %pp
+  store atomic ptr %dst, ptr %pp monotonic, align 8
   %op = getelementptr %olang.region, ptr %r, i32 0, i32 6
   %o = load ptr, ptr %op
   %wassrc = icmp eq ptr %o, %src
   br i1 %wassrc, label %reown, label %owned
 reown:
-  store ptr %owner, ptr %op
+  store atomic ptr %owner, ptr %op release, align 8
   br label %owned
 owned:
   %np = getelementptr %olang.region, ptr %r, i32 0, i32 3
@@ -3796,11 +3800,23 @@ bump:
 bump:
 ; @end
   %raw = call ptr @__olang_scope_alloc_a(ptr %inner, i64 %total, i64 %aln)
-  ; O29: the chunk bumped names the region, which a scope found from an address reads as the scope it lives in
+  ; O29: the chunk bumped names the region, which a scope found from an address reads as the scope it lives in -
+  ; written as the region first bumps it (it names the inner scope until then), with the mark that a region holds it
+  ; (M19d, __olang_grow_in_place): so neither word changes while what the chunk holds is in use, whoever reads it
   %rhp = getelementptr %olang.scope, ptr %inner, i32 0, i32 0
   %rhead = load ptr, ptr %rhp
   %rownp = getelementptr %olang.chunk, ptr %rhead, i32 0, i32 6
+  %rown = load ptr, ptr %rownp
+  %named = icmp eq ptr %rown, %r
+  br i1 %named, label %placed, label %name
+name:
   store ptr %r, ptr %rownp
+  %rfp = getelementptr %olang.chunk, ptr %rhead, i32 0, i32 4
+  %rf = load i64, ptr %rfp
+  %rf2 = or i64 %rf, 2
+  store i64 %rf2, ptr %rfp
+  br label %placed
+placed:
   %obj = getelementptr i8, ptr %raw, i64 %aln
   %word = getelementptr i8, ptr %obj, i64 -8
   store ptr %r, ptr %word
@@ -3871,7 +3887,15 @@ entry:
 find:
   %h = call ptr @__olang_chunk_of(ptr %obj)
   %noh = icmp eq ptr %h, null
-  br i1 %noh, label %done, label %owner
+  br i1 %noh, label %done, label %mark
+  ; a region's chunk only, by its mark: a scope's chunk's owner word and that scope's header may be rewritten by
+  ; another thread as this runs (as in __olang_grow_in_place)
+mark:
+  %hfp = getelementptr %olang.chunk, ptr %h, i32 0, i32 4
+  %hf = load i64, ptr %hfp
+  %hreg = and i64 %hf, 2
+  %inreg = icmp ne i64 %hreg, 0
+  br i1 %inreg, label %owner, label %done
 owner:
   %op = getelementptr %olang.chunk, ptr %h, i32 0, i32 6
   %o = load ptr, ptr %op
@@ -3941,7 +3965,16 @@ entry:
 find:
   %h = call ptr @__olang_chunk_of(ptr %p)
   %noh = icmp eq ptr %h, null
-  br i1 %noh, label %no, label %owner
+  br i1 %noh, label %no, label %mark
+  ; a region's chunk only, told by its own mark - nothing else of a chunk another scope holds is read: its owner word
+  ; and its scope's header may be rewritten as this runs, by the thread bumping it or by a join folding a finished
+  ; task's stand-in (P2b) while the task holding p still runs
+mark:
+  %hfp = getelementptr %olang.chunk, ptr %h, i32 0, i32 4
+  %hf = load i64, ptr %hfp
+  %hreg = and i64 %hf, 2
+  %inreg = icmp ne i64 %hreg, 0
+  br i1 %inreg, label %owner, label %no
 owner:
   %op = getelementptr %olang.chunk, ptr %h, i32 0, i32 6
   %o = load ptr, ptr %op
@@ -3958,25 +3991,34 @@ ispart:
   %pf = load i64, ptr %pfp
   %partof = icmp ne i64 %pf, 0
   br i1 %partof, label %up, label %no
-  ; this thread's storage only: the scope the owner is (a region's, the scope up its parents that is none) opened here
-  ; or claimed by this thread (P2) - another thread may be bumping another's chunk
+  ; this thread's storage only: the scope the owner is (a region's owner - the scope it was made in - or, for one made
+  ; in another region, that region's, up the parents) opened here or claimed by this thread (P2) - another thread may
+  ; be bumping another's chunk. Read through the regions' own words, never a scope's header, which its thread rewrites;
+  ; a join folding a stand-in moves its regions (__olang_kids_move), so those two words are atomic, the parent stored
+  ; before the owner that says to read it
 up:
-  %u = phi ptr [ %o, %ispart ], [ %upp, %upward ]
-  %uh = load ptr, ptr %u
-  %ureg = icmp eq ptr %uh, @__olang_region_chunk
-  br i1 %ureg, label %upward, label %whose
+  %u = phi ptr [ %o, %ispart ], [ %upp, %upreg ]
+  %uownp = getelementptr %olang.region, ptr %u, i32 0, i32 6
+  %uown = load atomic ptr, ptr %uownp acquire, align 8
+  %nested = icmp eq ptr %uown, null
+  br i1 %nested, label %upward, label %whose
 upward:
   %uparp = getelementptr %olang.region, ptr %u, i32 0, i32 4
-  %upp = load ptr, ptr %uparp
-  br label %up
+  %upp = load atomic ptr, ptr %uparp monotonic, align 8
+  %top = icmp eq ptr %upp, null
+  br i1 %top, label %no, label %upreg
+upreg:
+  %upph = load ptr, ptr %upp
+  %uppreg = icmp eq ptr %upph, @__olang_region_chunk
+  br i1 %uppreg, label %up, label %no
 whose:
-  %uop = getelementptr %olang.scope, ptr %u, i32 0, i32 3
+  %uop = getelementptr %olang.scope, ptr %uown, i32 0, i32 3
   %uo = load atomic ptr, ptr %uop monotonic, align 8
   %me = load ptr, ptr @__olang_self
   %prog = load ptr, ptr @__olang_prog_scope
   %mine = icmp eq ptr %uo, %me
   %fresh = icmp eq ptr %uo, null
-  %isprog = icmp eq ptr %u, %prog
+  %isprog = icmp eq ptr %uown, %prog
   %m1 = or i1 %mine, %fresh
   %m2 = or i1 %m1, %isprog
   br i1 %m2, label %scope, label %no
