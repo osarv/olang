@@ -1964,6 +1964,7 @@
 | ok - Float Parse names what was wrong
 | ok - Bool.Parse reads true and false exactly
 | ok - the F8 types parse as the float they round
+| ok - FindByte finds the first occurrence at any position, evaluated while compiling as at run time
 === test std/prelude/tests/vec.olang
 | status 0
 | ok - Vec: Push, indexing, Insert, TakeAt, RemoveAt, SwapTake, SwapRemove, Sort, Pop, Truncate, a copy - while compiling and at run time
