@@ -37,4 +37,3 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - olang session (cloud, 2026-11-22): wt-genslow merged (no repro)
 - OLang Cloud (2026-11-22): olang wt-s4egap - S4e: field writes after a param repoint
 - OLang Cloud (2026-11-22): olang wt-keptlast2 - Array<Array<String>> fill replaced, prelude SetAt of constant text
-- OLang Cloud (2026-11-22): olang wt-pushjoin - Vec.Push(Struct(".." + s)) inline segfault (e55)
