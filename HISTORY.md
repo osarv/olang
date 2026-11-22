@@ -41349,3 +41349,22 @@ as existing storage), the nested owner element (a3), and gaps.olang's Map copy (
 decision is needed for any of them. Freeing and lowering's releases changed; scopes, the runtime and the evaluator did
 not.
 
+## 2026-11-22: review6's task programs under the oracles (O8f, P1; mine; wt-taskcheck)
+
+Every test file with tasks (tests/any, drops, errdata, facts, keptfacts, reads, reclaimtasks, shared; std/cancel, chan,
+net, os, sync) passes `olang test` under `-sanitize`, `-free late` and `-race`; under `-memory -check` all but the three
+importing tests/shared pass - those keep everything (a task hands back a reference, `taskAll`) and B18 names two Map.Put
+and catch-payload let-goes, the guarantee's exceptions reported as it says. The task fixtures (spawnerr, interp's tasks,
+strheld's concurrent/lambdaspawn/manyplaces, vecalias f3, frameescapes, freeing's joins/texts/pushjoin) print the same
+built, `-free late` and `-sanitize` (texts' peak line aside: the sanitizer's address space is its own) and pass
+`-memory -check`. New probes, checks' freeing `taskvals`: text and Vecs of text the spawner made read by reference and
+given by value while the join replaces the spawner's, a task building and replacing its own Vec of text, tasks failing
+mid-way (caught in the task, and failing the join), a join inside a task, a channel carrying Vec<String> - flat over
+100,000 turns, `-memory -check` passes, built, `-free late`, `-sanitize` and `-race` agree at 2,000 turns; the
+evaluator runs no channel between a join's tasks (interpret runs them one after another, a known limit). No bug found.
+One shape keeps: a joined task's result stored into a long-lived Vec's element past the join grows ~500 bytes a turn -
+for condition 3 (the spawn target's type places, RTask, accepted by -check) and, without the task, as a gap -check
+names (a local given its value by an assignment rather than its Let). Recorded in docs/freeing.md 2.4 "Still open"; the
+fixture's default leaves that part out. `-memory`'s "until main's scope closes" names the function for a local declared
+in an inner block (scopeName), where the storage goes with that block - a wording to sharpen.
+

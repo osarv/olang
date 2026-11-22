@@ -276,6 +276,15 @@ walk's let-go of the elements' parts as one through the array's place (`goWalkPl
 - **A copy of a Map whose values are Vecs of text** (B18a's last gaps.olang row, `c := rows[(i + 3) % 10]` of an
   `Array<Map<String, Vec<String>>>`): `splitLetOf` leaves Maps out - a split copy's entries would be let go of by a Put as
   a gap; to close, a copied Map's entries built as `Map.add` builds them (entryCopy) at a local's copy too.
+- **A local given a new value before it is stored into an element** (found by wt-taskcheck, review6's task probes):
+  `r Vec<String>` (or `r := build(0)`) then `r = build(i)`, then `kept[i % 4] = r` - ~500 bytes a turn, named by
+  `-memory -check` as SetAt's gap. `r := build(i)` then the store frees (heldNew records only a Let's value, so a value
+  an assignment gives the local is not what the element is given). A joined task's result takes this shape always
+  (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`), and there the element keeps for condition 3 instead
+  - the places a spawn target's type holds keep (RTask, a keep `-memory -check` accepts) though the store is the
+  spawner's alone after the wait. To close: an assignment's value recorded as the local's held value until its next
+  write, and a target's type places kept only through the join that spawns into it. checks' freeing taskvals holds the
+  shape as its part 2 (`-define M=127`), left out of its default.
 
 ## 3. Order of work (phase 2)
 

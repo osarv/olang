@@ -1,0 +1,155 @@
+# review6's task probes (wt-taskcheck): text and Vecs of text the spawner made, read by its tasks and given them by
+# value while the join replaces the spawner's (1, 64); a task building and replacing its own Vec of text (64); a
+# joined task's result stored into a long-lived Vec's element past the join (2); tasks failing mid-way, caught in
+# the task (4) and failing the join (32); a task running a join of its own (8); a channel carrying Vec<String> between
+# two tasks (16). M picks the parts; the default leaves 2 out - its elements keep (docs/freeing.md 2.4, a join's
+# target type) and grow about 500 bytes a turn. The measure is tasks.olang's: the resident peak gained over each of
+# the last two quarters of the turns, flat where either gains under 2 MB. -free late, -sanitize and -race agree at a
+# smaller size; the evaluator runs no channel between a join's tasks (it runs them one after another)
+import "std/io"
+import "std/os"
+import "std/chan"
+
+N I64 = 100000
+M I64 = 125
+
+type E error { Odd }
+
+fn pad(i I64) String { return "t" + $i + " padded out to some length ..........................................." }
+
+fn peak() I64 {
+    for line in (try os.ReadFile("/proc/self/status") catch default "").Lines() {
+        if line.StartsWith("VmHWM:"): return try line[6:].Trim().Split(" ")[0].ParseInt(10) catch default -1
+    }
+    return -1
+}
+
+# a task reading text and a Vec of text the parent made
+fn ownVec(v Vec<String>) I64 { return v.Len() + v[1].Len() }
+
+# a task building its own Vec of text, replacing its elements
+fn churn(i I64) I64 {
+    v Vec<String>
+    for k in range 4: v.Push(pad(k))
+    for k in range 8: v[k % 4] = pad(i + k)
+    return v[0].Len() + v[3].Len()
+}
+
+fn lenOf(s String&, v Vec<String>&) I64 { return s.Len() + v.Len() + v[0].Len() }
+
+# a task given text by value while the join replaces the parent's
+fn ownLen(s String) I64 { return s.Len() }
+
+# a task's result kept past its join
+fn build(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push(pad(i + k))
+    return v
+}
+
+fn fails(i I64) Vec<String> ? E {
+    v Vec<String>
+    v.Push(pad(i))
+    if i % 2 == 1: error E.Odd
+    v.Push(pad(i + 1))
+    return v
+}
+
+fn inner(i I64) I64 {
+    a String
+    b Vec<String>
+    join {
+        spawn a = pad(i)
+        spawn b = build(i)
+    }
+    return a.Len() + b[2].Len()
+}
+
+fn send(c mut chan.Chan<Vec<String>>&, n I64, base I64) {
+    for k in range n: try chan.Send(c, build(base + k)) catch { return }
+}
+
+fn recv(c mut chan.Chan<Vec<String>>&, n I64, total mut Vec<I64>&) {
+    for _ in range n {
+        v := try chan.Recv(c) catch { return }
+        total[0] += v[0].Len() + v[2].Len()
+    }
+}
+
+fn main() {
+    t := 0
+    kept Vec<Vec<String>>
+    for _ in range 4: kept.Push(Vec<String>())
+    total mut Vec<I64>& = Vec<I64>[0]
+    p0 := 0
+    p1 := 0
+    for i in range N {
+        if i == N / 2: p0 = peak()
+        if i == N * 3 / 4: p1 = peak()
+        if M % 2 == 1 {
+            s := pad(i)
+            v Vec<String>
+            v.Push(pad(i + 1))
+            v.Push(s)
+            a := 0
+            b := 0
+            join {
+                spawn a = lenOf(s, v)
+                spawn b = ownLen(s)
+            }
+            t += a + b
+        }
+        if M / 64 % 2 == 1 {
+            v Vec<String>
+            v.Push(pad(i))
+            v.Push(pad(i + 1))
+            a := 0
+            c := 0
+            join {
+                spawn a = ownVec(v)
+                spawn c = churn(i)
+                v = Vec<String>[pad(i + 2), pad(i + 3)]
+            }
+            t += a + c + v[1].Len()
+        }
+        if M / 2 % 2 == 1 {
+            r Vec<String>
+            join: spawn r = build(i)
+            kept[i % 4] = r
+            t += kept[(i + 3) % 4].Len()
+        }
+        if M / 4 % 2 == 1 {
+            f Vec<String>
+            g Vec<String>
+            join {
+                spawn f = try fails(i) catch default Vec<String>()
+                spawn g = try fails(i + 1) catch default Vec<String>()
+            }
+            t += f.Len() + g.Len()
+        }
+        if M / 8 % 2 == 1 {
+            n := 0
+            join: spawn n = inner(i)
+            t += n
+        }
+        if M / 16 % 2 == 1 and i % 100 == 0 {
+            c mut chan.Chan<Vec<String>>& = chan.Chan<Vec<String>>(4)
+            join {
+                spawn send(c, 50, i)
+                spawn recv(c, 50, total)
+            }
+        }
+        if M / 32 % 2 == 1 {
+            failed := 0
+            b := 0
+            try join {
+                spawn try fails(i)
+                spawn b = ownLen(pad(i))
+            } catch E.Odd { failed = 1 }
+            t += failed + b
+        }
+    }
+    io.PutLn($t + " " + $total[0])!
+    p2 := peak()
+    if N >= 100000: io.PutLn("flat" if p1 - p0 < 2048 or p2 - p1 < 2048 else "grew by " + $(p2 - p0) + " KB")!
+}

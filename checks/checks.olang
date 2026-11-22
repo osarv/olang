@@ -681,6 +681,13 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -race -define N=2000 tasks.olang > out.txt 2>&1") == 0 and outOf(dir) == "7988024\n", "tasks -race", dir)
     try r.expect(sh(dir, "\"$OLANG\" -check texts.olang > out.txt 2>&1") == 0, "texts", dir)
     try r.expect(outOf(dir).EndsWith("flat 3097784\n"), "texts kept what its tasks built", dir)
+    # (taskvals, review6: text and Vecs of text a spawner made read and copied by tasks, tasks failing mid-way, a join in a
+    # task, a channel of Vec<String> - its peak over the last two quarters; the oracles and ThreadSanitizer at a smaller
+    # size, the evaluator running no channel between a join's tasks)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check taskvals.olang > out.txt 2>&1") == 0, "taskvals -memory -check", dir)
+    try r.expect(sh(dir, "./build/taskvals > out.txt 2>&1") == 0 and outOf(dir) == "76538990 7588882\nflat\n", "taskvals kept what its tasks made", dir)
+    try late(r, dir, "taskvals", "2000", "1501954 148882\n")
+    try r.expect(sh(dir, "\"$OLANG\" -race -define N=2000 taskvals.olang > out.txt 2>&1") == 0 and outOf(dir) == "1501954 148882\n", "taskvals -race", dir)
     for p in Array<String&>["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec"
                             "vecreassign", "dropvec", "exportquiet", "maptake", "mapput", "mapdrop", "globals", "fieldfeed", "getread"
                             "mapkeys"] {
