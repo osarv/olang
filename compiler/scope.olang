@@ -10329,6 +10329,10 @@ fn (s mut Scoper&) lastCopy(site I64) I64 {
         for en in typed.LastCopies(s.B!) {
             l := en.Value
             if (u.Whole[l] or s.B!.Locals[l].Unset) and not u.FirstSet(l) or u.EscHard[l] or u.AliasOf.View().Some(fn(a): return a == l): continue
+            # (nor one holding a constructor's instance viewing what it is given: lowering copies that instance into the
+            # local (D9h) where it lands outside the given locals' blocks, and the local at its last mention - built
+            # longer for nothing, the instance and what it views with it)
+            if u.Init[l] != null and s.viewCtor(u.Init[l]!): continue
             s.lastCopied.Put(pair.Pair<I64, I64>(s.Id, en.Key), l)
         }
     }
@@ -11803,6 +11807,18 @@ fn (s mut Scoper&) ownCall(t types.TypeId, x typed.Expr&) Bool {
     if not s.ownsUnshared(t): return false
     c := typed.Call.Of(x)
     return c != null and s.bodyOf(c.Target) >= 0
+}
+
+# whether x is a call of a constructor whose instance views what it is given (check.ctorViewKey's CtorViews)
+fn (s mut Scoper&) viewCtor(x typed.Expr&) Bool {
+    c := typed.Call.Of(x)
+    if c == null: return false
+    b := s.bodyOf(c.Target)
+    if b < 0: return false
+    return match s.Bodies[b].Of {
+        case typed.BodyOf.Ctor(t, twin): twin == types.ListId(0) and (try s.P.L.CtorViews.Get(I64(t)) catch default I64(0)) != 0
+        case _: false
+    }
 }
 
 # whether a value of type t owns storage (types.OwnsParts) and shares no reference (SharesRefs): all it holds is its own

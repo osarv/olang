@@ -1,0 +1,29 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4): a struct holding an owner by value, built by its constructor from a local given to it and
+# stored into an element - the constructor's instance views what it is given, so its local is copied (D9h); the local
+# is no longer built where its store goes (it kept about 1 KB a turn, the instance and the copy of the Q it views left
+# in main's scope, before)
+N I64 = 20000
+
+type Q struct(a Vec<I64>) {
+    a
+}
+
+type R struct(q Q, n I64) {
+    q
+    n
+}
+
+fn main() {
+    rows := Array<R>(10, R(Q(Vec<I64>()), 0))
+    t := 0
+    for i in range N {
+        q := Q(Vec<I64>())
+        for j in range 20: q.a.Push(i + j)
+        w := R(q, i)
+        rows[i % 10] = w
+        t += rows[(i + 3) % 10].n + rows[i % 10].q.a[19] + rows[(i + 7) % 10].q.a.Len()
+    }
+    io.PutLn($t + " " + $rows[4].q.a[2])!
+}
