@@ -1005,7 +1005,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   element's owner fields as stores into their places do (`lower.fillCopy`, `ownerField`: a region of its own where the
   place is sole, parts in part regions) - a run-time array's always, a fixed array's where it is a plain local's value
   built in a block, or a temporary built in a block and only read or lent through (an owner's region around it would
-  be hidden by one inside, `free.plainFillOf`, `blockFillOf`), and a fill of a value owning storage is its own copy, no
+  be hidden by one inside, `free.plainFillOf`, `blockFillOf`); a fill of text or of arrays of plain elements builds each
+  element as its place's stores do (a slot, a part region or a region of its own: `free.FillText`, `lower.fillText`);
+  a conditional of new values stored is a store of each branch (`free.made`); and a fill of a value owning storage is its own copy, no
   view of what its item's owner places hold (`free.makeOf`, as a copy's); a by-value
   argument's read is no view in use across its statement's let-goes (`free.copiedArg`); a temporary lent read-only
   through its fields is no copy kept (`tempPlaceCall`). checks' freeing structelems, copyelems under `-memory -check`

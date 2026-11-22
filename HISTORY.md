@@ -40992,3 +40992,33 @@ The worst three before any fix (first run): reverse-complement 1.26, spectral-no
   marker, and `evalCall` folded it as the constant -1 (and `instanceLen` counted it as known, so `readsLocal` did not
   send it to the run-time path). Both now treat RunLength as the running program's value. Test: tests/shared.olang "G29:
   an array made from a run-time length taken by value", baked and at run time (OLANG_EVALUATE=1 agrees).
+## 2026-11-22: a conditional of new values stored, and a fill of text, free at once (O8f; mine; wt-freecond)
+
+The two gaps wt-writeback left. A conditional stored into a part - `v[j].n = $"c" + $i if c else $"d" + $i`, the RefMut
+form `r.n = ...`, a local struct's field, an array's element - kept what it let go of until the scope closed: the free
+pass's `made` matched no case for a conditional and judged it "existing storage" (no site), though each branch is
+built new. A conditional's value is one of its branches', so `made` now records a store of each branch, recursing into
+nested ones (a constant branch is SOk, a branch of existing storage keeps as any such store does). writePlans then gives
+each branch's site the region (or slot) its store gives it, and lowering already builds a branch through `val`, which
+makes the site's region first: nothing changed there. check.writeBack's held conditional (heldNew) goes the same way.
+
+A fill of text failed `-memory -check` for every Array<String> element store in the file (the element place is the
+type's, `Array<String>.-1`): `Array<String>(4, "")` was a value made with no store into its element place (RCopied, in
+`untracked`), and its one item, once that was passed, a value stored into every element ("kept in another place too",
+makeStores' multi). The place is a slot place (immutable text, SlotPlace), whose stores build in slots and whose
+let-go puts a slot back - while the fill copied each element into the fill's own scope, which a slot release must never
+see. `lower.fillText` now builds each element of a fill of text, or of arrays of plain elements, as the place's stores
+do: into a slot scope made once for the fill (slotsOf) for a slot place, a part region of its own for a part place
+(`elemArrayCopy`, an Array<Array<I64>>'s), else a region of its own (`regionCopy`), each guarded by the place's
+decision; empty text left zero bits. `free.FillText` names the place (a fixed fill only where it is built in a block, as
+fillOwners requires - lowering's blockBuilt is wider, and building as the stores do where free did not count on it only
+costs a slot); `untracked` passes it over and makeStores records one SOk store for the fill.
+
+Fixtures freeing/conds (an element's field written back, RefMut with a nested conditional and an empty branch, a
+local's field with a call's text, an array element) and freeing/fills (a fixed fill, a run-time one of non-empty text
+whose other elements are read at the end, fills pushed whole into a Vec<Array<String>>, a fill of Array<I64>s): 200,000
+turns under 8 MB, master fails -check on each; built, `-free late`, `-sanitize` and interpreted print the same. At
+3,000,000 turns both read ~1.7 MB resident; `-free late` 505 MB and 654 MB. Probes (a branch of existing storage, a
+Vec<I64> owner field given a conditional of calls, a Vec<String> element given a conditional through SetAt, a fill
+returned, a fill of a local's text read after) print the same in every mode. Left: a struct constructed with a fill
+argument (`P(Array<String>(m, "p"))`) is a call's value copied (RCopied) where its field's element is replaced.
