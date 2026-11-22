@@ -41436,3 +41436,39 @@ placement change - the D9h-copied constructor's result placed as a temporary), a
 assignment before its store (`r = build(i); kept[j] = r`: a local assigned whole is no move candidate in the scope
 pass or lowering, so the SetAt is given a copy - the move rule, `LastCopies`/`movable`, extended to a local whose last
 assignment builds a fresh value, with the free pass's let-go at that assignment kept in step), and its task form.
+
+## 2026-11-22: a local given its first value by an assignment moved into an element, a constructor's viewing instance not lifted (O8f; mine; wt-gaps4)
+
+Docs/freeing.md 2.4's two remaining element gaps.
+
+**A local declared with no value, given a call's result by one assignment** (`r Vec<String>`, `r = build(i)`,
+`kept[i % 4] = r`, ~500 bytes a turn): three things kept it from the move a `:=` local gets. The scope pass's item 17
+and lowering's `movable` refused any local assigned whole, and any local declared with no value (D13d's Unset); the
+free pass made it an owner local (keyField -3), sole, whose held arrays then keep (RCopied) and refuse the move
+(`MovesLeaves`); and lowering's store let go of the local's old value. For such a local the assignment is its first
+value, as a Let's would be: `LocalUses.FirstSet` (Unset, assigned whole once, by a call's result - `WholeOther` - and
+not where the assignment may run again, a loop, a comprehension or deferred code its declaration is outside -
+`WholeAgain`) lets it be lifted and moved, `free.SetOnce` keeps it out of the owner locals, and `lower.releases` lets
+go of nothing at its assignment. The last one is not only bookkeeping: moved at its last mention, an Unset local's
+storage still holds the value the last turn moved on (lowering writes nothing at its declaration), and releasing it
+there freed the element's value - found by -sanitize and the evaluator on the first try, built output wrong. Tried
+first: relaxing `Whole` for any assignment of a call; a `:=` local given a second value (`r := build(0); r = build(i)`)
+then still leaks - its owner-local place keeps the arrays - so the rule stays with the first value; that form stays
+open. checks' freeing assignkept (a Vec of text and a Vec<I64>): flat under 8 MB, the oracles agree.
+
+**Its join form** (`join: spawn r = build(i)`, taskvals part 2) is not closed: beside the spawn target's own keep, the
+task's code (`build`'s Push) lets go of the very places the result holds on the task's thread, which condition 3 keeps
+program-wide; freeing them needs a region made or grown on one thread released on another, which the runtime's
+per-thread pools do not allow - a section-8 design question, freeing.md 2.4's question 1 (default: they keep; part 2
+stays out of taskvals' default).
+
+**A struct holding an owner by value built by its viewing constructor** (`w := R(q, i)`, `rows[i % 10] = w`, ~1 KB a
+turn): the analysis (wt-gaps2) held - the instance copied at `w`'s declaration (D9h, `q` escaping into it so never
+moved), `w` lifted where its store goes (item 17), and with it the instance and the copy of `q` given to it, while
+lowering copies `w` at the store all the same (its value's call has a region). The closure is the first of the two
+named there, done at the lift: a local whose value is a constructor's instance viewing what it is given is not lifted
+(`scope.viewCtor` in `lastCopy`), so the instance and `q`'s copy are temporaries of the turn and the element is given
+the store's copy. Lifting such a local could only help a move of the instance uncopied (D9i, `movedViews`), which needs
+the instance inside its viewed locals' blocks - a lifted `w` puts it outside them. checks' freeing ctorkept: flat, the
+oracles agree. A zero fill `Array<R>(10)` still keeps `R.q` (the fill's value copied with no store - viewCtor's
+RCopied), a shape of its own.

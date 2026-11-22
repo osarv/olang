@@ -279,15 +279,14 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
 **Still open** (each a round of its own; no design decision, the analysis and lowering only):
 
 - **An element holding a struct that holds an owner by value** (a3, `rows[i % 10] = w` for `R struct(q Q, n I64)`,
-  `w := R(q, i)`): ~1 KB a turn. Found (wt-gaps2): `R`'s constructor is a view call (its instance views `q`), and `q` is
-  moved in at its last use but its block does not enclose where the instance lands (`movedViews`), so `w`'s declaration
-  copies the instance (D9h, split, `ownersCopy`); the instance itself - built where the scope pass put the call's result,
-  `w`'s landing in main's scope, since `w` is stored into `rows` - and `q`'s `Q.a` region (a kid of main's scope, placed
-  for the instance) are garbage after the copy, released by no let-go. Letting owner places go with a by-value
-  parameter stored whole (`storeAs`) only removes the honest keep. To close: a view call whose value the store copies
-  passes the statement's innermost scope for its result (the scope pass: the result of a D9h-copied call is a temporary,
-  its arguments' storage placed for that), or, where its arguments are all moved in at their last use, the instance kept
-  uncopied (D9i widened to landing outside their blocks, their storage placed where it lands).
+  `w := R(q, i)`): closed by wt-gaps4. `R`'s constructor is a view call (its instance views `q`, which escapes into it,
+  so is never lifted or moved), so `w`'s declaration copies the instance (D9h). The scope pass built `w` where its copy
+  at its last mention goes (item 17), main's scope, and with it the instance and `q`'s copy given to it, though lowering
+  copies `w` there all the same (its value's call site has a region, `movable`) - ~1 KB a turn, named by -check as a
+  lifted copy (`lower.liftedCopy`). A local whose value is a constructor's instance viewing what it is given is no
+  longer lifted (`scope.viewCtor` in `lastCopy`): `w`, the instance and `q`'s copy stay in the turn, the store's copy
+  is the element's value. (`rows := Array<R>(10)`, a zero fill, still keeps `R.q` - the fill's value copied with no
+  store into its place, viewCtor's RCopied - a shape of its own.) checks' freeing ctorkept.
 - **A Map built by its literal whose values own storage** (gaps.olang's row since wt-gaps3,
   `Map<String, Vec<String>>[$i: Vec<String>[$i]]`): FromIter's entries are the iterator's values copied (D9h), made
   with no store into `MapEntry.Value`, which keeps (RCopied) - and with it a Put on a copy of the Map. To close: the
@@ -303,14 +302,33 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   regions (Vec.0 sole) but `Put`'s `MapEntry(key, value)` builds the value's bytes where the local lives; a move would
   need the value place's stores redirected to the element's region, as the Map's own arrays are.
 - **A local given a new value before it is stored into an element** (found by wt-taskcheck, review6's task probes):
-  `r Vec<String>` (or `r := build(0)`) then `r = build(i)`, then `kept[i % 4] = r` - ~500 bytes a turn, named by
-  `-memory -check` as SetAt's gap. `r := build(i)` then the store frees (heldNew records only a Let's value, so a value
-  an assignment gives the local is not what the element is given). A joined task's result takes this shape always
-  (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`), and there the element keeps for condition 3 instead
-  - the places a spawn target's type holds keep (RTask, a keep `-memory -check` accepts) though the store is the
-  spawner's alone after the wait. To close: an assignment's value recorded as the local's held value until its next
-  write, and a target's type places kept only through the join that spawns into it. checks' freeing taskvals holds the
-  shape as its part 2 (`-define M=127`), left out of its default.
+  `r Vec<String>` then `r = build(i)`, then `kept[i % 4] = r` - ~500 bytes a turn, named by `-memory -check` as
+  SetAt's gap. Closed by wt-gaps4 for a local declared with no value (D13d) and given its first value by one assignment
+  of a call's result, running as often as its declaration (`LocalUses.FirstSet`): it is moved at its last mention as a
+  `:=` local is (the scope pass's item 17 and lowering's `movable`), is no owner local of the free pass (`free.SetOnce`)
+  and its assignment lets go of nothing (`lower.releases` - its storage holds the value the last turn moved on). checks'
+  freeing assignkept. Still open: a local given a second value (`r := build(0)` then `r = build(i)`) - an owner local
+  of the free pass, sole, so the arrays its value holds keep (RCopied) and the move is refused (`MovesLeaves`): the owner
+  local's place would have to give its value's leaves to the element as a move does, its let-go at the assignment kept
+  in step. And the join form (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`, checks' freeing taskvals
+  part 2, `-define M=127`, still out of its default): the task's own code lets go of `Vec<String>.0` and its text array
+  (`build`'s Push grows them on the task's thread) and so they keep program-wide (condition 3 by origins, `taskArgs`),
+  besides the spawn target's own keep (`spawnSite`). Narrowing the target's keep to its join frees nothing while the
+  task's growth keeps the same places; freeing them needs a region a task made, or grew into, released on the spawner's
+  thread - question 1 below.
+
+**Question 1 (open; default in effect: a place a task's code lets go of keeps everywhere, condition 3 as built).** A
+value a joined task builds and hands back - a Vec grown by Push on the task's thread - can be freed by the spawner only
+if a region made (or a chunk taken) on one thread may be released on another. The runtime's pools and a region's kids
+list are one thread's (`runtime.ll`'s plain links), so today such a release would be a silent corruption. Options: (a)
+keep it as is - a task's results never freed early, the program's scope holding them (taskvals part 2 grows ~500 bytes
+a turn); (b) the spawner makes the regions a task's result and its growth go into before the spawn, and the task's
+allocations into a region it did not make take that region's lock (a cost per growth in a task, not per operation, and
+only where the result is kept past the join); (c) a hand-off at the join: the task's regions for its results are
+re-parented under the spawner's scope at the wait (their chunks returned to the pool they came from when released, the
+pools made safe to release into from another thread - a lock-free return list per pool). Recommendation: (c) - no cost
+in the task, one step per join, and it composes with condition 3 by origins (the task's own let-goes still keep
+where its values are not its own). Section-8 design (rules.md: Opus xhigh), so not built here.
 
 ## 3. Order of work (phase 2)
 
