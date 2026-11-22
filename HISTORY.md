@@ -41252,3 +41252,29 @@ repointing it, or return the new value"); the repoint, unread too, is reported a
 same walk, so the same holds there. checks/cases lostparamwriterepoint, lostparamwritenested; tests/shared.olang
 "S4e: a write through a repointed reference parameter ..." pins read back, `p = other`, a conditional repoint and a
 loop repointing elsewhere. Checker only.
+
+## 2026-11-22: a fill's item that holds references is built where the fill goes (O6, QCE; mine; review8)
+
+wt-keptlast2 had scope's valMake build a fill's item where the statement stands (`s.here()`), since the item is read
+only to be copied into each element (lower.fill, a value's own copy). That copy is deep through values but shallow at
+references, so an item holding a reference to storage it makes - `Array<R>(2, R(Vec<I64>(), $"x" + $i))`, R holding a
+`String&` - left every element naming text built in the statement's scope: stored into a local outside a loop it read
+the turn's freed text, returned from a function it read the callee's (`-sanitize` and the evaluator reported it; built
+and `-free late` printed garbage). Not early freeing's: the scope was wrong. Now the item is a temporary only where its
+type shares no reference (`SharesRefs`: references, function values, `any`, type variables); otherwise it is built in d,
+as before wt-keptlast2. Text, arrays of text and values owning storage outright - what wt-keptlast2 was for - are still
+temporaries (freeing/fixedfills stays flat under -memory -check). tests/valueparts.olang "a fill whose item holds a
+reference to text it makes ..." (baked K2 and run, after a churn; master fails it). Scopes changed; lowering, the runtime
+and the evaluator did not.
+
+## 2026-11-22: constant text given to a mutable array is a copy, not constant data (O8f; mine; review8)
+
+wt-keptlast2 judged any store of constant text read through a conversion (`ConstRead`) a store needing nothing, as
+constant data stored itself is, so that `v[j] = P("a", i)` frees at once. For a place holding text that never changes
+(a `String`, P's field) that holds: the value is the constant. For a mutable array it does not: `t Array<Char> = "abc"`
+is a copy - a text local from a literal held in its frame's slot (docs/optsurvey.md item 9) - and with both its stores
+judged sole, `if i == 3: t = "longer than abc"` let go of the slot with a region release, which read the word before a
+stack address: built and `-sanitize` crashed (tests/textslot.olang under `make scopesan`, master and -debug). The rule
+now takes only a place whose value type is immutable, as the ConstLocal rule above it does; P's text fields still free
+at once (freeing/constargs flat under -memory -check). checks/cases/constrelit.olang (run: master crashes). Early
+freeing alone changed.

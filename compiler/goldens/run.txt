@@ -1421,6 +1421,7 @@
 | ok - a walk of a Vec reads elements in place only where nothing can write them
 | ok - a value stored into a part of x[i] in a loop lives where the collection does
 | ok - a struct of texts pushed with a joined text built in the call
+| ok - a fill whose item holds a reference to text it makes keeps that text where the fill goes
 === test tests/variadic.olang
 | status 0
 | ok - D8g: a variadic parameter takes any number of arguments, or an array passed on
@@ -2271,6 +2272,9 @@
 | Array<I64>[10, 20, 30]
 === run condvaluesame.olang
 | status 0
+=== run constrelit.olang
+| status 0
+| 27
 === run ctorlambdafield.olang
 | status 0
 | 7

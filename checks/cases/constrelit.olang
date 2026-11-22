@@ -1,0 +1,18 @@
+# check: run
+# O8f: a text local from a literal, held in its frame's slot, given other constant text in one turn - what it lets go of
+# is the frame's copy, no region's (review8: constant text given to a mutable array was judged a store needing nothing,
+# so the let-go released the slot as a region and the program crashed)
+import "std/io"
+fn walk(n I64) I64 {
+    s := 0
+    for i in range n {
+        t Array<Char> = "abc"
+        t[0] = 'q'
+        if i == 3: t = "longer than abc"
+        s += t.Len()
+    }
+    return s
+}
+fn main() ? {
+    try io.PutLn($walk(5))
+}

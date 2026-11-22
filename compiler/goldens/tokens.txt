@@ -317,6 +317,7 @@ a17cd673701a9480 18f4a2926c2535db checks/cases/condtypes.olang
 c0e9f8fb09f6744e 6d223cc9f031366e checks/cases/constraintarg.olang
 20c4b9b3e84684cb c075e7fefde02c8d checks/cases/constraintcall.olang
 dc129a71b0352c53 85f8a8d2c4a456d5 checks/cases/constraintnotiface.olang
+265b805356b1fdff 0e1059a12cadddf9 checks/cases/constrelit.olang
 613bbecfdea5e4e8 4ef443b2f24fbc98 checks/cases/copyoutrefs.olang
 6719644191ae1fe4 ce8a14c1b2004d3c checks/cases/csvdecodearray.olang
 a71e33c0268d7761 dedeaafcce241a5b checks/cases/ctorlambdafield.olang
@@ -2461,7 +2462,7 @@ eba7fd72c9763b72 4d7260221f3478bb compiler/explain.olang
 5b0d1d8455b9f604 195cc71e4c8c755c compiler/fetch.olang
 b8bc27635ac86610 348eb08fc0410154 compiler/fix.olang
 e16765f56912e3a6 22d3690134ecf863 compiler/fmt.olang
-278881e5c3953ede ab6e8436f6c914cd compiler/free.olang
+c24b480e0523effb 79b4574dad6e719a compiler/free.olang
 7dcf3f3fd8db67e5 a4cd64ed0e69aa44 compiler/generic.olang
 47fb7c219d28bceb 00ca6e686b0a6d37 compiler/interp.olang
 23a885a6497e989e 121d5f76d127824b compiler/jupyter.olang
@@ -2485,7 +2486,7 @@ e2b2b02653bc4b63 5a8b70218b099dfd compiler/prompt.olang
 7cdf3a1d3967eaa7 10422cdb5ac85119 compiler/records.olang
 0c3f8c24752ad48a 5b5a3902974907e2 compiler/runtime.olang
 74927aaea47abc0f 8100b336b3b50d5c compiler/scan.olang
-42c0494e24d62e68 2717ddf8835de5db compiler/scope.olang
+9b76f89d48dbf431 51dff58466d4990b compiler/scope.olang
 ad0b24259637a1f2 35b31b7c785e8b14 compiler/session.olang
 8981299fcf27ba06 13b1ab50b72ab2a0 compiler/source.olang
 9bee4e94ca053127 882c3c1eac35e714 compiler/spin.olang
@@ -2740,7 +2741,7 @@ b85bbc40e839bded b5a7ded126f0400f tests/tuplefacts.olang
 865512a5b10174be 415d01faaa817e2d tests/typedefaults.olang
 7ffdae4bcc341292 9f9c543d3541d069 tests/unique.olang
 40b8b670318d4478 685c5774d1e2bcf4 tests/unreachable.olang
-9b3e7f1f83f6a1dd e746998fb0594a9a tests/valueparts.olang
+09b2c3ecd056a684 7bd566c298d94e08 tests/valueparts.olang
 9569b91f4fa19da4 facccf0f969ea68b tests/variadic.olang
 52986a8705789b5a 54ce663ba761c550 tests/viewplace.olang
 d1ae414fd9b9498a 5f97ecdad21e9600 tests/weak.olang

@@ -788,11 +788,14 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   an element or field holding one that no place follows, given another value whole, lets go of its text place
   (`unfollowed`): lowering puts each element's slot back by the length, guarded by the text place's decision
   (`releases`); a fill is judged by makeStores, anything else as a store. Scope's valMake builds a fill's item where
-  the statement stands, not in the target's scope, so the item's text is a temporary of the turn. (2) A constructor
+  the statement stands, not in the target's scope, so the item's text is a temporary of the turn. (review8: only where
+  the item's type shares no reference - one holding a reference to storage it makes is built where the fill goes.) (2) A constructor
   given constant text (`v[j] = P("a", i)`): the instance views its argument, constant data; `made` takes a ConstRead
   value as SOk, as constant data stored itself is, so the field stays decided sole and SetAt's copy is let go of. The
   report now counts SetAt's let-goes among those "in code that runs again". Fixtures fixedfills and constargs (200,000
   turns under 8 MB; master fails -check on each); built, `-free late`, `-sanitize` and interpreted print the same.
+  (review8: the ConstRead rule takes only a place of immutable text - a mutable array given constant text holds a
+  copy, `t Array<Char> = "abc"` in its frame's slot, which a region release crashed on.)
 - 2026-11-21, wt-taskgrow: **a task's read-only reference to an element** (`spawn b = readsRef(v[j].a)`, `readsQ(v[j])`)
   kept ~63 bytes a spawn for the run, here and at wt-taskfree alike: lowering copies the view call's value (D9h) for a
   task, and only a by-value argument's copy went to the join's scope (`taskCopy`). A read-only reference argument whose
