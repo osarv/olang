@@ -2069,7 +2069,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-fbfce7b261b2932b caabc06deddf0992 checks/checks.olang
+6f6104e1414a6860 2fbd9a22e8150545 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2186,6 +2186,7 @@ ed65e1c871a90895 f027d66ab67504be checks/fixtures/freeing/elements.olang
 9466a839d1567a5c 06f6b550ef6231b4 checks/fixtures/freeing/fieldagain.olang
 4fcd284aaf78face f2cb36690d1336db checks/fixtures/freeing/fieldreads.olang
 4bb628e5df1ebbeb 32972159450570f4 checks/fixtures/freeing/fields.olang
+56090b031d379544 00b3639e1a1376ee checks/fixtures/freeing/fillargs.olang
 4a3bf3927094052d d4708661bde7246f checks/fixtures/freeing/fillelems.olang
 96a3c1472dbe3da4 2b41dcaa53b33b78 checks/fixtures/freeing/fillread.olang
 1fa83c8af5767017 cd3e45916c6b1337 checks/fixtures/freeing/fillreturn.olang
@@ -2515,7 +2516,7 @@ bff38ad021d5542d 9c6cd315934193ff compiler/tools/rungold.olang
 67f2c232d9fc22f4 b75c2640c0dbc727 compiler/tools/seed.olang
 d60c568945ef50db bb36039f15d76915 compiler/tools/tokdiff.olang
 b5d5a7ffc3c55aed 778196a5417df71d compiler/tools/toolkit.olang
-af4a5ecc0d4db9df 81265911819cb9fb compiler/typed.olang
+4728fdce94d4bb33 6b04b50d240083c8 compiler/typed.olang
 92dfad194f495613 997945324cab99e9 compiler/types.olang
 ac9569bf452c8a83 6ed8536abd31d32d compiler/unparse.olang
 e2ea203aa101b68f 55a0a86245b469ff compiler/views.olang
