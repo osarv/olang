@@ -41079,6 +41079,28 @@ OLANG_EVALUATE=1 print the same. Left as kept, by the rule: a default fill of a 
 stored into the instance, not built in a block (wt-freecond's restriction), and `v[j] = P(...)` into a Vec<P> whose P
 holds text elements is SetAt's gap, with or without a fill. Fixture checks/fixtures/freeing/fillargs.olang (master fails
 -check on it).
+## 2026-11-22: a fixed array of arrays of text and constant text given to a constructor free at once (O8f; mine; wt-keptlast2)
+
+wt-keptlast left two shapes keeping until the scope closed:
+
+- **A fixed outer array of arrays of text**, `a := Array<Array<String>>(3, Array<String>(2, "z"))` with `a[j] =
+  Array<String>(2, $"a" + $i)` in a loop. The fill's elements were built by no store (wt-fillcopy's rule, RCopied).
+  An `Array<String, 2>`'s text place is a slot place by its type, so `free.FixedText` names it, and `FillText` takes a
+  fill whose elements are such arrays: `lower.fillText` walks each copy by its length building each text in a slot.
+  The outer element is no followed place, so its assignment had nothing to judge; `unfollowed` now records a let-go of
+  the text place, judging a fill through makeStores and anything else (a copy of another element shares its text) as
+  a store, and lowering's `releases` puts each element's slot back by the length, guarded by the text place's
+  decision. A third piece was in scope.olang: `valMake` gave a fill's item the target's scope, so
+  `Array<String>(2, $"a" + $i)` stored into an element built its item's text in `a`'s scope every turn; the item is
+  read only to be copied, so it is now built where the statement stands (`s.here()`).
+- **`v[j] = P("a", i)`**, P's text field viewing its constant argument: `made` judged the conversion of constant text
+  a copy of existing storage, so the field kept. A ConstRead value is now SOk, as constant data stored directly is: a
+  let-go of it releases nothing, since the runtime finds no chunk of its own behind it. The report also counts SetAt's
+  let-goes (`shown`), which it used to leave out of "code that runs again".
+
+Fixtures freeing/fixedfills and freeing/constargs: 200,000 turns under 8 MB, master fails -check on each; built,
+`-free late`, `-sanitize` and interpreted print the same. Since scope.olang changed, the next full verify covers it.
+
 ## 2026-11-22: the last three keeps -memory -check named free at once (O8f; mine; wt-keptlast)
 
 wt-fillstruct and review7 left three shapes keeping what they let go of until the scope closed, each named by

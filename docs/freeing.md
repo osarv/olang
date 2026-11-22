@@ -781,6 +781,18 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   existing storage made in the prelude's code - `v[j] = P("a", 1)`, SetAt's copy of a constant's text - keeps by the
   rule but is not counted among the let-goes "in code that runs again" (the report says none where SetAt's call is in a
   loop); a copy holding a Map stays untracked (gaps.olang's shape); tasks as wt-taskfree left them.
+- 2026-11-22, wt-keptlast2: **wt-keptlast's two leftovers free at once.** (1) A fixed outer array of arrays of text
+  (`a := Array<Array<String>>(3, Array<String>(2, "z"))`, `a[j] = Array<String>(2, ...)` in a loop) kept by
+  wt-fillcopy's rule: a fixed array of text whose text place is built in slots (`free.FixedText`) is now taken by
+  `free.FillText` - the fill builds each element's text in slots (lower.fillText walks the array by its length) - and
+  an element or field holding one that no place follows, given another value whole, lets go of its text place
+  (`unfollowed`): lowering puts each element's slot back by the length, guarded by the text place's decision
+  (`releases`); a fill is judged by makeStores, anything else as a store. Scope's valMake builds a fill's item where
+  the statement stands, not in the target's scope, so the item's text is a temporary of the turn. (2) A constructor
+  given constant text (`v[j] = P("a", i)`): the instance views its argument, constant data; `made` takes a ConstRead
+  value as SOk, as constant data stored itself is, so the field stays decided sole and SetAt's copy is let go of. The
+  report now counts SetAt's let-goes among those "in code that runs again". Fixtures fixedfills and constargs (200,000
+  turns under 8 MB; master fails -check on each); built, `-free late`, `-sanitize` and interpreted print the same.
 - 2026-11-21, wt-taskgrow: **a task's read-only reference to an element** (`spawn b = readsRef(v[j].a)`, `readsQ(v[j])`)
   kept ~63 bytes a spawn for the run, here and at wt-taskfree alike: lowering copies the view call's value (D9h) for a
   task, and only a by-value argument's copy went to the join's scope (`taskCopy`). A read-only reference argument whose
