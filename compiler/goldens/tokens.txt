@@ -869,6 +869,9 @@ e05313a7ab253feb ed06f5a8476dbad5 checks/cases/m19g14byvalue.olang
 cffa89f8be08e4d2 e9067302bce8c8fa checks/cases/m19g15loop.olang
 cf4ccc83a629d24a e8dce5b9c5d32bfd checks/cases/m19g16forin.olang
 8737ee7d2f7b615f 2cbef7f3bf5fa443 checks/cases/m19g20allowed.olang
+d8cf2af2141aeba6 40e2a797a30e89be checks/cases/m19gcapture.olang
+15f93e0109116447 35abbece598c49e9 checks/cases/m19gcapturegiven.olang
+4ef28f674c7b2f0d e333db8029a89a5f checks/cases/m19gcaptureread.olang
 dc1fbba4cbefddcc 39f566b2842b18fe checks/cases/m19gelemroute.olang
 d9063a38fddab681 698988f7b28a5b8b checks/cases/m19gelemroutemap.olang
 cb80122873081644 07fa8979755aa628 checks/cases/m19gfnpure.olang
