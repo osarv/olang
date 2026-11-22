@@ -1,0 +1,28 @@
+import "std/io"
+
+# O8f (docs/freeing.md): a conditional of new values stored into a part - each branch a store of its own, built in the
+# region (or slot) its store gives it - frees the value it replaces at once: a field of an element written back, the
+# RefMut form, a field of a local, nested conditionals, a call's text, an empty branch, an array element
+N I64 = 200000
+
+type Q struct(n String) { n }
+
+fn named(i I64) String { return $"f" + $i + " padded out to some length" }
+
+fn main() {
+    v Vec<Q>
+    for _ in range 4: v.Push(Q($""))
+    q := Q($"")
+    a := Array<String>[$"", $"", $"", $""]
+    s := 0
+    for i in range N {
+        j := i % 4
+        v[j].n = $"c" + $i + " padded out to some length" if i % 2 == 0 else $"d" + $i + " padded out"
+        r := v.RefMut((j + 2) % 4)
+        r.n = named(i) if i % 3 == 0 else ($"e" + $i if i % 3 == 1 else "")
+        q.n = $"q" + $i + " padded out to some length" if j < 2 else named(i)
+        a[j] = $"a" + $i + " padded out to some length" if i % 5 != 0 else $"b" + $i
+        s += v[(j + 3) % 4].n.Len() + q.n.Len() + a[(j + 1) % 4].Len()
+    }
+    try io.PutLn($s + " " + v[0].n + " " + v[1].n + " " + q.n + " " + a[2]) catch io.Error { }
+}

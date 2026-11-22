@@ -6907,8 +6907,11 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
         # (O8f, gap 22: a fixed array built in a block - no owner's region, whose anchors would reach its elements' -
         # has its elements' owner fields built as their stores build them: fillCopy, free.plainFillOf)
         split := owned and ln.blockBuilt(m.Site)
+        text := ln.fillTextPlace(at, split) if owned else -1
+        tat := ln.fillTextAt(text, ln.madeAt(m.Site), sp)
         for i in range fixed {
             c := ln.fillCopy(fv, el, ln.madeAt(m.Site), sp) if split else mir.Operand.None
+            if text >= 0: c = ln.fillText(fv, el, text, tat, sp)
             # (O8f, gap 22: else, where early freeing asks, each element's parts in part regions - free.fillParted)
             if c == mir.Operand.None and owned: c = ln.ownersCopy(I64(m.Site), fv, el, ln.madeAt(m.Site), sp)
             if c == mir.Operand.None: c = ln.ownCopyOf(fv, el, ln.madeAt(m.Site), sp) if owned else fv
@@ -6940,9 +6943,11 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
     buf := ln.local(r, ty, sp)
     bp := pl(mir.Base.Local(buf))
     if t.IsRef(t.Repr(ty)): bp = ln.with(bp, mir.Proj.Deref)
+    text := ln.fillTextPlace(at, true)
+    tat := ln.fillTextAt(text, where, sp)
     ln.eachIndex(n64, sp, fn(i mir.LocalId) {
-        # (O8f, gap 22: an owner field's value built as its place's stores build it - fillCopy)
-        c := ln.fillCopy(fv, el, where, sp)
+        # (O8f, gap 22: an owner field's value built as its place's stores build it - fillCopy, fillText)
+        c := ln.fillText(fv, el, text, tat, sp) if text >= 0 else ln.fillCopy(fv, el, where, sp)
         if c == mir.Operand.None: c = ln.ownCopyOf(fv, el, where, sp)
         ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(bp, mir.Proj.Index(i))), mir.Rvalue.Use(c)))
     })
@@ -8057,6 +8062,42 @@ fn (ln mut lowering&) ownerField(q pl, ft types.TypeId, k I64, at mir.ScopeRef, 
     after := ln.whenSole(g, true, sp) if g >= 0 else mir.NoBlock
     ln.emit(mir.Stmt.Settle(sp, h, ln.mk(q)))
     if after != mir.NoBlock: ln.joinAt(after)
+}
+
+# O8f: the element place of a fill of array type at whose elements lowering builds as that place's stores do (fillText,
+# free.FillText) - a fixed array's only where block says it is built in a block; -1 for none
+fn (ln mut lowering&) fillTextPlace(at types.TypeId, block Bool) I64 {
+    if ln.L.Free == null or not ln.L.Free!.Done: return -1
+    return ln.L.Free!.FillText(at, block)
+}
+
+# O8f: a fill's copy of v, text of element place k (fillTextPlace), built as a store into k builds it - into into, a slot
+# scope made once for the fill where k is built in slots (slotsOf), in a part region of its own where k is a part place
+# (elemArrayCopy), else in a region of its own, a kid of into (regionCopy), each where k is decided sole and released
+# at once where it holds nothing - so that an element's let-go releases what the fill built; empty text left zero bits
+fn (ln mut lowering&) fillText(v mir.Operand, el types.TypeId, k I64, into mir.ScopeRef, sp source.Span) mir.Operand {
+    d := ln.local(ln.into(el, mir.Rvalue.Use(v), sp), el, sp)
+    q := pl(mir.Base.Local(d))
+    if ln.L.Free!.PartPlace(k): return ln.elemArrayCopy(q, el, k, into, sp)
+    if ln.L.Free!.SlotPlace(k) {
+        ln.textInto(q, el, into, sp)
+        return mir.Operand.Copy(mir.Lvalue.L(d))
+    }
+    some, empty, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, Array<mir.Operand>[mir.Operand.Copy(ln.mk(q))], sp)
+    ln.end(mir.Term.Branch(ln.prim(typed.PrimOp.Gt, types.BoolT, Array<mir.Operand>[n, ln.constI64(0)], sp), some, empty))
+    ln.start(empty)
+    ln.emit(mir.Stmt.Assign(sp, ln.mk(q), mir.Rvalue.Use(mir.Operand.Const(el, 0))))
+    ln.goto(after)
+    ln.start(some)
+    ln.regionCopy(q, el, k, into, sp)
+    ln.joinAt(after)
+    return mir.Operand.Copy(mir.Lvalue.L(d))
+}
+
+# where fillText builds a fill's copies made in at, of element place k: a slot scope of at where k is built in slots
+fn (ln mut lowering&) fillTextAt(k I64, at mir.ScopeRef, sp source.Span) mir.ScopeRef {
+    return ln.slotsOf(k, at, sp) if k >= 0 and ln.L.Free!.SlotPlace(k) else at
 }
 
 # O8f (round 7's item 3, round 8): the text place a copy's text parts belong to - the elements of an array of text

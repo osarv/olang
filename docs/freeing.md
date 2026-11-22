@@ -723,9 +723,26 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   $i }`, built the text in the turn's scope (check.writeBack's held value: scope.letBody built a held local holding no
   reference where it was held) - now built at the store's slot (`ownsStorage`, `arenaCall`) and its let-go freed at
   once (free's `heldNew`). Fields of fields, elements of elements and a call's text alike; fixture writeback.
-  Left: a conditional of two new values stored into a part keeps until its scope closes (the RefMut form too).
-  **Where to pick up**: a copy holding a Map stays untracked (gaps.olang's shape); a conditional's new value stored; tasks
-  as wt-taskfree left them.
+  Left: a conditional of two new values stored into a part keeps until its scope closes (the RefMut form too) - fixed
+  by wt-freecond below.
+  **Where to pick up**: a copy holding a Map stays untracked (gaps.olang's shape); tasks as wt-taskfree left them.
+- 2026-11-22, wt-freecond: **a conditional of new values stored, and a fill of text** (the two gaps wt-writeback left).
+  `v[j].n = $"c" + $i if c else $"d" + $i` (and `r.n = ...` through RefMut, a local's field, an Array<String>'s
+  element) kept until the scope closed: made() judged the conditional itself, no site, as existing storage. Its value is
+  one of its branches', so made() records a store of each branch (nested conditionals in turn, a constant branch SOk):
+  each branch's site gets the region (or slot) its store gives it in writePlans, and lowering's val builds each branch
+  there already. A branch of existing storage keeps as before. And a fill of text - `Array<String>(n, "")`, fixed or
+  not, pushed whole, or a fill of plain arrays (`Array<Array<I64>>(n, w)`) - was a value made with no store into its
+  element place (RCopied), then its one item stored into every element ("kept in another place too"); every Array<String>
+  element store in the file kept with it, since the place is the type's. Each element is now built as the place's
+  stores build it (`lower.fillText`: a slot of the fill's scope for a slot place, a part region of its own for a part
+  place, else a region of its own; empty text zero bits), and the fill records one SOk store (`free.FillText`, makeStores;
+  a fixed fill only where it is built in a block, as fillOwners'). Fixtures conds and fills (200,000 turns under 8 MB;
+  master fails -check on each); built, `-free late`, `-sanitize` and interpreted print the same; at 3,000,000 turns
+  both read ~1.7 MB resident, `-free late` 505 and 654 MB.
+  **Where to pick up**: a copy holding a Map stays untracked (gaps.olang's shape); tasks as wt-taskfree left them; a
+  struct constructed with a fill argument (`P(Array<String>(m, "p"))`) is a call's value copied (RCopied) where an
+  element of its field is replaced.
 - 2026-11-21, wt-taskgrow: **a task's read-only reference to an element** (`spawn b = readsRef(v[j].a)`, `readsQ(v[j])`)
   kept ~63 bytes a spawn for the run, here and at wt-taskfree alike: lowering copies the view call's value (D9h) for a
   task, and only a by-value argument's copy went to the join's scope (`taskCopy`). A read-only reference argument whose
