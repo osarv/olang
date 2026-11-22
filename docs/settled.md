@@ -1332,7 +1332,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **The prelude's collections are Vec, Map and StringBuilder; List is `std/list` (M19d, QZ2, the user's decision
   2026-10-17).** `Vec<T>`, `Map<K, V>` (`Get` fails on a miss, `Take`, `Update`) and `StringBuilder` are the prelude's;
   every other container is std: `list.List<T>`, `pair.Pair` (the user's call: "Pair goes in Std not prelude"), set,
-  deque, heap. Iterators and arrays have `Some Every Count Fold Map Filter ToVec`.
+  deque, heap. Iterators and arrays have `Some Every Count Fold Map Filter ToVec`. A Map's slot holds its chain link
+  in its entry (`MapEntry`'s private `link`, given by the constructor's optional `chain`), so a probe reads a bucket and
+  then one entry per key; its `next` array only marks emptied slots, for the let-go walk (2026-11-21). `FindByte` skips
+  32 bytes at a time by a lane total (E39).
 - **Vec, Map, Set, Deque, Heap and StringBuilder are values (QCE, "Handles DECIDED 2026-11-01"; QCL's
   reference-only form declined 2026-11-03).** Each holds its storage by value: a copy is a collection of its own,
   shallow at every `&`; sharing is written `&`. Collections are ordinary types with a Copy, unique exactly when their

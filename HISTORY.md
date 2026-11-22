@@ -40992,3 +40992,31 @@ The worst three before any fix (first run): reverse-complement 1.26, spectral-no
   marker, and `evalCall` folded it as the constant -1 (and `instanceLen` counted it as known, so `readsLocal` did not
   send it to the run-time path). Both now treat RunLength as the running program's value. Test: tests/shared.olang "G29:
   an array made from a run-time length taken by value", baked and at run time (OLANG_EVALUATE=1 agrees).
+
+## 2026-11-21: a Map's chain link held in its entry, and FindByte by lanes (std, no meaning change; mine; wt-mapnode)
+
+Follow-up of the Benchmarks Game set (wt-bgame, above), which left k-nucleotide at 1.15-1.21 of C and revcomp's line
+search a byte loop.
+
+- **Map: the link moved into the slot's entry.** `MapEntry<K, V>` gained a private `link I64` (the next slot of its
+  bucket's chain), set from a new optional constructor parameter `chain I64 = -1`; `Map.next` is kept, but only marks
+  slots (-1 in use, below -1 an emptied one and the free list) - the compiler's let-go walk of a Map (free.olang
+  `MapFields`, lower.olang `textWalk`) reads it by name to skip emptied slots, and that freeing code was not to be
+  touched here. A probe now reads the bucket, then one entry per key compared (and the key's text), where it read a
+  link array and an entry array. Public API, iteration order and `$` rendering unchanged; reflection sees the new field.
+  Found on the way: the first version set the link with a store after `occupy` (`m.ents[i].link = m.buckets[b]`), and
+  that store into the new entry kept its parts from being built in regions of their own (O8f: `-memory` said "removed
+  elements of 'm' are kept until the scope closes", checks o8dmapkeyfree and o8elru grew 16 MB and 6 MB); handing the
+  link to the constructor keeps the entry made whole by the constructor, as before - hence `chain`.
+  Measured (cloud box, 4 cores, load 1-6 from other sessions, `perf stat` task-clock, medians of 15-31 alternated
+  runs): before 0.365-0.396 s, after 0.355-0.391 s, C 0.313-0.334 - 1-4%, at the edge of the noise; perf shows the
+  same three misses C has (bucket ~19%, entry ~19%, the key's bytes ~8%). Peak RSS 23.1 -> 24.4 MB (entries 24 -> 32
+  bytes; C 14.0 MB: malloc'd nodes, no slot array copied at growth). What is left: dropping `next` (8 bytes a slot) needs
+  the let-go walk to read the link in the entry - a change to free.olang/lower.olang.
+- **FindByte by lanes.** `String.FindByte` skips 32 bytes at a time while `(b[i:i + 32] ^ c).Min()` is not zero (E39:
+  one fused loop, no array, vectorized), then finds the byte one at a time; a 32-byte `LanesEqual(c).Some()` (early
+  exit, not vectorized) was slower than the byte loop, a `Select(1, 0).Sum()` no faster; 16 and 64 bytes were worse than
+  32 on 61-byte lines. A test checks every position across the steps, baked and at run time (std/prelude/tests/text.olang).
+  revcomp 0.199 -> 0.192 s (C 0.175, 15 alternated runs); peak unchanged (150 MB). Its line copy stays a byte loop: no
+  plain store of an array into a slice exists (E31e) and the lane stores are `op=` only.
+
