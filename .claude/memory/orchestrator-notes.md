@@ -77,3 +77,7 @@ EP - it won't touch e2-ebr). Pick up e2 scaling from your MAP when the PC is on.
 ## 2026-11-21 (new week)
 
 The weekly limit reset Sat 05:00 CET; this week has no cap (the user: "really max out and use as much as we can"). When the PC is on, pick up oagent e2 scaling from its MAP ("Where to pick up": rerun the 144-TMAC round first). Cloud sessions run olang freeing (freeopen3, then review6) and oagent e13 round 3. Open question for the user, in osarv/orchestrator decisions.md: the olang loop-copy write fix (A/B/C, recommended B).
+
+## 2026-11-22
+
+The user decided energy-based models are the main research line (direction.md). For the GPU when the PC is on, in this order: (1) e55b, the language gate at GPU scale: a masked-diffusion LM with an energy ranker against an autoregressive baseline at equal compute, plus an AR model as verifier of diffusion samples (oagent experiments/e55-langgate, README "Next"); at CPU scale the gate failed (AR ppl 17.5 vs diffusion 64-71). (2) Then e2 scaling as before. oann now has the EBM pieces: nn/potts local fitters (CD/PCD/EP), nn/diffusion + ad/score ranking, nn/chain hidden chains.
