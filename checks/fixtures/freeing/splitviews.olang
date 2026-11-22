@@ -1,0 +1,40 @@
+import "std/io"
+
+# O8f: a split array's let-go - a struct's field (SplitField) or a local (SplitLocal) holding an array of structs that
+# hold a Vec by value, given another array - while a loop still walks one element's Vec: the array keeps for that view
+# (condition 6). Each element's parts were released before, the walk reading the old array's storage (-sanitize stopped)
+N I64 = 2000
+
+type Q struct() { a Vec<I64> }
+type S struct() { qs Array<Q> }
+
+fn sum(v Vec<I64>&) I64 {
+    s := 0
+    for x in v: s += x
+    return s
+}
+
+fn main() {
+    src := Vec<Q>()
+    for i in range 3 {
+        q := Q()
+        q.a = Vec<I64>[i, i + 1, i + 2]
+        src.Push(q)
+    }
+    s := S()
+    s.qs = Array<Q>(4, src[0])
+    rows Array<Q>
+    rows = Array<Q>(4, src[1])
+    t := 0
+    for i in range N {
+        for x in s.qs[1].a {
+            s.qs = Array<Q>(4, src[(i + x) % 3])
+            t += x + sum(s.qs[2].a)
+        }
+        for x in rows[1].a {
+            rows = Array<Q>(4, src[(i + x) % 3])
+            t += x + sum(rows[2].a)
+        }
+    }
+    io.PutLn($t)!
+}

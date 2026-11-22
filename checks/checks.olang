@@ -647,6 +647,10 @@ fn freeing(r mut report&) ? Failed {
         try r.expect(outOf(dir) == part[i], $p + " interpreted output", dir)
         try late(r, dir, p, "200", part[i])
     }
+    # (splitviews: a split field's and a split local's array given another while a loop walks an element's Vec - kept
+    # for that view; built, -free late, -sanitize and the evaluator agree)
+    try late(r, dir, "splitviews", "200", "9806\n")
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 splitviews.olang > out.txt 2>&1") == 0 and outOf(dir) == "9806\n", "splitviews interpreted", dir)
     # (copyread: `c := v[j]` read after the element is replaced holds lowering's copy - no named view keep either)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check copyread.olang > out.txt 2>&1") == 0 and outOf(dir).Contains(", 0 keep it"), "copyread frees at once", dir)
     # (threads reserve address space of their own: these read their own growth, or their peak)

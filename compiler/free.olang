@@ -2264,6 +2264,8 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     goIdx Vec<I64>            # its index in Free.goes, -1 where it is not recorded there
     goVia Vec<I64>            # a walk's let-go (WalkIn, WalkCall), else WalkNone - and the walked value's type
     goWalkTy Vec<types.TypeId>
+    goWalkPl Vec<I64>         # ...and the place holding the walked array, where the walk is a split one's (walkPl)
+    walkPl I64 = -1           # (the split field, local or element array whose elements' parts the go being walked lets go of)
     parSite Vec<I64>          # stores of a parameter's value into a place: the parameter, the place, the statement
     parSitePlace Vec<I64>
     parSiteAt Vec<I64>
@@ -2429,6 +2431,7 @@ fn (w mut walker&) reset() {
     w.goIdx.Clear()
     w.goVia.Clear()
     w.goWalkTy.Clear()
+    w.goWalkPl.Clear()
     w.goEnd.Clear()
     w.closes.Clear()
     w.parSite.Clear()
@@ -2924,7 +2927,9 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
                 # (review4's h5: a split local's elements' parts, released by its walk - SplitLocal)
                 if w.F.SplitLocal(ol) {
                     et := w.T().Elem(w.T().Repr(p.Type()))
+                    w.walkPl = ol
                     for k2 in w.F.PartsLet(et): w.go(k2, LLeaf if w.F.PartPlace(k2) else LAssign, p.Span(), source.Span(0, 0), -1, false, WalkIn, p.Type())
+                    w.walkPl = -1
                 }
             }
             return
@@ -2952,7 +2957,9 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
                 # (c1's s.qs: a split field's elements' parts, released by its walk - SplitField)
                 if w.F.SplitField(k) {
                     et := w.T().Elem(w.T().Repr(p.Type()))
+                    w.walkPl = k
                     for k2 in w.F.PartsLet(et): w.go(k2, LLeaf if w.F.PartPlace(k2) else LAssign, p.Span(), source.Span(0, 0), -1, false, WalkIn, p.Type())
+                    w.walkPl = -1
                 }
                 return
             }
@@ -2989,7 +2996,9 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
                     # (c1's keep: an element array's own elements' parts, released by its walk - free.elemArray)
                     if w.F.PartPlace(k) {
                         et := w.T().Elem(w.T().Repr(p.Type()))
+                        w.walkPl = k
                         for k2 in w.F.PartsLet(et): w.go(k2, LLeaf if w.F.PartPlace(k2) else LAssign, p.Span(), source.Span(0, 0), -1, false, WalkIn, p.Type())
+                        w.walkPl = -1
                     }
                 }
                 return
@@ -4198,6 +4207,7 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
     if viewsOnly and via == WalkIn and k >= 0: addTo(f.partWalked, k)
     w.goVia.Push(via)
     w.goWalkTy.Push(walkTy)
+    w.goWalkPl.Push(w.walkPl if via == WalkIn else -1)
     w.goPlace.Push(k)
     w.goAt.Push(w.cur)
     w.goEnd.Push(w.deferStack[w.deferStack.Len() - 1] if kind == LHeld and w.deferStack.Len() > 0 else -1)
@@ -5899,12 +5909,18 @@ fn (w mut walker&) views() {
         # (review5: a walk's let-go - of what a Vec's live elements own, the buffer left as it is - is one of a view of
         # that buffer too: the place it lets go of keeps)
         bufs := w.walkBufs(g)
+        inside := f.splitInside(k)
         for l in viewers {
             found := false
             byBuf := false
             for q in viewed[l] {
                 if (k < 0 or q == k) and f.unkept(q): found = true
                 if k >= 0 and has(bufs, q) and has(f.bufReach(q), k) and f.unkept(k): byBuf = true
+                # (a split array's walk - SplitField, SplitLocal, an element array's - is a let-go of its elements'
+                # parts through the place holding it: a view of that place is one of them too)
+                if k >= 0 and q == w.goWalkPl[g] and f.unkept(k): byBuf = true
+                # (and a view into its elements - of a place their values hold - is one of the split array itself)
+                if has(inside, q) and f.unkept(k): byBuf = true
             }
             if not found and not byBuf: continue
             # (a local a Let declares with a call letting go of k is given its value after that let-go)
@@ -7506,6 +7522,20 @@ fn (f mut Free&) SplitField(k I64) Bool {
     if k < 0 or k >= f.keyField.Len() or f.keyField[k] < 0 or not f.arr[k] or not f.PartPlace(k): return false
     # (keptlast: or of text built in slots, `P{t Array<String>}` - its walk puts each element's slot back, TextArray)
     return f.partsArray(f.valTy[k]) or f.TextArray(f.valTy[k]) >= 0
+}
+
+# the places the elements of split array place k hold values of (SplitField, SplitLocal, an element array): a view of
+# one in use across k's let-go reads the array it releases - none for any other place
+fn (f mut Free&) splitInside(k I64) Vec<I64> {
+    out Vec<I64>
+    if k < 0 or k >= f.arr.Len() or not (f.SplitField(k) or f.SplitLocal(k) or (f.keyField[k] == -1 and f.PartPlace(k))): return out
+    t := f.T()
+    r := t.Repr(f.valTy[k])
+    if t.KindOf(r) != types.Kind.Array: return out
+    et := t.Elem(r)
+    addAllTo(out, f.PartsLet(et))
+    addAllTo(out, f.heldPlaces(et))
+    return out
 }
 
 # O8f (review4's h5): whether place k is an owner local holding a run-time array of PartsOnly values (`rows :=
