@@ -406,16 +406,15 @@ fn stored.storedOutput(name String&) stored {
 }
 
 test "every case in checks/cases does what its header says" {
-    bad := 0
+    bad := StringBuilder()
     count := 0
     for i, name in Cases {
-        if name.EndsWith(".olang") {
-            count++
-            if not reported(Outcomes[Checks.Len() + i]): bad++
-        }
+        if not name.EndsWith(".olang"): continue
+        count++
+        if not reported(Outcomes[Checks.Len() + i]): bad.Push(" " + $name)
     }
     assert count > 0 or OneScenario != ""
-    assert bad == 0
+    assert bad.Len() == 0, "the cases that failed:" + $bad.ToString()
 }
 
 # the scenario named "name", reporting into r
