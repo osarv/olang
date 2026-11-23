@@ -41573,3 +41573,29 @@ last mention, its assignment letting go of nothing. Unsound - the local is lifte
 Let's call builds its value there too: `-memory -check` passed while the program ran out of 8 MB. Reverted. Closing it
 needs the scope pass to place the Let's call result in the local's own block while the local's storage and the
 assignment's result go where the store is, or the owner local handing its leaves to the element (freeing.md 2.4).
+
+## 2026-11-22: import order in a cycle never matters (M13; mine; wt-debts)
+
+The last of plan.md's "small known debts" from the stage-0 era. SPEC M13 stated a rule: a module in a raw import cycle
+that also re-exports a third module had to declare the re-exported import before the cyclic one, or its partner could
+not reach the third module through it. tests/worker.olang's imports were reordered around it in the C compiler's time
+and the cause never fixed. The port kept it: `Loader.load` parsed each module as soon as its own imports had loaded, so
+in a cycle the partner was parsed while the module above it on the load stack still had imports without targets, and
+the parser's name oracle (`chains`, the `alias.Alias.Name` names it uses to read `<` as type arguments) missed the
+names behind them. Most chains still parsed by the fallback rules (`F<T>(...)` is read as a call by C#'s rule); a
+generic function's instance taken as a value (`co.Pk.First<I64>`) was misparsed as comparisons, so the module failed or
+passed by the order of its imports. Fixed at the cause: `load` registers and loads every reachable module first and
+parses them, in the same post-order as before, once the outermost load returns (`Loader.parseLoaded`); a load from
+`Decide` (a branch decided late) is an outermost load of its own. M13 now says the order never matters, and M2's
+pointer to it was reworded. Pinned by tests/cycleorder.olang, cyclepartner.olang and cyclepick.olang (the cyclic
+import declared first; each file a root in turn), which failed before (L9 on the misparse) and pass after.
+
+The same round closed plan.md's other two debts. The "must not compile" shapes named only in early tests/ comments
+(tests/shared.olang, runner.olang, Base.olang) were each looked for in checks/cases: twelve were not pinned and are now
+cases (m19nominalsibling, e12valuekeepstype, p1spawnoutsidejoin, p1ajoinwaitsfornothing, p1ainnerjoinonly,
+s11breakinfn, s11breakinjoin, l10ahexnodigits, l10cbinarynodigits, l10cbinarybaddigit, t30traitastype,
+t2cgenericnozero), the comments pointing at them; about fifteen were already pinned. Nine named shapes compile today -
+the scopes are inferred (a local stored past its block, a task argument from a closed loop block, a field written
+through `&`), a method may share a field's name, and the `&s`-style scope tags no longer exist - so their comments
+describe history. `structContainsBareScopeField` was stage 0's walker for the removed `<>` scopes; the port has no
+counterpart, and its own walkers are recorded in plan.md as the remaining debt.

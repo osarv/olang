@@ -1,0 +1,4 @@
+# M13: the module cycleorder.olang re-exports, reached from cyclepartner.olang through it
+fn First<T>(a T, b T) T { return a }
+
+test "M13: the re-exported generic" { assert First<I64>(3, 4) == 3 }

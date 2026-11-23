@@ -1,0 +1,9 @@
+# M13: the cyclic partner of cycleorder.olang, reaching cyclepick.olang through cycleorder's re-export of it
+import co "cycleorder"
+
+fn FirstThroughCycle() I64 {
+    first := co.Pk.First<I64>
+    return first(7, 8)
+}
+
+test "M13: a generic function's instance through a cyclic partner's re-export" { assert FirstThroughCycle() == 7 }

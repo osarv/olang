@@ -2481,7 +2481,7 @@ e16765f56912e3a6 22d3690134ecf863 compiler/fmt.olang
 23a885a6497e989e 121d5f76d127824b compiler/jupyter.olang
 8299f0d6f657ceae ba0b78c0c7122d77 compiler/lineedit.olang
 211de0b5ecb13aac 4324dd1a83c4b615 compiler/listing.olang
-f25119be92c6587e 3825c2dbc7b7a788 compiler/load.olang
+5404abd40e48fea1 a4193469e7418012 compiler/load.olang
 23999d856ced1186 092050a43c019f77 compiler/lower.olang
 0a6ba37a53fb9662 26f5ffd009f3d4b4 compiler/lsp.olang
 7dc09dd9a3624990 5eddb899d10cc9ce compiler/mcp.olang
@@ -2759,7 +2759,7 @@ b85bbc40e839bded b5a7ded126f0400f tests/tuplefacts.olang
 9569b91f4fa19da4 facccf0f969ea68b tests/variadic.olang
 52986a8705789b5a 54ce663ba761c550 tests/viewplace.olang
 d1ae414fd9b9498a 5f97ecdad21e9600 tests/weak.olang
-2cb98353b3847082 a5dcc9d3fc885f3d tests/worker.olang
+aacdffd773ecdc68 e297d8f70a07eae7 tests/worker.olang
 4082ae6946f58c86 51e537d40f8487d3 tools/arrays_migrate.olang
 141c40fee89ae562 9789f756ed7d8535 tools/as_migrate.olang
 f0e9ca08aa3eeddf dc7af405c1ce5a1d tools/attrs_migrate.olang

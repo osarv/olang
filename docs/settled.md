@@ -621,6 +621,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Visibility details (M6a, M12, M4).** A member or error word is public by its own first letter; enum cases are
   alias-qualified across modules; an alias-less import takes the file's base name; capitalized aliases re-export,
   through chains of any depth; a cycle in public reachability, or one file reached two ways, is an error.
+  The order of a module's imports never matters (M13): every module is loaded before any is parsed.
 
 ### Generics
 

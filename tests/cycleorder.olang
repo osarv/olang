@@ -1,0 +1,11 @@
+# M13: a module in an import cycle that also re-exports a third module, its cyclic import declared FIRST - the partner
+# (cyclepartner.olang) reaches the third module's generic function through this module's re-export, as a value
+# (co.Pk.First<I64>, no call after it: only the parser's name oracle knows it lists type arguments). The order of the
+# imports never decides whether that chain resolves, whichever of the three files is the root.
+import cp "cyclepartner"
+import Pk "cyclepick"
+
+test "M13: a chain through a re-export, its cyclic partner declared first" {
+    assert cp.FirstThroughCycle() == 7
+    assert Pk.First<I64>(1, 2) == 1
+}

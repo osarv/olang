@@ -128,6 +128,10 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     HandedToC Map<I64, Bool>
     Clang String& = ""                 # the clang a C import is translated with (X17), "" for none
     CFlags Vec<String&>                # what it is translated and compiled with: the target's, and the defines (X18)
+    # M13: how many loads are under way, and the modules loaded but not yet parsed - parsed in the order their imports
+    # finished, once the outermost load returns, so every import of every module is registered when any is parsed
+    loading I64 = 0
+    unparsed Vec<I64>
 }
 
 # B1a: the standard library this compiler was built from - its directory, as an absolute path, given by the build of the
@@ -267,9 +271,20 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool, c Bool = f
     l.prescan(m)
     m.Oracle = parse.Oracle()
     l.ownNames(m)
+    l.loading += 1
     l.loadImports(i)
-    l.parse(i)
+    l.loading -= 1
+    l.unparsed.Push(i)
+    if l.loading == 0: l.parseLoaded()
     return i
+}
+
+# M13: the modules the outermost load reached, parsed only now: in a cycle a module's parse would otherwise run while an
+# importer further up is still loading, before that importer's later imports have targets - and the oracle would miss
+# the names reached through them (alias.Alias.Name<...>)
+fn (l mut Loader&) parseLoaded() {
+    for mi in l.unparsed: l.parse(mi)
+    l.unparsed.Clear()
 }
 
 # ---- the pre-scan ----

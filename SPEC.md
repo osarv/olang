@@ -3052,8 +3052,7 @@ and each version of a repository has its own copy of what it imports relatively.
 legal without restriction as long as neither side needs the other's own top-level names to be fully
 resolved before *its own* top-level declarations can be scanned (in practice: cyclic imports work
 because scanning a module's own declared type names never requires parsing or resolving anything in
-an imported module first — see §4.4 for the one place import order *does* matter for a module
-participating in a cycle).
+an imported module first; the order of a module's imports never matters, M13).
 
 ### 4.2 Imports
 
@@ -3657,16 +3656,10 @@ A private word's *value* still crosses the boundary normally; only its name does
 is named - in a case test or after `as` (E32) and in a pattern (S13b): the chain is resolved, and the type it reaches must be
 the very enum of the value (its module and name), so another module's same-named enum is a different one.
 
-**M13.** Within one module, resolving *any* multi-hop alias chain (M8) requires that every
-intermediate module's own set of imports already be fully known. For two modules in a raw import
-cycle (M2), this is guaranteed for the module reached *last* in the cycle but not necessarily for
-whichever side's own source text is parsed while the *other* side is still finishing its own import
-list — concretely: if module A imports module B (participating in a cycle back to A) and *also*
-re-exports some third module C, and B's own source references something through A reached via C, B's
-source must declare its import of A only after any import that provides what it needs from that
-chain has itself already been fully processed — in practice, order the import that is *not* the
-cyclic partner first. This is a narrow, mechanical ordering requirement, not a general limitation on
-what can be expressed.
+**M13.** Resolving a multi-hop alias chain (M8) needs every intermediate module's imports known. They always
+are: every module the program reaches is loaded and its imports resolved before any module is parsed, so in a raw
+import cycle (M2) the order in which a module declares its imports never decides whether a chain through them
+resolves.
 
 ### 4.5 Re-export
 
