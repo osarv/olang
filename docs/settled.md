@@ -1456,7 +1456,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   none. A whole-program fact (B3i, "O43 NAME"). LaneDots' helper tags its loads and stores (T36). `writable` is added
   only where no task can run beside any call (2026-11-18, the user's "unless the compiler proves we are the only one"):
   nothing in the whole program starts a task and C cannot call back in (effects.Alone, bit 62 of the fact) - elsewhere
-  another task writing another field of the referent is legal, which a store LLVM adds would lose. Changes no meaning.
+  another task writing another field of the referent is legal, which a store LLVM adds would lose. Changes no meaning. Kept so beside tasks (the user, 2026-11-23): a writable reference parameter does not hold its whole referent for the call; a kernel accumulates in a local and copies out.
 - **An assignment reads its own place first (O46, mine, 2026-11-22).** `P = e` with P a number or Bool place (not
   packed, not weak) and e made only of constants, reads of plain places (locals, globals, fields, elements; no `.Get`),
   arithmetic, comparisons, conversions and choices - no call, no `try`, nothing that leaves - reads P once into a local
