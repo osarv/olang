@@ -41960,3 +41960,32 @@ the test runs under `-target x86-64-v3` and `x86-64-v4`. Tests: tests/lanes.olan
 hand, at run time, baked and decided while compiling; the rounding case 1 + 2^-24 + 2^-24 = 1; a subnormal result as
 zero; bit patterns across the range below overflow, bit for bit), and the checks scenario `listing` greps vdpbf16ps from
 `explain -asm` where /proc/cpuinfo has avx512_bf16.
+
+## 2026-11-23: the lane dot helpers unswitched - the shared operand tested once, broadcast before the loop (E39; mine; wt-unswitch)
+
+An olang BF16 pair-dot tile kernel (C[2048,128] += A[2048,688] B[688,128], B packed [K/2][N][2], one thread) reached
+~22 GMAC/s against 40-43 for hand-written C of the same layout, and the helper looked like the cause: whether an operand
+is shared (stride 0) was tested inside the vector loop, the shared group loaded and broadcast every step, the lanes
+stored and reloaded. Both helpers (`emit.olang` `laneDotsFn`/`laneDotsBody` for vpdpbusd, `pairDotsFn` for vdpbf16ps)
+now share `dotsSteps`: which operand is shared is tested once before the loop, four loops follow (one per answer, none
+holding a branch), and a shared operand's group is loaded and broadcast there, once. The vdpbf16ps inline assembly is
+now marked `nounwind memory(none)`: an asm call without it may read and write memory to LLVM, so every load after it
+(the broadcast, the next lanes) was redone and nothing could be kept in a register around it. No meaning changes: the
+same instructions on the same lanes in the same order; the bench checksums are bit-identical.
+
+**What it bought, and why not more.** Medians of four alternated runs pinned to one core, old -> new: pair dot with a
+shape known only at run time 23.1 -> 21.2 GMAC/s (the inner loop is now the ideal load-dp-store with the broadcast
+hoisted, but LLVM had already unswitched it, the strides being constants after inlining; the difference is layout
+noise); the same with a run-time stride (`a[s:s + two]`, so the shared test is a run-time value) 19.9 -> 22.4; INT8
+(U8 x I8 packed [K/4][N][4], vpdpbusd) 56.2 -> 61.6. The gap to C is not the helper: C reaches 39-41 only because its
+N is a constant, so the j loop unrolls fully and the 8 accumulator vectors live in registers across the K loop; with N
+read at run time the same C (acc in memory) gives 26-27, and with one bounds check per step inside the K loop it keeps
+the values in registers but stores every step (34). The olang kernel with N constant unrolls the same way, but the
+per-step slice constructions (`a[...]`, `p[...]`, each checked once, B9-style) are early exits in the K loop, and the
+accumulator is a scope allocation that may escape, so LLVM keeps the stores and reloads 7 of the 8 lanes: the loop is
+bound by the store-to-load latency of the accumulator chain, not by the helper's instructions. Closing it is register
+blocking in the kernel (a few rows x columns of lanes as locals, as oann's int8 tiles do), not a codegen change.
+
+Tests: tests/lanes.olang and tests/keptfacts.olang natively, under `OLANG_EVALUATE=1` and (lanes) at `-target x86-64-v3`
+and `x86-64-v4`; checks `listing` still finds vpdpbusd and vdpbf16ps; `make fixedpoint` byte-identical. No goldens
+move (none holds a helper's text).
