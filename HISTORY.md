@@ -42528,3 +42528,12 @@ it there; `item`'s `$decl` is again written as Push's argument, the symbol (also
 conditional's value) stay locals moved at their last use. Not covered, as before: a conditional's value (`a if c else
 $b`) given to a reference, and a call whose result the plan places elsewhere than the reference's scope - each still
 made, then copied.
+
+## 2026-11-23: emitdiff runs again (M5a; mine; wt-emitdiff)
+
+`make emitdiff` (the port-era acceptance tool, not in verify) died with "left no runtime in build/emitdiff/rt/build":
+its probe program was `import "std/ffi"` and an empty main, which M5a now refuses (an import used for nothing). The
+probe asks std/ffi one question (`ffi.Has("")`). It then runs over 152 files: 147 the same; the differences are the
+tool's own harness, not the compiler - tests/cfnptr, tests/cimport and std/tls do not link under emitdump (it links no C
+import or libssl), tests/follow and tests/reclaim fail only under emitdump's path (the twins and followed functions the
+driver's whole-program steps give; the real compiler passes both), and the runtime row differs from the driver's.

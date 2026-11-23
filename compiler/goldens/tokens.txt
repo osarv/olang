@@ -2583,7 +2583,7 @@ e80657e77bb89289 8e3e279943847a78 compiler/testdata/lex/strateof.olang
 05e909abce8f3d22 a2e0ff866b292afb compiler/tools/diaggold_capture.olang
 17332ebb578748da ffc9b53a9a373c6b compiler/tools/drvdiff.olang
 a4d11107338659ab 6531a20ca9f45498 compiler/tools/dump.olang
-cfb1266e111461e5 632542299aad5e41 compiler/tools/emitdiff.olang
+4afb1aa6c9af64d0 3b749ae0f39cc736 compiler/tools/emitdiff.olang
 ed6e41afea84150a 4e61a7a7dd1cf88d compiler/tools/emitdump.olang
 c9d0a1e5defd756f 1e8189c464884220 compiler/tools/evaldiff.olang
 92398fd91ceec3f7 e10ab55c2416a4d4 compiler/tools/fmt.olang
