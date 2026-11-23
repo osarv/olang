@@ -56,3 +56,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-chanwait merged - waits with a token block (no 10 ms polling); WaitUntil on a pidfd
 - Orchestrator child (cloud, 2026-11-23): olang wt-e73finds - e73 findings: Array<String>.Join refused (method lookup by element type on Array), a permutations walk in std
 - Orchestrator child (cloud, 2026-11-23): olang wt-homestd (time local offset, tls pinned fingerprint) and wt-homecimp (one type per C tag across header imports) - oagent home findings
+- Orchestrator child (cloud, 2026-11-23): olang wt-homestd and wt-homecimp merged - time.LocalOffset, tls pin and DialToLearn, one C type per tag, anonymous C members
