@@ -42075,3 +42075,22 @@ captured struct's reference field (`viaValue(fn(k I64) { p.C.names.Push($k + "b"
 -sanitize but the evaluator reports a use after its scope closed - the build is found from the function value's own
 environment (T22c's capRoot), which the evaluator finds as the closing frame's scope and the native runtime, the
 environment being on the stack, as the program's. Same on master; left for the next T22c round.
+
+## 2026-11-23: a promoted field's part handed back keeps its exact half (O23, O23b, O25g; mine; review 11)
+
+Review 11 (field scopes option B, before its merge) found a hole older than B that B makes common. A writable reference
+to a referent holding references, read out of a promoted field of an instance reached through another instance's field
+or an element (`b.p.C`, `b.ps[0].C`), is an underestimate - O23's container-scope reading, a `Derived` term with a
+floor - and `scope.fit` recorded its exactness only where the other direction could be shown: in the Obliged branch,
+`order(slot, t)` failing (always, for an underestimate: it is never shown to be outlived) dropped the second half
+silently. So `fn (b mut Bag&) First() mut Node& { return b.p.C }` summed "b outlives return" alone, and a caller
+storing `x := b.First(); x.next = y` held `y` to the Bag's scope while `x` pointed at a referent living longer: a
+read after the scope closed (segfault built, `WhyClosed` in the evaluator), on master as on the branch, for a result,
+a field (`s.n = b.p.C`), a payload (`Hold.N(b.p.C)`) and a build through the returned reference. A local taking such a
+part was already refused (and the field given back) by fit's FitLocal guard; the other kinds were not.
+
+The fix: in that branch, an exact half that fails gives the declarations read through back (`giveBackRead`, O23b's
+give-back) and reports fit's error where nothing gives back - so the declaration keeps no binding of its own, the
+instance lives where its referent does, and the program runs as it would without the inference. Nothing that B
+relaxes is lost (the probes accepted beyond master stay accepted; checks' fieldscopeflat stays flat).
+checks/cases/fieldscopepart.olang: the four shapes, read back after a churn, with a decided assert the evaluator runs.

@@ -13267,6 +13267,16 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         s.oblige(t, slot, false)
         if exact and t != slot {
             o := s.order(slot, t)
+            # (the exact half nothing can show: a writable reference read through a field of an instance reached where
+            # its binding is not known - a field of another instance, an element - is an underestimate (O23, O23b), and
+            # handed back, stored into a field or a payload it would be believed to point where it does not: its
+            # declarations' fields given back, else refused, as a local taking it is)
+            if o == FailsUnknown or o == FailsBlock {
+                s.giveBackRead(x, t)
+                s.obligeView = false
+                s.fitError(x, kind, exact)
+                return
+            }
             s.obligeBind = true
             if o == Obliged: s.oblige(slot, t, false)
             s.obligeBind = false
