@@ -42498,3 +42498,33 @@ compiler only a scope closing reclaims them. The double copy of a fresh value wr
 `Push($...)` sites in emit.olang alone, more across the compiler and in every program; moving a fresh temporary into a
 by-value argument at its one use, as D9i moves a local, would remove it everywhere (lowering and the scope pass's
 placement; plan.md).
+
+## 2026-11-23: a fresh text or call result given to a reference is built where the reference goes (D9i; mine; wt-argmove)
+
+The entry above found ~60 MB of bump slack in the self-build and put it down to a by-value argument copied a second
+time. Measured again, the double copy is not a by-value argument's: `v.Push($s)` into a `Vec<String>` built the text
+in the statement's scope and Push copied it into the slot, the first copy reclaimed with the turn (482 MB resident for
+469 MB of text). It is a reference's: the Emitter's vectors are `Vec<String&>`, so Push's parameter is a `String&`, and
+a value given to it is promoted (E12c) - `promoteNew` made the value (`olang_textcopy` into the scope the plan put the
+text in, the Vec's), then `New` copied it into the reference's scope, the same one: the first copy left there until it
+closed. A call's result alike: `b.ToString()`'s result was built in the scope passed for it, the Vec's, then copied
+there again.
+
+E12c already says a value that is no lvalue (a literal, a call's result) given to a reference is allocated in the
+target's scope - construction, not a copy - and `promotedInPlace` did so for fills, array literals, comprehensions and
+a value's own copy. It now does so for a text and for a call's result too (`freshInPlace`, `promotedFresh`): the
+reference is the value's pair, no `New`. Only where nothing could tell: a read-only reference (a writable one could
+write constant data a callee handed back), no declared Copy (E31d), no region of early freeing's on either side (O8d);
+a text's site adopts the reference's scope (`madeAt`, as a copy's does); a call's result is taken only where its callee
+hands back no view of its arguments (ViewResults none, not a constructor viewing what it is given - its result is then
+storage of its own, a returned view or a global's copied by the callee itself, T7b) and the plan already passes the
+reference's scope as its result scope. No rule changes; the evaluator copies every time and agrees.
+
+Measured: 20,000 texts of 24,000 bytes pushed into a `Vec<String&>` held in another scope, by `Push($text)` and by
+`Push(b.ToString())`: 960 MB resident grown -> 480 MB, for 469 MB asked. checks/fixtures/freeing/pushtexts.olang pins
+both shapes by peak address space (100 texts of 256 KB each: 50 MB before, 25 after; limit 37). The cold -quick
+self-build: lower+emit 2756 -> 2742 MB - little, as wt-buildmem2's locals in `Emitter.item` had already removed most of
+it there; `item`'s `$decl` is again written as Push's argument, the symbol (also the map's key) and the text (a
+conditional's value) stay locals moved at their last use. Not covered, as before: a conditional's value (`a if c else
+$b`) given to a reference, and a call whose result the plan places elsewhere than the reference's scope - each still
+made, then copied.

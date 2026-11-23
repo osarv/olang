@@ -885,6 +885,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   the scope of the thing we're storing it in").** A value local kept by reference past its block or turn, or copied
   whole at its last mention into longer-lived storage, has its storage placed where it is kept, a new value each time
   its declaration runs.
+- **A fresh value given to a reference is built where the reference goes (E12c, O6; 2026-11-23, mine).** A text
+  (`v.Push($s)` into a `Vec<String&>`) or a call's result whose callee hands back no view of its arguments
+  (`v.Push(b.ToString())`), promoted to a read-only reference to a run-time-length array, is built in the reference's
+  scope and the reference is its pair - not built and then copied there, the first copy left until the scope closed
+  (a text adopts the reference's scope; a call's result only where the plan already passes that scope for it; never a
+  region of early freeing's). Lowering only (`promotedFresh`); a by-value argument never had the double copy.
 - **Lending (O17, O17a, O17b; R1 of docs/refusals.md, 2026-11-08, mine within the user's decisions).** A split value
   (references living elsewhere than its storage) is lent where its references live, so a callee builds where they hang;
   its own storage is lifted there too only where the callee keeps it (stores, captures, returns or hands on the
