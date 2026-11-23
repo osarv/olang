@@ -11082,7 +11082,8 @@ fn (s mut Scoper&) bindResult(sp source.Span, ty types.TypeId, c typed.Call&, ft
     # Lowerer's bodies, hence every lowered function, held as long as the Lowerer)
     key := pair.Pair<I64, I64>(s.Id, I64(c.Site))
     s.heldExact.Remove(key)
-    if cb < 0 or beta[rv] == Term.Program: return
+    # (a reference only: a value's own storage is built where it lands, which a destructor's moment follows - C11)
+    if cb < 0 or beta[rv] == Term.Program or not s.isRef(ty): return
     v := s.exactParamOf(cb, rv)
     if v < 0 or beta[v] == Term.None or beta[v] == beta[rv] or s.order(beta[rv], beta[v]) != Obliged: return
     o := s.order(beta[v], beta[rv])
