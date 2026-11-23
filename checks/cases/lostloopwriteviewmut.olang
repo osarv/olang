@@ -1,0 +1,14 @@
+# check: fail error[S9g]: the write to 'p' is lost: nothing reads 'p' after it
+# S9a: a walk names each element's value - over a ViewMut too, a struct element is a copy; its field is written as
+# 'ps[i].x = 7'
+type P struct(x I64) {
+    x
+}
+fn main() {
+    ps := Vec<P>[]
+    ps.Push(P(1))
+    for p in ps.ViewMut() {
+        p.x = 7
+    }
+    Println(ps[0].x)
+}

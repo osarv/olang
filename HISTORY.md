@@ -41771,3 +41771,48 @@ errors were forgotten with the round (only a consequence, D10a, was said); and s
 were never forgotten with a round, so a round reading the misparsed body warned "nothing here is reached through 'x'"
 after the next round had read it rightly (`Forget` takes the warnings' count too). tests/condimport, condimportx,
 condimportcycle (fail on master: G12 and L9), built and evaluated.
+
+## 2026-11-23: a for loop's name is the element's value - the 2026-11-21 references reversed (S9a, S9g, T13b; the user's call; wt-loopvals)
+
+The user (2026-11-23), replacing their rule of 2026-11-21 ("loop variables get the type of what the iterator
+produces", built by wt-loopref, wt-looprows and wt-nestref's walk): "what we get from iterating over an array is
+exactly what that array contains ... like in C, an array of pointers, you get the pointer as a value ... we can write
+through those values ... if you want to update the entire array slot, you need to index the array." So a loop name is
+the element's value, however the array is reached: a struct or a row held by value is a copy, over a `ViewMut()` and a
+`mut` parameter too, and the slot or its fields are written as `a[i] = ...`, `a[i].f = ...`; a reference element is the
+reference, a write through it reaching its referent. `check.elemName` (the `mut T&` into the slot) is gone; the walk's
+Let is the element read, as it was before 2026-11-21. S9g stays: a store to the copy nothing reads after it is
+`LostLoopWrite`, its help now naming `a[i] = ...` or `a[i].f = ...` (the old help pointed at the writable walk's
+reference), its note "a copy of the element's value". T7c's reference locals of rows in place (wt-nestref) are
+unchanged: they were a bug fix of their own; only the walk over them gives copies again.
+
+**A reference held inside the element, the user's clarification (2026-11-23).** A by-value element may hold a `mut`
+reference; writing through it (`x.ref.f = ...`) reaches the referent, which may be another slot of the array or the very
+slot `x` was read from - the array then changes, as intended. Only replacing the slot, or its by-value fields, needs
+`a[i]`. The edge case - a write through `x.ref` to `x`'s own slot - is decided as a **snapshot** (the user's
+preference, which I found no reason against): `x` holds the element as it was when the turn began and does not see the
+write. That keeps "x is the element's value" exact - the same as `y := a[i]` before the loop body - and makes reading in
+place a pure optimization, allowed only where nothing can write the slot during the body (no write through any `mut`
+reference that may alias it). The alternative, reading in place always, would make `x`'s value depend on aliasing the
+program cannot see. As built, the copy is a Let of the element (an aggregate load) and LLVM's SROA/memcpy forwarding
+reads in place where alias analysis proves nothing writes the slot - which is exactly the condition stated; no
+checker-level in-place reading was added, since a reference name would change `y := x`'s meaning. SPEC S9a states the
+snapshot as part of the one rule; tests/loopvals.olang's "a write through a held reference to the very slot".
+
+**Unique elements (mine).** A unique element (T13b) cannot be copied, so the name is a reference where the array holds
+it; it was writable where the array was reached writably. Under "the name is the value" it is now always read-only (a
+borrowed value): a change to the element goes through the index form, `a[i].M()`, as a Vec's walk through `Ref(i)`
+already gave. Also a run of S9f now names a unique element by reference as the array walk does (it was missed).
+
+What changed for existing code: a temporary trace of every loop 2026-11-21's rule bound by reference, over every
+.olang file of olang (std, tests, tools, bench, checks, compiler and its tools), oann and oagent, found only
+tests/loopref.olang and the same read-only loops wt-loopref listed (bench/dispatch, bench/nbody's offsetMomentum,
+lower.payPlan, results/scopes/syntax_migrate) - no code outside the test wrote through a loop name. tests/loopref.olang
+(invalidated) was migrated to the index form; no `olang fix` tool (nothing to migrate, and a write later read cannot
+be told from one meant for the copy).
+
+Corpus: tests/loopvals.olang (a ViewMut's struct elements written by index, the name the snapshot; an array of
+references and a struct holding a `mut` reference written through; the self-slot snapshot; rows copied and written by
+index; `assert snapshot() == 1221` decided while compiling and a baked global). checks/cases: lostloopwriteviewmut
+(a field of a ViewMut's copy, the old rule's main use), lostloopwriterepoint now over an `Array<P&>` (a reference
+element repointed).
