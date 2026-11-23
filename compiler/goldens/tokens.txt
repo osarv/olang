@@ -2513,7 +2513,7 @@ be6d4829fde4952d cfae27a393c3b935 checks/fixtures/weak/unheld.olang
 72c5c47b1749b99b c91dc1d9e72d4d20 compiler/api.olang
 c770e3cdf9454803 824ae4dad32ea901 compiler/ast.olang
 378df1be09aa52ca 0f82a973c390d1b9 compiler/bindgen.olang
-929ef4c3b877b546 e84f2676cb167fbf compiler/build.olang
+a0ff33233cc0e2a2 df99865290cc86be compiler/build.olang
 9eb8d9916112f375 acad139c7c5a3871 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
 3233ac9cbd873b87 25814d52c7a5c177 compiler/check.olang
@@ -2523,7 +2523,7 @@ d5d87da3cf156c0a bba2773268c83e42 compiler/definit.olang
 8eecc7e6e624f53a 744bfcc1480f0aa4 compiler/diagmsg.olang
 b02b474ae1593a73 336dc6b9fb0adbb8 compiler/doc.olang
 a3fbc5540944968e 1dc922a7751f2cd7 compiler/effects.olang
-e3ed5b05689cc344 f894540644bad011 compiler/emit.olang
+9ef0036f01e1a507 67c0cb073be7a3c8 compiler/emit.olang
 e82f4f3de7559b1f 26a69a88bd1ea31c compiler/eval.olang
 eba7fd72c9763b72 4d7260221f3478bb compiler/explain.olang
 18829bd0a5b1f2ca 3705f65423c3116d compiler/facts.olang
@@ -2546,7 +2546,7 @@ ed6690a6c05d7494 5882af1e3f8ab527 compiler/mir.olang
 04b2a622da19ca9a 835500f0b436639f compiler/names.olang
 3f072b84e716c304 59b46a3ae1383924 compiler/needs.olang
 79acbc010c9bf08a b1a3323292403dad compiler/notebook.olang
-df520c4a1bbd12e1 8df955b798d06b9f compiler/olang.olang
+20fc9986e870276a 0081d658e779b863 compiler/olang.olang
 b39996c18bbe72bf ac116c53952c20fd compiler/paint.olang
 a0db63bdf993f7e7 af54cf8ddd638769 compiler/parse.olang
 2cf0b668dac274b7 b2471504fdad37d8 compiler/profile.olang
