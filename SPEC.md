@@ -455,9 +455,10 @@ code; a function either declares a success type or declares none (see §3.4).
 a parameter's type, a return type, an array's element type) — is one of:
 
 ```
-type-expr ::= [ "weak" ] [ "mut" ] ( enum-body | struct-body | trait-body | func-type | type-ref | any-ref )
+type-expr ::= [ "weak" ] [ "mut" ] ( enum-body | struct-body | trait-body | func-type | c-func-type | type-ref | any-ref )
                                            ("weak" only before a type-ref with the marker "?&", T2d)
 func-type ::= "fn" reference-marker func-sig { promise }   (T21, T21c; bare - "fn" func-sig - only as a type declaration's base, T21b)
+c-func-type ::= "extern" "fn" reference-marker func-sig   (X13a: a C function pointer)
 ```
 
 A leading `mut` makes a reference type writable (T25b); it is valid on a reference-shaped type and on a type
@@ -1323,7 +1324,8 @@ the payload into the target set's part.
 
 **T21.** `func-type ::= "fn" reference-marker func-sig { promise }`, where `reference-marker` is T24's (`&` or `?&`,
 written directly after the `fn`), `func-sig` is the parameter list, optional return type, and optional error list
-described in §3.4 (D8), and each `promise` is T21c's.
+described in §3.4 (D8), and each `promise` is T21c's. Written after `extern` it is a C function pointer instead (X13a),
+which is no function value.
 A function type is **reference-only**, as an `any` (T32) and an extern type (X10) are:
 every place holding a function value - a variable's, field's, parameter's or result's type, an element's, a type
 argument - writes its marker, `fn&(e Event)` a function value that is never null and `fn?&(e Event)` one that may be,
@@ -8664,7 +8666,7 @@ and no task in sight waits that time out, as the built program would with nothin
 reclaimed as it closes (§8) and each destructor runs where its holder lets go of its value (O15, O16), as in the built
 program. An `extern` function is called with numbers, `Bool`s, arrays, structs of numbers by reference (X10, X11), an
 extern type's reference and pointers C gave; one with any other parameter or result - a struct by value, a struct
-holding a reference, a function value C would call (X13) - stops the interpreter the same way. The libraries the
+holding a reference, a function value C would call (X13), a C function pointer made or called through (X13a) - stops the interpreter the same way. The libraries the
 program links (X9) are loaded into the interpreting process before
 `main` runs, a library's name as its shared library (`libNAME.so`, or the library a linker script of that name names
 first), so its functions are found as the built program
@@ -9639,8 +9641,8 @@ extern-type`, and `extern-ret-type ::= extern-value-type`. What crosses the C bo
 
 - an `extern-value-type`, as a parameter or the result: a numeric primitive type of the twelve C has types for - the
   floats and the integers of 8, 16, 32 and 64 bits, never another width (T4a) - or a type declared over one (T29, a
-  `Char` among them), a `Bool`, a reference to an extern type (X10: `Db&`, `Db?&`), or a plain-data struct
-  held by value (X11);
+  `Char` among them), a `Bool`, a reference to an extern type (X10: `Db&`, `Db?&`), a C function pointer (X13a:
+  `extern fn?&(x I32) I32`), or a plain-data struct held by value (X11);
 - as a parameter only: a reference to a plain-data struct (`p Point&`, `p mut Point&`, `p Point?&`, X11), or an array
   (T7, held by value or by reference, of any length) whose element is an `extern-value-type`.
 
@@ -9816,8 +9818,8 @@ anywhere and outlives everything as far as the scope check is concerned. Whether
 function (X1a).
 
 **X11 (plain-data structs).** A **plain-data struct** is a struct type (T13) declaring no destructor (C7) whose every
-field is a numeric primitive or a type declared over one, a `Bool`, a reference to an extern type (X10), an array laid
-out in place with a length known while compiling (T7c, T7d: `c := Array<U8>(16)` as a field) of these, or a
+field is a numeric primitive or a type declared over one, a `Bool`, a reference to an extern type (X10), a C function
+pointer (X13a, one word: a callbacks table is such a struct), an array laid out in place with a length known while compiling (T7c, T7d: `c := Array<U8>(16)` as a field) of these, or a
 plain-data struct held by value. Its layout is C's for a struct of the same fields in the same order (§3.2: each field
 at its natural alignment, the whole rounded to its largest), so a C declaration of those fields describes it exactly,
 and the program's declaration is taken at its word as any prototype is (X1a). It crosses the C boundary (X2) by value
@@ -9873,6 +9875,42 @@ struct (X11) - `each(n, add, ctx)` with `ctx mut Ctx&` - which lives, as every a
 duration. A C function keeping the callback, or the context, beyond that call and calling it later is relying on the
 context still being there: a context in the program's scope (a global's, or one built there) is, and anything else is
 the program's word, unchecked, as an extern's prototype is (X1a).
+
+**X13a (C function pointers).** `c-func-type ::= "extern" "fn" reference-marker func-sig` (T2) - `extern fn&(x I32)
+I32`, or `extern fn?&(x I32) I32` where it may be null - is a **C function pointer**: one word, C's pointer to a function
+of that prototype, called by the platform's C convention (X2). It is no olang function value (T21's pair of code and
+environment): neither is ever the other, by any conversion. Its signature is a callback's (X13) - its parameters of an
+export fn's vocabulary but arrays, its result an `extern-value-type` or nothing - with no errors, promises, defaults or
+`...`; any other is a compile-time error at the type. It is always written with its marker, never bare, and is never a
+type declaration's base (T21b).
+
+A value of one is made only of an **export fn, named**, where the type is wanted - `ops.twice = doubled` - its C entry
+(X12), whose type the export fn's must be (T22); a lambda, a function held in a variable or an ordinary function is a
+compile-time error, as for X13's callbacks. `null` is an `extern fn?&`'s zero value (D13), so a struct's field of one
+starts null where nothing else is written; an `extern fn&` has none, and is given a value as a `fn&` is. Every other
+value of one comes from C: an extern's result, a field of a struct C filled, an export fn's parameter.
+
+It is plain data that lives in no scope of olang's, as an extern type's reference does (X10): it may stand wherever a
+value may - a local, a global, a field, an element, a parameter, a result, a type argument - and §8 takes it for a value
+holding no reference. It is part of the vocabulary (X2): an `extern-value-type`, so an extern's parameter or result and an
+export fn's, and a field of a plain-data struct (X11), so a struct of function pointers - a callbacks table - crosses
+to C and back with each of them in place. `==` and `!=` compare two by the function they point to, `== null` tests one;
+`$` renders one as its type, or `null`.
+
+It is **called** as a function value is (E13b): `p(x)` through an `extern fn&`, and through an `extern fn?&` once a test
+says it is not null (S8e) or as `p!(x)` (E35), which ends the program on a null before anything is called. The call is a
+call of C, as an extern's is (X1-X4): its arguments and result cross as X2 says, it is never fallible, it is opaque
+(X3b), and C may call any export fn back before it returns. That the pointer names a function of exactly its prototype
+is the program's word, unchecked, as an extern's prototype is (X1a): a wrong prototype, a pointer to no function, or a
+null held in an `extern fn&` (a C result declared never null) is undefined behaviour. A task is never a call through
+one (P1) - a compile-time error naming a function the task calls instead.
+
+A table C hands over behind a pointer - JNI's `JNIEnv *`, a pointer to a pointer to a struct of functions each taking
+that pointer back - is read as any struct C laid out is, by copying it into a plain-data struct of the program's with
+`memcpy` (X22), its pointer fields `CVoid?&` and its functions `extern fn?&`, then called through: `t.scaled!(env, 4,
+2)`. A function taking variable arguments has no such form; its field is C's pointer of no type (`CVoid?&`, X18), and
+JNI's `A` forms, taking their arguments in an array, are the ones to call. The compile-time evaluator calls no C (K1),
+and the interpreter (B3e) neither makes nor calls through one: each stops there, saying so.
 
 **X14 (libraries).** `olang build -library FILE` builds the program FILE is the root of as a **shared library** for C
 (and anything calling C: Python's `ctypes`, say) rather than an executable: `libNAME.so`, `NAME` the file's base name
@@ -9963,7 +10001,9 @@ The types are those of C on the target (on x86-64 and AArch64 Linux, `long` is 6
 pointed to; `_Bool` a `Bool`; an enum an `I32`. A pointer parameter to numbers is an array of them (`const T *` an
 `Array<T>`, `T *` a `mut Array<T>&`, so `const char *` takes `t.ToC()`, X15); to a struct, its reference (`S?&`, a
 plain struct's `mut S?&` where it is not `const`); to a pointer to a struct, to `char` or to `void`, an array of the
-references (`mut Array<S?&>&`, C's out parameter); a function pointer, a function type (X13). A pointer to `char`,
+references (`mut Array<S?&>&`, C's out parameter); a function pointer, a function type (X13). A function pointer given
+back, or held in a field, is a C function pointer (`extern fn?&(a0 I32) I32`, X13a, its parameters named by position)
+where its prototype has that form, else - one taking variable arguments, say - a `CVoid?&`. A pointer to `char`,
 `signed char` or `unsigned char` given back, or held in a field, is a `CStr?&`; a pointer to anything else not
 already named - `void *` above all - is a `CVoid?&` (`mut CVoid?&` where it is not `const`, X22).
 
