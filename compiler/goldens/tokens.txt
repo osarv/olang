@@ -2112,7 +2112,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 ac0cb24df228eac5 494276e48e18f7fa checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-2f1dccaa27483f91 96e242a13f40da5e checks/checks.olang
+585df27b74e257bb 90591f17c620f12f checks/checks.olang
 e441d89352158de4 51f391891d39e1c7 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 efb54136ad6286dc checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb 11ac830c3b4509ca checks/fixtures/agree/math.olang
@@ -2258,6 +2258,7 @@ c63fbdfdcd4f61e6 786567b89d95661b checks/fixtures/freeing/mapcopy.olang
 d4da91f96eb62c2e 6c2d12ad76355b8a checks/fixtures/freeing/mapelems.olang
 d9bf50b73caa44d6 274017c25fff14e3 checks/fixtures/freeing/mapfill.olang
 fc8debc8cbb013c5 93b66da0776acce4 checks/fixtures/freeing/mapowners.olang
+2a1c506d619a9dfc 143037ad059e5f5d checks/fixtures/freeing/mapsplit.olang
 93352884d91c2ff9 5705096c0e0ede1b checks/fixtures/freeing/mapvalues.olang
 523c7b639758e386 ab90e87e0f89193a checks/fixtures/freeing/movedvalues.olang
 5a3504cbdb2bbcff 99c76fe5049c0be5 checks/fixtures/freeing/nestedowners.olang
@@ -2511,14 +2512,14 @@ d5d87da3cf156c0a bba2773268c83e42 compiler/definit.olang
 8eecc7e6e624f53a 744bfcc1480f0aa4 compiler/diagmsg.olang
 b02b474ae1593a73 336dc6b9fb0adbb8 compiler/doc.olang
 35fc969ca1a136ea 937772807dc0c829 compiler/effects.olang
-725edb6825a6d62e 6faa7bc840e4b1bd compiler/emit.olang
+1ad9c8b91765a977 a2cd62be9be9619c compiler/emit.olang
 01ff414bb0f67b9b 6d8b8b2926f0d0fe compiler/eval.olang
 eba7fd72c9763b72 4d7260221f3478bb compiler/explain.olang
 18829bd0a5b1f2ca 3705f65423c3116d compiler/facts.olang
 5b0d1d8455b9f604 195cc71e4c8c755c compiler/fetch.olang
 b8bc27635ac86610 348eb08fc0410154 compiler/fix.olang
 e16765f56912e3a6 22d3690134ecf863 compiler/fmt.olang
-902351544e011b11 e7bda39d909b125f compiler/free.olang
+33c2e5cb113ac564 606560cde397be0e compiler/free.olang
 7dcf3f3fd8db67e5 a4cd64ed0e69aa44 compiler/generic.olang
 d567d78faab8844a 7d14ca379389e62a compiler/interp.olang
 23a885a6497e989e 121d5f76d127824b compiler/jupyter.olang
