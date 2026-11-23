@@ -41653,3 +41653,35 @@ them back on every exit, the bounds checks' failing exits included, and without 
 another task writing a part the call never touched, which P8b allows. In oann (bench/int8, 512^3 and 1024^3) the
 in-place form gives 130 GOPS against 254-360. Nothing changes: the local accumulator stays oann's idiom, and whether a
 writable reference parameter should hold its whole referent for the call beside tasks is asked (decisions.md 2).
+
+## 2026-11-23: the front end's analysis goes when Analyze returns (build memory; mine; wt-mempeak2)
+
+The test build of compiler/olang.olang peaked at ~4.7 GB under memgate and was OOM-killed under `make quick`. Its
+parent kept everything the front end made - loader, checker, scope pass, lowerer, emitter - through clang's compiles
+and the link: `Passes.Analyze` placed them all in the scope of its `d` (the caller's diagnostics) and its `cfg`.
+The cause is how a struct holding a `mut` reference is placed: its field's tag is its container's scope and a `mut`
+reference's scope is exact, so an instance holding `mut X&` is built in X's scope (a two-type program shows it: a
+`Worker(L mut Big&)` made in a method of `Big` is allocated in `Big`'s scope; with `L Big&` in the method's own).
+`load.Loader` held `Diags mut diag.Diagnostics&` and `Consts mut cond.Consts&` (cfg's), the checker holds the loader,
+and so on up: `explain` gave Analyze "d outlives cfg, cfg outlives d, d outlives prog".
+
+The fix, in the compiler's own code: Analyze reports to diagnostics of its own, made in its scope - `diag.SetFrom`
+copies the caller's in, and a `defer` copies them back however Analyze ends; the loader holds the build constants
+read-only (it only reads them); and what Analyze hands the program - test words, links, exports, unit names, the
+listing's codes, the fuzz corpus - is copied (`$`). `explain` now gives Analyze no obligations, and its IR allocates
+the loader, checker, lowerer and emitter in its own scope; the objects' IR is the one thing built in the program's.
+Output is unchanged (the self-build's fixed point, the suite).
+
+Measured (`OLANG_TIMES=1 olang test compiler/olang.olang`, a 4-core 15 GB container; tree = the process and its clang
+workers, sampled every 0.2 s): cold (a fresh build directory) the parent stays at 4335 MB through compile and link
+before, and drops to 2987 MB once Analyze returns after; the tree's peak 5044 -> 4287 MB. Warm (every object reused)
+the tree's peak 2946 -> 2807 MB, the parent after the analysis 2795 -> 2361 MB. What is left after Analyze is the
+objects' IR and what the runtime's chunk pool keeps for reuse (up to an eighth of RAM).
+
+Left: the peak is now lower+emit's (2.5 -> 4.3 GB cold, against ~176 MB of IR written), the same placement at a
+smaller grain. Each function is lowered by a `lower.lowering` (holding `L mut Lowerer&` and `T mut types.Table&`) and
+written by an `emit.fnEm` (holding `E mut Emitter&`), so both - their scratch and the function's MIR - are built in
+the Lowerer's or the Emitter's scope and kept until Analyze returns (`explain` gives `Lowerer.LowerKey` "return
+outlives lw"). Closing it in code would mean those helpers holding their parents read-only, a large restructuring of
+lower.olang and emit.olang; giving a `mut` field a binding of its own in the scope pass would close it for every such
+helper - section 8's, reported to the session that owns it.
