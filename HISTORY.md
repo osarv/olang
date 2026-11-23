@@ -42528,3 +42528,47 @@ it there; `item`'s `$decl` is again written as Push's argument, the symbol (also
 conditional's value) stay locals moved at their last use. Not covered, as before: a conditional's value (`a if c else
 $b`) given to a reference, and a call whose result the plan places elsewhere than the reference's scope - each still
 made, then copied.
+
+## 2026-11-23: waits block, no polling (mine; wt-chanwait)
+
+oagent's low-power rule found that a wait given a token woke on a timer: a Token could not wake anyone, since it did
+not know who waited on it, so `cancel.WakeAt` capped every wait at `PollNs` (10 ms) to notice a `Cancel()`. chan's
+`RecvUntil`/`SendUntil` waited on the channel's condition variable up to that time, and `os.Process.WaitUntil` napped
+in a loop doubling from 50 us to the same cap. A `RecvUntil` blocked 200 ms with nothing arriving woke 20 times.
+
+Now a wait blocks until what it waits for comes, the token is cancelled or the deadline passes. A thread blocks on
+one thing only, so everything that may end a wait has to reach that one thing: each blocked wait takes a WAITER of
+std/cancel's - a mutex, a condition variable and a flag of its own, and for a wait in poll(2) an eventfd - registered
+under its token's number (a Token now carries one, from a counter). `Cancel()` sets the flag, then wakes every waiter
+registered under its number; a channel keeps the numbers of the waiters parked on it (`Chan.parked`) and wakes them
+wherever it already broadcast its conditions (a value placed or taken, a send withdrawn, Close). The waiter sleeps on
+its own condition variable, untimed without a deadline, else with pthread_cond_timedwait to the deadline itself (on
+the wall clock, as before). Inside time.Virtual the deadline is reached at once and what is waited for given a
+millisecond, as WakeAt did.
+
+Decided along the way (mine):
+- Waiters live in one table for the program's life (a global `Vec` of references, so a waiter never moves - pthread
+  needs its address fixed), reused once let go, and are named by their index: neither the token nor the channel holds
+  a reference into the other's scope, which no scope rule could allow (the token and the channel are unrelated
+  arguments of the wait). The table grows to the most waits blocked at once.
+- Lock order is one way: the waited-on lock (a channel's), then the table's, then a waiter's. `Cancel()` wakes under
+  the table's lock, so `Done` (taken under it) leaves no wake in flight for a waiter given to another wait; a wake
+  writes a waiter's eventfd under the waiter's lock, which `Done` clears before the caller closes it.
+- A lost wake is impossible by the flag: the waiter clears it (`Rearm`) under the waited-on lock before checking its
+  condition, and every wake after that sets it. A wake of a waiter whose wait already ended is at worst a spurious
+  wakeup of the next wait given it, which loops and checks again.
+- One list of parked waiters per channel for senders and receivers alike - a wait woken by a change in the other
+  direction checks and sleeps again; senders and receivers rarely block on one channel at once.
+- `Process.WaitUntil` polls (blocks in poll(2)) on a pidfd (pidfd_open, system call 434 on every Linux architecture)
+  and the waiter's eventfd, with the deadline as poll's timeout (`Token.LeftNs`). Where pidfd_open is missing (Linux
+  before 5.3, a sandbox refusing it) a child's end cannot be waited for beside anything else, so it falls back to the
+  old doubling naps, capped at 10 ms - only that case wakes on a timer, and a `Cancel()` still wakes it at once
+  through the eventfd.
+- `PollNs` and `WakeAt` are gone (nothing but std's waits used them); new in cancel, for std's own waits: `Token.Park`,
+  `Rearm`, `Token.Sleep`, `Wake`, `Done`, `Token.LeftNs`. `Select` is unchanged (it waits on no token: it backs off to
+  a sleep of a millisecond at most).
+
+Tests count wakes (a channel's `wakes`, a process's): a `RecvUntil` blocked 200 ms to its deadline wakes once (was
+20), a blocked `RecvUntil` woken by `Cancel()` or a `Send` once, a `SendUntil` on a full channel once per Recv, Cancel
+or deadline; `WaitUntil` once for a child's end, a deadline and a `Cancel()` (was ~20 in 200 ms). All pass under
+`-race`.

@@ -1210,7 +1210,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `AtomicStore`, `AtomicAdd`, `AtomicSwap`, `AtomicCompareSwap`, sequentially consistent.
 - **Runtime:** 1:1 threads, cached (at most 64 idle); no fixed pool and no M:N (P1e/P1f). Cancellation and timeout are
   `std/cancel` (the user's call: "both"); channels are `std/chan`, ready as made (`chan.Init` removed 2026-11-15, the AI
-  study: a channel made without it hung). `spawn` is for parallelism, not I/O concurrency.
+  study: a channel made without it hung). A wait given a token (`RecvUntil`, `SendUntil`, `Process.WaitUntil`) blocks
+  until what it waits for, `Cancel()` or the deadline - never woken on a timer (2026-11-23: cancel's waiters, woken by
+  `Cancel()` and by the channel; a pidfd and an eventfd in poll for a process). `spawn` is for parallelism, not I/O concurrency.
 
 ### Modules and the build
 
