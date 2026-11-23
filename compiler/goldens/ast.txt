@@ -2191,6 +2191,7 @@ e141c9f76622b90f ad1210872c3388d3 checks/fixtures/fix/today.olang
 837992c480dd3ebf 38292f16a9e79dd1 checks/fixtures/frameenv/envcheck.olang
 509448f185ac76a7 bfaebdb26cc88707 checks/fixtures/frameenv/frameescapes.olang
 a8cb815d7d5549ec 6604c37f6c4c45d8 checks/fixtures/frameenv/frameonly.olang
+b6faf622ec8a3aca f63d566099958cab checks/fixtures/freeing/againkept.olang
 f537cda0e88cd271 acda68313a3c2783 checks/fixtures/freeing/anyholders.olang
 1aaa5abd9c5dc32a 03ce4acebd6e7d75 checks/fixtures/freeing/append.olang
 0a4b44e85dda6635 4e09abbe2aecb236 checks/fixtures/freeing/argholders.olang
