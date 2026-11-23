@@ -86,23 +86,30 @@ fn ModuleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<Strin
 fn ReaderRecords(l mut load.Loader&, c typecheck.Checker&) Array<String&>& {
     mods Vec<mut load.Module&>& = l.Mods
     reads mut Array<String&>& = Array<String&>(mods.Len(), "")
-    # each module's own reads and those an importer carries, asked once each
-    own := Array<String&>(mods.Len(), "")
-    carried := Array<String&>(mods.Len(), "")
+    # each module's own reads and those an importer carries, asked once each, as lines: a module's record is the lines
+    # of the records it reaches, sorted, each once
+    own Vec<Vec<String>>
+    carried Vec<Vec<String>>
     tokens := c.P.Facts.Tokens()
     for x in range mods.Len() {
+        own.Push(Vec<String>())
+        carried.Push(Vec<String>())
         if mods[x].File < 0: continue
-        own[x] = c.P.Facts.Record(mods[x].File, true, tokens)
-        carried[x] = c.P.Facts.Record(mods[x].File, false, tokens)
+        own[x] = c.P.Facts.RecordLines(mods[x].File, true, tokens)
+        carried[x] = c.P.Facts.RecordLines(mods[x].File, false, tokens)
     }
     for m in range mods.Len() {
         if m == l.Root: continue
         lines Vec<String&>
         for x in Reached(mods, m) {
-            rec := own[x] if x == m else carried[x]
-            if rec != "": lines.Push(rec)
+            for line in (own[x] if x == m else carried[x]): lines.Push(line)
         }
-        reads[m] = SortedLines(lines.Join("\n"))
+        lines.Sort(fn(a String&, b String&) Bool { return a < b })
+        out Vec<String&>
+        for x in lines {
+            if out.Len() == 0 or out[out.Len() - 1] != x: out.Push(x)
+        }
+        reads[m] = out.Join("\n")
     }
     return reads
 }
@@ -128,18 +135,6 @@ fn Reached(mods Vec<mut load.Module&>&, m I64) Vec<I64> {
     }
     order.Sort(fn(a I64, b I64) Bool { return a < b })
     return order
-}
-
-# text's lines sorted, each once
-fn SortedLines(text String&) String {
-    if text == "": return ""
-    lines := text.Lines().ToVec()
-    lines.Sort(fn(a String&, b String&) Bool { return a < b })
-    out Vec<String&>
-    for x in lines {
-        if out.Len() == 0 or out[out.Len() - 1] != x: out.Push(x)
-    }
-    return out.Join("\n")
 }
 
 # ---- the front end's records (B3i, the incremental front end) ----
