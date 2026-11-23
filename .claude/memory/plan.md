@@ -98,3 +98,4 @@ on 2026-11-07. The remaining work is /home/user/review/remaining/LIST.md.)
   returning a field of the worker) still place the worker in the caller's scope, so the second direction in Lower
   comes from something not yet found. To trace: a local OBLIGE/DISAGREE line in scope.fit's Obliged branch and in
   disagree under OLANG_INFERDUMP, with the module's scope records out of the way (lower.olang's were read, not judged).
+- Decided (the user, 2026-11-23): a joined task's results freed early by option (c) of docs/freeing.md 2.4 question 1 (result regions handed to the spawner at the join's wait; pools take cross-thread releases via a lock-free return list); section-8, Opus xhigh, after condimport, exactlocal and the full verify. Field scopes (decisions 3): docs/fieldscopes.md for option B (soundness argument, run-time lookup, cost) first; no building until the user has seen it.
