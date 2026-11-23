@@ -908,6 +908,7 @@ cfed5e1d5fc16340 506587bfe7ea382e checks/cases/m5askipped.olang
 fd3d2b79465d7957 ed58990c2982700a checks/cases/m6bonce.olang
 9cbcffb77825183e 3d0fc88ac6331123 checks/cases/m6bprivatelen.olang
 67c063135434a0bd 5636232b20f332fc checks/cases/m9builderold.olang
+1dfac3567ea34fa5 7ad6b66337719cb6 checks/cases/m9missingtype.olang
 0f561b208e09299d 4185981717cf5b19 checks/cases/m9preludename.olang
 cfd84acce1ea7988 94695905db8cbece checks/cases/mapchurn.olang
 959f1de86b6ed1b1 99da85babd48cd6e checks/cases/mapremove.olang
