@@ -479,6 +479,24 @@ $(filter-out cross@checks/checks.olang,$(CROSS_RUNS)): cross@%: FORCE
 cross@checks/checks.olang: FORCE
 	@CHECKS_TARGET=$(CROSS_TARGET) $(OLANG_ENV) $(OLANG) test checks/checks.olang || echo "checks ($(CROSS_TARGET))" >> build/failed.txt
 
+# B12e: the same tests built for Android (ANDROID_TARGET) with the Android NDK (ANDROID_NDK_HOME, or ANDROID_NDK_ROOT),
+# linked statically and run through qemu-aarch64; skipped, saying so, where neither names the NDK. ANDROID_SKIP leaves out
+# what the emulator cannot run as a phone would: std/os's (a failed exec reported as a child exiting 127, as for cross),
+# std/net's (bionic resolves names through the system's netd, not here), std/ffi's and std/tls's (no libffi or OpenSSL
+# in the NDK). docs/android.md
+ANDROID_TARGET ?= aarch64-linux-android
+ANDROID_SKIP ?= std/os.olang std/net.olang std/ffi.olang std/tls.olang
+ANDROID_TESTS = $(filter-out $(ANDROID_SKIP),$(CROSS_TESTS) $(CROSS_SKIP))
+ANDROID_RUNS = $(addprefix android@,$(ANDROID_TESTS))
+android-test: $(OLANG)
+	@if [ -z "$$ANDROID_NDK_HOME$$ANDROID_NDK_ROOT" ]; then \
+		echo "android-test: skipped - set ANDROID_NDK_HOME to the Android NDK's directory (docs/android.md)"; exit 0; fi; \
+	rm -f build/failed.txt; \
+	$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(ANDROID_RUNS) && [ ! -s build/failed.txt ] || $(FAILED); \
+	echo "android-test: every test passed on $(ANDROID_TARGET)"
+$(ANDROID_RUNS): android@%: FORCE
+	@$(OLANG_ENV) $(OLANG) test -target $(ANDROID_TARGET) $* || echo "$* ($(ANDROID_TARGET))" >> build/failed.txt
+
 # B12d: a release - build/release/olang-VERSION-ARCH-linux.tar.xz, VERSION as git describes this checkout. It holds
 # the compiler built for the architecture's baseline (bin/olang, so it runs on every machine of it, whatever this one
 # has), std/, SPEC.md (for "olang explain RULE"), editors/, tools/ (for "olang fix"), docs/install.md as its README, and
@@ -665,4 +683,4 @@ uninstall:
 	echo "uninstall: done (left as they are: ~/.cache/olang, a Jupyter kernel spec, builds' build/ directories)"
 
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: consistency dumptool all build prereq install install-editors uninstall bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean
+.PHONY: consistency dumptool all build android-test prereq install install-editors uninstall bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean
