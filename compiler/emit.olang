@@ -75,6 +75,10 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     itemDecl Vec<String&>
     itemAt Map<String&, I64>
     itemRefs Vec<Array<I64>&>      # each item's references (refsIn), found once when an object first needs them
+    # build memory: the directory each object's text is written to as it is assembled (spilled), "" to keep it in the
+    # Object; and how many were written there
+    SpillDir String& = ""
+    nspill I64 = 0
     Triple String& = "x86_64-pc-linux-gnu"    # the target written into every module (B12)
     nconst I64 = 0
     badType Bool = false            # a type met with no layout, in the function being written
@@ -217,6 +221,25 @@ type Object struct(Identity String&, Kind ObjectKind, Ir String&) {
     Kind
     Ir
     From I64 = -1       # B3i: no IR, standing for the objects of the module Reuse[From] (the caller has them)
+    # build memory: where the emitter has a SpillDir, the file its text was written to as it was assembled (Ir ""),
+    # how long that text is, and whether it calls the dynamic call (what the caller would look for in it)
+    Spill String& = ""
+    Size I64 = 0
+    Dyncall Bool = false
+}
+
+# an object of text ir where the emitter has a SpillDir: the text written to a file of its own there and the object
+# naming it - so the objects assembled are not all held beside what emission holds until the build is analyzed, only
+# one object's text at a time (kept in the Object where the file cannot be written)
+fn (e mut Emitter&) spilled(identity String&, kind ObjectKind, ir String&) Object {
+    path := $e.SpillDir + "/" + $e.nspill + ".ll"
+    try os.WriteFile(path, ir) catch os.Error { return Object($identity, kind, $ir) }
+    e.nspill++
+    o := Object($identity, kind, "")
+    o.Spill = path
+    o.Size = ir.Len()
+    o.Dyncall = ir.Contains("@__olang_dyncall")
+    return o
 }
 
 # the whole program as one LLVM module: the root's main (or, in a test build, the harness running its tests), each
@@ -464,12 +487,22 @@ fn (e mut Emitter&) parts(out mut Vec<Object>&, identity String&, kind ObjectKin
         for k in range n {
             name := $identity + "-t" + $k if grp == 1 else $identity + "-b" + $k
             if grp <= 0: name = $identity if k == 0 else $identity + "-" + $k
-            out.Push(Object($name, kind, e.assemble(home, alsoInst, k, n, inst, grp, locs, ig)))
+            out.Push(e.assembled($name, kind, home, alsoInst, k, n, inst, grp, locs, ig))
         }
     }
     if locs.Len() > 0 {
-        out.Push(Object($identity + $("-i" if kind == ObjectKind.Instances else ""), ObjectKind.Locations, e.locations(locs)))
+        lid := $identity + $("-i" if kind == ObjectKind.Instances else "")
+        if e.SpillDir == "" { out.Push(Object(lid, ObjectKind.Locations, e.locations(locs))) } else {
+            out.Push(e.spilled(lid, ObjectKind.Locations, e.locations(locs)))
+        }
     }
+}
+
+# one part's object (assemble) - where it is spilled, its text made in this frame and let go of as it returns
+fn (e mut Emitter&) assembled(name String&, kind ObjectKind, home I64, alsoInst Bool, k I64, n I64
+    inst mut Vec<String&>?&, grp I64, locs mut Map<I64, Bool>?&, ig I64) Object {
+    if e.SpillDir == "": return Object($name, kind, e.assemble(home, alsoInst, k, n, inst, grp, locs, ig))
+    return e.spilled(name, kind, e.assemble(home, alsoInst, k, n, inst, grp, locs, ig))
 }
 
 # B3l: the Locations object of a home, defining the places its objects name, in the order of their symbols
@@ -2128,15 +2161,22 @@ fn (e mut Emitter&) item(symbol String&, home I64, text String&, decl String& = 
         # a function written again, its calls reaching clones (4.4)
         if symbol != e.replaceSym: return
         i := try e.itemAt.Get(symbol) catch default -1
-        e.itemText[i] = e.dbgFunctions(text) if e.Lines and not e.Debug else $text
+        t := e.dbgFunctions(text) if e.Lines and not e.Debug else $text
+        e.itemText[i] = t
         e.itemRefs[i] = Array<I64>(0)
         return
     }
-    e.itemAt.Put($symbol, e.itemSym.Len())
-    e.itemSym.Push($symbol)
-    e.itemText.Push(e.dbgFunctions(text) if e.Lines and not e.Debug else $text)
+    # build memory: each copy bound to a local first, so the one copy is moved into its place at its last use (D9i) -
+    # a copy written as the argument (`Push($text)`) was copied again into the Emitter's scope, the first left behind
+    # there: the items' text held twice
+    sym := $symbol
+    e.itemAt.Put(sym, e.itemSym.Len())
+    e.itemSym.Push(sym)
+    t := e.dbgFunctions(text) if e.Lines and not e.Debug else $text
+    e.itemText.Push(t)
     e.itemHome.Push(home)
-    e.itemDecl.Push($decl)
+    dc := $decl
+    e.itemDecl.Push(dc)
     e.itemRefs.Push(Array<I64>(0))
 }
 

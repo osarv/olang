@@ -49,6 +49,40 @@ type Unit struct(Identity String&, Holds UnitKind, Ir String&) {
     Holds
     Ir
     Hash String& = ""
+    # build memory: the file the text was written to as the front end made it (a spilled object, emit.Object.Spill),
+    # Ir "" - read again one unit at a time where it is compiled - and the text's length
+    Spill String& = ""
+    Size I64 = 0
+}
+
+# the unit's IR: its text, or the file it was spilled to read again
+fn (u Unit&) Text() String& ? os.Error {
+    if u.Spill == "": return u.Ir
+    return try os.ReadFile(u.Spill)
+}
+
+# the length of the unit's IR
+fn (u Unit&) Len() I64 { return u.Size if u.Spill != "" else u.Ir.Len() }
+
+# build memory (BuildProgram and testBinary, Config.Spill): a new directory, under DIR/spill, for the objects' text the
+# emitter writes as it assembles them (emit.Emitter.SpillDir), "" where none can be made - those of builds no longer
+# running, whose pid names their directory, removed first. Removed again by Objects, once what it holds is compiled
+fn (c Config&) SpillDir() String {
+    root := $c.Dir + "/spill"
+    try os.MkDirAll(root) catch os.Error { return "" }
+    names := try os.ReadDir(root) catch os.Error default Array<String&>(0)
+    for n in names {
+        dash := try n.Find("-") catch default -1
+        if dash > 0 and not os.Exists($"/proc/" + $n[:dash]) { try os.RemoveAll($root + "/" + $n) catch os.Error { } }
+    }
+    return try os.MkTemp(root, $"" + $Pid() + "-") catch os.Error default ""
+}
+
+# the program's spill directory (SpillDir), with the units' files in it, removed
+fn (p Program&) Unspill() { Unspill(p.Spill) }
+
+fn Unspill(dir String&) {
+    if dir != "" { try os.RemoveAll(dir) catch os.Error { } }
 }
 
 # the SHA-256 of an object's IR, what its object is named by (ObjectPath)
@@ -78,8 +112,14 @@ fn hashUnits(units Vec<Unit>&, picked Vec<I64>&, out mut Array<String&>&, from I
     i := from
     for i < picked.Len() {
         u := picked[i]
-        out[u] = $units[u].Hash if units[u].Hash != "" else IrHash(units[u].Ir)
         i += step
+        if units[u].Hash != "" {
+            out[u] = $units[u].Hash
+            continue
+        }
+        # a spilled unit's text read again (Unit.Text), one at a time; its hash "" where it cannot be (Objects fails)
+        text := try units[u].Text() catch os.Error { continue }
+        out[u] = IrHash(text)
     }
 }
 
@@ -93,6 +133,7 @@ type Program struct() {
     Exports Vec<String&>    # a library's (X14): the C entries its export fns have, the only symbols it shows
     Header String& = ""      # and its C header's text
     FuzzCorpus String& = ""  # B19: where the fuzzed test's failing inputs are saved
+    Spill String& = ""       # build memory: the directory its units' text was spilled to (Config.SpillDir), "" none
     TestWords Vec<String&>   # B7a: the root's tests' targets and descriptions, for a filter naming none
     Spawning Vec<I64>        # B3a, P7: the root's tests that start a task (their places among its tests), where asked
     PartTests I64 = 0        # and how many tests this build runs
@@ -143,6 +184,7 @@ type Config struct() {
     Library Bool = false    # -library: a shared library of the export fns, and its C header (X14)
     Static Bool = false     # B12e: linked statically - an Android program run here, where bionic's loader is not
     Cell Bool = false       # B22: a session's cell - a shared object the cell worker loads, without the runtime (cells.olang)
+    Spill Bool = false      # build memory: the front end writes its objects' text to files (SpillDir), which Objects reads
     Fuzz String& = ""   # -fuzz NAME: the test fuzzed, built with libFuzzer (B19); "" for none
     FuzzTime I64 = 0    # -fuzztime SECONDS: how long it runs, 0 until a failure is found or it is stopped
     Profile Bool = false    # olang profile: frame pointers, line tables and the runtime's sampler (B20)
@@ -710,15 +752,27 @@ fn fileFatal(path String&, m diagmsg.Msg, d mut diag.Diagnostics&) {
 }
 
 # every object the program's link reads, in its units' order and then the runtime's (and the dynamic call's): the ones
-# not there yet compiled, side by side, each renamed into place once clang has written it
+# not there yet compiled, side by side, each renamed into place once clang has written it - and the files the units
+# were spilled to removed (Unspill), whatever the outcome
 fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) Vec<String&> ? Failed {
+    defer: prog.Unspill()
+    return try c.objects(prog, d)
+}
+
+fn (c mut Config&) objects(prog Program&, d mut diag.Diagnostics&) Vec<String&> ? Failed {
     size I64 = 0
-    for u in prog.Units: size += u.Ir.Len()
+    for u in prog.Units: size += u.Len()
     c.Thin = not c.Debug and not c.Race and not c.Quick and size >= ThinFrom
     j := compiles()
     paths Vec<String&>
     hashes := IrHashes(prog.Units)
-    for i, u in prog.Units: paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d, hashes[i], i))
+    for i, u in prog.Units {
+        ir := try u.Text() catch os.Error {
+            fileFatal(u.Spill, msgs.CannotOpen(), d)
+            error Failed.Reported
+        }
+        paths.Push(try c.want(j, Readable(u.Identity), u.Holds, ir, d, hashes[i], i))
+    }
     n := prog.Units.Len()
     if prog.Runtime != "": paths.Push(try c.want(j, "olang_runtime", UnitKind.Module, prog.Runtime, d, "", n))
     if prog.Dyncall != "": paths.Push(try c.want(j, "olang_dyncall", UnitKind.Module, prog.Dyncall, d, "", n + 1))
@@ -732,7 +786,11 @@ fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) Vec<String&> 
             if os.Exists(path): continue
             if i < n {
                 u := prog.Units[i]
-                try c.want(again, Readable(u.Identity), u.Holds, u.Ir, d, u.Hash)
+                ir := try u.Text() catch os.Error {
+                    fileFatal(u.Spill, msgs.CannotOpen(), d)
+                    error Failed.Reported
+                }
+                try c.want(again, Readable(u.Identity), u.Holds, ir, d, u.Hash)
             } else if i == n {
                 try c.want(again, "olang_runtime", UnitKind.Module, prog.Runtime, d)
             } else {
@@ -938,8 +996,12 @@ fn Compile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagno
 # build FILE: every module's object, then one link (B3)
 fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&) I32 {
     prog := Program()
+    c.Spill = not c.Library
     try fe.Analyze(file, Kind.Program, c, prog, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
-    if d.Errors() > 0 or prog.Units.Len() == 0: return finish(d)
+    if d.Errors() > 0 or prog.Units.Len() == 0 {
+        prog.Unspill()
+        return finish(d)
+    }
     try c.ensureDir(d) catch Failed { return finish(d) }
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
     Phase("compile")
@@ -1039,9 +1101,16 @@ fn (c Config&) splitsTests() Bool {
 # one test build, the file analyzed and its objects made and linked: -1 and its binary, or the status the file ends with.
 # Where its other part has all the tests (spare), -2 once analyzed: there is nothing to build
 fn (c mut Config&) testBinary<F Frontend>(fe mut F&, file String&, d mut diag.Diagnostics&, prog mut Program&, spare Bool) I32, String {
+    c.Spill = true
     try fe.Analyze(file, Kind.Tests, c, prog, d) catch Failed.Reported { return c.skipped(file, d), "" } catch Failed.Unbuilt { return unbuilt(), "" }
-    if d.Errors() > 0 or prog.Units.Len() == 0: return c.skipped(file, d), ""
-    if spare and prog.PartTests == 0 and prog.Spawning.Len() > 0: return -2, ""
+    if d.Errors() > 0 or prog.Units.Len() == 0 {
+        prog.Unspill()
+        return c.skipped(file, d), ""
+    }
+    if spare and prog.PartTests == 0 and prog.Spawning.Len() > 0 {
+        prog.Unspill()
+        return -2, ""
+    }
     try c.ensureDir(d) catch Failed { return finish(d), "" }
     objs := try c.Objects(prog, d) catch Failed { return finish(d), "" }
     Phase("compile")

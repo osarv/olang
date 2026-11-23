@@ -792,7 +792,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if cfg.Memory and cfg.MemoryCheck and fr.Gaps > 0 and d.Errors() == 0: d.Error(diag.Where.Nowhere, msgs.MemoryGaps(fr.Gaps))
     if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PutErr(fr.Dump()) catch io.Error { } }
     if d.Errors() > 0: error build.Failed.Reported
+    # build memory: each object's text written to a file as it is assembled (Config.Spill), read again as it is compiled
+    # (build.Unit.Text) - removed with the program's units, or here where the build ends in an error
+    if cfg.Spill and kind != build.Kind.Module and not cfg.Library and not cfg.Cell: prog.Spill = cfg.SpillDir()
+    errdefer: prog.Unspill()
     e mut emit.Emitter& = emitter(c, lw, d, cfg, kind, baked)
+    e.SpillDir = prog.Spill
     # B3i: a module whose object a build with the same inputs made already is not lowered or written again
     irs Map<String, String&>      # a reused module's parts' IR, "MODULE PART", read and checked against their hashes
     if kind != build.Kind.Module {
@@ -807,10 +812,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         cut := e.Cut
         irs.Clear()
         e = emitter(c, lw, d, cfg, kind, baked)
+        e.SpillDir = prog.Spill
         e.Reuse = reusable(l, c, cfg, keys, irs, 1 if cut else 0)
         objs = e.Objects()
         if e.Redo {
             e = emitter(c, lw, d, cfg, kind, baked)
+            e.SpillDir = prog.Spill
             objs = e.Objects()
         }
     }
@@ -868,7 +875,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             continue
         }
         ir String& = o.Ir
-        if ir.Contains("@__olang_dyncall"): dyncall = true
+        if o.Dyncall or ir.Contains("@__olang_dyncall"): dyncall = true
         if cfg.Library: ir = libraryIr(ir)
         holds := match o.Kind {
             case emit.ObjectKind.Module: build.UnitKind.Module
@@ -882,7 +889,10 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             keptUnit.Push(prog.Units.Len())
         }
         hashes.Push("")
-        prog.Units.Push(build.Unit($o.Identity, holds, ir))
+        u mut build.Unit& = build.Unit($o.Identity, holds, ir)
+        u.Spill = $o.Spill
+        u.Size = o.Size
+        prog.Units.Push(u)
     }
     # the modules' IR hashed at once, side by side (build.IrHashes), each hash kept in its record too
     sums := build.IrHashes(prog.Units, keptUnit)
@@ -1144,7 +1154,7 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, reads A
         if reads[r.Module] != "": b.Push($reads[r.Module] + "\n")
         ok := true
         for k in range r.Parts.Len() {
-            if not records.PutFile($base + ".p" + $k + ".ll", objs[r.From + k].Ir, pid): ok = false
+            if not keepPart($base + ".p" + $k + ".ll", objs[r.From + k], pid): ok = false
             b.Push($("locs " if r.Locs[k] else "part ") + $hashes[r.From + k] + " " + $r.Parts[k] + "\n")
         }
         if not ok: continue
@@ -1152,6 +1162,25 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, reads A
         body := b.ToString()
         records.PutFile(base, $body + "sum " + $build.IrHash(body) + "\n", pid)
     }
+}
+
+# a module record's part (keep): the object's text, or the file it was spilled to linked there (its text read and
+# written where it cannot be)
+fn keepPart(path String&, o emit.Object&, pid I32) Bool {
+    if o.Spill == "": return records.PutFile(path, o.Ir, pid)
+    tmp := $path + "." + $pid + ".tmp"
+    try os.Remove(tmp) catch os.Error { }
+    linked := true
+    try os.Link(o.Spill, tmp) catch os.Error { linked = false }
+    if not linked {
+        text := try os.ReadFile(o.Spill) catch os.Error { return false }
+        return records.PutFile(path, text, pid)
+    }
+    try os.Rename(tmp, path) catch os.Error {
+        try os.Remove(tmp) catch os.Error { }
+        return false
+    }
+    return true
 }
 
 # OLANG_FACTSTATS: what the program decided and its modules read (facts.olang), and which modules were reused and which
@@ -1172,7 +1201,7 @@ fn factStats(l mut load.Loader&, c typecheck.Checker&, e emit.Emitter&, keys Arr
         if scoped.Has(l.Mods[m].File): b.Push($"olang: scope judged " + $l.Mods[m].Identity + "\n")
     }
     # each object by its IR's hash: equal objects have equal names (B3j)
-    for u in prog.Units { b.Push($"olang: unit " + $u.Identity + " " + $(u.Hash if u.Hash != "" else build.IrHash(u.Ir)) + "\n") }
+    for u in prog.Units { b.Push($"olang: unit " + $u.Identity + " " + $(u.Hash if u.Hash != "" else build.IrHash(try u.Text() catch default "")) + "\n") }
     try io.PutErr(b.ToString()) catch io.Error { }
 }
 
@@ -1197,7 +1226,7 @@ fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Chec
     for i in range fresh.Len() {
         if i >= units: break
         u := prog.Units[i]
-        if fresh[i].Identity != u.Identity or fresh[i].Ir != u.Ir {
+        if fresh[i].Identity != u.Identity or fresh[i].Ir != (try u.Text() catch default "") {
             try io.PutErr($"olang: reuse check: " + $fresh[i].Identity + " differs\n") catch io.Error { }
             bad = true
         }
