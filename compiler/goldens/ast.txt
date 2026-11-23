@@ -676,6 +676,7 @@ a28aa635925cccf7 c98d9b3ae533b429 checks/cases/fieldscopectx.olang
 3ec47b3bf3809f41 41f8e56b243f7fdf checks/cases/fieldscopeelem.olang
 ec8460b0c900f370 4ba1295c0b1989d5 checks/cases/fieldscopeflat.olang
 cf3d6a267c8312c8 6842c814e555318d checks/cases/fieldscopegeneric.olang
+c8e8ddcd53266615 f4e84d3b24baa4da checks/cases/fieldscopelambda.olang
 6eb386715b0f99eb f0d8a6b9174d335a checks/cases/fieldscopelookup.olang
 d44baec6a193674d 0de6de7524a8ddb5 checks/cases/fieldscopepart.olang
 7c83fc47da681d6a cd579b2e11eb1c82 checks/cases/fieldscoperepoint.olang
@@ -2510,7 +2511,7 @@ d5d87da3cf156c0a 6fd762f9553d2a77 compiler/definit.olang
 b02b474ae1593a73 a4a8294e6adfbb54 compiler/doc.olang
 35fc969ca1a136ea 57ce7a3142fad927 compiler/effects.olang
 725edb6825a6d62e a8f4f034fb48a9e2 compiler/emit.olang
-163f0adb264d08fa 281713ae7924d6e0 compiler/eval.olang
+01ff414bb0f67b9b 2b438216b3c48337 compiler/eval.olang
 eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
 18829bd0a5b1f2ca f6ec86b39fd51e0c compiler/facts.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
