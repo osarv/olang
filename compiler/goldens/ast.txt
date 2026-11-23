@@ -2478,7 +2478,7 @@ a63bb2cbd4c666c1 32f8e5565363d2f2 compiler/cells.olang
 1e5e8e4c48b379f9 fa943b5315a5bc36 compiler/check.olang
 da018e972c2ecc90 402dd6cf0de7cca1 compiler/cond.olang
 d5d87da3cf156c0a 6fd762f9553d2a77 compiler/definit.olang
-37cab67029bd9915 c502d5a301ed7cdb compiler/diag.olang
+2a78c656414c1755 a11d4882585a13b4 compiler/diag.olang
 8eecc7e6e624f53a d60fad56d190f340 compiler/diagmsg.olang
 b02b474ae1593a73 a4a8294e6adfbb54 compiler/doc.olang
 35fc969ca1a136ea 57ce7a3142fad927 compiler/effects.olang

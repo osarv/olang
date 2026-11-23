@@ -62,7 +62,8 @@ type context struct(at Where, text String&) {
     text
 }
 
-# the diagnostics of one compilation. color: write the terminal's colours (ColorWanted says whether to)
+# the diagnostics of one compilation. color: write the terminal's colours (ColorWanted says whether to). Every field is
+# copied by SetFrom: a field added here is added there too
 type Diagnostics struct(Color Bool) {
     Color
     paths := Vec<String&>()
