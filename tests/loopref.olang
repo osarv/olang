@@ -1,6 +1,6 @@
-# A for loop's name has the type its walk gives (S9a, S9g): over an array reached writably (a ViewMut, a mut
-# parameter), a struct element is named by a writable reference into it; anything else is a value, and a
-# write to a value name that nothing reads after it is refused (checks/cases/lostloopwrite*.olang)
+# A for loop's name is the element's value (S9a, S9g): over an array reached writably (a ViewMut, a mut parameter)
+# too, a struct element or a row is a copy and the slot is written by the index form, a[i] or a[i].f; a write to the
+# name that nothing reads after it is refused (checks/cases/lostloopwrite*.olang)
 
 type P struct(x I64, name String) {
     x
@@ -24,12 +24,13 @@ fn people() Vec<P> {
     return ps
 }
 
-test "a ViewMut walk names each struct element, writes reaching the Vec" {
+test "a ViewMut walk's index form writes each struct element, reaching the Vec" {
     ps := people()
-    for p in ps.ViewMut() {
+    w := ps.ViewMut()
+    for i, p in w {
         n := churn()
-        p.x = p.x * 10 + n
-        p.name = $p.name + "!" + $n
+        w[i].x = p.x * 10 + n
+        w[i].name = $p.name + "!" + $n
     }
     m := churn()
     assert ps[0].x == 10 + m and ps[1].x == 20 + m
@@ -37,10 +38,10 @@ test "a ViewMut walk names each struct element, writes reaching the Vec" {
 }
 
 fn bump(w mut Array<P>&, by I64) {
-    for p in w: p.x += by
+    for i in range w.Len(): w[i].x += by
 }
 
-test "a mut parameter's walk writes through" {
+test "a mut parameter's elements written by index" {
     a := Array<P>[P(1, $"a"), P(2, $"b")]
     bump(a, 5)
     assert a[0].x == 6 and a[1].x == 7
@@ -72,16 +73,17 @@ type Row struct(cells Array<I64>) {
     cells
 }
 
-test "an array element is a copy, a struct holding one is named" {
+test "a struct holding an array is written by index" {
     rs := Vec<Row>[]
     rs.Push(Row([1, 2]))
     rs.Push(Row([3, 4]))
-    for r in rs.ViewMut(): r.cells[0] = r.cells[1] * 2
+    w := rs.ViewMut()
+    for i, r in w: w[i].cells[0] = r.cells[1] * 2
     assert churn() > 0
     assert rs[0].cells[0] == 4 and rs[1].cells[0] == 8 and rs[1].cells[1] == 4
 }
 
-test "repointing a reference name read later is kept" {
+test "assigning the copy read later is kept" {
     a := Array<P>[P(1, $"a"), P(2, $"b")]
     other := P(7, $"o")
     seen I64 = 0
@@ -97,7 +99,7 @@ fn walked() I64 {
     a := Array<P>[P(1, "a"), P(2, "b")]
     bump(a, 3)
     w mut Array<P>& = a
-    for p in w: p.x *= 2
+    for i, p in w: w[i].x = p.x * 2
     return a[0].x * 100 + a[1].x
 }
 
@@ -109,31 +111,33 @@ test "the baked global agrees" {
     assert Walked == 810 and walked() == 810
 }
 
-# rows (T7c): over an array of arrays reached writably, x is a writable reference to the row, in place or not
+# rows (T7c): over an array of arrays reached writably, x is a copy of the row; the index form writes it in place
 fn zeroFirst(rows mut Array<Array<I64>>&) {
-    for r in rows: r[0] = 0
+    for i in range rows.Len(): rows[i][0] = 0
 }
 
-test "a writable walk of rows in place writes them" {
+test "the index form over a writable walk of rows in place writes them" {
     m := [[1, 2], [3, 4], [5, 6]]
     rows mut Array<Array<I64>>& = m
-    for r in rows: r[0] = r[1] * 10 + churn()
+    for i, r in rows: rows[i][0] = r[1] * 10 + churn()
     n := churn()
     assert m[0][0] == 20 + n and m[1][0] == 40 + n and m[2][0] == 60 + n and m[2][1] == 6
-    for r in rows[1:]: r[1] = -1
+    tail := rows[1:]
+    for i in range tail.Len(): tail[i][1] = -1
     assert m[0][1] == 2 and m[1][1] == -1 and m[2][1] == -1
     zeroFirst(m)
     assert churn() > 0
     assert m[0][0] == 0 and m[2][0] == 0 and m[1].Len() == 2
 }
 
-test "a ViewMut walk of a Vec's rows writes them" {
+test "a ViewMut walk's index form writes a Vec's rows" {
     v := Vec<Array<I64>>[]
     v.Push([1, 2, 3])
     v.Push([4, 5])
-    for r in v.ViewMut() {
+    w := v.ViewMut()
+    for i in range w.Len() {
         n := churn()
-        r[1] = 7 + n
+        w[i][1] = 7 + n
     }
     m := churn()
     assert v[0][1] == 7 + m and v[1][1] == 7 + m and v[0][2] == 3 and v[1].Len() == 2
@@ -152,7 +156,7 @@ test "rows walked read-only are copies" {
 fn rowsWalked() I64 {
     m := [[1, 2], [3, 4]]
     rows mut Array<Array<I64>>& = m
-    for r in rows: r[1] *= 5
+    for i, r in rows: rows[i][1] = r[1] * 5
     zeroFirst(m)
     return m[0][1] * 100 + m[1][1] + m[0][0] + m[1][0]
 }

@@ -1,0 +1,104 @@
+# A for loop's name is the element's value (S9a): what the array holds there. A struct or a row held by value is a
+# snapshot taken when the turn begins - the slot is written as a[i] or a[i].f; a reference element, or a reference
+# held inside a by-value element, is followed as it is, so a write through it reaches its referent, even the slot the
+# name was read from
+
+type P struct(x I64, name String) {
+    x
+    name
+}
+
+type Link struct(n I64, to mut P&) {
+    n
+    to
+}
+
+# storage made and dropped, so a reference to reclaimed storage would read it overwritten
+fn churn() I64 {
+    n I64 = 0
+    for i in range 100 {
+        s := $"xyzw" + $i
+        n += s.Len()
+    }
+    return n
+}
+
+test "a struct element is a copy over a ViewMut: the index form writes the slot" {
+    ps := Vec<P>[]
+    ps.Push(P(1, $"a"))
+    ps.Push(P(2, $"b"))
+    w := ps.ViewMut()
+    for i, p in w {
+        q := p
+        q.x = 99            # a copy of the copy, read after
+        assert q.x == 99
+        w[i].x = p.x * 10 + churn()
+        w[i].name = $p.name + "!"
+        assert p.x == i + 1 # the snapshot
+    }
+    m := churn()
+    assert ps[0].x == 10 + m and ps[1].x == 20 + m and ps[1].name == "b!"
+}
+
+test "a reference element is the reference: a write through it reaches the referent" {
+    a := P(1, $"a")
+    b := P(2, $"b")
+    refs := Array<P&>[a, b]
+    total I64 = 0
+    for r in refs: total += r.x
+    assert total == 3
+    ws := Vec<Link>[]
+    ws.Push(Link(1, a))
+    ws.Push(Link(2, b))
+    for l in ws: l.to.x += l.n * churn()
+    n := churn()
+    assert a.x == 1 + n and b.x == 2 + 2 * n
+}
+
+type Node struct(v I64, self mut Node?&) {
+    v
+    self
+}
+
+test "a write through a held reference to the very slot: the name is the snapshot, the slot changes" {
+    a := Array<Node>[Node(1, null), Node(2, null)]
+    a[0].self = a[0]
+    a[1].self = a[0]    # the other slot
+    seen I64 = 0
+    for x in a {
+        x.self!.v += 10
+        seen = seen * 100 + x.v
+    }
+    assert churn() > 0
+    assert seen == 102 and a[0].v == 21 and a[1].v == 2
+}
+
+test "rows are copies: the index form writes them" {
+    m := [[1, 2], [3, 4]]
+    rows mut Array<Array<I64>>& = m
+    for i, r in rows {
+        r[0] = 9            # the copy, read after
+        rows[i][1] = r[0] + churn()
+    }
+    n := churn()
+    assert m[0][0] == 1 and m[1][0] == 3 and m[0][1] == 9 + n and m[1][1] == 9 + n
+}
+
+fn snapshot() I64 {
+    a := Array<P>[P(1, "a"), P(2, "b")]
+    w mut Array<P>& = a
+    s I64 = 0
+    for i, p in w {
+        w[i].x = p.x * 7
+        s = s * 10 + p.x
+    }
+    return s * 100 + a[0].x + a[1].x
+}
+
+# decided while compiling (S18c): the evaluator walks values as the build does
+assert snapshot() == 1221
+Snapshot I64 = snapshot()
+
+test "the baked global agrees" {
+    assert Snapshot == 1221 and snapshot() == 1221
+}

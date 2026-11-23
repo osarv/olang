@@ -23465,7 +23465,7 @@ fn (c mut Checker&) walkRuns(sp source.Span, f ast.ForIn&, src typed.Expr&, runs
     ra := c.arrayOf(rt)
     base typed.Lvalue& = typed.Lvalue.Deref(sp, c.deref(rt), c.readLocal(sp, run))
     e := c.read(sp, typed.Lvalue.Elem(sp, c.P.T.Elem(ra), typed.Elem(base, c.readLocal(sp, j), typed.Check.None)))
-    c.elementLocals(sp, f, k, e if cm != null else c.elemName(e, sp))
+    c.elementLocals(sp, f, k, e if cm != null else c.uniqueRef(e, sp, false, true))
     c.walkBody(f, cm, ce)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
@@ -23510,19 +23510,6 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&, a
     c.emit(c.addTo(sp, k, c.lit(sp, c.i64(), 1)))
     pb := c.close(pid, pouter, pmark, pfrom)
     c.emit(typed.Stmt.Loop(sp, b, pb))
-}
-
-# S9a: what a walk of an array names each element by - where the array is reached writably and the element is a struct
-# or an array (a row, in place or not, T7c) held by value, a writable reference to it where the array holds it;
-# anything else, its value (no reference names a number, a reference or a function, T24; an immut value is never
-# written, T13a; an enum is compared by value, T26)
-fn (c mut Checker&) elemName(e typed.Expr&, sp source.Span) typed.Expr& {
-    t := typeOf(e)
-    if t == types.UnknownT or c.isRef(t) or c.P.Immut(t) or c.P.Unique(t): return e
-    if not c.isStruct(t) and c.arrayOf(t) == types.UnknownT: return e
-    p := readPlace(e)
-    if p == null or not c.placeWritable(p): return e
-    return c.fit(e, c.P.T.Ref(t, types.Writable), sp)
 }
 
 # T13b: the Ref a walk of an indexable collection holding unique elements names each one with - one index, a reference
@@ -23670,8 +23657,7 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
         ct := c.localType(coll)
         base typed.Lvalue& = typed.Lvalue.Deref(sp, c.P.T.Referent(ct), c.readLocal(sp, coll))
         e = c.read(sp, typed.Lvalue.Elem(sp, c.P.T.Elem(at), typed.Elem(base, c.readLocal(sp, k), typed.Check.None)))
-        e = c.uniqueRef(e, sp, false)   # T13b: a unique element is named where the array holds it
-        if cm == null: e = c.elemName(e!, sp)
+        e = c.uniqueRef(e, sp, false, true)   # S9a, T13b: a unique element named where the array holds it, read-only
     } else {
         e = c.prim(sp, kt, typed.PrimOp.Add, c.readLocal(sp, lo), c.prim(sp, kt, typed.PrimOp.Mul, c.readLocal(sp, k), c.readLocal(sp, st)))
     }
@@ -24586,7 +24572,7 @@ fn (c mut Checker&) mentions(t types.TypeId, u types.TypeId, depth I64) Bool {
 
 # T13b: a unique value read where no type says what holds it (a ":=", a walk's name, a binding, a capture) - a
 # reference to its place, writable where the place may be written; any other value as it is
-fn (c mut Checker&) uniqueRef(x typed.Expr&, sp source.Span, written Bool = true) typed.Expr& {
+fn (c mut Checker&) uniqueRef(x typed.Expr&, sp source.Span, written Bool = true, walked Bool = false) typed.Expr& {
     if not c.uniqueExisting(x): return x
     t := typeOf(x)
     # (a copy written in a generic is its need, said at the call that bound the type; a walk's or a binding's name is a
@@ -24597,7 +24583,8 @@ fn (c mut Checker&) uniqueRef(x typed.Expr&, sp source.Span, written Bool = true
     }
     p := readPlace(x)
     # (an immut type's reference is read-only: nothing of it changes, T13a - one unique too is F13's error already)
-    perm := types.Writable if p != null and c.placeWritable(p) and not c.P.Immut(t) else types.ReadOnly
+    # (a walk's name is the element's value, borrowed: read-only wherever the array is reached, S9a)
+    perm := types.Writable if not walked and p != null and c.placeWritable(p) and not c.P.Immut(t) else types.ReadOnly
     return c.fit(x, c.P.T.Ref(t, perm), sp)
 }
 
