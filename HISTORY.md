@@ -42404,3 +42404,19 @@ records followed, nothing kept, stored or put through its arguments (`cPointerCa
 argument count's default read the function type it refers to. And an export fn's C entry, written in the root's object
 only, had no declaration for another module's object naming it - a C function pointer made of an export fn outside the
 root failed to link; the entry now carries its declaration. Test: tests/cfnptrmod.olang with tests/cfnptr/table.olang.
+
+## 2026-11-23: an array literal's item read by value is no view across the statement's let-goes (O8f; mine; wt-slotcopy)
+
+Found by archnet (OLang Debts): `v := Vec<Big>[b]`, `Big` holding an `Array<F64>`, then `x := v[0]` and `v[0] = x` each
+turn kept every replaced element's array until main's scope closed (~924 MB over 4000 turns of 240 KB). Not a recent
+regression: 046bf9d leaks the same, with or without a `Vec<Array<F64>>` field beside the array. `-memory -check` named
+the keep - "a value of it read in this statement is in use when 'Vec<Big>[b]' lets go of it" - free's in-statement
+view rule (walker.views): the literal is `Vec.FromIter` over the array `[b]`, whose summary lets go of Big's array
+place, and reading `b` into the literal's item counted as a view of that place in use across the call. One such view
+keeps the place for the whole program, so the loop's `v[0] = x` kept too. An item that is a local's whole value given
+by value - copied right there (wholeCopySite) or moved at its last use, of a type holding no reference - goes into the
+literal's new storage, which alone holds it then: it is read only until it is there, like the copied items of a
+literal an assignment's value widens (2.4). makeOf now reads such items as copies (walker.wholeItem). The variant with
+the Vec field still reports a keep under `-check` - the copy of `b` into the literal is made with no store into the
+Vec field's owner place (RCopied) - but that place's values are empty Vecs here and the arrays are freed: it runs flat.
+checks' freeing slotcopy: both variants, flat under 8 MB; built, `-free late`, `-sanitize` and the evaluator agree.

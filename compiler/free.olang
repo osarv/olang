@@ -4781,6 +4781,10 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     widenedLit := m.Kind == typed.MakeKind.Array and I64(m.Site) == w.widenLit
     for it in m.Items {
         copied := widenedLit and wholeCopySite(it) >= 0
+        # (slotcopy: and a local's value an item of any array literal by value - copied there, or moved whole at its last
+        # use, a value holding no reference: the literal's new storage all that holds it then - is no view in use across
+        # the statement's later let-goes either: `Vec<Big>[b]`'s FromIter letting go of the leaf b's array is one of)
+        copied = copied or (m.Kind == typed.MakeKind.Array and w.wholeItem(it))
         if copied: w.copying++
         o := w.expr(it)
         if copied: w.copying--
@@ -4858,6 +4862,16 @@ fn (w mut walker&) arm(a typed.Arm&) Vec<I64> {
 
 # an array literal's items or a fill's value stored into the array's element place - none for the prelude's fills,
 # whose positions past what a collection holds are never read (3.4: the prelude says what it lets go of)
+# whether an array literal's item is a local's whole value given to it by value - a copy made right there, or the local
+# moved at its last use - of a type holding no reference: only owned storage, which the literal then holds alone
+fn (w mut walker&) wholeItem(it typed.Expr&) Bool {
+    if wholeCopySite(it) >= 0: return true
+    l := readLocalOf(it)
+    if l < 0 or l >= w.body().Locals.Len() or w.params.Has(l): return false
+    ty := it.Type()
+    return w.body().Locals[l].Kind == typed.LocalKind.Var and not w.T().IsRef(ty) and not w.F.refsBeyondParts(ty)
+}
+
 fn (w mut walker&) makeStores(m typed.Make&, ty types.TypeId, sp source.Span, block Bool = false) {
     f := w.F
     if m.Kind != typed.MakeKind.Array and m.Kind != typed.MakeKind.Fill: return
