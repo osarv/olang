@@ -1,0 +1,7 @@
+# check: fail error[L1]: non-ASCII character outside a comment or literal
+# also: a name is ASCII letters, digits and
+# L1: UTF-8 is text in comments and literals only - a name stays ASCII
+fn main() {
+    på := 1
+    Println("x")
+}

@@ -1,0 +1,7 @@
+# check: run
+# L1: UTF-8 in literals and comments, printed as its bytes - å ä ö
+fn main() {
+    w := "räksmörgås"
+    Println("hej på dig") # a comment after code: ÅÄÖ
+    Println(w + " " + $w.Len())
+}

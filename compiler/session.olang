@@ -1682,3 +1682,15 @@ fn ImportFix(text String&, message String&) String, I64 ? Nothing {
     if at == text.Len() and at > 0 and text[at - 1] != '\n': line = $"\n" + $rest[:end]
     return line, at
 }
+
+test "positions count UTF-16 units, or UTF-8 bytes, over text beyond ASCII (L1)" {
+    t := "a := \"på 😀\"\nb"
+    u := Positions(t, false)
+    l, c := u.Pos(14)
+    assert l == 0 and c == 11 and u.Offset(0, 11) == 14 and u.Offset(0, 8) == 9
+    l2, c2 := u.Pos(16)
+    assert l2 == 1 and c2 == 0
+    b := Positions(t, true)
+    l3, c3 := b.Pos(14)
+    assert l3 == 0 and c3 == 14 and b.Offset(0, 14) == 14
+}

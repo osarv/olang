@@ -594,7 +594,7 @@ fn (f formatter&) write() String {
         e := i
         col I64 = 0
         for e < n and f.lKind[e] == 0 and f.lComS[e] >= 0 and f.lCodeE[e] > f.lCodeS[e] and not f.lMulti[e] {
-            w := f.lIndent[e] * 4 + f.lCodeE[e] - f.lCodeS[e]
+            w := f.lIndent[e] * 4 + width(codes[f.lCodeS[e]:f.lCodeE[e]])
             if w > col: col = w
             e++
         }
@@ -603,6 +603,15 @@ fn (f formatter&) write() String {
         i = e
     }
     return out.ToString()
+}
+
+# the columns t takes: its characters, a UTF-8 continuation byte taking none of its own (L1)
+fn width(t String&) I64 {
+    w I64 = 0
+    for c in t {
+        if c < 0x80 or c >= 0xC0: w++
+    }
+    return w
 }
 
 # line l, its code indented and its comment after it at column col (0: one space after the code)
@@ -618,7 +627,7 @@ fn (f formatter&) writeLine(out mut StringBuilder&, codes String&, l I64, col I6
     out.Push(code)
     if f.lComS[l] >= 0 {
         if code.Len() > 0 {
-            w := f.lIndent[l] * 4 + code.Len()
+            w := f.lIndent[l] * 4 + width(code)
             pad := col - w + 1 if col > 0 else 1
             for _ in range pad: out.PushChar(' ')
         }

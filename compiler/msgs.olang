@@ -179,6 +179,7 @@ type Diag enum {
     CommaEndsLine
     Semicolon
     NonAscii
+    BadUtf8
     CarriageReturn
     NulByte
     UnclosedComment
@@ -188,6 +189,7 @@ type Diag enum {
     CharNewline
     EmptyChar
     LongChar
+    WideChar
     BadEscape
     HexNoDigits
     BinNoDigits
@@ -1174,7 +1176,8 @@ fn LinkFailed(text String&) r.Msg { return r.Msg(Diag.LinkFailed, "", "linking "
 fn UnknownChar(ch Char) r.Msg { return r.Msg(Diag.UnknownChar, "L16", "unexpected character '" + $Esc(ch) + "'") }
 fn CommaEndsLine() r.Msg { return r.Msg(Diag.CommaEndsLine, "L18a", "a comma never ends a line", "items on different lines are separated by the line break", "remove it") }
 fn Semicolon() r.Msg { return r.Msg(Diag.Semicolon, "L18", "olang has no ';'", "a statement ends where its line does", "put the next statement on a line of its own") }
-fn NonAscii(ch Char) r.Msg { return r.Msg(Diag.NonAscii, "L1", "non-ASCII byte '" + $Esc(ch) + "' - olang source is ASCII") }
+fn NonAscii() r.Msg { return r.Msg(Diag.NonAscii, "L1", "non-ASCII character outside a comment or literal - names and code are ASCII", "", "a name is ASCII letters, digits and '_' - non-ASCII text goes in a comment or a literal") }
+fn BadUtf8() r.Msg { return r.Msg(Diag.BadUtf8, "L1", "invalid UTF-8 - olang source is UTF-8 text", "", "save the file as UTF-8 - a byte that is no text is written \\xHH in a literal") }
 fn CarriageReturn() r.Msg { return r.Msg(Diag.CarriageReturn, "L3", "carriage return - save the file with LF line endings") }
 fn NulByte() r.Msg { return r.Msg(Diag.NulByte, "L1", "NUL byte in the source - is this a text file?") }
 fn UnclosedComment() r.Msg { return r.Msg(Diag.UnclosedComment, "L4a", "unterminated block comment - '##' closes it") }
@@ -1183,6 +1186,7 @@ fn StringNewline() r.Msg { return r.Msg(Diag.StringNewline, "L14", "string liter
 fn UnclosedChar() r.Msg { return r.Msg(Diag.UnclosedChar, "L13", "unterminated character literal") }
 fn CharNewline() r.Msg { return r.Msg(Diag.CharNewline, "L13", "character literal not closed on its line") }
 fn EmptyChar() r.Msg { return r.Msg(Diag.EmptyChar, "L13", "empty character literal") }
+fn WideChar() r.Msg { return r.Msg(Diag.WideChar, "L13", "a character literal holds one byte, and this character is several in UTF-8", "", "write the text in \"\"") }
 fn LongChar() r.Msg { return r.Msg(Diag.LongChar, "L13", "character literal holds more than one character - text is written in \"\"") }
 fn BadEscape(ch Char) r.Msg { return r.Msg(Diag.BadEscape, "L15", "unknown escape '\\" + $Esc(ch) + "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\"") }
 fn HexNoDigits() r.Msg { return r.Msg(Diag.HexNoDigits, "L10a", "'0x' needs hexadecimal digits") }

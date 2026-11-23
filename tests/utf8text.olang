@@ -1,0 +1,37 @@
+# L1: UTF-8 text in comments and literals - Swedish words written as they are spelled (å ä ö), a literal its UTF-8
+# bytes (L14), the compile-time evaluator agreeing with the run time (K1)
+
+## a block comment may hold it too: ÅÄÖ, €, 😀 ##
+
+# decided while compiling (S18c): a literal is its UTF-8 bytes
+assert "å".Len() == 2 and "hej på dig".Len() == 11
+assert "å" + "ä" == "åä"
+
+# baked while compiling (K2)
+Greeting := "hej på " + $3 + " ö"
+Bytes := "räksmörgås".Len()
+Pa := "på"
+O := "ö"
+assert Pa == "p\u{E5}" and O == "\xC3\xB6" and Pa.Len() == 3
+Raw := """
+    åker över ängen
+    """
+
+test "a UTF-8 literal is its bytes: Len counts them, equality and joins compare them" {
+    s := "hej på dig"
+    assert s.Len() == 11 and s[4] == 'p' and s[5] == Char(0xC3) and s[6] == Char(0xA5)
+    assert s == "hej p" + "\u{E5}" + " dig"
+    assert Greeting == "hej på 3 ö" and Greeting.Len() == 12
+    assert Bytes == 13 and Bytes == "räksmörgås".Len()
+    assert Raw == "åker över ängen" and Raw.Len() == 18
+    assert "€".Len() == 3 and "😀".Len() == 4
+    e := "😀"
+    assert e == "\u{1F600}" and Pa == "p\u{E5}" and O == "\xC3\xB6"
+}
+
+test "text renders as its bytes" {
+    w := "ängen"
+    assert $w == "ängen" and "x " + w == "x ängen"
+    a := ["å", "b"]
+    assert $a == "Array<String>[\"å\", \"b\"]"
+}

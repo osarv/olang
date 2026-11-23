@@ -1465,6 +1465,10 @@
 | status 0
 | ok - unreachable gives way to the values beside it
 | ok - the evaluator agrees
+=== test tests/utf8text.olang
+| status 0
+| ok - a UTF-8 literal is its bytes: Len counts them, equality and joins compare them
+| ok - text renders as its bytes
 === test tests/valueparts.olang
 | status 0
 | ok - a part store copies its value in
@@ -2631,6 +2635,10 @@
 | 6
 === run l18cgroupok.olang
 | status 0
+=== run l1utf8run.olang
+| status 0
+| hej på dig
+| räksmörgås 13
 === run l9afields.olang
 | status 0
 === run l9aowntake.olang
