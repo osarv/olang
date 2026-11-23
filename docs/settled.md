@@ -1060,8 +1060,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   holding such an array is a split local (`free.SplitLocal`), let go of the same way (splitlocal, wt-gapsb18); a view of
   a place a split array's elements hold, in use across its let-go, keeps the array (`splitInside`, splitviews). A fixed
   fill or literal widened to a local's run-time array (`rows := Array<I64>(4)`, T7c) is the Make's store
-  (`free.WidenedMake`), widened into the region its site is given (`lower.widenAt`; widenlocal, wt-gaps2) - a fill
-  only: a literal is built where it is written, so its place keeps, named (litstores, review9). An argument
+  (`free.WidenedMake`), widened into the region its site is given (`lower.widenAt`; widenlocal, wt-gaps2); a literal's
+  items are built there too, a local's value copied in, never moved (`typed.LastUses.Literal`; litstores, litlocal), and
+  a mutable global's initializer copies its widened value into a region of its own (`lower.storeHome`; globalinit). A
+  `:=` local of a call's value given a call's result in its block is declared without its first value where nothing
+  reads it (`check.deadLet`; againkept), else split into a second local of the name where nothing holds the first past
+  the assignment (`check.splitLet`, D9i; againread). An argument
   for a read-only parameter of a call whose result views no argument and holds no reference beyond its own storage
   (`lower.viewsNoArg`: `y := make(ps[0])`) is read where it stands, and a call given only such references or plain data,
   writing through no parameter and reaching no global, lets go only of what it built (`free.ownGoes`; elemarg).

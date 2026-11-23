@@ -326,9 +326,11 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   thread - question 1 below. (Closed by wt-globalfill for a first value nothing reads - `r := build(0)` then
   `r = build(i)` with no mention between, the shape named: the checker declares such a local with no value
   (`check.deadLet`, `definit.ReadIn`), the first call's value an Eval dropped where it stands, the assignment its first
-  value (FirstSet), moved into the element - checks' freeing againkept. A first value read before the assignment still
-  keeps, named: a version split of the local, the read value kept in its block and the assignment's built where the store
-  goes, is the road there.)
+  value (FirstSet), moved into the element - checks' freeing againkept. A first value read before the assignment: closed
+  by wt-gaps6 - the assignment declares a second local of the name for the rest of the block (`check.splitLet`), where
+  nothing holds the first past it (no reference kept, LocalUses.EscHard and AliasOf over the statements checked so far;
+  no deferred code of the block; no destructor): the first value the block's, the second a `:=` local moved into the
+  element. checks' freeing againread.)
 
 - **An array literal given to a place** (review9, `rows = Array<Vec<I64>>[Vec<I64>[i], Vec<I64>[7]]` or `ns =
   Array<I64>[i, 2]` each turn, into a local, a split field or a mutable global): kept, and named by `-memory -check`
@@ -343,8 +345,14 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   in a region of early freeing's (`lower.regionMade`) is taken uncopied, and `WidenedMake` takes a literal whose items
   are each built for it (`builtItems`) - its items the element place's stores (`makeStores`), no view of what they own
   (`makeOf`'s `unowned`, as a fill's). One holding a local's value (`Array<Vec<I64>>[v, ...]`, `v` copied or moved at
-  its last mention where it lives, outside the region) keeps, named, and so does a global's first value (its
-initializer copies it into the program's scope). checks' freeing litstores, now flat. (A mutable global made by a fill
+  its last mention where it lives, outside the region) kept, named, and so did a global's first value (its
+initializer copied it into the program's scope, no region's). checks' freeing litstores, now flat. Both closed by
+wt-gaps6: a local's value an item of such a literal is no last copy (`typed.LastUses.Literal`: never moved, so never
+lifted to where the place lives by item 17) but copied into the literal's region as any item is built there, and read
+only until that copy is made (`makeOf`, no view across a later item's let-go - before, `Vec<I64>.0` kept program-wide
+for it, a leak `-memory -check` did not name); a global's initializer copies a widened fill or literal into a region of
+its own in the program's scope (`lower.storeHome`), which the global's later let-go releases, the initializer's store
+letting go of nothing. checks' freeing litlocal, globalinit. (A mutable global made by a fill
 and given another fill in a function was read after its scope closed under `-sanitize`: an array place's value read
 where it stands - lent, rendered - across a later operand's let-go was no view to the free pass, an array of plain
 values holding no reference by type; `readOf` now records it, the place keeping, as any field's array place does.

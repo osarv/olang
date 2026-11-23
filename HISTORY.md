@@ -41685,3 +41685,42 @@ the Lowerer's or the Emitter's scope and kept until Analyze returns (`explain` g
 outlives lw"). Closing it in code would mean those helpers holding their parents read-only, a large restructuring of
 lower.olang and emit.olang; giving a `mut` field a binding of its own in the scope pass would close it for every such
 helper - section 8's, reported to the session that owns it.
+## 2026-11-23: a literal's local item copied into its region, a global's first literal in a region, a read local split (O8f, D9i; mine; wt-gaps6)
+
+Docs/freeing.md 2.4's three named shapes that stayed open after wt-gaps5 and wt-globalfill.
+
+**An array literal holding a local's value given to a place each turn** (`rows = Array<Vec<String>>[v, Vec<String>["x"]]`,
+`v := build(i)` or a Vec pushed into): kept, named ("one of whose items is not built for it"). The local's copy is its
+last mention, so the scope pass lifted it to where the place lives (item 17) for lowering to move it - outside the
+literal's region. Now a copy that is an item of a literal an assignment's value widens is no last copy
+(`typed.LastUses.Literal`, left out of `LastCopies` and of lowering's moves): the local stays in its block and its value
+is copied into the literal's region as any item is built there, so `free.builtItems` takes it. The cost is a copy where
+a move was possible, D9h's meaning. A second gap behind it: the copy reads the local in the statement, and condition 6
+judged that read in use across a later item's let-go (`Vec<I64>[7]` built by FromIter), so `Vec<I64>.0` kept everywhere
+- the build function's growth leaked ~250 bytes a turn while `-memory -check` counted nothing kept (a keep of a part
+place by a growth let-go is not one of its rows; found, not fixed). Such a copy reads only until it is made
+(`makeOf`'s `copying`, as `readCopy` already did for a view call's temporary). checks' freeing litlocal (master: two
+places keep, out of 8 MB).
+
+**A mutable global's initializer a literal or a fill** (`G mut Array<I64> = Array<I64>[1, 2]`, later `G = Array<I64>[i,
+...]` each turn): kept, named by `-check` ("its first value is a fixed array widened, copied into the program's
+scope"), so every later value was kept too. Judging the initializer's store as nothing to release crashed: G's let-go
+is a `Release`, the region read from the word before the array, and the copy in the program's scope has none. Now the
+initializer copies a widened fill or literal into a region of its own in the program's scope (`lower.storeHome`: a
+global's initializer, freeing on, a widening), and the free pass takes that store as letting go of nothing (SOk); G's
+next let-go releases the region. checks' freeing globalinit (an `Array<I64>`, an `Array<String>` and a fill; master
+keeps two of them, out of 8 MB); strheld's globals and globalviews unchanged.
+
+**A `:=` local whose first value is read before a call's result is assigned to it** (`r := build(0)`, `n := r.Len()`,
+`r = build(i)`, `kept[i % 4] = r`): the local was an owner local of the free pass, sole, and the arrays its value held
+kept (B18a naming the element's let-go). wt-globalfill's road (the first value dropped) does not apply - it is read.
+The version split it named: where deadLet's Assign case finds the first value read (`definit.ReadIn`), `check.splitLet`
+declares a second local of the same name with the assigned value and binds the name to it for the rest of the block, so
+every pass sees two `:=` locals - the first the block's, the second moved into the element as any. Same meaning only
+where nothing holds the first local past the assignment, so it is refused where `LocalUses.Over` (Uses over the
+statements of the block checked so far) finds it EscHard, returned or aliased (a reference local `p Vec<I64>& = r`
+reading the new value after), where a top-level `defer` of the block stands between (it runs after, reading the new
+value), or where the type has a destructor (its moment would move). A lambda's capture copies a value (D16c), so the
+split keeps its meaning; a value array borrowed by a capture is EscHard. Checked by hand that a reference local, a
+`defer` and a capture print what master prints, the evaluator agreeing. SPEC D9i says both. checks' freeing againread
+(master fails `-memory -check`).

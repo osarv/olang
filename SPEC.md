@@ -2583,12 +2583,16 @@ other part of the same value made - mentions the local (`peek(t, t)` lends `t` b
 in it, `t.Peek(t)` is its receiver: those stay alive for the very call the copy is given to), the local's storage is its own - no view
 held in place of its copy (D9h) - named by no other local, escaping nowhere, never assigned whole (but by the one assignment giving its first value: a
 local declared with no value, D13d, or declared with a call's value nothing reads before a call's result is assigned
-to it by a statement of the same block - that declared value computed and dropped where it stands), in no region early
+to it by a statement of the same block - that declared value computed and dropped where it stands; where the declared
+value is read first, that assignment declares a second local of the name for the rest of the block, the same meaning
+where nothing holds the first past it - no reference kept, no deferred code of the block reading it, no destructor), in no region early
 freeing made (O8d), and lives at least as long as where the copy would be built - a local whose copy at its last
 mention goes into storage outliving its block is built there (O28), so `rows.Push(rec)` in a loop moves each turn's
 `rec` into `rows` rather than copying it out of the turn - but not one whose copy is a global's whole new value
 (`cache = v`), which the global lets go of again (O8d): the copy is built for the global, the local reclaimed with
-its block, rather than built in the program's scope, which never closes. A local whose copy at its last mention is the
+its block, rather than built in the program's scope, which never closes - nor one whose copy is an item of an array
+literal an assignment's value widens (`rows = Array<Vec<I64>>[v, Vec<I64>[7]]`), copied into the literal's storage as
+each item is built there. A local whose copy at its last mention is the
 whole new value of a place that lets go (O8d) - a field or a global - by a statement of the very block declaring it is
 built for that place from its declaration, and moved there; a constructor's instance viewing only
 such moved locals - or unique values a by-value parameter hands on (T13b), moved too - is its own (no D9h copy where
