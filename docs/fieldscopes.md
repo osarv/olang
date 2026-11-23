@@ -14,8 +14,9 @@ statements of `Lowerer.lowerAs` cause it:
    writable reference to storage holding references). The local `b` is kept where the result goes (O26a), so the call's
    result was bound there and the callee's exactness asked the vector's scope to be the result's. That is more than
    §8 needs: the local can name the element where the vector lives, which outlives the result, and only "lw outlives
-   return" follows. Fixed on branch `wt-lwplace-exactlocal` (scope.olang: `bindResult`, `callValue`, `letMoved`), checked
-   only on small programs. It is not merged: with item 2 left, it changes nothing measurable.
+   return" follows. Fixed on branch `wt-lwplace-exactlocal` (scope.olang: `bindResult`, `callValue`, `letMoved`; a reference
+   result only - HISTORY, 2026-11-23), validated by tests/heldexact and checks' o25gheld* cases. With item 2 left, it
+   changes nothing measurable here.
 2. `ln mut lowering& = lowering(lw, b, lw.P.T, f)`. `lowering` holds `L mut Lowerer&` and `T mut types.Table&`, bare
    fields. A bare field lives in the instance scope, and where something can be stored through it the instance must
    live exactly where its referent does (C2d, O25g; the constructor's summary says "I outlives L" and "L outlives I").
