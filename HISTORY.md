@@ -42030,7 +42030,15 @@ derived scopes as hidden parameters (O23a), is a place a temporary is built - `r
 the call cannot resolve (the argument reached through an element: Untraced, or an underestimate) gives the argument's
 declaration back - without it, `q := ps[0]; q.link(x)` was refused where it is accepted with the field in the instance
 scope, and B would no longer accept a superset. Trace lines (OLANG_INFERDUMP) for each promotion asked and each field
-given back.
+given back. `make quick` showed the first `giveBackUnresolved` too wide: it gave back any argument's declaration whose
+derived scope a refused call could not resolve, and checks' rv3roclone (a List built from a read-only List of Lists'
+iterator, refused because its Iter's promoted `chunk` field is untraced through the for-in's hidden walk of a parameter)
+compiled - the old field inference had promoted Iter and the refusal is T25c's, not an unresolved binding. Now
+(`unnamedInstance`) only an instance reached through a path naming none is given back: an element, another instance's
+field, a payload, a global, what a reference not a parameter leads to, a part a call hands back (a call whose summary
+binds no construction binding for that parameter - `ps[0]` on a Vec, a value copy promoted for a receiver included), or
+a local holding one read so; a parameter, a constructor's result and a call result whose ResBind knows the binding keep
+it.
 
 O23b, as built. The doc's O23b equated an instance's binding with its instance scope at every store into an unnamed
 place (an element, a global, an `any`), per instance. Built instead at the declaration's grain, by the inference's
