@@ -2166,17 +2166,15 @@ fn (e mut Emitter&) item(symbol String&, home I64, text String&, decl String& = 
         e.itemRefs[i] = Array<I64>(0)
         return
     }
-    # build memory: each copy bound to a local first, so the one copy is moved into its place at its last use (D9i) -
-    # a copy written as the argument (`Push($text)`) was copied again into the Emitter's scope, the first left behind
-    # there: the items' text held twice
+    # (a text written as the argument, `Push($decl)`, is built where the Vec's reference goes, E12c; the symbol, also
+    # the map's key, and the text, a conditional's value, are locals moved into their places at their last use, D9i)
     sym := $symbol
     e.itemAt.Put(sym, e.itemSym.Len())
     e.itemSym.Push(sym)
     t := e.dbgFunctions(text) if e.Lines and not e.Debug else $text
     e.itemText.Push(t)
     e.itemHome.Push(home)
-    dc := $decl
-    e.itemDecl.Push(dc)
+    e.itemDecl.Push($decl)
     e.itemRefs.Push(Array<I64>(0))
 }
 
