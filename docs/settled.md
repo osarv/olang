@@ -1261,6 +1261,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`pack/olang`, `EDITORS=none` skips); `make uninstall` undoes it.
 - **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile; target constants
   `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma TargetHasTileDot` (the last 2026-11-23, for tile.AddDot). No fast-math or contraction (the user's call).
+- **Android (B12e, 2026-11-23):** `-target aarch64-linux-android[LEVEL]`, API level 29 by default (the first with ELF
+  TLS), a lower one refused; `TargetOs` `"android"`. Built by the NDK's clang alone (`ANDROID_NDK_HOME`, else
+  `ANDROID_NDK_ROOT`; r28c, clang 19), C imports from its headers (bindgen skips clang's nullability words). `build`
+  gives a dynamic PIE (what `/system/bin/linker64` runs), `-library` a NativeActivity's library; `test`/`run` link
+  statically and run under qemu-aarch64 (`make android-test`). The runtime is glibc's aarch64 runtime transformed
+  (runtime.Bionic: `__errno`, sysconf's numbers, sigaction's layout, heap pointer tagging off at start) - not Fill's
+  facts, which the seed would not know. A library's C imports are compiled `-fPIC` (a PIE mark made LTO reach TLS
+  local-exec). The sample app (examples/android, `make android-apk`: build-tools 36.1.0, android-36, committed debug
+  key, byte-reproducible) checks running shipped programs from nativeLibraryDir and through linker64. docs/android.md.
 - **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-define Name=value` build constants;
   an immutable top-level global is a default `-define` replaces (B10c); a local `if` the build decides is conditional
   compilation too (S8b); a constant condition not depending on the build is a dead-branch error (S8a). **A comparison

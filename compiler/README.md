@@ -127,6 +127,8 @@ namesdiff, layoutdiff, fmtdiff, drvdiff and dumptool beside the tests, with the 
 ```
 OLANG_CLANG=clang-20 make quick    # the suite with another LLVM (18, 19 and 20 all pass it)
 make cross                         # corpus, std and checks cases built for aarch64, run under qemu-user
+make android-test                  # the same tests built for Android with the NDK (ANDROID_NDK_HOME), under qemu
+make android-apk                   # the sample app examples/android as an APK (docs/android.md)
 make release                       # build/release/olang-VERSION-ARCH-linux.tar.xz with clang bundled, then releasetest
 ```
 

@@ -108,25 +108,25 @@
 === olang compile -target bogus-cpu main.olang
 | stdout:
 | olang: error[B12]: unknown target 'bogus-cpu'
-| olang: help: write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
+| olang: help: write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu, aarch64-linux-gnu or aarch64-linux-android (an API level after it if wanted, as aarch64-linux-android35), ':CPU' after it if wanted
 | stderr:
 | status 1
 === olang compile -target riscv64-linux-gnu main.olang
 | stdout:
 | olang: error[B12]: olang does not build for 'riscv64-linux-gnu'
-| olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library
+| olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library, and aarch64 Android (aarch64-linux-android)
 | stderr:
 | status 1
 === olang compile -target x86_64-apple-darwin main.olang
 | stdout:
 | olang: error[B12]: olang does not build for 'x86_64-apple-darwin'
-| olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library
+| olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library, and aarch64 Android (aarch64-linux-android)
 | stderr:
 | status 1
 === olang compile -target x86_64-linux-gnu:a:b main.olang
 | stdout:
 | olang: error[B12]: unknown target 'x86_64-linux-gnu:a:b'
-| olang: help: write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
+| olang: help: write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu, aarch64-linux-gnu or aarch64-linux-android (an API level after it if wanted, as aarch64-linux-android35), ':CPU' after it if wanted
 | stderr:
 | status 1
 === olang compile -target aarch64-linux-gnu:native main.olang
