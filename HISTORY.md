@@ -42253,6 +42253,6 @@ listed that field twice for the element's let-go: once as a split field, walked 
 Map's slot array (entryBuffer), walked by its live entries. Each entry's text slots and its Vec's buffer were released
 by the first walk - the buffer field left empty, its count not - and the second walk read the strings through the
 emptied buffer: a null read built (a double release where it reads stale storage), out of range interpreted. A Map's
-slot array is now walked by its live entries only (an emptied slot holds stale values the length walk would release
-again). checks' freeing mapsplit: the shape and a removal between stores; built, `-free late`, `-sanitize` and the
+slot array is now walked by its live entries only, the walk that skips a slot a removal emptied.
+checks' freeing mapsplit: the shape and a removal between stores; built, `-free late`, `-sanitize` and the
 evaluator agree, where master segfaults.
