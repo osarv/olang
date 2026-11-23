@@ -4741,8 +4741,15 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
         w.exemptSite = copiedCall(m.Items[0]) if readFill else readCall(m.Items[0])
         w.copying++
     }
+    # (2.4: a local's value an item of the literal an assignment's value widens is copied into the literal's region,
+    # never moved - typed.LastUses.Literal - so it is read only until that copy is made, no view in use across a later
+    # item's let-go)
+    widenedLit := m.Kind == typed.MakeKind.Array and I64(m.Site) == w.widenLit
     for it in m.Items {
+        copied := widenedLit and wholeCopySite(it) >= 0
+        if copied: w.copying++
         o := w.expr(it)
+        if copied: w.copying--
         if not dead: addAllTo(out, o)
     }
     if readFill or readCopy: w.copying--
@@ -5828,25 +5835,15 @@ fn (f mut Free&) WidenedMake(x typed.Expr&) typed.Expr?& {
     return a
 }
 
-# whether each item of a literal is built where it stands (a call's value, a Make, text) - one read out of a local is
-# moved or copied in where the local lives, outside the literal's region (lower.movable: no move into a region); true
+# whether each item of a literal is built where it stands (a call's value, a Make, text, a local's value copied - never
+# lifted to where the place lives, typed.LastUses.Literal, its copy made in the literal's region as any item's) - true
 # for a fill
 fn (f mut Free&) builtItems(a typed.Expr&) Bool {
     if a != typed.Expr.Make or a.m.Kind != typed.MakeKind.Array: return true
     for it in a.m.Items {
-        if not f.T().OwnsParts(it.Type()): continue
-        if f.topSite(it) < 0 or copyMake(it): return false
+        if f.T().OwnsParts(it.Type()) and f.topSite(it) < 0: return false
     }
     return true
-}
-
-# whether x is a copy made of a value (D9h: a local's, moved at its last mention instead where lowering may)
-fn copyMake(x typed.Expr&) Bool {
-    return match x {
-        case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Copy
-        case typed.Expr.Away(_, _, y): copyMake(y)
-        case _: false
-    }
 }
 
 # the fixed fill or literal a conversion widens to an array of a run-time length of its element, null for any other

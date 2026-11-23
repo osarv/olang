@@ -3295,6 +3295,10 @@ type LastUses struct(N I64) {
     # what a region of its own holds, the local's storage freed where its own block closes - never built in the
     # program's scope, which never closes (item 17's lift left out: LastCopies)
     OverGlobal Map<I64, Bool>
+    # the copies that are items of an array literal an assignment's value widens: each built for the literal, in the
+    # region its store gives it (free.WidenedMake) - the local's storage freed where its own block closes, never lifted
+    # to where the place lives (item 17's lift left out: LastCopies, whatever globals says)
+    Literal Map<I64, Bool>
 }
 
 fn (w mut LastUses&) mention(id LocalId) {
@@ -3337,6 +3341,7 @@ fn (w mut LastUses&) stmt(s Stmt&) {
                 cs := copySite(x)
                 if cs >= 0: w.OverGlobal.Put(cs, true)
             }
+            w.literalItems(x)
             w.expr(x)
         }
         case Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Reraise(_, x, _): w.expr(x)
@@ -3513,6 +3518,22 @@ fn (w mut LastUses&) copyOf(m Make&) {
 }
 
 # the site of the copy of a whole local an expression is, -1 for any other
+# the copies of locals an array literal a conversion widens (T7c) holds as items (Literal)
+fn (w mut LastUses&) literalItems(x Expr&) {
+    match x {
+        case Expr.Prim(_, _, op, _, args) {
+            if op != PrimOp.Convert or args.Len() != 1: return
+            a := args[0]
+            if a != Expr.Make or a.m.Kind != MakeKind.Array: return
+            for it in a.m.Items {
+                cs := copySite(it)
+                if cs >= 0: w.Literal.Put(cs, true)
+            }
+        }
+        case _ { }
+    }
+}
+
 fn copySite(x Expr&) I64 {
     return match x {
         case Expr.Make(_, _, m): I64(m.Site) if m.Kind == MakeKind.Copy and m.Items.Len() == 1 and wholeLocal(m.Items[0]) >= 0 else -1
@@ -3833,7 +3854,7 @@ fn LastCopies(b Body&, globals Bool = false) Map<I64, I64> {
     w.Block(b.Root!)
     for k in range w.CopySite.Len() {
         l := w.CopyLocal[k]
-        if w.CopyAt[k] >= 0 and w.Last[l] == w.CopyAt[k] and (globals or not w.OverGlobal.Has(w.CopySite[k])): out.Put(w.CopySite[k], l)
+        if w.CopyAt[k] >= 0 and w.Last[l] == w.CopyAt[k] and (globals or not w.OverGlobal.Has(w.CopySite[k])) and not w.Literal.Has(w.CopySite[k]): out.Put(w.CopySite[k], l)
     }
     return out
 }

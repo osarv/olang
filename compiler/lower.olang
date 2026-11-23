@@ -6339,7 +6339,8 @@ fn (ln mut lowering&) movesAtLastUse(u typed.LocalUses&) {
     w.Block(ln.B.Root!)
     for k in range w.CopySite.Len() {
         l := w.CopyLocal[k]
-        if w.CopyAt[k] < 0 or w.Last[l] != w.CopyAt[k]: continue
+        # (an item of a literal an assignment's value widens is copied into the literal's region: LastUses.Literal)
+        if w.CopyAt[k] < 0 or w.Last[l] != w.CopyAt[k] or w.Literal.Has(w.CopySite[k]): continue
         if not ln.movable(u, l, w.CopySite[k]) {
             ln.liftedCopy(l)
             continue
