@@ -41720,7 +41720,11 @@ every pass sees two `:=` locals - the first the block's, the second moved into t
 where nothing holds the first local past the assignment, so it is refused where `LocalUses.Over` (Uses over the
 statements of the block checked so far) finds it EscHard, returned or aliased (a reference local `p Vec<I64>& = r`
 reading the new value after), where a top-level `defer` of the block stands between (it runs after, reading the new
-value), or where the type has a destructor (its moment would move). A lambda's capture copies a value (D16c), so the
+value), where the type has a destructor (its moment would move), where the assigned value reads the local (a compound
+assignment's old value is lowered only as an assignment's - tests/shared's `c |= OpBits(1)` failed to lower), or where
+a call given a read-only reference to it may keep it (`mayKeepRef`: a result holding references, a writable reference
+parameter - tests/kept's `hs.Push(H(p))`, whose `H` reads the new value after `p = P(i + 100, 0)`, failed its decided
+assert). A lambda's capture copies a value (D16c), so the
 split keeps its meaning; a value array borrowed by a capture is EscHard. Checked by hand that a reference local, a
 `defer` and a capture print what master prints, the evaluator agreeing. SPEC D9i says both. checks' freeing againread
 (master fails `-memory -check`).
