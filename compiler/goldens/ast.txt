@@ -2699,6 +2699,9 @@ d1986413c494d127 004ced7dc1e3ca28 tests/bench.olang
 7ca9a95e47d1199d 768ed9cb8238521d tests/builders.olang
 12b2732a870bb75b d1b7a5e654a3c1a6 tests/cimport.olang
 0982b04b265a312a 3723d54e0df6e7c9 tests/comptime.olang
+a0c513af26182d60 a9c7c5b214723356 tests/condimport.olang
+c7cd075b10d9f450 bb504098115e0d70 tests/condimportcycle.olang
+61466f421b5232ad fed76e939e22bf83 tests/condimportx.olang
 61ee1081c756af08 d8ecb9d42699f787 tests/condnull.olang
 a69641bf9fa1d746 98ba70a608295a12 tests/copy.olang
 0130be38ec7eb537 9e6797971b370ced tests/cycleorder.olang
