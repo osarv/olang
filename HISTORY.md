@@ -41743,3 +41743,12 @@ scope closes`, with the note of its reason, counted kept, and a gap where its re
 of storage"); the freeing and earlyfree fixtures gain rows (genviews, globalviews, ownertexts, taskvals, viewholders,
 viewlocals, earlyfree's server), none a gap. Left (a design question, docs/freeing.md 2.4): the place is the type's,
 so a view of one `Vec<I64>` keeps the growth of every other - the spec's condition 6 is a view "of the old storage".
+
+## 2026-11-23: an alias-qualified type its module does not declare is said (M9; mine; wt-unktype)
+
+From oann (repro/unknowntype.olang): `fn ms(t0 time.Instant)`, std/time declaring no Instant, passed the checker - a
+bare unknown name is T2 where it is written, but a qualified one was recorded as nothing by the resolver and never
+looked at again, so a function never called built silently and one called with any value stopped in lowering ("does
+not lower an unknown type"). The resolver now notes, where a type path is written, the module its last name was looked
+for in and not found (`Resolver.MissingIn`), and the checker's namedMet says M9 there through the message a value path
+gets ("module std/time declares no 'Instant'", with its nearest-name hint). checks/cases/m9missingtype.olang.

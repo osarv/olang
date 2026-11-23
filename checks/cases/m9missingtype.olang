@@ -1,0 +1,11 @@
+# check: fail error[M9]: module std/time declares no 'Instant'
+# M9: an alias-qualified type its module does not declare is said where it is written - a parameter's type in a
+# function called with a value of another type once passed the checker and stopped in lowering (oann repro/unknowntype)
+import "std/time"
+
+fn ms(t0 time.Instant) I64 { return 0 }
+
+fn main() {
+    t := time.Now()
+    Println(ms(t))
+}
