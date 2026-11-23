@@ -75,6 +75,16 @@ fn Verdict.Judge(b typed.Body&, l typed.LocalId, field Bool) Verdict {
     return Verdict(w.Found, w.ReadAt, w.Why, w.WhyAt)
 }
 
+# whether statements ss and then value x read local l, from a point where it holds the value its declaration gave it -
+# any mention but a whole assignment, as Judge counts one (check.deadLet: a declared value no one reads)
+fn ReadIn(b typed.Body&, l typed.LocalId, ss Array<typed.Stmt&>&, x typed.Expr&) Bool {
+    w := Walker(b, l)
+    s := w.stmts(ss, State(true, false, Cause.Decl, source.Span(0, 0)))
+    w.targets.Push(true)   # (x is assigned to l: its Target - `c++`'s old value - reads it)
+    w.expr(x, s)
+    return w.Found
+}
+
 type Verdict struct(Found Bool, ReadAt source.Span, Why Cause, WhyAt source.Span) {
     Found
     ReadAt

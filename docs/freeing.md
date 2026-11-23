@@ -323,7 +323,12 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   (`build`'s Push grows them on the task's thread) and so they keep program-wide (condition 3 by origins, `taskArgs`),
   besides the spawn target's own keep (`spawnSite`). Narrowing the target's keep to its join frees nothing while the
   task's growth keeps the same places; freeing them needs a region a task made, or grew into, released on the spawner's
-  thread - question 1 below.
+  thread - question 1 below. (Closed by wt-globalfill for a first value nothing reads - `r := build(0)` then
+  `r = build(i)` with no mention between, the shape named: the checker declares such a local with no value
+  (`check.deadLet`, `definit.ReadIn`), the first call's value an Eval dropped where it stands, the assignment its first
+  value (FirstSet), moved into the element - checks' freeing againkept. A first value read before the assignment still
+  keeps, named: a version split of the local, the read value kept in its block and the assignment's built where the store
+  goes, is the road there.)
 
 - **An array literal given to a place** (review9, `rows = Array<Vec<I64>>[Vec<I64>[i], Vec<I64>[7]]` or `ns =
   Array<I64>[i, 2]` each turn, into a local, a split field or a mutable global): kept, and named by `-memory -check`
@@ -339,8 +344,11 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   are each built for it (`builtItems`) - its items the element place's stores (`makeStores`), no view of what they own
   (`makeOf`'s `unowned`, as a fill's). One holding a local's value (`Array<Vec<I64>>[v, ...]`, `v` copied or moved at
   its last mention where it lives, outside the region) keeps, named, and so does a global's first value (its
-initializer copies it into the program's scope). checks' freeing litstores, now flat. Open: a mutable global made by a
-fill and given another fill in a function is read after its scope closed (`-sanitize`; also before wt-gaps5).
+initializer copies it into the program's scope). checks' freeing litstores, now flat. (A mutable global made by a fill
+and given another fill in a function was read after its scope closed under `-sanitize`: an array place's value read
+where it stands - lent, rendered - across a later operand's let-go was no view to the free pass, an array of plain
+values holding no reference by type; `readOf` now records it, the place keeping, as any field's array place does.
+Closed by wt-globalfill; checks' freeing globalviews.)
 
 **Question 1 (open; default in effect: a place a task's code lets go of keeps everywhere, condition 3 as built).** A
 value a joined task builds and hands back - a Vec grown by Push on the task's thread - can be freed by the spawner only

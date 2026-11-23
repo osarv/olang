@@ -4528,7 +4528,9 @@ fn (w mut walker&) readOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     } else if not w.movedRead(p, ty) {
         for lf in f.leaves(ty): addTo(o, orig(OPl, lf.PlaceId))
     }
-    if w.holds(ty): w.viewRead(o)
+    # (an array place's value holds no reference by type, but read where it stands - lent to a call, a piece rendered
+    # after the statement's other operands - it is its storage: `show(G, growG())`, `$G + $growG()`)
+    if w.holds(ty) or k >= 0 and f.arr[k]: w.viewRead(o)
     return o
 }
 

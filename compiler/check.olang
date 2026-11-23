@@ -263,6 +263,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     fixedRead Vec<I64>                               # E16h: the fixed locals fixedInt last read
     exprs Vec<typed.Expr&>                # nodes being gathered into lists, nested lists on top
     stmts Vec<typed.Stmt&>
+    callLets Map<pair.Pair<I64, I64>, pair.Pair<I64, I64>>   # (body, local): a ":=" of a call's value - its index in stmts, its block (deadLet)
     atRecs Vec<atRec>                     # each x[i] read through At as a place: what writing back through it needs
     laneNodes Vec<laneNode>               # E39: the lane operations not built yet, a placeholder naming each
     laneAccept Bool = false                # E39: the expression checked next may be left as lanes for its taker
@@ -19596,7 +19597,68 @@ fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool ? Unread {
 
 fn (c mut Checker&) emit(s typed.Stmt&) {
     c.roKeep(s)
+    c.deadLet(s)
     c.stmts.Push(s)
+}
+
+# O8f (docs/freeing.md 2.4): a ":=" local given a call's value that nothing reads before a later assignment of a call's
+# result standing in the same block (`r := build(0)`, `r = build(i)`) is declared with no value (D13d) - the first
+# call's value computed and dropped where it stands, the assignment its first value (LocalUses.FirstSet), built where
+# the local's last copy goes, as a local declared with none is. The meaning is the same: the dropped value was never read
+fn (c mut Checker&) deadLet(s typed.Stmt&) {
+    if c.frames.Len() == 0 or c.fr().Body < 0: return
+    match s {
+        case typed.Stmt.Let(_, l, x) {
+            # (not one declared with no value, its zero a constructor's call: settleUnset's)
+            n := c.unsets.Len()
+            if n > 0 and c.unsets[n - 1].Body == c.fr().Body and c.unsets[n - 1].Local == I64(l): return
+            if x == typed.Expr.Call: c.callLets.Put(pair.Pair(c.fr().Body, I64(l)), pair.Pair(c.stmts.Len(), c.fr().Block))
+        }
+        case typed.Stmt.Assign(_, p, x) {
+            if p != typed.Lvalue.Local or x != typed.Expr.Call: return
+            l := I64(p.id)
+            key := pair.Pair(c.fr().Body, l)
+            at := try c.callLets.Get(key) catch default pair.Pair<I64, I64>(-1, -1)
+            c.callLets.Remove(key)
+            if at.First < 0 or at.Second != c.fr().Block: return
+            # (an earlier change of this block's moved its later statements on by one)
+            for i in range at.First, c.stmts.Len() {
+                st := c.stmts[i]
+                if st == typed.Stmt.Let and I64(st.local) == l {
+                    c.unsetLet(i, l, x)
+                    return
+                }
+            }
+        }
+        case _ { }
+    }
+}
+
+# deadLet's change: the Let at index i of stmts, of local l, made an Eval of its value and a declaration with no value,
+# where l is a plain value local whose value nothing reads before value x is assigned to it
+fn (c mut Checker&) unsetLet(i I64, l I64, x typed.Expr&) {
+    match c.stmts[i] {
+        case typed.Stmt.Let(sp, d, init) {
+            loc := c.cur().Locals[l]
+            t := loc.Ty
+            if I64(d) != l or loc.Kind != typed.LocalKind.Var or loc.Unset or c.isRef(t) or not c.unsetLowers(t) or c.needsDrop(t): return
+            between := Array<typed.Stmt&>(c.stmts.Len() - i - 1, c.stmts[i])
+            for j in range between.Len(): between[j] = c.stmts[i + 1 + j]
+            if definit.ReadIn(c.cur(), d, between, x): return
+            dg := c.P.L.Diags
+            g := dg.Hold()
+            mark := dg.Count()
+            z := c.zero(sp, t)
+            dg.EndHold()
+            noZero := dg.Count() > mark
+            dg.Drop(g)
+            if noZero: return
+            c.stmts[i] = typed.Stmt.Eval(sp, init)
+            c.stmts.Insert(i + 1, typed.Stmt.Let(sp, d, z))!
+            c.cur().Locals[l].Unset = true
+        }
+        case _ { }
+    }
 }
 
 fn (c mut Checker&) stmt(s ast.Stmt?&) {
