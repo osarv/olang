@@ -1,0 +1,26 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4): a `:=` local given a call's value that is read, then given a call's result and stored into
+# an element at its last mention - the assignment declares a second local of the name (check.splitLet): the first value
+# the turn's, freed as its block closes, the second moved into the element as any `:=` local's. Before, the local was an
+# owner local of the free pass, sole, and the arrays its value held kept (-memory -check naming the element's let-go)
+N I64 = 20000
+
+fn build(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push("t" + $(i + k) + " padded out to some length")
+    return v
+}
+
+fn main() {
+    kept := Array<Vec<String>>(4)
+    t := 0
+    for i in range N {
+        r := build(0)
+        n := r.Len() + r[2].Len()
+        r = build(i)
+        kept[i % 4] = r
+        t += n + kept[(i + 3) % 4].Len()
+    }
+    io.PutLn($t + " " + kept[2][1])!
+}

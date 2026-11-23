@@ -19597,54 +19597,77 @@ fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool ? Unread {
 
 fn (c mut Checker&) emit(s typed.Stmt&) {
     c.roKeep(s)
-    c.deadLet(s)
-    c.stmts.Push(s)
+    c.stmts.Push(c.deadLet(s))
 }
 
 # O8f (docs/freeing.md 2.4): a ":=" local given a call's value that nothing reads before a later assignment of a call's
 # result standing in the same block (`r := build(0)`, `r = build(i)`) is declared with no value (D13d) - the first
 # call's value computed and dropped where it stands, the assignment its first value (LocalUses.FirstSet), built where
-# the local's last copy goes, as a local declared with none is. The meaning is the same: the dropped value was never read
-fn (c mut Checker&) deadLet(s typed.Stmt&) {
-    if c.frames.Len() == 0 or c.fr().Body < 0: return
+# the local's last copy goes, as a local declared with none is. The meaning is the same: the dropped value was never read.
+# Where the first value is read before the assignment, the assignment declares a second local of the name instead
+# (splitLet) - s, or what stands for it
+fn (c mut Checker&) deadLet(s typed.Stmt&) typed.Stmt& {
+    if c.frames.Len() == 0 or c.fr().Body < 0: return s
     match s {
         case typed.Stmt.Let(_, l, x) {
             # (not one declared with no value, its zero a constructor's call: settleUnset's)
             n := c.unsets.Len()
-            if n > 0 and c.unsets[n - 1].Body == c.fr().Body and c.unsets[n - 1].Local == I64(l): return
+            if n > 0 and c.unsets[n - 1].Body == c.fr().Body and c.unsets[n - 1].Local == I64(l): return s
             if x == typed.Expr.Call: c.callLets.Put(pair.Pair(c.fr().Body, I64(l)), pair.Pair(c.stmts.Len(), c.fr().Block))
         }
-        case typed.Stmt.Assign(_, p, x) {
-            if p != typed.Lvalue.Local or x != typed.Expr.Call: return
+        case typed.Stmt.Assign(sp, p, x) {
+            if p != typed.Lvalue.Local or x != typed.Expr.Call: return s
             l := I64(p.id)
             key := pair.Pair(c.fr().Body, l)
             at := try c.callLets.Get(key) catch default pair.Pair<I64, I64>(-1, -1)
             c.callLets.Remove(key)
-            if at.First < 0 or at.Second != c.fr().Block: return
+            if at.First < 0 or at.Second != c.fr().Block: return s
             # (an earlier change of this block's moved its later statements on by one)
             for i in range at.First, c.stmts.Len() {
                 st := c.stmts[i]
                 if st == typed.Stmt.Let and I64(st.local) == l {
-                    c.unsetLet(i, l, x)
-                    return
+                    if c.unsetLet(i, l, x): return s
+                    sl := c.splitLet(i, l, sp, p.Span(), x)
+                    return sl if sl != null else s
                 }
             }
         }
         case _ { }
     }
+    return s
+}
+
+# O8f (docs/freeing.md 2.4): the assignment of x to local l, whose Let is stmts[i] and whose value statements since read
+# (`r := build(0)`, `n := r.Len()`, `r = build(i)`): a second local of the name declared with x, the name bound to it for
+# the rest of the block - the first value's storage the block's, the second's built where its own last copy goes, as
+# any ":=" local's. The same meaning where nothing holds the first local past the assignment: no reference to it kept
+# (a reference local, a capture, a store - LocalUses.EscHard, AliasOf), no deferred code of the block reading it, and
+# no destructor (whose moment would move); null where any does
+fn (c mut Checker&) splitLet(i I64, l I64, sp source.Span, at source.Span, x typed.Expr&) typed.Stmt?& {
+    loc := c.cur().Locals[l]
+    if loc.Kind != typed.LocalKind.Var or loc.Unset or c.isRef(loc.Ty) or c.needsDrop(loc.Ty): return null
+    so := Array<typed.Stmt&>(c.stmts.Len() - i, c.stmts[i])
+    for j in range so.Len() {
+        so[j] = c.stmts[i + j]
+        if so[j] == typed.Stmt.Defer: return null
+    }
+    u := typed.LocalUses.Over(c.P.T, c.cur(), typed.Block(typed.BlockId(I32(c.fr().Block)), so))
+    if u.EscHard[l] or u.Ret[l] or u.AliasOf.View().Some(fn(a I64): return a == l): return null
+    d := c.local(loc.Name, at, loc.Ty, typed.LocalKind.Var, loc.Marked)
+    return typed.Stmt.Let(sp, typed.LocalId(I32(d)), x)
 }
 
 # deadLet's change: the Let at index i of stmts, of local l, made an Eval of its value and a declaration with no value,
 # where l is a plain value local whose value nothing reads before value x is assigned to it
-fn (c mut Checker&) unsetLet(i I64, l I64, x typed.Expr&) {
+fn (c mut Checker&) unsetLet(i I64, l I64, x typed.Expr&) Bool {
     match c.stmts[i] {
         case typed.Stmt.Let(sp, d, init) {
             loc := c.cur().Locals[l]
             t := loc.Ty
-            if I64(d) != l or loc.Kind != typed.LocalKind.Var or loc.Unset or c.isRef(t) or not c.unsetLowers(t) or c.needsDrop(t): return
+            if I64(d) != l or loc.Kind != typed.LocalKind.Var or loc.Unset or c.isRef(t) or not c.unsetLowers(t) or c.needsDrop(t): return false
             between := Array<typed.Stmt&>(c.stmts.Len() - i - 1, c.stmts[i])
             for j in range between.Len(): between[j] = c.stmts[i + 1 + j]
-            if definit.ReadIn(c.cur(), d, between, x): return
+            if definit.ReadIn(c.cur(), d, between, x): return false
             dg := c.P.L.Diags
             g := dg.Hold()
             mark := dg.Count()
@@ -19652,13 +19675,15 @@ fn (c mut Checker&) unsetLet(i I64, l I64, x typed.Expr&) {
             dg.EndHold()
             noZero := dg.Count() > mark
             dg.Drop(g)
-            if noZero: return
+            if noZero: return false
             c.stmts[i] = typed.Stmt.Eval(sp, init)
             c.stmts.Insert(i + 1, typed.Stmt.Let(sp, d, z))!
             c.cur().Locals[l].Unset = true
+            return true
         }
         case _ { }
     }
+    return false
 }
 
 fn (c mut Checker&) stmt(s ast.Stmt?&) {

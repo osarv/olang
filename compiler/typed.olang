@@ -941,7 +941,10 @@ type LocalUses struct(T types.Table&, B Body&) {
 # as often as its declaration does: that value is what it holds from there, as a Let's would be (D9i moves it on)
 fn (u LocalUses&) FirstSet(l I64) Bool { return u.Whole[l] and not u.WholeOther[l] and not u.WholeAgain[l] and u.B.Locals[l].Unset }
 
-fn LocalUses.Uses(t types.Table&, b Body&) LocalUses {
+fn LocalUses.Uses(t types.Table&, b Body&) LocalUses { return LocalUses.Over(t, b, b.Root) }
+
+# how statements root of body b use its locals - its whole body, or (check.splitLet) the part of a block checked so far
+fn LocalUses.Over(t types.Table&, b Body&, root Block?&) LocalUses {
     u := LocalUses(t, b)
     for _ in range b.Locals.Len() {
         u.WrOther.Push(false)
@@ -966,7 +969,7 @@ fn LocalUses.Uses(t types.Table&, b Body&) LocalUses {
     }
     for l in b.Locals { u.declDepth.Push(0 if l.Kind == LocalKind.Param else I64.Max) }
     u.byValue = t.KindOf(b.Ty) != types.Kind.Func or not t.IsRef(t.Result(b.Ty))
-    if b.Root != null: u.block(b.Root!)
+    if root != null: u.block(root)
     # (a constructor's fields are what it hands back: its instance is made of them)
     for f in b.Fields: u.Ret[I64(f)] = true
     u.closeAliases()
