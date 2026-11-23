@@ -22,6 +22,7 @@
 # points to numbers ("const T *" an "Array<T>", "T *" a "mut Array<T>&", so text is passed as "t.ToC()"), a reference
 # where it points to a struct ("Db?&", "mut Point?&"), an array of one handle where it points to a pointer
 # ("mut Array<Db?&>&", C's out parameter), a function where it is a function pointer (X13: an export fn is passed); a
+# function pointer held in a field or given back is a C function pointer ("extern fn?&(...)", X13a); a
 # pointer to anything else - "void *" above all - is the prelude's "CVoid?&" ("mut CVoid?&" where it is not const). A
 # "char *" result is the prelude's "CStr?&" (X15).
 import "std/os"
@@ -698,6 +699,7 @@ fn (g mut gen&) fieldType(t I64) String ? Skip {
         case CKind.Ptr {
             to := g.nodes[n.To]
             if g.isByte(n.To): return "CStr?&"
+            if to.Kind == CKind.Fn: return g.cFunc(to)   # X13a
             if to.Kind == CKind.Rec {
                 i := g.recOf(to.Text)
                 if not g.holdable(i): return $g.name(i) + "?&"
@@ -708,6 +710,29 @@ fn (g mut gen&) fieldType(t I64) String ? Skip {
         case _ { try g.skip("a field of this type, which has no olang form") }
     }
     return ""
+}
+
+# a function pointer's prototype (node n, a CKind.Fn), "fn?&(a0 I32) I32": its parameters and result a callback's (X13)
+fn (g mut gen&) fnSpelled(n ctype) String ? Skip {
+    b := StringBuilder()
+    b.Push("fn?&(")
+    for k in range n.N {
+        if k > 0: b.Push(", ")
+        b.Push($"a" + $k + " " + $(try g.valueType(g.params[n.First + k], true)))
+    }
+    b.Push(")")
+    if g.nodes[n.To].Kind != CKind.Void: b.Push($" " + $(try g.valueType(n.To, true)))
+    return b.ToString()
+}
+
+# X13a: a function pointer held in a field or given back, node n: "extern fn?&(...)" where its prototype has an olang
+# form, else C's pointer of no type ("CVoid?&") - one taking variable arguments, say
+fn (g mut gen&) cFunc(n ctype) String {
+    if n.Text == "variadic": return "CVoid?&"
+    why := g.why
+    f := try g.fnSpelled(n) catch Skip default ""
+    g.why = why
+    return "extern " + $f if f != "" else "CVoid?&"
 }
 
 # a result's, or a callback parameter's, type (X2, X13): a number, a Bool, a plain struct by value, an extern type's
@@ -725,6 +750,7 @@ fn (g mut gen&) valueType(t I64, callback Bool) String ? Skip {
         case CKind.Ptr {
             to := g.nodes[n.To]
             if g.isByte(n.To): return "CStr?&"
+            if to.Kind == CKind.Fn: return g.cFunc(to)   # X13a
             if to.Kind == CKind.Rec {
                 i := g.recOf(to.Text)
                 if not g.holdable(i): return $g.name(i) + "?&"
@@ -777,15 +803,7 @@ fn (g mut gen&) pointerParam(t I64, ro Bool) String ? Skip {
         case CKind.Fn {
             if n.Text == "variadic": try g.skip("a callback taking a variable number of arguments")
             # T21: a C function pointer may be null - "fn?&(...)"; an export fn given for one is never null
-            b := StringBuilder()
-            b.Push("fn?&(")
-            for k in range n.N {
-                if k > 0: b.Push(", ")
-                b.Push($"a" + $k + " " + $(try g.valueType(g.params[n.First + k], true)))
-            }
-            b.Push(")")
-            if g.nodes[n.To].Kind != CKind.Void: b.Push($" " + $(try g.valueType(n.To, true)))
-            return b.ToString()
+            return try g.fnSpelled(n)
         }
         case CKind.Bad { try g.skip(n.Text) }
         case _ { }

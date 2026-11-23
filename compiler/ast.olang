@@ -40,7 +40,7 @@ type Param struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Dflt Expr?&)
 # set ("?" alone, R1a); NoReturn for "noreturn" where a result would stand (D8e)
 type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool, Errors Array<Path&>&, NoReturn Bool = false
                 Commutes Bool = false, Variadic Bool = false
-                Promises Array<Promise&>& = Array<Promise&>(0)) {
+                Promises Array<Promise&>& = Array<Promise&>(0), Extern Bool = false) {
     Params
     Results
     HasErrors
@@ -49,6 +49,7 @@ type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool,
     Commutes   # "commutes" after an operator method's result (E31c): the operator applies with its operands swapped too
     Variadic   # "..." after an extern's parameters (X17): C's variable arguments
     Promises   # the words after a function type's signature (T21c), as written
+    Extern     # "extern" before a function type (X13a): a C function pointer
 }
 
 # a promise after a function type's signature (T21c): its word, and the names it takes as written - "keeps b in a.f"

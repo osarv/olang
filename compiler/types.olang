@@ -1047,11 +1047,17 @@ fn (t mut Table&) HoldsRefs(id TypeId) Bool {
 
 # X10: whether a type is a reference to an extern type ("Db&", "Db?&") - a C pointer olang holds and never reads: it
 # lives in no scope of olang's, so section 8 takes it for a value holding no reference, as a number is
+# and a C function pointer is one too (X13a)
 fn (t Table&) ForeignRef(id TypeId) Bool {
     if t.KindOf(id) != Kind.Ref: return false
     x := t.Referent(id)
+    if t.KindOf(x) == Kind.Func: return true
     return t.KindOf(x) == Kind.Named and t.DeclKindOf(t.DeclOf(x)) == DeclKind.Foreign
 }
+
+# X13a: whether a type is a C function pointer ("extern fn&(...)", "extern fn?&(...)"): a reference to a function type -
+# one word, C's pointer to the function, never an olang function value (T21's pair), which is no reference
+fn (t Table&) CFunc(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and t.KindOf(t.Referent(id)) == Kind.Func }
 
 fn (t Table&) holdsState(id TypeId) U8 {
     i := I64(id)
@@ -1430,6 +1436,7 @@ type codeWalk struct(T Table&, Writes Bool = false, Pure Bool = false) {
 
 fn (w mut codeWalk&) reaches(id TypeId) Bool {
     t := w.T
+    if t.CFunc(id): return true     # X13a: C's code, which may do anything
     if t.ForeignRef(id) or w.walking.Has(id): return false
     k := t.KindOf(id)
     if k == Kind.Func and w.Pure and t.PromisesPure(id): return false
@@ -2141,6 +2148,7 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
                 t.canon(b, t.Elem(t.Referent(id)))
                 return
             }
+            if t.KindOf(t.Referent(id)) == Kind.Func: b.Push("extern ")   # X13a: a C function pointer
             if (p & Writable) != 0: b.Push("mut ")
             t.canon(b, t.Referent(id))
             b.Push("?&" if (p & Nullable) != 0 else "&")

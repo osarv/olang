@@ -6611,6 +6611,7 @@ fn (e mut Emitter&) pow2(k I64) String { return e.constText(types.TypeId(14), I6
 
 # a function value (T21): the pair { code, environment } - the environment, where there are captures, built in s
 fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args mir.Range, caps mir.Range) String {
+    if fe.E.T.CFunc(ty): return fe.cEntry(code, fe.E.T.Referent(ty))
     fe.E.want(code)
     sym := fe.E.codeFor(code, ty)
     env := "null"
@@ -7252,6 +7253,12 @@ fn (fe mut fnEm&) call(c mir.Call) {
             isExtern = true
             variadic = fe.E.P.FnDecl(f).S.Variadic
         }
+        case mir.Callee.Pointer(x, fty) {
+            # X13a: through a C function pointer - its value the address C calls, by C's convention
+            ty = fty
+            target = fe.val(x, fe.otype(x))
+            isExtern = true
+        }
         case mir.Callee.Value(x) {
             ty = fe.otype(x)
             v := fe.val(x, ty)
@@ -7759,6 +7766,21 @@ fn (fe mut fnEm&) exportNamed(x mir.Operand) String {
 }
 
 # the name of the export fn a closure is made of, "" where the value is no such closure
+# X13a: a C function pointer made of an export fn, named - its C entry's address (check allows nothing else)
+# - declared where another module's object defines it (X12: the root's)
+fn (fe mut fnEm&) cEntry(code mir.FnKey, fty types.TypeId) String {
+    if code == mir.FnKey.Body {
+        of := fe.E.Lw.Bodies[I64(code.id)].Of
+        if of == typed.BodyOf.Fn {
+            name := $fe.E.text(fe.E.P.FnDecl(fe.E.P.InstanceFn(of.instance)).Name)
+            if not fe.E.has(name): fe.E.declare(name, $fe.E.cHeader(fty) + " @" + $name + "(" + $fe.E.cParamList(fty, false) + ")")
+            return "@" + $name
+        }
+    }
+    fe.gap("a C function pointer that is no export fn's entry")
+    return "null"
+}
+
 fn (e mut Emitter&) exportBody(rv mir.Rvalue) String {
     if rv != mir.Rvalue.Closure: return ""
     code := rv.code
@@ -8890,6 +8912,11 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
             # refused by check (T32b): a task's call is through a function value or to a function
             ty = dty
             fe.gap("a task calling through an any")
+        }
+        case mir.Callee.Pointer(_, pty) {
+            # refused by check (X13a)
+            ty = pty
+            fe.gap("a task calling through a C function pointer")
         }
     }
     ps := t.Items(t.Params(ty))

@@ -4883,6 +4883,9 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         case typed.Callee.Value(v) {
             w.expr(v)
             if not w.Final: f.setRegOut(w.Id)
+            # X13a: through a C function pointer - C, which may call any export fn back
+            foreign = w.T().CFunc(v.Type())
+            calls = foreign
         }
         case typed.Callee.Dispatch(_, _, _) { if not w.Final { f.setRegOut(w.Id) } }
         case typed.Callee.Helper(_, _) { helper = true }
@@ -5042,7 +5045,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     }
     # a call through a function value: judged by what is followed of it, else by its type (docs/fnvalues.md 4.6)
     match c.Target {
-        case typed.Callee.Value(v) {
+        case typed.Callee.Value(v) if not foreign {
             w.valueCall(c, v, args, sp, out)
             return out
         }
