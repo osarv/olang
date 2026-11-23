@@ -9020,8 +9020,10 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
         match r {
             case mir.ScopeRef.Program { vals.Push("null") }
             case _ {
-                e.runtime("__olang_standin_in")
-                sub := fe.let("call ptr @__olang_standin_in(ptr " + $fe.scope(r) + ", ptr " + $js + ")")
+                # (O8d: the region made for the task's result handed to it whole, where it is one - mir.Task.Fresh)
+                how := "__olang_standin_or" if freshScope(k, I64(i)) else "__olang_standin_in"
+                e.runtime(how)
+                sub := fe.let("call ptr @" + $how + "(ptr " + $fe.scope(r) + ", ptr " + $js + ")")
                 subs.Push($sub)
                 vals.Push($sub)
             }
@@ -9103,6 +9105,9 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
     fe.store("ptr", node, "%jh" + $j)
 }
 
+# whether a task's scope i is the region made for its result (mir.Task.Fresh)
+fn freshScope(k mir.Task, i I64) Bool { return i < 63 and (k.Fresh & (I64(1) << i)) != 0 }
+
 # a task's trampoline, fn(ptr env) ptr: the call made from what the environment holds, its results stored, and the
 # error it fails with re-encoded under the join's list (as a pointer's bits, the runtime's contract), null for none
 fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, callee String&, ty types.TypeId
@@ -9142,6 +9147,10 @@ fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, ca
     for i in range nscopes {
         f := at + ps.Len() + i
         b.Push("  %sc" + $i + " = load ptr, ptr %f" + $f + "\n  %sn" + $i + " = icmp eq ptr %sc" + $i + ", null\n")
+        if freshScope(k, i) {
+            e.runtime("__olang_region_adopt")
+            b.Push("  call void @__olang_region_adopt(ptr %sc" + $i + ")\n")
+        }
         e.define("__olang_prog_scope", "@__olang_prog_scope = external thread_local(initialexec) global ptr")
         b.Push("  %sg" + $i + " = load ptr, ptr @__olang_prog_scope\n  %ss" + $i + " = select i1 %sn" + $i + ", ptr %sg" + $i + ", ptr %sc" + $i + "\n")
         if not first: args.Push(", ")

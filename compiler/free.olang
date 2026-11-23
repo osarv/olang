@@ -399,6 +399,13 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     joins I64 = 0
     joinGoes Vec<pair.Pair<I64, I64>>
     joinReach Map<I64, String>
+    # (the let-goes a spawn makes of its target's old value, on the spawner's thread before its task starts - spawnLets:
+    # its own join's tasks may not reach them (joinReach), but they are no let-go of what those tasks build (joinTargets))
+    spawnGoes Vec<pair.Pair<I64, I64>>
+    candLoops I64 = 0         # findCands: the loops around the statement, and around each local's declaration
+    candDecl Map<I64, I64>
+    spawnNot Map<pair.Pair<I64, I64>, Bool>   # (body, local): given a value other than by a spawn, or by one whose
+                                              # task may leave it unwritten or give it an existing value (SpawnLets)
     # by body: run from an entry (reachedTasks, ahead of the final walk) - only a live body's spawns are tasks; the bodies
     # a live spawn calls (liveSpawned) and of those the ones that may let go of storage not built in the task (taskRoots:
     # no ownBody); and a spawn target's type places by join (its number, the place), which keep only where that join's
@@ -855,6 +862,8 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     # the candidates: places a body assigns or vacates (a let-go of one needs one of those somewhere)
     for b in range n {
         f.curBody = b
+        f.candLoops = 0
+        f.candDecl.Clear()
         if f.Bodies[b].Root != null: f.findCands(f.Bodies[b].Root!)
     }
     if f.keyTy.Len() == 0: return
@@ -1922,12 +1931,19 @@ fn (f mut Free&) findCands(bl typed.Block&) {
 fn (f mut Free&) findStmt(st typed.Stmt&) {
     match st {
         case typed.Stmt.Assign(_, p, x) {
+            match p {
+                case typed.Lvalue.Local(_, _, l) { f.spawnNot.Put(pair.Pair(f.curBody, I64(l)), true) }
+                case _ { }
+            }
             f.candTarget(p)
             f.ownLocalCand(p)
             f.globalCand(p)
             f.findExpr(x)
         }
-        case typed.Stmt.Let(_, _, x) { f.findExpr(x) }
+        case typed.Stmt.Let(_, l, x) {
+            f.candDecl.Put(I64(l), f.candLoops)
+            f.findExpr(x)
+        }
         case typed.Stmt.Eval(_, x) {
             f.findExpr(x)
         }
@@ -1937,13 +1953,33 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
             if i.Else != null: f.findCands(i.Else!)
         }
         case typed.Stmt.Loop(_, body, post) {
+            f.candLoops++
             f.findCands(body)
             if post != null: f.findCands(post)
+            f.candLoops--
         }
         case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { if x != null: f.findExpr(x) }
         case typed.Stmt.Block(_, b) { f.findCands(b) }
-        case typed.Stmt.Defer(_, b) { f.findCands(b) }
+        case typed.Stmt.Defer(_, b) {
+            f.candLoops++
+            f.findCands(b)
+            f.candLoops--
+        }
         case typed.Stmt.Join(_, j) { f.findCands(j.Code) }
+        # (a spawn's target a local declared outside a loop the spawn is in: an owner local, each turn's spawn letting
+        # go of what the turn before stored - spawnLets)
+        case typed.Stmt.Spawn(_, s) {
+            for p in s.Targets {
+                if p == null: continue
+                l := match p {
+                    case typed.Lvalue.Local(_, _, l): I64(l)
+                    case _: -1
+                }
+                if l < 0: continue
+                if f.candLoops > (try f.candDecl.Get(l) catch default 0): f.ownLocalCand(p)
+                if f.failsIntoJoin(s) or not f.plainClauses(s): f.spawnNot.Put(pair.Pair(f.curBody, l), true)
+            }
+        }
         case _ { }
     }
 }
@@ -2303,6 +2339,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     goOwn Vec<Bool>           # ...one letting go only of storage it built itself (ownGoes): no view of this body's reaches it
     callOwn Bool = false      # (whether the call being walked is one)
     inTask Bool = false       # the let-goes being walked are a spawn's own call's, run on the task's thread
+    spawnGo Bool = false      # ...are a spawn's of its target's old value, on the spawner's thread (spawnLets)
     # (condition 3's summaries, taskLets: the let-goes being walked are a call's, which passes on its callee's taskLets
     # itself - taskPass - or none, for a spawn's own call or a callee letting go only of what it builds - ownBody)
     taskCut Bool = false
@@ -2881,10 +2918,13 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             # (a body no entry reaches never runs: its spawns start no task - O8f's condition 3 judges live ones)
             wasT := w.taskSite
             w.taskSite = I64(tc.Site) if tc != null else -1
-            w.expr(s.Task)
+            o := w.expr(s.Task)
             w.taskSite = wasT
             for c in s.Clauses {
                 if c.Handler != null: w.expr(c.Handler!)
+            }
+            for p in s.Targets {
+                if p != null: w.spawnLets(st.Span(), s, p, o, tc)
             }
             if w.Final and w.quiet == 0 and w.F.isLive(w.Id): w.spawnSite(s, tc)
         }
@@ -4254,7 +4294,9 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
     # (O8f, condition 3: one a join's tasks may run beside - decide's taskKeeps; not a task's own call's, which runs on the
     # task's thread and is judged at the spawn, taskArgs)
     if not w.inTask {
-        for j in w.inJoin: f.joinGoes.Push(pair.Pair(j, k))
+        for i in range w.inJoin.Len() {
+            if w.spawnGo and i == w.inJoin.Len() - 1 { f.spawnGoes.Push(pair.Pair(w.inJoin[i], k)) } else { f.joinGoes.Push(pair.Pair(w.inJoin[i], k)) }
+        }
     }
     # (O8f: a walk's let-go of a Vec's live elements, where its owner is not decided sole, is a let-go of their place -
     # condition 5's, though the report and the views judge it as the owner's: a Vec<String> or Vec<Array<I64>> pushed to
@@ -7466,6 +7508,32 @@ fn (w mut walker&) reaches(why String) {
     if not w.F.joinReach.Has(j): w.F.joinReach.Put(j, why)
 }
 
+# a spawn's target an owner local (findStmt: declared outside a loop the spawn is in) given the task's result as an
+# assignment's target is - its place's store and let-go. Where the spawner lets go of the old value itself (SpawnLets),
+# at the spawn, before the task starts, the place is judged as an assignment's: sole, each value is built in a region of
+# its own the spawner makes and hands the task whole (lowering's spawnLets, emit's fresh scopes) - its let-goes judged
+# against its own join's tasks reaching the spawner's storage (spawnGoes), not against what they build (joinTargets),
+# and where the result is not handed over at the wait the place keeps. Else it keeps for condition 3, the store into it
+# being the task's
+fn (w mut walker&) spawnLets(sp source.Span, s typed.Spawn&, p typed.Lvalue&, o Vec<I64>&, tc typed.Call?&) {
+    l := match p {
+        case typed.Lvalue.Local(_, _, l): I64(l)
+        case _: -1
+    }
+    ol := w.ownLocal(l)
+    if ol < 0: return
+    f := w.F
+    why := "a task's result is stored into it, made on the task's thread: '" + $w.text(p.Span()) + "'"
+    lets := f.SpawnLets(w.Id, l)
+    if not lets or w.Final and w.quiet == 0 and not w.handedAtWait(s, p, tc): f.keep(ol, RTask, w.body().File, p.Span(), why)
+    w.give(l, o)
+    w.store(ol, s.Task, o, sp, w.localName(l))
+    w.spawnGo = lets
+    w.go(ol, LAssign, p.Span(), source.Span(0, 0), -1)
+    w.goParts(ol, p.Span())
+    w.spawnGo = false
+}
+
 # a spawn: a task not known keeps everything; its targets stored into on the task's thread (P1g) - the places they
 # are, and those a result made there holds, keep; one not a plain local is storage the task reaches
 fn (w mut walker&) spawnSite(s typed.Spawn&, tc typed.Call?&) {
@@ -7491,7 +7559,7 @@ fn (w mut walker&) spawnSite(s typed.Spawn&, tc typed.Call?&) {
             case typed.Lvalue.Local(_, _, l) {
                 fd := w.feeder(I64(l))
                 if fd >= 0: f.keep(f.feeds[fd].PlaceId, RTask, w.body().File, p.Span(), why)
-                f.keep(w.ownLocal(I64(l)), RTask, w.body().File, p.Span(), why)
+                # (its owner local's keep is spawnLets')
             }
             case _ {
                 f.keep(f.placeOfPlace(p), RTask, w.body().File, p.Span(), why)
@@ -7608,23 +7676,97 @@ fn (f mut Free&) taskKeeps() {
     for fd in f.feeds {
         if run[fd.Body]: f.keep(fd.PlaceId, RTask, -1, source.Span(0, 0), own)
     }
-    for jk in f.joinGoes {
-        k := jk.Second
-        why := try f.joinReach.Get(jk.First) catch default f.taskReach
-        if why == "": continue
-        why = $why + ", and the join's code lets go of it while the task may run"
-        if k != AnyPlace {
-            f.keep(k, RTask, -1, source.Span(0, 0), why)
-            continue
-        }
-        for q in range n: f.keep(q, RTask, -1, source.Span(0, 0), why)
-    }
+    for jk in f.joinGoes: f.joinReached(jk, n)
+    for jk in f.spawnGoes: f.joinReached(jk, n)
     # a spawn target's type places, where the join spawning into it lets one go while the task runs
     for jk in f.joinGoes {
         for tg in f.joinTargets {
             if tg.First != jk.First or (jk.Second != AnyPlace and jk.Second != tg.Second): continue
             f.keep(tg.Second, RTask, -1, source.Span(0, 0), "a task's result is stored into a place holding it, and the join's code lets go of it while the task may run")
         }
+    }
+}
+
+# a place let go of in join jk.First's code (jk.Second, AnyPlace for any): kept where that join's tasks may reach the
+# spawner's storage, or any task reads a global
+fn (f mut Free&) joinReached(jk pair.Pair<I64, I64>, n I64) {
+    k := jk.Second
+    why := try f.joinReach.Get(jk.First) catch default f.taskReach
+    if why == "": return
+    why = $why + ", and the join's code lets go of it while the task may run"
+    if k != AnyPlace {
+        f.keep(k, RTask, -1, source.Span(0, 0), why)
+        return
+    }
+    for q in range n: f.keep(q, RTask, -1, source.Span(0, 0), why)
+}
+
+# O8d, P1g: whether the spawns into local l of body b let go of its old value themselves, on the spawner's thread before
+# each task starts: l an owner local (findStmt) given values by its declaration and by spawns alone, whose every
+# task always writes it - one failing into its join leaves it unwritten (P4d), its old value still to be read - and no
+# clause of which gives it a default that could be existing storage (spawnNot)
+fn (f mut Free&) SpawnLets(b I64, l I64) Bool {
+    if l < 0 or b < 0 or b >= f.olIn.Len() or not f.olIn[b]: return false
+    ol := try f.ownLocalOf.Get(pair.Pair(b, l)) catch default -1
+    if ol < 0 or not f.owner[ol]: return false
+    return not f.spawnNot.Has(pair.Pair(b, l))
+}
+
+# whether a spawn's task may fail into its join (P4b): its call can fail with an error none of its clauses takes, and it
+# is no `!` (E35, which ends the program from the task's thread) - a callee not a body counts as one that may
+fn (f mut Free&) failsIntoJoin(s typed.Spawn&) Bool {
+    match s.Task {
+        case typed.Expr.Try(_, _, tr) { if tr.Ends: return false }
+        case _ { }
+    }
+    tc := typed.Call.Of(taskCall(s.Task))
+    if tc == null: return true
+    b2 := typed.CalleeBody(tc)
+    if b2 < 0: return true
+    t := f.T()
+    for e in t.Items(t.Errors(f.Bodies[b2].Ty)) {
+        if not f.clausesTake(s, e): return true
+    }
+    return false
+}
+
+# whether a spawned call's clauses take error type e: one taking every error, or one naming e whole (lowering's)
+fn (f mut Free&) clausesTake(s typed.Spawn&, e types.TypeId) Bool {
+    t := f.T()
+    for cl in s.Clauses {
+        if cl.All: return true
+        for it in cl.Items {
+            if it.Word < 0 and t.Same(t.ErrOf(it.Err), t.ErrOf(e)): return true
+        }
+    }
+    return false
+}
+
+# whether no clause of spawn s gives its targets a default that could be existing storage (plainDefault)
+fn (f mut Free&) plainClauses(s typed.Spawn&) Bool {
+    for c in s.Clauses {
+        if c.Handler != null and not f.plainDefault(c.Handler!): return false
+    }
+    return true
+}
+
+# whether a clause's handler gives a default that is no existing storage: a lambda capturing nothing, reading no global
+# and allocating nothing (`catch default Vec<String>()`)
+fn (f mut Free&) plainDefault(h typed.Expr&) Bool {
+    match h {
+        case typed.Expr.Fn(_, _, fv) {
+            match fv {
+                case typed.FnVal.Lambda(lb, caps, _) {
+                    if caps.Len() > 0 or I64(lb) < 0 or I64(lb) >= f.Bodies.Len(): return false
+                    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+                    fs := f.fx!.Of(I64(lb))
+                    if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0: return false
+                    return not (fs.Holds(effects.Fact.Allocates) or fs.ReadsGlobals or fs.RefGlobals)
+                }
+                case _ { return false }
+            }
+        }
+        case _ { return false }
     }
 }
 

@@ -3232,6 +3232,40 @@ make:
   ret ptr %sub
 }
 
+; O8d, P2: a task's scope that is the region its spawner made for the task's result (lower.spawnLets) - the region itself,
+; which the task alone builds into until the join's wait (the spawner reads nothing of it before then); any other a
+; stand-in, as __olang_standin_in makes one. The join's fold passes over a region (__olang_scope_merge)
+define ptr @__olang_standin_or(ptr %parent, ptr %home) {
+entry:
+  %h = load ptr, ptr %parent
+  %isreg = icmp eq ptr %h, @__olang_region_chunk
+  br i1 %isreg, label %reg, label %sub
+reg:
+  ret ptr %parent
+sub:
+  %s = call ptr @__olang_standin_in(ptr %parent, ptr %home)
+  ret ptr %s
+}
+
+; O8d, P2: on the task's thread, a region handed to it whole (__olang_standin_or) named as made by this thread: what the
+; task builds there comes from this thread's storage, which the region's release gives back here (__olang_close_kids)
+define void @__olang_region_adopt(ptr %s) {
+entry:
+  %none = icmp eq ptr %s, null
+  br i1 %none, label %done, label %look
+look:
+  %h = load ptr, ptr %s
+  %isreg = icmp eq ptr %h, @__olang_region_chunk
+  br i1 %isreg, label %own, label %done
+own:
+  %mkp = getelementptr %olang.region, ptr %s, i32 0, i32 8
+  %home = load ptr, ptr @__olang_home
+  store ptr %home, ptr %mkp
+  br label %done
+done:
+  ret void
+}
+
 ; P2b: scope s as something that may outlive a task holds it - a closure's captured scope, a generator's home, a scope
 ; handle kept in a place: s itself, but for a stand-in made in its join's scope, its KEEPER - a forwarder made once, in
 ; the stand-in's own storage, to the stand-in while the task runs and to what it stood in for once folded (as a stand-in
@@ -4553,9 +4587,14 @@ entry:
 define void @__olang_scope_merge(ptr %src) {
 entry:
   %none = icmp eq ptr %src, null
-  br i1 %none, label %ret, label %go
+  br i1 %none, label %ret, label %look
 ret:
   ret void
+  ; a region handed to the task whole (__olang_standin_or) stands in for nothing: it is the spawner's from the wait on
+look:
+  %h0 = load ptr, ptr %src
+  %isreg = icmp eq ptr %h0, @__olang_region_chunk
+  br i1 %isreg, label %ret, label %go
 go:
   %parentp = getelementptr %olang.scope, ptr %src, i32 0, i32 5
   %parent = load ptr, ptr %parentp
