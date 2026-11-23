@@ -41817,7 +41817,7 @@ Every unit's IR record (294 files) and every other record of the self-build (608
 the compiler masked) are byte for byte the old compiler's, as are tests/runner.olang's records and binary; the
 compiler builds itself identically (the fixed point).
 
-## 2026-11-23: a for loop's name is the element's value - the 2026-11-21 references reversed (S9a, S9g, T13b; the user's call; wt-loopvals)
+## 2026-11-23: a for loop's name is the element's value - the 2026-11-21 references reversed (S9a, S9g; the user's call; wt-loopval)
 
 The user (2026-11-23), replacing their rule of 2026-11-21 ("loop variables get the type of what the iterator
 produces", built by wt-loopref, wt-looprows and wt-nestref's walk): "what we get from iterating over an array is
@@ -41844,10 +41844,28 @@ reads in place where alias analysis proves nothing writes the slot - which is ex
 checker-level in-place reading was added, since a reference name would change `y := x`'s meaning. SPEC S9a states the
 snapshot as part of the one rule; tests/loopvals.olang's "a write through a held reference to the very slot".
 
+How the snapshot and the in-place read are built, checked in wt-loopval. The name is a Let of the element read - a
+copy in the typed tree, always. Two things then read in place, both conservative and both existing: a plain-data
+element (numbers, references) is an aggregate load LLVM forwards only where its alias analysis proves no store
+between; an element owning storage (text, a row held as a pair, a Vec) is a candidate of lowering's D9h viewLocals,
+which keeps the view in place of the copy only where the local is never written, lent writably, escaping or handed
+back and nothing changes the storage it views while it lives (heldSrc). OLANG_VIEWDUMP on probes: a read-only walk
+over a ViewMut of structs holding text, and of a Vec's rows, "holds views"; the same walk whose body writes `w[i]`
+"copies". The evaluator runs MIR as lowered without the scope plan, every copy made, so it computes the snapshot by
+construction. tests/loopvals.olang pins both edges: a struct holding text written through its own reference
+(`x.me!.name = ...`, the name still reading the old text, under `-sanitize` and `-memory -check` too - an early free of
+the old text under a view would show there), and `assert selfSlot() == 102212`, decided while compiling, with a baked
+global.
+
 **Unique elements (mine).** A unique element (T13b) cannot be copied, so the name is a reference where the array holds
 it; it was writable where the array was reached writably. Under "the name is the value" it is now always read-only (a
 borrowed value): a change to the element goes through the index form, `a[i].M()`, as a Vec's walk through `Ref(i)`
 already gave. Also a run of S9f now names a unique element by reference as the array walk does (it was missed).
+A change through such a name is refused by the permission rules (T25c's "a read-only reference cannot become
+writable" for a `mut` method, T25b's "writes through a read-only reference" for a field), whose general help - a copy
+of your own - cannot apply to a type that has none; so both now carry a note at the loop, "'t' is a unique element's
+value, borrowed read-only (S9a) - change the element where it is, 'for i, t in a: a[i].M()'" (check.walkUnique,
+noteWalkUnique). checks/cases s9auniquewalk and s9auniquewalkfield.
 
 What changed for existing code: a temporary trace of every loop 2026-11-21's rule bound by reference, over every
 .olang file of olang (std, tests, tools, bench, checks, compiler and its tools), oann and oagent, found only
@@ -41861,3 +41879,9 @@ references and a struct holding a `mut` reference written through; the self-slot
 index; `assert snapshot() == 1221` decided while compiling and a baked global). checks/cases: lostloopwriteviewmut
 (a field of a ViewMut's copy, the old rule's main use), lostloopwriterepoint now over an `Array<P&>` (a reference
 element repointed).
+
+Handed over unverified (wt-loopvals, another session) and finished in wt-loopval: the SPEC, settled and checker text
+stood as written; tests/loopvals.olang had never been built - its `Vec<Link>[]` literal is refused (T25c, "a copy of a
+read-only Link cannot be returned as a writable value", in ArrayIter's Next: a Vec literal of a type holding a `mut`
+reference cannot be built from an array literal - a limit of its own, not this rule's), so it is `Vec<Link>()` with
+Pushes.
