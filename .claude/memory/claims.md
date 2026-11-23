@@ -45,5 +45,5 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-bf16dot merged - E39 BF16 pair dot (vdpbf16ps); AMX measured 7.5x F32, surface proposed, not built
 - Orchestrator child (cloud, 2026-11-23): olang wt-adddot merged - tile.AddDot (AMX, bit-exact, 425-449 GMAC/s)
 - OLang Cloud (2026-11-23): olang wt-taskhandoff - task results handed to the spawner at the join (the user's option c)
-- Orchestrator child (cloud, 2026-11-23): olang wt-mapiter - Map iteration with values holding writable references (T25c in MapIter.Next), writable and read-only walks
+- Orchestrator child (cloud, 2026-11-23): olang wt-mapiter merged - Map walks over values holding writable references (IterRef, IterMut, the loop picks)
 - Orchestrator child (cloud, 2026-11-23): olang wt-android - Android target (aarch64-linux-android, bionic via NDK r28c), NativeActivity sample and APK: merged
