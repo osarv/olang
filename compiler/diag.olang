@@ -491,6 +491,60 @@ fn (d mut Diagnostics&) Replay(t Taken&) {
 
 fn (t Taken&) Count() I64 { return t.records.Len() }
 
+# d made what o is, every text in it a copy of o's: a pass that reports to diagnostics of its own, made in its own scope
+# from the caller's and handed back by this as it ends, so what the pass builds - its texts and everything holding them -
+# goes with the pass rather than living as long as the caller's diagnostics (the front end's, olang.Passes.Analyze)
+fn (d mut Diagnostics&) SetFrom(o Diagnostics&) {
+    d.Color = o.Color
+    d.paths.Clear()
+    d.texts.Clear()
+    for x in o.paths: d.paths.Push($x)
+    for x in o.texts: d.texts.Push($x)
+    d.library.Clear()
+    d.starts.Clear()
+    d.startsFrom.Clear()
+    d.startsLen.Clear()
+    for b in o.library: d.library.Push(b)
+    for n in o.starts: d.starts.Push(n)
+    for n in o.startsFrom: d.startsFrom.Push(n)
+    for n in o.startsLen: d.startsLen.Push(n)
+    d.records.Clear()
+    d.notes.Clear()
+    for r in o.records: d.records.Push(record(r.at, $r.rule, $r.text, r.kind, r.group, r.oncePerLine))
+    for n in o.notes: d.notes.Push(note(n.rec, n.at, $n.text, n.help, n.plain))
+    d.groupParent.Clear()
+    d.groupState.Clear()
+    d.held.Clear()
+    for n in o.groupParent: d.groupParent.Push(n)
+    for n in o.groupState: d.groupState.Push(n)
+    for n in o.held: d.held.Push(n)
+    d.contexts.Clear()
+    for c in o.contexts: d.contexts.Push(context(c.at, $c.text))
+    d.ctxFrom = o.ctxFrom
+    d.scopeOn = o.scopeOn
+    d.scopeSeen = o.scopeSeen
+    d.yielding.Clear()
+    d.alone.Clear()
+    for n in o.yielding: d.yielding.Push(n)
+    for n in o.alone: d.alone.Push(n)
+    d.fatalAt = o.fatalAt
+    d.fatalRule = $o.fatalRule
+    d.fatalText = $o.fatalText
+    d.fatalNote = $o.fatalNote
+    d.fatalHelp = $o.fatalHelp
+    d.fatal = o.fatal
+    d.Quiet = o.Quiet
+    d.Lenient = o.Lenient
+    d.warns.Clear()
+    for r in o.warns: d.warns.Push(record(r.at, $r.rule, $r.text, r.kind, r.group, r.oncePerLine))
+    d.shownFrom.Clear()
+    d.shownPaths.Clear()
+    d.shownLines.Clear()
+    for n in o.shownFrom: d.shownFrom.Push(n)
+    for x in o.shownPaths: d.shownPaths.Push($x)
+    for n in o.shownLines: d.shownLines.Push(n)
+}
+
 # whether two takings say the same: their records' rules, texts and places, in order
 fn (t Taken&) Same(o Taken&) Bool {
     if t.records.Len() != o.records.Len() or t.notes.Len() != o.notes.Len(): return false

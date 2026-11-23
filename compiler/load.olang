@@ -91,7 +91,7 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
 
 # a program's modules. Std is the standard library's directory; Consts the build constants; Fetch the remote
 # repositories; Names and Diags the compilation's
-type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher&, Names mut source.Names&
+type Loader struct(Std String&, Consts cond.Consts&, Fetch mut fetch.Fetcher&, Names mut source.Names&
                    Diags mut diag.Diagnostics&) {
     Std
     Consts

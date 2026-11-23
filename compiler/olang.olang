@@ -701,7 +701,12 @@ type Passes struct() {
 }
 
 fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&, prog mut build.Program&
-    d mut diag.Diagnostics&) ? build.Failed {
+    given mut diag.Diagnostics&) ? build.Failed {
+    # build memory: the passes report to diagnostics of their own, made here and handed back as this ends - the loader,
+    # the checker, the lowerer and the emitter hold them, and so would live as long as the caller's
+    d mut diag.Diagnostics& = diag.Diagnostics(given.Color)
+    d.SetFrom(given)
+    defer: given.SetFrom(d)
     tests := kind == build.Kind.Tests
     build.Phase("start")
     l mut load.Loader& = try p.load(root, cfg, d)
@@ -754,7 +759,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             d.Error(diag.Where.Nowhere, msgs.ListingNoFunction(cfg.ListName, root))
             error build.Failed.Reported
         }
-        for k in codes: prog.Named.Push(build.Code(k.Label, k.File, k.Line, k.Symbol))
+        for k in codes: prog.Named.Push(build.Code($k.Label, $k.File, k.Line, $k.Symbol))
     }
     lw mut lower.Lowerer& = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
@@ -810,9 +815,9 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         # B19: the one test the word names, or a mistake in the command line
         if e.FuzzPicked == 0: d.Error(diag.Where.Nowhere, msgs.FuzzNoTest(e.Fuzz))
         if e.FuzzPicked > 1: d.Error(diag.Where.Nowhere, msgs.FuzzManyTests(e.Fuzz, e.FuzzErr))
-        prog.FuzzCorpus = e.FuzzCorpus
+        prog.FuzzCorpus = $e.FuzzCorpus
     }
-    for w in e.TestWords: prog.TestWords.Push(w)
+    for w in e.TestWords: prog.TestWords.Push($w)
     if tests and cfg.TestPart != 0 {
         # B3a, P7: which tests start a task, and how many this build runs
         for k, id in testBodies(c) {
@@ -850,7 +855,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
                 }
                 if pir.Contains("@__olang_dyncall"): dyncall = true
                 if cfg.Library: pir = libraryIr(pir)
-                u mut build.Unit& = build.Unit(id, build.UnitKind.Locations if r.Locs[k] else build.UnitKind.Module, pir)
+                u mut build.Unit& = build.Unit($id, build.UnitKind.Locations if r.Locs[k] else build.UnitKind.Module, pir)
                 u.Hash = $r.Hashes[k]
                 prog.Units.Push(u)
             }
@@ -872,7 +877,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             keptUnit.Push(prog.Units.Len())
         }
         hashes.Push("")
-        prog.Units.Push(build.Unit(o.Identity, holds, ir))
+        prog.Units.Push(build.Unit($o.Identity, holds, ir))
     }
     # the modules' IR hashed at once, side by side (build.IrHashes), each hash kept in its record too
     sums := build.IrHashes(prog.Units, keptUnit)
@@ -905,10 +910,10 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         if sole != "" { prog.Units.Push(build.Unit($l.Mods[l.Root].Identity + "~~sole", build.UnitKind.Instances, libraryIr(sole) if cfg.Library else sole)) }
     }
     if kind != build.Kind.Module and (try os.Env("OLANG_FACTSTATS") catch default "") != "" { factStats(l, c, e, keys, prog, kept, fr.Sc.JudgedFiles()) }
-    prog.Links = l.Links()
+    for x in l.Links(): prog.Links.Push($x)
     if d.Errors() > 0: error build.Failed.Reported
     if cfg.Library {
-        for x in e.ExportNames(): prog.Exports.Push(x)
+        for x in e.ExportNames(): prog.Exports.Push($x)
         prog.Header = e.Header(build.LibName(root), root)
     }
     prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench) catch rt.Bad {
