@@ -670,6 +670,17 @@ eed7e894562df048 addfb34a96ee702b checks/cases/extendsstruct.olang
 e43c06ddd2a7bb60 667ce6c7d08f05d7 checks/cases/externruntime.olang
 a6e276f41c1524b3 d8d9076941c878be checks/cases/externruntime2.olang
 97c395bee6629b9e bd350ea4920775fc checks/cases/fieldcomma.olang
+a8379cbc9ef38c94 5f6b62fcd7f7c9ad checks/cases/fieldscopeattach.olang
+a28aa635925cccf7 dfcd22e8eacde916 checks/cases/fieldscopectx.olang
+0592bb290a0e7a1a 4f5ba917e6e4c930 checks/cases/fieldscopedtor.olang
+3ec47b3bf3809f41 f1081231d9f0834f checks/cases/fieldscopeelem.olang
+ec8460b0c900f370 c769e6fdfe916646 checks/cases/fieldscopeflat.olang
+cf3d6a267c8312c8 0c911c91a723d2b2 checks/cases/fieldscopegeneric.olang
+6eb386715b0f99eb 823900f544305ab0 checks/cases/fieldscopelookup.olang
+7c83fc47da681d6a 05c37056240d1a8b checks/cases/fieldscoperepoint.olang
+02bbfccaea58abea e20d3ab2b8a979d5 checks/cases/fieldscoperepointshort.olang
+8baeda651c0ad235 d1ca59941e67ac39 checks/cases/fieldscopereturn.olang
+1c0d981d3f6631ae b45b51ea5adcd0b5 checks/cases/fieldscopestash.olang
 832a32a7cded35c6 35bfc1b0e9cfde70 checks/cases/forinclausebreak.olang
 0218845a9a54aa3c 43a29c0c068074bb checks/cases/forinexists.olang
 1b04fcc198de76d5 7e1e20fffbd626b4 checks/cases/forinint.olang
@@ -2510,7 +2521,7 @@ d567d78faab8844a 7d14ca379389e62a compiler/interp.olang
 8299f0d6f657ceae ba0b78c0c7122d77 compiler/lineedit.olang
 211de0b5ecb13aac 4324dd1a83c4b615 compiler/listing.olang
 4d9b20ee19fcdada 9ea8ba280c896ad2 compiler/load.olang
-5476dc93f4bb079e 3c9a2e45aa618729 compiler/lower.olang
+3cde6365c0d2f1c7 ba0409d48193742c compiler/lower.olang
 0a6ba37a53fb9662 26f5ffd009f3d4b4 compiler/lsp.olang
 7dc09dd9a3624990 5eddb899d10cc9ce compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
@@ -2527,7 +2538,7 @@ e2b2b02653bc4b63 5a8b70218b099dfd compiler/prompt.olang
 e7ba5bcc74b12eea e57cc8ec0248335a compiler/records.olang
 0c3f8c24752ad48a 5b5a3902974907e2 compiler/runtime.olang
 74927aaea47abc0f 8100b336b3b50d5c compiler/scan.olang
-219d8c751814e3e7 4b33c558744c9464 compiler/scope.olang
+f07566633a1ffd95 054e620fda0c6843 compiler/scope.olang
 ad0b24259637a1f2 35b31b7c785e8b14 compiler/session.olang
 8981299fcf27ba06 13b1ab50b72ab2a0 compiler/source.olang
 9bee4e94ca053127 882c3c1eac35e714 compiler/spin.olang
