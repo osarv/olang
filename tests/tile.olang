@@ -1,0 +1,135 @@
+# std/tile's AddDot (SPEC E39a): C += A . B over BF16 is tdpbf16ps's arithmetic on every target - by AMX here where the
+# processor has it, by std/tile's own steps under another target (-target x86-64-v4) and while compiling - checked bit
+# for bit against the rule written out by hand, over operands from the whole range: subnormals, zeros of both signs,
+# exponents far apart. What the evaluator bakes equals what the run time computes
+import "std/tile"
+
+# the zero of its sign for a subnormal, else itself
+fn ftz(v F32) F32 { return F32.FromBits(v.Bits() & 0x80000000) if (v.Bits() & 0x7F800000) == 0 else v }
+
+# the rule by hand, one output at a time: per 32-deep step, e and o from +0 through the even and odd lanes, then C
+fn model(c Array<F32>&, cld I64, rows I64, cols I64, a Array<BF16>&, ald I64, depth I64, b Array<BF16>&) Array<F32> {
+    r := Array<F32>[v for v in c]
+    for m in range rows {
+        for n in range cols: r[m * cld + n] = element(r[m * cld + n], a[m * ald:m * ald + depth], b, cols, n)
+    }
+    return r
+}
+
+fn element(start F32, row Array<BF16>&, b Array<BF16>&, cols I64, n I64) F32 {
+    x := start
+    for s in range row.Len() / 32 {
+        e F32 = 0.0
+        o F32 = 0.0
+        for k in range 16 {
+            p := 16 * s + k
+            e = ftz(ftz(F32(row[32 * s + 2 * k])).Fma(ftz(F32(b[(p * cols + n) * 2])), e))
+            o = ftz(ftz(F32(row[32 * s + 2 * k + 1])).Fma(ftz(F32(b[(p * cols + n) * 2 + 1])), o))
+        }
+        x = ftz(ftz(x) + ftz(e + o))
+    }
+    return x
+}
+
+# BF16 bits from a seed: exponents within 2^-30..2^30 of 1 (products and sums stay finite), one in eight subnormal or zero
+fn bf16s(n I64, seed I64) Array<BF16> {
+    return Array<BF16>[bf16At(i, seed) for i in range n]
+}
+
+fn bf16At(i I64, seed I64) BF16 {
+    h := U64(i * 2654435761 + seed * 40503 + 977) * 0x9E3779B97F4A7C15
+    h = h ^ (h >> 29)
+    e := U16(97 + (h >> 8) % 61) if h % 8 != 0 else 0
+    return BF16.FromBits(U16((h >> 20) & 1) << 15 | e << 7 | U16((h >> 32) & 0x7F))
+}
+
+fn f32s(n I64, seed I64) Array<F32> {
+    return Array<F32>[F32(bf16At(i, seed)) * (F32(1 + i % 5)) for i in range n]
+}
+
+# AddDot against the rule, bit for bit, on one shape; strides longer than the rows where wide
+fn agrees(rows I64, cols I64, depth I64, wide Bool, seed I64) Bool {
+    cld := cols + (16 if wide else 0)
+    ald := depth + (32 if wide else 0)
+    c := f32s(rows * cld, seed)
+    a := bf16s(rows * ald, seed + 1)
+    b := bf16s(depth * cols, seed + 2)
+    want := model(c, cld, rows, cols, a, ald, depth, b)
+    tile.AddDot(c, cld, rows, cols, a, ald, depth, b)!
+    return [c[i].Bits() == want[i].Bits() for i in range c.Len()].Every()
+}
+
+fn shapes() Bool {
+    return agrees(16, 16, 32, false, 1) and agrees(32, 32, 64, false, 2) and agrees(48, 80, 96, true, 3) and
+        agrees(64, 48, 704, true, 4)
+}
+
+# probes of the rule, each one reading of the instruction that another would not give
+fn probes() Bool {
+    a := Array<BF16>(16 * 32, BF16(0.0))
+    b := Array<BF16>(32 * 16, BF16(0.0))
+    c := Array<F32>(16 * 16, 0.0)
+    # the even lane's chain: 2^24 + 2 ; the same terms split between the lanes: 2^24 + (2 + 1), rounded to 2^24 + 4
+    a[0] = BF16(16777216.0)
+    a[2] = BF16(2.0)
+    b[0] = BF16(1.0)
+    b[32] = BF16(1.0)
+    tile.AddDot(c, 16, 16, 16, a, 32, 32, b)!
+    lanes := c[0] == 16777218.0
+    a[3] = BF16(1.0)
+    b[33] = BF16(1.0)
+    c[0] = 0.0
+    tile.AddDot(c, 16, 16, 16, a, 32, 32, b)!
+    split := c[0] == 16777220.0
+    # C is added last: -2^30 + (2^30 + 1) is 0 in F32 once the chains are summed, rounding 2^30 + 1 to 2^30
+    a2 := Array<BF16>(16 * 32, BF16(0.0))
+    a2[0] = BF16(1073741824.0)
+    a2[1] = BF16(1.0)
+    b2 := Array<BF16>(32 * 16, BF16(0.0))
+    b2[0] = BF16(1.0)
+    b2[1] = BF16(1.0)
+    c2 := Array<F32>(16 * 16, 0.0)
+    c2[0] = -1073741824.0
+    c2[1] = -0.0
+    tile.AddDot(c2, 16, 16, 16, a2, 32, 32, b2)!
+    # a -0 C with zero products is +0
+    return lanes and split and c2[0] == 0.0 and c2[1].Bits() == 0
+}
+
+fn refused(rows I64, cols I64, depth I64, cld I64, ald I64, short I64) Bool {
+    c := Array<F32>(64 * 64)
+    a := Array<BF16>(64 * 64 - short)
+    b := Array<BF16>(64 * 64)
+    try tile.AddDot(c, cld, rows, cols, a, ald, depth, b) catch tile.Error.Shape { return true }
+    return false
+}
+
+fn shapesRefused() Bool {
+    return refused(15, 16, 32, 16, 32, 0) and refused(16, 24, 32, 32, 32, 0) and refused(16, 16, 48, 16, 64, 0) and
+        refused(16, 32, 32, 16, 32, 0) and refused(16, 16, 64, 16, 32, 0) and refused(64, 16, 64, 16, 64, 1) and
+        refused(-16, 16, 32, 16, 32, 0) and not refused(64, 16, 64, 16, 64, 0) and not refused(0, 16, 32, 16, 32, 0)
+}
+
+# a product the evaluator baked, as bits, against the same product at run time
+fn product(seed I64) Array<U32> {
+    c := f32s(32 * 32, seed)
+    tile.AddDot(c, 32, 32, 32, bf16s(32 * 64, seed + 1), 64, 64, bf16s(64 * 32, seed + 2))!
+    return Array<U32>[v.Bits() for v in c]
+}
+
+Seed mut I64 = 7 # read at run time
+Baked := product(7)
+BakedAgrees := agrees(16, 32, 64, true, 5) and probes()
+
+test "tile.AddDot is tdpbf16ps's arithmetic, bit for bit, here and while compiling" {
+    assert shapes() and probes() and BakedAgrees
+    assert product(Seed) == Baked
+    assert agrees(16, 16, 32, true, 6) # S18c: decided while compiling
+}
+
+test "tile.AddDot refuses a shape it does not take, and adds nothing for an empty one" {
+    assert shapesRefused()
+    c := Array<F32>(16 * 16, -0.0)
+    tile.AddDot(c, 16, 16, 16, Array<BF16>(0), 0, 0, Array<BF16>(0))!
+    assert c[0].Bits() == 0x80000000
+}

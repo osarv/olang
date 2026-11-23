@@ -5242,6 +5242,31 @@ c := a.LanesLess(b).Select(a, b)        # the lesser of each pair
 ok := (x - y).LanesLess(eps).Every()
 ```
 
+**E39a (the tile product).** The standard library's `std/tile` gives `tile.AddDot(c, cld, rows, cols, a, ald, depth,
+b)`: `C[rows x cols] += A[rows x depth] . B`, with `c` a `mut Array<F32>&` (row `m` of `C` from `c[m * cld]`), `a` an
+`Array<BF16>&` (row `m` of `A` from `a[m * ald]`) and `b` an `Array<BF16>&` holding `B` in the pair dot's layout (E39):
+for each pair of rows `p` and column `n`, `b[(p * cols + n) * 2 + t]` is `B[2p + t][n]`. `rows` and `cols` are
+multiples of 16 and `depth` of 32, each stride at least its row, and each array long enough for what the shape reaches;
+any other shape fails with `tile.Error.Shape`, checked once a call and never per element. A shape with no rows, no
+columns or no depth adds nothing. The meaning is AMX's tdpbf16ps's arithmetic, **on every target** (B12c): for each
+32-deep step `s` in order, each element of `C` gets
+
+```
+e = +0; o = +0
+for k in 0..15:
+    e = ftz(fma(A[m][32s + 2k], B[32s + 2k][n], e))
+    o = ftz(fma(A[m][32s + 2k + 1], B[32s + 2k + 1][n], o))
+C[m][n] = ftz(ftz(C[m][n]) + ftz(e + o))
+```
+
+That is, the even and the odd lanes of the step in two chains, each `fma` the exact product and sum rounded once to `F32`, to
+nearest even, a subnormal `BF16` operand read as the zero of its sign and `ftz` giving a subnormal `F32` the zero of
+its sign; `C` is added last. It is not E39's pair dot chained over the depth (that adds each pair into `C` itself).
+The runtime computes it with tdpbf16ps where the target has amx-bf16 and the system lets the process use the tile
+registers (X6, `__olang_tile_bf16`), and `std/tile` computes the same steps elsewhere and while compiling (K1). Where an
+operand is a NaN or an infinity the result is the NaN or infinity IEEE 754 gives, a NaN's sign and payload not part of
+the rule.
+
 ### 5.23 `!`
 
 **E35 (`!`).** A postfix `!` - `f(x)!`, `a.F().G()!`, `(f(x) + g(y))!`, `x[i]!` on a type whose `At` can fail - handles
@@ -9679,6 +9704,7 @@ must state exactly the prototype below (X1a).
 | `__olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64` | `path` made absolute with every symbolic link, `.` and `..` resolved, as `__olang_arg` gives an entry — `-1` when that fails |
 | `__olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32` | starts the program the first of the `count` zero-terminated entries of `args` names - looked up through `PATH` unless it holds a `/` - with all of them as its command line and no shell between, and the descriptors `stdin`, `stdout` and `stderr` (each `-1` for this process's own) as its standard input, output and error, in the zero-terminated directory `dir` (empty: this process's own; a relative program path is found from it); returns its process id, or `-1` when it cannot be started (`__olang_err` says why). The caller waits for it (`waitpid`, an ordinary C function). Where the C library cannot change a spawned program's directory itself, the program is run through `/bin/sh` with the directory and the arguments as the shell's arguments, never its script |
 | `__olang_mkdtemp(template Array<U8>) I32` | makes a new directory, readable, writable and enterable by this user alone, named by the zero-terminated `template` with its last six characters - six `X`s - replaced by ones that make the name unused, written over the template's; returns `0`, or `-1` when it fails (`__olang_err` says why) |
+| `__olang_tile_bf16(c Array<F32>, cld I64, rows I64, cols I64, a Array<BF16>, ald I64, depth I64, b Array<BF16>) I32` | E39a's tile product, `std/tile`'s `AddDot`, on a shape its caller has checked: computed with tdpbf16ps, returning `0`, where the target has amx-bf16 and the system lets this process use the tile registers (asked once a process; the tile configuration loaded for the call and released after it, so no thread keeps tile state); otherwise nothing is computed and `1` returned, and the caller computes it. Evaluated while compiling (K1) and under the evaluator (B3e) as returning `1` |
 | `__olang_run_on_stack(bytes I64, f fn&())` | calls `f` on a thread of its own with a stack of `bytes` bytes - raised to the least the system allows a thread, and stopping the program as a failed check does when the system will not make it - and returns once `f` has, nothing running beside it. While a test is running, a check failing, `unreachable` or a failing `!` inside `f` ends the test as it would have had `f` been called directly (S16, S18), the scopes open on both threads unwound first (P1d). Evaluated while compiling (K1) and under the evaluator (B3e) as the call `f()`, the evaluator's own limits on depth standing for the stack |
 | `__olang_on_crash(message Array<U8>, len I64)` | keeps a copy of `len` bytes of `message` and makes it what the program writes to its standard error, with nothing added, when it receives a fatal signal - a segmentation fault, a bus error, an arithmetic or illegal-instruction fault, an abort - before it ends as that signal ends it, and when a failed check or a `!` ends the program (S18, E35). The writing runs on a stack of its own, on the thread calling this and on every thread the runtime starts after it, so a stack overflow is reported too. Called again, the newer message replaces it. Under the evaluator (B3e) the message is written first when the interpreter's process crashes |
 | `__olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32` | whether the function the zero-terminated `name` names - in what the process has loaded, or in the C math library - can be called as `kinds` and `ret` describe: `0` it can, `1` there is no such function, `2` a kind is one that cannot be passed. `kinds` holds a byte per argument and a `0` after the last: a number type's code - `I8` 1, `I16` 2, `I32` 3, `I64` 4, `U8` 5, `U16` 6, `U32` 7, `U64` 8, `F16` 9, `BF16` 10, `F32` 11, `F64` 12 - with `0x80` added for an array of that type; `ret` is the result's code, `0` for none. A 16-bit float is passed only in an array, and an array is never a result |

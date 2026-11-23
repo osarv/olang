@@ -33,6 +33,9 @@ type Target struct() {
     # E39, B12c: the processor has vdpbf16ps (avx512bf16, turned off in Attrs as IEEE-unsafe) - the BF16 pair dot's
     # instruction, written by the compiler where it means it
     PairDot Bool = false
+    # tile.AddDot: the processor has AMX's BF16 tile product (amx-bf16, amx-tile) - the runtime's __olang_tile_bf16 runs
+    # it there (runtime.Ir) and computes nothing elsewhere, where std/tile computes the same itself
+    TileDot Bool = false
 }
 
 # a target that could not be resolved - its diagnostic said
@@ -262,6 +265,7 @@ fn (t mut Target&) FromProbe(out String&) ? Probe {
     raw := try attrValue(al, "target-features") catch default ""
     features := StripUnsafe(raw)
     t.PairDot = HasFeature(raw, "avx512bf16")
+    t.TileDot = HasFeature(raw, "amx-bf16") and HasFeature(raw, "amx-tile")
     # B10a: the width of the vectors the generated code uses for its loops, and whether it has fused multiply-add
     if t.Arch == "aarch64" {
         t.VectorBits = 128 if HasFeature(features, "neon") else 0

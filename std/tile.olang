@@ -1,0 +1,52 @@
+# tile - matrix products by tiles. AddDot adds A . B into C, BF16 operands summed in F32, computed on every target
+# exactly as AMX's tdpbf16ps computes it (SPEC E39a): by that instruction where the target has it, by the same
+# arithmetic written out elsewhere and while compiling. Imported with `import "std/tile"`.
+
+# a shape AddDot does not take: rows or columns not a multiple of 16, a depth not a multiple of 32, a row stride shorter
+# than its row, an array too short for what the shape reaches
+type Error error {
+    Shape
+}
+
+extern {
+    fn __olang_tile_bf16(c Array<F32>, cld I64, rows I64, cols I64, a Array<BF16>, ald I64, depth I64, b Array<BF16>) I32
+}
+
+# C[rows x cols] += A[rows x depth] . B: C's row m starts at c[m * cld], A's at a[m * ald]; B is held in pairs - for
+# each pair of rows p (rows 2p and 2p + 1 of B) and column n, b[(p * cols + n) * 2] is B[2p][n] and the element after it
+# B[2p + 1][n] - the layout of E39's pair dot. rows and cols are multiples of 16, depth of 32 (Error.Shape otherwise,
+# checked once a call). Each 32-deep step adds, to each element, two chains of fused multiply-adds (the even and the
+# odd lanes of the step, each from +0, in order) summed, a subnormal operand, chain, sum or result the zero of its sign
+fn AddDot(c mut Array<F32>&, cld I64, rows I64, cols I64, a Array<BF16>&, ald I64, depth I64, b Array<BF16>&) ? Error.Shape {
+    if rows < 0 or cols < 0 or depth < 0 or rows % 16 != 0 or cols % 16 != 0 or depth % 32 != 0: error Error.Shape
+    if rows == 0 or cols == 0 or depth == 0: return
+    if cld < cols or ald < depth: error Error.Shape
+    if c.Len() < (rows - 1) * cld + cols or a.Len() < (rows - 1) * ald + depth or b.Len() < depth * cols: error Error.Shape
+    if __olang_tile_bf16(c, cld, rows, cols, a, ald, depth, b) == 0: return
+    even := Array<F32>(cols)
+    odd := Array<F32>(cols)
+    for m in range rows {
+        for s in range depth / 32: step(c, m * cld, cols, a, m * ald + 32 * s, b, 16 * s * cols * 2, even, odd)
+    }
+}
+
+# the zero of its sign for a subnormal, else itself
+fn flush(v F32) F32 { return F32.FromBits(v.Bits() & 0x80000000) if (v.Bits() & 0x7F800000) == 0 else v }
+
+# one 32-deep step into one row of C (from c[at]), its A from a[from], its pairs from b[pairs]
+fn step(c mut Array<F32>&, at I64, cols I64, a Array<BF16>&, from I64, b Array<BF16>&, pairs I64, even mut Array<F32>&, odd mut Array<F32>&) {
+    for n in range cols {
+        even[n] = 0.0
+        odd[n] = 0.0
+    }
+    for k in range 16 {
+        x0 := flush(F32(a[from + 2 * k]))
+        x1 := flush(F32(a[from + 2 * k + 1]))
+        row := pairs + k * cols * 2
+        for n in range cols {
+            even[n] = flush(x0.Fma(flush(F32(b[row + 2 * n])), even[n]))
+            odd[n] = flush(x1.Fma(flush(F32(b[row + 2 * n + 1])), odd[n]))
+        }
+    }
+    for n in range cols: c[at + n] = flush(flush(c[at + n]) + flush(even[n] + odd[n]))
+}

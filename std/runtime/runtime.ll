@@ -6064,3 +6064,138 @@ entry:
 }
 declare { i128, i1 } @llvm.umul.with.overflow.i128(i128, i128)
 ; @end
+
+; X6, tile.AddDot (std/tile.olang, SPEC E39a): C[rows x cols] (row stride cld) += A[rows x depth] (row stride
+; ald) . B, B in BF16 pairs (b[(p*cols + n)*2 + j] = B[2p + j][n]), rows and cols multiples of 16 and depth of 32 - checked by
+; the caller. Where the target has AMX's BF16 tile product it is computed here by tdpbf16ps and 0 returned; elsewhere, or
+; where the kernel does not let this process use the tile registers, nothing is computed and 1 returned, and the caller
+; computes the same bits itself (the instruction's arithmetic is the operation's meaning on every target, B12c).
+; @if x86_64
+@__olang_tile_on = internal constant i1 false ; true where the target has AMX's BF16 tile product (compiler/runtime.olang Ir)
+@__olang_tile_perm = internal global i32 0
+
+; the 2x2 kernel: C[32 x 32] at c (row stride cs bytes) += A[32 x 32n] at a (row stride as) . B at b (pair rows of
+; stride bs, a 32-deep step bstep bytes on), the four C tiles held in tmm0-tmm3 across all n steps
+define internal void @__olang_tile_k22(ptr %c, i64 %cs, ptr %a, i64 %as, ptr %b, i64 %bs, i64 %n, i64 %bstep) {
+entry:
+  %c16 = shl i64 %cs, 4
+  %c2 = getelementptr i8, ptr %c, i64 %c16
+  %a16 = shl i64 %as, 4
+  %a2 = getelementptr i8, ptr %a, i64 %a16
+  call { ptr, ptr, ptr, i64 } asm sideeffect "tileloadd ($4,$5,1), %tmm0\0Atileloadd 64($4,$5,1), %tmm1\0Atileloadd ($6,$5,1), %tmm2\0Atileloadd 64($6,$5,1), %tmm3\0A1:\0Atileloadd ($0,$7,1), %tmm4\0Atileloadd ($1,$7,1), %tmm5\0Atileloadd ($2,$8,1), %tmm6\0Atileloadd 64($2,$8,1), %tmm7\0Atdpbf16ps %tmm6, %tmm4, %tmm0\0Atdpbf16ps %tmm7, %tmm4, %tmm1\0Atdpbf16ps %tmm6, %tmm5, %tmm2\0Atdpbf16ps %tmm7, %tmm5, %tmm3\0Aaddq $$64, $0\0Aaddq $$64, $1\0Aaddq $9, $2\0Adecq $3\0Ajnz 1b\0Atilestored %tmm0, ($4,$5,1)\0Atilestored %tmm1, 64($4,$5,1)\0Atilestored %tmm2, ($6,$5,1)\0Atilestored %tmm3, 64($6,$5,1)", "=r,=r,=r,=r,r,r,r,r,r,r,0,1,2,3,~{memory},~{dirflag},~{fpsr},~{flags}"(ptr %c, i64 %cs, ptr %c2, i64 %as, i64 %bs, i64 %bstep, ptr %a, ptr %a2, ptr %b, i64 %n)
+  ret void
+}
+
+; the 1x1 kernel: one 16 x 16 C tile in tmm0
+define internal void @__olang_tile_k11(ptr %c, i64 %cs, ptr %a, i64 %as, ptr %b, i64 %bs, i64 %n, i64 %bstep) {
+entry:
+  call { ptr, ptr, i64 } asm sideeffect "tileloadd ($3,$4,1), %tmm0\0A1:\0Atileloadd ($0,$5,1), %tmm4\0Atileloadd ($1,$6,1), %tmm6\0Atdpbf16ps %tmm6, %tmm4, %tmm0\0Aaddq $$64, $0\0Aaddq $7, $1\0Adecq $2\0Ajnz 1b\0Atilestored %tmm0, ($3,$4,1)", "=r,=r,=r,r,r,r,r,r,0,1,2,~{memory},~{dirflag},~{fpsr},~{flags}"(ptr %c, i64 %cs, i64 %as, i64 %bs, i64 %bstep, ptr %a, ptr %b, i64 %n)
+  ret void
+}
+
+; ARCH_REQ_XCOMP_PERM (0x1023) for XFEATURE_XTILEDATA (18) is asked once per process; the tile configuration (every
+; tile 16 rows of 64 bytes) is loaded on each call and released after it, so nothing about the tiles outlives a call on
+; any thread. Blocks of 32 x 32 hold four C tiles across the whole depth; a last block of 16 rows or columns goes tile
+; by tile
+define i32 @__olang_tile_bf16(ptr %c, i64 %cld, i64 %rows, i64 %cols, ptr %a, i64 %ald, i64 %depth, ptr %b) {
+entry:
+  %cfg = alloca [64 x i8], align 64
+  %on = load i1, ptr @__olang_tile_on
+  br i1 %on, label %some, label %refused
+some:
+  %nothing = icmp eq i64 %depth, 0
+  br i1 %nothing, label %empty, label %start
+empty:                                     ; nothing to add: and no step, whose count the kernels' loops take as at least 1
+  ret i32 0
+start:
+  %perm = load atomic i32, ptr @__olang_tile_perm monotonic, align 4
+  %asked = icmp ne i32 %perm, 0
+  br i1 %asked, label %known, label %ask
+ask:
+  %r = call i64 (i64, ...) @syscall(i64 158, i64 4131, i64 18) ; SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA
+  %ok0 = icmp eq i64 %r, 0
+  %p0 = select i1 %ok0, i32 1, i32 2
+  store atomic i32 %p0, ptr @__olang_tile_perm monotonic, align 4
+  br label %known
+known:
+  %p = phi i32 [ %perm, %start ], [ %p0, %ask ]
+  %granted = icmp eq i32 %p, 1
+  br i1 %granted, label %setup, label %refused
+refused:
+  ret i32 1
+setup:
+  call void @llvm.memset.p0.i64(ptr %cfg, i8 0, i64 64, i1 false)
+  store i8 1, ptr %cfg
+  %colsb = getelementptr i8, ptr %cfg, i64 16
+  store <8 x i16> <i16 64, i16 64, i16 64, i16 64, i16 64, i16 64, i16 64, i16 64>, ptr %colsb, align 16
+  %rowsp = getelementptr i8, ptr %cfg, i64 48
+  store <8 x i8> <i8 16, i8 16, i8 16, i8 16, i8 16, i8 16, i8 16, i8 16>, ptr %rowsp, align 16
+  call void asm sideeffect "ldtilecfg ($0)", "r,~{memory},~{dirflag},~{fpsr},~{flags}"(ptr %cfg)
+  %cs = shl i64 %cld, 2
+  %as = shl i64 %ald, 1
+  %bs = shl i64 %cols, 2
+  %bstep = shl i64 %cols, 6
+  %n = lshr i64 %depth, 5
+  %rows32 = and i64 %rows, -32
+  %cols32 = and i64 %cols, -32
+  br label %rowloop
+rowloop:                                   ; i over row blocks of 32, then one of 16
+  %i = phi i64 [ 0, %setup ], [ %inext, %rowdone ]
+  %more = icmp slt i64 %i, %rows
+  br i1 %more, label %rowbody, label %done
+rowbody:
+  %full = icmp slt i64 %i, %rows32
+  %mr = select i1 %full, i64 32, i64 16
+  %crow = mul i64 %i, %cs
+  %cr = getelementptr i8, ptr %c, i64 %crow
+  %arow = mul i64 %i, %as
+  %ar = getelementptr i8, ptr %a, i64 %arow
+  br label %colloop
+colloop:
+  %j = phi i64 [ 0, %rowbody ], [ %jnext, %coldone ]
+  %cmore = icmp slt i64 %j, %cols
+  br i1 %cmore, label %colbody, label %rowdone
+colbody:
+  %jb = shl i64 %j, 2
+  %cb = getelementptr i8, ptr %cr, i64 %jb
+  %bb = getelementptr i8, ptr %b, i64 %jb
+  %cfull = icmp slt i64 %j, %cols32
+  %both = and i1 %full, %cfull
+  br i1 %both, label %k22, label %edge
+k22:
+  call void @__olang_tile_k22(ptr %cb, i64 %cs, ptr %ar, i64 %as, ptr %bb, i64 %bs, i64 %n, i64 %bstep)
+  br label %coldone
+edge:                                      ; a block of 16 rows or 16 columns: its 16 x 16 tiles one by one
+  call void @__olang_tile_k11(ptr %cb, i64 %cs, ptr %ar, i64 %as, ptr %bb, i64 %bs, i64 %n, i64 %bstep)
+  br i1 %full, label %edgerow, label %edgecol
+edgerow:                                   ; 32 rows, 16 columns: the lower tile
+  %c16 = shl i64 %cs, 4
+  %cb2 = getelementptr i8, ptr %cb, i64 %c16
+  %a16 = shl i64 %as, 4
+  %ar2 = getelementptr i8, ptr %ar, i64 %a16
+  call void @__olang_tile_k11(ptr %cb2, i64 %cs, ptr %ar2, i64 %as, ptr %bb, i64 %bs, i64 %n, i64 %bstep)
+  br label %coldone
+edgecol:                                   ; 16 rows: the right tile too, where 32 columns remain
+  br i1 %cfull, label %edgeright, label %coldone
+edgeright:
+  %cbr = getelementptr i8, ptr %cb, i64 64
+  %bbr = getelementptr i8, ptr %bb, i64 64
+  call void @__olang_tile_k11(ptr %cbr, i64 %cs, ptr %ar, i64 %as, ptr %bbr, i64 %bs, i64 %n, i64 %bstep)
+  br label %coldone
+coldone:
+  %cstep = select i1 %cfull, i64 32, i64 16
+  %jnext = add i64 %j, %cstep
+  br label %colloop
+rowdone:
+  %inext = add i64 %i, %mr
+  br label %rowloop
+done:
+  call void asm sideeffect "tilerelease", "~{memory},~{dirflag},~{fpsr},~{flags}"()
+  ret i32 0
+}
+; @else
+define i32 @__olang_tile_bf16(ptr %c, i64 %cld, i64 %rows, i64 %cols, ptr %a, i64 %ald, i64 %depth, ptr %b) {
+entry:
+  ret i32 1
+}
+; @end

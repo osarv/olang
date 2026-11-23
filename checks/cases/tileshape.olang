@@ -1,0 +1,15 @@
+# check: fail error[K2]: this global's initializer aborts the program, evaluated while compiling
+# also: an error reaches '!', which ends the program
+# std/tile (E39a): AddDot takes columns in multiples of 16 - 24 is refused with tile.Error.Shape, here found while
+# computing the global, so the program is refused rather than stopping at startup
+import "std/tile"
+
+fn product(cols I64) Array<F32> {
+    c := Array<F32>(16 * cols)
+    tile.AddDot(c, cols, 16, cols, Array<BF16>(16 * 32), 32, 32, Array<BF16>(32 * cols))!
+    return c
+}
+
+G := product(24)
+
+fn main() ? { Println(G[0]) }

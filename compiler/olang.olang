@@ -916,7 +916,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         for x in e.ExportNames(): prog.Exports.Push($x)
         prog.Header = e.Header(build.LibName(root), root)
     }
-    prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench) catch rt.Bad {
+    prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench, tile = t.TileDot) catch rt.Bad {
         error build.Failed.Reported
     }
     if cfg.Library: prog.Runtime = libraryIr(prog.Runtime)

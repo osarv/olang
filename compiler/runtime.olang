@@ -197,8 +197,13 @@ fn WithAttributes(ir String&, attrs String&, race Bool) String {
 
 # the runtime's IR for a build for triple and arch, with attrs on its functions: what build compiles into the
 # runtime's object
-fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false, bench Bool = false) String ? Bad {
+fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false, bench Bool = false, tile Bool = false) String ? Bad {
     body := try Text(arch, san, false, prof, bench)
+    # tile.AddDot: the runtime's AMX product runs where the target has it (target.Target's TileDot), declined elsewhere -
+    # a constant here rather than a condition of Fill's, which the seed's own filling would not know
+    off := "@__olang_tile_on = internal constant i1 false"
+    at := try body.Find(off) catch default -1
+    if tile and at >= 0: body = $body[:at] + "@__olang_tile_on = internal constant i1 true" + $body[at + off.Len():]
     return WithAttributes($"target triple = \"" + $triple + "\"\n\n" + $body, attrs, race)
 }
 
