@@ -1,0 +1,17 @@
+# check: fail error[T22b]: 'link' keeps 'other' in 'bs'
+# O25g, O26a: a node stored through an element read out of a vector and kept by a local is kept in the vector
+type N struct() {
+    next mut N?& = null
+    v I64 = 0
+}
+fn link(bs mut Vec<mut N&>&, other mut N&) {
+    b := bs[0]
+    b.next = other
+}
+fn main() {
+    fs := Vec<fn&(bs mut Vec<mut N&>&, other mut N&)>()
+    fs.Push(link)
+    bs := Vec<mut N&>()
+    bs.Push(N())
+    fs[0](bs, N())
+}

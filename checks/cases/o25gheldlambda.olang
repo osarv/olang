@@ -1,0 +1,20 @@
+# check: fail error[T22b]: this lambda keeps 'bs' in what it captured
+# O25g, O26a: an element read out of a vector by a lambda's local, kept in what the lambda captured
+type N struct() {
+    v I64 = 0
+}
+type Hook struct() {
+    on fn?&(bs mut Vec<mut N&>&) = null
+}
+fn main() {
+    h := Hook()
+    keep := Vec<mut N&>()
+    keepRef mut Vec<mut N&>& = keep
+    h.on = fn(bs mut Vec<mut N&>&) {
+        b := bs[0]
+        keepRef.Push(b)
+    }
+    bs := Vec<mut N&>()
+    bs.Push(N())
+    h.on!(bs)
+}

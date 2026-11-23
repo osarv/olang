@@ -1,0 +1,141 @@
+# A writable reference read out of what a call is given and kept by a local - "b := bs[i]" for a Vec<mut N&> - lives
+# where that argument does (O25g, O26a): the local names the element where the vector lives, not where the read's
+# result goes, so a function returning what it builds from the element asks only that the vector outlive the result.
+# Each test reads its values back after an arena churn (what a closed scope left would be written over), and the
+# evaluator decides the same values while compiling (top-level asserts).
+
+type N struct() {
+    next mut N?& = null
+    v I64 = 0
+}
+
+type Out struct(n I64) {
+    n
+}
+
+# a pass's shape: bodies held by a long-lived owner, each read out to make one output the caller places
+type Lw struct() {
+    Bodies := Vec<mut N&>()
+}
+
+fn (lw mut Lw&) Lower(id I64) Out& {
+    b := lw.Bodies[id]
+    b.v += 1
+    return Out(b.v * 10)
+}
+
+# what a closed scope left behind is written over
+fn churn() I64 {
+    t := 0
+    for i in range 300 {
+        s := $i + "-" + $(i * 7)
+        a := Array<I64>(64, -7)
+        t += s.Len() + a[3]
+    }
+    return t
+}
+
+fn lowered(k I64) I64 {
+    lw := Lw()
+    lw.Bodies.Push(N())
+    lw.Bodies.Push(N())
+    outs := Vec<Out&>()
+    for i in range k {
+        o := lw.Lower(i % 2)
+        outs.Push(o)
+    }
+    churn()
+    t := 0
+    for o in outs: t += o.n
+    return t + lw.Bodies[0].v + lw.Bodies[1].v
+}
+
+# an element read out of a vector made in an inner block, kept by a list outside it: the vector and its nodes are
+# built where the list lives
+fn keptOut(k I64) I64 {
+    keep := Vec<mut N&>()
+    {
+        bs := Vec<mut N&>()
+        bs.Push(N())
+        b := bs[0]
+        b.v = k
+        keep.Push(b)
+    }
+    churn()
+    return keep[0].v
+}
+
+# a node read out of an inner vector linked from one read out of an outer vector
+fn linkedOut(k I64) I64 {
+    outer := Vec<mut N&>()
+    outer.Push(N())
+    {
+        inner := Vec<mut N&>()
+        inner.Push(N())
+        b := outer[0]
+        c := inner[0]
+        c.v = k
+        b.next = c
+    }
+    churn()
+    return outer[0].next!.v
+}
+
+# a vector read out of a vector of vectors, pushed into
+fn nestedPush(k I64) I64 {
+    vs := Vec<mut Vec<mut N&>&>()
+    vs.Push(Vec<mut N&>())
+    {
+        inner := vs[0]
+        n := N()
+        n.v = k
+        inner.Push(n)
+    }
+    churn()
+    return vs[0][0].v
+}
+
+# a lambda capturing an element read out of a vector
+fn captured(k I64) I64 {
+    bs := Vec<mut N&>()
+    bs.Push(N())
+    b := bs[0]
+    f := fn(d I64) { b.v += d }
+    f(k)
+    f(1)
+    churn()
+    return bs[0].v
+}
+
+fn bump(n mut N&, d I64) I64 {
+    n.v += d
+    return n.v
+}
+
+# a task given an element read out of a vector
+fn tasked(k I64) I64 {
+    bs := Vec<mut N&>()
+    bs.Push(N())
+    b := bs[0]
+    r := 0
+    join {
+        spawn r = bump(b, k)
+    }
+    churn()
+    return r + bs[0].v
+}
+
+test "O25g: a writable reference read out of a vector lives where the vector does" {
+    assert lowered(4) == 10 + 10 + 20 + 20 + 4
+    assert keptOut(7) == 7
+    assert linkedOut(8) == 8
+    assert nestedPush(9) == 9
+    assert captured(4) == 5
+    assert tasked(3) == 6
+}
+
+assert lowered(4) == 64
+assert keptOut(7) == 7
+assert linkedOut(8) == 8
+assert nestedPush(9) == 9
+assert captured(4) == 5
