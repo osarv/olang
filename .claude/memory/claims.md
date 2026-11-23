@@ -49,3 +49,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-buildmem merged - plans by reference in lowering (-36 MB); the emitted text left as the next step
 - OLang Cloud (2026-11-23): olang wt-spawnrelease - spawn target declared outside a loop: -check names it, then release at reassignment after the wait
 - Orchestrator child (cloud, 2026-11-23): olang wt-buildmem2 merged - objects spilled as assembled, items copied once (cold lower+emit 3116 -> 2757 MB)
+- Orchestrator child (cloud, 2026-11-23): olang wt-argmove - a temporary argument moved into the callee's place (Push($text), Push(b.ToString())) in lowering, not copied
