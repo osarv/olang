@@ -633,10 +633,23 @@ declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)
 ;         released first; a list through each region's own header (%olang.region)
 %olang.scope = type { ptr, ptr, ptr, ptr, ptr, ptr, ptr }
 ; a region (O8d): its scope, its inner scope (what is built there), prev and next among its parent's kids, its parent,
-; its destructors' chain, its owner (the parent where that is no region), and whether it is a PART region - one made
+; its destructors' chain, its owner (the parent where that is no region), whether it is a PART region - one made
 ; for an array a value holds by value (a Vec's buffer, a Map's slots: O8f), which a growth releases and an owner's
-; release reads as part of the region holding it (__olang_region_home)
-%olang.region = type { %olang.scope, %olang.scope, ptr, ptr, ptr, ptr, ptr, i64 }
+; release reads as part of the region holding it (__olang_region_home) - and its MAKER, the home of the thread that made
+; it (%olang.home), where its storage goes back when another thread releases it
+%olang.region = type { %olang.scope, %olang.scope, ptr, ptr, ptr, ptr, ptr, i64, ptr }
+; O8f, P2: a thread's HOME - the storage of its regions released on another thread comes back to it here, a list of
+; chunks (a region's first block among them) linked through their next words, pushed onto by any thread (a lock-free
+; push, __olang_home_give) and taken whole by the thread whose home it is as its own pool runs short (an exchange,
+; __olang_home_drain). A joined task's results are handed to its spawner at the join's wait (__olang_kids_move): a
+; region a task made is then released on the spawner's thread, and what it took from the worker's pool goes back there,
+; so a loop of joins keeping its tasks' results settles rather than the spawner's lists growing while the workers ask
+; for more. The second word links a retired worker's home into the homes a new worker takes (__olang_homes_free): a
+; home is never freed, since another thread may still give back to it; a worker taking one takes what was given since
+%olang.home = type { ptr, ptr }
+@__olang_main_home = global %olang.home zeroinitializer
+@__olang_home = thread_local(initialexec) global ptr @__olang_main_home
+@__olang_homes_free = global ptr null
 ; P1: a thread's pool is thread_local, so two threads never take from or give to the same one. A scope belongs to
 ; exactly one thread, and so do the chunks it takes and gives back, which is what makes a per-thread pool
 ; correct rather than merely faster
@@ -1317,7 +1330,15 @@ search:
   %classsize = phi i64 [ 4096, %entry ], [ %csz, %sized ]
   %own = call ptr @__olang_pool_take(ptr @__olang_pool, i64 %class, i64 %size)
   %hasown = icmp ne ptr %own, null
-  br i1 %hasown, label %take, label %shared
+  br i1 %hasown, label %take, label %returned
+  ; O8f: what other threads gave back to this thread's home (its regions they released), taken into its pool first
+returned:
+  %gotback = call i1 @__olang_home_drain()
+  br i1 %gotback, label %retake, label %shared
+retake:
+  %own.r = call ptr @__olang_pool_take(ptr @__olang_pool, i64 %class, i64 %size)
+  %hasown.r = icmp ne ptr %own.r, null
+  br i1 %hasown.r, label %take, label %shared
   ; the shared pool, locked only when it holds something: read without the lock, a stale answer costs at most a
   ; chunk made that could have been taken, or a lock taken for nothing
 shared:
@@ -1337,7 +1358,7 @@ unlock:
   call i32 @pthread_mutex_unlock(ptr @__olang_shared_lock)
   br i1 %hasshared, label %take, label %make
 take:
-  %c.p = phi ptr [ %own, %search ], [ %shared.c, %unlock ]
+  %c.p = phi ptr [ %own, %search ], [ %own.r, %retake ], [ %shared.c, %unlock ]
   %usedptr.p = getelementptr %olang.chunk, ptr %c.p, i32 0, i32 1
   store i64 0, ptr %usedptr.p
   ; it has been used: what it holds is whatever its last scope left there
@@ -2772,6 +2793,7 @@ entry:
   call void @__olang_alloc_check(ptr %prog)
   store %olang.scope { ptr null, ptr null, ptr null, ptr @__olang_global_scope, ptr null, ptr null, ptr null }, ptr %prog
   store ptr %prog, ptr @__olang_prog_scope
+  call void @__olang_home_take()
   %m = getelementptr %olang.worker, ptr %w, i32 0, i32 5
   %c = getelementptr %olang.worker, ptr %w, i32 0, i32 6
   %st = getelementptr %olang.worker, ptr %w, i32 0, i32 3
@@ -2841,6 +2863,7 @@ done:
 retire:
   call i32 @pthread_mutex_unlock(ptr @__olang_worker_lock)
   call i32 @pthread_mutex_unlock(ptr %m)
+  call void @__olang_home_retire()
   call void @__olang_pool_drain()
   call void @__olang_region_lists_drain()
   call void @__olang_alt_stack_free()
@@ -3371,6 +3394,11 @@ csplice:
 chunked:
   %h2 = phi ptr [ %h, %dtored ], [ %nh, %csplice ]
   %t2 = phi ptr [ %t, %dtored ], [ %tn, %csplice ]
+  ; O8d: the regions made in the part go with its root, as a stand-in's go with what it stood in for (__olang_kids_move)
+  ; - the part's header is freed below, and a region's parent word must name a header that is still there
+  %krootp = getelementptr %olang.scope, ptr %n, i32 0, i32 5
+  %kroot = load ptr, ptr %krootp
+  call void @__olang_kids_move(ptr %n, ptr %kroot)
   call void @free(ptr %n)
   %more = icmp ne ptr %nn, null
   br i1 %more, label %part, label %out
@@ -3560,7 +3588,7 @@ reuse:
   store i64 %n1, ptr @__olang_rfree_nhdr
   ret ptr %h
 fresh:
-  %r = call ptr @malloc(i64 160)
+  %r = call ptr @malloc(i64 168)
   call void @__olang_alloc_check(ptr %r)
   ret ptr %r
 }
@@ -3596,11 +3624,20 @@ entry:
   %slot = getelementptr [32 x ptr], ptr @__olang_rfree_blk, i64 0, i64 %k
   %b = load ptr, ptr %slot
   %none = icmp eq ptr %b, null
-  br i1 %none, label %shared, label %reuse
+  br i1 %none, label %returned, label %reuse
+  ; O8f: blocks of this thread's regions other threads released, given back to its home (__olang_home_drain)
+returned:
+  %gotback = call i1 @__olang_home_drain()
+  br i1 %gotback, label %again, label %shared
+again:
+  %b2 = load ptr, ptr %slot
+  %none2 = icmp eq ptr %b2, null
+  br i1 %none2, label %shared, label %reuse
 reuse:
-  %next = load ptr, ptr %b
+  %bb = phi ptr [ %b, %entry ], [ %b2, %again ]
+  %next = load ptr, ptr %bb
   store ptr %next, ptr %slot
-  ret ptr %b
+  ret ptr %bb
 shared:
   %shp = getelementptr [32 x ptr], ptr @__olang_rshared_blk, i64 0, i64 %k
   %sh0 = load atomic ptr, ptr %shp monotonic, align 8
@@ -3725,8 +3762,11 @@ done:
 define ptr @__olang_region_make(ptr %parent) noinline {
 entry:
   %r = call ptr @__olang_region_hdr_new()
-  call void @llvm.memset.p0.i64(ptr %r, i8 0, i64 160, i1 false)
+  call void @llvm.memset.p0.i64(ptr %r, i8 0, i64 168, i1 false)
   store ptr @__olang_region_chunk, ptr %r
+  %mkp = getelementptr %olang.region, ptr %r, i32 0, i32 8
+  %home = load ptr, ptr @__olang_home
+  store ptr %home, ptr %mkp
   %tailp = getelementptr %olang.scope, ptr %r, i32 0, i32 2
   store ptr %r, ptr %tailp
   %kp = getelementptr %olang.scope, ptr %parent, i32 0, i32 6
@@ -4356,12 +4396,146 @@ own:
   store ptr null, ptr %cur
   call void @__olang_scope_close(ptr %cur)
   %inner = getelementptr %olang.region, ptr %cur, i32 0, i32 1
+  ; O8f, P2: a region another thread made (a joined task's, handed over at its wait) gives its storage back to that
+  ; thread's home rather than to this thread's pool
+; @if !san
+  %mkp = getelementptr %olang.region, ptr %cur, i32 0, i32 8
+  %mk = load ptr, ptr %mkp
+  %me = load ptr, ptr @__olang_home
+  %mine = icmp eq ptr %mk, %me
+  %nomk = icmp eq ptr %mk, null
+  %here = or i1 %mine, %nomk
+  br i1 %here, label %closein, label %away
+away:
+  %gave = call i1 @__olang_region_give_back(ptr %inner, ptr %mk)
+  br i1 %gave, label %hdr, label %closein
+closein:
+; @end
   call void @__olang_scope_close(ptr %inner)
+  br label %hdr
+hdr:
   call void @__olang_region_hdr_free(ptr %cur)
   br label %freed
 freed:
   br label %loop
 done:
+  ret void
+}
+
+; O8f, P2: region storage, the arena inner of a region another thread made, given back to that thread's home: its whole
+; chunk list pushed at once, the arena left empty - false, nothing done, where the arena holds what a plain close must
+; run (destructors, parts other threads made of it, regions made in it), which never happens to a region's arena
+define i1 @__olang_region_give_back(ptr %inner, ptr %home) noinline {
+entry:
+  %dp = getelementptr %olang.scope, ptr %inner, i32 0, i32 1
+  %d = load ptr, ptr %dp
+  %pp = getelementptr %olang.scope, ptr %inner, i32 0, i32 4
+  %p = load ptr, ptr %pp
+  %kp = getelementptr %olang.scope, ptr %inner, i32 0, i32 6
+  %k = load ptr, ptr %kp
+  %hasd = icmp ne ptr %d, null
+  %hasp = icmp ne ptr %p, null
+  %hask = icmp ne ptr %k, null
+  %dp1 = or i1 %hasd, %hasp
+  %busy = or i1 %dp1, %hask
+  br i1 %busy, label %no, label %look
+look:
+  %hp = getelementptr %olang.scope, ptr %inner, i32 0, i32 0
+  %first = load ptr, ptr %hp
+  %empty = icmp eq ptr %first, null
+  br i1 %empty, label %yes, label %give
+give:
+  %tp = getelementptr %olang.scope, ptr %inner, i32 0, i32 2
+  %last = load ptr, ptr %tp
+  store ptr null, ptr %hp
+  call void @__olang_home_give(ptr %home, ptr %first, ptr %last)
+  br label %yes
+yes:
+  ret i1 1
+no:
+  ret i1 0
+}
+
+; the chunks first to last (linked through their next words) pushed onto home's returned list, from any thread
+define void @__olang_home_give(ptr %home, ptr %first, ptr %last) {
+entry:
+  %hp = getelementptr %olang.home, ptr %home, i32 0, i32 0
+  %lnp = getelementptr %olang.chunk, ptr %last, i32 0, i32 0
+  %old0 = load atomic ptr, ptr %hp monotonic, align 8
+  br label %push
+push:
+  %old = phi ptr [ %old0, %entry ], [ %seen, %push ]
+  store ptr %old, ptr %lnp
+  %pair = cmpxchg ptr %hp, ptr %old, ptr %first release monotonic
+  %seen = extractvalue { ptr, i1 } %pair, 0
+  %ok = extractvalue { ptr, i1 } %pair, 1
+  br i1 %ok, label %done, label %push
+done:
+  ret void
+}
+
+; what other threads gave back to this thread's home, taken into its pool and its region block lists
+; (__olang_pool_give): true when there was any - asked where its own pool has nothing that fits, before the pool every
+; thread shares or the system
+define i1 @__olang_home_drain() noinline {
+entry:
+  %h = load ptr, ptr @__olang_home
+  %hp = getelementptr %olang.home, ptr %h, i32 0, i32 0
+  %peek = load atomic ptr, ptr %hp monotonic, align 8
+  %none = icmp eq ptr %peek, null
+  br i1 %none, label %no, label %take
+take:
+  %first = atomicrmw xchg ptr %hp, ptr null acquire, align 8
+  %gone = icmp eq ptr %first, null
+  br i1 %gone, label %no, label %each
+each:
+  %c = phi ptr [ %first, %take ], [ %next, %each ]
+  %np = getelementptr %olang.chunk, ptr %c, i32 0, i32 0
+  %next = load ptr, ptr %np
+  call void @__olang_pool_give(ptr %c)
+  %end = icmp eq ptr %next, null
+  br i1 %end, label %yes, label %each
+yes:
+  ret i1 1
+no:
+  ret i1 0
+}
+
+; a worker starting: a home of its own - a retired worker's, with whatever was given back to it since, else a new one
+define void @__olang_home_take() {
+entry:
+  call i32 @pthread_mutex_lock(ptr @__olang_worker_lock)
+  %h0 = load ptr, ptr @__olang_homes_free
+  %none = icmp eq ptr %h0, null
+  br i1 %none, label %fresh, label %reuse
+reuse:
+  %lp = getelementptr %olang.home, ptr %h0, i32 0, i32 1
+  %nx = load ptr, ptr %lp
+  store ptr %nx, ptr @__olang_homes_free
+  call i32 @pthread_mutex_unlock(ptr @__olang_worker_lock)
+  store ptr %h0, ptr @__olang_home
+  ret void
+fresh:
+  call i32 @pthread_mutex_unlock(ptr @__olang_worker_lock)
+  %h = call ptr @malloc(i64 16)
+  call void @__olang_alloc_check(ptr %h)
+  store %olang.home zeroinitializer, ptr %h
+  store ptr %h, ptr @__olang_home
+  ret void
+}
+
+; a worker retiring: what was given back to its home into its pool, which it then gives back to the system
+; (__olang_pool_drain), and the home onto the list a new worker takes from
+define void @__olang_home_retire() {
+entry:
+  %d = call i1 @__olang_home_drain()
+  %h = load ptr, ptr @__olang_home
+  call i32 @pthread_mutex_lock(ptr @__olang_worker_lock)
+  %old = load ptr, ptr @__olang_homes_free
+  %lp = getelementptr %olang.home, ptr %h, i32 0, i32 1
+  store ptr %old, ptr %lp
+  store ptr %h, ptr @__olang_homes_free
+  call i32 @pthread_mutex_unlock(ptr @__olang_worker_lock)
   ret void
 }
 
