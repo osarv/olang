@@ -1,0 +1,23 @@
+# C imports (X17): two C files of the corpus's own (tests/cshare) both include one header, so both translations declare
+# its types - one type each, as C has one type of a tag in a program: a point made through one module is given to the
+# other's functions, and to olang functions naming it through either alias; an opaque type alike
+import one "cshare/one.c"
+import two "cshare/two.c"
+
+fn sum(p two.cs_point&) I64 { return I64(two.cs_sum(p)) }
+
+test "a struct two C modules translate alike is one type" {
+    p := one.cs_point()
+    one.cs_set(p, 3, 4)
+    assert two.cs_sum(p) == 7
+    q := two.cs_point()
+    one.cs_set(q, 10, 20)
+    assert sum(q) == 30 and sum(p) == 7
+}
+
+test "an opaque C type two C modules declare is one type" {
+    h := one.cs_open(21)
+    assert h != null
+    assert two.cs_twice(h) == 42
+    assert two.cs_value(h) == one.cs_value(h)
+}

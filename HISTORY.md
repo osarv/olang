@@ -42615,3 +42615,35 @@ Tests count wakes (a channel's `wakes`, a process's): a `RecvUntil` blocked 200 
 20), a blocked `RecvUntil` woken by `Cancel()` or a `Send` once, a `SendUntil` on a full channel once per Recv, Cancel
 or deadline; `WaitUntil` once for a child's end, a deadline and a `Cancel()` (was ~20 in 200 ms). All pass under
 `-race`.
+
+## 2026-11-23: one C type per tag across C imports (X17; mine; wt-homecimp)
+
+A session using olang with OpenSSL found that the same C struct imported through two headers was two olang types:
+`X509` of `import ssl "openssl/ssl.h" link "ssl"` did not fit `X509_digest` of `import x509 "openssl/x509.h"`
+("expected X509& of <openssl/x509.h>, found X509& of <openssl/ssl.h>"); the workaround was an `extern link "crypto"`
+block redeclaring `X509_digest` over `ssl.X509`. X17 said so on purpose - each C module holds its whole translation
+unit, so two imports including one header each declared its types, two types of one name - and advised one import per
+library. But in C a tag names one type in the whole program, and a library's headers are meant to be included piecemeal;
+the rule made a second header of the same library unusable beside the first.
+
+Now a type two C modules translate alike is one type. Identity is the translation's own: the type's name and its
+declaration's text (X18's struct of fields, packed struct, opaque words, or the extern block's opaque `type NAME`), so a
+header included by both gives the same text and the same type, and fields naming other C types agree once those do.
+The first C module loaded declaring it keeps it; a later one's translation is loaded without that declaration
+(load.cImport, `sharedCTypes`/`withoutCTypes`, the cached file unchanged) and records the name in `Module.CShared`, which
+the resolver (names: `lookup`, `typeIn`, `memberOf`, `sharedType`) follows, so `x509.X509`, the module's own functions
+and every importer reach the first module's declaration - one DeclId, and nothing downstream of the resolver changed.
+Done in the loader and resolver rather than at the checker's DeclFor, which a dozen per-declaration loops (rules,
+generics, lowering) walk by module and would have seen twice.
+
+Decided: a tag translated differently - two definitions, or opaque in one translation and complete in the other - stays
+two types of one name, refused at a use by the type mismatch naming both modules ("expected cd_thing?& of b.c, found
+cd_thing of a.c", checks scenario `cdiffer`); no new diagnostic. C calls two definitions of one tag in two translation
+units incompatible too; opaque against complete is compatible in C, but X18 gives them different olang forms (an extern
+type against a struct), so they cannot be one. The canonical module is the first loaded, so a type's module in a
+diagnostic follows import order.
+
+Linking needed nothing: `link` is per import, but the libraries are the program's (X9) - importing `openssl/x509.h link
+"crypto"` beside `ssl.h link "ssl"` links both, and libcrypto's functions reached through either module resolve.
+Tests: tests/cshare.olang (two C files of the corpus including one header, a struct and an opaque type passed between
+their functions and an olang function naming the type through the other alias).

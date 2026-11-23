@@ -10000,9 +10000,12 @@ The library a header's code is in is named after it (X9), and none is for the C 
 is its path for a file beside the importer and `<PATH>` for a system header; a C module imports nothing.
 
 A header's module holds everything its translation unit declares - the header and every header it includes - since C
-has one namespace and its headers declare one another's types; so two C imports translating one header (directly or
-by including it) each declare its types, two distinct types of one name (T16), and a value of one is not a value of
-the other. A program reaches a C library's whole interface through one import of it. A source file's module holds
+has one namespace and its headers declare one another's types. As C names one type by a tag in a whole program, a
+type two C modules translate alike - the same name and the same declaration (X18), as two imports including one
+header give it - is **one type**, the first such module's (in the order the imports are loaded), reached through
+either alias (`ssl.X509` and `x509.X509` are one type, and a function of either module takes it); the later module's
+translation leaves it out. A tag two C modules translate differently - two definitions, or one opaque and one
+complete - is two distinct types of one name (T16), and a value of one is not a value of the other. A source file's module holds
 what its code declares and every header it includes, and the file's own functions are compiled into the program
 (X20). The translation of a file is the same in every module importing it and is made once per compilation; an
 implementation keeps it between compilations (this one under `OLANG_CACHE/cimport`, keyed by the file, clang, the

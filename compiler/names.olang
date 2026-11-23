@@ -671,6 +671,8 @@ fn (r mut Resolver&) lookup(n source.NameId) Ref {
     if v >= 0: return Ref(t.Entries[v].Kind, r.mi, v)
     ty := try t.types.Get(n) catch default -1
     if ty >= 0: return Ref(What.Type, r.mi, ty)
+    sh := r.sharedType(r.mi, n)
+    if sh.Kind != What.None: return sh
     a := try t.aliases.Get(n) catch default -1
     if a >= 0 {
         if not r.survey: r.aliasUsed.Put(key(r.mi, I32(n)), true)   # M5a
@@ -696,6 +698,8 @@ fn (r mut Resolver&) preludeTaken(mi I64, n source.NameId, sp source.Span) {
 fn (r mut Resolver&) typeIn(mi I64, n source.NameId) Ref {
     ty := try r.Tables[mi].types.Get(n) catch default -1
     if ty >= 0: return Ref(What.Type, mi, ty)
+    sh := r.sharedType(mi, n)
+    if sh.Kind != What.None: return sh
     p := try r.preludeTypes.Get(n) catch default -1
     if p >= 0 { return Ref(What.Type, p, try r.Tables[p].types.Get(n) catch default -1) }
     if BuiltinTypeName(r.text(n)): return Ref(What.Builtin, -1, -1)
@@ -709,9 +713,20 @@ fn (r mut Resolver&) memberOf(mi I64, n source.NameId) Ref {
     if v >= 0: return Ref(t.Entries[v].Kind, mi, v)
     ty := try t.types.Get(n) catch default -1
     if ty >= 0: return Ref(What.Type, mi, ty)
+    sh := r.sharedType(mi, n)
+    if sh.Kind != What.None: return sh
     a := try t.aliases.Get(n) catch default -1
     if a >= 0: return Ref(What.Import, a, -1)
     return Ref(What.None, -1, -1)
+}
+
+# X17: a type C module mi translated as an earlier C module did, so that module's (its translation leaves it out)
+fn (r mut Resolver&) sharedType(mi I64, n source.NameId) Ref {
+    m := r.L.Mods[mi]
+    if not m.C or m.CShared.Len() == 0: return Ref(What.None, -1, -1)
+    at := try m.CShared.Get(r.text(n)) catch default -1
+    if at < 0: return Ref(What.None, -1, -1)
+    return Ref(What.Type, at, try r.Tables[at].types.Get(n) catch default -1)
 }
 
 fn (r mut Resolver&) record(sp source.Span, ref Ref) {
@@ -1451,7 +1466,7 @@ fn (r mut Resolver&) namesType(x ast.Expr&) Bool {
                 case ast.Expr.Name(_, an) {
                     ref := r.lookup(an)
                     if ref.Kind != What.Import or ref.Module < 0: return false
-                    return r.Tables[ref.Module].types.Has(n)
+                    return r.Tables[ref.Module].types.Has(n) or r.sharedType(ref.Module, n).Kind != What.None
                 }
                 case _ { return false }
             }
@@ -1601,7 +1616,9 @@ fn (r mut Resolver&) suggests(name String&) Bool {
 # whether an import of the module exports a type of that name
 fn (r mut Resolver&) importedType(n source.NameId) Bool {
     for imp in r.L.Mods[r.mi].Imports {
-        if imp.Target >= 0 and n in r.Tables[imp.Target].types and (r.text(n)[0].IsUpper() or r.L.Mods[imp.Target].C) { return true }
+        if imp.Target < 0: continue
+        if n in r.Tables[imp.Target].types and (r.text(n)[0].IsUpper() or r.L.Mods[imp.Target].C) { return true }
+        if r.sharedType(imp.Target, n).Kind != What.None: return true
     }
     return false
 }

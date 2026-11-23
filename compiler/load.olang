@@ -90,6 +90,7 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
     CUnit String& = ""                # the C the build compiles beside it (X20): its file, "" for none
     CSymbols Map<String&, String&>    # a function linked by another symbol than its name (X20)
     CSkipped Map<String&, String&>    # what the translation could not declare, by name: why (X19)
+    CShared Map<String&, I64>         # X17: a type an earlier C module declares the same, by name: that module
 }
 
 # a program's modules. Std is the standard library's directory; Consts the build constants; Fetch the remote
@@ -131,6 +132,7 @@ type Loader struct(Std String&, Consts cond.Consts&, Fetch mut fetch.Fetcher&, N
     HandedToC Map<I64, Bool>
     Clang String& = ""                 # the clang a C import is translated with (X17), "" for none
     CFlags Vec<String&>                # what it is translated and compiled with: the target's, and the defines (X18)
+    cTypes Map<String&, I64>           # X17: each C type's identity (its name and declaration) - the C module declaring it
     # M13: how many loads are under way, and the modules loaded but not yet parsed - parsed in the order their imports
     # finished, once the outermost load returns, so every import of every module is registered when any is parsed
     loading I64 = 0
@@ -245,7 +247,7 @@ fn memberAhead(toks Array<token.Token>&, i I64) Bool {
 }
 
 # the module at path, loaded once, its imports with it: its index, or -1 where it cannot be read
-fn (l mut Loader&) load(path String&, identity String&, prelude Bool, c Bool = false) I64 {
+fn (l mut Loader&) load(path String&, identity String&, prelude Bool, c Bool = false, text String& = "") I64 {
     r := try os.RealPath(path) catch default ""
     real := $r if r != "" else $path
     for i in range l.Mods.Len() {
@@ -254,7 +256,9 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool, c Bool = f
     i := l.Mods.Len()
     l.Mods.Push(Module(path, real, identity, prelude))
     m := l.Mods[i]
-    if real in l.Overlay {
+    if text != "" {
+        m.Src = source.Source(m.Path, text)
+    } else if real in l.Overlay {
         m.Src = source.Source(m.Path, l.Overlay.Get(real)!)
     } else {
         m.Src = try source.Source.Read(m.Path) catch os.Error {
@@ -773,8 +777,15 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
         text = tr.Text
         trimCImports(dir, ck)
     }
-    i := l.load($base + ".olang", identity, false, true)
+    # (a translation already loaded - the same header imported again - is that module, its types its own)
+    kr := try os.RealPath($base + ".olang") catch default ""
+    for k in range l.Mods.Len() {
+        if kr != "" and l.Mods[k].Real == kr: return k
+    }
+    shared := l.sharedCTypes(text)
+    i := l.load($base + ".olang", identity, false, true, withoutCTypes(text, shared) if shared.Len() > 0 else "")
     if i < 0: return -1
+    for k in shared.Keys(): l.Mods[i].CShared.Put(k, shared.Get(k)!)
     t := l.Mods[i]
     if os.Exists($base + ".c") and (try os.FileInfo.Stat($base + ".c") catch os.Error default os.FileInfo(os.FileKind.OTHER, 0, 0)).Size > 0 {
         t.CUnit = $base + ".c"
@@ -792,6 +803,69 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
         }
     }
     return i
+}
+
+# X17: C names a type by its tag once in a program, so a type a C module translates as an earlier one did - the same
+# name and the same declaration - is that module's: the names of a translation's types an earlier C module declares,
+# each with that module. The rest are recorded as this one's, the module index given as the next one loaded
+fn (l mut Loader&) sharedCTypes(text String&) Map<String&, I64> {
+    out := Map<String&, I64>()
+    decls := CTypeDecls(text)
+    for name in decls.Keys() {
+        identity := $name + "\n" + $decls.Get(name)!
+        at := try l.cTypes.Get(identity) catch default -1
+        if at >= 0 and at < l.Mods.Len() and l.Mods[at].C: out.Put(name, at)
+        else: l.cTypes.Put(identity, l.Mods.Len())
+    }
+    return out
+}
+
+# a C module's types (X18) by name, each with its declaration's text: an opaque one's line in the extern block, a
+# struct's lines through its closing brace
+fn CTypeDecls(text String&) Map<String&, String&> {
+    out := Map<String&, String&>()
+    name := ""
+    body := StringBuilder()
+    for line in text.Lines() {
+        if name != "" {
+            body.Push($line + "\n")
+            if line != "}": continue
+            out.Put(name, body.ToString())
+            name = ""
+        } else if line.StartsWith("    type ") and not line[9:].Contains(" ") {
+            out.Put($line[9:], $line[4:])
+        } else if line.StartsWith("type ") {
+            name = typeWord(line)
+            body.Clear()
+            body.Push($line + "\n")
+        }
+    }
+    return out
+}
+
+# the name a translation's "type NAME ..." line declares
+fn typeWord(line String&) String {
+    rest := line[5:]
+    return $rest[:(try rest.FindByte(' ') catch default rest.Len())]
+}
+
+# a C module's translation without the types named, which an earlier C module declares (X17)
+fn withoutCTypes(text String&, drop Map<String&, I64>&) String {
+    b := StringBuilder()
+    inside := false
+    for line in text.Lines() {
+        if inside {
+            if line == "}": inside = false
+            continue
+        }
+        if line.StartsWith("    type ") and line[9:] in drop: continue
+        if line.StartsWith("type ") and typeWord(line) in drop {
+            inside = true
+            continue
+        }
+        b.Push($line + "\n")
+    }
+    return b.ToString()
 }
 
 # the symbol function name of C module mi links by: its name, or the one the translation says (X20)

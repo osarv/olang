@@ -48,7 +48,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "freeing", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
                      "prompt", "promptkeys", "spinner", "jupyter", "notebook", "checkedbuild", "linkinline", "racetests", "dwarf"
-                     "nodump"]
+                     "nodump", "cdiffer"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -502,6 +502,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "target" { try target(r) }
         case "lazytype" { try lazytype(r) }
         case "updir" { try updir(r) }
+        case "cdiffer" { try cdiffer(r) }
         case "crash" { try crashes(r) }
         case "nodump" { try nodump(r) }
         case "scopesan" { try scopesan(r) }
@@ -1148,6 +1149,16 @@ fn updir(r mut report&) ? Failed {
     try r.expect(sh(dir, "cd sub && \"$OLANG\" build main.olang > ../out.txt 2>&1 && ./build/main > ../out.txt") == 0
                  "from below", dir)
     try r.expect(outOf(dir) == "7\n", "from below: expected 7", dir)
+}
+
+# X17: a C type two C modules translate differently - the same tag, two definitions - is two types, named apart
+test "a C tag defined differently in two C files is two types" { assert passed("cdiffer") }
+
+fn cdiffer(r mut report&) ? Failed {
+    dir := fresh("cdiffer")
+    os.Run("cp checks/fixtures/cdiffer/*.c checks/fixtures/cdiffer/*.olang " + $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build main.olang > out.txt 2>&1") != 0, "two definitions of a tag were taken as one type", dir)
+    try r.expect(sh(dir, "grep -q 'expected cd_thing?& of b.c, found cd_thing of a.c' out.txt") == 0, "the refusal names both C modules", dir)
 }
 
 # M1/M22: a module is a file - a directory is not one, and files in one directory see each other only

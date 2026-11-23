@@ -7689,10 +7689,12 @@ fn (c mut Checker&) fitIntoFixed(x typed.Expr&, have types.TypeId, want types.Ty
 fn (c mut Checker&) mismatch(x typed.Expr&, have types.TypeId, want types.TypeId, sp source.Span) typed.Expr& {
     ws := c.ty(want)
     hs := c.tyOf(x)
-    if ws == hs and c.isNamed(c.deref(want)) and c.isNamed(c.deref(have)) {
-        # two types of one name, declared by two modules - two C imports translating one header among them (X18)
-        ws = $ws + " of " + $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(c.deref(want)))].Identity
-        hs = $hs + " of " + $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(c.deref(have)))].Identity
+    wd := c.deref(want)
+    hd0 := c.deref(have)
+    if c.isNamed(wd) and c.isNamed(hd0) and c.ty(wd) == c.ty(hd0) and c.P.T.DeclOf(wd) != c.P.T.DeclOf(hd0) {
+        # two types of one name, declared by two modules - two C modules defining one tag differently among them (X17)
+        ws = $ws + " of " + $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(wd))].Identity
+        hs = $hs + " of " + $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(hd0))].Identity
     }
     hd := c.ty(c.deref(have))
     if c.lenArgAt == sp.Start and ws == "I64" and c.deref(have) == c.textType() {

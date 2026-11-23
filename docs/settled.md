@@ -1482,7 +1482,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   "zlib.h" link "z"` gives a module of what clang reads, translated while compiling and cached; `import fast "fast.c"`
   compiles the file's C as IR so the LTO link inlines across; `extern link "golib" { fn ... }` declares a header-less
   library, `extern { }` what is already linked. Variadic C calls pass C's default promotions. `void *` is the prelude's
-  `CVoid?&` (X22). One C import per library. Left: C extern variables and cast macros have no form.
+  `CVoid?&` (X22). A C type two C imports translate alike (same name, same declaration: one header included by both)
+  is one type, the first module's, through either alias (`ssl.X509` is `x509.X509`, 2026-11-23); a tag translated
+  differently stays two types. Left: C extern variables and cast macros have no form.
 - **std/linalg is gone (2026-10-26, the user: "No linalg in stdlib ... Tensors are part of oann and they declare
   everything themselves").**
 - **std names never repeat their module's (the user's naming rule, 2026-10-24: "we don't integrate the knowledge that

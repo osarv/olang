@@ -1,0 +1,8 @@
+# X17: two C files each defining their own struct cd_thing, differently - two types, so a's is no b's
+import a "a.c"
+import b "b.c"
+
+fn main() {
+    t := a.cd_thing()
+    b.cd_b(t)
+}
