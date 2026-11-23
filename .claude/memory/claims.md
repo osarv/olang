@@ -41,3 +41,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-memhelpers - on hold: lower/emit helpers wait for OLang Cloud's view of the mut-field placement rule (asked the Orchestrator, its Q3)
 - Orchestrator child (cloud, 2026-11-23): olang wt-mutplace - stopped: findings in plan.md "Build memory, open"; handed back to the Orchestrator
 - Orchestrator child (cloud, 2026-11-23): olang wt-speed - compile speed: profile the self-build and a mid-size program per phase, cut olang's own hotspots (not scope.olang/free.olang)
+- OLang Cloud (2026-11-23): olang wt-loopvals - loop names are the element's value (the user's 2026-11-23 decision, replaces S9a/S9g's mut T& rows)
