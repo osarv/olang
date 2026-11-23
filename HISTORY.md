@@ -41816,3 +41816,30 @@ globals times bodies, modules times the records they reach). Also met: a Viewer 
 Every unit's IR record (294 files) and every other record of the self-build (608 files, the keys and checksums naming
 the compiler masked) are byte for byte the old compiler's, as are tests/runner.olang's records and binary; the
 compiler builds itself identically (the fixed point).
+
+## 2026-11-23: a writable reference read out of an argument and kept by a local lives where the argument does (O25g, O26a; mine; wt-lwplace-exactlocal)
+
+Found tracing the compiler's lower/emit memory (docs/fieldscopes.md, item 1). `b := lw.Bodies[id]` on a
+`Vec<mut typed.Body&>`: `At` holds its result exactly to its receiver's scope (O25g - a writable reference to storage
+holding references), and the local `b` was placed where the call's result goes (O26a), so the call's result was bound
+there and the callee's exactness asked the vector's scope to be the result's - both directions, where §8 needs only that
+the vector outlive the place. Now (scope.olang) `bindResult` binds such a result - one the callee's summary holds exactly
+equal to one parameter's scope variable (`exactParamOf`: each outlives the other, nothing built in the result) and
+whose argument's scope outlives the place - to that argument's scope instead, recorded per call site (`heldExact`);
+`callValue` gives it as existing storage at that scope; and `letMoved` gives a reference local assigned once from what
+already lives longer than the local's place that scope as its term, fitted without exactness. The local names the
+element where the vector lives; what is stored through it or where it is kept is judged against the vector's scope, so
+every obligation the element's exactness carries still reaches the vector.
+
+The draft bound any such result, a value included, and `make quick` showed it unsound: a by-value result holding a
+writable reference its callee holds exactly to a parameter's (`fn Res.tried(id I64, bad Bool, log mut Tally&) Res`,
+`mkv(n, t) Vec<Logged>`) was given as existing storage where the argument lives, though its own storage is built where
+it lands - tests/heldfields refused at a constructor (C2d), and the interpreter read freed storage in checks' o17aparamhandon,
+e31bviewbuilds, c2dfieldmapput. Only a reference result is rebound now (`bindResult`, `s.isRef(ty)`).
+
+Checked: a function stored as a function type that keeps the element (in another vector, in a lambda's capture, a node
+linked through it, a vector read out of a vector of vectors and pushed into, the element stored with no local) is still
+refused as on master, the same T22b (checks' o25gheldkeeps, o25gheldkeepsdirect, o25gheldlambda, o25gheldthrough,
+o25gheldnested); tests/heldexact.olang reads the accepted shapes back after an arena churn, under -sanitize and under
+the evaluator. The Lowerer's `LowerKey` still has both directions: item 2 (lowering's bare `mut` fields, C2d) gives the
+second one on its own, docs/fieldscopes.md question 1.
