@@ -10,7 +10,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `io.olang` | file descriptors, `Print`/`Println`, `Show` (a value written with its place and given back), buffered `Writer`, `Lines`, buffered `Reader` (`Line`, `Word`, `Next<T>`, `Bytes`, `All`) |
 | `os.olang` | arguments, environment, files and directories, `Exec`/`Start` without a shell, `Exit` |
 | `filepath.olang` | path text: `Dir`, `Base`, `Ext`, `Join`, `Clean`, `Rel` |
-| `time.olang` | monotonic and wall clocks, `Duration` and `Sleep`, `Date` with RFC 3339 `Format`/`Parse`, `After`'s timers, and `Virtual(f)` - a virtual clock for tests |
+| `time.olang` | monotonic and wall clocks, `Duration` and `Sleep`, `Date` with RFC 3339 `Format`/`Parse`, the local zone (`LocalOffset`, `Date.Local`), `After`'s timers, and `Virtual(f)` - a virtual clock for tests |
 | `rand.olang` | seeded xoshiro256** generator; draws over arrays: `Normals`, `Uniforms`, `Choice`, `Choices`, `Sample`, `Shuffle` |
 | `list.olang` | `List<T>`: a growable sequence that never moves what it stores (chunks doubling in size) - for when a `Vec`'s growth copying its elements is what is to be avoided; `list.List.Of(a)`, `list.List.FromIter(it)`, `list.Error`, `list.Iter` |
 | `set.olang`, `deque.olang`, `heap.olang` | `Set<T>` over Map, a double-ended ring `Deque<T>`, a binary `Heap<T>` ordered by a function |
@@ -32,7 +32,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `json.olang` | JSON parse into an immutable tree, and encode; `Encode`/`Decode<T>` of any value by reflection, keys by a `Naming` policy, `@json.Key`, `@json.Skip` |
 | `csv.olang` | RFC 4180 records, read and written; structs as records (`Encode`, `Decode<T>`, `@csv.Column`, `@csv.Skip`) |
 | `net.olang` | blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`) and UDP sockets, IPv4 and IPv6 addresses, names resolved (`Lookup`, `Resolve`), `net.Error`; `Readable` waits on several descriptors at once |
-| `tls.olang` | a verified TLS client session over a TCP one (`tls.Conn.Dial(host, port)`, `Read`, `Write`, `SetTimeout`), through OpenSSL; opt-in - only a program importing it links libssl and libcrypto; `tls.Error` |
+| `tls.olang` | a verified TLS client session over a TCP one (`tls.Conn.Dial(host, port)`, or pinned to a certificate's SHA-256 fingerprint with `pin`, `Read`, `Write`, `SetTimeout`), through OpenSSL; opt-in - only a program importing it links libssl and libcrypto; `tls.Error` |
 | `zmtp.olang` | ZeroMQ's wire protocol (ZMTP 3.0, NULL mechanism) over TCP, no libzmq: a `Socket` per connection (`Accept`, `Dial`, `Send`, `Recv`) - what the Jupyter kernel speaks (B23) |
 | `http.olang` | requests by running `curl` |
 | `chan.olang`, `cancel.olang` | bounded blocking channel, `Select` over two to four channels, sends (`SendOf`) and timers, cancellation tokens and deadlines |

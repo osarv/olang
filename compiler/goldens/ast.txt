@@ -2726,8 +2726,8 @@ ac5bc791fca142dc 322190b1abb48cbd std/sha256.olang
 a81faf81143e4029 4459d73325ec9b06 std/stats.olang
 61284ebe07008756 2bb02ed4d46b936f std/sync.olang
 cec14acad2356597 54d51ead4dd8d2db std/tile.olang
-c85cc7ff6bb88b66 cb292a8c1f4206cf std/time.olang
-ca1ed8bbef28692e d9219123dbc87d14 std/tls.olang
+ff64ae4509e74c89 fab2508ea5925e89 std/time.olang
+487e297c80ef9123 69214f993d922814 std/tls.olang
 dc957db12eea5034 04e163ebae4a8df8 std/utf8.olang
 1868ee0e15269bcc 75bc51694bfbb49d std/zmtp.olang
 a56142c30b36b352 474d244d62248f51 tests/Base.olang
