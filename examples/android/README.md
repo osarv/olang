@@ -8,7 +8,7 @@ a program it ships, `libprobe.so` (from `probe.olang`), both from its native lib
 | File | What it is |
 |---|---|
 | `native.olang` | the activity: `ANativeActivity_onCreate`, its callbacks, the window, input, the checks |
-| `probe.olang` | the program the app runs; prints `olang probe ok:` and its arguments |
+| `probe.olang` | the program the app runs; it prints that it ran ("olang probe ok:") and its arguments |
 | `AndroidManifest.xml` | the app: NativeActivity, `hasCode="false"`, lib_name `native`, minSdk 29, targetSdk 36, arm64-v8a |
 | `debug.keystore` | the debug key the APK is signed with (PKCS12, password `android`, alias `olangdebug`) |
 

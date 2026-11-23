@@ -546,6 +546,7 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
         b.Push("  OLANG_TIMES=1      says each phase of a build as it ends, with its time and the compiler's memory (B3m)\n")
         b.Push("  OLANG_SPINNER=0    no busy indicator on the terminal while a build waits (B25)\n")
         b.Push("  OLANG_CLANG=PATH   names the clang a build uses (B12d)\n")
+        b.Push("  ANDROID_NDK_HOME=DIR  names the Android NDK -target aarch64-linux-android builds with (B12e)\n")
         b.Push("  OLANG_OBJECTS=DIR  a directory of objects builds share (B3j)\n")
         b.Push("  OLANG_CELLS=interpret  the prompt's and notebooks' cells interpreted, not compiled (B22)\n")
         b.Push("  OLANG_AUTORACE=0   test builds no race-detector build of the tests that start a task (P7a)\n")
