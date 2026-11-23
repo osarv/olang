@@ -37,4 +37,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - olang session (cloud, 2026-11-22): wt-genslow merged (no repro)
 - OLang Cloud (2026-11-22): olang wt-globalfill - global refilled in a function read after its scope (-sanitize), r := build(0) then r = build(i)
 - Orchestrator child (cloud, 2026-11-22): olang wt-debts merged - plan.md small known debts closed (M13 import order, 12 checks cases; one walker debt left in plan.md)
-- Orchestrator child (cloud, 2026-11-23): olang wt-walkers - one shared recursion over a type for the port's type walkers (types.Table.Embedded)
+- Orchestrator child (cloud, 2026-11-23): olang wt-walkers merged - types.HeldParts under the type walkers
