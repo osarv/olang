@@ -1012,6 +1012,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   own code lets one go (`joinTargets`), unless the result is built where no wait hands it over (the program's scope, a
   scope found at run time, a clause's default that builds - which leaks on the worker's program part, open); only a
   body an entry reaches starts tasks. Places are by type: one task-shared value of a type keeps every value of it.
+  **A spawn's target local declared outside its loop (review12 F3, 2026-11-23, mine):** an owner local, given each
+  task's result as an assignment's target is - its let-go the spawner's, at the spawn, before the task starts, judged
+  against its own join's tasks reaching the spawner's storage (`spawnGoes`), not what they build. Where every task
+  writes it (none fails into its join, P4d; no clause default that could be existing storage) and spawns alone give it
+  values, and it is sole, the spawner releases its old value's region (by its anchors, or the handle kept beside it
+  where it holds nothing) and hands the task the region made for the new value whole (`mir.Task.Fresh`,
+  `__olang_standin_or`), adopted as the worker's (its storage goes back there, O8b); else it keeps, and `-memory`
+  names it (before, it grew ~9 KB a turn with `-check` counting no keep). A text or array target keeps (named).
   A let-go the compiler does not follow is a gap:
   `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. **Captures and local copies
   (2026-11-21, mine; docs/freeing.md):** a value a lambda captures is the lambda's own copy, its parts split, made in
