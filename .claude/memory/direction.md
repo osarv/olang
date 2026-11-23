@@ -44,18 +44,16 @@ one rule that composes over special cases; fix rough edges found while building.
   Arxiv connector frivolously"); paper notes in oagent's papers/.
 - **GPUs are local:** the user's own machine (RTX 4060 8 GB, sm_89 first; Ryzen 5 7600 with AVX-512; 16 GB RAM, 12 GB
   visible in WSL; specs in oagent's machine/specs.txt). No paid cloud GPUs.
-- **Energy-based models are the main line** (the user, 2026-11-22: "Yes, make energy-based models the main line. Keep doing that"): structured and learned energies, local learning (pseudolikelihood, CD, EP), stochastic search (Gibbs, Langevin, diffusion) with learned energies as verifiers, on-chip efficiency; the deterministic settle is one member of the family, kept where it measurably wins.
-- **Settling networks are the main experiment** (2026-10-28: "This is what we are going to be experimenting with
-  primarily"): weigh olang by what the settle needs - many small cache-resident GEMVs in an allocation-free loop,
-  symmetric reciprocal blocks, low precision, the FPGA path. When experiments start is the user's to say; the
-  experiments asked for are in oagent's EXPERIMENTS.md.
+- **Settling is abandoned as a concept (the user, 2026-11-23: "if it comes back and we had no gains, then abandon settling as a concept. The fact that it runs well on FPGAs is not relevant enough")**: it came back with no gain (e67: memory settled to its exact energy minimum gained +0.001 nats over no memory on long documents, 3 seeds, while one delta-rule step gained +0.025; e66/e68: settling or looping to a fixed point never beat a plain transformer at equal compute). The lines below that make settling the main experiment, the niche or the long-term plan are superseded; what they say about settles is history, not direction.
+- **Language modelling is the research area (the user, 2026-11-23: "Try to tackle language modelling more directly now. It's where most of the signal is")**, trained by backprop; explicit energy objectives for language are closed ("We seem to have already hit the best spot there with an energy model already" - a softmax LM is the exactly normalised energy model). Energy + search stays the tool for structured, constraint-satisfying problems ("keep it for the other problems").
+- (Superseded 2026-11-23) Energy-based models were the main line (the user, 2026-11-22) and settling networks the main experiment (2026-10-28); kept here only as the record.
 - **Research after the compiler (2026-10-11):** extract functional structures for tasks, MNIST first, then NLP and
   robotics; genetic algorithms allowed. Clean room: work only from oann/docs/settling.md and the published papers it
   cites. It lives in **osarv/oagent** (/home/user/oagent), where all implementations of the agent and its research go.
 - **The goal:** a general high-quality agent that takes on any task with as little compute as possible; "Use any method.
   Do more with less, continuously." Capability and capability per compute should keep rising; size and compute may grow.
   Priorities: bootstrapping first, general semantic intelligence the main target, robotics and image generation later.
-- **Long-term plan: a settling network with recursive self improvement.** Oversight is designed in from the start: a
+- **Long-term plan: a learned system with recursive self improvement** (the network was a settling one until 2026-11-23). Oversight is designed in from the start: a
   self-improvement step is a proposal evaluated in a sandbox on fixed benchmarks and kept only when better; a capability
   jump needs the user's sign-off; the system cannot change its objective, its evaluation or the oversight; everything is
   logged so changes can be traced and undone.
