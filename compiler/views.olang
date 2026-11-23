@@ -34,6 +34,7 @@ import "msgs"
 import "types"
 import "generic"
 import "typed"
+import "std/pair"
 
 # ---- places, views and what a body's walk holds ----
 
@@ -158,6 +159,18 @@ type fact struct(Param I64, Module I64, Name source.NameId, Path I64, Show I64, 
     Into I64 = -1
 }
 
+# a factPut asked before, by the summary list it adds to (Views, else Grows) and what decides it: a summary's facts are
+# only added, so one asked again is covered already
+type putKey struct(Views Bool, Body I64, Param I64, Module I64, Name source.NameId, Path I64, Any Bool) {
+    Views
+    Body
+    Param
+    Module
+    Name
+    Path
+    Any
+}
+
 type summary struct() {
     Grows Vec<fact>
     Views Vec<fact>
@@ -182,6 +195,9 @@ type Viewer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     sums Vec<mut summary&>
     strs Vec<String&> # interned texts: paths and quoted callee names, 0 the empty one
     strIds Map<String&, I64>
+    belowIds Map<pair.Pair<I64, I64>, I64> # below's joined path, by its two parts' ids
+    puts Map<putKey, Bool>                  # the factPuts asked
+    calleeNames Vec<I64>                    # by body: calleeName's text, -1 not asked yet
     texts Map<I64, String&>         # a file's text, by file
     library Map<I64, Bool>          # the standard library's files
     vecFile I64 = -1                # the prelude's Vec module's file
@@ -377,6 +393,14 @@ fn (v mut Viewer&) quoted(b I64) String {
         case typed.BodyOf.Ctor(t, _): "'" + $v.text(v.P.T.DeclName(v.P.T.DeclOf(t))) + "'"
         case _: "a lambda"
     }
+}
+
+# quoted's text for body b, interned once
+fn (v mut Viewer&) calleeName(b I64) I64 {
+    if b < 0: return v.str(v.quoted(b))
+    for v.calleeNames.Len() <= b: v.calleeNames.Push(-1)
+    if v.calleeNames[b] < 0: v.calleeNames[b] = v.str(v.quoted(b))
+    return v.calleeNames[b]
 }
 
 # where a place is, as a message says it: "l.toks"
@@ -685,7 +709,14 @@ fn (v mut Viewer&) bufferElem(p typed.Lvalue&, st state&, out mut Vec<place>&) ?
 fn (v mut Viewer&) below(a place, path I64, show I64, found Bool) place {
     if a.Any: return a
     s := v.strs[a.Path].Len() + show if show > 0 else a.Show
-    return place(a.R, v.str($v.strs[a.Path] + $v.strs[path]), s, found)
+    if path == 0: return place(a.R, a.Path, s, found)
+    k := pair.Pair<I64, I64>(a.Path, path)
+    id := try v.belowIds.Get(k) catch default -1
+    if id < 0 {
+        id = v.str($v.strs[a.Path] + $v.strs[path])
+        v.belowIds.Put(k, id)
+    }
+    return place(a.R, id, s, found)
 }
 
 # whether path a is path b, or a place above it, at a field's boundary
@@ -879,13 +910,13 @@ fn (v mut Viewer&) grow(g place, sp source.Span, grewIn I64, innerFile I64, inne
     if v.quiet: return
     if not v.check {
         match g.R {
-            case Root.Param(i) { v.factPut(v.sums[v.Id].Grows, i, -1, source.NameId(0), g, sp) }
-            case Root.Global(m, n) { v.factPut(v.sums[v.Id].Grows, -1, m, n, g, sp) }
+            case Root.Param(i) { v.factPut(false, i, -1, source.NameId(0), g, sp) }
+            case Root.Global(m, n) { v.factPut(false, -1, m, n, g, sp) }
             # a lambda's capture: what the lambda was given it from grows where it is called (capGrows), as Params.Len()
             # + the capture's local
             case Root.Local(id) {
                 if v.B!.Locals[id].Kind == typed.LocalKind.Capture {
-                    v.factPut(v.sums[v.Id].Grows, v.B!.Params.Len() + id, -1, source.NameId(0), g, sp)
+                    v.factPut(false, v.B!.Params.Len() + id, -1, source.NameId(0), g, sp)
                 }
             }
             case _ { }
@@ -912,8 +943,12 @@ fn (v mut Viewer&) grow(g place, sp source.Span, grewIn I64, innerFile I64, inne
     }
 }
 
-# a summary's fact, added unless one already covers it; a path deeper than eight fields cut to "something below" there
-fn (v mut Viewer&) factPut(fs mut Vec<fact>&, param I64, module I64, name source.NameId, g place, sp source.Span) {
+# a fact of the walked body's summary (its Views, else its Grows), added unless one already covers it; a path deeper
+# than eight fields cut to "something below" there
+fn (v mut Viewer&) factPut(views Bool, param I64, module I64, name source.NameId, g place, sp source.Span) {
+    key := putKey(views, v.Id, param, module, name, g.Path, g.Any)
+    if v.puts.Has(key): return
+    v.puts.Put(key, true)
     path := v.strs[g.Path]
     pid := g.Path
     found := g.Any
@@ -928,6 +963,7 @@ fn (v mut Viewer&) factPut(fs mut Vec<fact>&, param I64, module I64, name source
             }
         }
     }
+    fs mut Vec<fact>& = v.sums[v.Id].Views if views else v.sums[v.Id].Grows
     for f in fs {
         if f.Param != param or f.Module != module or f.Name != name: continue
         if f.Path == pid and (f.Any or not found): return
@@ -1032,7 +1068,7 @@ fn (v mut Viewer&) handOut(sp source.Span, x typed.Expr?&, st mut state&) {
     if v.check: return
     for r in refs {
         match r.P.R {
-            case Root.Param(i) { v.factPut(v.sums[v.Id].Views, i, -1, source.NameId(0), r.P, sp) }
+            case Root.Param(i) { v.factPut(true, i, -1, source.NameId(0), r.P, sp) }
             case Root.Mark(_) { v.passes(r) }
             case _ { }
         }
@@ -1424,7 +1460,7 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
         v.expr(c.Args[i], st, argRefs.RefMut(i))
     }
     tok := v.callTok(sp, c)
-    name := v.str(v.quoted(callee))
+    name := v.calleeName(callee)
     known := callee >= 0 and v.sums[callee].Known
     # the growths it may make, and each one's place in the callee, for a note
     grows Vec<place>
