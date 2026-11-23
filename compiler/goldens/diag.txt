@@ -2653,6 +2653,51 @@ externfnvalue.olang:9:12: error[X13]: a C function is given a function by the na
       |            ^~~
 externfnvalue.olang:9:12: help: declare one with 'export fn' and pass it by name
 compilation failed with 1 error
+=== fieldscopeattach.olang
+fieldscopeattach.olang:26:12: error[O17]: this value's references live where its own storage does not
+   26 |     p.link(h.n)
+      |            ^~~
+fieldscopeattach.olang:26:12: note: the callee can store through it
+fieldscopeattach.olang:26:12: help: declare it a reference ('x T& = ...')
+fieldscopeattach.olang:26:7: error[O10c]: the callee needs one argument's scope to outlive another's
+   26 |     p.link(h.n)
+      |       ^~~~
+fieldscopeattach.olang:26:7: note: nothing here shows it
+fieldscopeattach.olang:16:38: note: the callee requires it because of this statement
+   16 | fn (p mut Pass&) link(x mut Node&) { p.C.next = x }
+      |                                      ^
+fieldscopeattach.olang:26:7: help: pass them from one scope
+compilation failed with 2 errors
+=== fieldscoperepointshort.olang
+fieldscoperepointshort.olang:30:15: error[O17]: this value's references live where its own storage does not
+   30 |     p.repoint(h.n)
+      |               ^~~
+fieldscoperepointshort.olang:30:15: note: the callee can store through it
+fieldscoperepointshort.olang:30:15: help: declare it a reference ('x T& = ...')
+fieldscoperepointshort.olang:30:7: error[O10c]: the callee needs one argument's scope to outlive another's
+   30 |     p.repoint(h.n)
+      |       ^~~~~~~
+fieldscoperepointshort.olang:30:7: note: nothing here shows it
+fieldscoperepointshort.olang:15:41: note: the callee requires it because of this statement
+   15 | fn (p mut Pass&) repoint(n mut Node&) { p.C = n }
+      |                                         ^
+fieldscoperepointshort.olang:30:7: help: pass them from one scope
+compilation failed with 2 errors
+=== fieldscopestash.olang
+fieldscopestash.olang:32:14: error[O17]: this value's references live where its own storage does not
+   32 |     keep(ps, h.n)
+      |              ^~~
+fieldscopestash.olang:32:14: note: the callee can store through it
+fieldscopestash.olang:32:14: help: declare it a reference ('x T& = ...')
+fieldscopestash.olang:32:5: error[O10c]: the callee needs one argument's scope to outlive another's
+   32 |     keep(ps, h.n)
+      |     ^~~~
+fieldscopestash.olang:32:5: note: nothing here shows it
+fieldscopestash.olang:15:46: note: the callee requires it because of this statement
+   15 | fn keep(ps mut Vec<Pass>&, root mut Node&) { ps.Push(Pass(root)) }
+      |                                              ^~
+fieldscopestash.olang:32:5: help: pass them from one scope
+compilation failed with 2 errors
 === forinclausebreak.olang
 forinclausebreak.olang:15:36: error[S9e]: a loop's catch clause has no loop to break or continue
    15 |         for _ in try t { } catch { break }

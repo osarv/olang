@@ -42069,3 +42069,92 @@ oann pins its products allocation-free (`assert not Gemm<...>.Allocates`), and A
 as `Array<F32>(cols)`. They are now `Array<F32>(64)`, a known length held in the call's frame (T7c), and the columns go
 64 at a time - each element's two chains and sum depend on no other column, so the result is the same bit for bit
 (tests/tile.olang unchanged, on AMX and under -target x86-64-v4). tests/tile.olang pins `assert not tile.AddDot.Allocates`.
+
+## 2026-11-23: a shared field has a binding of its own (C2d, O28, O23a, O23b; the user's call; wt-fieldscopes)
+
+The user read docs/fieldscopes.md's "Option B in full" and said "Yes, build this". The question was why the compiler's
+lower and emit phases grow from 2.5 to over 4 GB on a cold self-build: `lowering(L mut Lowerer&, ...)` and `fnEm(E mut
+Emitter&, ...)` hold a bare writable reference to a context something can be stored through, and C2d asked such an
+argument to live exactly where the instance does - so every function's helper, and the `mir.Fn` it builds, lived as
+long as the Lowerer.
+
+What was already there. The field inference (docs/rework.md 2.6) promotes a declaration's fields to a binding of their
+own where a quiet judging finds a refusal that needs it, and `dischargeRels` already asked for the promotion where a
+constructor's exact C2d relation failed at a call (`wantExact`) - B's reason to promote existed. What kept it from
+working: a promoted field built through by a call (`p.C.names.Push($i)`) had its temporary built in the caller's frame,
+since `requiredIn`, `argTemp`, `val` and `buildSite` built only at a run-time term, never at a derived scope; the refusal
+that followed gave the field back (step 4), and the instance went back to living with its referent. And a callee's
+obligation naming its own derived scope (`link`'s "x exactly D(p, C)") was never translated through the call when
+binding a temporary, so `p.link(Node(k))` was refused.
+
+What changed (scope.olang). `derivedBuilt`: a derived scope of one of this body's parameters, in a body that takes its
+derived scopes as hidden parameters (O23a), is a place a temporary is built - `requiredIn` returns it, `argTemp` and
+`val` build there, `buildSite` plans the hidden scope (passed, else found, O29). `requiredIn` translates a callee's
+`Derived(p, w)` through the call (`derivedAt`). `giveBackUnresolved`: a refusal at a call whose callee's derived scope
+the call cannot resolve (the argument reached through an element: Untraced, or an underestimate) gives the argument's
+declaration back - without it, `q := ps[0]; q.link(x)` was refused where it is accepted with the field in the instance
+scope, and B would no longer accept a superset. Trace lines (OLANG_INFERDUMP) for each promotion asked and each field
+given back. `make quick` showed the first `giveBackUnresolved` too wide: it gave back any argument's declaration whose
+derived scope a refused call could not resolve, and checks' rv3roclone (a List built from a read-only List of Lists'
+iterator, refused because its Iter's promoted `chunk` field is untraced through the for-in's hidden walk of a parameter)
+compiled - the old field inference had promoted Iter and the refusal is T25c's, not an unresolved binding. Now
+(`unnamedInstance`) only an instance reached through a path naming none is given back: an element, another instance's
+field, a payload, a global, what a reference not a parameter leads to, a part a call hands back (a call whose summary
+binds no construction binding for that parameter - `ps[0]` on a Vec, a value copy promoted for a receiver included), or
+a local holding one read so; a parameter, a constructor's result and a call result whose ResBind knows the binding keep
+it.
+
+O23b, as built. The doc's O23b equated an instance's binding with its instance scope at every store into an unnamed
+place (an element, a global, an `any`), per instance. Built instead at the declaration's grain, by the inference's
+existing step 4: where an instance is reached through such a path and a store, a build or a call there needs the
+binding, the declaration's shared fields go back to the instance scope for the whole program - today's equality, so the
+program is judged exactly as before. It accepts every program accepted before; it frees less than per-instance O23b in
+a program that both uses a helper from a local and stores through it from a vector (the local's helper then lives as
+long as its referent too). Per-instance O23b stays the refinement if such programs turn up. A lambda building through a
+captured helper's field and passed as a function value (not followed into its callee, T22c) gives the field back too:
+T22c refuses a build into an unfollowed capture's derived scope, so it falls back rather than finding at run time.
+
+The compiler's own code (lower.olang). One more statement equated the helper with the Lowerer: `ln.plan =
+lw.Plans[id]` copied a `typed.Plan` - writable references to arrays of references, something can be stored through it -
+into a bare field, exact. `lowering` now takes the plan by reference (`given typed.Plan&`, a sixth constructor
+parameter; `Lowerer.planFor(id, t)` picks the twin's, the body's or the Lowerer's `NoPlan` stand-in). `explain
+compiler/lower.olang Lowerer.LowerKey` now says "lw outlives return" alone (it said "return outlives lw" too); emit's
+`fnEm` had nothing tying it once E was promoted.
+
+Measured (cold self-build, this container, -quick, OLANG_TIMES): before, lower+emit 5018 ms and 3814 MB at its peak
+(1454 MB above the 2360 MB after facts), the build's peak 3834 MB; after, 4190 ms and 2990 MB (610 MB above 2380), the
+build's peak 3008 MB - 824 MB less. Scope judging unchanged within noise (3675 + 2729 ms before, 3589 + 2546 after). The
+inference promotes 35 fields over the compiler (21 given back), among them lowering's L, B and T and fnEm's E and F.
+
+Tests (checks/cases): run cases read back after an arena churn under -sanitize and the evaluator - fieldscopectx (the
+doc's Pass/Ctx loop, a top-level assert the evaluator decides), fieldscopereturn (lowerAs's shape), fieldscopeflat
+(20,000 turns of it flat; with the helper pinned it grew 320 MB), fieldscopelookup (through an `any`, a lambda called
+where it is made, a task), fieldscoperepoint, fieldscopedtor (a destructor building through the field),
+fieldscopegeneric (one generic helper over a referent holding references and over numbers), fieldscopeelem (the element
+path, judged with the field given back); refused: fieldscopeattach (the doc's frame-held store, O10c), fieldscopestash
+(an instance put in a vector its referent cannot outlive), fieldscoperepointshort (repointing the field to the frame).
+
+Found on the way, not B's: a lambda passed as a function value that pushes text into a vector reached through a
+captured struct's reference field (`viaValue(fn(k I64) { p.C.names.Push($k + "b") }, i)`) runs natively and under
+-sanitize but the evaluator reports a use after its scope closed - the build is found from the function value's own
+environment (T22c's capRoot), which the evaluator finds as the closing frame's scope and the native runtime, the
+environment being on the stack, as the program's. Same on master; left for the next T22c round.
+
+## 2026-11-23: a promoted field's part handed back keeps its exact half (O23, O23b, O25g; mine; review 11)
+
+Review 11 (field scopes option B, before its merge) found a hole older than B that B makes common. A writable reference
+to a referent holding references, read out of a promoted field of an instance reached through another instance's field
+or an element (`b.p.C`, `b.ps[0].C`), is an underestimate - O23's container-scope reading, a `Derived` term with a
+floor - and `scope.fit` recorded its exactness only where the other direction could be shown: in the Obliged branch,
+`order(slot, t)` failing (always, for an underestimate: it is never shown to be outlived) dropped the second half
+silently. So `fn (b mut Bag&) First() mut Node& { return b.p.C }` summed "b outlives return" alone, and a caller
+storing `x := b.First(); x.next = y` held `y` to the Bag's scope while `x` pointed at a referent living longer: a
+read after the scope closed (segfault built, `WhyClosed` in the evaluator), on master as on the branch, for a result,
+a field (`s.n = b.p.C`), a payload (`Hold.N(b.p.C)`) and a build through the returned reference. A local taking such a
+part was already refused (and the field given back) by fit's FitLocal guard; the other kinds were not.
+
+The fix: in that branch, an exact half that fails gives the declarations read through back (`giveBackRead`, O23b's
+give-back) and reports fit's error where nothing gives back - so the declaration keeps no binding of its own, the
+instance lives where its referent does, and the program runs as it would without the inference. Nothing that B
+relaxes is lost (the probes accepted beyond master stay accepted; checks' fieldscopeflat stays flat).
+checks/cases/fieldscopepart.olang: the four shapes, read back after a churn, with a decided assert the evaluator runs.

@@ -1,0 +1,125 @@
+# check: run
+# flags: -sanitize
+# O23, O23b, O25g (review 11): a writable reference to a referent holding references, read out of a promoted field of
+# an instance reached through another instance's field or an element, and handed back, stored into a field or a payload
+# - its exact half cannot be shown there, so the field's declaration keeps no binding of its own and the instance lives
+# where its referent does. Each store and build through what came back lands in the referent's scope; read back after
+# an arena churn (each was a read of storage a closed scope gave back)
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+
+type Pass1 struct(C mut Node&) {
+    C
+}
+
+type Pass2 struct(C mut Node&) {
+    C
+}
+
+type Pass3 struct(C mut Node&) {
+    C
+}
+
+type Pass4 struct(C mut Node&) {
+    C
+}
+
+type Bag1 struct(p Pass1) {
+    p
+}
+
+type Bag2 struct() {
+    ps Vec<Pass2> = Vec<Pass2>()
+}
+
+type Bag3 struct(p Pass3) {
+    p
+}
+
+type Bag4 struct(p Pass4) {
+    p
+}
+
+type Slot struct() {
+    n mut Node?& = null
+}
+
+type Hold enum {
+    N(n mut Node&)
+    Nil
+}
+
+fn (b mut Bag1&) First() mut Node& { return b.p.C }
+
+fn (b mut Bag2&) Elem() mut Node& { return b.ps[0].C }
+
+fn (b mut Bag3&) into(s mut Slot&) { s.n = b.p.C }
+
+fn (b mut Bag4&) wrap() Hold { return Hold.N(b.p.C) }
+
+fn viaReturn(outer mut Node&, i I64) {
+    b := Bag1(Pass1(outer))
+    x := b.First()
+    y := Node(10 + i)
+    x.next = y
+}
+
+fn viaElem(outer mut Node&, i I64) {
+    b := Bag2()
+    b.ps.Push(Pass2(outer))
+    b.Elem().next = Node(20 + i)
+}
+
+fn viaField(outer mut Node&, i I64) {
+    b := Bag3(Pass3(outer))
+    s := Slot()
+    b.into(s)
+    y := Node(30 + i)
+    s.n!.next = y
+}
+
+fn viaPayload(outer mut Node&, i I64) {
+    b := Bag4(Pass4(outer))
+    h := b.wrap()
+    y := Node(40 + i)
+    match h {
+        case Hold.N(n) { n.next = y }
+        case Hold.Nil {}
+    }
+}
+
+fn churn(d I64) I64 {
+    a := Array<I64>[d, d, d, d, d, d, d, d]
+    l := Vec<I64>()
+    for i in range 30: l.Push(i)
+    if d == 0: return 0
+    return churn(d - 1) + a[3] - d
+}
+
+fn all() {
+    a := Node(1)
+    b := Node(2)
+    c := Node(3)
+    d := Node(4)
+    for i in range 3 {
+        viaReturn(a, i)
+        viaElem(b, i)
+        viaField(c, i)
+        viaPayload(d, i)
+    }
+    t := churn(40)
+    assert a.next!.v == 12 and b.next!.v == 22 and c.next!.v == 32 and d.next!.v == 42 and t == 0
+}
+
+fn ran() Bool {
+    all()
+    return true
+}
+
+assert ran()
+
+fn main() {
+    all()
+}

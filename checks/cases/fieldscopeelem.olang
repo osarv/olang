@@ -1,0 +1,46 @@
+# check: run
+# flags: -sanitize
+# O23b (field scopes, option B): an instance of a helper whose writable field could have a binding of its own, reached
+# through an element and stored through there - where its binding is not known - is judged as the field in its instance
+# scope, exactly where the instance lives: the vector, the instance and what is stored through it land where the
+# referent does. The same helper used from a local elsewhere is judged so too; read back after an arena churn
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+
+type Pass struct(C mut Node&) {
+    C
+}
+
+fn (p mut Pass&) link(x mut Node&) { p.C.next = x }
+
+fn use(root mut Node&, k I64) {
+    p := Pass(root)
+    p.link(Node(k))
+}
+
+fn stash(root mut Node&) {
+    ps := Vec<Pass>()
+    ps.Push(Pass(root))
+    x := Node(42)
+    q := ps[0]
+    q.link(x)
+}
+
+fn churn(d I64) I64 {
+    a := Array<I64>[d, d, d, d, d, d, d, d]
+    l := Vec<I64>()
+    for i in range 30: l.Push(i)
+    if d == 0: return 0
+    return churn(d - 1) + a[3] - d
+}
+
+fn main() {
+    r := Node(1)
+    use(r, 7)
+    assert r.next!.v == 7
+    stash(r)
+    t := churn(60)
+    assert r.next!.v == 42 and t == 0
+}

@@ -1,0 +1,32 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# also: the callee requires it because of this statement
+# C2d, O23a, O10c (field scopes, option B): a helper over a writable reference given a binding of its own still holds
+# what is stored through its field exactly where the field's referent lives - the helper's own place does not decide
+# it. Here link stores h.n, a part of a by-value parameter with a destructor kept in attach's frame, into root: refused
+# at the call, as when the helper lived exactly where root does. Judged against the helper's place, the store would be
+# accepted and root.next would name storage gone at attach's return
+type Node struct() {
+    next mut Node?& = null
+}
+
+type Pass struct(C mut Node&) {
+    C
+}
+
+fn (p mut Pass&) link(x mut Node&) { p.C.next = x }
+
+drops mut I64 = 0
+
+type Held unique struct() {
+    n := Node()
+} destruct { drops += 1 }
+
+fn attach(root mut Node&, h Held) {
+    p := Pass(root)
+    p.link(h.n)
+}
+
+fn main() {
+    root := Node()
+    attach(root, Held())
+}

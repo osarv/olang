@@ -3754,6 +3754,16 @@ fn (s mut Scoper&) derivedRoot(p I64, w I64) typed.Expr?& {
 # T22c, O23a: whether t is a capture of a function value followed into this body that the body takes as a derived scope
 fn (s mut Scoper&) capPassed(t Term) Bool { return capTerm(t) and s.derivedScope(t, -1) != typed.Scope.Unset }
 
+# O23a: whether t is a derived scope of one of this body's parameters a temporary can be built in - its hidden scope
+# parameter, passed by a caller that knows it, else found from the field's referent while the program runs (O29)
+fn (s Scoper&) derivedBuilt(t Term) Bool {
+    if not s.derivedOk: return false
+    return match t {
+        case Term.Derived(p, w): p >= 0 and not isCapCode(w)
+        case _: false
+    }
+}
+
 # ...the same where a root's scope is to be found at run time: Found(i) as derivedScope gives it, else as it is
 fn (s mut Scoper&) foundOr(t Term, found typed.Scope) typed.Scope {
     i := match found {
@@ -10103,7 +10113,7 @@ fn (s mut Scoper&) calleeType(c typed.Call&) types.TypeId {
 # run-time term, else where the expression stands (O18a's last row)
 fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
     if x == null: return Val.plain()
-    d := dest if dest.Runs() or s.finds(dest) or s.capPassed(dest) else s.here()
+    d := dest if dest.Runs() or s.finds(dest) or s.capPassed(dest) or s.derivedBuilt(dest) else s.here()
     # (the local a value is declared as, for the outermost expression of its initializer only - C2)
     whole, wholeStor, wholePart := s.caseLocal, s.caseStor, s.casePart
     s.caseLocal, s.caseStor, s.casePart = -1, false, false
@@ -10972,7 +10982,7 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
     if rrels.Len() > 0: s.valRelsAt.Put(I64(c.Site), s.unionRels(rrels, recs.Full, fty, vars, rv))
     if rv >= 0: s.bindResult(sp, ty, c, fty, rv, dest, here, land, partD, beta)
     callee := s.bodyOf(c.Target)
-    s.bindRest(callee, vars, recs, rmaps, rrels, rv, ev, dest, here, beta)
+    s.bindRest(c, callee, vars, recs, rmaps, rrels, rv, ev, dest, here, beta)
     s.argTemps(c, callee, owner, firstArg, here, spawned, j, beta, vals, landed)
     # a copy of an element no one holds, for a writable reference parameter, is written and lost (E31b)
     if s.report {
@@ -11122,11 +11132,11 @@ fn (s mut Scoper&) staticResult(callee I64, rv I64) Bool {
 
 # callAs's scope variables no argument determines: where the callee's obligations say each must live (O18b), else
 # where the call's result lands, else where the call stands (O18a)
-fn (s mut Scoper&) bindRest(callee I64, vars Array<I64>&, recs fnRecs&, rmaps Vec<Array<I64>>&, rrels Vec<Vec<rel>>&, rv I64
+fn (s mut Scoper&) bindRest(c typed.Call&, callee I64, vars Array<I64>&, recs fnRecs&, rmaps Vec<Array<I64>>&, rrels Vec<Vec<rel>>&, rv I64
                             ev I64, dest Term, here Term, beta mut Array<Term>&) {
     for v in range vars.Len() {
         if beta[v] != Term.None: continue
-        t := s.requiredBy(callee, v, beta)
+        t := s.requiredBy(callee, v, beta, c)
         # (a call through a value: where every record's body needs it, the longest of them)
         for i in range rrels.Len() {
             u := s.requiredIn(rrels[i], v, s.recBeta(recs.Recs[i], rmaps[i], beta))
@@ -11631,7 +11641,7 @@ fn (s mut Scoper&) taskArgsLast(c typed.Call&, vals Array<Val>&, landed Array<Bo
 # scope) - a task's, what it holds lasting until its join j (P2)
 fn (s mut Scoper&) argTemp(a typed.Expr&, beta mut Array<Term>&, k I64, here Term, spawned Bool, j Term) Val {
     b := beta[k]
-    t := b if b.Runs() else here
+    t := b if b.Runs() or s.derivedBuilt(b) else here
     savedTemp, savedAt, savedSlot, savedFunc := s.taskTemp, s.taskAt, s.taskSlot, s.taskFunc
     if spawned: s.taskTemp, s.taskAt, s.taskSlot, s.taskFunc = true, s.opTok(a), t, false
     v := s.val(a, t)
@@ -12128,13 +12138,13 @@ fn (s mut Scoper&) bindingArg(callee I64, v I64, firstArg Array<I64>&) I64 {
 # None where none does. A callee of the component being judged gives what the rounds so far found: its obligations only
 # grow, so the first relation naming v - what this reads - is fixed once found, and the rounds still reach their fixed
 # point before anything is said (7.2)
-fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
+fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&, c typed.Call?& = null) Term {
     if callee < 0 or not (s.sum(callee).Done or s.sum(callee).Judging): return Term.None
-    return s.requiredIn(s.sum(callee).Rels, v, beta)
+    return s.requiredIn(s.sum(callee).Rels, v, beta, c)
 }
 
 # ... by obligations rels, in the call's numbering
-fn (s mut Scoper&) requiredIn(rels Vec<rel>&, v I64, beta Array<Term>&) Term {
+fn (s mut Scoper&) requiredIn(rels Vec<rel>&, v I64, beta Array<Term>&, c typed.Call?& = null) Term {
     for r in rels {
         if r.Hi != Term.Var(v): continue
         match r.Lo {
@@ -12143,8 +12153,17 @@ fn (s mut Scoper&) requiredIn(rels Vec<rel>&, v I64, beta Array<Term>&) Term {
                 # (T22c: a capture of a function value followed into this body - where nothing is built, as a constant
                 # given for it)
                 if k < beta.Len() and capTerm(beta[k]): return beta[k]
+                # (O23a: a derived scope of this body's, where a temporary is built through its hidden scope parameter)
+                if k < beta.Len() and s.derivedBuilt(beta[k]): return beta[k]
             }
             case Term.Program { return Term.Program }
+            case Term.Derived(p, w) {
+                # (O23a: where the argument for the callee's parameter p bound w - a binding its value carries, or a
+                # derived scope of this body's; never a set or what is not traced)
+                if c == null or isCapCode(w): continue
+                t := s.derivedAt(p, w, c, false, beta)
+                if t.Runs() or s.derivedBuilt(t): return t
+            }
             case _ { }
         }
     }
@@ -12202,6 +12221,10 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
                 s.giveBackArg(c, r.Hi)
                 s.giveBackArg(c, r.Lo)
             }
+            # (... and a callee's derived scope this call cannot resolve - the argument's instance reached where its
+            # binding is not known: its declaration's shared fields judged as they are without the inference, O23b)
+            s.giveBackUnresolved(c, r.Hi, hi)
+            s.giveBackUnresolved(c, r.Lo, lo)
         }
         if k == Obliged {
             # what a constructor's instance holds, through a constructor building one of its fields: its own C2d, said
@@ -13244,6 +13267,16 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         s.oblige(t, slot, false)
         if exact and t != slot {
             o := s.order(slot, t)
+            # (the exact half nothing can show: a writable reference read through a field of an instance reached where
+            # its binding is not known - a field of another instance, an element - is an underestimate (O23, O23b), and
+            # handed back, stored into a field or a payload it would be believed to point where it does not: its
+            # declarations' fields given back, else refused, as a local taking it is)
+            if o == FailsUnknown or o == FailsBlock {
+                s.giveBackRead(x, t)
+                s.obligeView = false
+                s.fitError(x, kind, exact)
+                return
+            }
             s.obligeBind = true
             if o == Obliged: s.oblige(slot, t, false)
             s.obligeBind = false
@@ -14429,6 +14462,7 @@ fn (s mut Scoper&) wantPromotion(x typed.Expr&) {
 
 # declaration d asked to have its fields promoted, by the component being judged too
 fn (s mut Scoper&) want(d I64) {
+    if s.Trace and not s.wantDecl.Has(d) { s.TraceLog.Push($"want " + $d + " | " + $s.traceAt(s.stmtSp.Start)) }
     if not s.wantDecl.Has(d): s.wantNew.Push(d)
     s.wantDecl.Put(d, true)
     s.wantsDecl.Push(d)
@@ -14451,6 +14485,7 @@ fn (s mut Scoper&) wantPromotionOf(t types.TypeId) {
 # given back to their container's scope, for good (2.6, step 4)
 fn (s mut Scoper&) giveBack(d I64) {
     if not (s.fieldGather and s.finalQuiet and not s.standIn and d >= 0): return
+    if s.Trace and not s.wantField.Has(pair.Pair<I64, I64>(d, -1)) { s.TraceLog.Push($"give back " + $d + " | " + $s.traceAt(s.stmtSp.Start)) }
     if not s.wantField.Has(pair.Pair<I64, I64>(d, -1)): s.wantNewField.Push(pair.Pair<I64, I64>(d, -1))
     s.wantField.Put(pair.Pair<I64, I64>(d, -1), true)
     s.wantsField.Push(pair.Pair<I64, I64>(d, -1))
@@ -14491,6 +14526,54 @@ fn (s mut Scoper&) giveBackPlace(p typed.Lvalue&) {
 fn (s mut Scoper&) giveBackArg(c typed.Call&, v Term) {
     a := s.argOfVar(c, v)
     if a >= 0: s.giveBackExpr(c.Args[a])
+}
+
+# ... the declaration of the instance a call gives for its callee's derived term ct, where the call resolves it to t,
+# a term naming no binding, and the instance is reached through a path naming none (O23b)
+fn (s mut Scoper&) giveBackUnresolved(c typed.Call&, ct Term, t Term) {
+    if not s.fieldGather or not s.finalQuiet or ct != Term.Derived or isCapCode(ct.w): return
+    if ct.p < 0 or ct.p >= c.Args.Len(): return
+    unresolved := match t {
+        case Term.Untraced: true
+        case Term.Derived(q, _): q < 0
+        case _: false
+    }
+    if not unresolved or not s.unnamedInstance(c.Args[ct.p], ct.w, 0): return
+    s.giveBack(s.declOf(c.Args[ct.p].Type()))
+    s.giveBackExpr(c.Args[ct.p])
+}
+
+# O23b: whether x reads an instance reached through a path naming none - an element, a field of another instance, a
+# payload, a global, what a reference not a parameter leads to, a part a call hands back - or a local holding one read
+# so; never a parameter, a call's own result or a local a constructor or such a call made (its binding for the
+# constructor's parameter w known)
+fn (s mut Scoper&) unnamedInstance(x typed.Expr&, w I64, depth I64) Bool {
+    if depth > 8: return false
+    # (a call's result carries its construction bindings where its callee's summary says them - a constructor's, a
+    # function returning an instance it made, O13c; any other call's, a vector's element read by At, a part of what
+    # it was given)
+    v := unPassed(s.unAway(s.unPromoted(x)))
+    c := typed.Call.Of(v)
+    if c != null {
+        if s.P.T.Role(s.calleeType(c)) == types.RoleCtor: return false
+        callee := s.bodyOf(c.Target)
+        if callee < 0 or not s.summed(callee) or w >= s.sum(callee).ResBind.Len(): return true
+        return s.sum(callee).ResBind[w] == Term.Untraced
+    }
+    p := match v {
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): q
+        case _: return false
+    }
+    match p {
+        case typed.Lvalue.Local(_, _, id) {
+            if s.B!.Locals[I64(id)].Kind == typed.LocalKind.Param: return false
+            init := try s.inits.Get(I64(id)) catch { return false }
+            return s.unnamedInstance(init, w, depth + 1)
+        }
+        case typed.Lvalue.Deref(_, _, r) { return s.unnamedInstance(r, w, depth + 1) }
+        case typed.Lvalue.Temp(_, _, _, _), typed.Lvalue.Target(_, _) { return false }
+        case _ { return true }
+    }
 }
 
 # ... the declaration of the parameter whose field viewing p's referent derived term t reads
@@ -14649,7 +14732,7 @@ fn (s mut Scoper&) buildSite(site typed.SiteId, t Term, sp source.Span) {
         s.plan.Built[I64(site)] = s.foundOr(t, s.plan.Find(s.foundRoot!))
         return
     }
-    if s.capPassed(t) {
+    if s.capPassed(t) or s.derivedBuilt(t) {
         s.plan.Built[I64(site)] = s.derivedScope(t, -1)
         return
     }

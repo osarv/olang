@@ -1,0 +1,38 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# O23a, O25h (field scopes, option B): repointing a helper's writable field with a binding of its own is held to that
+# binding exactly - every reader of the field believes it points where the binding says - so a referent of the frame
+# (a part of a by-value parameter with a destructor) is refused at the call that repoints
+type Node struct() {
+    next mut Node?& = null
+}
+
+type Pass struct(C mut Node&) {
+    C
+}
+
+fn (p mut Pass&) link(x mut Node&) { p.C.next = x }
+
+fn (p mut Pass&) repoint(n mut Node&) { p.C = n }
+
+# (a helper placed by its own uses: the field given a binding of its own)
+fn use(root mut Node&) {
+    p := Pass(root)
+    p.link(Node())
+}
+
+drops mut I64 = 0
+
+type Held unique struct() {
+    n := Node()
+} destruct { drops += 1 }
+
+fn swap(p mut Pass&, h Held) {
+    p.repoint(h.n)
+}
+
+fn main() {
+    root := Node()
+    p := Pass(root)
+    swap(p, Held())
+    use(Node())
+}

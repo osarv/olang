@@ -1,0 +1,43 @@
+# check: run
+# flags: -sanitize
+# O23a, O25h (field scopes, option B): a helper's writable field with a binding of its own, repointed to another
+# referent of a longer scope - the new referent held exactly where the binding is, so every reader of the field
+# believes where it points - and built through after; the helper itself made each turn of a loop. Read back after an
+# arena churn
+type Tally struct() {
+    seen Vec<String&> = Vec<String&>()
+}
+
+type Logger struct(log mut Tally&) {
+    log
+}
+
+fn (l mut Logger&) note(id I64) { l.log.seen.Push($id) }
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i + "-" + $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+fn main() {
+    out := Tally()
+    {
+        inner := Tally()
+        for k in range 10 {
+            lg := Logger(inner)
+            lg.note(k)
+            lg.log = out
+            lg.note(k + 100)
+        }
+        assert inner.seen.Len() == 10
+    }
+    churn()
+    b := StringBuilder()
+    for x in out.seen: b.Push(x + " ")
+    assert b.ToString() == "100 101 102 103 104 105 106 107 108 109 "
+}

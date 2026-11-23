@@ -2547,6 +2547,25 @@
 | status 0
 === run fieldcomma.olang
 | status 0
+=== run fieldscopectx.olang
+| status 0
+=== run fieldscopedtor.olang
+| status 0
+=== run fieldscopeelem.olang
+| status 0
+=== run fieldscopeflat.olang
+| status 0
+| flat
+=== run fieldscopegeneric.olang
+| status 0
+=== run fieldscopelookup.olang
+| status 0
+=== run fieldscopepart.olang
+| status 0
+=== run fieldscoperepoint.olang
+| status 0
+=== run fieldscopereturn.olang
+| status 0
 === run g10drun.olang
 | status 0
 === run g12explicitlength.olang

@@ -1,0 +1,40 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# C2d, O23b (field scopes, option B): an instance stored into a vector a caller gave, its writable field's referent a
+# part of a by-value parameter kept in the frame - the instance must live where the vector's elements do, and its
+# referent outlive that: refused at keep's call
+type Node struct() {
+    next mut Node?& = null
+}
+
+type Pass struct(C mut Node&) {
+    C
+}
+
+fn (p mut Pass&) link(x mut Node&) { p.C.next = x }
+
+fn keep(ps mut Vec<Pass>&, root mut Node&) { ps.Push(Pass(root)) }
+
+fn relink(ps mut Vec<Pass>&, x mut Node&) { ps[0].link(x) }
+
+# (a helper placed by its own uses: the field given a binding of its own)
+fn use(root mut Node&) {
+    p := Pass(root)
+    p.link(Node())
+}
+
+drops mut I64 = 0
+
+type Held unique struct() {
+    n := Node()
+} destruct { drops += 1 }
+
+fn stash(ps mut Vec<Pass>&, h Held) {
+    keep(ps, h.n)
+}
+
+fn main() {
+    ps := Vec<Pass>()
+    stash(ps, Held())
+    use(Node())
+    relink(ps, Node())
+}

@@ -1,0 +1,65 @@
+# check: run
+# flags: -sanitize
+# C2d, O28 (field scopes, option B): Lowerer.lowerAs's shape - a helper holding writable references to the shared
+# context and a read-only one to the input, building its own output, whose output is returned by reference: the helper
+# lives where the result is put, not as long as the context, and the text built through its field lives with the
+# context; read back after an arena churn
+type Ctx struct() {
+    names Vec<String&> = Vec<String&>()
+}
+
+type Body struct(text String&) {
+    text
+}
+
+type Out struct(k I64) {
+    k
+    lines Vec<String&> = Vec<String&>()
+}
+
+type Pass struct(L mut Ctx&, B Body&, made mut Out&) {
+    L
+    B
+    F Out = made
+    seen Vec<String&> = Vec<String&>()
+}
+
+fn (p mut Pass&) note(i I64) {
+    p.L.names.Push($i)
+    p.F.lines.Push($i + p.B.text)
+    p.seen.Push(p.B.text)
+}
+
+fn (c mut Ctx&) lowerAs(b Body&, i I64) Out& {
+    f := Out(i)
+    p mut Pass& = Pass(c, b, f)
+    p.note(i)
+    return p.F
+}
+
+fn churn(d I64) I64 {
+    a := Array<I64>[d, d, d, d, d, d, d, d]
+    l := Vec<I64>()
+    for i in range 30: l.Push(i)
+    if d == 0: return 0
+    return churn(d - 1) + a[3] - d
+}
+
+fn all() String {
+    c := Ctx()
+    b := Body("-body")
+    s := StringBuilder()
+    for i in range 4 {
+        o := c.lowerAs(b, i)
+        t := churn(20)
+        s.Push(o.lines[0] + " " + $t + " ")
+    }
+    for n in c.names: s.Push(n)
+    return s.ToString()
+}
+
+assert all() == "0-body 0 1-body 0 2-body 0 3-body 0 0123"
+
+fn main() {
+    assert all() == "0-body 0 1-body 0 2-body 0 3-body 0 0123"
+}

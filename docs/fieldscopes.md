@@ -1,8 +1,9 @@
 # A writable reference field pins its instance (for decision)
 
-**Open, 2026-11-23.** Found tracing why the compiler's lower and emit phases grow from 2.5 to 4.3 GB on a cold
-self-build (plan.md, "Build memory, open"). Nothing in the language is changed by this note; it asks one question.
-Option B is written out in full below ("Option B in full"), for the user to read before anything is built.
+**Decided 2026-11-23 (the user: "Yes, build this"), built on wt-fieldscopes.** Found tracing why the compiler's lower
+and emit phases grow from 2.5 to 4.3 GB on a cold self-build. Option B is written out in full below ("Option B in
+full"); what was built - O23b at the declaration's grain rather than per instance - and what it measured are in
+HISTORY.md (2026-11-23, "a shared field has a binding of its own") and SPEC's C2d, O28 and O23b.
 
 ## What holds the memory
 
