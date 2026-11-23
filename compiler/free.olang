@@ -5708,20 +5708,22 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     # (2.4's first gap: a fixed fill or literal widened to the place's run-time array, `rows := Array<I64>(4)` (T7c), is
     # the Make's store - lowering widens it into the region its site is given, lower.widenAt)
     wm := f.WidenedMake(x)
-    # (a global's initializer copies a widened fill or literal into the program's scope, lower.regionMade: no store of
-    # its region - judged one, a later let-go released that copy as a region, a fill's too)
-    initLit := wm != null and w.body().Of == typed.BodyOf.Global
-    if wm != null and not initLit {
+    # (a global's initializer copies a widened fill or literal into a region of its own in the program's scope,
+    # lower.storeHome - not its site's, regionMade: a later let-go of the global releases that region, the initializer
+    # itself letting go of nothing)
+    if wm != null and w.body().Of == typed.BodyOf.Global {
+        f.stores.Push(store(k, w.Id, file, sp, SOk, of, site, x, null))
+        return
+    }
+    if wm != null {
         w.made(k, wm, sp, multi)
         return
     }
-    # (a literal one of whose items is not built for it - a local's value, held outside its region - or a global's
-    # first value: kept, and said)
+    # (a literal one of whose items is not built for it - a local's value, held outside its region: kept, and said)
     wa := f.widened(x)
     if wa != null {
         f.stores.Push(store(k, w.Id, file, sp, SFail, of, site, x, null))
-        lw := "its new value is an array literal one of whose items is not built for it" if not initLit else "its first value is a fixed array widened, copied into the program's scope"
-        f.keep(k, RMade, file, sp, $lw + ": '" + $w.text(wa.Span()) + "'; build each item in the literal, or the array with a fill")
+        f.keep(k, RMade, file, sp, "its new value is an array literal one of whose items is not built for it: '" + $w.text(wa.Span()) + "'; build each item in the literal, or the array with a fill")
         return
     }
     match x {

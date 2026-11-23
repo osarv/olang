@@ -2402,6 +2402,16 @@ fn (ln mut lowering&) storageOf(l typed.LocalId) mir.ScopeRef {
 
 # where the storage of an array value place is: a local's, a global's in the program's scope (a value array is held
 # by value only there, T7b)
+# where a store's copy of an array value is made: the place's storage - but a global's initializer copies a fill or
+# literal widened (free's initializer store) into a region of its own in the program's scope, so that a later let-go of
+# the global releases it as a region (O8f, 2.4: copied into the program's scope, the global kept every value it was given)
+fn (ln mut lowering&) storeHome(target typed.Lvalue&, value typed.Expr&, sp source.Span) mir.ScopeRef {
+    if not ln.freeing or ln.B.Of != typed.BodyOf.Global or target != typed.Lvalue.Global or not ln.widens(value, target.Type()): return ln.placeStorage(target)
+    h := ln.temp(mir.I64T, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.Region(mir.ScopeRef.Program)))
+    return mir.ScopeRef.Held(h)
+}
+
 fn (ln mut lowering&) placeStorage(p typed.Lvalue&) mir.ScopeRef {
     return match p {
         case typed.Lvalue.Local(_, _, id): ln.storageOf(id)
@@ -2562,7 +2572,7 @@ fn (ln mut lowering&) valueArrayStore(target typed.Lvalue&, dst mir.Lvalue, v mi
     }
     copies := ln.copiesArray(value, ty)
     if rel.Len() == 0 {
-        ln.arrayStore(dst, v, ty, copies, sp, ln.placeStorage(target))
+        ln.arrayStore(dst, v, ty, copies, sp, ln.storeHome(target, value, sp))
         return
     }
     # (decided where the program is linked: both ways, the sole one releasing as decided here)
@@ -2576,7 +2586,7 @@ fn (ln mut lowering&) valueArrayStore(target typed.Lvalue&, dst mir.Lvalue, v mi
     ln.replaceStore(target, dst, v, value, decided, sp)
     ln.joinAt(after)
     ln.start(no)
-    ln.arrayStore(dst, v, ty, copies, sp, ln.placeStorage(target))
+    ln.arrayStore(dst, v, ty, copies, sp, ln.storeHome(target, value, sp))
     ln.joinAt(after)
 }
 
@@ -2592,7 +2602,7 @@ fn (ln mut lowering&) replaceStore(target typed.Lvalue&, dst mir.Lvalue, v mir.O
     }
     w := v
     keepConst := rel.Len() > 0 and ln.L.P.Immut(ty) and free.ConstRead(value)
-    if ln.copiesArray(value, ty) and not keepConst: w = ln.arrayCopy(v, ty, sp, ln.placeStorage(target))
+    if ln.copiesArray(value, ty) and not keepConst: w = ln.arrayCopy(v, ty, sp, ln.storeHome(target, value, sp))
     ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(w)))
     if old != mir.NoLocal: ln.releaseAt(old, rel, sp)
 }
@@ -4786,7 +4796,7 @@ fn (ln mut lowering&) widenAt(arg typed.Expr&, at mir.ScopeRef) mir.ScopeRef {
 
 # O8f (2.4's first gap): whether the fill or literal arg is made in a region of early freeing's (widenAt)
 fn (ln mut lowering&) regionMade(arg typed.Expr&) Bool {
-    # (a global's initializer copies its value into the program's scope as ever, globalHeld)
+    # (a global's initializer copies its value into a region of its own, storeHome)
     if not ln.freeing or not ln.planned or arg != typed.Expr.Make or ln.B.Of == typed.BodyOf.Global: return false
     site := I64(arg.m.Site)
     return site >= 0 and site < ln.plan.Built.Len() and ln.plan.Built[site] == typed.Scope.Region
