@@ -688,6 +688,11 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(outOf(dir).Contains("growkept.olang:21:9: memory: what a Vec<I64> grows out of in calls here is kept until its scope closes") and outOf(dir).Contains(", 1 keeps it"), "growkept names its growth's keep", dir)
     try late(r, dir, "growkept", "2000", "2059000\n")
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" growkept.olang > out.txt 2>&1") == 0 and outOf(dir) == "2059000\n", "growkept interpreted", dir)
+    # (mapsplit, review12: a Map of Vecs copied out of a Vec's element, the element given new values - its slot array walked
+    # once, by its live entries (its entries' values keep, -check names them: copies of the element); built, -free late,
+    # -sanitize and the evaluator agree)
+    try late(r, dir, "mapsplit", "2000", "18890 7998\n")
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 mapsplit.olang > out.txt 2>&1") == 0 and outOf(dir) == "1688 798\n", "mapsplit interpreted", dir)
     # (threads reserve address space of their own: these read their own growth, or their peak)
     try r.expect(sh(dir, "\"$OLANG\" -check joins.olang > out.txt 2>&1") == 0, "joins", dir)
     try r.expect(outOf(dir).EndsWith("flat 200000\n"), "joins kept what its joins made", dir)
@@ -716,13 +721,26 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -race -define N=2000 tasks.olang > out.txt 2>&1") == 0 and outOf(dir) == "7988024\n", "tasks -race", dir)
     try r.expect(sh(dir, "\"$OLANG\" -check texts.olang > out.txt 2>&1") == 0, "texts", dir)
     try r.expect(outOf(dir).EndsWith("flat 3097784\n"), "texts kept what its tasks built", dir)
-    # (taskvals, review6: text and Vecs of text a spawner made read and copied by tasks, tasks failing mid-way, a join in a
-    # task, a channel of Vec<String> - its peak over the last two quarters; the oracles and ThreadSanitizer at a smaller
-    # size, the evaluator running no channel between a join's tasks)
+    # (taskvals, review6: text and Vecs of text a spawner made read and copied by tasks, a joined task's result kept past
+    # its join, tasks failing mid-way, a join in a task, a channel of Vecs - its peak over the last two quarters; the
+    # oracles and ThreadSanitizer at a smaller size, the evaluator without the channel, which it runs no task beside)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check taskvals.olang > out.txt 2>&1") == 0, "taskvals -memory -check", dir)
-    try r.expect(sh(dir, "./build/taskvals > out.txt 2>&1") == 0 and outOf(dir) == "76538990 7588882\nflat\n", "taskvals kept what its tasks made", dir)
-    try late(r, dir, "taskvals", "2000", "1501954 148882\n")
-    try r.expect(sh(dir, "\"$OLANG\" -race -define N=2000 taskvals.olang > out.txt 2>&1") == 0 and outOf(dir) == "1501954 148882\n", "taskvals -race", dir)
+    try r.expect(sh(dir, "./build/taskvals > out.txt 2>&1") == 0 and outOf(dir) == "76838987 7588882\nflat\n", "taskvals kept what its tasks made", dir)
+    try late(r, dir, "taskvals", "2000", "1507951 148882\n")
+    try r.expect(sh(dir, "\"$OLANG\" -race -define N=2000 taskvals.olang > out.txt 2>&1") == 0 and outOf(dir) == "1507951 148882\n", "taskvals -race", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 -define M=111 taskvals.olang > out.txt 2>&1") == 0 and outOf(dir) == "148833 0\n", "taskvals interpreted", dir)
+    # (taskkept, question 1 of docs/freeing.md 2.4: joined tasks' results handed to the spawner at the wait - kept in a
+    # long-lived Vec's elements, many to a join, dropped, made by a join inside the task, beside failing tasks - flat, the
+    # oracles, ThreadSanitizer and the evaluator agreeing; with the shapes that keep (condition 3) on, -check still passes
+    # and the oracles still agree)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check taskkept.olang > out.txt 2>&1") == 0, "taskkept -memory -check", dir)
+    try r.expect(sh(dir, "./build/taskkept > out.txt 2>&1") == 0 and outOf(dir) == "16319466 19\nflat\n", "taskkept kept its tasks' results", dir)
+    try late(r, dir, "taskkept", "2000", "320623 23\n")
+    try r.expect(sh(dir, "\"$OLANG\" -race -define N=2000 taskkept.olang > out.txt 2>&1") == 0 and outOf(dir) == "320623 23\n", "taskkept -race", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 taskkept.olang > out.txt 2>&1") == 0 and outOf(dir) == "31667 23\n", "taskkept interpreted", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check -define M=255 taskkept.olang > out.txt 2>&1") == 0, "taskkept's keeping shapes -memory -check", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -sanitize -define M=255 -define N=2000 taskkept.olang > out.txt 2>&1") == 0 and outOf(dir) == "328602 23\n", "taskkept's keeping shapes -sanitize", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define M=255 -define N=200 taskkept.olang > out.txt 2>&1") == 0 and outOf(dir) == "32446 23\n", "taskkept's keeping shapes interpreted", dir)
     for p in Array<String&>["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec"
                             "vecreassign", "dropvec", "exportquiet", "maptake", "mapput", "mapdrop", "globals", "fieldfeed", "getread"
                             "mapkeys"] {

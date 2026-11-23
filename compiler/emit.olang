@@ -594,7 +594,7 @@ fn (e mut Emitter&) emitAll() {
     e.index()
     p := e.P
     instKeys := e.reusing()
-    rootCalled := e.reusedReachRoot()
+    rootCalled := e.othersReachRoot()
     inits := e.initOrder()
     tests Vec<I64>
     mainBody I64 = -1
@@ -633,8 +633,8 @@ fn (e mut Emitter&) emitAll() {
                 } else if (h == p.L.Root) == e.Module and h >= 0 {
                     e.want(k)
                 } else if h == p.L.Root and rootCalled {
-                    # a reused module importing the root may call any of its functions, and no lowering of it here
-                    # asks for them: every one is written (B3i)
+                    # another module importing the root may call any of its functions, and no lowering of it here
+                    # asks for them (a reused one's, B3i; one written here holds them all): every one is written
                     e.want(k)
                 }
             }
@@ -756,20 +756,20 @@ fn (e mut Emitter&) TwinLines(inst Vec<String&>&) Vec<String&> {
     return out
 }
 
-# whether a reused module reaches the root through its imports (an import cycle through the root): its object may call
-# root functions that only its lowering would have asked for
-fn (e Emitter&) reusedReachRoot() Bool {
-    if e.Module or e.ReusedAt.Len() == 0: return false
-    seen := Array<Bool>(e.P.L.Mods.Len())
-    work Vec<I64>
-    for m in e.ReusedAt.Keys(): work.Push(m)
-    for work.Len() > 0 {
-        x := try work.Pop() catch { break }
-        if x == e.P.L.Root: return true
-        if seen[x]: continue
-        seen[x] = true
-        for im in e.P.L.Mods[x].Imports {
-            if im.Target >= 0 and not seen[im.Target]: work.Push(im.Target)
+# whether another module imports the root (an import cycle through it, or a test build of a module the prelude's others
+# import - std/prelude/text.olang): that module's object, reused or written here, holds every one of its functions and
+# may call any of the root's, not only those this build reaches. Without the link's LTO dropping the code nothing
+# reaches (-race, -debug, -sanitize), a root function only such code calls was undefined (review12: `make race` on
+# std/prelude/place.olang and text.olang)
+fn (e Emitter&) othersReachRoot() Bool {
+    if e.Module: return false
+    root := e.P.L.Root
+    # (every module sees the prelude's names without an import)
+    if e.P.L.Mods[root].Prelude or e.P.L.Mods[root].Identity.StartsWith("std/prelude/"): return true
+    for m in range e.P.L.Mods.Len() {
+        if m == root: continue
+        for im in e.P.L.Mods[m].Imports {
+            if im.Target == root: return true
         }
     }
     return false
