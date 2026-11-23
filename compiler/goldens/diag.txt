@@ -7996,6 +7996,15 @@ tdnovalue.olang:8:32: error[R11]: this call returns no value, so there is nothin
     8 | fn novalue() { x := try none() catch default 1 }
       |                                ^~~~~
 compilation failed with 1 error
+=== tileshape.olang
+tileshape.olang:13:1: error[K2]: this global's initializer aborts the program, evaluated while compiling
+   13 | G := product(24)
+      | ^
+tileshape.olang:13:1: note: an error reaches '!', which ends the program
+tileshape.olang:9:5: note: here
+    9 |     tile.AddDot(c, cols, 16, cols, Array<BF16>(16 * 32), 32, 32, Array<BF16>(32 * cols))!
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === timevirtualbuild.olang
 timevirtualbuild.olang:6:10: error[S18c]: this assertion is false: time.Virtual runs only in a test build ('olang test') - a program's clock is the real one
     6 |     time.Virtual(fn() { time.Sleep(time.Duration.Seconds(1)) })

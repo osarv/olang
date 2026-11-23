@@ -42043,7 +42043,8 @@ records key already holds the target's features, `+amx-bf16` among them.
 425-449 GMAC/s (best 486-496); the fallback (`-target x86-64-v4` on the same machine, AVX-512 FMA) 9.6-11.5. The
 earlier C experiment's 369 was below what the instruction gives: a C harness with `malloc`'d (16-byte aligned) arrays
 reached 212, the same kernel on 64-byte aligned arrays 383 - a tile row straddling two cache lines halves the loads'
-throughput; olang's arrays are 64-byte aligned (O8a), so AddDot gets the aligned figure.
+throughput; an olang array of 64 bytes or more starts 64-byte aligned (O8a), so AddDot gets the aligned figure where
+its rows start on 64 bytes (strides in multiples of 16 F32s and 32 BF16s).
 
 Tests: `tests/tile.olang` - AddDot against the rule written out by hand, one output at a time, bit for bit, on four
 shapes (strides longer than rows, depth 704) with operands over 2^-30..2^30 of 1 and one in eight subnormal or zero;

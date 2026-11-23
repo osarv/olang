@@ -1983,6 +1983,7 @@ ea31af7689ead55c 18180bedb5223399 checks/cases/tagunknownscope.olang
 12385fe322d41873 a985c0e46449a369 checks/cases/tdrefdef.olang
 7dca951d6b6e6e85 50daf63a1fafbecd checks/cases/tdrefnull.olang
 f3a0087f7f70cc02 d48a21cdfc8981fc checks/cases/tdscope.olang
+619168e65381fbe5 6965ec90e860c8c2 checks/cases/tileshape.olang
 ec1e861b6e5a1617 4d0aedb5330a9ec8 checks/cases/timevirtualbuild.olang
 d633b309a2f49534 4116b22c59a6a4b5 checks/cases/topassertbool.olang
 ae7c79bd4307d0be 52c7e5dfce4e5930 checks/cases/topassertfalse.olang
@@ -2496,8 +2497,8 @@ d5d87da3cf156c0a bba2773268c83e42 compiler/definit.olang
 8eecc7e6e624f53a 744bfcc1480f0aa4 compiler/diagmsg.olang
 b02b474ae1593a73 336dc6b9fb0adbb8 compiler/doc.olang
 35fc969ca1a136ea 937772807dc0c829 compiler/effects.olang
-d1f91b22483339a1 f4c3f41ebeedbb6c compiler/emit.olang
-816d0f83ab2f908a 89c52c68d1324f7d compiler/eval.olang
+725edb6825a6d62e 6faa7bc840e4b1bd compiler/emit.olang
+163f0adb264d08fa e8ab91714ea86870 compiler/eval.olang
 eba7fd72c9763b72 4d7260221f3478bb compiler/explain.olang
 18829bd0a5b1f2ca 3705f65423c3116d compiler/facts.olang
 5b0d1d8455b9f604 195cc71e4c8c755c compiler/fetch.olang
@@ -2519,19 +2520,19 @@ d567d78faab8844a 7d14ca379389e62a compiler/interp.olang
 04b2a622da19ca9a 835500f0b436639f compiler/names.olang
 3f072b84e716c304 59b46a3ae1383924 compiler/needs.olang
 79acbc010c9bf08a b1a3323292403dad compiler/notebook.olang
-e5e0242646bf3108 e424c57c4257c929 compiler/olang.olang
+386ae89038d2e3da d56c89523fac4a5d compiler/olang.olang
 b39996c18bbe72bf ac116c53952c20fd compiler/paint.olang
 972886cfacdeac38 5c46daaa6f7ab18e compiler/parse.olang
 2cf0b668dac274b7 b2471504fdad37d8 compiler/profile.olang
 e2b2b02653bc4b63 5a8b70218b099dfd compiler/prompt.olang
 e7ba5bcc74b12eea e57cc8ec0248335a compiler/records.olang
-0c3f8c24752ad48a 5b5a3902974907e2 compiler/runtime.olang
+a5885a0d1b06dada fc413eac3f908c4b compiler/runtime.olang
 74927aaea47abc0f 8100b336b3b50d5c compiler/scan.olang
 219d8c751814e3e7 4b33c558744c9464 compiler/scope.olang
 ad0b24259637a1f2 35b31b7c785e8b14 compiler/session.olang
 8981299fcf27ba06 13b1ab50b72ab2a0 compiler/source.olang
 9bee4e94ca053127 882c3c1eac35e714 compiler/spin.olang
-3c3850e5a8a7739b e37bfe7dc8fea58e compiler/target.olang
+47f08d6424821b5d 1c88597e1bfb5d23 compiler/target.olang
 6a532120b548d9b9 1f959f62979af9eb compiler/testdata/lex/brackets.olang
 14c07dc193d19f47 f4317f59fb8f5cd5 compiler/testdata/lex/bytes.olang
 d3ca96586c22f5a8 73565baabf360712 compiler/testdata/lex/charateof.olang
@@ -2692,6 +2693,7 @@ f32716d6d9c12ec4 2280c72bcf5c532e std/regex.olang
 ac5bc791fca142dc ac6f449016838138 std/sha256.olang
 a81faf81143e4029 4013c4fb0394df9f std/stats.olang
 61284ebe07008756 ecb9197c0018fbfe std/sync.olang
+dcf1a3732f553966 f4b4dafada9bc1ea std/tile.olang
 c85cc7ff6bb88b66 b234092a7e8e1235 std/time.olang
 ca1ed8bbef28692e 47b67ea5774f4e95 std/tls.olang
 dc957db12eea5034 3e908f6a7936a6ae std/utf8.olang
@@ -2787,6 +2789,7 @@ c452c9cb509c23e1 dca352c6c89a7600 tests/structpat.olang
 b043808fc75ce994 65143d47c35f3f5a tests/textfields.olang
 0d4b3ba0fcda27dc f54bfde8d599baa6 tests/textplus.olang
 2fb13fa3e9f7127c a1fe4e3375cf79b7 tests/textslot.olang
+c843c45bf8667f1e 5f9583acad88af6d tests/tile.olang
 306278cf38ee3057 34b0c2b9622614a4 tests/topassert.olang
 b85bbc40e839bded b5a7ded126f0400f tests/tuplefacts.olang
 865512a5b10174be 415d01faaa817e2d tests/typedefaults.olang
