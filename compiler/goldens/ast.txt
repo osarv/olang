@@ -2754,6 +2754,7 @@ c2f50b441dc503ab 5d569021b19bb941 tests/keptfacts.olang
 3253d9e1f272b7f0 71d68e12eec68060 tests/keyenums.olang
 bcc9ef5a3b4134de 3d9949edfee60676 tests/lanes.olang
 01ffe7335fe6ab32 5ca34c7fbd5883d8 tests/literals.olang
+c03507ad87365063 e783974df7eab970 tests/litmut.olang
 375b5311b95e0319 11d005301eeb442f tests/loopref.olang
 02dc8a3ce8916c6f dd7963d4c14e4869 tests/loopvals.olang
 cb1a5845ede026cf 0791c61597117220 tests/match.olang
