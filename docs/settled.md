@@ -211,7 +211,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   QBW, the user's decisions 2026-10-27: "type in front for sure", "do only fromIter"; built 2026-11-07).**
   `Array<I64>[1, 2]`, `Vec<I64>[1, 2]`, `set.Set<I64>[1, 2]`, `Map<String, I64>["a": 1]`, `C[]` empty; a comprehension
   alike. An `Array<T>` is laid out as before; any other type is `C.FromIter(walk)`, the one protocol (D19), its errors
-  the literal's. The prelude and std collections declare one. **`$` renders the literal making it (E11a)**. No trait
+  the literal's; the walk is the literal's array's `Iter()`, or `IterMut()` (an `ArrayIterMut`, 2026-11-23, mine) where
+  the element holds a writable reference (T25c). The prelude and std collections declare one. **`$` renders the literal making it (E11a)**. No trait
   requires FromIter. A primitive, reference or struct with no FromIter in front is an error naming `Array<T>[...]`.
 - **Literals without the type in front (E19, E20, E20a, the user, 2026-11-13, partly reversing QBU's "type in front";
   constructors keep their names).** One rule for every literal form, as a number literal adapts (T6/T6a): `[a, b]`,

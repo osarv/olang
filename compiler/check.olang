@@ -17726,7 +17726,10 @@ fn (c mut Checker&) fromIterElem(f I64, made types.TypeId) types.TypeId {
 
 # made.FromIter(arr.Iter()) - the builder b handed a walk of the array the items made (E19, E27)
 fn (c mut Checker&) fromIter(sp source.Span, msp source.Span, b litBuilder, made types.TypeId, arr typed.Expr&) typed.Expr& {
-    im := c.roleMethod(typeOf(arr), "Iter", 0)
+    # (elements holding writable references are walked writably: a read-only walk may not hand them out, T25c - the
+    # literal's array is its own)
+    walk := "IterMut" if c.holdsWritable(c.P.T.Elem(c.deref(typeOf(arr)))) else "Iter"
+    im := c.roleMethod(typeOf(arr), walk, 0)
     if im < 0 {
         c.gap(sp, "an array with no Iter")
         return c.unknown(sp)

@@ -1,0 +1,23 @@
+# E19, T25c: a collection literal of elements holding writable references - walked writably (Array.IterMut, an
+# ArrayIterMut), since a read-only walk may not hand them out; each element's reference still reaches its referent
+type Counter struct() {
+    n := 0
+}
+
+type Link struct(to mut Counter&) {
+    to
+}
+
+fn bumped() I64 {
+    a := Counter()
+    b := Counter()
+    v := Vec<Link>[Link(a), Link(b), Link(a)]
+    for l in v: l.to.n += 1
+    m := Map<I64, Link>[1: Link(b)]
+    m.Get(1)!.to.n += 10
+    return a.n * 100 + b.n
+}
+
+test "E19: a Vec and a Map literal of elements holding writable references" { assert bumped() == 211 }
+
+assert bumped() == 211, "decided while compiling"

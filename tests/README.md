@@ -92,6 +92,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   local - each call through one judged as the direct call it is; read back after an arena churn, baked globals and
   top-level asserts deciding the same while compiling.
 - `viewplace.olang` - storage kept for a view (O27 as placement): a turn's text kept through views of it, a view handed
+- `litmut.olang` - a Vec and a Map literal of elements holding writable references (E19, T25c): walked writably, each
+  reference still reaching its referent.
   back of what a function builds, a slice of a temporary kept in a parameter's field, a generator's views of a local it
   made, a closure over a turn's local kept in a field, a part of an instance kept past its turn; read back after an arena
   churn, a baked global and top-level asserts deciding the same while compiling.

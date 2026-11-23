@@ -41885,3 +41885,15 @@ stood as written; tests/loopvals.olang had never been built - its `Vec<Link>[]` 
 read-only Link cannot be returned as a writable value", in ArrayIter's Next: a Vec literal of a type holding a `mut`
 reference cannot be built from an array literal - a limit of its own, not this rule's), so it is `Vec<Link>()` with
 Pushes.
+
+## 2026-11-23: a literal of elements holding writable references (E19, T25c; mine; wt-t25c)
+
+Found by wt-loopval: `Vec<Link>[Link(a), Link(b)]`, Link holding a `mut Counter&`, was refused with T25c inside
+ArrayIter's Next ("a copy of a read-only Link cannot be returned as a writable value"). The refusal is right for
+ArrayIter: it walks a read-only view, and handing out a copy holding a writable reference would make a read-only path
+writable - a plain `for l in ls` over a read-only `Array<Link>&` writing `l.to.n` is refused the same way. What was
+wrong is the literal: its array is its own, made where the call is, yet it was walked read-only. The prelude now has
+`IterMut()` on an array reached writably, giving an `ArrayIterMut<T>` (Next, Rest; Vec's FromIter reserves its count
+as for ArrayIter), and a literal whose element holds a writable reference (Checker.holdsWritable) is walked by it;
+every other literal is built as before. A Map literal of such values works through the same path. tests/litmut.olang
+(also decided while compiling).

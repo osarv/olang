@@ -90,6 +90,7 @@ fn Vec<T>.FromIter<I Iterator<T ? E> ? E>(it mut I&) Vec<T> ? E {
     out Vec<T>
     match I {
         case ArrayIter<T> { out.Reserve(it.Rest().Len()) }
+        case ArrayIterMut<T> { out.Reserve(it.Rest().Len()) }
         case _ { }
     }
     for x in try it: out.Push(x)

@@ -1993,7 +1993,9 @@ and no `Iter` of its own reaches the iterator defaults (`g.Iter().Count(f)`).
 Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its start that satisfies
 `Iterator<T>` - so code written over `Iterator<T>` takes an array as it takes any other collection
 (`total(a.Iter())`); its `Rest()` is a view of the elements it has still to give, and `Advance(n)` moves it past at
-most `n` of them, as that many `Next` calls would, giving how many it passed. There is no `Iterable` trait: a function wanting "anything that can be walked" takes
+most `n` of them, as that many `Next` calls would, giving how many it passed. An array reached writably also has
+`IterMut()`, giving an `ArrayIterMut<T>` - the same walk over a writable view, so it may hand out elements holding
+writable references, which a read-only walk may not (T25c); its `Rest()` is `ArrayIter`'s. There is no `Iterable` trait: a function wanting "anything that can be walked" takes
 `it mut I&` with `I Iterator<T>` in its list and its caller writes `.Iter()` (G9c infers `T`). The prelude's defaults for
 `Iterator<T>` (M19e) are `Some`, `Every`, `Count`, `Fold`, `Map` and `Filter` - the last two building a new `Vec` -
 and `ToVec()`, a new `Vec` of every value left - `m.Keys().ToVec()`; each fails with what the iterator and its callbacks fail with - `E`, bound to their union
@@ -4490,7 +4492,8 @@ error naming `Array<I64>[1, 2]`. What the literal is depends on the made type:
   in place (T7d), `Array<Array<F32>>[Array<F32>[1, 2], Array<F32>[3, 4]]` two rows of two; items of different lengths
   are each the array's own copy (T7a), `Array<String>["a", "bc"]`.
 - **`Vec<T>`** (M19d) and **any other type `C`** declaring a builder `FromIter` (D19, below): `C.FromIter(it)`, `it` a
-  walk of the items - `Array<E>[items].Iter()`, an `ArrayIter<E>` over an array made where the call is, so the builder
+  walk of the items - `Array<E>[items].Iter()`, an `ArrayIter<E>` over an array made where the call is (`IterMut()`, an
+  `ArrayIterMut<E>`, where `E` holds a writable reference: the array is the literal's own, T25c), so the builder
   may read their count before the first (`it.Rest().Len()`; a `Vec` reserves it, its buffer made once) - where `E` is
   the element type its `FromIter` takes: the element its parameter's type is an `Iterator` of (a type variable
   constrained by `Iterator<E ? Err>`, or an iterator type whose `Next` gives `E`). `Vec<I64>[1, 2, 3]`, `Vec<I64>[]`.

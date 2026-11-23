@@ -2483,7 +2483,7 @@ e20178f94e07dfed 093e0335a8debfcd compiler/bindgen.olang
 1c0afe32dcaf03c1 9684b6618b8c6420 compiler/build.olang
 9eb8d9916112f375 acad139c7c5a3871 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
-a68fdc2523c02c71 bb8cc1309cef3a3c compiler/check.olang
+5fbe4c6b78e0b45b 8929fe6cfbeecb9d compiler/check.olang
 da018e972c2ecc90 2073133fd217ef43 compiler/cond.olang
 d5d87da3cf156c0a bba2773268c83e42 compiler/definit.olang
 10fe8de7e2c53448 07ee50d7637ae4d4 compiler/diag.olang
@@ -2651,7 +2651,7 @@ e9aa94e405345e7a 4927fbcc42dcb6a9 std/order.olang
 6d63e48e89ab2815 a6f0f6bf11a5db33 std/plot.olang
 3ea631f369fef41e 9b46acf3eb0d51c6 std/pool.olang
 1a2030bf036772f0 e4bdf373a917a2e6 std/prelude/argument.olang
-a1270e0e5b2c331e 8bafd9a414f8a71f std/prelude/array.olang
+0882c16e49511749 b4e46fdc95db5e98 std/prelude/array.olang
 71c041edf9953fff 79ca2f0eaf4e79f4 std/prelude/axis.olang
 4980b308c63a73cb bf473ce0be40cb8e std/prelude/columns.olang
 39b4b8c10db8acbb 91e5290106839be2 std/prelude/complex.olang
@@ -2678,7 +2678,7 @@ fe5b84d4c9b76537 3124ca503c4741de std/prelude/tests/pow.olang
 6355680ec0892971 5031930790552c0f std/prelude/tests/text.olang
 ecc53430a01cc6c7 5695b53ed745cea6 std/prelude/tests/vec.olang
 f206864d97cf5b8e feb1bcc9895fdc81 std/prelude/text.olang
-cc2ac3b62a421bb1 3f04ed44986db7b1 std/prelude/vec.olang
+f674158ab881404d b4026bb412222634 std/prelude/vec.olang
 a933f00380704315 cb2ac8b1a4a6003e std/prop.olang
 2b48bebf867f21e2 fcc999a2deb668d6 std/rand.olang
 f32716d6d9c12ec4 2280c72bcf5c532e std/regex.olang

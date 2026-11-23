@@ -6281,8 +6281,8 @@ t13bvecat.olang:7:16: error[T13b, G18]: Get needs a copy, and File is unique
     7 |     f := try v.Get(0) catch VecError { return }
       |                ^~~
 t13bvecat.olang:7:16: note: its values are never copied
-$ROOT/std/prelude/vec.olang:123:12: note: Get needs a copy here
-  123 |     return v.data[i]
+$ROOT/std/prelude/vec.olang:124:12: note: Get needs a copy here
+  124 |     return v.data[i]
       |            ^~~~~~~~~
 t13bvecat.olang:7:16: help: call Get with a reference ('File&') or with a type that copies
 compilation failed with 1 error
