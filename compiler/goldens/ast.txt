@@ -2089,7 +2089,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-2377a4bf8d3edfca db5c1884061b1742 checks/checks.olang
+b9fe98db04ec97e7 66a03cec3374e9a0 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2225,6 +2225,7 @@ ed65e1c871a90895 f027d66ab67504be checks/fixtures/freeing/elements.olang
 217397296d19aecc 54f099facf748fa7 checks/fixtures/freeing/global.olang
 c92dc198c42716e3 04940b8c8584997e checks/fixtures/freeing/globalinit.olang
 79701488917b3ac8 f4652454247b4b47 checks/fixtures/freeing/globalviews.olang
+fcb8db7508dca0da af38e63a1d5aa0ce checks/fixtures/freeing/growkept.olang
 612dfdcfb3a4acae 4b3eb425d967678b checks/fixtures/freeing/growth.olang
 8d3c4aca81f9cb85 28d51ed34ad59b92 checks/fixtures/freeing/joins.olang
 40f829da5cbe9587 675afcba3869791b checks/fixtures/freeing/litlocal.olang
@@ -2492,7 +2493,7 @@ eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
-dc3401b5948e1718 092e54c34c1931a4 compiler/free.olang
+8a1dd9f226b013da 98864a1b02a7c847 compiler/free.olang
 7dcf3f3fd8db67e5 e07e51a6cff33838 compiler/generic.olang
 47fb7c219d28bceb 53557355686b67f3 compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang
