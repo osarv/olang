@@ -3882,3 +3882,13 @@ Answered 2026-11-18 (the user, via the Orchestrator: "Go with B, yes"): no rule;
 
 3. (2026-11-23, asked via the Orchestrator; docs/fieldscopes.md question 1; the user, 2026-11-23, via the Orchestrator: "can we make B actually work?", worried it weakens memory safety - next: docs/fieldscopes.md for option B with a soundness argument (the field still cannot outlive its referent; only the exact-equality over-approximation goes), where the run-time lookup happens and its cost; no building until the user has seen it) A struct holding bare `mut X&` fields (the compiler's lower.lowering, emit.fnEm) gets its instance scope equal to X's (C2d/O25g), so what it holds and returns lives as long as X - the compiler's lower+emit peak 2.5 -> 4.3 GB. Options: (A) keep the rule, restructure lower/emit (output passed to every method); (B) a field that can be stored through gets a binding of its own (O28/O23a), passed by callers and found at run time (O29) only where no caller knows it; (C) scope parameters in struct types. Default in effect: (A). Recommendation: (B). Section-8 design.
    Answered (the user, 2026-11-23, via the Orchestrator, after docs/fieldscopes.md "Option B in full"): "Yes, build this." Option B with O23b (equality kept for collections, globals, any); section-8, Opus xhigh; refusal checks, lower/emit peak measured before/after, bulk soundness review before merging.
+
+1. (2026-11-23, asked via the Orchestrator) AMX BF16 products (tdpbf16ps, 369 GMAC/s = 7.5x F32 at 2048x128x688 on one
+   thread) as one named std operation `tile.AddDot(...)` (C += A.B over the whole depth; runtime does the permission and
+   tile config; the pair-dot loop where the processor lacks it): its accumulation order matches no simple model (five
+   tested, 19-48% of elements differ), so a bit-exact fallback needs it reverse-engineered. Allow AddDot's result to
+   depend on the target (against B12c's one result on every target), or require bit-exact? Default in effect: nothing
+   built. Recommendation: allow it for this named operation, stated in SPEC (products exact, F32 accumulation, order
+   unspecified), as BLAS does.
+   Withdrawn (2026-11-23): the order was found (HISTORY "tdpbf16ps's arithmetic, found"), so AddDot can be bit-exact
+   on every target and B12c holds; nothing to decide.
