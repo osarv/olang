@@ -1,0 +1,47 @@
+import "std/io"
+import "std/os"
+
+# E12c, O6 (D9i; wt-argmove): a fresh text given to a reference a Vec keeps - `v.Push($s)` and `v.Push(b.ToString())`
+# into a Vec<String&> held where the call does not close - is built where the reference goes, once. Before, each was
+# built there and copied there again, the first copy left behind until that scope closed: twice the text resident. The
+# measure is the peak address space gained (VmPeak, as growth.olang's): N texts of 256 KB, each in a chunk mapped for
+# itself, are 25 MB at N = 100 for each shape; a program building each twice is at 50, and the limit is midway, 37 MB
+N I64 = 100
+
+type Holder struct() {
+    texts Vec<String&>
+}
+
+fn (h mut Holder&) add(s String&) { h.texts.Push($s) }
+
+fn (h mut Holder&) made(s String&) {
+    b := StringBuilder()
+    b.Push(s)
+    h.texts.Push(b.ToString())
+}
+
+# the peak address space, in KB (VmPeak)
+fn peak() I64 {
+    st := try os.ReadFile("/proc/self/status") catch default ""
+    for line in st.Lines() {
+        if line.StartsWith("VmPeak:"): return try line[7:line.Len() - 3].Trim().ParseInt(10) catch default 0
+    }
+    return 0
+}
+
+fn verdict(gained I64) String { return "once" if gained < 37 else "twice, " + $gained + " MB" }
+
+fn main() {
+    b := StringBuilder()
+    for _ in range 256 * 1024: b.Push("x")
+    s := b.ToString()
+    h mut Holder& = Holder()
+    p0 := peak()
+    for _ in range N: h.add(s)
+    p1 := peak()
+    for _ in range N: h.made(s)
+    p2 := peak()
+    t := 0
+    for x in h.texts: t += x.Len()
+    io.PutLn($t + " " + verdict((p1 - p0) / 1024) + " " + verdict((p2 - p1) / 1024))!
+}

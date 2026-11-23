@@ -5140,7 +5140,54 @@ fn (ln mut lowering&) promotedInPlace(pr typed.Promote&, ty types.TypeId, sp sou
         return r
     }
     if t0.Length(a0) == types.TypeId(0) and ln.copyInPlace(pr): return ln.promotedCopy(pr, ty, sp)
+    if t0.Length(a0) == types.TypeId(0) and ln.freshInPlace(pr, ty): return ln.promotedFresh(pr, ty, sp)
     return try ln.promotedFill(pr, ty, sp, a0)
+}
+
+# E12c, O6: a fresh value promoted to a read-only run-time-length array reference - a text (`v.Push($s)` into a
+# Vec<String&>), or a call's result of a body handing back no view of what it is given (`v.Push(b.ToString())`) - is
+# built where the reference goes, the reference its pair, rather than built and copied there again (the first copy
+# left in that scope until it closes). A text's site is adopted there; a call's result is taken only where the plan
+# already passes that scope for it. Never a region of early freeing's (O8d) on either side
+fn (ln mut lowering&) freshInPlace(pr typed.Promote&, ty types.TypeId) Bool {
+    t := ln.T
+    if not ln.planned or (t.PermOf(ty) & types.Writable) != 0 or t.RunsCopy(t.Referent(ty)): return false
+    if pr.Site < typed.SiteId(0) or I64(pr.Site) >= ln.plan.Built.Len() or ln.plan.RegionKind[I64(pr.Site)] != 0: return false
+    to := ln.plan.Built[I64(pr.Site)]
+    if to == typed.Scope.Unset or heldRef(ln.built(pr.Site)): return false
+    site := freshSite(pr.X)
+    if site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() or ln.plan.RegionKind[I64(site)] != 0 or heldRef(ln.built(site)): return false
+    x := pr.X
+    if x == typed.Expr.Text: return true
+    if x != typed.Expr.Call: return false
+    c := x.c
+    id := typed.CalleeBody(c)
+    if id < 0 or ln.L.ViewsOf(typed.BodyId(I32(id))) != 0 or ln.freshCtor(c): return false
+    return ln.resultScopeAt(c, id) == to
+}
+
+# the site a fresh value's storage is made at: a text's, a call's; -1 for any other value
+fn freshSite(x typed.Expr&) typed.SiteId {
+    return match x {
+        case typed.Expr.Text(_, _, tx): tx.Site
+        case typed.Expr.Call(_, _, c): c.Site
+        case _: typed.SiteId(-1)
+    }
+}
+
+# a fresh value made where the reference it is promoted to goes (freshInPlace): the reference its pair
+fn (ln mut lowering&) promotedFresh(pr typed.Promote&, ty types.TypeId, sp source.Span) mir.Operand {
+    x := pr.X
+    sv, sa := ln.adoptSite, ln.adoptAt
+    if x == typed.Expr.Text {
+        ln.adoptSite = x.t.Site
+        ln.adoptAt = ln.built(pr.Site)
+    }
+    v := ln.val(x)
+    ln.adoptSite, ln.adoptAt = sv, sa
+    if ln.dead: return mir.Operand.None
+    slot := ln.local(v, x.Type(), sp)
+    return ln.into(ty, mir.Rvalue.Ref(mir.Lvalue.L(slot), ty), sp)
 }
 
 # a value's own copy (MakeKind.Copy), or a conversion of one (T13a's `String(chars)`), promoted to a run-time-length
@@ -7763,7 +7810,7 @@ fn (ln mut lowering&) text(tx typed.Text&, ty types.TypeId, sp source.Span) mir.
             case typed.Piece.Render(_) { ln.render(bref, vals[i], tys[i], sp) }
         }
     }
-    r := ln.into(ty, mir.Rvalue.Text(bref, ln.built(tx.Site), ty), sp)
+    r := ln.into(ty, mir.Rvalue.Text(bref, ln.madeAt(tx.Site), ty), sp)
     ln.emit(mir.Stmt.Close(sp, b))
     return r
 }
