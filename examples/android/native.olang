@@ -55,25 +55,40 @@ extern link "GLESv2" {
     fn glViewport(x I32, y I32, width I32, height I32)
 }
 
-# C's memmove, memcpy and mempcpy, declared for the three things the program does with addresses it holds as U64 -
-# each a copy of n bytes that C does as the program's word (X1a): memmove of no bytes gives back its destination, here
-# an export fn's C entry (X13), so its address; memcpy reads ANativeActivity's callbacks table into an array, and
-# mempcpy writes it back
+# C's memcpy, for the one copy the program makes into C's memory: the callbacks table written whole, the struct handed
+# over as its storage (X22)
 extern {
-    fn memmove(entry fn&(activity U64, other U64), from U64, n U64) U64
-    fn memcpy(to mut Array<U64>&, from U64, n U64) U64
-    fn mempcpy(to U64, from Array<U64>&, n U64) U64
+    fn memcpy(to mut CVoid?&, from CVoid?&, n U64) CVoid?&
 }
 
-# ANativeActivityCallbacks: sixteen function pointers, these the ones set (android/native_activity.h)
-OnDestroy I64 = 5
-OnNativeWindowCreated I64 = 7
-OnNativeWindowDestroyed I64 = 10
-OnInputQueueCreated I64 = 11
-OnInputQueueDestroyed I64 = 12
-# ANativeActivity: callbacks at 0, internalDataPath (the files directory) at 32
-CallbacksAt I64 = 0
-InternalDataPathAt I64 = 32
+# ANativeActivity as far as it is read (android/native_activity.h): its callbacks table and the files directory
+type Activity struct() {
+    callbacks CVoid?& = null
+    vm CVoid?& = null
+    env CVoid?& = null
+    clazz CVoid?& = null
+    internalDataPath CStr?& = null
+}
+
+# ANativeActivityCallbacks: sixteen C function pointers (X13a), each an export fn's C entry or null - five set here
+type Callbacks struct() {
+    onStart extern fn?&(activity U64) = null
+    onResume extern fn?&(activity U64) = null
+    onSaveInstanceState extern fn?&(activity U64, size U64) U64 = null
+    onPause extern fn?&(activity U64) = null
+    onStop extern fn?&(activity U64) = null
+    onDestroy extern fn?&(activity U64) = null
+    onWindowFocusChanged extern fn?&(activity U64, focused I32) = null
+    onNativeWindowCreated extern fn?&(activity U64, window U64) = null
+    onNativeWindowResized extern fn?&(activity U64, window U64) = null
+    onNativeWindowRedrawNeeded extern fn?&(activity U64, window U64) = null
+    onNativeWindowDestroyed extern fn?&(activity U64, window U64) = null
+    onInputQueueCreated extern fn?&(activity U64, queue U64) = null
+    onInputQueueDestroyed extern fn?&(activity U64, queue U64) = null
+    onContentRectChanged extern fn?&(activity U64, rect U64) = null
+    onConfigurationChanged extern fn?&(activity U64) = null
+    onLowMemory extern fn?&(activity U64) = null
+}
 
 # EGL's and GL's numbers (EGL/egl.h, GLES2/gl2.h)
 EglNone I32 = 0x3038
@@ -97,63 +112,41 @@ FilesDir mut String = ""
 
 fn log(text String&) { __android_log_write(4, "olang".ToC(), text.ToC()) }  # ANDROID_LOG_INFO
 
-# the 8 bytes at address at, read as C reads a pointer
-fn word(at U64) U64 {
-    one := Array<U64>(1)
-    memcpy(one, at, 8)
-    return one[0]
-}
-
-# the NUL-terminated text at address at, up to max bytes
-fn cText(at U64, max I64) String {
-    got := StringBuilder()
-    for i in range max {
-        one := Array<U64>(1)
-        memcpy(one, at + U64(i), 1)
-        if one[0] == 0: break
-        got.PushChar(Char(U8(one[0])))
-    }
-    return got.ToString()
-}
-
 # ---- the activity ----
 
-export fn ANativeActivity_onCreate(activity U64, saved U64, savedSize U64) {
+export fn ANativeActivity_onCreate(activity Activity&, saved U64, savedSize U64) {
     log("onCreate")
-    table := word(activity + U64(CallbacksAt))
-    slots := Array<U64>(16)
-    memcpy(slots, table, 128)
-    slots[OnDestroy] = memmove(onDestroy, 0, 0)
-    slots[OnNativeWindowCreated] = memmove(onWindowCreated, 0, 0)
-    slots[OnNativeWindowDestroyed] = memmove(onWindowDestroyed, 0, 0)
-    slots[OnInputQueueCreated] = memmove(onQueueCreated, 0, 0)
-    slots[OnInputQueueDestroyed] = memmove(onQueueDestroyed, 0, 0)
-    mempcpy(table, slots, 128)
-    FilesDir = cText(word(activity + U64(InternalDataPathAt)), 4096)
+    table := Callbacks()
+    table.onDestroy = activityDestroyed
+    table.onNativeWindowCreated = windowCreated
+    table.onNativeWindowDestroyed = windowDestroyed
+    table.onInputQueueCreated = queueCreated
+    table.onInputQueueDestroyed = queueDestroyed
+    memcpy(activity.callbacks, table, U64(Callbacks.Size))
+    files := activity.internalDataPath
+    if files != null: FilesDir = String.FromC(files, 4096)
     runChecks()
 }
 
-# every callback takes the activity and one handle (a window, a queue): onDestroy, given only the activity, ignores
-# the second, which C's calling convention leaves unread
-export fn onDestroy(activity U64, other U64) { log("onDestroy") }
+export fn activityDestroyed(activity U64) { log("onDestroy") }
 
-export fn onWindowCreated(activity U64, window U64) {
+export fn windowCreated(activity U64, window U64) {
     log($"window created, " + $ANativeWindow_getWidth(window) + "x" + $ANativeWindow_getHeight(window))
     openWindow(window)
     draw()
 }
 
-export fn onWindowDestroyed(activity U64, window U64) {
+export fn windowDestroyed(activity U64, window U64) {
     log("window destroyed")
     closeWindow()
 }
 
-export fn onQueueCreated(activity U64, queue U64) {
+export fn queueCreated(activity U64, queue U64) {
     Queue = queue
     AInputQueue_attachLooper(queue, ALooper_forThread(), 1, onInput, 0)
 }
 
-export fn onQueueDestroyed(activity U64, queue U64) {
+export fn queueDestroyed(activity U64, queue U64) {
     AInputQueue_detachLooper(queue)
     Queue = 0
 }

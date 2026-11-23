@@ -1,0 +1,9 @@
+# check: fail error[X13a]: 'extern fn?&(xs Array<I32>&) I64' is no C function pointer
+# X13a: a C function pointer's parameters are a callback's (X13) - no array, whose length C would not be given
+type Table struct() {
+    sum extern fn?&(xs Array<I32>&) I64 = null
+}
+
+fn main() {
+    t := Table()
+}

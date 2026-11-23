@@ -1,0 +1,24 @@
+# X13a from a module that is not the root: a plain struct of C function pointers, filled from this module's own export
+# fn and called through ("t.F!(...)") - tests/cfnptrmod.olang calls it from several places. A call through a C function
+# pointer is an extern call to section 8 (X1a), and the export fn's C entry, written in the root's object, is declared
+# in this one's
+
+export fn cfpSum5(env CVoid?&, a I64, b I64, c I64, d I64) I64 { return a + b + c + d + (0 if env == null else 1) }
+
+# a table as JNI's is, of one C function pointer of five parameters
+type Table struct() {
+    F extern fn?&(env CVoid?&, a I64, b I64, c I64, d I64) I64 = null
+}
+
+fn Table.Filled() Table {
+    t := Table()
+    t.F = cfpSum5
+    return t
+}
+
+fn Call(t Table&, x I64) I64 { return t.F!(null, x, 1, 2, 3) }
+
+fn Sum(x I64) I64 {
+    t := Table.Filled()
+    return Call(t, x)
+}

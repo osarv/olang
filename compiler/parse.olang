@@ -70,6 +70,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     noGt Bool = false                  # in a type-argument list: ">" closes it, and a comparison or shift is no operator
     inCtor Bool = false                # at a constructor body's top level: a bare name is a field (C2)
     fnBase Bool = false                # the type next is a declaration's base: a function type there has no marker (T21)
+    cFunc Bool = false                 # the function type next was written after "extern" (X13a)
     inLine Bool = false                # in a one-line body (S1b): "else" and "catch" end its statement too
     lamItem Bool = false               # ... and the lambda an item of a list: its "," is the list's (L18c)
     inLam Bool = false                 # in a lambda's one-line body (S1b, D16): what closes its bracket ends it, a line end is left
@@ -1181,7 +1182,7 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>& ? Fail {
 # "(params) [results] [? errors]" - the "(" not yet read; several results bare, "I64, I64" (D8c). A lambda's parameters
 # may leave their types out. A function type or a lambda (value) read as an item of a list takes one result and one
 # error item, so a "," after it is the list's: one with several of either is parenthesized whole (L18c)
-fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false, ofTrait Bool = false) ast.Sig& ? Fail {
+fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false, ofTrait Bool = false, ext Bool = false) ast.Sig& ? Fail {
     one := value and p.item
     try p.want(token.Tok.LParen)
     p.sawVariadic = false
@@ -1220,7 +1221,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false, ofTr
         w := words[0]
         p.report(w.Sp.Start, w.Sp.End, msgs.PromiseMisplaced(w.Word.Text()))
     }
-    return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, swaps, variadic, words)
+    return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, swaps, variadic, words, ext)
 }
 
 # T21c: the promises after a signature - read for as long as a token on its line begins one: a word, "borrows NAME",
@@ -1259,7 +1260,8 @@ fn promiseWord(k token.Tok) Bool {
 fn (p Parser&) startsResult() Bool {
     k := p.peek()
     return k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Fn or k == token.Tok.LParen or
-           k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait or k == token.Tok.Any or k == token.Tok.Weak
+           k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait or k == token.Tok.Any or k == token.Tok.Weak or
+           k == token.Tok.Extern
 }
 
 # "[? [A, B.c]]" - a list on one line; one item where the function type or lambda it ends is an item of a list (one),
@@ -1466,15 +1468,24 @@ fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
     bareOk := p.fnBase
     p.fnBase = false
     match p.peek() {
+        case token.Tok.Extern {
+            # X13a: "extern fn&(...)", "extern fn?&(...)" - a C function pointer, written as a function type is
+            p.advance()
+            if not p.sees(token.Tok.Fn): try p.fail("'fn' after 'extern' in a type")
+            p.cFunc = true
+            return try p.typeBase()     # never a declaration's base: always with its marker
+        }
         case token.Tok.Fn {
             # T21: a function type is reference-only - "fn&(...)" never null, "fn?&(...)" may be - its marker on the "fn";
             # only a type declaration's base is written bare ("type Handler fn(e Event)")
             p.advance()
+            ext := p.cFunc
+            p.cFunc = false
             marked := p.sees(token.Tok.Amp) or p.nullMark()
             nullable := p.sees(token.Tok.Question)
             if nullable: p.advance()
             if marked: p.advance()
-            s := try p.sig(false, true)
+            s := try p.sig(false, true, ext = ext)
             f := ast.TypeRef.Func(p.from(at), s)
             if marked: return ast.TypeRef.Ref(p.from(at), f, nullable, false)
             if not bareOk {
@@ -2010,7 +2021,8 @@ fn (p mut Parser&) idenStmt() ast.Stmt& ? Fail {
         return ast.Stmt.Var(sp, v)
     }
     if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut or k2 == token.Tok.Any or
-       k2 == token.Tok.Fn or k2 == token.Tok.Enum or k2 == token.Tok.Struct or k2 == token.Tok.Weak {
+       k2 == token.Tok.Fn or k2 == token.Tok.Enum or k2 == token.Tok.Struct or k2 == token.Tok.Weak or
+       k2 == token.Tok.Extern {
         nt := p.tk()
         name := try p.name()
         return try p.varDecl(at, p.one(name, source.Span(nt.Start, nt.End)))

@@ -1141,6 +1141,42 @@ fn (c mut Checker&) callbackType(t types.TypeId) Bool {
     return r == types.VoidT or c.externValue(r)
 }
 
+# X13a: an export fn, named, where a C function pointer is wanted: its C entry, of the pointer's type - the function's
+# own, scopes aside (Same); C may call it from here on (HandedToC). A lambda, a function value or an ordinary function
+# has no C entry
+fn (c mut Checker&) cEntry(x typed.Expr&, want types.TypeId, sp source.Span) typed.Expr& {
+    f := c.P.T.NonNull(want)
+    match x {
+        case typed.Expr.Fn(fsp, _, typed.FnVal.Named(body)) {
+            inst := c.Bodies[I64(body)].Inst()
+            if inst >= 0 and c.P.FnDecl(c.P.InstanceFn(inst)).Export {
+                if not c.P.T.Same(typeOf(x), c.P.T.Referent(f)) {
+                    c.err(sp, msgs.TypeMismatch(c.ty(want), c.ty(typeOf(x))))
+                    return x
+                }
+                c.P.L.HandedToC.Put(c.P.InstanceFn(inst), true)
+                y := typed.Expr.Fn(fsp, f, typed.FnVal.Named(body))
+                return y if f == want else c.convert(sp, y, want)
+            }
+        }
+        case _ { }
+    }
+    c.err(sp, msgs.CFuncNotExport(c.ty(want)))
+    return x
+}
+
+# X13a: a C function pointer as written - "extern fn&(...)": its parameters and result a callback's (X13), and no
+# promise or default, which C cannot keep or fill in
+fn (c mut Checker&) cFuncWritten(tr ast.TypeRef&, s ast.Sig&) Bool {
+    t := c.P.Resolve(c.fr().Ctx, tr)
+    if t == types.UnknownT: return false
+    defaults := false
+    for prm in s.Params: defaults = defaults or prm.Dflt != null
+    if c.callbackType(c.P.T.Referent(t)) and s.Promises.Len() == 0 and not defaults and not s.Variadic: return true
+    c.err(tr.Span(), msgs.CFuncShape(c.ty(t)))
+    return false
+}
+
 # X12: an export fn - a function C calls by its name: no receiver, not generic, a name that is not the program's own,
 # parameters and a result C has counterparts for (an array by reference, a result array copied out)
 fn (c mut Checker&) exportRules(f I64) {
@@ -1250,7 +1286,7 @@ fn (c mut Checker&) externParam(t types.TypeId) Bool {
 fn (c mut Checker&) externValue(t types.TypeId) Bool {
     u := c.under(t)
     if c.cNumber(u) or u == types.BoolT: return true
-    if c.foreignRef(t): return true
+    if c.foreignRef(t) or c.P.T.CFunc(t): return true   # X10, X13a
     if c.P.T.Packed(u) { return not c.holdsFloat(u) }   # X11a: by value only as integer bits
     return c.plainStruct(t, 0)
 }
@@ -1291,7 +1327,7 @@ fn (c mut Checker&) cNumber(u types.TypeId) Bool { return c.P.T.IsNumber(u) and 
 
 fn (c mut Checker&) plainField(t types.TypeId, depth I64) Bool {
     u := c.under(t)
-    if c.cNumber(u) or u == types.BoolT or c.foreignRef(t): return true
+    if c.cNumber(u) or u == types.BoolT or c.foreignRef(t) or c.P.T.CFunc(t): return true
     if c.P.T.KindOf(u) == types.Kind.Array {
         return c.P.T.KindOf(c.P.T.Length(u)) == types.Kind.Const and c.plainField(c.P.T.Elem(u), depth + 1)
     }
@@ -6403,6 +6439,12 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
                 c.spell(b, c.P.T.Elem(c.P.T.Referent(t)), false)
                 return
             }
+            if c.P.T.CFunc(t) {
+                # X13a: a C function pointer, its marker on its "fn"
+                b.Push("extern ")
+                c.spellFunc(b, c.P.T.OrNull(c.P.T.Referent(t)) if (perm & types.Nullable) != 0 else c.P.T.Referent(t))
+                return
+            }
             if not top and (perm & types.Writable) != 0: b.Push("mut ")
             c.spell(b, c.P.T.Referent(t), false)
             b.Push("?&" if (perm & types.Nullable) != 0 else "&")
@@ -7485,6 +7527,13 @@ fn (c mut Checker&) fit(x typed.Expr&, want types.TypeId, sp source.Span) typed.
     if have == types.NoreturnT: return x
     hk := c.P.T.KindOf(have)
     wk := c.P.T.KindOf(want)
+    # X13a: a function where a C function pointer is wanted - an export fn, named, its C entry; nothing else
+    if hk == types.Kind.Func and c.P.T.CFunc(want): return c.cEntry(x, want, sp)
+    # (and a C function pointer is never read as what it points to: no olang function value stands behind it)
+    if c.P.T.CFunc(have) and not c.P.T.CFunc(want) and have != types.NullT {
+        c.err(sp, msgs.TypeMismatch(c.ty(want), c.ty(have)))
+        return x
+    }
     # T20: null is the error value meaning no error; an error value fits a set holding everything it can be, recoded (R6)
     if wk == types.Kind.ErrVal and have == types.NullT: return c.lit(x.Span(), want, 0)
     if wk == types.Kind.ErrVal and hk == types.Kind.ErrVal {
@@ -12330,7 +12379,7 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             if stored and not isWeak: c.genHeld(of)
             match of {
                 case ast.TypeRef.Any(_, trt) { return c.anyWritten(trt) }
-                case ast.TypeRef.Func(_, s) { return c.sigWritten(s) }   # T21: "fn&(...)", "fn?&(...)"
+                case ast.TypeRef.Func(_, s) { return c.sigWritten(s) and (not s.Extern or c.cFuncWritten(tr, s)) }   # T21: "fn&(...)", "fn?&(...)"; X13a
                 case _ { }
             }
             if c.traitWritten(of, tr): return false
@@ -14493,7 +14542,10 @@ fn (c mut Checker&) argDefault(sp source.Span, target typed.Callee&, f I64, k I6
             if file != here: return typed.Expr.Away(sp, file, x)
             return x
         }
-        case typed.Callee.Value(fv) { return c.typeDefault(sp, c.P.T.NonNull(typeOf(fv)), k, want) }
+        case typed.Callee.Value(fv) {
+            ft := c.P.T.NonNull(typeOf(fv))
+            return c.typeDefault(sp, c.P.T.Referent(ft) if c.P.T.CFunc(ft) else ft, k, want)   # X13a: a C pointer's function type
+        }
         case _ { return c.defaultArg(sp, f, k, hasRecv, want, c.calleeArgs(target)) }
     }
 }
@@ -15174,6 +15226,12 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&, a
     if t == types.UnknownT {
         c.dropArgs(args)
         return c.unknown(sp)
+    }
+    if c.P.T.CFunc(t) {
+        # X13a: through a C function pointer - C's function, called as an extern is; one that may be null only once a
+        # test says it is not, or through "!"
+        if c.P.T.IsNullable(t): c.err(fv.Span(), msgs.ReadMaybeNull(c.src(fv.Span()), c.ty(t), bangOf(c.src(fv.Span())), c.endedWhy(c.src(fv.Span()))))
+        return c.callBody(sp, fsp, c.P.T.Referent(t), typed.Callee.Value(fv), -1, null, args, Array<typed.Expr&>(0))
     }
     if c.P.T.FuncNullable(t) {
         # T21: nothing is called through a function value that may be null until a test says it is not
@@ -19995,6 +20053,10 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     if task == null: return
     if dispatched(task) {
         c.anySpawned(targets, call, inner, typeOf(task))
+        return
+    }
+    if c.cPointerCall(task) {
+        c.err(inner.Span(), msgs.CFuncTask())   # X13a
         return
     }
     errs := c.P.T.Items(c.lastErrs)
@@ -28761,6 +28823,20 @@ fn (c mut Checker&) thunkModule(id I64) I64 {
 # s.M(args) on an "any" (T32b): through its table, M's slot - or, for a default of the trait introducing type variables
 # of its own, the default instantiated for the "any" (T32c)
 # whether a task's call is through an "any"'s table (T32b)
+# X13a: whether a task's expression is a call through a C function pointer
+fn (c mut Checker&) cPointerCall(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Call(_, _, cl) {
+            match cl.Target {
+                case typed.Callee.Value(v) { return c.P.T.CFunc(typeOf(v)) }
+                case _ { return false }
+            }
+        }
+        case typed.Expr.Seq(_, _, q) { return q.X != null and c.cPointerCall(q.X!) }
+        case _ { return false }
+    }
+}
+
 fn dispatched(x typed.Expr&) Bool {
     match x {
         case typed.Expr.Call(_, _, cl) {

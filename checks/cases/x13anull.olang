@@ -1,0 +1,8 @@
+# check: fail error[T2c]: 'p' is a extern fn?&(x I32) I32, which may be null
+# X13a: nothing is called through a C function pointer that may be null until a test says it is not, or through "!"
+extern fn x13a_get() extern fn?&(x I32) I32
+
+fn main() {
+    p := x13a_get()
+    p(3)
+}

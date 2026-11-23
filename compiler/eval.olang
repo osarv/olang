@@ -115,6 +115,7 @@ WhyLong String& = "it makes an array longer than the evaluator holds"
 WhyFfiFind String& = "it calls an external function interpret cannot find in this process"
 WhyFfiPass String& = "it calls an external function with a parameter or result interpret cannot pass - only numbers, Bools, arrays and structs of numbers, and pointers C gave"
 WhyForeign String& = "it reads through a pointer C gave, which only C may read"
+WhyCFunc String& = "it makes or calls through a C function pointer (X13a), which only C's code stands behind"
 WhyNoClause String& = "a task's error has no clause to take it"
 WhyWaits String& = "it waits for another task, and interpret runs a join's tasks one after another, never beside each other"
 WhyWeakUnheld String& = "it reads a weak place whose referent no owning place holds, which the running program may read as null"
@@ -2242,6 +2243,7 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
         case mir.Rvalue.New(s, x, ty) { m.newRef(fi, dst, s, x, ty) }
         case mir.Rvalue.NewArray(s, ty, n, fill) { m.newArray(fi, dst, s, ty, n, fill) }
         case mir.Rvalue.Slice(q, lo, hi, ty) { m.slice(fi, dst, q, lo, hi, ty) }
+        case mir.Rvalue.Closure(_, ty, _, _, _) if m.T.CFunc(ty) { m.refuse(WhyCFunc) }
         case mir.Rvalue.Closure(code, _, s, args, caps) { m.closure(fi, dst, code, s, args, caps) }
         case mir.Rvalue.Recode(x, from, to) {
             m.wr(dst, 4, m.recode(m.intValue(m.scalar(fi, x), mir.I32T), from, to))
@@ -4519,6 +4521,10 @@ fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, I64 {
             return i, NullPtr, -1
         }
         case mir.Callee.Extern(e, _) { return -1, NullPtr, e }
+        case mir.Callee.Pointer(_, _) {
+            m.refuse(WhyCFunc)
+            return -1, NullPtr, -1
+        }
         case mir.Callee.Value(x) {
             p := m.addr(fi, x, 3)
             code := m.rdPtr(p)
@@ -4562,7 +4568,7 @@ fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, I64 {
 
 fn (m mut Machine&) calleeType(fi I64, c mir.Callee) types.TypeId {
     return match c {
-        case mir.Callee.Fn(_, ty), mir.Callee.Extern(_, ty), mir.Callee.Dispatch(_, _, ty): ty
+        case mir.Callee.Fn(_, ty), mir.Callee.Extern(_, ty), mir.Callee.Dispatch(_, _, ty), mir.Callee.Pointer(_, ty): ty
         case mir.Callee.Value(x): m.T.Repr(m.opType(fi, x))
     }
 }
@@ -5664,7 +5670,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
     k := f.Tasks[tk.Task]
     waiter := m.nFs - 1
     ty := match k.Target {
-        case mir.Callee.Fn(_, t), mir.Callee.Extern(_, t), mir.Callee.Dispatch(_, _, t): t
+        case mir.Callee.Fn(_, t), mir.Callee.Extern(_, t), mir.Callee.Dispatch(_, _, t), mir.Callee.Pointer(_, t): t
         case mir.Callee.Value(x): m.T.Repr(m.opType(waiter, x))
     }
     errs := m.T.Errors(ty)
@@ -6541,6 +6547,7 @@ fn (m mut Machine&) whyCall(target mir.Callee, sp source.Span, seen mut Map<I64,
             name := try m.externs.Get(e) catch default ""
             if name != "__olang_run_on_stack" and not typed.MathExtern(name, m.T.Items(m.T.Params(ty)).Len()) { return WhyExtern, sp }
         }
+        case mir.Callee.Pointer(_, _) { return WhyCFunc, sp }
         case mir.Callee.Fn(key, _) {
             g := m.fnIndex(key)
             if g < 0: return WhyNoBody, sp

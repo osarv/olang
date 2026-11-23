@@ -1467,7 +1467,7 @@ fn (s mut Scoper&) bndCallRecs(c typed.Call&, out mut Vec<fnRec>&) {
             tw := s.plan.Twin(c.Site)
             for r in (s.Twins.Sums[tw] if tw >= 0 else s.sum(I64(id))).ResFn.Recs: out.Push(r)
         }
-        case typed.Callee.Value(v) {
+        case typed.Callee.Value(v) if not s.P.T.CFunc(v.Type()) {
             rs Vec<fnRec>
             s.bndRecs(v, rs)
             for r in rs {
@@ -3129,7 +3129,7 @@ fn (s mut Scoper&) resultRecs(c typed.Call&, callee I64, recs fnRecs&, vars Arra
         s.transRecs(out, s.sum(callee).ResFn, c, id, false, beta)
         return out
     }
-    if c.Target != typed.Callee.Value or recs.Recs.Len() == 0: return fnRecs()
+    if not s.valueCall(c) or recs.Recs.Len() == 0: return fnRecs()
     if not recs.Full: out.Full = false
     for r in recs.Recs {
         m := s.recMap(r, vars, rv)
@@ -4656,7 +4656,7 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
         s.landPart = true
     }
     callee := s.bodyOf(c!.Target)
-    if c!.Target == typed.Callee.Value {
+    if s.valueCall(c!) {
         # a call through a function value lands where its type's obligations need it (valueRels)
         vr := s.resultVarOf(s.calleeType(c!))
         s.landOK = vr >= 0 and s.forcedBy(s.callRels(c!), vr)
@@ -4922,7 +4922,7 @@ fn (s mut Scoper&) forcedBy(rels Vec<rel>&, rv I64) Bool {
 # program's, a derived one or not known here
 fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) Term {
     callee := s.bodyOf(c.Target)
-    if c.Target != typed.Callee.Value and (callee < 0 or not s.summed(callee)): return Term.None
+    if not s.valueCall(c) and (callee < 0 or not s.summed(callee)): return Term.None
     best := Term.None
     for r in s.callRels(c) {
         if r.Lo != Term.Var(rv) or r.Hi == Term.Var(rv): continue
@@ -5031,7 +5031,7 @@ fn (s mut Scoper&) argLands(a typed.Expr&) Bool { return s.landTerm(a) != Term.N
 fn (s mut Scoper&) callRels(c typed.Call&) Vec<rel> {
     callee := s.bodyOf(c.Target)
     if callee >= 0: return s.sum(callee).Rels
-    if c.Target != typed.Callee.Value: return Vec<rel>()
+    if not s.valueCall(c): return Vec<rel>()
     # (a call through a value whose records are known: theirs, T22a 5.3)
     if s.valRelsAt.Has(I64(c.Site)) { return try s.valRelsAt.Get(I64(c.Site)) catch default Vec<rel>() }
     fty := s.calleeType(c)
@@ -6718,7 +6718,7 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
             s.kwHanded(a)
             continue
         }
-        if c.Target == typed.Callee.Value: s.kwValueArg(c, k, r, ps, true)
+        if s.valueCall(c): s.kwValueArg(c, k, r, ps, true)
         else if s.calleeStoresArg(c, k): s.storeParam(r, s.calleePutsArg(c, k))
         else if s.calleeKeepsArg(c, k): s.holdOrKeep(h, r)
         s.kwHanded(a)
@@ -6753,7 +6753,7 @@ fn (s mut Scoper&) typeKeeps(fty types.TypeId, k I64) Bool {
 # argument k of call c (ua, its value) read through a reference out of parameter rr's region - handed out of no region
 # itself (handedRegion): kept in the region where the callee keeps it (ps the callee's parameter types)
 fn (s mut Scoper&) kwOutOfRegion(c typed.Call&, k I64, ua typed.Expr&, rr I64, ps Array<types.TypeId>&) {
-    byValue := c.Target == typed.Callee.Value
+    byValue := s.valueCall(c)
     if s.isRef(ua.Type()) {
         # a reference into a region handed on: kept where the callee keeps it - through a function value, where something
         # can be stored through its parameter (T22a). A reference read out of the region names storage that lives where
@@ -6851,6 +6851,7 @@ fn (s mut Scoper&) calleeKeepsArg(c typed.Call&, k I64) Bool {
             return s.sum(cb).Keeps[k]
         }
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
+        case typed.Callee.Value(v) if s.P.T.CFunc(v.Type()) { return false }
         case typed.Callee.Value(_) { return s.valueArgBy(c, k, 0) }
         case _ { return true }
     }
@@ -6866,6 +6867,7 @@ fn (s mut Scoper&) calleePutsArg(c typed.Call&, k I64) Bool {
             return s.sum(cb).Puts[k]
         }
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
+        case typed.Callee.Value(v) if s.P.T.CFunc(v.Type()) { return false }
         case typed.Callee.Value(_) { return s.valueArgBy(c, k, 1) }
         case _ { return true }
     }
@@ -6882,6 +6884,7 @@ fn (s mut Scoper&) calleeStoresArg(c typed.Call&, k I64) Bool {
             return s.sum(cb).Stores[k]
         }
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
+        case typed.Callee.Value(v) if s.P.T.CFunc(v.Type()) { return false }
         case typed.Callee.Value(_) { return s.valueArgBy(c, k, 2) }
         case _ { return true }
     }
@@ -10100,10 +10103,22 @@ fn (s mut Scoper&) callBuilds(c typed.Call&, ty types.TypeId) Bool {
     return e < 0
 }
 
+# X13a: a call through a C function pointer is an extern call to section 8 (X1a) - it is held to nothing and keeps
+# nothing, has no function type of olang's (its type is a reference to one) and no records
+fn (s Scoper&) cPointerCall(c typed.Call&) Bool {
+    return match c.Target {
+        case typed.Callee.Value(x): s.P.T.CFunc(x.Type())
+        case _: false
+    }
+}
+
+# a call through an olang function value (T21) - not a C function pointer (cPointerCall)
+fn (s Scoper&) valueCall(c typed.Call&) Bool { return c.Target == typed.Callee.Value and not s.cPointerCall(c) }
+
 fn (s mut Scoper&) calleeType(c typed.Call&) types.TypeId {
     return match c.Target {
         case typed.Callee.Body(id): s.Bodies[I64(id)].Ty
-        case typed.Callee.Value(x): x.Type()
+        case typed.Callee.Value(x): types.UnknownT if s.P.T.CFunc(x.Type()) else x.Type()
         case typed.Callee.Dispatch(_, _, sig): sig
         case _: types.UnknownT
     }
@@ -10933,7 +10948,7 @@ fn (s mut Scoper&) callAs(sp source.Span, ty types.TypeId, c typed.Call&, dest T
     match c.Target {
         case typed.Callee.Value(x) {
             home = s.calleeValue(x, spawned, j)
-            if not spawned {
+            if not spawned and not s.P.T.CFunc(x.Type()) {
                 recs = s.recsOf(x)
                 s.lateRecs(recs, x)
                 # (what each record's body keeps of its arguments, for the lending its arguments are judged by, O17)
@@ -11074,7 +11089,7 @@ fn (s mut Scoper&) bindResult(sp source.Span, ty types.TypeId, c typed.Call&, ft
     if s.P.T.Role(fty) == types.RoleCtor: land = false
     if not land and (dest == Term.None or partD) and s.P.T.Role(fty) != types.RoleCtor {
         cb := s.bodyOf(c.Target)
-        land = cb >= 0 and s.summed(cb) and s.forced(cb, rv) or c.Target == typed.Callee.Value and s.forcedBy(s.callRels(c), rv)
+        land = cb >= 0 and s.summed(cb) and s.forced(cb, rv) or s.valueCall(c) and s.forcedBy(s.callRels(c), rv)
     }
     if land {
         t := s.landByObligations(c, rv, beta)
@@ -11238,7 +11253,7 @@ fn (s mut Scoper&) dischargeCall(sp source.Span, c typed.Call&, callee I64, fty 
     if callee >= 0: s.discharge(sp, callee, beta, c, agreed)
     # T30c: a call through an "any" relies on its trait's method's bound (T22b), as one through a value not followed
     if c.Target == typed.Callee.Dispatch: s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp), -1, beta, c, agreed)
-    if callee < 0 and c.Target == typed.Callee.Value {
+    if callee < 0 and s.valueCall(c) {
         # each record judged as the direct call it is (5.3); a value not followed by what its type says (T22)
         for i in range recs.Recs.Len() { s.dischargeRels(sp, rrels[i], recs.Recs[i].Body, s.recBeta(recs.Recs[i], rmaps[i], beta), c, agreed) }
         if not recs.Full { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp, vars.Len()), -1, withHome(beta, home), c, agreed) }

@@ -95,6 +95,12 @@
 | ok - reflection walks a type's builders
 | ok - the prelude's builders: T.Parse, F64.FromBits, String.FromC
 | ok - the evaluator bakes and decides what the run time computes
+=== test tests/cfnptr.olang
+| status 0
+| ok - a fresh struct's C function pointers are null, and the struct is laid out as C's
+| ok - C calls the export fns a struct of function pointers holds, and leaves a null one uncalled
+| ok - the program calls the functions C gives back, in a struct and alone
+| ok - a table reached through a pointer to a pointer, as JNI's is, is read out and called through
 === test tests/cimport.olang
 | status 0
 | ok - a header's integer, float and text macros are constants
@@ -3964,6 +3970,9 @@
 | 20/190
 === run x10handles.olang
 | status 0
+=== run x13acookie.olang
+| status 0
+| written 13
 === run x13qsort.olang
 | status 0
 === run x17header.olang

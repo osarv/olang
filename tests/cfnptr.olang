@@ -1,0 +1,74 @@
+# C function pointers (X13a): a struct of them filled from the program's export fns and called by C, one C fills and
+# the program calls through, one C gives back alone, and a table reached as JNI's is - a pointer to a pointer to a
+# struct of functions, each taking that pointer back. The C is tests/cfnptr, imported (X17); the compile-time evaluator
+# calls no C (K1), so what C computes is tested at run time, and a pointer's null and the struct's layout while compiling
+import c "string.h"
+import f "cfnptr/cfnptr.c"
+
+# what the callbacks saw, written by C's calls of them
+Seen mut I32 = 0
+
+export fn cfpDoubled(x I32) I32 { return 2 * x }
+export fn cfpPlus(a I64, b I64) I64 { return a + b }
+export fn cfpSeen(x I32) { Seen = x }
+
+# a struct of the program's own holding C function pointers, null until given
+type Hooks struct() {
+    twice extern fn?&(x I32) I32 = null
+    count I64 = 0
+}
+
+# an environment as JNI's JNIEnv is: a pointer to the table, read out of C's memory as a struct of one pointer
+type Env struct() {
+    table CVoid?& = null
+}
+
+test "a fresh struct's C function pointers are null, and the struct is laid out as C's" {
+    o := f.cfp_ops()
+    assert o.twice == null and o.add == null and o.seen == null
+    assert f.cfp_ops.Size == 32 and Hooks.Size == 16
+    h := Hooks()
+    assert h.twice == null
+    assert $h.twice == "null"
+}
+
+test "C calls the export fns a struct of function pointers holds, and leaves a null one uncalled" {
+    o := f.cfp_ops()
+    assert f.cfp_apply(o, 5) == -1
+    o.twice = cfpDoubled
+    assert f.cfp_apply(o, 5) == 10
+    o.add = cfpPlus
+    o.seen = cfpSeen
+    o.base = 1
+    assert f.cfp_apply(o, 21) == 43 and Seen == 21
+    assert $o.twice == "extern fn&(a0 I32) I32"
+}
+
+test "the program calls the functions C gives back, in a struct and alone" {
+    o := f.cfp_c_ops()
+    assert o.twice!(4) == 12
+    assert o.add!(10, 3) == 7
+    assert o.seen == null and o.base == 7
+    t := f.cfp_c_twice()
+    if t != null: assert t(5) == 15
+    # two pointers compare by the function they point to - C's, or an export fn's entry
+    assert t == o.twice and o.twice != null
+    h := Hooks()
+    h.twice = t
+    assert h.twice!(2) == 6
+    h.twice = cfpDoubled
+    o.twice = cfpDoubled
+    assert h.twice == o.twice and h.twice != t
+}
+
+test "a table reached through a pointer to a pointer, as JNI's is, is read out and called through" {
+    env := f.cfp_env_get()
+    e := Env()
+    c.memcpy(e, env, U64(Env.Size))
+    t := f.cfp_iface()
+    c.memcpy(t, e.table, U64(f.cfp_iface.Size))
+    assert t.version!(env) == 6
+    assert t.scaled!(env, 4, 2) == 42
+    # a variadic function has no olang form: its field is C's pointer of no type
+    assert t.format == null and t.reserved0 == null
+}

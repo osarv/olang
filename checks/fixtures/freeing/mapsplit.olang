@@ -1,0 +1,46 @@
+# A Map whose values own storage, stored into a Vec's element and copied back out of it (review12): the copy splits the
+# element's slot array, and the element's next let-go walked that array twice - every slot by its length, then the live
+# entries - releasing each entry's parts twice (a crash, built; out of range, interpreted). The elements churn through
+# stores while their copies are read; a removal empties a slot between them, which the live-entry walk skips. Built,
+# -free late, -sanitize and the evaluator agree
+import "std/io"
+
+N I64 = 2000
+
+fn mkmap(i I64) Map<I64, Vec<String>> {
+    m Map<I64, Vec<String>>
+    for k in range 3: m.Put(k, Vec<String>["t" + $(i + k), "u" + $i])
+    return m
+}
+
+fn mapChurn(n I64) I64 {
+    t := 0
+    maps Vec<Map<I64, Vec<String>>>
+    for _ in range 4: maps.Push(Map<I64, Vec<String>>())
+    for i in range n {
+        maps[i % 4] = mkmap(i)
+        x := maps[i % 4]
+        y := try maps[(i + 1) % 4].Get(1) catch default Vec<String>()
+        t += x.Len() + y.Len() + (try x.Get(2) catch default Vec<String>())[0].Len()
+    }
+    return t
+}
+
+# a removal empties a slot between the stores: the live-entry walk skips it
+fn mapRemoved(n I64) I64 {
+    t := 0
+    maps Vec<Map<I64, Vec<String>>>
+    for _ in range 2: maps.Push(Map<I64, Vec<String>>())
+    for i in range n {
+        m := mkmap(i)
+        m.Remove(1)
+        maps[i % 2] = m
+        x := maps[i % 2]
+        t += x.Len() + maps[(i + 1) % 2].Len()
+    }
+    return t
+}
+
+fn main() {
+    io.PutLn($mapChurn(N) + " " + $mapRemoved(N))!
+}

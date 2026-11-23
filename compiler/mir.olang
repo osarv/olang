@@ -443,6 +443,7 @@ type Callee enum {
     # through an "any"'s table (T32b): x the "any", which the call's first argument is too - passed as its instance, a
     # pointer - slot its trait's slot (generic.Program.AnySlots; -1 for $'s rendering), ty the call's signature
     Dispatch(x Operand, slot I64, ty types.TypeId)
+    Pointer(x Operand, ty types.TypeId)   # through a C function pointer x (X13a), to a C function of type ty: as an extern
 }
 
 # a call: its callee, its arguments one per parameter (the receiver first, defaults filled in, D8a) in f.Ops, the
@@ -1139,7 +1140,7 @@ fn PassedCount(t mut types.Table&, c Callee, ty types.TypeId) I64 {
         case Callee.Fn(FnKey.Helper(HelperKind.Split, _), _): 1
         case Callee.Fn(FnKey.Helper(HelperKind.Release, _), _): 0
         case Callee.Fn(FnKey.Helper(HelperKind.Equal, _), _), Callee.Fn(FnKey.Helper(HelperKind.Hash, _), _): 0
-        case Callee.Extern(_, _): 0
+        case Callee.Extern(_, _), Callee.Pointer(_, _): 0
         case Callee.Dispatch(_, sl, _) if sl < 0: 1     # $'s rendering, through the table: a Render helper's builder
         case _: t.ScopeVarsOf(ty).Len()
     }
@@ -1389,7 +1390,7 @@ fn (v mut verifier&) operand(x Operand) {
 
 fn (v mut verifier&) callee(c Callee) {
     match c {
-        case Callee.Value(x) { v.operand(x) }
+        case Callee.Value(x), Callee.Pointer(x, _) { v.operand(x) }
         case _ { }
     }
 }
@@ -2147,7 +2148,7 @@ fn (v mut verifier&) sliceType(of types.TypeId, lo Operand, hi Operand, ty types
 }
 
 fn (v mut verifier&) closureType(ty types.TypeId) types.TypeId {
-    if v.T.KindOf(ty) != types.Kind.Func: v.bad("a function value typed " + $v.canon(ty))
+    if v.T.KindOf(ty) != types.Kind.Func and not v.T.CFunc(ty): v.bad("a function value typed " + $v.canon(ty))
     return ty
 }
 
@@ -2161,7 +2162,7 @@ fn (v mut verifier&) calleeType(c Callee) types.TypeId {
     ty := match c {
         case Callee.Fn(_, ty), Callee.Extern(_, ty): ty
         case Callee.Value(x): v.operandType(x)
-        case Callee.Dispatch(_, _, ty): ty
+        case Callee.Dispatch(_, _, ty), Callee.Pointer(_, ty): ty
     }
     match c {
         case Callee.Dispatch(x, _, _) {
@@ -2188,7 +2189,7 @@ fn (v mut verifier&) args(c Callee, ty types.TypeId, args Range, scopes Range) {
     t := v.T
     ps := t.Items(t.Params(ty))
     isExtern := match c {
-        case Callee.Extern(_, _): true
+        case Callee.Extern(_, _), Callee.Pointer(_, _): true
         case _: false
     }
     # X21: an extern's variable arguments after its parameters
@@ -2582,7 +2583,7 @@ fn (v mut verifier&) pop(x ScopeId, what String&) {
 
 fn (v mut verifier&) calleeReads(c Callee) {
     match c {
-        case Callee.Value(x) { v.reads(x) }
+        case Callee.Value(x), Callee.Pointer(x, _) { v.reads(x) }
         case _ { }
     }
 }
@@ -2907,6 +2908,7 @@ fn (w mut dumper&) callee(c Callee) String {
         case Callee.Extern(fx, _): "extern " + $fx
         case Callee.Value(x): "(" + $w.operand(x) + ")"
         case Callee.Dispatch(x, k, _): "dispatch#" + $k + " (" + $w.operand(x) + ")"
+        case Callee.Pointer(x, _): "C (" + $w.operand(x) + ")"
     }
 }
 
@@ -3422,7 +3424,7 @@ fn (f Fn&) refMentions(r ScopeRef, uses mut Vec<LocalId>&) {
 
 fn (f Fn&) calleeMentions(c Callee, uses mut Vec<LocalId>&) {
     match c {
-        case Callee.Value(x), Callee.Dispatch(x, _, _) { f.opMentions(x, uses) }
+        case Callee.Value(x), Callee.Dispatch(x, _, _), Callee.Pointer(x, _) { f.opMentions(x, uses) }
         case _ { }
     }
 }

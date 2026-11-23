@@ -1965,6 +1965,14 @@ fn (e mut Effects&) call(cl typed.Call&) {
             }
         }
         case typed.Callee.Extern(f) { e.extern(f) }
+        case typed.Callee.Value(v) if e.P.T.CFunc(v.Type()) {
+            # X13a: through a C function pointer - C's code, which may do anything and call any export fn back
+            e.expr(v)
+            e.cPointer()
+            for a in cl.Args {
+                if e.P.T.IsRef(a.Type()) and e.P.T.PermOf(a.Type()) & types.Writable != 0: e.written(a)
+            }
+        }
         case typed.Callee.Value(v) {
             # what it calls is what the value may be, classified at the walk's end (resolve); what it is given
             # writably it may write
@@ -2279,6 +2287,17 @@ fn (e mut Effects&) extern(f I64) {
     # calls C for is said by what it gains
     own := e.curMod >= 0 and not e.P.L.Mods[e.curMod].Identity.StartsWith("std/")
     if own and not name.StartsWith("__olang_"): e.cap(CapC)
+}
+
+# X13a: a call through a C function pointer - C, not known, which may call an export fn back: as an extern of the
+# program's own that is none of the known ones
+fn (e mut Effects&) cPointer() {
+    e.cur.CallsC = true
+    e.cur.Blocks = true
+    e.cur.Opaque = true
+    e.cur.Unknown = true
+    e.cur.Back = true
+    e.cap(CapC)
 }
 
 # the capability a C function gains (B1.2), 0 for none

@@ -1,0 +1,7 @@
+# check: fail error[X13a]: 'extern fn?&(x I32) I32 ? Bad' is no C function pointer
+# X13a: C cannot fail with an olang error - a C function pointer declares none
+type Bad error { No }
+
+fn main() {
+    p extern fn?&(x I32) I32 ? Bad = null
+}

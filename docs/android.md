@@ -44,7 +44,8 @@ olang build -library -target aarch64-linux-android native.olang     # libnative.
 `-library` (X14) builds a shared library showing only the program's export fns. A NativeActivity's library exports
 `ANativeActivity_onCreate`, which Android calls on the app's main thread with the `ANativeActivity*`; the activity's
 other callbacks are function pointers the library writes into the activity's callbacks table, each an export fn's C
-entry. examples/android/native.olang does exactly that, and draws with EGL and OpenGL ES, reads input through an
+entry: a struct of C function pointers (`extern fn?&(activity U64)`, X13a) filled and copied over the table whole.
+examples/android/native.olang does exactly that, and draws with EGL and OpenGL ES, reads input through an
 `ALooper`, and logs with `__android_log_write` - all declared as `extern fn` in an `extern link "android" { ... }`
 block and the like, which also names the system library to link.
 

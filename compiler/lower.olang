@@ -5355,6 +5355,11 @@ fn (ln mut lowering&) bodyCallee(id typed.BodyId) mir.Callee, types.TypeId {
 
 fn (ln mut lowering&) valueCallee(x typed.Expr&) mir.Callee, types.TypeId {
     v := ln.val(x)
+    if ln.T.CFunc(x.Type()) {
+        # X13a: through a C function pointer - C's function, called as an extern is
+        f := ln.T.Referent(x.Type())
+        return mir.Callee.Pointer(v, f), f
+    }
     return mir.Callee.Value(v), x.Type()
 }
 
@@ -9056,6 +9061,13 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         }
         ln.start(some)
         ref := t.Referent(r)
+        if t.KindOf(ref) == types.Kind.Func {
+            # X13a: a C function pointer - C's code, never read - renders as its signature
+            ln.word(b, ln.spell(t.NonNull(r), true, not top), sp)
+            ln.goto(after)
+            ln.start(after)
+            return
+        }
         if t.KindOf(ref) == types.Kind.Named and t.DeclKindOf(t.DeclOf(ref)) == types.DeclKind.Foreign {
             # X10: what an extern type's reference names is C's, never read - it renders as the type's name
             ln.word(b, ln.T.Names.Text(t.DeclName(t.DeclOf(ref))), sp)
@@ -9270,6 +9282,11 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
         }
         out.PushChar('>')
         return out.ToString()
+    }
+    if t.CFunc(ty) {
+        # X13a: a C function pointer, its marker on its "fn"
+        f := t.OrNull(t.Referent(ty)) if (t.PermOf(ty) & types.Nullable) != 0 else t.Referent(ty)
+        return "extern " + $ln.spell(f, true, item, group)
     }
     if k == types.Kind.Ref {
         m := "mut " if (t.PermOf(ty) & types.Writable) != 0 else ""
