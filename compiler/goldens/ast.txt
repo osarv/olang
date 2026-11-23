@@ -2486,10 +2486,10 @@ d5d87da3cf156c0a 6fd762f9553d2a77 compiler/definit.olang
 8eecc7e6e624f53a d60fad56d190f340 compiler/diagmsg.olang
 b02b474ae1593a73 a4a8294e6adfbb54 compiler/doc.olang
 35fc969ca1a136ea 57ce7a3142fad927 compiler/effects.olang
-d18594dbf86fcd2f ae0b139b931cbb11 compiler/emit.olang
+d54ca06bd45dbec6 f8d875ce2d6bd907 compiler/emit.olang
 9854931d78166617 c986bd2b8d3cad2f compiler/eval.olang
 eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
-9687610503b19cda 4ad7726a11a86c6e compiler/facts.olang
+18829bd0a5b1f2ca f6ec86b39fd51e0c compiler/facts.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
@@ -2514,7 +2514,7 @@ b39996c18bbe72bf 450c7b08c181c7db compiler/paint.olang
 972886cfacdeac38 221ac8e3f38d49d6 compiler/parse.olang
 2cf0b668dac274b7 31a01a936fc852db compiler/profile.olang
 e2b2b02653bc4b63 28b9ec011557160d compiler/prompt.olang
-7cdf3a1d3967eaa7 9afac11b70c15560 compiler/records.olang
+fc27f6b5dfde0c34 82854c3a2354b606 compiler/records.olang
 0c3f8c24752ad48a 95536513b050b2a4 compiler/runtime.olang
 74927aaea47abc0f 36130c34ac2dc3c0 compiler/scan.olang
 e6f055c7fd199749 23d92f56746bb151 compiler/scope.olang
@@ -2564,7 +2564,7 @@ b5d5a7ffc3c55aed 778196a5417df71d compiler/tools/toolkit.olang
 106629abcaa0243b 590441b019f0e67f compiler/typed.olang
 a420fba4a7691190 0cb49e3ae2354b15 compiler/types.olang
 ac9569bf452c8a83 6ed8536abd31d32d compiler/unparse.olang
-d5a8171078a1e0db a119c99bed219b29 compiler/views.olang
+6a9d5ca3dbd9cc8e c94efa450c1fb68d compiler/views.olang
 bbb5e3df24f5ea40 ccf8d32bc22f7008 docs/genrefs/dlist.olang
 6694346501eb6c41 64dcf0a58b35a663 docs/genrefs/lru.olang
 d34fa4513f30281f 79ed3bea38711f1a docs/genrefs/peak.olang

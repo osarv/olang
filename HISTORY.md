@@ -41743,3 +41743,48 @@ scope closes`, with the note of its reason, counted kept, and a gap where its re
 of storage"); the freeing and earlyfree fixtures gain rows (genviews, globalviews, ownertexts, taskvals, viewholders,
 viewlocals, earlyfree's server), none a gap. Left (a design question, docs/freeing.md 2.4): the place is the type's,
 so a view of one `Vec<I64>` keeps the growth of every other - the spec's condition 6 is a view "of the old storage".
+
+## 2026-11-23: the front end's hot spots outside scope and freeing, second round (B3, B3i, M19g; mine; wt-speed)
+
+Compile speed is a first-class goal; this round follows 2026-11-21's (wt-buildspeed) with the same method. The
+compiler was profiled building itself (`olang profile compiler/olang.olang -- build ...`, the optimized build - a
+`-quick` profile misleads, its uninlined accessors such as types.Table.at showing as hot spots that -O3 folds away),
+and each front-end phase timed with `OLANG_TIMES` on the 4-core cloud box, cold (a fresh build directory: no build/rec,
+no objects), the old and new compilers alternated. Of the front end's ~16 s of one core, placement (scope.olang and
+free.olang, ~7.7 s of the profile) is another session's and was left alone; the runtime's chunks are another ~2 s (the
+first touch of fresh pages in `__olang_new_chunk`, and `madvise` when a closing scope gives the pool more than its
+bound, an eighth of the machine's memory, ~0.65 s at the analysis' scope close) - a memory-for-time trade not made
+here. What was cut:
+
+- **A summary's fact looked for again on every round (M19g, views.olang).** `factPut` scanned the walked body's whole
+  Grows (or Views) list for each growth of each call, on every round of a cyclic component's fixed point (up to 100) -
+  ~0.5 s of self time. A summary's facts are only added, so a put asked once is covered for good: the puts asked are
+  kept by (list, body, parameter, module, name, path, any) and one asked again returns at once. And `below` joined
+  two interned paths as text and interned the result for every place a callee's fact names (~0.3 s): the joined id is
+  kept by the pair of ids. A call's quoted callee name is interned once per body. Interning order is unchanged (an id
+  is made where it was first asked before), so the summaries and their records are the same. Views 1.8-2.3 s ->
+  1.3-1.6 s.
+- **A global's body found by a scan of every body (emit.olang).** `globalBody` walked all of lowering's bodies for each
+  global emitted - ~0.6 s in the profile; now an index by (module, name), filled as far as the bodies scanned, the first
+  body of each kept as the scan returned it.
+- **foldSlots (emit.olang)** read every function's text four times (count the lines, find their ends, find the slots,
+  write it out) and kept three arrays the length of its lines; now two passes, the slots' lines kept by their starts,
+  a line's block found from the label lines' starts, and the text written in pieces between the folded lines and
+  temporaries. Its self time moved little (~0.65 -> ~0.6 s): the per-character scan is most of it.
+- **ReaderRecords (records.olang, B3i)** joined each reached module's record into one text per module and split and
+  sorted it again, and picked each record with a conditional expression that copied the Vec of its lines; now each
+  record's lines are kept once and a module's are gathered, sorted and deduplicated as lines (~0.4 -> ~0.3 s).
+- **codeSize (emit.olang, B3i)** counted every instruction of every function to compare with BulkFrom (42); it stops
+  once past it.
+
+Self-build, front end (cold; three alternated runs each; another agent's work beside, load ~3): user CPU up to the end
+of lower+emit 15.1-15.7 s -> 14.3-14.6 s; check 3.5-3.6 s (views 1.87-1.96) -> 2.9-3.1 s (views 1.31-1.42); lower+emit
+4.65-4.8 s -> 4.47-4.94 s (noise of this size); evaluate, scope judged, scope records and scope unchanged (another
+session's code). The back end is untouched. A mid-size program, tests/runner.olang (its suite's
+shared.olang, 18.8k lines, worker and geom, with std): front end ~1.6-1.8 s, check 0.73-0.96 s, lower+emit 0.31-0.45 s
+before and after alike - within noise, as each cost cut grows faster than the program (a fixed point's rounds,
+globals times bodies, modules times the records they reach). Also met: a Viewer field named `names` was refused
+(M20, an import's alias) in `olang test compiler/records.olang` but not in the compiler's own build; renamed.
+Every unit's IR record (294 files) and every other record of the self-build (608 files, the keys and checksums naming
+the compiler masked) are byte for byte the old compiler's, as are tests/runner.olang's records and binary; the
+compiler builds itself identically (the fixed point).
