@@ -19642,10 +19642,12 @@ fn (c mut Checker&) deadLet(s typed.Stmt&) typed.Stmt& {
 # the rest of the block - the first value's storage the block's, the second's built where its own last copy goes, as
 # any ":=" local's. The same meaning where nothing holds the first local past the assignment: no reference to it kept
 # (a reference local, a capture, a store - LocalUses.EscHard, AliasOf), no deferred code of the block reading it, and
-# no destructor (whose moment would move); null where any does
+# no destructor (whose moment would move); null where any does, or where x reads it
 fn (c mut Checker&) splitLet(i I64, l I64, sp source.Span, at source.Span, x typed.Expr&) typed.Stmt?& {
     loc := c.cur().Locals[l]
     if loc.Kind != typed.LocalKind.Var or loc.Unset or c.isRef(loc.Ty) or c.needsDrop(loc.Ty): return null
+    # (nor where x reads it: a compound assignment's old value is lowered only as an assignment's)
+    if definit.ReadIn(c.cur(), typed.LocalId(I32(l)), Array<typed.Stmt&>(0, c.stmts[i]), x): return null
     so := Array<typed.Stmt&>(c.stmts.Len() - i, c.stmts[i])
     for j in range so.Len() {
         so[j] = c.stmts[i + j]
