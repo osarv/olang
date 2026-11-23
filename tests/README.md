@@ -100,6 +100,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   back of what a function builds, a slice of a temporary kept in a parameter's field, a generator's views of a local it
   made, a closure over a turn's local kept in a field, a part of an instance kept past its turn; read back after an arena
   churn, a baked global and top-level asserts deciding the same while compiling.
+- `cfnptr.olang`, `cfnptr/` - C function pointers (X13a) with a C file of the corpus's own, imported: a struct of them
+  filled from export fns and called by C, C's own called through, and a table reached through a pointer to a pointer as
+  JNI's is; a fresh struct's nulls and its layout decided while compiling.
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.

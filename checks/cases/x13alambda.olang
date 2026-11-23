@@ -1,0 +1,6 @@
+# check: fail error[X13a]: a C function pointer ('extern fn&(x I32) I32') is made of an export fn, named
+# X13a: a lambda - code with what it captured - has no C entry, and neither has a function value held in a variable
+fn main() {
+    k I32 = 3
+    f extern fn&(x I32) I32 = fn(x I32) I32 { return k * x }
+}

@@ -1,0 +1,46 @@
+# check: run
+# X13a: a struct of C function pointers given to C by value - glibc's fopencookie and its cookie_io_functions_t - each an
+# export fn's C entry or null, called back by C as the stream is written and closed
+extern {
+    type CFile
+    fn fopencookie(cookie CVoid?&, mode Array<U8>, io Cookie) CFile?&
+    fn fputs(s Array<U8>, f CFile&) I32
+    fn fflush(f CFile&) I32
+    fn fclose(f CFile&) I32
+}
+
+# cookie_io_functions_t: read, write, seek, close (stdio.h)
+type Cookie struct() {
+    read extern fn?&(cookie CVoid?&, buf CVoid?&, size U64) I64 = null
+    write extern fn?&(cookie CVoid?&, buf CVoid?&, size U64) I64 = null
+    seek extern fn?&(cookie CVoid?&, at CVoid?&, whence I32) I32 = null
+    close extern fn?&(cookie CVoid?&) I32 = null
+}
+
+Written mut I64 = 0
+Closed mut I64 = 0
+
+export fn cookieWrite(cookie CVoid?&, buf CVoid?&, size U64) I64 {
+    Written += I64(size)
+    return I64(size)
+}
+
+export fn cookieClose(cookie CVoid?&) I32 {
+    Closed++
+    return 0
+}
+
+fn main() {
+    io := Cookie()
+    io.write = cookieWrite
+    io.close = cookieClose
+    f := fopencookie(null, "w".ToC(), io)
+    if f == null: unreachable "fopencookie failed"
+    fputs("hello, ".ToC(), f)
+    fputs("cookie".ToC(), f)
+    fflush(f)
+    assert Written == 13 and Closed == 0
+    fclose(f)
+    assert Closed == 1
+    Println("written " + $Written)
+}
