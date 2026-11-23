@@ -257,7 +257,7 @@ fn Process.Start(args ...String&, input Array<U8>& = "", capture Bool = true, di
     errs I32 = -1
     if capture {                                        # the Process keeps both: closed by Wait, or here if Start fails
         out = try memFile()
-        e := mman.memfd_create("olang\0", 1)
+        e := memfd()
         if e < 0: try closeAndRaise(out, __olang_err(), "")
         errs = e
     }
@@ -340,9 +340,19 @@ fn (p mut Process&) ended(waitStatus I32) Output ? Error {
 # a file in memory, with no name in the file system: written and read through its descriptor as any file, gone once
 # closed - and closed in any program Exec starts (MFD_CLOEXEC), but for the copies it is given as its standard streams
 fn memFile() I32 ? Error {
-    fd := mman.memfd_create("olang\0", 1)
+    fd := memfd()
     try check(fd)
     return fd
+}
+
+# memfd_create(2) with MFD_CLOEXEC: a descriptor, or -1. Android's C library declares it from API level 30 only, so a
+# build for an earlier one (B12e) makes the system call itself
+fn memfd() I32 {
+    if TargetOs == "android" {
+        return I32(unistd.syscall(279, "olang\0".ToC(), 1)) # SYS_memfd_create on aarch64
+    } else {
+        return mman.memfd_create("olang\0", 1)
+    }
 }
 
 # everything written to the file fd, from its start, as text built where the caller puts it

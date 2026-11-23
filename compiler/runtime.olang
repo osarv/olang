@@ -223,10 +223,15 @@ fn Bionic(text String&) String {
     return $out + BionicShims
 }
 
-# what Bionic adds: __errno_location over bionic's __errno (std's own C imports name __errno themselves), sysconf
+# what Bionic adds: heap pointer tagging turned off before anything is allocated (bionic's malloc gives pointers with a
+# tag in their top byte, where a weak word keeps its generation, T13d - mallopt's M_BIONIC_SET_HEAP_TAGGING_LEVEL,
+# -204, to M_HEAP_TAGGING_LEVEL_NONE, 0; Android 10 has no tagging and ignores it); __errno_location over bionic's __errno (std's own C imports name __errno themselves), sysconf
 # taking glibc's numbers for the three names the runtime asks (_SC_PAGESIZE 30 -> 39, _SC_THREAD_STACK_MIN 75 -> 76,
 # _SC_PHYS_PAGES 85 -> 98), and sigaction taking and giving glibc's aarch64 layout (handler at 0, flags at 136)
 BionicShims := "\n; B12e: bionic's differences from glibc, as runtime.Bionic says\n" + $
+    "@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 101, ptr @__olang_bionic_untag, ptr null }]\n" + $
+    "declare i32 @mallopt(i32, i32)\n" + $
+    "define internal void @__olang_bionic_untag() {\n  %r = call i32 @mallopt(i32 -204, i32 0)\n  ret void\n}\n" + $
     "declare ptr @__errno()\n" + $
     "define ptr @__errno_location() {\n  %p = call ptr @__errno()\n  ret ptr %p\n}\n" + $
     "define internal i64 @__olang_bionic_sysconf(i32 %name) {\n" + $

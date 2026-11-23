@@ -13,6 +13,13 @@
 
 import cmath "math.h"
 
+# C23's roundeven and roundevenf, one instruction each (X8's exact functions): declared here, not read from <math.h>,
+# which not every C library declares them in (Android's bionic does not, B12e)
+extern {
+    fn roundeven(x F64) F64
+    fn roundevenf(x F32) F32
+}
+
 type Float trait for F16, BF16, F32, F64 { }
 
 # every integer type, of every width from 1 to 128 bits (T4a), signed and unsigned, sixteen widths a line
@@ -510,10 +517,10 @@ fn (x T) Round<T Float>() T {
 # which leaves no bias over many values, so the one a quantizer wants
 fn (x T) RoundEven<T Float>() T {
     return match T {
-        case F64: cmath.roundeven(x)
-        case F32: cmath.roundevenf(x)
-        case F16: F16(cmath.roundevenf(x))
-        case BF16: BF16(cmath.roundevenf(x))
+        case F64: roundeven(x)
+        case F32: roundevenf(x)
+        case F16: F16(roundevenf(x))
+        case BF16: BF16(roundevenf(x))
     }
 }
 

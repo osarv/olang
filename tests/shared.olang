@@ -6895,7 +6895,7 @@ ccRunFma mut Bool = TargetHasFma
 ccRunCpu mut String = TargetCpu
 
 test "B12: the target's build constants describe one machine, while compiling and at run time" {
-    assert TargetCpu.Len() > 0 and TargetOs == "linux"
+    assert TargetCpu.Len() > 0 and (TargetOs == "linux" or TargetOs == "android")
     assert TargetArch == "x86_64" or TargetArch == "aarch64"
     assert TargetVectorBits == 128 or TargetVectorBits == 256 or TargetVectorBits == 512
     # on x86-64 an FMA instruction comes with AVX's wide vectors, never with SSE's alone
