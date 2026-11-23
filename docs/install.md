@@ -38,4 +38,5 @@ The first of: the one `OLANG_CLANG` names (a path, or a name on `PATH`); the rel
 of `clang-20`, `clang-19`, `clang-18` and `clang` on `PATH`. Any of LLVM 18, 19 and 20 builds for this machine;
 building for another architecture (`-target aarch64-linux-gnu`) takes clang 19 or newer, that architecture's C library
 (Debian: `libc6-dev-arm64-cross libgcc-13-dev-arm64-cross binutils-aarch64-linux-gnu`, or `OLANG_SYSROOT` naming one),
-and, to run its programs and tests here, qemu-user (`qemu-user-static`, or `OLANG_EMULATOR`). SPEC.md, B12-B12d.
+and, to run its programs and tests here, qemu-user (`qemu-user-static`, or `OLANG_EMULATOR`). Android
+(`-target aarch64-linux-android`) is built with the Android NDK, named by `ANDROID_NDK_HOME` (docs/android.md). SPEC.md, B12-B12e.

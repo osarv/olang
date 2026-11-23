@@ -479,6 +479,50 @@ $(filter-out cross@checks/checks.olang,$(CROSS_RUNS)): cross@%: FORCE
 cross@checks/checks.olang: FORCE
 	@CHECKS_TARGET=$(CROSS_TARGET) $(OLANG_ENV) $(OLANG) test checks/checks.olang || echo "checks ($(CROSS_TARGET))" >> build/failed.txt
 
+# B12e: the same tests built for Android (ANDROID_TARGET) with the Android NDK (ANDROID_NDK_HOME, or ANDROID_NDK_ROOT),
+# linked statically and run through qemu-aarch64; skipped, saying so, where neither names the NDK. ANDROID_SKIP leaves out
+# what the emulator cannot run as a phone would: std/os's (a failed exec reported as a child exiting 127, as for cross),
+# std/net's (bionic resolves names through the system's netd, not here), std/ffi's and std/tls's (no libffi or OpenSSL
+# in the NDK). docs/android.md
+ANDROID_TARGET ?= aarch64-linux-android
+ANDROID_SKIP ?= std/os.olang std/net.olang std/ffi.olang std/tls.olang
+ANDROID_TESTS = $(filter-out $(ANDROID_SKIP),$(CROSS_TESTS) $(CROSS_SKIP))
+ANDROID_RUNS = $(addprefix android@,$(ANDROID_TESTS))
+android-test: $(OLANG)
+	@if [ -z "$$ANDROID_NDK_HOME$$ANDROID_NDK_ROOT" ]; then \
+		echo "android-test: skipped - set ANDROID_NDK_HOME to the Android NDK's directory (docs/android.md)"; exit 0; fi; \
+	rm -f build/failed.txt; \
+	$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(ANDROID_RUNS) && [ ! -s build/failed.txt ] || $(FAILED); \
+	echo "android-test: every test passed on $(ANDROID_TARGET)"
+$(ANDROID_RUNS): android@%: FORCE
+	@$(OLANG_ENV) $(OLANG) test -target $(ANDROID_TARGET) $* || echo "$* ($(ANDROID_TARGET))" >> build/failed.txt
+
+# B12e: the sample Android app (examples/android, docs/android.md) as build/android/olang-sample.apk: native.olang built
+# as libnative.so, the NativeActivity's code, and probe.olang as libprobe.so, a program the app runs; the manifest linked
+# against ANDROID_JAR by aapt2, the libraries added (lib/arm64-v8a, every entry's time fixed so the bytes are the same
+# each time), aligned by zipalign and signed by apksigner with the committed debug key - so two builds of one checkout
+# give the same APK. ANDROID_BUILD_TOOLS is the build-tools directory (aapt2, zipalign, apksigner), ANDROID_JAR a
+# platform's android.jar; under ANDROID_HOME, the SDK's own places
+ANDROID_BUILD_TOOLS ?= $(ANDROID_HOME)/build-tools/36.1.0
+ANDROID_JAR ?= $(ANDROID_HOME)/platforms/android-36/android.jar
+APK_DIR = build/android
+android-apk: $(OLANG)
+	@if [ -z "$$ANDROID_NDK_HOME$$ANDROID_NDK_ROOT" ] || [ ! -x "$(ANDROID_BUILD_TOOLS)/aapt2" ] || [ ! -f "$(ANDROID_JAR)" ]; then \
+		echo "android-apk: skipped - set ANDROID_NDK_HOME, ANDROID_BUILD_TOOLS and ANDROID_JAR (or ANDROID_HOME) (docs/android.md)"; exit 0; fi; \
+	set -e; rm -rf $(APK_DIR)/stage $(APK_DIR)/*.apk; mkdir -p $(APK_DIR)/stage/lib/arm64-v8a; \
+	$(OLANG) build -library -target $(ANDROID_TARGET) -output $(APK_DIR)/libnative.so examples/android/native.olang; \
+	$(OLANG) build -target $(ANDROID_TARGET) -output $(APK_DIR)/libprobe.so examples/android/probe.olang; \
+	cp $(APK_DIR)/libnative.so $(APK_DIR)/libprobe.so $(APK_DIR)/stage/lib/arm64-v8a/; \
+	"$(ANDROID_BUILD_TOOLS)/aapt2" link -o $(APK_DIR)/unaligned.apk -I "$(ANDROID_JAR)" --manifest examples/android/AndroidManifest.xml; \
+	touch -h -t 198001010000 $(APK_DIR)/stage/lib $(APK_DIR)/stage/lib/arm64-v8a $(APK_DIR)/stage/lib/arm64-v8a/*; \
+	cd $(APK_DIR)/stage && TZ=UTC zip -q -X -D -r ../unaligned.apk lib && cd $(CURDIR); \
+	"$(ANDROID_BUILD_TOOLS)/zipalign" -P 16 -f 4 $(APK_DIR)/unaligned.apk $(APK_DIR)/aligned.apk; \
+	"$(ANDROID_BUILD_TOOLS)/apksigner" sign --ks examples/android/debug.keystore --ks-pass pass:android \
+		--key-pass pass:android --ks-key-alias olangdebug --out $(APK_DIR)/olang-sample.apk $(APK_DIR)/aligned.apk; \
+	"$(ANDROID_BUILD_TOOLS)/apksigner" verify $(APK_DIR)/olang-sample.apk; \
+	rm -f $(APK_DIR)/unaligned.apk $(APK_DIR)/aligned.apk $(APK_DIR)/olang-sample.apk.idsig; \
+	echo "android-apk: built $(APK_DIR)/olang-sample.apk (adb install $(APK_DIR)/olang-sample.apk)"
+
 # B12d: a release - build/release/olang-VERSION-ARCH-linux.tar.xz, VERSION as git describes this checkout. It holds
 # the compiler built for the architecture's baseline (bin/olang, so it runs on every machine of it, whatever this one
 # has), std/, SPEC.md (for "olang explain RULE"), editors/, tools/ (for "olang fix"), docs/install.md as its README, and
@@ -665,4 +709,4 @@ uninstall:
 	echo "uninstall: done (left as they are: ~/.cache/olang, a Jupyter kernel spec, builds' build/ directories)"
 
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: consistency dumptool all build prereq install install-editors uninstall bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean
+.PHONY: consistency dumptool all build android-test android-apk prereq install install-editors uninstall bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean

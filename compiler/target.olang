@@ -36,6 +36,41 @@ type Target struct() {
     # tile.AddDot: the processor has AMX's BF16 tile product (amx-bf16, amx-tile) - the runtime's __olang_tile_bf16 runs
     # it there (runtime.Ir) and computes nothing elsewhere, where std/tile computes the same itself
     TileDot Bool = false
+    # B12e: Android - its API level (29 and up) and the NDK's clang, which builds for it with the NDK's linker and
+    # sysroot; "" for every other target, built with the build's own clang
+    Api I64 = 0
+    Clang String& = ""
+}
+
+# B12e: the API level "-target aarch64-linux-android" builds for, where the triple names none: Android 10, the first
+# whose C library (bionic) has ELF thread-local storage, which the runtime uses
+AndroidApi I64 = 29
+
+# B12e: the Android NDK's directory - ANDROID_NDK_HOME, else ANDROID_NDK_ROOT - and its clang ("" where neither names a
+# directory holding one)
+fn NdkClang() String {
+    for name in Array<String&>["ANDROID_NDK_HOME", "ANDROID_NDK_ROOT"] {
+        dir := try os.Env(name) catch default ""
+        if dir == "": continue
+        clang := $dir + "/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+        if executable(clang): return clang
+    }
+    return ""
+}
+
+# B12e: the API level an Android triple's operating system part names ("linux-android" 29, "linux-android35" 35), 0
+# where it is not Android's, -1 where the level is not a number
+fn androidLevel(triple String&) I64 {
+    at := try triple.Find("-linux-android") catch default -1
+    if at < 0: return 0
+    digits := triple[at + 14:]
+    if digits == "": return AndroidApi
+    level I64 = 0
+    for ch in digits {
+        if ch < '0' or ch > '9': return -1
+        level = level * 10 + I64(ch - '0')
+    }
+    return level
 }
 
 # a target that could not be resolved - its diagnostic said
@@ -148,6 +183,8 @@ fn (t Target&) Runner() Array<String&> ? Bad {
         at := whereIs(name)
         if at == "": continue
         out.Push(at)
+        # B12e: an Android program run here is linked statically (bionic's loader is not here): nothing to point at
+        if t.Os == "android": return out.ToArray()
         root := Sysroot()
         if root == "" and os.IsDir($"/usr/" + $t.Arch + "-linux-gnu"): root = $"/usr/" + $t.Arch + "-linux-gnu"
         if root != "" {
@@ -187,8 +224,18 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
         triple = $spec[:colon] if colon >= 0 else $spec
         hasCpu = colon >= 0
         cpu = $spec[colon + 1:] if colon >= 0 else ""
-        # the operating system part: Linux with the GNU C library, the one whose facts the runtime knows
-        if not (triple.Len() > 10 and triple.EndsWith("-linux-gnu")): try refuse(d, msgs.TargetUnsupported(spec))
+        # the operating system part: Linux with the GNU C library, or Android's bionic on aarch64 (B12e) - the C
+        # libraries whose facts the runtime knows
+        t.Api = androidLevel(triple)
+        if t.Api != 0 {
+            if Archs[ai] != "aarch64": try refuse(d, msgs.TargetUnsupported(spec))
+            if t.Api < AndroidApi: try refuse(d, msgs.TargetAndroidApi(spec))
+            at := try triple.Find("-linux-android") catch default 0
+            triple = $triple[:at] + "-linux-android" + $t.Api
+            t.Os = "android"
+        } else if not (triple.Len() > 10 and triple.EndsWith("-linux-gnu")) {
+            try refuse(d, msgs.TargetUnsupported(spec))
+        }
         if hasCpu and (cpu == "" or cpu.Contains(":")): try refuse(d, msgs.TargetUnknown(spec))
     } else {
         # a triple for an architecture olang does not build for, rather than a CPU
@@ -200,7 +247,7 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
         if ai < 0: try refuse(d, msgs.TargetUnsupported(hostArch))
     }
     t.Arch = $Archs[ai]
-    t.Foreign = Archs[ai] != hostArch or hostOs != "linux"
+    t.Foreign = Archs[ai] != hostArch or hostOs != "linux" or t.Os != "linux"
     # a triple naming this machine's architecture and system is this machine, with the triple's baseline CPU unless one
     # is given: built and linked as any other build for this machine
     if triple != "" and not t.Foreign {
@@ -213,15 +260,21 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
     if hasCpu and cpu == "native" and t.Foreign: try refuse(d, msgs.TargetNativeForeign(spec))
     if t.Foreign and interpreting: try refuse(d, msgs.TargetForeignMode("scripting mode", spec))
     if t.Foreign and here != "": try refuse(d, msgs.TargetForeignMode(here, spec))
+    # B12e: Android is built for by the NDK's clang alone, whatever clang the build would use
+    if t.Os == "android" {
+        t.Clang = NdkClang()
+        if t.Clang == "": try refuse(d, msgs.TargetNoNdk(spec))
+    }
+    cc := t.Clang if t.Clang != "" else clang
     # interpret runs the program without clang and needs one only to know the target: this machine's own CPU, or an
     # x86-64 level, it knows without - the level this processor supports standing for its CPU
-    if clang == "" {
+    if cc == "" {
         if not interpreting or not t.withoutClang(cpu, cpuFlags()): try refuse(d, msgs.TargetNoClang(spec))
         return t
     }
     # the probe: one empty C function compiled to IR for the target, whose attributes say what clang made of it
     args Vec<String&>
-    args.Push(clang)
+    args.Push(cc)
     if triple != "": args.Push($"--target=" + $triple)
     if hasCpu: args.Push($ArchCpuFlags[ai] + $cpu)
     for a in Array<String&>["-S", "-emit-llvm", "-o", "-", "-x", "c", "-"]: args.Push(a)
@@ -234,7 +287,7 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
     catch Probe.Unsupported { try refuse(d, msgs.TargetUnsupported(spec)) }
     # another architecture is built for only where this clang can generate all the code the runtime holds - BF16 among
     # it, which LLVM 18's AArch64 back end cannot select: an object it could not compile at the link is not built
-    if t.Foreign and not canCompileBf16(clang, t.Triple): try refuse(d, msgs.TargetNoBackend(spec))
+    if t.Foreign and not canCompileBf16(cc, t.Triple): try refuse(d, msgs.TargetNoBackend(spec))
     t.CpuFlag = $ArchCpuFlags[ai] + $t.Cpu # resolved: native is looked up once
     return t
 }
@@ -527,7 +580,7 @@ test "what cannot be built for is said as stage 0 says it, before clang is asked
     # no clang is named, so every one of these is decided from the spec alone
     assert mistake("mips-linux-gnu", "", false, "linux", "x86_64") ==
         "olang: error[B12]: olang does not build for 'mips-linux-gnu'\n" + $
-        "olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library\n"
+        "olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library, and aarch64 Android (aarch64-linux-android)\n"
     assert mistake("aarch64-apple-darwin", "", false, "linux", "x86_64").Contains("does not build for")
     assert mistake("aarch64-linux-gnu:native", "", false, "linux", "x86_64").Contains("native is this machine's CPU")
     assert mistake("aarch64-linux-gnu:", "", false, "linux", "x86_64").Contains("unknown target")
@@ -542,6 +595,25 @@ test "what cannot be built for is said as stage 0 says it, before clang is asked
     assert mistake("x86-64-v2", "", true, "linux", "x86_64") == ""
     assert mistake("x86_64-pc-linux-gnu", "", true, "linux", "x86_64") == ""
     assert mistake("skylake", "", true, "linux", "x86_64").Contains("clang not found")
+}
+
+test "B12e: an Android triple names its API level, 29 where it names none, and aarch64 alone" {
+    assert androidLevel("aarch64-linux-android") == 29 and androidLevel("aarch64-unknown-linux-android35") == 35
+    assert androidLevel("aarch64-linux-gnu") == 0 and androidLevel("aarch64-linux-android3x") == -1
+    assert mistake("aarch64-linux-android28", "", false, "linux", "x86_64").Contains("error[B12e]: 'aarch64-linux-android28' names an Android API level")
+    assert mistake("aarch64-linux-androidx", "", false, "linux", "x86_64").Contains("names an Android API level")
+    assert mistake("x86_64-linux-android", "", false, "linux", "x86_64").Contains("does not build for 'x86_64-linux-android'")
+    assert mistake("aarch64-linux-android", "", true, "linux", "x86_64").Contains("error[B12a]: scripting mode runs on this machine")
+    # the NDK is what builds for it: without one, that is what is said
+    if NdkClang() == "" {
+        assert mistake("aarch64-linux-android", "", false, "linux", "x86_64").Contains("error[B12e]: '-target aarch64-linux-android' needs the Android NDK")
+        return
+    }
+    d := quiet()
+    t := try Target.ResolveOn("aarch64-linux-android35", "", false, "linux", "x86_64", d) catch Bad { unreachable }
+    assert t.Os == "android" and t.Api == 35 and t.Foreign and t.Triple == "aarch64-unknown-linux-android35" and t.Clang != ""
+    run := try t.Runner() catch Bad { return } # no emulator on this machine
+    assert run.Len() == 1     # linked statically: qemu needs no C library pointed at
 }
 
 test "with clang, native is this machine's CPU, a triple of this machine its baseline, and a bad CPU is unknown" {

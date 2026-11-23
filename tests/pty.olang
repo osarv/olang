@@ -1,0 +1,53 @@
+# a pseudo-terminal through the C library's own functions (X17): posix_openpt, grantpt, unlockpt and ptsname, and
+# forkpty - what a terminal emulator is built on, on Linux and on Android (B12e)
+import cstdlib "stdlib.h"
+import cfcntl "fcntl.h"
+import unistd "unistd.h"
+import cpty "pty.h"
+import cwait "sys/wait.h"
+
+# what fd gives within the reads it takes to see want, or all it gave before it ended
+fn readUntil(fd I32, want String&) String {
+    got := StringBuilder()
+    buf := Array<U8>(256)
+    for _ in range 50 {
+        n := unistd.read(fd, buf, U64(buf.Len()))
+        if n <= 0: break
+        for b in buf[:n]: got.PushChar(Char(b))
+        if got.ToString().Contains(want): break
+    }
+    return got.ToString()
+}
+
+test "a pseudo-terminal's slave side writes what its master side reads, the terminal's line ends made CR LF" {
+    m := cstdlib.posix_openpt(cfcntl.O_RDWR | cfcntl.O_NOCTTY)
+    assert m >= 0
+    defer: unistd.close(m)
+    assert cstdlib.grantpt(m) == 0 and cstdlib.unlockpt(m) == 0
+    name := String.FromC(cstdlib.ptsname(m)!, 64)
+    assert name.StartsWith("/dev/pts/")
+    s := cfcntl.open($name + "\0", cfcntl.O_RDWR | cfcntl.O_NOCTTY)
+    assert s >= 0
+    defer: unistd.close(s)
+    line := "hello pty\n"
+    assert unistd.write(s, line, U64(line.Len())) == line.Len()
+    assert readUntil(m, "\r\n") == "hello pty\r\n"
+}
+
+test "forkpty starts a child on a new terminal, whose output the parent reads" {
+    fd := Array<I32>(1)
+    name := Array<U8>(64)
+    pid := cpty.forkpty(fd, name, null, null)
+    m := fd[0]
+    assert pid >= 0
+    if pid == 0 {
+        said := "child on a tty\n"
+        unistd.write(1, said, U64(said.Len()))
+        unistd._exit(I32(unistd.isatty(0)))
+    }
+    defer: unistd.close(m)
+    assert readUntil(m, "\r\n").Contains("child on a tty\r\n")
+    status := Array<I32>(1)
+    assert cwait.waitpid(pid, status, 0) == pid
+    assert (status[0] >> 8) & 255 == 1
+}

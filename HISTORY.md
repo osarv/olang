@@ -42174,6 +42174,67 @@ instance lives where its referent does, and the program runs as it would without
 relaxes is lost (the probes accepted beyond master stay accepted; checks' fieldscopeflat stays flat).
 checks/cases/fieldscopepart.olang: the four shapes, read back after a churn, with a decided assert the evaluator runs.
 
+## 2026-11-23: Android as a target (B12e, X14; mine; wt-android)
+
+The first step of a native Android terminal app in olang: `-target aarch64-linux-android[LEVEL]` builds programs and
+NativeActivity libraries for bionic, with the Android NDK (r28c, clang 19.0.1), and an APK of an olang-only app is made
+by `make android-apk` (build-tools 36.1.0, platform android-36, the system's OpenJDK 21 for apksigner).
+
+**Decisions.** The spelling follows B12's triples: `aarch64-linux-android` is API level 29, `aarch64-linux-android35`
+names one; below 29 is refused (29 is the first bionic with ELF TLS, which the runtime uses throughout), and so is
+`x86_64-linux-android` (no bionic facts for it). `TargetOs` is `"android"` - a program must be able to tell bionic from
+glibc (std/os's memfd_create is the first case), and Android is what clang's triple calls it. The NDK is found through
+`ANDROID_NDK_HOME`, else `ANDROID_NDK_ROOT` - the two names the NDK's own documentation and Gradle use - rather than an
+option or a build constant: it is a property of the machine, like `OLANG_CLANG`, not of the build; without one the
+build says how to name it (B12e's message). Android is always built with the NDK's clang, whatever B12d would choose:
+only it knows the sysroot, the API levels' stubs and Android's linker defaults (16 KB pages, TLS alignment). `build`
+gives a dynamic PIE - what a phone runs and what `/system/bin/linker64` can load - while `test` and `run`, which run the
+program here, link it `-static` (the NDK ships `libc.a`; bionic's loader is not on a Linux machine, so a dynamic program
+cannot run under qemu - a fake `/system` tree would need a phone's `linker64` and libraries, which the NDK does not
+have). No `-static` option was added: where the program runs decides it. The sample's APK is signed with a committed
+debug keystore (PKCS12, password `android`) rather than one generated per checkout: the same checkout then gives the
+same bytes on every machine and an update installs over the last; it is a sample's key and says so.
+
+**The runtime on bionic.** Fill's facts and `; @if` conditions are not extended - the seed fills the runtime with its
+own table and would refuse a new placeholder or condition - so, as tile.AddDot did, the Android runtime is the aarch64
+glibc text transformed in `runtime.Bionic`: `__errno_location` defined over bionic's `__errno`; `sysconf` called through
+a shim mapping glibc's three names (30, 75, 85) to bionic's (39, 76, 98); `sigaction` through a shim translating the
+glibc layout (handler at 0, flags at 136) to bionic's (flags at 0, handler at 8). The other structures the runtime
+sizes are laid out alike or are smaller on bionic (measured with a static probe under qemu: stat 128, dirent's name
+at 19, pthread_attr_t 56, jmp_buf 256, posix_spawn_file_actions_t 8, ucontext's pc/fp/sp at 440/416/432), so the glibc
+row's sizes hold. The first run showed "memory mapped above 2^48": bionic's malloc tags heap pointers in their top byte,
+where a weak word (T13d) keeps its generation; a constructor turns tagging off (`mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL,
+NONE)`), and the sample's manifest says `allowNativeHeapPointerTagging="false"` too. Under qemu bionic writes a line about
+it to the standard error (on a phone it goes to logcat).
+
+**Bugs and gaps found.** bindgen did not know clang's nullability qualifiers (`_Nonnull`, `_Nullable`,
+`_Null_unspecified`), which bionic writes on every pointer: `read`, `write`, `strnlen` had no olang form; they are passed
+over as `restrict` is. The prelude's RoundEven read `roundeven` from `<math.h>`, which bionic does not declare though
+it is an instruction (X8) - it is now an `extern fn` of the prelude's own. std/os's memfd_create is declared from level
+30, so below it std makes the system call; std/net's `poll` count is `nfds_t`, unsigned long on glibc and unsigned int on
+bionic - a `U32` flows into either. tests/shared.olang asserted `TargetOs == "linux"`. A real X14 bug, on every target:
+a library's C imports were compiled to IR with clang's default, a position-independent executable, whose "PIE Level"
+mark LTO merges - so the link's code generator reached the program's thread-locals local-exec, which a shared library
+cannot (lld: "TLSLE ... cannot be used with -shared"); it showed once the version script internalized them. A library's
+C imports are now compiled `-fPIC`.
+
+**What works.** `make android-test` runs the corpus's, std's and the prelude's tests built for Android under
+qemu-aarch64: all pass but those left out as for `make cross` (std/os: qemu reports a failed exec as exit 127) and
+std/net (name resolution goes through the system's netd), std/ffi and std/tls (no libffi or OpenSSL in the NDK);
+threads, join, files, processes, and a pseudo-terminal (tests/pty.olang: posix_openpt/grantpt/unlockpt/ptsname and
+forkpty, which a terminal emulator is built on) among them. A NativeActivity library cannot be loaded here (static
+bionic has no dlopen); its exports and its undefined symbols are checked against the level-29 stubs instead.
+
+**The sample's callbacks.** A NativeActivity sets its callbacks by writing function pointers into
+`ANativeActivityCallbacks`. olang can hand an export fn's C entry to C only as an extern's argument (X13), never store
+one, and a struct of function pointers has no olang form (it is a `CVoid`). The sample declares C's `memmove` with an
+export fn's type as its first parameter: `memmove(onX, 0, 0)` gives back its destination, the entry's address, which
+it writes into the table with `mempcpy` - correct and documented, but a workaround: a direction question (a C function
+pointer as a value an extern struct can hold) went to the ledger's owner. The checks of running shipped programs (the
+user's request through the Orchestrator: nativeLibraryDir exec, and `/system/bin/linker64 FILE` for a program copied
+into the files directory) run at onCreate and show as green or red bands, with logcat lines; they can only be judged on
+a phone.
+
 ## 2026-11-23: a Map whose values hold writable references, walked read-only and writably (S9c, T25c; mine; wt-mapiter)
 
 Found by oann (tensor.Tensor values): a read-only `for e in m` over `Map<I64, Buf>`, Buf holding `mut Array<F32>&`,

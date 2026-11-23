@@ -192,10 +192,10 @@ olang: note: native is this machine's CPU
 olang: help: name the other architecture's CPU after ':', or none for its default
 === b12unknown.olang
 olang: error[B12]: unknown target 'pentium9000'
-olang: help: write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
+olang: help: write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu, aarch64-linux-gnu or aarch64-linux-android (an API level after it if wanted, as aarch64-linux-android35), ':CPU' after it if wanted
 === b12unsupported.olang
 olang: error[B12]: olang does not build for 'riscv64-linux-gnu'
-olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library
+olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library, and aarch64 Android (aarch64-linux-android)
 === b4droppedbranch.olang
 b4droppedbranch.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 1 error

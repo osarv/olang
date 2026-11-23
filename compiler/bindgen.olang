@@ -412,6 +412,12 @@ fn (g mut gen&) parseType(t String&, depth I64 = 0) I64 {
     return r
 }
 
+# qualifiers that change nothing olang's form of a type says: volatile, restrict, and clang's nullability annotations,
+# which bionic's headers write on every pointer (B12e)
+fn passOver(w String&) Bool {
+    return w in Array<String&>["volatile", "restrict", "__restrict", "_Nonnull", "_Nullable", "_Null_unspecified", "_Nullable_result"]
+}
+
 # specifiers then a declarator: "const char *", "int (*)(void *, int)", "unsigned char [64]"
 fn (g mut gen&) typeName(p mut ctp&, depth I64) I64 {
     signed I64 = 0                                      # 1 signed, 2 unsigned
@@ -424,7 +430,7 @@ fn (g mut gen&) typeName(p mut ctp&, depth I64) I64 {
         w := p.at()
         if w == "const" {
             ro = true
-        } else if w == "volatile" or w == "restrict" or w == "__restrict" {
+        } else if passOver(w) {
         } else if w == "signed" {
             signed = 1
         } else if w == "unsigned" {
@@ -485,7 +491,7 @@ fn (g mut gen&) declarator(p mut ctp&, base I64, ro Bool, depth I64) I64 {
         t = g.node(CKind.Ptr, "", t, cnst)
         p.pos++
         cnst = false
-        for p.at() == "const" or p.at() == "volatile" or p.at() == "restrict" or p.at() == "__restrict" {
+        for p.at() == "const" or passOver(p.at()) {
             cnst = p.at() == "const"
             p.pos++
         }

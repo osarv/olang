@@ -521,6 +521,9 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     here := modeName(cl.Mode) if not foreignOk and not interpreting else ""
     c.Target = try target.Target.Resolve(cl.Spec, c.Clang, interpreting or (tool and c.Clang == ""), d, here = here)
         catch target.Bad { error Bad.Usage }
+    # B12e: Android is built with the NDK's clang, and a program of it run here - a test, run - linked statically
+    if c.Target.Clang != "": c.Clang = c.Target.Clang
+    c.Static = c.Target.Os == "android" and (cl.Mode == Test or cl.Mode == RunBuilt)
     if c.Target.Foreign and not foreignOk: try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec))
     c.Tests = cl.Mode == Test
     c.Profile = cl.Mode == Profile
@@ -543,6 +546,7 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
         b.Push("  OLANG_TIMES=1      says each phase of a build as it ends, with its time and the compiler's memory (B3m)\n")
         b.Push("  OLANG_SPINNER=0    no busy indicator on the terminal while a build waits (B25)\n")
         b.Push("  OLANG_CLANG=PATH   names the clang a build uses (B12d)\n")
+        b.Push("  ANDROID_NDK_HOME=DIR  names the Android NDK -target aarch64-linux-android builds with (B12e)\n")
         b.Push("  OLANG_OBJECTS=DIR  a directory of objects builds share (B3j)\n")
         b.Push("  OLANG_CELLS=interpret  the prompt's and notebooks' cells interpreted, not compiled (B22)\n")
         b.Push("  OLANG_AUTORACE=0   test builds no race-detector build of the tests that start a task (P7a)\n")
@@ -917,7 +921,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         for x in e.ExportNames(): prog.Exports.Push($x)
         prog.Header = e.Header(build.LibName(root), root)
     }
-    prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench, tile = t.TileDot) catch rt.Bad {
+    prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench, tile = t.TileDot, system = t.Os) catch rt.Bad {
         error build.Failed.Reported
     }
     if cfg.Library: prog.Runtime = libraryIr(prog.Runtime)
@@ -1484,6 +1488,10 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
     args Vec<String&>
     args.Push(cfg.Clang)
     for f in cfg.CFlags(): args.Push(f)
+    # X14: a library's C is position-independent as its olang is - else clang's default (position-independent
+    # executable, on Android and most Linux distributions) marks the IR as an executable's, and the link's code
+    # generator, merging that mark, reaches every thread-local at an executable's fixed offsets, which a library cannot
+    if cfg.Library: args.Push("-fPIC")
     if cfg.Debug: args.Push("-g")
     if cfg.Race: args.Push("-fsanitize=thread")
     if cfg.Profile {

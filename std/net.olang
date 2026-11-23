@@ -511,7 +511,8 @@ fn Readable(fds Array<I32>&, ms I64 = -1) Array<Bool> {
         set[i].fd = fd
         set[i].events = I16(cpoll.POLLIN)
     }
-    for cpoll.poll(set, U64(fds.Len()), I32(ms)) < 0 and interrupted() { }
+    # nfds_t is unsigned long on glibc, unsigned int on bionic (B12e): a U32 flows into either
+    for cpoll.poll(set, U32(fds.Len()), I32(ms)) < 0 and interrupted() { }
     return Array<Bool>[set[i].revents != 0 for i in range fds.Len()]
 }
 
