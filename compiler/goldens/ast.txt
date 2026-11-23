@@ -851,7 +851,8 @@ d05e72c40bb876f5 6864678024d5c268 checks/cases/longflag.olang
 3bf20bb8a826e9d0 97c72d225a75f0a1 checks/cases/lostloopwrite.olang
 7cf5395a072a86b2 17fe62aca9d6e714 checks/cases/lostloopwritecopy.olang
 c3cab10cc937587a 8771b6440614cc60 checks/cases/lostloopwriteindex.olang
-e895c18145f03631 50a303417490492f checks/cases/lostloopwriterepoint.olang
+16406bccb38cca05 d3a8226a1b72b4fe checks/cases/lostloopwriterepoint.olang
+9b15a1a5d6a67196 f4a19ebe42d0208a checks/cases/lostloopwriteviewmut.olang
 b8cff2650bd206ca e35cd8b0fe96b2a2 checks/cases/lostparamwrite.olang
 e971fac7f980c8ff f084038e0f1cf7af checks/cases/lostparamwritenested.olang
 037852f04a33e340 09846c308ca06b9a checks/cases/lostparamwriterepoint.olang
@@ -1546,6 +1547,8 @@ fb876149e76bc3d1 98271ac1aec28047 checks/cases/s8dwidecond.olang
 f487ef7106a0435e 72734bc4b92d9050 checks/cases/s8dwideor.olang
 153b7a066acde04f 85861d63dcd558d6 checks/cases/s8edefernull.olang
 a8cf98e02554ee7c 102f5f06f2ad8797 checks/cases/s8eerrdefernull.olang
+cdc58e6ca54d0647 268e7cb16e66b6c4 checks/cases/s9auniquewalk.olang
+2e9f0915fe9eedf5 efed1d216361cc24 checks/cases/s9auniquewalkfield.olang
 c33112cfc1a1313d 33d7fbaad5becccb checks/cases/s9erangeundertry.olang
 9539cce793560b77 53c114677653e16c checks/cases/satadd01outside.olang
 a42e51ff10c74ec0 f8ef7426aeb5c0da checks/cases/server.olang
@@ -2480,7 +2483,7 @@ e20178f94e07dfed ff5ec0fbe401eade compiler/bindgen.olang
 1c0afe32dcaf03c1 f4a0a51add52a9f9 compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 a63bb2cbd4c666c1 32f8e5565363d2f2 compiler/cells.olang
-b8e9a62db7404e9c 2c03edb1f84b6169 compiler/check.olang
+a68fdc2523c02c71 6b5ba868cda7c42d compiler/check.olang
 da018e972c2ecc90 402dd6cf0de7cca1 compiler/cond.olang
 d5d87da3cf156c0a 6fd762f9553d2a77 compiler/definit.olang
 10fe8de7e2c53448 44486c8e5adfc518 compiler/diag.olang
@@ -2506,7 +2509,7 @@ d567d78faab8844a db01326d5481790c compiler/interp.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
 68e708117c28f3bb 7de5ae35b8b694ce compiler/mir.olang
-b721863274bc9221 679849d67ec3b912 compiler/msgs.olang
+4feb78fede446d67 0654c912b94c48fe compiler/msgs.olang
 04b2a622da19ca9a 327665c0703d5b1e compiler/names.olang
 3f072b84e716c304 202ed56cc066d701 compiler/needs.olang
 79acbc010c9bf08a a1be4111ef62bcb1 compiler/notebook.olang
@@ -2745,7 +2748,8 @@ c2f50b441dc503ab 5d569021b19bb941 tests/keptfacts.olang
 3253d9e1f272b7f0 71d68e12eec68060 tests/keyenums.olang
 bcc9ef5a3b4134de 3d9949edfee60676 tests/lanes.olang
 01ffe7335fe6ab32 5ca34c7fbd5883d8 tests/literals.olang
-39a108fffbe46338 18586af323f9f702 tests/loopref.olang
+375b5311b95e0319 11d005301eeb442f tests/loopref.olang
+02dc8a3ce8916c6f dd7963d4c14e4869 tests/loopvals.olang
 cb1a5845ede026cf 0791c61597117220 tests/match.olang
 bd604793a79e1dd0 03c02f86e953d049 tests/membermod.olang
 43716d6db39bbcf8 469215721341423b tests/members.olang

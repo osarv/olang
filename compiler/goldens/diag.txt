@@ -1414,9 +1414,9 @@ definiteffect.olang:11:5: note: its constructor does not run on zeros while comp
 definiteffect.olang:13:12: note: read here before it is assigned on every path - assign it on each path before this read
    13 |     return e.v
       |            ^
-definiteffect.olang:8:12: note: here
+definiteffect.olang:8:5: note: here
     8 |     Made = Made + 1
-      |            ^~~~
+      |     ^~~~~~~~~~~~~~~
 compilation failed with 1 error
 === definitfield.olang
 definitfield.olang:7:5: error[D13d]: the field 'n' is not assigned on every path through the constructor
@@ -1572,6 +1572,11 @@ e12textforlength.olang:4:20: error[E12, D14]: expected I64, found String
       |                    ^~~~~~~~~~~~~~~~
 e12textforlength.olang:4:20: note: Array<T>(n) makes n zeroed elements
 e12textforlength.olang:4:20: help: to read the text's bytes, write 't.Bytes()'; its characters, 'c Array<Char> = t'
+compilation failed with 1 error
+=== e12valuekeepstype.olang
+e12valuekeepstype.olang:7:14: error[E12]: expected Txt&, found Array<U8>
+    7 |     x Txt& = b
+      |              ^
 compilation failed with 1 error
 === e13bfieldnotfn.olang
 e13bfieldnotfn.olang:6:10: error[E13b]: I32 is not a function, and declares no Call
@@ -3289,6 +3294,11 @@ keywordlocal.olang:5:5: error[L9a]: 'keeps' is a keyword, not a name
       |     ^~~~~
 keywordlocal.olang:5:5: note: a field named by one is reached only after '.', never by the name alone
 compilation failed with 2 errors
+=== l10ahexnodigits.olang
+l10ahexnodigits.olang:4:10: error[L10a]: '0x' needs hexadecimal digits
+    4 |     x := 0x
+      |          ^~
+compilation failed with 1 error
 === l10bdouble.olang
 l10bdouble.olang:4:11: error[L10b]: '_' in a number must stand between two digits
     4 |     x := 1__000
@@ -3298,6 +3308,19 @@ compilation failed with 1 error
 l10bprefix.olang:4:15: error[L10b]: '_' in a number must stand between two digits
     4 |     x U64 = 0x_FF
       |               ^
+compilation failed with 1 error
+=== l10cbinarybaddigit.olang
+l10cbinarybaddigit.olang:5:13: error[L10c]: '2' is not a binary digit
+    5 |     x := 0b12
+      |             ^
+l10cbinarybaddigit.olang:5:13: error: expected end of line, found '2'
+    5 |     x := 0b12
+      |             ^
+compilation failed with 2 errors
+=== l10cbinarynodigits.olang
+l10cbinarynodigits.olang:4:10: error[L10c]: '0b' needs binary digits
+    4 |     x := 0b
+      |          ^~
 compilation failed with 1 error
 === l12bfloatbig.olang
 l12bfloatbig.olang:4:10: error[L12b]: '1e400' is beyond F64's range
@@ -3614,29 +3637,36 @@ olang: error[B1]: unknown option '-x' - 'olang help' lists the options of build
 lostloopwrite.olang:6:9: error[S9g]: the write to 'x' is lost: nothing reads 'x' after it
     6 |         x = x * 10
       |         ^~~~~~~~~~
-lostloopwrite.olang:6:9: note: 'x' holds a copy of what the walk gives (S9a), and nothing reads it again this turn
-lostloopwrite.olang:6:9: help: write the element where it is - 'for i, x in a: a[i] = ...', or a field through a writable walk's reference - or store the value somewhere read later
+lostloopwrite.olang:6:9: note: 'x' is a copy of the element's value (S9a), and nothing reads it again this turn
+lostloopwrite.olang:6:9: help: write the element where it is - 'for i, x in a: a[i] = ...' or 'a[i].f = ...' - or store the value somewhere read later
 compilation failed with 1 error
 === lostloopwritecopy.olang
 lostloopwritecopy.olang:10:9: error[S9g]: the write to 'p' is lost: nothing reads 'p' after it
    10 |         p.x = 7
       |         ^~~~~~~
-lostloopwritecopy.olang:10:9: note: 'p' holds a copy of what the walk gives (S9a), and nothing reads it again this turn
-lostloopwritecopy.olang:10:9: help: write the element where it is - 'for i, p in a: a[i] = ...', or a field through a writable walk's reference - or store the value somewhere read later
+lostloopwritecopy.olang:10:9: note: 'p' is a copy of the element's value (S9a), and nothing reads it again this turn
+lostloopwritecopy.olang:10:9: help: write the element where it is - 'for i, p in a: a[i] = ...' or 'a[i].f = ...' - or store the value somewhere read later
 compilation failed with 1 error
 === lostloopwriteindex.olang
 lostloopwriteindex.olang:7:9: error[S9g]: the write to 'i' is lost: nothing reads 'i' after it
     7 |         i = 0
       |         ^~~~~
-lostloopwriteindex.olang:7:9: note: 'i' holds a copy of what the walk gives (S9a), and nothing reads it again this turn
+lostloopwriteindex.olang:7:9: note: 'i' holds a copy of the turn's count (S9a), and nothing reads it again this turn
 lostloopwriteindex.olang:7:9: help: keep a count of your own in a local declared before the loop
 compilation failed with 1 error
 === lostloopwriterepoint.olang
 lostloopwriterepoint.olang:11:9: error[S9g]: the write to 'p' is lost: nothing reads 'p' after it
-   11 |         p = twice(p)
-      |         ^~~~~~~~~~~~
-lostloopwriterepoint.olang:11:9: note: 'p' refers to the element, and '=' repoints the name (S4a), never writing the element
-lostloopwriterepoint.olang:11:9: help: write the element where it is - 'for i, p in a: a[i] = ...', or a field through a writable walk's reference - or store the value somewhere read later
+   11 |         p = b
+      |         ^~~~~
+lostloopwriterepoint.olang:11:9: note: 'p' is the reference the element holds, and '=' repoints the name (S4a), never writing the element
+lostloopwriterepoint.olang:11:9: help: write the element where it is - 'for i, p in a: a[i] = ...' or 'a[i].f = ...' - or store the value somewhere read later
+compilation failed with 1 error
+=== lostloopwriteviewmut.olang
+lostloopwriteviewmut.olang:11:9: error[S9g]: the write to 'p' is lost: nothing reads 'p' after it
+   11 |         p.x = 7
+      |         ^~~~~~~
+lostloopwriteviewmut.olang:11:9: note: 'p' is a copy of the element's value (S9a), and nothing reads it again this turn
+lostloopwriteviewmut.olang:11:9: help: write the element where it is - 'for i, p in a: a[i] = ...' or 'a[i].f = ...' - or store the value somewhere read later
 compilation failed with 1 error
 === lostparamwrite.olang
 lostparamwrite.olang:14:5: error[S4e]: the write to 'out' is lost: nothing reads 'out' after it
@@ -3950,6 +3980,11 @@ m19grefloop.olang:12:28: note: 'v' may grow here, in 'Push' - take the view or t
    12 |     for i in range 5000: v.Push(blk(i, $i))
       |                            ^~~~
 compilation failed with 1 error
+=== m19nominalsibling.olang
+m19nominalsibling.olang:10:19: error[T6b]: Feet does not flow into Meters - convert it, as Meters(x)
+   10 |     assert m.AddM(f) == 5
+      |                   ^
+compilation failed with 1 error
 === m21twiceexact.olang
 m21twiceexact.olang:8:18: error[M21]: 'Describe' is declared twice for Box<I64> - declare one per instance
     8 | fn (b Box<I64>&) Describe() String { return "two" }
@@ -4051,6 +4086,11 @@ m9builderold.olang:12:15: error[M9]: module std/time declares no 'DateOf' - did 
    12 |     d := time.DateOf(0)
       |               ^~~~~~
 compilation failed with 2 errors
+=== m9missingtype.olang
+m9missingtype.olang:6:10: error[M9]: module std/time declares no 'Instant'
+    6 | fn ms(t0 time.Instant) I64 { return 0 }
+      |          ^~~~~~~~~~~~
+compilation failed with 1 error
 === m9preludename.olang
 m9preludename.olang:6:8: error[M9]: module std/io declares no 'Println'
     6 |     io.Println("x")
@@ -4293,6 +4333,16 @@ overridesig.olang:11:12: error[M19e]: Twice does not have the signature of the d
       |            ^~~~~
 overridesig.olang:11:12: help: match it, or choose another name
 compilation failed with 1 error
+=== p1ainnerjoinonly.olang
+p1ainnerjoinonly.olang:6:5: error[P1a]: this join spawns nothing, so it waits for nothing
+    6 |     join {
+      |     ^~~~~~
+compilation failed with 1 error
+=== p1ajoinwaitsfornothing.olang
+p1ajoinwaitsfornothing.olang:4:5: error[P1a]: this join spawns nothing, so it waits for nothing
+    4 |     join {
+      |     ^~~~~~
+compilation failed with 1 error
 === p1gresultref.olang
 p1gresultref.olang:13:38: error[P1g]: a spawn target has exactly the call's type Array<I64>, found Array<I64>&
    13 |         for t in range 2: spawn parts[t] = part(t * 4, t * 4 + 4)
@@ -4303,6 +4353,11 @@ compilation failed with 1 error
 p1gtargetsfields.olang:20:13: error[P1g]: these targets live in different scopes, and the results are built in one
    20 |             spawn h.n, k.n = two(i + 5)
       |             ^~~~~
+compilation failed with 1 error
+=== p1spawnoutsidejoin.olang
+p1spawnoutsidejoin.olang:6:5: error[P1]: 'spawn' is written inside a 'join' block, which waits for the task
+    6 |     spawn f()
+      |     ^~~~~~~~~
 compilation failed with 1 error
 === p2forincopy.olang
 p2forincopy.olang:16:44: error[P2]: this argument's storage closes before the join does
@@ -5112,6 +5167,16 @@ rv3strreceiver.olang:11:10: error[E11c, T25c]: Str only reads its receiver
 rv3strreceiver.olang:11:10: note: '$' renders read-only values too
 rv3strreceiver.olang:11:10: help: pass on what it holds read-only
 compilation failed with 1 error
+=== s11breakinfn.olang
+s11breakinfn.olang:5:5: error[S11]: 'break' acts on the innermost loop, and there is none here
+    5 |     break
+      |     ^~~~~
+compilation failed with 1 error
+=== s11breakinjoin.olang
+s11breakinjoin.olang:8:9: error[S11]: 'break' acts on the innermost loop, and there is none here
+    8 |         break
+      |         ^~~~~
+compilation failed with 1 error
 === s12bexhaustive.olang
 s12bexhaustive.olang:8:18: error[S13a]: case A of S is not covered - add it, or 'case _ { }'
     8 |     return match s {
@@ -5827,6 +5892,25 @@ s8eerrdefernull.olang:10:45: error[T2c]: 'p' is a Node?&, which may be null
       |                                             ^
 s8eerrdefernull.olang:10:45: note: a test narrowed it, and an assignment since has ended that
 s8eerrdefernull.olang:10:45: help: read through it where a test says it is not ('if x != null'), or write 'p!'
+compilation failed with 1 error
+=== s9auniquewalk.olang
+s9auniquewalk.olang:12:17: error[T25c]: a read-only reference cannot become writable
+   12 |     for t in w: t.Use()
+      |                 ^
+s9auniquewalk.olang:12:17: note: what is reached read-only stays so - a read-only parameter, and a local copied from one (x := r copies the reference, not what it names)
+s9auniquewalk.olang:12:5: note: 't' is a unique element's value, borrowed read-only (S9a) - change the element where it is, 'for i, t in a: a[i].M()'
+   12 |     for t in w: t.Use()
+      |     ^~~~~~~~~~~~~~~~~~~
+s9auniquewalk.olang:12:17: help: pass a writable reference, change a copy of your own ('r.Copy()'), or, where a 'mut' parameter asks for it, make that parameter read-only
+compilation failed with 1 error
+=== s9auniquewalkfield.olang
+s9auniquewalkfield.olang:12:19: error[T25b]: this writes through a read-only reference
+   12 |     for t in w: t.uses = 3
+      |                   ^~~~
+s9auniquewalkfield.olang:12:19: note: a read-only reference is one with no 'mut' in its type
+s9auniquewalkfield.olang:12:5: note: 't' is a unique element's value, borrowed read-only (S9a) - change the element where it is, 'for i, t in a: a[i].M()'
+   12 |     for t in w: t.uses = 3
+      |     ^~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === satadd01outside.olang
 satadd01outside.olang:5:12: error[M19]: I16 has no method 'satAdd'
@@ -7304,6 +7388,21 @@ t2cfieldnarrow.olang:9:12: error[T2c]: 'h.next' is a N?&, which may be null
 t2cfieldnarrow.olang:9:12: note: a test narrowed it, and a call since may have changed it - a field path narrows only up to the next call
 t2cfieldnarrow.olang:9:12: help: read through it where a test says it is not ('if x != null'), or write 'h.next!'
 compilation failed with 1 error
+=== t2cgenericnozero.olang
+t2cgenericnozero.olang:11:26: error[T2c]: Box& is never null, so it has no zero value
+   11 |     Data mut Array<T>& = Array<T>(n)
+      |                          ^~~~~~~~~~~
+t2cgenericnozero.olang:14:16: note: instantiated here, with T = WithRef
+   14 |     c := Cell2<WithRef>(4)
+      |                ^~~~~~~
+t2cgenericnozero.olang:14:16: note: instantiated here, with T = WithRef
+   14 |     c := Cell2<WithRef>(4)
+      |                ^~~~~~~
+t2cgenericnozero.olang:7:26: note: the type is written here - write '?&' for '&' where it may be null
+    7 | type WithRef struct(b Box&) {
+      |                          ^
+t2cgenericnozero.olang:11:26: help: give it a value, or write Box?&
+compilation failed with 1 error
 === t2cmapkey.olang
 t2cmapkey.olang:5:14: error[T2c]: String?& may be null, so it meets no trait
     5 |     m := Map<String?&, I64>()
@@ -7522,6 +7621,13 @@ compilation failed with 1 error
 t30sep.olang:3:28: error: expected '}', found 'Perim'
     3 | type Sh trait { Area() I32 Perim() I32 }
       |                            ^~~~~
+compilation failed with 1 error
+=== t30traitastype.olang
+t30traitastype.olang:6:8: error[T30, T32]: Shape& is a trait, not a type
+    6 | fn f(s Shape&) { }
+      |        ^~~~~
+t30traitastype.olang:6:8: note: a trait is a constraint on a type variable
+t30traitastype.olang:6:8: help: a value of any type meeting it is an 'any Shape&'
 compilation failed with 1 error
 === t31aclosedgenericbare.olang
 t31aclosedgenericbare.olang:5:23: error[G7]: type arguments for aBox: expected 1, found 0
