@@ -42453,3 +42453,48 @@ declarations) kept in the Emitter, the objects' text assembled from it in Object
 Analyze returns - and ~60 MB more bumped in that scope than its allocations ask, not yet explained (no buffer grows
 in place there; alignment accounts for a few MB). Letting go of the items' text once the objects hold it is the next
 step (plan.md).
+
+## 2026-11-23: the objects' IR spilled as it is assembled, and each item's text copied once (build memory; mine; wt-buildmem2)
+
+The entry above left lower+emit holding its output until Analyze returns: the items' IR in the Emitter, the objects'
+text Objects assembles from it beside it, and ~60 MB "bumped beyond what was asked". Measured in a scratch build reading
+VmHWM around Objects (cold -quick self-build): emitAll grew the peak 291 MB for 106 MB of item text and 3 MB of
+declarations, assembling the 432 objects 236 MB more for 120 MB of object text.
+
+Letting go of each item's text once its object held it (a store of "" into `itemText`) was built first and measured: no
+change at all. The compiler gets no early freeing anywhere (`-memory` on compiler/olang.olang: "0 free it at once, 996
+keep it", every place kept by condition 3 - C is given a function value, and the program has tasks), so a store lets
+nothing go; storage is reclaimed only where a scope closes. Reverted.
+
+What did work:
+
+- **The objects spilled (Config.Spill).** In a build or test build (BuildProgram, testBinary; not -library, a cell, a
+  listing or one module compiled), the emitter writes each object to `DIR/spill/PID-XXXXXX/N.ll` as it assembles it
+  (`Emitter.spilled`, from `assembled`, so the text is made in that frame and gone as it returns); the Object carries
+  the path, its length and whether it names the dynamic call. `build.Unit` carries the path (`Spill`, `Size`):
+  `Unit.Text` reads it again one unit at a time where it is hashed (IrHashes' workers) and compiled (Objects, before
+  `want`), `Unit.Len` gives the length; a module record's part is the spill file linked into `rec/` (`keepPart`, read
+  and written where a link fails). `Config.Objects` removes the directory whatever its outcome, Analyze on an error
+  (errdefer), the drivers where the build stops after Analyze; a directory whose pid is gone is removed by the next
+  build making one. Where the directory cannot be made or a file written, the text stays in the Object as before.
+- **Each item's text copied once.** The "slack" was a double copy: a copy written as a by-value argument -
+  `e.itemText.Push($text)`, and `Push(b.ToString())` alike - is copied a second time into the callee's place, the first
+  copy left behind in the Emitter's scope (the IR: `olang_textcopy` into the scope, then a `memcpy` into the same scope).
+  A micro-benchmark of 20,000 strings of 24,000 bytes pushed into a Vec held in another scope: 469 MB asked, 960 MB
+  resident; bound to a local first (`t := $text`, then `Push(t)`), the local is moved at its last use (D9i) and it is
+  481 MB. `Emitter.item` now binds the symbol, text and declaration to locals. What is left of chunk rounding is small
+  (strings of 2,400 bytes: 15%; 24,000: 2.5%) - each request not fitting the head chunk takes a chunk of its own size
+  class, in a 128 KB slot whose untouched pages cost nothing.
+
+Measured (`OLANG_TIMES`, the 4-core 15 GB container; the same tree compiled by the compiler before and after, -O3 builds
+of both): the cold -quick self-build's lower+emit peak 3116 -> 2757 MB (576 -> 217 MB above facts), the compile phase's
+3133 -> 2775 MB, lower+emit 3.9 -> 4.0 s, compile 50 -> 48 s; warm 2710 -> 2663 MB (lower+emit 2694 -> 2657, 0.67 ->
+0.61 s); the test build of compiler/olang.olang 3333 -> 2947 MB (lower+emit 3315 -> 2923). Every .ll of the cold build
+byte-identical (434 files); the self-build's fixed point holds; the tests of compiler/emit.olang, build.olang and
+olang.olang pass.
+
+Left: the items' text (~106 MB) and the emitter's state stay until Analyze returns - without early freeing in the
+compiler only a scope closing reclaims them. The double copy of a fresh value written as an argument is general: 180
+`Push($...)` sites in emit.olang alone, more across the compiler and in every program; moving a fresh temporary into a
+by-value argument at its one use, as D9i moves a local, would remove it everywhere (lowering and the scope pass's
+placement; plan.md).
