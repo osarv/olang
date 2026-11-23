@@ -1578,6 +1578,7 @@
 | status 0
 | ok - the ring buffer wraps
 | ok - a wait with a token returns what is there, and gives up when the deadline passes
+| ok - RecvUntil: a wait blocks until its deadline, without waking on a timer
 | ok - a closed channel gives what it holds, then fails with CLOSED
 | ok - a channel's capacity is an I64
 | ok - Ready.Select: times out on time.After, on the virtual clock in no time
@@ -1585,6 +1586,9 @@
 | ok - a bounded channel carries values between two tasks
 | ok - Chan: a channel needs nothing but its constructor, on storage used before
 | ok - Cancel wakes a task blocked in a wait
+| ok - RecvUntil: a blocked wait wakes for a Cancel, once, at once
+| ok - RecvUntil: a blocked wait wakes for a Send
+| ok - SendUntil: a send blocked on a full channel wakes for a Recv, a Cancel or its deadline
 | ok - P4: a task cancelled in RecvUntil fails into its join, or takes its own default
 | ok - a channel carries any element type
 | ok - a channel of capacity 0 is a rendezvous
@@ -1809,6 +1813,7 @@
 | ok - RunOnStack runs a recursion deeper than a thread's own stack holds, and waits for it
 | ok - a return inside RunOnStack closes the scopes f had open
 | ok - the test before ended with f's scopes closed
+| ok - Process.WaitUntil: blocks until the program ends, the token is cancelled or the deadline passes
 | ok - RunOnStack from tasks builds into the program's scope through each task's own part of it
 === test std/pair.olang
 | status 0

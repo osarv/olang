@@ -2664,8 +2664,8 @@ c438c5fa8d8d3a25 3d3a7b4ec4e3c4f6 fuzz/scopegen.olang
 1b7326a0a6c59a81 ff6dc1d3b6572acc std/base64.olang
 b34d7704a70a94a2 b2a1e540b3a0b9c0 std/bench.olang
 3e45fdebc31be42a c15a1c14b691d08f std/bitset.olang
-6cd836b80e6bc6a0 290f2c950034606a std/cancel.olang
-a13cf4e296235013 5716a35c82760c12 std/chan.olang
+fa4802101cf2b36c 298b6c881b3ec342 std/cancel.olang
+0d8e216f10438d37 432a839d43e5615f std/chan.olang
 5fa0fda963ee765a d034ab98bdcba40b std/crc32.olang
 f6e04d43ad554209 1e08df5f6646c4d2 std/csv.olang
 794dc209a5c10699 605422102d6e2079 std/deque.olang
@@ -2682,7 +2682,7 @@ c40abb18bd5bc0e8 dde88c3ea060ce90 std/json.olang
 40854ce6087f112c 75a97cd9f2afbb71 std/list.olang
 7ffd70be0ceab32b 82754c0412eb4841 std/net.olang
 e9aa94e405345e7a f136bf23c1f483ab std/order.olang
-4791627b79b879f8 21640acedc91c650 std/os.olang
+6ea841dca654b5e6 45be0e9557b2563e std/os.olang
 17c08f79ab55afc4 b4a22233d00c7e49 std/pair.olang
 6d63e48e89ab2815 27472a692fbe2416 std/plot.olang
 3ea631f369fef41e 930ead3ce67343d4 std/pool.olang

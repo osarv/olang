@@ -1053,11 +1053,8 @@ test "Start, Wait, Kill and Pid" {
 
 # WaitUntil BLOCKS: it wakes for the program's end, a Cancel() or the deadline - once each, where asking every few
 # milliseconds woke some twenty times in 200 ms
-fn cancelSoon(tok mut cancel.Token&) {
-    nap := ctime.timespec()
-    nap.tv_nsec = 200000000
-    ctime.nanosleep(nap, ctime.timespec())
-    tok.Cancel()
+fn waitStopped(p mut Process&, tok cancel.Token&, stopped mut Array<Bool>&) {
+    try p.WaitUntil(tok) catch cancel.Stopped.Cancelled { stopped[0] = true } catch { }
 }
 
 test Process.WaitUntil "blocks until the program ends, the token is cancelled or the deadline passes" {
@@ -1071,13 +1068,16 @@ test Process.WaitUntil "blocks until the program ends, the token is cancelled or
     assert timedOut and cancel.NowNs() - start >= 200000000 and q.wakes <= 2
     r := try Process.Start("sleep", "5")
     tok mut cancel.Token& = cancel.Token()
-    stopped := false
+    stopped := Array<Bool>[false]
     start = cancel.NowNs()
     join {
-        spawn cancelSoon(tok)
-        try r.WaitUntil(tok) catch cancel.Stopped.Cancelled { stopped = true } catch { }
+        spawn waitStopped(r, tok, stopped)
+        nap := ctime.timespec()
+        nap.tv_nsec = 200000000
+        ctime.nanosleep(nap, ctime.timespec())
+        tok.Cancel()
     }
-    assert stopped and cancel.NowNs() - start < 4000000000 and r.wakes <= 2
+    assert stopped[0] and cancel.NowNs() - start < 4000000000 and r.wakes <= 2
 }
 
 # what Exec gathers is built where the caller puts it - here, through a function's result, the caller's block

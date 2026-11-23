@@ -375,6 +375,13 @@ fn parkedNow<T>(c mut Chan<T>&) I64 {
     return n
 }
 
+# waits until a wait is parked on c - for at most 5 s, so a run whose tasks start only at the join's end (the
+# interpreter's, B3e) goes on without it
+fn parkedSoon<T>(c mut Chan<T>&) {
+    start := cancel.NowNs()
+    for parkedNow(c) == 0 and cancel.NowNs() - start < 5000000000 { }
+}
+
 fn wakesNow<T>(c mut Chan<T>&) I64 {
     pthread.pthread_mutex_lock(c.lock)
     n := c.wakes
@@ -402,7 +409,7 @@ test RecvUntil "a blocked wait wakes for a Cancel, once, at once" {
     stopped I64 = 0
     join {
         spawn recvInto(c, tok, got)
-        for parkedNow(c) == 0 { }
+        parkedSoon(c)
         realSleep(100000000)
         stopped = cancel.NowNs()
         tok.Cancel()
@@ -418,7 +425,7 @@ test RecvUntil "a blocked wait wakes for a Send" {
     got mut sumBox& = sumBox(0)
     join {
         spawn recvInto(c, tok, got)
-        for parkedNow(c) == 0 { }
+        parkedSoon(c)
         realSleep(100000000)
         try Send(c, 7)
     }
@@ -436,7 +443,7 @@ test SendUntil "a send blocked on a full channel wakes for a Recv, a Cancel or i
     got mut sumBox& = sumBox(0)
     join {
         spawn sendFrom(c, 2, cancel.Token(), got)
-        for parkedNow(c) == 0 { }
+        parkedSoon(c)
         realSleep(100000000)
         assert (try Recv(c)) == 1
     }
@@ -446,7 +453,7 @@ test SendUntil "a send blocked on a full channel wakes for a Recv, a Cancel or i
     tok mut cancel.Token& = cancel.Token()
     join {
         spawn sendFrom(c, 4, tok, got)
-        for parkedNow(c) == 0 { }
+        parkedSoon(c)
         realSleep(100000000)
         tok.Cancel()
     }
