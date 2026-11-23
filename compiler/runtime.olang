@@ -201,9 +201,9 @@ fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Boo
     body := try Text(arch, san, false, prof, bench)
     # tile.AddDot: the runtime's AMX product runs where the target has it (target.Target's TileDot), declined elsewhere -
     # a constant here rather than a condition of Fill's, which the seed's own filling would not know
-    off := "@__olang_tile_on = internal constant i1 false"
-    at := try body.Find(off) catch default -1
-    if tile and at >= 0: body = $body[:at] + "@__olang_tile_on = internal constant i1 true" + $body[at + off.Len():]
+    if tile {
+        body = String(body.Replace("@__olang_tile_on = internal constant i1 false", "@__olang_tile_on = internal constant i1 true"))
+    }
     return WithAttributes($"target triple = \"" + $triple + "\"\n\n" + $body, attrs, race)
 }
 
@@ -350,6 +350,16 @@ test "the runtime is filled in for an architecture and a mode, every placeholder
     r := try Ir("x86_64-pc-linux-gnu", "x86_64", "", false, true)
     assert r.Contains("attributes #0 = { null_pointer_is_valid sanitize_thread  nounwind }")
     assert r.Contains("@__olang_crash_handler(") and r.Contains(") #1 {")
+}
+
+test "the runtime's AMX tile product is on only for a target that has it" {
+    cpu := "\"target-cpu\"=\"x86-64\""
+    off := try Ir("x86_64-pc-linux-gnu", "x86_64", cpu, false, false) catch { unreachable }
+    on := try Ir("x86_64-pc-linux-gnu", "x86_64", cpu, false, false, tile = true) catch { unreachable }
+    arm := try Ir("aarch64-unknown-linux-gnu", "aarch64", "", false, false) catch { unreachable }
+    assert off.Contains("@__olang_tile_on = internal constant i1 false")
+    assert on.Contains("@__olang_tile_on = internal constant i1 true") and on.Contains("tdpbf16ps %tmm")
+    assert not arm.Contains("tdpbf16ps %tmm") and arm.Contains("define i32 @__olang_tile_bf16(")
 }
 
 test "a benchmark build's runtime counts allocations, and no other build's does" {

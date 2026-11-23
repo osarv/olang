@@ -476,7 +476,11 @@ test "a probe gives the triple, the CPU, the features without the IEEE-unsafe on
     try t.FromProbe(SkylakeProbe) catch { unreachable }
     assert t.Triple == "x86_64-pc-linux-gnu"
     assert t.Cpu == "skylake-avx512"
-    assert t.VectorBits == 512 and t.Fma and t.PairDot
+    assert t.VectorBits == 512 and t.Fma and t.PairDot and not t.TileDot
+    amx := Target()
+    amx.Arch = "x86_64"
+    try amx.FromProbe(SkylakeProbe.Replace("+avx512f,", "+amx-bf16,+amx-tile,+avx512f,")) catch { unreachable }
+    assert amx.TileDot and amx.Attrs.Contains("+amx-bf16")
     assert t.Attrs == "\"target-cpu\"=\"skylake-avx512\" \"target-features\"=\"+avx,-avx512bf16,+avx512f,+fma," + $
         "-avxneconvert,+sse2\" \"tune-cpu\"=\"generic\" \"prefer-vector-width\"=\"512\""
     # a 32-bit machine's layout, and no attributes at all
