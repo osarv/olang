@@ -15,6 +15,8 @@ import syswait "sys/wait.h"
 import csignal "signal.h"
 import ctime "time.h"
 import mman "sys/mman.h"
+import cpoll "poll.h"
+import ceventfd "sys/eventfd.h"
 
 extern {
     fn __olang_arg_count() I64
@@ -216,6 +218,7 @@ type Process struct(pid I32, out I32, errs I32, capture Bool) {
     errs
     capture
     waited Bool = false
+    wakes I64 = 0       # how often WaitUntil's wait woke: what its tests count to see it blocks, not polls
 }
 
 # the program's process id, as the system knows it
@@ -293,14 +296,27 @@ fn (p mut Process&) lost(code I32) ? Error {
 }
 
 # Wait, killing the program once tok fires and it has not ended: then it fails with the token's reason, once the
-# program has ended. Asks every few milliseconds at most - sooner while the program is young, so a short one is not
-# kept waiting - as nothing can wait for a child and a token at once
+# program has ended. It blocks in poll(2) until the program ends (its pidfd turns readable), the token is cancelled (an
+# eventfd its waiter is woken through, cancel's Park) or the deadline passes - nothing else wakes it. Where the system
+# has no pidfd_open (Linux before 5.3, or a sandbox refusing it) a program's end cannot be waited for beside anything
+# else, so the wait asks after it in naps doubling from 50 microseconds to 10 milliseconds - a Cancel() still waking it
+# at once
 fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? Error, cancel.Stopped {
     if p.waited: error Error.Failed("")
     waited := Array<I32>(1)
-    nap := ctime.timespec()
-    left := ctime.timespec()
-    step I64 = 50000                                    # nanoseconds, doubling up to cancel.PollNs
+    set := Array<cpoll.pollfd>(2)
+    set[0].fd = I32(unistd.syscall(434, p.pid, 0))     # pidfd_open(2): the same number on every Linux architecture
+    set[1].fd = ceventfd.eventfd(0, I32(ceventfd.EFD_CLOEXEC))
+    set[0].events = I16(cpoll.POLLIN)
+    set[1].events = I16(cpoll.POLLIN)
+    w := tok.Park(set[1].fd)
+    defer {
+        cancel.Done(w)
+        for e in set {
+            if e.fd >= 0: unistd.close(e.fd)
+        }
+    }
+    step I64 = 50000                                    # the fallback's nap, in nanoseconds
     for {
         got := syswait.waitpid(p.pid, waited, 1)                # WNOHANG
         if got < 0: try p.lost(__olang_err())
@@ -311,9 +327,13 @@ fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? Error, cancel.Stopped 
             try p.ended(waited[0]) catch Error { }
             try tok.Reason()
         }
-        nap.tv_nsec = step
-        ctime.nanosleep(nap, left)
-        if step < cancel.PollNs: step = step * 2
+        ns := tok.LeftNs()
+        if set[0].fd < 0 {
+            if ns < 0 or ns > step: ns = step
+            if step < 10000000: step = step * 2
+        }
+        cpoll.poll(set, 2, I32(-1 if ns < 0 else (ns + 999999) / 1000000))
+        p.wakes++
     }
     unreachable
 }
@@ -1029,6 +1049,35 @@ test "Start, Wait, Kill and Pid" {
     missing := false
     try Process.Start("olang-no-such-program") catch Error.NotFound { missing = true } catch { }
     assert missing
+}
+
+# WaitUntil BLOCKS: it wakes for the program's end, a Cancel() or the deadline - once each, where asking every few
+# milliseconds woke some twenty times in 200 ms
+fn cancelSoon(tok mut cancel.Token&) {
+    nap := ctime.timespec()
+    nap.tv_nsec = 200000000
+    ctime.nanosleep(nap, ctime.timespec())
+    tok.Cancel()
+}
+
+test Process.WaitUntil "blocks until the program ends, the token is cancelled or the deadline passes" {
+    p := try Process.Start("sleep", "0.2")
+    done := try p.WaitUntil(cancel.Token.After(60000))
+    assert done.Status == 0 and p.wakes <= 2
+    q := try Process.Start("sleep", "5")
+    start := cancel.NowNs()
+    timedOut := false
+    try q.WaitUntil(cancel.Token.After(200)) catch cancel.Stopped.TimedOut { timedOut = true } catch { }
+    assert timedOut and cancel.NowNs() - start >= 200000000 and q.wakes <= 2
+    r := try Process.Start("sleep", "5")
+    tok mut cancel.Token& = cancel.Token()
+    stopped := false
+    start = cancel.NowNs()
+    join {
+        spawn cancelSoon(tok)
+        try r.WaitUntil(tok) catch cancel.Stopped.Cancelled { stopped = true } catch { }
+    }
+    assert stopped and cancel.NowNs() - start < 4000000000 and r.wakes <= 2
 }
 
 # what Exec gathers is built where the caller puts it - here, through a function's result, the caller's block
