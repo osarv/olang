@@ -42256,3 +42256,13 @@ emptied buffer: a null read built (a double release where it reads stale storage
 slot array is now walked by its live entries only, the walk that skips a slot a removal emptied.
 checks' freeing mapsplit: the shape and a removal between stores; built, `-free late`, `-sanitize` and the
 evaluator agree, where master segfaults.
+## 2026-11-23: a test build of a prelude module writes all its functions (review12, B3i)
+
+`make race` failed to link std/prelude/place.olang and text.olang (undefined `Place.Str`, `Char.IsSpace`,
+`Array<String&>.Join`, `String.ParseFloat`), and `olang test -debug` of text.olang did too, depending on what the build
+directory held. Every module's object but the root's holds every one of its functions; the root's holds what this build
+reaches, or every one where a module importing it was reused (`reusedReachRoot`, B3i). A prelude module tested as the
+root is imported by every other prelude module without an import - and one written afresh holds the callers too - so
+the root's functions those callers name were never written; under full LTO the link drops the callers first, without it
+(-race, -debug, -sanitize) the link fails. `emit.othersReachRoot`: the root's every function is written where any other
+module imports it, or it is a prelude module.
