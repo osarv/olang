@@ -59,7 +59,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     Attrs String& = ""              # what every function carries for the target (B12: CPU, features, vector width)
     Gaps Vec<String&>              # what emission met and does not emit yet, a line each
     queue Vec<mir.FnKey>           # the functions to write, in the order first referred to
-    globalBodies Map<pair.Pair<I64, I64>, I64> # a global's initializing body, by (module, name): the first of the bodies scanned
+    globalBodies Map<pair.Pair<I64, I64>, I64> # a global's initializing body by (module, name), of the bodies scanned
     globalsScanned I64 = 0                      # ... the bodies globalBodies covers
     queued Map<mir.FnKey, I64>      # each function's index in queue
     cur I64 = -1                    # the function being written
@@ -505,7 +505,7 @@ fn (e mut Emitter&) weigh() {
     e.bulky.Clear()
     e.keyOf.Clear()
     for i in range n {
-        e.bulky.Push(codeSize(e.itemText[i]) > BulkFrom)
+        e.bulky.Push(codeSize(e.itemText[i], BulkFrom) > BulkFrom)
         e.keyOf.Push(i)
     }
     # the one item naming each, -2 where more than one does
@@ -537,12 +537,13 @@ fn (e mut Emitter&) weigh() {
 # optimization removes or folds - ThinLTO's summary counts the instructions after it, and imports a function of at most
 # build.ImportLimit (70). Measured on the compiler's own objects (2026-11-21): of the 5,367 functions some backend
 # imported, 39 count more than BulkFrom (a match over an enum's cases reading one field of each, 400 lines written,
-# is 15 instructions optimized); the functions at most BulkFrom are a third of the IR
+# is 15 instructions optimized); the functions at most BulkFrom are a third of the IR. The count stops once past limit
 BulkFrom I64 = 42
-fn codeSize(text String&) I64 {
+fn codeSize(text String&, limit I64) I64 {
     if not text.StartsWith("define "): return 0
     n I64 = 0
     for line in text.Lines() {
+        if n > limit: return n
         if line.Len() < 3 or line[0] != ' ' or line.EndsWith(":"): continue
         s := line.TrimStart()
         if s.StartsWith("store ") or s.StartsWith("br ") or s.StartsWith(";"): continue

@@ -102,7 +102,11 @@ fn ReaderRecords(l mut load.Loader&, c typecheck.Checker&) Array<String&>& {
         if m == l.Root: continue
         lines Vec<String&>
         for x in Reached(mods, m) {
-            for line in (own[x] if x == m else carried[x]): lines.Push(line)
+            if x == m {
+                for line in own[x]: lines.Push(line)
+            } else {
+                for line in carried[x]: lines.Push(line)
+            }
         }
         lines.Sort(fn(a String&, b String&) Bool { return a < b })
         out Vec<String&>
