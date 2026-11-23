@@ -1,0 +1,19 @@
+# check: fail error[T25c]: this writes through a reference a read-only copy holds
+# also: help: reach the place writably
+# S9c, T25c: "for e in m" over a map reached read-only whose values hold writable references walks IterRef, each entry
+# a read-only copy - reading it is fine, writing through its Value's reference is refused
+type Buf struct(d mut Array<I64>&) {
+    d
+}
+fn bad(m Map<I64, Buf>&) I64 {
+    t I64 = 0
+    for e in m: t += e.Value.d[0]
+    for e in m: e.Value.d[0] = 1
+    return t
+}
+fn main() ? {
+    a := Array<I64>[1]
+    m := Map<I64, Buf>()
+    m.Put(1, Buf(a))
+    Println(bad(m))
+}

@@ -289,6 +289,44 @@ fn (it mut MapIter<K, V>&) Next() MapEntry<K, V> ? Exhausted {
 #     for e in es { ... e.Key ... e.Value ... }
 fn (m Map<K, V>&) Iter() MapIter<K, V> { return MapIter<K, V>(m) }
 
+# Iter over a map reached writably, for values holding writable references, which a read-only walk may not hand out
+# copies of (T25c): each step a copy of the entry, writable - a write through its Value's references reaches what the
+# map's value refers to. What "for e in m" walks a map reached writably by when V holds one (S9c)
+type MapIterMut<K, V> struct(of mut Map<K, V>&) {
+    m mut Map<K, V>& = of
+    i I64 = 0
+}
+
+fn (it mut MapIterMut<K, V>&) Next() MapEntry<K, V> ? Exhausted {
+    for it.i < it.m.n {
+        k := it.i
+        it.i++
+        if it.m.live(k): return MapEntry<K, V>(it.m.ents[k].Key, it.m.ents[k].Value)
+    }
+    error Exhausted.End
+}
+
+fn (m mut Map<K, V>&) IterMut() MapIterMut<K, V> { return MapIterMut<K, V>(m) }
+
+# the entries where the map holds them, each a read-only reference to its slot - nothing copied, so it walks a map
+# reached read-only whatever V holds. What "for e in m" walks a map reached read-only by when V holds a writable
+# reference, each entry then a read-only copy (S9c, T25c)
+type MapIterRef<K, V> struct(of Map<K, V>&) {
+    m Map<K, V>& = of
+    i I64 = 0
+}
+
+fn (it mut MapIterRef<K, V>&) Next() MapEntry<K, V>& ? Exhausted {
+    for it.i < it.m.n {
+        k := it.i
+        it.i++
+        if it.m.live(k): return it.m.ents[k]
+    }
+    error Exhausted.End
+}
+
+fn (m Map<K, V>&) IterRef() MapIterRef<K, V> { return MapIterRef<K, V>(m) }
+
 # the keys, one at a time, in the order Iter() gives the entries: "for k in m.Keys()", "m.Keys().ToVec()" for a Vec of
 # them. A walk of the map as Iter's is, under the same rule for changes made during it
 fn (m Map<K, V>&) Keys() MapKeyIter<K, V> { return MapKeyIter<K, V>(m) }
@@ -325,6 +363,23 @@ fn (it mut MapValueIter<K, V>&) Next() V ? Exhausted {
     }
     error Exhausted.End
 }
+
+# Values over a map reached writably, for values holding writable references (T25c), as IterMut is Iter's
+type MapValueIterMut<K, V> struct(of mut Map<K, V>&) {
+    m mut Map<K, V>& = of
+    i I64 = 0
+}
+
+fn (it mut MapValueIterMut<K, V>&) Next() V ? Exhausted {
+    for it.i < it.m.n {
+        k := it.i
+        it.i++
+        if it.m.live(k): return it.m.ents[k].Value
+    }
+    error Exhausted.End
+}
+
+fn (m mut Map<K, V>&) ValuesMut() MapValueIterMut<K, V> { return MapValueIterMut<K, V>(m) }
 
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program

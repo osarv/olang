@@ -21800,13 +21800,15 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr?&, ce types.
     }
     iter := c.roleUse(dt, "Iter", 0, sp, "'for'")
     if iter >= 0 {
-        it := c.invoke(sp, f.Source.Span(), iter, src, Array<ast.Expr&>(0), Array<typed.Expr&>(0))
+        held := c.heldWalk(dt, src, iter, sp)
+        ro := held >= 0 and c.text(c.P.FnDecl(held).Name) == "IterRef"
+        it := c.invoke(sp, f.Source.Span(), iter if held < 0 else held, src, Array<ast.Expr&>(0), Array<typed.Expr&>(0))
         nt := c.roleMethod(c.deref(typeOf(it)), "Next", 0)
         if nt < 0 {
             c.gap(f.Source.Span(), "an Iter() whose result is no iterator (S9c)")
             return null
         }
-        c.walkIter(sp, f, it, nt, cm, ce)
+        c.walkIter(sp, f, it, nt, cm, ce, ro)
         return null
     }
     atm := c.roleUse(dt, "At", 1, sp, "'for'")
@@ -21820,6 +21822,31 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr?&, ce types.
     if c.notOperator(dt, "Next", sp, "'for ... in'", 0, false): return null
     c.needErr(f.Source.Span(), st, "a walk ('for ... in': Next, Iter, or At and Len)", msgs.NotIterable(c.ty(st)))
     return null
+}
+
+# S9c, T25c: the walk of an iterable whose Iter() gives values holding writable references, which a walk of it reached
+# read-only may not hand out copies of - its IterMut() where it is reached writably, its IterRef() (a read-only
+# reference to each value) otherwise; -1 where Iter() serves
+fn (c mut Checker&) heldWalk(dt types.TypeId, src typed.Expr&, iter I64, sp source.Span) I64 {
+    r := c.deref(c.P.T.Result(c.P.MethodSig(iter, dt)))
+    nt := c.roleMethod(r, "Next", 0)
+    if nt < 0: return -1
+    el := c.P.T.Result(c.P.MethodSig(nt, r))
+    if c.isRef(el) or not c.holdsWritable(el): return -1
+    if c.walkedWritably(src) {
+        m := c.roleUse(dt, "IterMut", 0, sp, "'for'")
+        if m >= 0: return m
+    }
+    return c.roleUse(dt, "IterRef", 0, sp, "'for'")
+}
+
+# whether a value walked is reached writably: a writable reference not read out of a read-only copy, or a value whose
+# place may be written (a value with no place is the walk's own)
+fn (c mut Checker&) walkedWritably(src typed.Expr&) Bool {
+    st := typeOf(src)
+    if c.isRef(st): return (c.P.T.PermOf(st) & types.Writable) != 0 and not c.roRef(src)
+    p := readPlace(src)
+    return p == null or (c.placeWritable(p) and not c.roPlace(p))
 }
 
 # whether a Next makes an iterator (S9a): a writable receiver, one value, Exhausted among its errors
@@ -23369,7 +23396,7 @@ fn (c mut Checker&) loopCall(sp source.Span, f I64, recv typed.Expr&, args Array
 }
 
 # an iterator (S9a): the loop's own copy of it, Next() called each iteration, Exhausted ending the loop
-fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&, next I64, cm ast.Compr?&, ce types.TypeId) {
+fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&, next I64, cm ast.Compr?&, ce types.TypeId, roEach Bool = false) {
     it := c.hidden(sp, typeOf(src))
     if c.generatorCall(src): c.cur().Walks.Push(typed.LocalId(I32(it)))
     # D18e: a local walked here - its walk this loop's own where nothing else names it (settleHeldWalks)
@@ -23396,7 +23423,12 @@ fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&, next
     c.fr().exits.Push(id)
     call := c.loopCall(sp, next, c.readLocal(sp, it), Array<typed.Expr&>(0))
     v := c.exhaustedOrBreak(sp, call, id)
-    c.elementLocals(sp, f, k, v)
+    if roEach {
+        # S9c, T25c: an IterRef walk's reference named as the value it refers to - a read-only copy, as an element of an
+        # array reached read-only is (a unique one named where it is, read-only)
+        v = c.uniqueRef(c.read(sp, typed.Lvalue.Deref(sp, c.P.T.Referent(typeOf(v)), v)), sp, false, true)
+    }
+    c.elementLocals(sp, f, k, v, roEach)
     c.walkBody(f, cm, ce)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
@@ -23423,13 +23455,14 @@ fn localIdOf(p typed.Lvalue?&) I64 {
 }
 
 # the key and the value locals of an iteration
-fn (c mut Checker&) elementLocals(sp source.Span, f ast.ForIn&, k I64, v typed.Expr&) {
+fn (c mut Checker&) elementLocals(sp source.Span, f ast.ForIn&, k I64, v typed.Expr&, ro Bool = false) {
     if f.Key != source.NameId(0) and k >= 0 {
         key := c.local(f.Key, sp, c.i64(), typed.LocalKind.Var, typed.Mark.None)
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(key)), c.readLocal(sp, k)))
     }
     x := c.local(f.Name, sp, typeOf(v), typed.LocalKind.Var, typed.Mark.Infer)
     c.roLet(x, v)   # T25c: an element of a collection reached read-only is a read-only copy
+    if ro and not c.isRef(typeOf(v)): c.roCopies.Put(c.roKey(x), source.NameId(0))
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(x)), v))
 }
 

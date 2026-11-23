@@ -95,11 +95,14 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   local lives where the vector does (O25g, O26a): kept outside a block, linked to, pushed into, captured, given to a task;
   read back after an arena churn, decided while compiling beside the run time.
 - `viewplace.olang` - storage kept for a view (O27 as placement): a turn's text kept through views of it, a view handed
-- `litmut.olang` - a Vec and a Map literal of elements holding writable references (E19, T25c): walked writably, each
-  reference still reaching its referent.
   back of what a function builds, a slice of a temporary kept in a parameter's field, a generator's views of a local it
   made, a closure over a turn's local kept in a field, a part of an instance kept past its turn; read back after an arena
   churn, a baked global and top-level asserts deciding the same while compiling.
+- `litmut.olang` - a Vec and a Map literal of elements holding writable references (E19, T25c): walked writably, each
+  reference still reaching its referent.
+- `mapmut.olang` - a Map whose values hold writable references walked by `for e in m` (S9c, T25c): read-only through
+  IterRef (each entry a read-only copy), writably through IterMut and ValuesMut, a write reaching the arrays the values
+  refer to; a plain map as before; decided while compiling too.
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.

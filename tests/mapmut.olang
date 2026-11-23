@@ -1,0 +1,44 @@
+# S9c, T25c: a Map whose values hold writable references, walked by "for e in m" - through IterRef where the map is
+# reached read-only (each entry a read-only copy, read freely), through IterMut where it is reached writably (each entry
+# a writable copy, a write through its Value reaching the arrays the map's values refer to); a plain map walks Iter
+type Buf struct(d mut Array<I64>&) {
+    d
+}
+
+fn total(m Map<I64, Buf>&) I64 {
+    t I64 = 0
+    for e in m: t += e.Key * e.Value.d[0]
+    return t
+}
+
+fn bump(m mut Map<I64, Buf>&) {
+    for e in m: e.Value.d[0] += 1
+}
+
+fn walked() I64 {
+    a := Array<I64>[1, 2]
+    b := Array<I64>[5]
+    m := Map<I64, Buf>()
+    m.Put(1, Buf(a))
+    m.Put(2, Buf(b))
+    bump(m)                                        # through a "mut Map&": a 2, b 6
+    for e in m: e.Value.d[0] *= 10                 # the map's own local: a 20, b 60
+    for v in m.ValuesMut(): v.d[0] += 1            # a 21, b 61
+    n I64 = 0
+    for e in m.IterRef(): n += e.Value.d[0]        # read-only references to the slots: 82
+    ks := [e.Key for e in m]
+    return total(m) * 1000 + n * 10 + ks.Len()     # total 1*21 + 2*61 = 143
+}
+
+fn plain() I64 {
+    p := Map<String, I64>["x": 1, "yy": 2]
+    t I64 = 0
+    for e in p: t += e.Key.Len() * e.Value
+    return t
+}
+
+test "S9c: a map of values holding writable references, walked read-only and writably" { assert walked() == 143822 }
+test "S9c: a plain map walks Iter as before" { assert plain() == 5 }
+
+assert walked() == 143822, "decided while compiling"
+assert plain() == 5, "decided while compiling"
