@@ -19641,7 +19641,8 @@ fn (c mut Checker&) deadLet(s typed.Stmt&) typed.Stmt& {
 # (`r := build(0)`, `n := r.Len()`, `r = build(i)`): a second local of the name declared with x, the name bound to it for
 # the rest of the block - the first value's storage the block's, the second's built where its own last copy goes, as
 # any ":=" local's. The same meaning where nothing holds the first local past the assignment: no reference to it kept
-# (a reference local, a capture, a store - LocalUses.EscHard, AliasOf), no deferred code of the block reading it, and
+# (a reference local, a capture, a store, a call that may keep one - LocalUses.EscHard, AliasOf, GiveAt, RefAt with
+# mayKeepRef), no deferred code of the block reading it, and
 # no destructor (whose moment would move); null where any does, or where x reads it
 fn (c mut Checker&) splitLet(i I64, l I64, sp source.Span, at source.Span, x typed.Expr&) typed.Stmt?& {
     loc := c.cur().Locals[l]
@@ -19654,13 +19655,28 @@ fn (c mut Checker&) splitLet(i I64, l I64, sp source.Span, at source.Span, x typ
         if so[j] == typed.Stmt.Defer: return null
     }
     u := typed.LocalUses.Over(c.P.T, c.cur(), typed.Block(typed.BlockId(I32(c.fr().Block)), so))
-    if u.EscHard[l] or u.Ret[l] or u.AliasOf.View().Some(fn(a I64): return a == l): return null
+    if u.EscHard[l] or u.Ret[l] or u.AliasOf.View().Some(fn(a I64): return a == l) or u.GiveAt.View().Some(fn(a I64): return a == l): return null
+    for k in range u.RefAt.Len() {
+        if u.RefAt[k] == l and c.mayKeepRef(u.RefBody[k]): return null
+    }
     d := c.local(loc.Name, at, loc.Ty, typed.LocalKind.Var, loc.Marked)
     return typed.Stmt.Let(sp, typed.LocalId(I32(d)), x)
 }
 
 # deadLet's change: the Let at index i of stmts, of local l, made an Eval of its value and a declaration with no value,
 # where l is a plain value local whose value nothing reads before value x is assigned to it
+# whether body b, given a read-only reference, may keep it past the call (splitLet): through a result holding references
+# (`H(p)`, a constructor viewing it) or a writable reference parameter; true for an unknown callee
+fn (c mut Checker&) mayKeepRef(b I64) Bool {
+    if b < 0 or b >= c.Bodies.Len(): return true
+    ft := c.Bodies[b].Ty
+    if c.P.T.KindOf(ft) != types.Kind.Func or c.P.T.HoldsRefs(c.P.T.Result(ft)): return true
+    for pt in c.P.T.Items(c.P.T.Params(ft)) {
+        if c.P.T.IsRef(pt) and (c.P.T.PermOf(pt) & types.Writable) != 0: return true
+    }
+    return false
+}
+
 fn (c mut Checker&) unsetLet(i I64, l I64, x typed.Expr&) Bool {
     match c.stmts[i] {
         case typed.Stmt.Let(sp, d, init) {
