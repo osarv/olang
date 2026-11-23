@@ -41641,3 +41641,15 @@ allocation each step. Two walkers stay on their own and say why: `holdsWritableR
 arguments, more than what is held in place, and `mir.DropsParts` looks one level down, field by field. Behaviour is
 unchanged: the self-build reaches its fixed point, the run, layout and diagnostic goldens and every check pass as they
 were.
+
+## 2026-11-23: accumulating into a `mut` parameter, measured (O43; mine; wt-walkers)
+
+plan.md queued "alias facts for `mut` references" from oann's gemm, where accumulating straight into the `mut tile&`
+parameter measured ~3x slower than into a local. O43 (2026-11-17) already writes such a parameter `noalias`; what is
+missing is `writable`, which O43 gives only where no task can run beside the call (mir.Alone). A copy of groupWide
+shows it: in a program that starts no task the two forms run alike; add one `join { spawn ... }` anywhere and the
+in-place form takes 79-104 ms against 26-36 - LLVM keeps the lanes in registers through the loop only when it may store
+them back on every exit, the bounds checks' failing exits included, and without `writable` that store could race with
+another task writing a part the call never touched, which P8b allows. In oann (bench/int8, 512^3 and 1024^3) the
+in-place form gives 130 GOPS against 254-360. Nothing changes: the local accumulator stays oann's idiom, and whether a
+writable reference parameter should hold its whole referent for the call beside tasks is asked (decisions.md 2).

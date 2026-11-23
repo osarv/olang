@@ -22,3 +22,15 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 Open questions:
 
 1. (2026-11-22, asked via the Orchestrator) Freeing a joined task's results early: a value a task builds (a Vec grown by Push on the task's thread) can be freed by the spawner only if a region made on one thread may be released on another; today the pools are per thread. Options in docs/freeing.md 2.4 question 1: (a) keep as is (task results never freed early); (b) the spawner makes the result's regions before the spawn and the task's growth into them takes a lock; (c) hand the task's result regions to the spawner at the join's wait, pools taking releases from other threads via a lock-free return list. Default in effect: (a). Recommendation: (c) - no cost in the task, one step per join; section-8 design (Opus xhigh).
+
+2. (2026-11-23, asked via the Orchestrator) A writable reference parameter's referent held whole by the call, beside tasks: O43
+   already writes an exclusive `mut T&` parameter `noalias`; LLVM keeps its lanes in registers through a loop only
+   with `writable` too, which O43 adds only where no task can run beside the call - since by P8b another task may write
+   a part of the referent the call does not touch, and the stores LLVM adds would race with it. Measured: oann's
+   kernels/gemm groupWide accumulating into its `mut tile&` runs 130 GOPS vs 254-360 with a local accumulator at
+   512^3-1024^3 (a program with a task: 79-104 ms vs 26-36; without one, equal). Options: (a) keep - a local
+   accumulator copied out is the idiom; (b) extend P8b: while a call runs, the whole referent of each writable
+   reference parameter is the call's, another task touching any part of it is a data race - then `writable` goes on
+   every exclusive parameter. Default in effect: (a). Recommendation: (a) - (b) makes programs that are race-free
+   today undefined, against "unless the compiler proves we are the only one" (2026-11-18), for a cost the local
+   accumulator already avoids at no price.
