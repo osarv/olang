@@ -8997,7 +8997,7 @@ another type, one in the standard library - is B10's error; and a condition nami
 S8b) says it may be a build constant `-define` did not define.
 
 **B10a.** Every build defines nine build constants of its own, and `-define` may not redefine them. Six describe its
-target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operating system (lowercase, `"linux"`), its
+target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operating system (lowercase: `"linux"`, or `"android"`, B12e), its
 architecture (`"x86_64"`, `"aarch64"`) and its CPU as clang names it (`"cascadelake"`, `"x86-64-v3"`, `"generic"`);
 `TargetVectorBits`, an `I64`, the width in bits of the vectors the generated code computes with - `512` where the
 target has AVX-512, `256` where it has AVX, `128` with only SSE2 or on `aarch64` (Advanced SIMD); and `TargetHasFma`, a
@@ -9025,9 +9025,12 @@ own CPU with every instruction set extension it has, as clang's `-march=native` 
   `x86-64-v3`, `x86-64-v4` - or a processor, `skylake`, `znver4`; what is built runs on every machine with that CPU's
   instructions;
 - a triple, `ARCH-linux-gnu` (with any vendor between, `x86_64-pc-linux-gnu`), and after it `:CPU` for a CPU of that
-  architecture - without one, the architecture's own baseline (`x86-64`, or `generic` for `aarch64`).
+  architecture - without one, the architecture's own baseline (`x86-64`, or `generic` for `aarch64`);
+- an Android triple, `aarch64-linux-android` or `aarch64-linux-androidLEVEL` with an API level from 29 up
+  (`aarch64-linux-android35`), `:CPU` after it as for the others (B12e).
 
-The architectures are `x86_64` and `aarch64`, the operating system Linux with the GNU C library. A CPU and its
+The architectures are `x86_64` and `aarch64`, the operating system Linux with the GNU C library, and Android on
+`aarch64` (B12e). A CPU and its
 extensions are what clang resolves `-march=CPU` (`-mcpu=CPU` for `aarch64`) to. Any other target, a CPU its
 architecture does not have, or `native` after another architecture's triple is a command-line error. Without clang -
 which the evaluator (B3e) otherwise does not need - scripting mode takes `native`, on x86-64, to be the x86-64 level this processor has.
@@ -9053,6 +9056,17 @@ back end cannot compile `BF16` code, so with it `aarch64` is refused, and with c
 compiling for another machine, a call of a function of the C math library that is not exact (X8) is not evaluated
 (K1): the target's own library may give another result. An exact one gives the same result everywhere, and is
 evaluated. The runtime's own functions (X6) read the C library's structures as the target's lays them out.
+
+**B12e (Android).** `-target aarch64-linux-android[LEVEL]` builds for Android, on its C library bionic, for the API
+level LEVEL - 29 (Android 10, the first with the thread-local storage the runtime uses) where none is written, and a
+level below 29 is a command-line error. `TargetOs` is `"android"` and `TargetArch` `"aarch64"`. It is another machine
+(B12a), built with the **Android NDK**: its clang, linker and C library, whatever clang B12d would choose - the NDK in
+the directory `ANDROID_NDK_HOME` names, else `ANDROID_NDK_ROOT` (the directory holding `toolchains/llvm`); without
+either it is a command-line error saying to set one. C imports (X18) are translated from the NDK's headers for that
+level. `build` gives a position-independent executable linked against the system's `libc.so`, `libm.so` and
+`libdl.so`; `build -library` (X14) a shared library an Android app loads - a NativeActivity's, its export fns its
+entries (`ANativeActivity_onCreate` among them where the program defines it). `test` and `run` link the program
+**statically** (bionic's loader is not on this machine) and run it in the emulator (`qemu-aarch64`), as for B12a.
 
 **B12d (clang).** A build compiles and links with clang, of LLVM 18, 19 or 20 - the intermediate form written is one
 all three read. The clang used is the first of: the one `OLANG_CLANG` names (a path, or a name looked up on `PATH`);
