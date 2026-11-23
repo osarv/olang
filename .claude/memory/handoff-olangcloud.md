@@ -7,7 +7,7 @@ Written for a fresh OLang Cloud session. The previous one stopped because its co
 2. The review notes `/home/user/review9.md`, `review10.md`, `review11.md` and `review12.md`, and `docs/freeing.md` section 2.4, "Still open".
 
 ## In progress
-- **wt-spawnrelease** (worktree `/home/user/wt/spawnrelease`, branch `wt-spawnrelease`): an Opus xhigh agent was running it when the session stopped. Look at the branch's last commits and any uncommitted files.
+- **wt-spawnrelease** (worktree `/home/user/wt/spawnrelease`, branch `wt-spawnrelease`): both steps are built and committed (fddf3e0d1: the spawn lets go of the old value, and the task builds the new one in a region of its own; a269aaaf3: records; then goldens). Its agent was finishing its checks when the session stopped. It may push one more goldens commit (09d0495cd); check that the branch head matches the worktree, and push if not.
   - The case: a spawn target declared outside a loop (`r Vec<String>`, then `join: spawn r = build(i)` each turn) never released its old value. That is about 9 KB a turn, while `-memory -check` reported 0 kept, a false proof.
   - Step 1: make `-check` name the keep.
   - Step 2: release the previous value at the reassignment once the spawner owns it after the join's wait (decided by the Orchestrator as an extension of the user's option (c)).
