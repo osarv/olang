@@ -2242,7 +2242,7 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
         case mir.Rvalue.New(s, x, ty) { m.newRef(fi, dst, s, x, ty) }
         case mir.Rvalue.NewArray(s, ty, n, fill) { m.newArray(fi, dst, s, ty, n, fill) }
         case mir.Rvalue.Slice(q, lo, hi, ty) { m.slice(fi, dst, q, lo, hi, ty) }
-        case mir.Rvalue.Closure(code, _, s, args, _) { m.closure(fi, dst, code, s, args) }
+        case mir.Rvalue.Closure(code, _, s, args, caps) { m.closure(fi, dst, code, s, args, caps) }
         case mir.Rvalue.Recode(x, from, to) {
             m.wr(dst, 4, m.recode(m.intValue(m.scalar(fi, x), mir.I32T), from, to))
         }
@@ -2762,7 +2762,7 @@ fn (m mut Machine&) codePtr(k mir.FnKey) Ptr {
 
 # a function value (T21): its code, and an environment in s holding its captures in order, then the scope each lives
 # in (D16c); none for a named function
-fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, args mir.Range) {
+fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, args mir.Range, caps mir.Range) {
     cp := m.codePtr(code)
     gi := m.fnIndex(code)
     if gi >= 0 and m.fns.At(gi).Gen {
@@ -2792,8 +2792,28 @@ fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, arg
         }
         m.wr(Ptr(env.Id, total + 8 * i), 8, held)
     }
+    if gi >= 0: m.planCaps(fi, env, total, m.fns.At(gi), caps)
     m.wrPtr(dst, cp)
     m.wrPtr(Ptr(dst.Id, dst.Off + 8), env)
+}
+
+# D16c, T22c: where the captures holding references live, as the plan said (caps, one per Capture variable of g in
+# order) and as emit stores them - over what the capture's own value shows: a value capture (a struct holding a
+# reference) lives where the plan put its referent, not where the environment is
+fn (m mut Machine&) planCaps(fi I64, env Ptr, total I64, g mir.Fn&, caps mir.Range) {
+    f := m.fnOfFrame(fi)
+    j := 0
+    for v in g.Vars {
+        ci := match v {
+            case mir.VarKind.Capture(c): c
+            case _: -1
+        }
+        if ci < 0: continue
+        if j >= I64(caps.N): return
+        r := f.Refs[I64(caps.At) + j]
+        j++
+        if ci < g.Captures.Len(): m.wr(Ptr(env.Id, total + 8 * ci), 8, m.scopeOf(fi, r))
+    }
 }
 
 # a generator's value (D18): its Next's code with an environment of its own in s - the captures as any closure's, then

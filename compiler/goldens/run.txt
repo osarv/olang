@@ -2558,6 +2558,8 @@
 | flat
 === run fieldscopegeneric.olang
 | status 0
+=== run fieldscopelambda.olang
+| status 0
 === run fieldscopelookup.olang
 | status 0
 === run fieldscopepart.olang

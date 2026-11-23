@@ -42147,6 +42147,14 @@ as long as the longest-lived referent's - and the user wants freeing per instanc
 places item (plan.md). And a lambda passed as a function value that builds through a captured helper's field gives the
 declaration back where O29's run-time lookup would serve.
 
+The evaluator's disagreement above, fixed the same day (mine): it was not the run-time lookup. The native code stores,
+for each capture variable of a lambda, the scope the plan recorded in the closure's `caps` (D16c) - here run's derived
+scope for `p`, where the field's referent lives - and the lambda builds there. The evaluator ignored `caps` and took
+each capture's scope from its value: a reference's referent's allocation, else the environment's own scope - for `p`,
+a struct held by value, run's frame, closed before main read the names. It now writes the plan's scopes over the
+value-derived ones as emit does (`eval.planCaps`, one per Capture variable in order). checks/cases/fieldscopelambda.olang
+(built, -sanitize and OLANG_EVALUATE=1 agree; a top-level assert the evaluator decides).
+
 ## 2026-11-23: a promoted field's part handed back keeps its exact half (O23, O23b, O25g; mine; review 11)
 
 Review 11 (field scopes option B, before its merge) found a hole older than B that B makes common. A writable reference
