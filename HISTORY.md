@@ -42616,6 +42616,14 @@ Tests count wakes (a channel's `wakes`, a process's): a `RecvUntil` blocked 200 
 or deadline; `WaitUntil` once for a child's end, a deadline and a `Cancel()` (was ~20 in 200 ms). All pass under
 `-race`.
 
+## 2026-11-23: a local time zone in std/time, certificate pinning in std/tls (mine; wt-homestd)
+
+Two gaps a voice-assistant program found (programs use the language as designed; gaps come to std). `time.LocalOffset(wall = Wall())` is the process's zone offset at an instant in seconds east of UTC, daylight saving included, and `time.Date.Local(wall = Wall())` the instant as a `Date` in it. `struct tm` imports opaque, so no field is read: `localtime` then `strftime("%z")`, parsed as the program did. A runtime helper reading `tm_gmtoff` would have been a new LLVM-IR extern for nothing; the cost is `localtime`'s one static result (not for concurrent callers, said in the comment). Tested by setting TZ with `setenv`/`tzset` to UTC, Europe/Stockholm and America/New_York for a winter and a summer instant. Date.Offset stays in minutes (Date.Of's unit); LocalOffset is in seconds, as asked, and Local divides.
+
+`tls.Conn.Dial(host, port, ca = "", pin = "")`: a pin is the SHA-256 of the peer certificate's DER (hex, either case, `:` allowed, as `openssl x509 -fingerprint -sha256` prints it). Pinned, the context verifies nothing (SSL_VERIFY_NONE is OpenSSL's default for a client context that sets no mode) and no host is set for checking; after the handshake `X509_digest` of `SSL_get1_peer_certificate` is compared in constant time with the pin, and a difference - or a malformed pin, rejected before dialling - is `tls.Error.Pin`. No pin leaves every path as it was. x509.h and evp.h are reached through ssl.h's import (importing them separately gives distinct, incompatible X509 types). Tested against `openssl s_server` with the test's self-signed certificate: right pin (colon or lowercase form) passes even for a name the certificate lacks; a wrong or malformed pin fails with Pin.
+
+Trust on first use for the same program (the hub's certificate is self-signed and its fingerprint is not known until the first connection): `Conn.DialToLearn(host, port)` connects with no chain, name or pin check (the pinned path's no-verify context, `learn` flag in newSession) and `Conn.Fingerprint()` returns the peer certificate's SHA-256 as 64 lowercase hex digits, the form Dial's pin takes. No `"*"` pin was added: skipping verification is a different call with a name that says so, and its doc says the Conn is unauthenticated and only good for reading Fingerprint() before closing it and dialling with the pin. Tested: DialToLearn to the self-signed s_server, Fingerprint equals openssl's, Dial with it passes.
+
 ## 2026-11-23: one C type per tag across C imports (X17; mine; wt-homecimp)
 
 A session using olang with OpenSSL found that the same C struct imported through two headers was two olang types:

@@ -7,6 +7,7 @@
 # Reading a clock is an effect, so neither is computed while compiling (K1): a global set from one is set at startup.
 
 import ctime "time.h"
+import cstdlib "stdlib.h"
 
 # Linux's clock ids
 clockRealtime I32 = 0
@@ -339,6 +340,27 @@ fn (d Date&) Str() String {
     return b.ToString()
 }
 
+# the local time zone's offset from UTC at the instant "wall" (as Wall() gives, the clock reading by default), in seconds
+# east of UTC, daylight saving time included: 3600 in Stockholm in winter, 7200 in summer. The zone is the process's -
+# the TZ environment variable, else the system's - as the C library reads it (localtime and strftime's %z, no
+# structure fields read). The C library's localtime keeps one static result, so call this from one task at a time
+fn LocalOffset(wall I64 = Wall()) I64 {
+    secs := wall / 1000000000
+    if wall % 1000000000 < 0: secs--
+    t := Array<I64>(1)
+    t[0] = secs
+    tm := ctime.localtime(t)
+    buf := Array<U8>(16)
+    n := ctime.strftime(buf, 16, "%z\0", tm!)
+    if n < 5: return 0                                    # "+hhmm"
+    mag := I64(buf[1] - '0') * 36000 + I64(buf[2] - '0') * 3600 + I64(buf[3] - '0') * 600 + I64(buf[4] - '0') * 60
+    return -mag if buf[0] == '-' else mag
+}
+
+# the instant "wall" (the clock reading by default) as a Date in the local time zone, Offset in minutes as LocalOffset
+# gives it: "time.Date.Local().Hour" is the hour on the wall clock here
+fn Date.Local(wall I64 = Wall()) Date { return Date.Of(wall, LocalOffset(wall) / 60) }
+
 # the instant "wall" (as Wall() gives) as RFC 3339 text, in the time zone "offset" minutes ahead of UTC
 fn Format(wall I64, offset I64 = 0) String { return Date.Of(wall, offset).Str() }
 
@@ -454,4 +476,21 @@ test Error "Syntax carries the offset where the text stopped being a date" {
     assert whyNot("2026-10-24T13:05:01Zx") == "Error.Syntax(20)"
     assert whyNot("2026-13-01T00:00:00Z") == "Error.Range"
     assert whyNot("2026-10-24T13:05:01Z") == "ok"
+}
+
+test "the local offset follows the TZ environment, daylight saving time included" {
+    winter := daysFromCivil(2026, 1, 15) * 86400 * 1000000000 + 12 * 3600 * 1000000000
+    summer := daysFromCivil(2026, 7, 15) * 86400 * 1000000000 + 12 * 3600 * 1000000000
+    cstdlib.setenv("TZ\0", "UTC\0", 1)
+    ctime.tzset()
+    assert LocalOffset(winter) == 0 and LocalOffset(summer) == 0
+    cstdlib.setenv("TZ\0", "Europe/Stockholm\0", 1)
+    ctime.tzset()
+    assert LocalOffset(winter) == 3600 and LocalOffset(summer) == 7200
+    assert LocalOffset(winter - 1) == 3600
+    cstdlib.setenv("TZ\0", "America/New_York\0", 1)
+    ctime.tzset()
+    assert LocalOffset(winter) == -18000 and LocalOffset(summer) == -14400
+    l := Date.Local(summer)
+    assert l.Hour == 8 and l.Offset == -240 and l.Day == 15
 }

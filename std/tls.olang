@@ -3,7 +3,10 @@
 #
 # A Conn is verified: the server's certificate chain must lead to a certificate the system trusts (OpenSSL's default
 # store, or the one file given as "ca") and must name the host dialed, or the dial fails with Verify. There is no way to
-# turn the checks off. A Conn shuts down its TLS session and closes its socket where its holder lets go (a destructor,
+# turn the checks off - except by pinning: a dial given the SHA-256 fingerprint of the peer's certificate (for a device
+# on a LAN with a self-signed one) replaces the chain and name checks with comparing that certificate's DER digest to the
+# pin, and fails with Pin when they differ. No pin, no change. The one other way to skip the checks is DialToLearn, for
+# trust on first use: it verifies nothing, so its Conn is unauthenticated and only good for reading Fingerprint(). A Conn shuts down its TLS session and closes its socket where its holder lets go (a destructor,
 # C9, O15), as net.Conn does.
 #
 # Imported with `import "std/tls"`.
@@ -27,12 +30,13 @@ sslErrorWantWrite I32 = 3
 sslErrorSyscall I32 = 5
 sslErrorZeroReturn I32 = 6
 
-# why a TLS call failed (a dial's TCP failures are net.Error's). Verify: the server's certificate is not one to trust - the text says why OpenSSL refused it (an untrusted issuer, a
+# why a TLS call failed (a dial's TCP failures are net.Error's). Pin: the peer's certificate is not the one pinned, or the pin is not 32 bytes of hex; Verify: the server's certificate is not one to trust - the text says why OpenSSL refused it (an untrusted issuer, a
 # name that is not the host dialed, an expired date); Handshake: the server did not speak TLS, or no protocol and cipher
 # both sides accept; Closed: the other side ended the session, so there is nothing more to read (a clean close_notify,
 # or a connection cut off); Timeout: a timeout set by SetTimeout passed; Failed: any other reason, or an unreadable "ca"
 type Error error {
     Verify(why String)
+    Pin
     Handshake
     Closed
     Timeout
@@ -56,10 +60,55 @@ fn verifyFailure(session ssl.SSL&) String {
     return String.FromC(ossl.X509_verify_cert_error_string(code)!, 128)
 }
 
-# a context trusting "ca" where that names a file and the system's store where it is empty
-fn newContext(ca String&) ssl.SSL_CTX& ? Error {
+# the value of the hex digit c, -1 when it is not one
+fn hexValue(c Char) I64 {
+    if c >= '0' and c <= '9': return I64(c) - I64('0')
+    if c >= 'a' and c <= 'f': return I64(c) - I64('a') + 10
+    if c >= 'A' and c <= 'F': return I64(c) - I64('A') + 10
+    return -1
+}
+
+# the 32 bytes a SHA-256 fingerprint names, written as 64 hex digits - upper or lower case, ':' between bytes allowed
+fn parsePin(pin String&) Array<U8> ? Error.Pin {
+    out := Array<U8>(32)
+    n := 0
+    hi I64 = -1
+    for c in pin {
+        if c == ':': continue
+        v := hexValue(c)
+        if v < 0 or n >= 32: error Error.Pin
+        if hi < 0 {
+            hi = v
+        } else {
+            out[n] = U8(hi * 16 + v)
+            n++
+            hi = -1
+        }
+    }
+    if n != 32 or hi >= 0: error Error.Pin
+    return out
+}
+
+# whether the peer's certificate has the SHA-256 (of its DER form) "want"
+fn pinMatches(session ssl.SSL&, want Array<U8>&) Bool {
+    cert := ssl.SSL_get1_peer_certificate(session)
+    if cert == null: return false
+    got := Array<U8>(32)
+    len := Array<U32>(1)
+    ok := ssl.X509_digest(cert, ssl.EVP_sha256(), got, len) == 1 and len[0] == 32
+    ssl.X509_free(cert)
+    if not ok: return false
+    diff := 0
+    for i in range 32: diff |= I64(got[i] ^ want[i])
+    return diff == 0
+}
+
+# a context trusting "ca" where that names a file and the system's store where it is empty - or, for a pinned dial, one
+# that checks no chain (the pin is the check)
+fn newContext(ca String&, pinned Bool) ssl.SSL_CTX& ? Error {
     ctx := ssl.SSL_CTX_new(ssl.TLS_client_method())
     if ctx == null: error Error.Failed
+    if pinned: return ctx
     ok := ssl.SSL_CTX_load_verify_file(ctx, ca.ToC()) if ca != "" else ssl.SSL_CTX_set_default_verify_paths(ctx)
     if ok != 1 {
         ssl.SSL_CTX_free(ctx)
@@ -70,7 +119,7 @@ fn newContext(ca String&) ssl.SSL_CTX& ? Error {
 
 # the handshake over the socket "fd" to "host" - the name sent for the server to choose its certificate by, and the
 # name that certificate must carry - and the session it made; "ctx" and "fd" are let go of here when the session does not come
-fn newSession(ctx ssl.SSL_CTX&, fd I32, host String&) ssl.SSL& ? Error {
+fn newSession(ctx ssl.SSL_CTX&, fd I32, host String&, pin Array<U8>&, learn Bool = false) ssl.SSL& ? Error {
     session := ssl.SSL_new(ctx)
     if session == null {
         ssl.SSL_CTX_free(ctx)
@@ -79,24 +128,63 @@ fn newSession(ctx ssl.SSL_CTX&, fd I32, host String&) ssl.SSL& ? Error {
     }
     ssl.SSL_set_fd(session, fd)
     ssl.SSL_ctrl(session, sslCtrlSetTlsextHostname, 0, host.ToC())
-    connected := ssl.SSL_set1_host(session, host.ToC()) == 1 and ssl.SSL_connect(session) == 1
-    why := verifyFailure(session)
-    if connected and why == "": return session
+    pinned := pin.Len() > 0
+    unchecked := pinned or learn
+    connected := (unchecked or ssl.SSL_set1_host(session, host.ToC()) == 1) and ssl.SSL_connect(session) == 1
+    why := "" if unchecked else verifyFailure(session)
+    mismatch := connected and pinned and not pinMatches(session, pin)
+    if connected and why == "" and not mismatch: return session
     ssl.SSL_free(session)
     ssl.SSL_CTX_free(ctx)
     unistd.close(fd)
+    if mismatch: error Error.Pin
     if why != "": error Error.Verify(why)
     error Error.Handshake
 }
 
 # a TLS session to "host" at "port", the server's certificate checked against the system's trusted ones - or the file
-# "ca", a PEM bundle, where one is named - and against the name "host"; fails with Verify where it does not pass
-fn Conn.Dial(host String&, port U16, ca String& = "") Conn ? Error, net.Error {
+# "ca", a PEM bundle, where one is named - and against the name "host"; fails with Verify where it does not pass.
+# "pin", where given, is the SHA-256 fingerprint of the server's certificate (64 hex digits, ':' between bytes allowed,
+# as `openssl x509 -fingerprint -sha256` prints it): the chain, "ca" and the name are then not checked, the certificate
+# must be exactly that one, and the dial fails with Pin when it is not (or when "pin" is not a fingerprint)
+fn Conn.Dial(host String&, port U16, ca String& = "", pin String& = "") Conn ? Error, net.Error {
+    want := try parsePin(pin) if pin != "" else Array<U8>(0)
     tcp := try net.Conn.Dial(try net.Addr.Resolve($host + ":" + $port))
-    ctx := try newContext(ca)
+    ctx := try newContext(ca, pin != "")
     fd := unistd.dup(tcp.Fd())
-    session := try newSession(ctx, fd, host)
+    session := try newSession(ctx, fd, host, want)
     return Conn(fd, session, ctx)
+}
+
+# a TLS session to "host" at "port" with NO verification at all - no chain, no host name, no pin - for trust on first
+# use: connect to a device whose certificate is self-signed, read Fingerprint(), close the Conn, and from then on Dial
+# with that fingerprint as "pin". The Conn is UNAUTHENTICATED: anyone on the path may be the peer, so send nothing
+# secret over it and trust nothing it says; it is good for reading Fingerprint() and nothing else
+fn Conn.DialToLearn(host String&, port I64) Conn ? Error, net.Error {
+    tcp := try net.Conn.Dial(try net.Addr.Resolve($host + ":" + $port))
+    ctx := try newContext("", true)
+    fd := unistd.dup(tcp.Fd())
+    session := try newSession(ctx, fd, host, Array<U8>(0), true)
+    return Conn(fd, session, ctx)
+}
+
+# the SHA-256 of the peer's certificate (over its DER form) as 64 lowercase hex digits - the form Dial's "pin" takes;
+# "" when the peer sent no certificate
+fn (c Conn&) Fingerprint() String {
+    cert := ssl.SSL_get1_peer_certificate(c.session)
+    if cert == null: return ""
+    got := Array<U8>(32)
+    len := Array<U32>(1)
+    ok := ssl.X509_digest(cert, ssl.EVP_sha256(), got, len) == 1 and len[0] == 32
+    ssl.X509_free(cert)
+    if not ok: return ""
+    digits := "0123456789abcdef"
+    out := Array<Char>(64)
+    for i in range 32 {
+        out[2 * i] = digits[got[i] >> 4]
+        out[2 * i + 1] = digits[got[i] & 15]
+    }
+    return String(out)
 }
 
 # the Error for a read or write that returned "n" <= 0: what SSL_get_error says of it. A close_notify, and a connection
@@ -159,18 +247,24 @@ fn freePort() I64 ? net.Error {
 }
 
 # the first line the server answers a GET with, as seen by a session dialed to "host" - or what the dial failed with
-fn firstLine(host String&, port I64, ca String&) String {
+fn firstLine(host String&, port I64, ca String&, pin String& = "") String {
     for _ in range 100 {
-        c := try Conn.Dial(host, U16(port), ca) catch net.Error.Refused {
+        c := try Conn.Dial(host, U16(port), ca, pin) catch net.Error.Refused {
             time.Sleep(time.Duration(100000000))
             continue
-        } catch Error.Verify { return "verify" } catch Error.Handshake { return "handshake" } catch { return "failed" }
+        } catch Error.Verify { return "verify" } catch Error.Pin { return "pin" } catch Error.Handshake { return "handshake" } catch { return "failed" }
         try c.Write("GET / HTTP/1.0\r\n\r\n") catch { return "write failed" }
         buf := Array<U8>(4096)
         got := try c.Read(buf) catch { return "read failed" }
         return String(got[:12])
     }
     return "never up"
+}
+
+# the fingerprint learned from the server at "port"; the Conn is let go of on return, as the single-threaded server needs
+fn learnedPrint(port I64) String ? Error, net.Error {
+    c := try Conn.DialToLearn("127.0.0.1", port)
+    return c.Fingerprint()
 }
 
 test "a session to a server whose certificate is trusted and names the host carries bytes both ways" {
@@ -189,6 +283,21 @@ test "a session to a server whose certificate is trusted and names the host carr
     assert first == "HTTP/1.0 200"
     assert firstLine("localhost", port, "") == "verify"                    # a certificate nothing trusts
     assert firstLine("127.0.0.1", port, dir + "/c.pem") == "verify"        # trusted, but not for this name
+    # pinning: the certificate's SHA-256 replaces the chain and name checks, so a name that does not match passes
+    fpCmd := "openssl x509 -in " + dir + "/c.pem -noout -fingerprint -sha256 | cut -d= -f2 | tr -d '\\n'"
+    assert os.Run(fpCmd + " > " + dir + "/fp") == 0
+    assert os.Run(fpCmd + " | tr -d : | tr A-F a-f > " + dir + "/fp2") == 0
+    pin := String(try os.ReadFile(dir + "/fp"))
+    assert pin.Len() == 95
+    assert firstLine("127.0.0.1", port, "", pin) == "HTTP/1.0 200"
+    assert firstLine("127.0.0.1", port, "", String(try os.ReadFile(dir + "/fp2"))) == "HTTP/1.0 200"
+    assert firstLine("localhost", port, "", "00" + pin[2:]) == "pin"
+    assert firstLine("localhost", port, "", "abc") == "pin"
+    # trust on first use: learn the fingerprint with no verification, then pin it
+    fp := try learnedPrint(port)
+    assert fp.Len() == 64
+    assert fp == String(try os.ReadFile(dir + "/fp2"))
+    assert firstLine("127.0.0.1", port, "", fp) == "HTTP/1.0 200"
     try os.RemoveAll(dir)
 }
 
