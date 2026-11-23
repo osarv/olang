@@ -1672,10 +1672,10 @@ fn writtenFn(f typed.Expr&) I64 {
     }
 }
 
-# the function type a call is made through
+# the function type a call is made through (a C function pointer's, the function type it refers to)
 fn (v mut Viewer&) calleeType(c typed.Call&) types.TypeId {
     return match c.Target {
-        case typed.Callee.Value(f): f.Type()
+        case typed.Callee.Value(f): v.P.T.Referent(f.Type()) if v.P.T.CFunc(f.Type()) else f.Type()   # X13a: C's, its function type
         case typed.Callee.Body(id): v.Bodies[I64(id)].Ty
         case _: types.UnknownT
     }

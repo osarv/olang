@@ -1,0 +1,13 @@
+# X13a: calls through a C function pointer held by another module's struct (tests/cfnptr/table.olang), from several
+# call sites - a call through one is an extern call to section 8 (X1a): the scope pass reads no function type of olang's
+# in it (it read a reference type's as one, and a build of a program like this one failed from the root and passed from
+# its directory), and the module's object declares the export fn's C entry the root's object defines
+import "cfnptr/table"
+
+test "a call through another module's C function pointer, from several call sites" {
+    assert table.Sum(1) == 7
+    assert table.Sum(2) + table.Sum(3) == 17
+    t := table.Table.Filled()
+    assert table.Call(t, 10) == 16 and t.F != null
+    assert t.F!(null, 4, 0, 0, 0) == 4
+}

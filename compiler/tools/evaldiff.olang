@@ -50,6 +50,7 @@ Expected Array<String&> = Array<String&>[
     "tests/cfnptr.olang: C calls the export fns a struct of function pointers holds, and leaves a null one uncalled - a struct of C function pointers to C (X13a, B3e)"
     "tests/cfnptr.olang: the program calls the functions C gives back, in a struct and alone - a call through a C function pointer (X13a, B3e)"
     "tests/cfnptr.olang: a table reached through a pointer to a pointer, as JNI's is, is read out and called through - a call through a C function pointer (X13a, B3e)"
+    "tests/cfnptrmod.olang: a call through another module's C function pointer, from several call sites - a C function pointer made of an export fn (X13a, B3e)"
 ]
 
 # the tests the interpreter is not given at all, since they would never end - by name, as Expected names a test: a task

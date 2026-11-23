@@ -7915,7 +7915,15 @@ fn (e mut Emitter&) exportEntry(i I64) {
     b.Push(fe.head.ToString())
     b.Push(fe.code.ToString())
     b.Push("}\n\n")
-    e.item(name, p.L.Root, b.ToString())
+    # (declared in another module's object naming it - one making a C function pointer of it, X13a)
+    d := StringBuilder()
+    d.Push($"declare " + $head + " @" + $name + "(")
+    for q, c in cps {
+        if q > 0: d.Push(", ")
+        d.Push(c)
+    }
+    d.Push(")\n")
+    e.item(name, p.L.Root, b.ToString(), d.ToString())
 }
 
 # exportEntry's parameters: C's (cps), and the function's arguments made of them (olang), by C's convention

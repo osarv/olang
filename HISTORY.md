@@ -42393,3 +42393,14 @@ decided while compiling), checks/cases/x13a*.olang (glibc's fopencookie run with
 refusals). A library's header (X14) writes each C function pointer
 type as a typedef of its own (`olang_fn_K`), a struct it points to declared by its tag first, since the struct may be the
 one holding the pointer.
+Two bugs found by a program (an Android app's JNI module, a plain struct of one five-parameter `extern fn?&` called as
+`f.f!(...)` from four call sites in another module) were fixed the same day. The scope pass took a call through a C
+function pointer for one through an olang function value: its callee's type is a reference to a function type, which it
+read as a function type, so `valueRels` took the referent's type id for a list of parameters - past the end of the
+type table's lists, an unchecked read whose length was whatever memory held ("array length out of range" in the build
+from the repository's root, none from the app's directory, the type ids differing with the module paths). A call
+through one is now an extern call to section 8, as X1a says: no function type of olang's (`calleeType` gives none), no
+records followed, nothing kept, stored or put through its arguments (`cPointerCall`, `valueCall`); the views pass and an
+argument count's default read the function type it refers to. And an export fn's C entry, written in the root's object
+only, had no declaration for another module's object naming it - a C function pointer made of an export fn outside the
+root failed to link; the entry now carries its declaration. Test: tests/cfnptrmod.olang with tests/cfnptr/table.olang.

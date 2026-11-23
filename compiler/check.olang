@@ -14542,7 +14542,10 @@ fn (c mut Checker&) argDefault(sp source.Span, target typed.Callee&, f I64, k I6
             if file != here: return typed.Expr.Away(sp, file, x)
             return x
         }
-        case typed.Callee.Value(fv) { return c.typeDefault(sp, c.P.T.NonNull(typeOf(fv)), k, want) }
+        case typed.Callee.Value(fv) {
+            ft := c.P.T.NonNull(typeOf(fv))
+            return c.typeDefault(sp, c.P.T.Referent(ft) if c.P.T.CFunc(ft) else ft, k, want)   # X13a: a C pointer's function type
+        }
         case _ { return c.defaultArg(sp, f, k, hasRecv, want, c.calleeArgs(target)) }
     }
 }
