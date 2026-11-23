@@ -21,4 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-3. (2026-11-23, asked via the Orchestrator; docs/fieldscopes.md question 1; the user, 2026-11-23, via the Orchestrator: "can we make B actually work?", worried it weakens memory safety - next: docs/fieldscopes.md for option B with a soundness argument (the field still cannot outlive its referent; only the exact-equality over-approximation goes), where the run-time lookup happens and its cost; no building until the user has seen it) A struct holding bare `mut X&` fields (the compiler's lower.lowering, emit.fnEm) gets its instance scope equal to X's (C2d/O25g), so what it holds and returns lives as long as X - the compiler's lower+emit peak 2.5 -> 4.3 GB. Options: (A) keep the rule, restructure lower/emit (output passed to every method); (B) a field that can be stored through gets a binding of its own (O28/O23a), passed by callers and found at run time (O29) only where no caller knows it; (C) scope parameters in struct types. Default in effect: (A). Recommendation: (B). Section-8 design.
+(none)
