@@ -323,7 +323,12 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   (`build`'s Push grows them on the task's thread) and so they keep program-wide (condition 3 by origins, `taskArgs`),
   besides the spawn target's own keep (`spawnSite`). Narrowing the target's keep to its join frees nothing while the
   task's growth keeps the same places; freeing them needs a region a task made, or grew into, released on the spawner's
-  thread - question 1 below.
+  thread - question 1 below. (Closed by wt-globalfill for a first value nothing reads - `r := build(0)` then
+  `r = build(i)` with no mention between, the shape named: the checker declares such a local with no value
+  (`check.deadLet`, `definit.ReadIn`), the first call's value an Eval dropped where it stands, the assignment its first
+  value (FirstSet), moved into the element - checks' freeing againkept. A first value read before the assignment still
+  keeps, named: a version split of the local, the read value kept in its block and the assignment's built where the store
+  goes, is the road there.)
 
 - **An array literal given to a place** (review9, `rows = Array<Vec<I64>>[Vec<I64>[i], Vec<I64>[7]]` or `ns =
   Array<I64>[i, 2]` each turn, into a local, a split field or a mutable global): kept, and named by `-memory -check`

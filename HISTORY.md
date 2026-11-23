@@ -41577,3 +41577,17 @@ statement's check of reads against a call's let-go (condition 6) never saw it, a
 later operand's call lets go of it, as a Vec's would. A literal initializer had hidden it (its value copied into the
 program's scope, never the place's own: RMade). checks' freeing globalviews (built, -free late, -sanitize, the
 evaluator agree; master's build printed a different sum and -sanitize stopped).
+
+**A `:=` local's first value unread before a call's result is assigned** (wt-globalfill, 2026-11-22): the shape freeing.md
+2.4 named, `r := build(0)`, `r = build(i)`, `kept[i % 4] = r` (`Vec<String>`, ~500 bytes a turn, -memory -check naming the
+element's let-go). wt-gaps5's widening of FirstSet to a `:=` local was unsound because the Let's call kept building where
+the local was lifted. Done instead before any pass sees it: the checker, emitting an assignment of a call's result to a
+local declared by a `:=` of a call's value in the same block (`check.deadLet`), asks whether anything between - or the
+assigned value - reads the local (`definit.ReadIn`, D13d's walk: any mention but a whole assignment, captures and deferred
+code included); where nothing does, the Let becomes an Eval of its value (computed and dropped where it stands) and a
+declaration with no value (Unset, its zero for the type). The local is then gaps4's FirstSet shape - no owner local,
+moved at its last mention into the element, the assignment letting go of nothing - and every pass (scope, free, lowering,
+the evaluator) reads what it already reads. Same meaning: the dropped value was never read. Left to a type with no
+destructor (the drop's moment would move) and of a zero value; a value local, not a reference. SPEC D9i says it. checks'
+freeing againkept (flat under 8 MB; built, -free late, -sanitize and the evaluator agree; master fails -memory -check).
+Still open: a first value read before the assignment (`n := r.Len()` between) - a split of the local's two versions.

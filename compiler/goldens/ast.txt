@@ -2077,7 +2077,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-3b7ddf9802e3e234 2dc386a0a6085a1e checks/checks.olang
+74d16ac07411ec9d 51f8d4f5c65d71a6 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2209,6 +2209,7 @@ ed65e1c871a90895 f027d66ab67504be checks/fixtures/freeing/elements.olang
 658cd15b20393216 49056b0a8ff733fb checks/fixtures/freeing/gaps.olang
 8f51a875a88e3c20 abf5a8fc50ff6728 checks/fixtures/freeing/genviews.olang
 217397296d19aecc 54f099facf748fa7 checks/fixtures/freeing/global.olang
+79701488917b3ac8 f4652454247b4b47 checks/fixtures/freeing/globalviews.olang
 612dfdcfb3a4acae 4b3eb425d967678b checks/fixtures/freeing/growth.olang
 8d3c4aca81f9cb85 28d51ed34ad59b92 checks/fixtures/freeing/joins.olang
 133cc0a2934286f6 51ef6a7ab071b55c checks/fixtures/freeing/litstores.olang
@@ -2461,9 +2462,9 @@ e20178f94e07dfed ff5ec0fbe401eade compiler/bindgen.olang
 1c0afe32dcaf03c1 f4a0a51add52a9f9 compiler/build.olang
 9eb8d9916112f375 a204171a5e8519d7 compiler/cabi.olang
 a63bb2cbd4c666c1 32f8e5565363d2f2 compiler/cells.olang
-6c32bd7b53314105 b1888059d06bf086 compiler/check.olang
+1e5e8e4c48b379f9 fa943b5315a5bc36 compiler/check.olang
 da018e972c2ecc90 402dd6cf0de7cca1 compiler/cond.olang
-2ab98962469bc960 f235e148eac3e4ba compiler/definit.olang
+d5d87da3cf156c0a 6fd762f9553d2a77 compiler/definit.olang
 db407b9ec2aacf25 d850fbb42d0e8294 compiler/diag.olang
 8eecc7e6e624f53a d60fad56d190f340 compiler/diagmsg.olang
 b02b474ae1593a73 a4a8294e6adfbb54 compiler/doc.olang
@@ -2475,7 +2476,7 @@ eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
-4b2ecf84f0816b08 769e21aa1a785645 compiler/free.olang
+36ce4b52db4d3938 b19cf413019f329e compiler/free.olang
 7dcf3f3fd8db67e5 e07e51a6cff33838 compiler/generic.olang
 47fb7c219d28bceb 53557355686b67f3 compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang

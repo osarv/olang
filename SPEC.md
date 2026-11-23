@@ -2581,7 +2581,9 @@ costs. Only where nothing could tell: no mention of the local comes after (defer
 loop around the copy but not around the local's declaration count as after), no other argument of the same call - or
 other part of the same value made - mentions the local (`peek(t, t)` lends `t` beside its copy, `part(t.a, t)` reads
 in it, `t.Peek(t)` is its receiver: those stay alive for the very call the copy is given to), the local's storage is its own - no view
-held in place of its copy (D9h) - named by no other local, escaping nowhere, never assigned whole, in no region early
+held in place of its copy (D9h) - named by no other local, escaping nowhere, never assigned whole (but by the one assignment giving its first value: a
+local declared with no value, D13d, or declared with a call's value nothing reads before a call's result is assigned
+to it by a statement of the same block - that declared value computed and dropped where it stands), in no region early
 freeing made (O8d), and lives at least as long as where the copy would be built - a local whose copy at its last
 mention goes into storage outliving its block is built there (O28), so `rows.Push(rec)` in a loop moves each turn's
 `rec` into `rows` rather than copying it out of the turn - but not one whose copy is a global's whole new value
