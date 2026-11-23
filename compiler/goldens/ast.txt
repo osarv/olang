@@ -670,6 +670,18 @@ eed7e894562df048 4a36d54e84d8b285 checks/cases/extendsstruct.olang
 e43c06ddd2a7bb60 c7236fde342a38f3 checks/cases/externruntime.olang
 a6e276f41c1524b3 4431253f10292974 checks/cases/externruntime2.olang
 97c395bee6629b9e 7ceeeddfefab1ada checks/cases/fieldcomma.olang
+a8379cbc9ef38c94 106036e3b0137004 checks/cases/fieldscopeattach.olang
+a28aa635925cccf7 c98d9b3ae533b429 checks/cases/fieldscopectx.olang
+0592bb290a0e7a1a 8cd7f9b745b704ee checks/cases/fieldscopedtor.olang
+3ec47b3bf3809f41 41f8e56b243f7fdf checks/cases/fieldscopeelem.olang
+ec8460b0c900f370 4ba1295c0b1989d5 checks/cases/fieldscopeflat.olang
+cf3d6a267c8312c8 6842c814e555318d checks/cases/fieldscopegeneric.olang
+6eb386715b0f99eb f0d8a6b9174d335a checks/cases/fieldscopelookup.olang
+d44baec6a193674d 0de6de7524a8ddb5 checks/cases/fieldscopepart.olang
+7c83fc47da681d6a cd579b2e11eb1c82 checks/cases/fieldscoperepoint.olang
+02bbfccaea58abea d58dd6e022d681d7 checks/cases/fieldscoperepointshort.olang
+8baeda651c0ad235 968a62fb03b9efe6 checks/cases/fieldscopereturn.olang
+1c0d981d3f6631ae dec8258fc1b21f1c checks/cases/fieldscopestash.olang
 832a32a7cded35c6 c85a80cb6f1b13f5 checks/cases/forinclausebreak.olang
 0218845a9a54aa3c 1282fe2461469f8f checks/cases/forinexists.olang
 1b04fcc198de76d5 0c0da08020ea7796 checks/cases/forinint.olang
@@ -2511,7 +2523,7 @@ d567d78faab8844a db01326d5481790c compiler/interp.olang
 8299f0d6f657ceae 5fcac26072ce57dd compiler/lineedit.olang
 211de0b5ecb13aac 9a12ce3d06dabd21 compiler/listing.olang
 4d9b20ee19fcdada 1a7d9a24f6bc6a93 compiler/load.olang
-5476dc93f4bb079e 10885ccef5550179 compiler/lower.olang
+3cde6365c0d2f1c7 08027cb0451e99bf compiler/lower.olang
 0a6ba37a53fb9662 36e2d7fb1015a7d2 compiler/lsp.olang
 7dc09dd9a3624990 4a85f96276950cab compiler/mcp.olang
 58d176a3e635da8e bab463865b0307a9 compiler/measure.olang
@@ -2528,7 +2540,7 @@ e2b2b02653bc4b63 28b9ec011557160d compiler/prompt.olang
 e7ba5bcc74b12eea 1ae5eae57a5881f5 compiler/records.olang
 a5885a0d1b06dada eaa5f78f28fac506 compiler/runtime.olang
 74927aaea47abc0f 36130c34ac2dc3c0 compiler/scan.olang
-219d8c751814e3e7 743b2470fa420955 compiler/scope.olang
+81739bc5f8e3212f bcabab1da63c2448 compiler/scope.olang
 ad0b24259637a1f2 b4e672fd8bdacd75 compiler/session.olang
 8981299fcf27ba06 e84af040edacca63 compiler/source.olang
 9bee4e94ca053127 837a4be40276ab63 compiler/spin.olang
