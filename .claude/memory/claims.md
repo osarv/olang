@@ -42,3 +42,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-mutplace - stopped: findings in plan.md "Build memory, open"; handed back to the Orchestrator
 - Orchestrator child (cloud, 2026-11-23): olang wt-speed merged - check 3.5 -> 3.0 s on the self-build (views, emit, records)
 - Orchestrator child (cloud, 2026-11-23): olang wt-loopval - the user's loop rule of 2026-11-23 (S9a/S9g: a loop name is the element's value), taken from OLang Cloud's queue; migrations of olang, oann, oagent
+- OLang Cloud (2026-11-23): olang wt-loopvals - loop names are the element's value (resumed)
