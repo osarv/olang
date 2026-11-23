@@ -2112,7 +2112,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-cdc3e89c8201f1b8 c70ebcf463f438f4 checks/checks.olang
+2f1dccaa27483f91 59fa54f2f1e048e6 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2277,8 +2277,9 @@ a279308f7e9120d1 e6df593763b44a6f checks/fixtures/freeing/splitelems.olang
 e12eacc7a9616dc4 cbcd66b0a7922008 checks/fixtures/freeing/splitlocal.olang
 35bf310ced49eca9 11909c04528c89d9 checks/fixtures/freeing/splitviews.olang
 d66b7ed7488df41e dae2ec7771244c85 checks/fixtures/freeing/structelems.olang
+e12d5542cef9c1c4 1f42a755a9284fe5 checks/fixtures/freeing/taskkept.olang
 f1c20ff3f5a169be eb36ebc438018c23 checks/fixtures/freeing/tasks.olang
-3b9de0269b71741c 28081b7c2866da86 checks/fixtures/freeing/taskvals.olang
+29fc85ed2f010c02 5c0cab3b698cf20a checks/fixtures/freeing/taskvals.olang
 8f42cb1782a3ec6c b89390ef036f022a checks/fixtures/freeing/tempref.olang
 30d86bf605793cdb 6fce06e636ba2d57 checks/fixtures/freeing/textarrays.olang
 6f8f63e1e574c89d 293ddd3d54b9ec54 checks/fixtures/freeing/texts.olang
@@ -2517,7 +2518,7 @@ eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 e16765f56912e3a6 04da83f352618be8 compiler/fmt.olang
-8a1dd9f226b013da 98864a1b02a7c847 compiler/free.olang
+902351544e011b11 34134d3d5e5c0747 compiler/free.olang
 7dcf3f3fd8db67e5 e07e51a6cff33838 compiler/generic.olang
 d567d78faab8844a db01326d5481790c compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang
