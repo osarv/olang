@@ -37,11 +37,7 @@ fn wallNs() I64 {
 type Token struct(deadlineNs I64 = 0) {
     flag I32 = 0
     deadline I64 = deadlineNs
-    id I64 = tokens.AtomicAdd(1) + 1        # the number its waits are registered under (never 0)
 }
-
-# how many tokens have been made
-tokens mut I64 = 0
 
 # a token that fires by itself once ms milliseconds have passed - and on Cancel(), like any other
 fn Token.After(ms I64) mut Token& {
@@ -51,7 +47,7 @@ fn Token.After(ms I64) mut Token& {
 # fires the token: every Cancelled() from now on is true, and every wait given it gives up
 fn (t mut Token&) Cancel() {
     t.flag.AtomicStore(1)
-    wakeAll(t.id)
+    wakeAll()
 }
 
 # true once the token was cancelled or its deadline has passed
@@ -77,10 +73,13 @@ fn (t Token&) Reason() ? Stopped {
 # A wait given a token blocks until what it waits for comes, the deadline passes or Cancel() is called - with no
 # periodic wakeup. A thread can block on one thing only (a condition variable, or poll(2)'s set of descriptors), so
 # whatever may end the wait has to reach that one thing. Each blocked wait is a WAITER: a mutex, a condition
-# variable and a flag of its own, and for a wait in poll() an eventfd. The waiter is registered under its token's
-# number, so Cancel() wakes every waiter of its token; the thing waited on (a channel) keeps the numbers of the waiters
-# parked on it and wakes them as it changes. Waiters live in one table for the program's life - never moved, never
-# freed, reused once let go - so a waiter is named by its number and nothing holds a reference into anyone's scope.
+# variable and a flag of its own, and for a wait in poll() an eventfd. Cancel() wakes every waiter blocked, whatever its
+# token - each looks at its own and sleeps again if that has not fired: a token carries nothing that tells it apart
+# (a number from a counter would be a global its constructor writes, and leave Token with no zero value, D13c), and a
+# Cancel() is an event, not a timer, so no wait wakes while nothing happens. The thing waited on (a channel) keeps the
+# numbers of the waiters parked on it and wakes them as it changes. Waiters live in one table for the program's life -
+# never moved, never freed, reused once let go - so a waiter is named by its number and nothing holds a reference into
+# anyone's scope.
 #
 # Locks are taken in one order only: what is waited on (a channel's lock), then the table's, then a waiter's. Cancel()
 # takes the table's lock and wakes each waiter under its own; Wake takes the table's lock only to find the waiter. A
@@ -91,7 +90,7 @@ type waiter struct() {
     lock pthread.pthread_mutex_t
     cond pthread.pthread_cond_t
     woken I32 = 0
-    token I64 = 0       # the number of the token waited on; 0 while the waiter is free
+    used Bool = false   # given to a wait
     fd I32 = -1         # an eventfd a wake writes to, for a wait in poll(); -1 for none
 }
 
@@ -106,14 +105,14 @@ fn waiter.at(w I64) mut waiter& {
     return x
 }
 
-# a waiter for a wait on t, registered so Cancel() wakes it, its flag clear: its number, for Rearm, Sleep and Done. fd,
+# a waiter for a wait on a token, which Cancel() wakes, its flag clear: its number, for Rearm, Sleep and Done. fd,
 # when not -1, is an eventfd every wake writes to as well, for a wait in poll(); it stays the caller's to close, after
 # Done. Taken while the waited-on lock is held, before the condition is checked again
-fn (t Token&) Park(fd I32 = -1) I64 {
+fn Park(fd I32 = -1) I64 {
     pthread.pthread_mutex_lock(tableLock)
     w I64 = -1
     for i in range table.Len() {
-        if table[i].token == 0 {
+        if not table[i].used {
             w = i
             break
         }
@@ -123,7 +122,7 @@ fn (t Token&) Park(fd I32 = -1) I64 {
         w = table.Len() - 1
     }
     x := table[w]
-    x.token = t.id
+    x.used = true
     pthread.pthread_mutex_lock(x.lock)
     x.woken = 0
     x.fd = fd
@@ -139,7 +138,7 @@ fn Done(w I64) {
     pthread.pthread_mutex_lock(x.lock)
     x.fd = -1
     pthread.pthread_mutex_unlock(x.lock)
-    x.token = 0
+    x.used = false
     pthread.pthread_mutex_unlock(tableLock)
 }
 
@@ -165,11 +164,11 @@ fn wake(x mut waiter&) {
     pthread.pthread_mutex_unlock(x.lock)
 }
 
-# every waiter registered under the token numbered id woken
-fn wakeAll(id I64) {
+# every waiter given to a wait woken
+fn wakeAll() {
     pthread.pthread_mutex_lock(tableLock)
     for x in table {
-        if x.token == id: wake(x)
+        if x.used: wake(x)
     }
     pthread.pthread_mutex_unlock(tableLock)
 }
@@ -204,11 +203,11 @@ fn (t Token&) Sleep(w I64) {
 # the nanoseconds left until the token's deadline, for a wait elsewhere (poll's timeout): -1 for none, 0 once it has
 # passed. Inside time.Virtual the deadline is reached at once, and a millisecond is left for what the wait waits for
 fn (t Token&) LeftNs() I64 {
-    if t.deadline == 0: return -1
-    if time.IsVirtual() {
+    if t.deadline != 0 and time.IsVirtual() {
         time.Reach(t.deadline)
         return 1000000
     }
+    if t.deadline == 0: return -1
     left := t.deadline - NowNs()
     return left if left > 0 else 0
 }

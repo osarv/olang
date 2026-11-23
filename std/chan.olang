@@ -130,8 +130,8 @@ fn wakeParked<T>(c mut Chan<T>&) {
 }
 
 # a wait given a token, parked on the channel (cancel's waiter w) - the lock held, and the condition to be checked again
-fn park<T>(c mut Chan<T>&, tok cancel.Token&) I64 {
-    w := tok.Park()
+fn park<T>(c mut Chan<T>&) I64 {
+    w := cancel.Park()
     c.parked.Push(w)
     return w
 }
@@ -204,7 +204,7 @@ fn SendUntil<T>(c mut Chan<T>&, v T, tok cancel.Token&) ? cancel.Stopped, Error 
             try tok.Reason()
         }
         if w < 0 {
-            w = park(c, tok)
+            w = park(c)
             continue
         }
         sleep(c, tok, w)
@@ -220,7 +220,7 @@ fn SendUntil<T>(c mut Chan<T>&, v T, tok cancel.Token&) ? cancel.Stopped, Error 
             try tok.Reason()
         }
         if w < 0 {
-            w = park(c, tok)
+            w = park(c)
             continue
         }
         sleep(c, tok, w)
@@ -245,7 +245,7 @@ fn RecvUntil<T>(c mut Chan<T>&, tok cancel.Token&) T ? cancel.Stopped, Error {
             try tok.Reason()
         }
         if w < 0 {
-            w = park(c, tok)
+            w = park(c)
             c.waiting++
             continue
         }

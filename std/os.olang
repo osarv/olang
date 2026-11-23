@@ -309,7 +309,7 @@ fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? Error, cancel.Stopped 
     set[1].fd = ceventfd.eventfd(0, I32(ceventfd.EFD_CLOEXEC))
     set[0].events = I16(cpoll.POLLIN)
     set[1].events = I16(cpoll.POLLIN)
-    w := tok.Park(set[1].fd)
+    w := cancel.Park(set[1].fd)
     defer {
         cancel.Done(w)
         for e in set {
