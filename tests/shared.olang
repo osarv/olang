@@ -1609,7 +1609,7 @@ test "a declared type over a primitive is distinct from it and from its siblings
     assert plain == 3
     back Meters = Meters(plain)
     assert back == 3
-        # "m.AddM(aFeetValue)" and "m.AddM(plain)" are compile errors - that is what nominal buys
+        # "m.AddM(aFeetValue)" and "m.AddM(plain)" are compile errors - that is what nominal buys  (checks/cases/m19nominalsibling.olang)
 }
 
 test "methods work on a named primitive and on a struct alike" {
@@ -1812,9 +1812,9 @@ test "a callee's join is entirely its own" {
 }
 
 # the three programs P1/P1a reject, which can only be named here:
-#   spawn f()                              # no enclosing join in THIS function
-#   join { assert true }                   # a join that waits for nothing
-#   join { join { spawn f() } }            # ... including one whose only spawn belongs to an inner join
+#   spawn f()                              # no enclosing join in THIS function  (checks/cases/p1spawnoutsidejoin.olang)
+#   join { assert true }                   # a join that waits for nothing  (checks/cases/p1ajoinwaitsfornothing.olang)
+#   join { join { spawn f() } }            # ... including one whose only spawn belongs to an inner join  (checks/cases/p1ainnerjoinonly.olang)
 #   join { for i := 0, i < 2, i++ { t Tally& = Tally(0)  spawn addUp(t, 1) } }
 #                                          # the argument is declared in a block that closes before the
 #                                          # join does, so the task could outlive its own storage
@@ -2209,7 +2209,7 @@ test "T29: and the built-in operators still reach it - it IS an array" {
 }
 
 # the rejection, which can only be named here:
-#   x Txt& = someByteArray   # a VALUE keeps its own type; Txt(v) is how it changes
+#   x Txt& = someByteArray   # a VALUE keeps its own type; Txt(v) is how it changes  (checks/cases/e12valuekeepstype.olang)
 
 # a one-element array holding a variable, as a fill or as a literal (E20a went with the declaration form
 # "buf I32[k]" it was distinguishing this from)
@@ -4407,10 +4407,10 @@ test "an 'e' that is not an exponent lexes as it always did" {
 }
 
 # these are errors, named here since they cannot be written as running tests:
-#   0x      0b          no digits after the prefix
+#   0x      0b          no digits after the prefix   (checks/cases/l10ahexnodigits.olang, l10cbinarynodigits.olang)
 #   1_      1_.5   1_e5 a separator not followed by a digit
 #   0b12                a digit that is not of the literal's own base - reported as a mistake in the
-#                       literal rather than lexed as binary 1 beside a stray 2
+#                       literal rather than lexed as binary 1 beside a stray 2  (checks/cases/l10cbinarybaddigit.olang)
 
 # ---- E8a / E26a: two operations with no defined result, left undefined ----
 
@@ -4642,8 +4642,8 @@ test "S11a: break and continue close every block scope they leave" {
 }
 
 # outside a loop both are compile errors, so they can only be named here:
-#   fn f() I32 { break }
-#   join { spawn f() break }       # a join is not a loop, so there is nothing here for break to target.
+#   fn f() I32 { break }  (checks/cases/s11breakinfn.olang)
+#   join { spawn f() break }       # a join is not a loop, so there is nothing here for break to target.  (checks/cases/s11breakinjoin.olang)
 #                                  # Inside a loop it targets that loop, and the join block is a scope
 #                                  # it crosses on the way out (P1b) rather than the thing it leaves.
 
@@ -5037,7 +5037,7 @@ test "a collection of mixed types is an enum of them" {
     assert sum == 25
 }
 
-# these are compile errors, so they can only be named here: a trait written as a type ("s Shape&") - it is a
+# these are compile errors, so they can only be named here: a trait written as a type ("s Shape&", checks/cases/t30traitastype.olang) - it is a
 # constraint (T30); a type missing a method (or with the wrong receiver mutability) does not satisfy it; a method
 # signature may not be generic (T35); two methods of the SAME type may not share a name (M21); and no method may be
 # called plainly - "Area(q)" is rejected, only "q.Area()" calls it (M19).
@@ -5935,7 +5935,7 @@ type Cell2<T> struct(n I32) {
     Data mut Array<T>& = Array<T>(n)
 }
 
-# "Cell2<WithRef>(4)", where WithRef holds a "Box&", is a compile error and so can only be named here.
+# "Cell2<WithRef>(4)", where WithRef holds a "Box&", is a compile error and so can only be named here.  (checks/cases/t2cgenericnozero.olang)
 # The safe instantiations still work, which is the half that has to keep working:
 test "a generic run-time-sized field still works for reference-free element types" {
     c Cell2<I32>& = Cell2<I32>(4)

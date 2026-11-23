@@ -1,0 +1,7 @@
+# check: fail error[P1]: 'spawn' is written inside a 'join' block, which waits for the task
+# P1: a spawn needs an enclosing join in its own function. Pins the shape named in a comment of tests/shared.olang
+# ("spawn f()" with no enclosing join)
+fn f() { }
+fn main() {
+    spawn f()
+}

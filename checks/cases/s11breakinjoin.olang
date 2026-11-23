@@ -1,0 +1,10 @@
+# check: fail error[S11]: 'break' acts on the innermost loop, and there is none here
+# S11: a join is not a loop, so 'break' in it has no loop to leave. Pins the shape named in a comment of tests/shared.olang
+# ("join { spawn f() break }")
+fn f() { }
+fn main() {
+    join {
+        spawn f()
+        break
+    }
+}

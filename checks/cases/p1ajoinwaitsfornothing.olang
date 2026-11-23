@@ -1,0 +1,7 @@
+# check: fail error[P1a]: this join spawns nothing, so it waits for nothing
+# P1a: a join with no spawn in it is refused. Pins the shape named in a comment of tests/shared.olang ("join { assert true }")
+fn main() {
+    join {
+        assert true
+    }
+}

@@ -1,0 +1,11 @@
+# check: fail error[P1a]: this join spawns nothing, so it waits for nothing
+# P1a: the outer join is refused when its only spawn belongs to an inner join. Pins the shape named in a comment of
+# tests/shared.olang ("join { join { spawn f() } }")
+fn f() { }
+fn main() {
+    join {
+        join {
+            spawn f()
+        }
+    }
+}

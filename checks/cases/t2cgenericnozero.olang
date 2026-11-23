@@ -1,0 +1,16 @@
+# check: fail error[T2c]: Box& is never null, so it has no zero value
+# T2c: a generic run-time-sized field is re-checked per instantiation - Cell2<WithRef>, whose element holds a Box&, is refused
+# (D14a). Pins the shape named in a comment of tests/shared.olang ("Cell2<WithRef>(4)")
+type Box struct(n I32) {
+    v I32 = n
+}
+type WithRef struct(b Box&) {
+    r Box& = b
+}
+type Cell2<T> struct(n I32) {
+    Data mut Array<T>& = Array<T>(n)
+}
+fn main() {
+    c := Cell2<WithRef>(4)
+    assert c.Data.Len() == 4
+}

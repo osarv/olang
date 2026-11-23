@@ -1,0 +1,7 @@
+# check: fail error[T30, T32]: Shape& is a trait, not a type
+# T30: a trait is a constraint, not a type - "s Shape&" is refused. Pins the shape named in a comment of tests/shared.olang
+type Shape trait {
+    Area() I32
+}
+fn f(s Shape&) { }
+fn main() { }

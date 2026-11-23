@@ -1,0 +1,6 @@
+# check: fail error[L10c]: '2' is not a binary digit
+# L10c: a digit outside the literal's own base is a mistake in the literal, not binary 1 beside a stray 2. Pins the shape
+# named in a comment of tests/shared.olang ("0b12")
+fn main() {
+    x := 0b12
+}

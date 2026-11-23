@@ -1,0 +1,5 @@
+# check: fail error[L10a]: '0x' needs hexadecimal digits
+# L10a: a hexadecimal literal with nothing after the prefix. Pins the shape named in a comment of tests/shared.olang ("0x")
+fn main() {
+    x := 0x
+}
