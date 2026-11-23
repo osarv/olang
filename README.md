@@ -89,6 +89,8 @@ I64
 
 The compiler finds the standard library beside itself, so the checkout must stay where it is. To use another clang,
 set `OLANG_CLANG=/path/to/clang` for both `make` and the compiler.
+To build for Android phones (`-target aarch64-linux-android`), set `ANDROID_NDK_HOME` to the Android NDK: programs,
+app libraries and a sample app written in olang alone are in [docs/android.md](docs/android.md).
 
 ### Notebooks
 
