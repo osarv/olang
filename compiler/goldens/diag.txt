@@ -3385,6 +3385,12 @@ l13newline.olang:7:10: error[L13]: character literal not closed on its line
     7 |     a := 'q
       |          ^~
 compilation failed with 1 error
+=== l13utf8char.olang
+l13utf8char.olang:5:10: error[L13]: a character literal holds one byte, and this character is several in UTF-8
+    5 |     c := '√•'
+      |          ^~~
+l13utf8char.olang:5:10: help: write the text in ""
+compilation failed with 1 error
 === l13widechar.olang
 l13widechar.olang:4:11: error[L13, L15]: a character literal holds one byte, and \u{...} there is below 80
     4 |     c := '\u{E9}'
@@ -3501,10 +3507,28 @@ l18semicolon.olang:7:36: error[L18]: olang has no ';'
 l18semicolon.olang:7:36: note: a statement ends where its line does
 l18semicolon.olang:7:36: help: put the next statement on a line of its own
 compilation failed with 1 error
+=== l1badutf8comment.olang
+l1badutf8comment.olang:4:11: error[L1]: invalid UTF-8 - olang source is UTF-8 text
+    4 |     # bad ¿Ø here
+      |           ^
+l1badutf8comment.olang:4:11: help: save the file as UTF-8 - a byte that is no text is written \xHH in a literal
+compilation failed with 1 error
+=== l1badutf8str.olang
+l1badutf8str.olang:4:12: error[L1]: invalid UTF-8 - olang source is UTF-8 text
+    4 |     s := "a√b"
+      |            ^
+l1badutf8str.olang:4:12: help: save the file as UTF-8 - a byte that is no text is written \xHH in a literal
+compilation failed with 1 error
 === l1junkline.olang
 l1junkline.olang:8:1: error[L16]: unexpected character ''
     8 | ?
       | ^
+compilation failed with 1 error
+=== l1nonasciiname.olang
+l1nonasciiname.olang:5:6: error[L1]: non-ASCII character outside a comment or literal - names and code are ASCII
+    5 |     p√• := 1
+      |      ^
+l1nonasciiname.olang:5:6: help: a name is ASCII letters, digits and '_' - non-ASCII text goes in a comment or a literal
 compilation failed with 1 error
 === l1nul.olang
 l1nul.olang:4:1: error[L1]: NUL byte in the source - is this a text file?
