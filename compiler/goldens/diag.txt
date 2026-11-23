@@ -4273,6 +4273,77 @@ o20storedrefoutlived.olang:19:9: error[O20]: the container outlives what this re
       |         ^
 o20storedrefoutlived.olang:19:9: help: build it where the container lives, or keep a copy ('$x', 'x.Copy()')
 compilation failed with 1 error
+=== o25gheldkeeps.olang
+o25gheldkeeps.olang:13:8: error[T22b]: 'keepFirst' keeps 'bs' in 'keep'
+   13 |     fs.Push(keepFirst)
+      |        ^~~~
+o25gheldkeeps.olang:13:8: note: the function type of this store says nothing of that
+$ROOT/std/prelude/vec.olang:68:24: note: in the standard library's code, here
+   68 |     v.data[v.n].occupy(x)
+      |                        ^
+o25gheldkeeps.olang:13:8: note: the functions given here followed into it (T22c)
+   13 |     fs.Push(keepFirst)
+      |        ^~~~
+o25gheldkeeps.olang:13:8: note: instantiated here, with T = fn&(mut Vec<mut N&>&, mut Vec<mut N&>&)
+   13 |     fs.Push(keepFirst)
+      |        ^~~~
+o25gheldkeeps.olang:13:8: help: write 'keeps bs in keep' after its signature
+compilation failed with 1 error
+=== o25gheldkeepsdirect.olang
+o25gheldkeepsdirect.olang:11:8: error[T22b]: 'keepFirst' keeps 'bs' in 'keep'
+   11 |     fs.Push(keepFirst)
+      |        ^~~~
+o25gheldkeepsdirect.olang:11:8: note: the function type of this store says nothing of that
+$ROOT/std/prelude/vec.olang:68:24: note: in the standard library's code, here
+   68 |     v.data[v.n].occupy(x)
+      |                        ^
+o25gheldkeepsdirect.olang:11:8: note: the functions given here followed into it (T22c)
+   11 |     fs.Push(keepFirst)
+      |        ^~~~
+o25gheldkeepsdirect.olang:11:8: note: instantiated here, with T = fn&(mut Vec<mut N&>&, mut Vec<mut N&>&)
+   11 |     fs.Push(keepFirst)
+      |        ^~~~
+o25gheldkeepsdirect.olang:11:8: help: write 'keeps bs in keep' after its signature
+compilation failed with 1 error
+=== o25gheldlambda.olang
+o25gheldlambda.olang:13:10: error[T22b]: this lambda keeps 'bs' in what it captured
+   13 |     h.on = fn(bs mut Vec<mut N&>&) {
+      |          ^
+o25gheldlambda.olang:13:10: note: the function type of this store says nothing of that
+o25gheldlambda.olang:13:10: help: write 'keeps bs' after its signature
+compilation failed with 1 error
+=== o25gheldnested.olang
+o25gheldnested.olang:12:8: error[T22b]: 'moveIn' keeps 'n' in 'vs'
+   12 |     fs.Push(moveIn)
+      |        ^~~~
+o25gheldnested.olang:12:8: note: the function type of this store says nothing of that
+$ROOT/std/prelude/vec.olang:68:24: note: in the standard library's code, here
+   68 |     v.data[v.n].occupy(x)
+      |                        ^
+o25gheldnested.olang:12:8: note: the functions given here followed into it (T22c)
+   12 |     fs.Push(moveIn)
+      |        ^~~~
+o25gheldnested.olang:12:8: note: instantiated here, with T = fn&(mut Vec<mut Vec<mut N&>&>&, mut N&)
+   12 |     fs.Push(moveIn)
+      |        ^~~~
+o25gheldnested.olang:12:8: help: write 'keeps n in vs' after its signature
+compilation failed with 1 error
+=== o25gheldthrough.olang
+o25gheldthrough.olang:13:8: error[T22b]: 'link' keeps 'other' in 'bs'
+   13 |     fs.Push(link)
+      |        ^~~~
+o25gheldthrough.olang:13:8: note: the function type of this store says nothing of that
+$ROOT/std/prelude/vec.olang:68:24: note: in the standard library's code, here
+   68 |     v.data[v.n].occupy(x)
+      |                        ^
+o25gheldthrough.olang:13:8: note: the functions given here followed into it (T22c)
+   13 |     fs.Push(link)
+      |        ^~~~
+o25gheldthrough.olang:13:8: note: instantiated here, with T = fn&(mut Vec<mut N&>&, mut N&)
+   13 |     fs.Push(link)
+      |        ^~~~
+o25gheldthrough.olang:13:8: help: write 'keeps other in bs' after its signature
+compilation failed with 1 error
 === oparity.olang
 oparity.olang:9:15: error[E31]: V's Plus takes 2 parameters besides its receiver
     9 |     t := V(1) + V(2)

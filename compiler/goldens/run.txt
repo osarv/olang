@@ -428,6 +428,7 @@
 | ok - E39: Sum<A> works every lane in A - byte products into I32, I8 past its range, BF16 and F16 into F32
 | ok - E39: Sum<A> of byte products at odd depths, every pairing of signedness, agrees with the loop written by hand
 | ok - E39: Sum<A>(n), the grouped total, agrees with the loop written by hand - vpdpbusd's groups of four bytes
+| ok - E39: x += (a * b).Sum<F32>(2) over BF16 is the pair dot - vdpbf16ps's rounding, the same everywhere
 === test tests/literals.olang
 | status 0
 | ok - literals make the type before their bracket
