@@ -6168,27 +6168,11 @@ fn laneDotsBody(name String&, d laneDotForm&) String {
     if d.Dp == 0: b.Push("  br label %t\nt:\n  br label %sh\n")
     else {
         vt := $"<" + $d.L + " x i32>"
-        b.Push("  br label %h\nh:\n  %j = phi i64 [ 0, %entry ], [ %j1, %pq ]\n")
-        b.Push($"  %j1 = add i64 %j, " + $d.L + "\n  %cj = icmp sle i64 %j1, %g\n  br i1 %cj, label %v, label %t\nv:\n")
-        b.Push("  %ap = getelementptr i32, ptr %a, i64 %j\n")
-        b.Push($"  %av = load " + $vt + ", ptr %ap, align 4" + $d.Tags.A + "\n  br label %p0\n")
-        for side in Array<String&>["p", "q"] {
-            o := $"%" + $side
-            tag := d.Tags.P if side == "p" else d.Tags.Q
-            b.Push($side + "0:\n  " + $o + "o = mul i64 %j, %" + $side + "s\n  " + $o + "a = getelementptr i8, ptr " + $o + ", i64 " + $o + "o\n")
-            b.Push($"  " + $o + "one = icmp eq i64 %" + $side + "s, 0\n  br i1 " + $o + "one, label %" + $side + "b, label %" + $side + "l\n")
-            b.Push($side + "b:\n  " + $o + "w = load i32, ptr " + $o + "a, align 1" + $tag + "\n")
-            b.Push($"  " + $o + "i = insertelement " + $vt + " poison, i32 " + $o + "w, i64 0\n")
-            b.Push($"  " + $o + "s1 = shufflevector " + $vt + " " + $o + "i, " + $vt + " poison, " + $vt + " zeroinitializer\n  br label %" + $side + "j\n")
-            b.Push($side + "l:\n  " + $o + "v1 = load " + $vt + ", ptr " + $o + "a, align 1" + $tag + "\n  br label %" + $side + "j\n")
-            b.Push($side + "j:\n  " + $o + "x = phi " + $vt + " [ " + $o + "s1, %" + $side + "b ], [ " + $o + "v1, %" + $side + "l ]\n")
-            b.Push($"  br label %" + $("q0" if side == "p" else "pq") + "\n")
-        }
-        b.Push($"pq:\n  %r = call " + $vt + " @llvm.x86.avx512.vpdpbusd." + $d.Dp + "(" + $vt + " %av, " + $vt + " %px, " + $vt + " %qx)\n")
-        b.Push($"  store " + $vt + " %r, ptr %ap, align 4" + $d.Tags.A + "\n  br label %h\nt:\n  br label %sh\n")
+        op := $"call " + $vt + " @llvm.x86.avx512.vpdpbusd." + $d.Dp + "(" + $vt + " %avK, " + $vt + " %pxK, " + $vt + " %qxK)"
+        dotsSteps(b, d.L, "i32", vt, "i8", 1, op, d.Tags)
     }
     # the groups left, one by one
-    from := "0" if d.Dp == 0 else "%j"
+    from := "0" if d.Dp == 0 else "%jt"
     b.Push($"sh:\n  %k = phi i64 [ " + $from + ", %t ], [ %k1, %sb ]\n  %ck = icmp slt i64 %k, %g\n  br i1 %ck, label %sb, label %done\nsb:\n")
     b.Push($"  %akp = getelementptr i32, ptr %a, i64 %k\n  %s0 = load i32, ptr %akp, align 4" + $d.Tags.A + "\n")
     b.Push("  %pko = mul i64 %k, %ps\n  %qko = mul i64 %k, %qs\n")
@@ -6224,26 +6208,11 @@ fn (e mut Emitter&) pairDotsFn(tags laneTags) String {
     b.Push($"define linkonce_odr hidden void @" + $name + "(ptr %a, ptr %p, ptr %q, i64 %g, i64 %ps, i64 %qs) alwaysinline #0 {\nentry:\n")
     if dp == 0: b.Push("  br label %t\nt:\n  br label %sh\n")
     else {
-        b.Push("  br label %h\nh:\n  %j = phi i64 [ 0, %entry ], [ %j1, %pq ]\n")
-        b.Push($"  %j1 = add i64 %j, " + $l + "\n  %cj = icmp sle i64 %j1, %g\n  br i1 %cj, label %v, label %t\nv:\n")
-        b.Push($"  %ap = getelementptr float, ptr %a, i64 %j\n  %av = load " + $ft + ", ptr %ap, align 4" + $tags.A + "\n  br label %p0\n")
-        for side in Array<String&>["p", "q"] {
-            o := $"%" + $side
-            tag := tags.P if side == "p" else tags.Q
-            b.Push($side + "0:\n  " + $o + "o = mul i64 %j, %" + $side + "s\n  " + $o + "a = getelementptr i16, ptr " + $o + ", i64 " + $o + "o\n")
-            b.Push($"  " + $o + "one = icmp eq i64 %" + $side + "s, 0\n  br i1 " + $o + "one, label %" + $side + "b, label %" + $side + "l\n")
-            b.Push($side + "b:\n  " + $o + "w = load i32, ptr " + $o + "a, align 2" + $tag + "\n")
-            b.Push($"  " + $o + "i = insertelement " + $it + " poison, i32 " + $o + "w, i64 0\n")
-            b.Push($"  " + $o + "s1 = shufflevector " + $it + " " + $o + "i, " + $it + " poison, " + $it + " zeroinitializer\n  br label %" + $side + "j\n")
-            b.Push($side + "l:\n  " + $o + "v1 = load " + $it + ", ptr " + $o + "a, align 2" + $tag + "\n  br label %" + $side + "j\n")
-            b.Push($side + "j:\n  " + $o + "x = phi " + $it + " [ " + $o + "s1, %" + $side + "b ], [ " + $o + "v1, %" + $side + "l ]\n")
-            b.Push($"  br label %" + $("q0" if side == "p" else "pq") + "\n")
-        }
-        b.Push($"pq:\n  %r = call " + $ft + " asm \"vdpbf16ps $2, $1, $0\", \"=v,v,v,0\"(" + $it + " %px, " + $it + " %qx, " + $ft + " %av)\n")
-        b.Push($"  store " + $ft + " %r, ptr %ap, align 4" + $tags.A + "\n  br label %h\nt:\n  br label %sh\n")
+        op := $"call " + $ft + " asm \"vdpbf16ps $2, $1, $0\", \"=v,v,v,0\"(" + $it + " %pxK, " + $it + " %qxK, " + $ft + " %avK) nounwind memory(none)"
+        dotsSteps(b, l, "float", it, "i16", 2, op, tags)
     }
     # the groups left, one by one
-    from := "0" if dp == 0 else "%j"
+    from := "0" if dp == 0 else "%jt"
     b.Push($"sh:\n  %k = phi i64 [ " + $from + ", %t ], [ %k1, %sb ]\n  %ck = icmp slt i64 %k, %g\n  br i1 %ck, label %sb, label %done\nsb:\n")
     b.Push($"  %akp = getelementptr float, ptr %a, i64 %k\n  %s0 = load float, ptr %akp, align 4" + $tags.A + "\n")
     pairFlush(b, "%s0", "s")
@@ -6264,6 +6233,48 @@ fn (e mut Emitter&) pairDotsFn(tags laneTags) String {
     b.Push($"  store float %f0, ptr %akp, align 4" + $tags.A + "\n  %k1 = add i64 %k, 1\n  br label %sh\ndone:\n  ret void\n}\n")
     e.item(name, HomeShared, b.ToString())
     return name
+}
+
+# a LaneDots helper's vector steps, l lanes of type ae a step, from entry to t, where %jt is the first group left: each
+# step loads l lanes of %a, adds into them the step's p and q (vt, elements of type el and alignment al) by op (its text
+# naming the lanes %avK and the operands %pxK, %qxK) and stores them. Which operand is shared (stride 0)
+# is tested once, before the loop - four loops, one for each answer - and a shared operand's group is loaded and
+# broadcast there, once; so the loop holds no branch and LLVM can keep the lanes in registers across a loop around it
+fn dotsSteps(b mut StringBuilder&, l I64, ae String&, vt String&, el String&, al I64, op String&, tags laneTags&) {
+    at := $"<" + $l + " x " + $ae + ">"
+    b.Push($"  %pone = icmp eq i64 %ps, 0\n  %qone = icmp eq i64 %qs, 0\n  %some = icmp sle i64 " + $l + ", %g\n")
+    b.Push("  br i1 %some, label %pre, label %t\npre:\n")
+    for side in Array<String&>["p", "q"] {
+        o := $"%" + $side
+        tag := tags.P if side == "p" else tags.Q
+        prev := "pre" if side == "p" else "pn"
+        b.Push($"  br i1 " + $o + "one, label %" + $side + "b, label %" + $side + "n\n" + $side + "b:\n")
+        b.Push($"  " + $o + "w = load i32, ptr " + $o + ", align " + $al + $tag + "\n")
+        b.Push($"  " + $o + "i = insertelement " + $vt + " poison, i32 " + $o + "w, i64 0\n")
+        b.Push($"  " + $o + "s1 = shufflevector " + $vt + " " + $o + "i, " + $vt + " poison, " + $vt + " zeroinitializer\n")
+        b.Push($"  br label %" + $side + "n\n" + $side + "n:\n  " + $o + "B = phi " + $vt + " [ " + $o + "s1, %" + $side + "b ], [ zeroinitializer, %" + $prev + " ]\n")
+    }
+    b.Push("  br i1 %pone, label %d1, label %d0\nd1:\n  br i1 %qone, label %h3, label %h1\nd0:\n  br i1 %qone, label %h2, label %h0\n")
+    for k in range 4 {
+        n := $k
+        b.Push($"h" + n + ":\n  %j" + n + " = phi i64 [ 0, %d" + $(k % 2) + " ], [ %n" + n + ", %v" + n + " ]\n")
+        b.Push($"  %n" + n + " = add i64 %j" + n + ", " + $l + "\n  %c" + n + " = icmp sle i64 %n" + n + ", %g\n")
+        b.Push($"  br i1 %c" + n + ", label %v" + n + ", label %t\nv" + n + ":\n  %ap" + n + " = getelementptr " + $ae + ", ptr %a, i64 %j" + n + "\n")
+        b.Push($"  %av" + n + " = load " + $at + ", ptr %ap" + n + ", align 4" + $tags.A + "\n")
+        step := $op.Replace("%avK", $"%av" + n)
+        for side in Array<String&>["p", "q"] {
+            shared := k % 2 == 1 if side == "p" else k / 2 == 1
+            o := $"%" + $side
+            x := $o + "x" + n
+            step = step.Replace($o + "xK", $o + "B" if shared else x)
+            if shared: continue
+            tag := tags.P if side == "p" else tags.Q
+            b.Push($"  " + $o + "o" + n + " = mul i64 %j" + n + ", %" + $side + "s\n  " + $o + "a" + n + " = getelementptr " + $el + ", ptr " + $o + ", i64 " + $o + "o" + n + "\n")
+            b.Push($"  " + $x + " = load " + $vt + ", ptr " + $o + "a" + n + ", align " + $al + $tag + "\n")
+        }
+        b.Push($"  %r" + n + " = " + $step + "\n  store " + $at + " %r" + n + ", ptr %ap" + n + ", align 4" + $tags.A + "\n  br label %h" + n + "\n")
+    }
+    b.Push("t:\n  %jt = phi i64 [ 0, %entry ], [ %j0, %h0 ], [ %j1, %h1 ], [ %j2, %h2 ], [ %j3, %h3 ]\n  br label %sh\n")
 }
 
 # %r: the float v, or the zero of its sign where its exponent bits are zero (a subnormal: vdpbf16ps's DAZ and FTZ)
