@@ -7,11 +7,13 @@ Written for a fresh OLang Cloud session. The previous one stopped because its co
 2. The review notes `/home/user/review9.md`, `review10.md`, `review11.md` and `review12.md`, and `docs/freeing.md` section 2.4, "Still open".
 
 ## In progress
-- **wt-spawnrelease** (worktree `/home/user/wt/spawnrelease`, branch `wt-spawnrelease`): both steps are built and committed (fddf3e0d1: the spawn lets go of the old value, and the task builds the new one in a region of its own; a269aaaf3: records; then goldens). Its agent was finishing its checks when the session stopped. It may push one more goldens commit (09d0495cd); check that the branch head matches the worktree, and push if not.
-  - The case: a spawn target declared outside a loop (`r Vec<String>`, then `join: spawn r = build(i)` each turn) never released its old value. That is about 9 KB a turn, while `-memory -check` reported 0 kept, a false proof.
-  - Step 1: make `-check` name the keep.
-  - Step 2: release the previous value at the reassignment once the spawner owns it after the join's wait (decided by the Orchestrator as an extension of the user's option (c)).
-  - Before merging, run a soundness review on the branch (Opus high, like review12), then a merge steward with `make quick` and `make race` on the merged tree.
+- **wt-spawnrelease** (branch `wt-spawnrelease` at 8931c644e, rebased on master f689d46d5, not merged; worktree `/home/user/wt/spawnrelease`):
+  - **Status:** done and checked, but it still needs a soundness review (Opus high, like review12) before merging.
+  - **What it does:** a spawn target declared outside its loop is released by the spawner at the spawn, before the task starts. The task builds the new value in a region of its own, owned by the worker.
+  - **Measured:** the review12 shape stays at 2 MB over 200k turns, where master reaches 911 MB. Fixture: checks' freeing `spawnlocal`. `-check` names every target that still keeps.
+  - **Checks passed:** make quick, the fixed point (byte-identical), make race, and the freeing and earlyfree scenarios.
+  - **Still open:** a `String` or array target keeps (now named). A struct target frees, but `-check` reports it as the already-known gap for a plain assignment.
+  - **The review should attack:** sibling tasks reaching the released value, a failing task, views across the spawn, and the two new runtime functions in runtime.ll. Probes: /tmp/claude-0/sr (run.sh) and review12's a1-a9.
 
 ## Queue, in order
 1. Finish, review and merge wt-spawnrelease.
