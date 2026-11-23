@@ -57,6 +57,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     P
     Bodies
     Plans Vec<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
+    NoPlan typed.Plan = typed.Plan(0, 0, 0)   # the stand-in placement's: what a body or helper without a plan reads
     fx mut effects.Effects?& = null    # P2: what a task's callee may do (buildsFact), made when first asked
     buildsDecided Map<I64, Bool>       # ...the bodies whose fact is decided
     Exclusive Map<I64, I64>            # O43: by body, its exclusive parameters (effects.Exclusive), where its type allows any
@@ -277,15 +278,11 @@ fn (lw mut Lowerer&) lowerAs(id I64, t I64) mir.Fn& {
         ex := lw.P.PreludeType("std/prelude/iterator", "Exhausted")
         if ex != types.UnknownT: f.GenEnd = mir.ErrorCode(lw.P.T, lw.P.T.Errors(b.Ty), ex, 0)
     }
-    ln mut lowering& = lowering(lw, b, lw.P.T, f)
+    # (the plan read where the Lowerer keeps it: the helper holds no copy, so it lives as long as this function's
+    # result, not as long as the Lowerer - field scopes, docs/fieldscopes.md)
+    ln mut lowering& = lowering(lw, b, lw.P.T, f, lw.planFor(id, t))
     ln.file = b.File
-    if t >= 0 {
-        ln.planned = true
-        ln.plan = lw.TwinPlans[t]
-    } else if id < lw.Plans.Len() {
-        ln.planned = true
-        ln.plan = lw.Plans[id]
-    }
+    ln.planned = t >= 0 or id < lw.Plans.Len()
     ln.freeing = t < 0 and lw.Free != null and lw.Free!.Frees(id)
     lw.ReadGen(-1)   # (what a helper lowered before asked is not this body's)
     ln.run()
@@ -293,6 +290,13 @@ fn (lw mut Lowerer&) lowerAs(id I64, t I64) mir.Fn& {
     lw.ReadGen(b.File)
     lw.Gapped = ln.gapped
     return ln.F
+}
+
+# the plan body id is lowered with as twin t (-1 for the body itself): the twin's, the body's, else the stand-in's
+fn (lw Lowerer&) planFor(id I64, t I64) typed.Plan& {
+    if t >= 0: return lw.TwinPlans[t]
+    if id < lw.Plans.Len(): return lw.Plans[id]
+    return lw.NoPlan
 }
 
 # the plan the code a key names was lowered with (a twin's own, else its body's) - an empty one for anything else
@@ -426,7 +430,7 @@ fn (lw mut Lowerer&) anyRender(ti I64, top Bool) mir.Fn {
     tab := lw.P.AnyTables.Ref(ti)
     hty := mir.HelperType(lw.P.T, mir.HelperKind.Render, tab.Stored)
     b := standIn(hty)
-    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.AnyRender(ti, top), hty))
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.AnyRender(ti, top), hty), lw.NoPlan)
     sp := source.Span(0, 0)
     ln.prologue(Array<mir.VarKind>[mir.VarKind.Builder])
     ln.rdepth = mir.Operand.Copy(mir.Lvalue.L(mir.LocalId(1)))
@@ -522,7 +526,7 @@ type pl struct(B mir.Base) {
     PkTy types.TypeId           # written through the whole value at Ps[:Pk], of type PkTy
 }
 
-type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut mir.Fn&) {
+type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut mir.Fn&, given typed.Plan&) {
     L
     B
     T
@@ -567,7 +571,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     taskCopy I64 = -1       # the call whose value a task's by-value argument is: its copy (D9h) made in the join's scope (O8f)
     adoptSite typed.SiteId = typed.SiteId(-1)    # a fresh array promoted (promote): made at the reference's scope
     adoptAt mir.ScopeRef = mir.ScopeRef.Program
-    plan typed.Plan = typed.Plan(0, 0, 0)
+    plan typed.Plan& = given  # the scope pass's plan for B where planned, else the Lowerer's stand-in
     freeing Bool = false            # whether this body frees early what sole places let go of (O8d, free.Frees)
     regions Map<I64, mir.LocalId>   # the regions made for sites being lowered (plan.RegionKind), by site
     regionPar Map<I64, mir.ScopeRef> # ... and the scope each is a kid of (a split copy's other parts go there)
@@ -7948,7 +7952,7 @@ fn (lw mut Lowerer&) index() {
 fn (lw mut Lowerer&) helper(kind mir.HelperKind, t types.TypeId) mir.Fn {
     hty := mir.HelperType(lw.P.T, kind, t)
     b := standIn(hty)
-    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Helper(kind, t), hty))
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Helper(kind, t), hty), lw.NoPlan)
     ln.helper(kind, t)
     lw.Gapped = ln.gapped
     return ln.F
@@ -8847,7 +8851,7 @@ fn (lw mut Lowerer&) adapterFn(call typed.BodyId) mir.Fn {
     for i in range rest.Len(): rest[i] = ps[i + 1]
     ty := lw.P.T.Func(lw.P.T.List(rest), lw.P.T.Result(cty), lw.P.T.Errors(cty))
     b := standIn(ty)
-    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Adapter(call), ty))
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Adapter(call), ty), lw.NoPlan)
     ln.adapterBody(call, cty, ps[0])
     lw.Gapped = ln.gapped
     return ln.F
@@ -8917,7 +8921,7 @@ fn (lw mut Lowerer&) CodeOf(body typed.BodyId) mir.FnKey {
 fn (lw mut Lowerer&) copiedFn(body typed.BodyId) mir.Fn {
     ty := lw.Bodies[I64(body)].Ty
     b := standIn(ty)
-    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Copied(body), ty))
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Copied(body), ty), lw.NoPlan)
     ln.copiedBody(body, ty)
     lw.Gapped = ln.gapped
     return ln.F
@@ -8963,7 +8967,7 @@ fn (ln mut lowering&) copiedBody(body typed.BodyId, ty types.TypeId) {
 fn (lw mut Lowerer&) initFn(m I64) mir.Fn {
     ty := lw.P.T.Func(types.ListId(0), types.VoidT, types.ListId(0))
     b := standIn(ty)
-    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Init(m), ty))
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Init(m), ty), lw.NoPlan)
     ln.prologue(Array<mir.VarKind>[])
     for i in lw.P.InitOrder {
         match lw.Bodies[i].Of {
