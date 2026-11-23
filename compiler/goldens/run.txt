@@ -2553,6 +2553,8 @@
 | status 0
 === run fieldscopelookup.olang
 | status 0
+=== run fieldscopepart.olang
+| status 0
 === run fieldscoperepoint.olang
 | status 0
 === run fieldscopereturn.olang

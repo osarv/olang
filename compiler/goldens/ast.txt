@@ -677,6 +677,7 @@ a28aa635925cccf7 c98d9b3ae533b429 checks/cases/fieldscopectx.olang
 ec8460b0c900f370 4ba1295c0b1989d5 checks/cases/fieldscopeflat.olang
 cf3d6a267c8312c8 6842c814e555318d checks/cases/fieldscopegeneric.olang
 6eb386715b0f99eb f0d8a6b9174d335a checks/cases/fieldscopelookup.olang
+d44baec6a193674d 0de6de7524a8ddb5 checks/cases/fieldscopepart.olang
 7c83fc47da681d6a cd579b2e11eb1c82 checks/cases/fieldscoperepoint.olang
 02bbfccaea58abea d58dd6e022d681d7 checks/cases/fieldscoperepointshort.olang
 8baeda651c0ad235 968a62fb03b9efe6 checks/cases/fieldscopereturn.olang
@@ -2538,7 +2539,7 @@ e2b2b02653bc4b63 28b9ec011557160d compiler/prompt.olang
 e7ba5bcc74b12eea 1ae5eae57a5881f5 compiler/records.olang
 0c3f8c24752ad48a 95536513b050b2a4 compiler/runtime.olang
 74927aaea47abc0f 36130c34ac2dc3c0 compiler/scan.olang
-f07566633a1ffd95 917feb1d12db7319 compiler/scope.olang
+81739bc5f8e3212f bcabab1da63c2448 compiler/scope.olang
 ad0b24259637a1f2 b4e672fd8bdacd75 compiler/session.olang
 8981299fcf27ba06 e84af040edacca63 compiler/source.olang
 9bee4e94ca053127 837a4be40276ab63 compiler/spin.olang
