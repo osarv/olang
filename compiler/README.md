@@ -7,7 +7,7 @@ pass, and the bootstrap. `goldens/` keeps recorded output (diagnostics, edge cas
 The pipeline: the front end (source, tokens, parser, diagnostics, loader, name resolution) and the type table; the
 typed core and the MIR; checking (`check.olang`), the scope pass (`scope.olang`) and lowering (`lower.olang`, which reads
 the scope pass's placement); emission (`emit.olang`), which writes one LLVM object per module (and one for the root's
-instances), compiled by clang and linked with the runtime (`make emitdiff` compares whole programs with the recorded output); and evaluation (`eval.olang`, `interp.olang`), which runs what lowering makes -
+instances), compiled by clang and linked with the runtime; and evaluation (`eval.olang`, `interp.olang`), which runs what lowering makes -
 while compiling (B9c, S8b, S18c) and as `OLANG_EVALUATE=1 olang FILE` (`make evaldiff`, the testing tools' route, not an option); `olang FILE` itself builds the program into the cache as `build` does and runs it (B3g). The driver (`olang.olang`,
 `build/compiler_olang`) builds, runs, tests, compiles and interprets through the pipeline, with the runtime filled in
 by `runtime.olang`; it builds itself (`build/compiler_olang build -output build/stage1
@@ -82,13 +82,12 @@ which builds the optimized one); `make fixedpoint` checks that compiler builds i
   make of a file), `checkdump.olang` (what the checker says of a program), `scopedump.olang` (what the
   scope pass says of a program, `-plan` for its placement), `drvdiff.olang` (the driver's command lines
   and whole builds against the goldens), `lowerdump.olang` (every function of a program lowered and verified, `-mir` to dump, `-standin`
-  for the placement of before the scope pass), `emitdump.olang` (a program written as LLVM IR), `emitdiff.olang`
-  (programs built by the pipeline, run, and their outcomes compared), `evaldiff.olang` (the built runs
+  for the placement of before the scope pass), `evaldiff.olang` (the built runs
   against `OLANG_EVALUATE=1 olang test`'s and `OLANG_EVALUATE=1 olang FILE`'s, the interpreter's known differences listed by name - in
   `make verify`, a file a target: `interp@FILE`),
   `consistency.olang` (the parts that must agree, held to each other: `make consistency`, DEPENDENTS.md), `seed.olang` (writes the bootstrap seed, `make seed` - `seed/README.md`), `diaggold.olang`, `nesting.olang` (every function of compiler/ with its deepest block nesting and its length, worst first: `build/olang build compiler/tools/nesting.olang && build/compiler_tools_nesting [-n N] [FILE...]`), `memgate.olang` (the suite's memory gate: a command started once the machine has the memory its last run peaked at - `peaks.txt` the committed figures, `-table` the measured ones; docs/testmem.md).
 - `goldens/` - recorded output: `drv.txt` (the driver's command lines and whole builds), `run.txt` (the
-  corpus's and std's test runs and the checks' run cases, for emitdiff and evaldiff), `tokens.txt`/`tokens.full.txt` and
+  corpus's and std's test runs and the checks' run cases, for the suite and evaldiff), `tokens.txt`/`tokens.full.txt` and
   `ast.txt`/`ast.full.txt` (a hash per file of the C tokenizer's stream and the C parser's tree, whole for small files
   with errors - a file edited since is stale, and `make tokgold astgold` captures it again from the port), `modgraph.txt` (module
   graphs per root), `diag.txt` (diagnostics per checks case), `layout.txt` and
@@ -114,7 +113,6 @@ make fmtdiff       # every file formatted reads back as the same tree, keeps its
 make drvdiff       # the driver says what the goldens say: command lines decided before code generation, and whole builds
 make lowerdump     # every body and helper of the corpus and the checks' run cases lowered to MIR and verified
 make dumptool      # scopedump's own module compiled - the dump tools still check (in the suite)
-make emitdiff      # the corpus and std's tests built through emit, run, and each test's outcome compared with the goldens'
 make evaldiff      # the corpus, std's tests and the checks' run cases interpreted, compared with the built runs
 ```
 

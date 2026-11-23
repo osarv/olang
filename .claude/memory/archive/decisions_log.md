@@ -3892,3 +3892,9 @@ Answered 2026-11-18 (the user, via the Orchestrator: "Go with B, yes"): no rule;
    unspecified), as BLAS does.
    Withdrawn (2026-11-23): the order was found (HISTORY "tdpbf16ps's arithmetic, found"), so AddDot can be bit-exact
    on every target and B12c holds; nothing to decide.
+
+1. (2026-11-23, asked via the Orchestrator) `make emitdiff` (port-era acceptance tool, not in verify) runs again, but 5
+   of 152 files differ through its own harness only (emitdump links no C imports or libssl; lacks the driver's
+   whole-program twins/followed functions). Bring emitdump up to the driver, or retire emitdiff? Default: leave as is.
+   Recommendation: retire it - the suite and fixedpoint cover it; a second emit path costs more to keep than it catches.
+   Answered (the user, 2026-11-23, via the Orchestrator): retire it - emitdiff and emitdump removed.

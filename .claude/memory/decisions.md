@@ -21,7 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-1. (2026-11-23, asked via the Orchestrator) `make emitdiff` (port-era acceptance tool, not in verify) runs again, but 5
-   of 152 files differ through its own harness only (emitdump links no C imports or libssl; lacks the driver's
-   whole-program twins/followed functions). Bring emitdump up to the driver, or retire emitdiff? Default: leave as is.
-   Recommendation: retire it - the suite and fixedpoint cover it; a second emit path costs more to keep than it catches.
+(none)
