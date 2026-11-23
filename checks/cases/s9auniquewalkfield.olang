@@ -1,0 +1,14 @@
+# check: fail error[T25b]: this writes through a read-only reference
+# S9a, T13b: a walk names a unique element by a read-only reference - its value, borrowed - over a writable array too;
+# a field of it is written 'a[i].uses = 3'
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+fn (t mut Token&) Use() { t.uses++ }
+fn main() {
+    a := Array<Token>[Token(1), Token(2)]
+    w mut Array<Token>& = a
+    for t in w: t.uses = 3
+    Println(a[0].uses)
+}

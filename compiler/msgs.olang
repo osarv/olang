@@ -484,6 +484,7 @@ type Diag enum {
     NoteGroupFunctionType
     NoteReadOnlyCopy
     NoteReadOnlyCopyOf
+    NoteWalkUnique
     TypeNotInferable
     DeclFromNull
     BuildIntoUnknownScope
@@ -1523,6 +1524,7 @@ fn ReadOnlyCopyLent(text String&) r.Msg { return r.Msg(Diag.ReadOnlyCopyLent, "T
 fn ReadOnlyCopyWrite() r.Msg { return r.Msg(Diag.ReadOnlyCopyWrite, "T25c", "this writes through a reference a read-only copy holds", "a copy of a place reached read-only writes nothing it shares") }
 fn ReadOnlyFuncValue(text1 String&, text2 String&, text3 String&) r.Msg { return r.Msg(Diag.ReadOnlyFuncValue, "T25c", $text1 + " cannot be a function value", "it writes through or keeps its by-value parameter '" + $text2 + "', and a caller of a function value may pass a read-only copy", "work on one of its own, made " + $text3) }
 fn NoteGroupFunctionType() r.Msg { return r.Msg(Diag.NoteGroupFunctionType, "", "a function type of several results or error items is parenthesized whole in a list: '(fn&(x I64) I64, I64)'") }
+fn NoteWalkUnique(n String&) r.Msg { return r.Msg(Diag.NoteWalkUnique, "", "'" + n + "' is a unique element's value, borrowed read-only (S9a) - change the element where it is, 'for i, " + n + " in a: a[i].M()'") }
 fn NoteReadOnlyCopy(text String&) r.Msg { return r.Msg(Diag.NoteReadOnlyCopy, "", "'" + $text + "' copies a place reached read-only, so it is read-only") }
 fn NoteReadOnlyCopyOf(text1 String&, text2 String&, text3 String&, text4 String&) r.Msg { return r.Msg(Diag.NoteReadOnlyCopyOf, "", "'" + $text1 + "' copies '" + $text2 + "', reached read-only, so it is read-only - '" + $text3 + " := " + $text4 + ".Clone()' would be one of its own") }
 fn TypeNotInferable() r.Msg { return r.Msg(Diag.TypeNotInferable, "D15", "':=' has no type to take from this initializer", "':=' takes its type from the initializer, and a call returning nothing has none") }

@@ -1,0 +1,14 @@
+# check: fail error[T25c]: a read-only reference cannot become writable
+# S9a, T13b: a walk names a unique element by a read-only reference - its value, borrowed - over a writable array too;
+# a change to it is written 'a[i].Use()'
+type Token unique struct(id I64) {
+    id
+    uses I64 = 0
+}
+fn (t mut Token&) Use() { t.uses++ }
+fn main() {
+    a := Array<Token>[Token(1), Token(2)]
+    w mut Array<Token>& = a
+    for t in w: t.Use()
+    Println(a[0].uses)
+}

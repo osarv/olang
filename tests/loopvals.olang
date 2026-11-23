@@ -47,7 +47,7 @@ test "a reference element is the reference: a write through it reaches the refer
     total I64 = 0
     for r in refs: total += r.x
     assert total == 3
-    ws := Vec<Link>[]
+    ws := Vec<Link>()
     ws.Push(Link(1, a))
     ws.Push(Link(2, b))
     for l in ws: l.to.x += l.n * churn()
@@ -101,4 +101,44 @@ Snapshot I64 = snapshot()
 
 test "the baked global agrees" {
     assert Snapshot == 1221 and snapshot() == 1221
+}
+
+type Named struct(n I64, name String, me mut Named?&) {
+    n
+    name
+    me
+}
+
+test "an element holding text, written through its own reference: the name keeps what the slot held" {
+    a := Array<Named>[Named(1, $"one", null), Named(2, $"two", null)]
+    a[0].me = a[0]
+    a[1].me = a[1]
+    for x in a {
+        was := $x.name
+        x.me!.name = $x.name + "!" + $churn()
+        x.me!.n += 10
+        assert x.name == was and x.n < 10
+    }
+    n := churn()
+    assert a[0].name == "one!" + $n and a[1].name == "two!" + $n and a[0].n == 11 and a[1].n == 12
+}
+
+fn selfSlot() I64 {
+    a := Array<Node>[Node(1, null), Node(2, null)]
+    a[0].self = a[0]
+    a[1].self = a[0]
+    seen I64 = 0
+    for x in a {
+        x.self!.v += 10
+        seen = seen * 100 + x.v
+    }
+    return seen * 1000 + a[0].v * 10 + a[1].v
+}
+
+# the evaluator snapshots the element as the build does
+assert selfSlot() == 102212
+SelfSlot I64 = selfSlot()
+
+test "the self-slot snapshot, baked, agrees" {
+    assert SelfSlot == 102212 and selfSlot() == 102212
 }

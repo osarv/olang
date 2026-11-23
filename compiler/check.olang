@@ -326,6 +326,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # a for-in's hidden borrow of a value, by (body, local): whether that value is reached read-only
     roCopies Map<pair.Pair<I64, I64>, source.NameId>
     roBorrows Map<pair.Pair<I64, I64>, Bool>
+    walkUnique Map<pair.Pair<I64, I64>, Bool>   # S9a, T13b: the for-in names of unique elements, read-only, by (body, local)
     # a reference local made from a place, by (body, local): the place, and whether the reference names its storage (a
     # borrow, a slice, a view) rather than having been read out of it - what read-only copies and parameters reach
     roFrom Map<pair.Pair<I64, I64>, roOrigin>
@@ -5937,8 +5938,13 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
         case typed.Lvalue.Deref(_, _, ref) {
             rt := typeOf(ref)
             if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 {
-                if c.capturedValue(ref): c.err(sp, msgs.CaptureReadOnly())
-                else: c.noteWritable(c.err(sp, msgs.ReadOnlyRefWrite()), ref)
+                if c.capturedValue(ref) {
+                    c.err(sp, msgs.CaptureReadOnly())
+                } else {
+                    rec := c.err(sp, msgs.ReadOnlyRefWrite())
+                    c.noteWritable(rec, ref)
+                    c.noteWalkUnique(rec, ref)
+                }
             } else if c.isRef(rt) and c.roRoot(readPlace(unwrapped(ref))) >= 0 {
                 # T25c: a read-only copy writes nothing through the writable references it shares
                 rec := c.err(sp, msgs.ReadOnlyCopyWrite())
@@ -7774,7 +7780,7 @@ fn (c mut Checker&) fitRefs(x typed.Expr&, have types.TypeId, want types.TypeId,
             c.err(sp, msgs.TextWrite() if hr == c.textType() else msgs.ImmutWrite(c.ty(hr)))
             return x
         }
-        c.err(sp, msgs.ReadOnlyToWritable())
+        c.noteWalkUnique(c.err(sp, msgs.ReadOnlyToWritable()), x)
         return x
     }
     if (c.P.T.PermOf(want) & types.Writable) != 0 and not c.roWritableRef(x, sp): return x
@@ -23466,6 +23472,7 @@ fn (c mut Checker&) walkRuns(sp source.Span, f ast.ForIn&, src typed.Expr&, runs
     base typed.Lvalue& = typed.Lvalue.Deref(sp, c.deref(rt), c.readLocal(sp, run))
     e := c.read(sp, typed.Lvalue.Elem(sp, c.P.T.Elem(ra), typed.Elem(base, c.readLocal(sp, j), typed.Check.None)))
     c.elementLocals(sp, f, k, e if cm != null else c.uniqueRef(e, sp, false, true))
+    c.markWalkUnique(c.localNamed(f.Name), c.P.T.Elem(ra))
     c.walkBody(f, cm, ce)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
@@ -23510,6 +23517,26 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&, a
     c.emit(c.addTo(sp, k, c.lit(sp, c.i64(), 1)))
     pb := c.close(pid, pouter, pmark, pfrom)
     c.emit(typed.Stmt.Loop(sp, b, pb))
+}
+
+# S9a, T13b: a walk's name x of an array whose element type is et, where it names a unique element by a read-only
+# reference - for the note at a change through it (noteWalkUnique)
+fn (c mut Checker&) markWalkUnique(x I64, et types.TypeId) {
+    if x >= 0 and not c.isRef(et) and c.P.Unique(et): c.walkUnique.Put(c.roKey(x), true)
+}
+
+# the note at a change through a walk's name of a unique element: it is the element's value, borrowed (S9a)
+fn (c mut Checker&) noteWalkUnique(rec I64, x typed.Expr&) {
+    p := readPlace(unwrapped(x))
+    if p == null: return
+    match p {
+        case typed.Lvalue.Local(_, _, id) {
+            if not c.walkUnique.Has(c.roKey(I64(id))): return
+            l := c.cur().Local(id)
+            c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteWalkUnique(c.text(l.Name)))
+        }
+        case _ { }
+    }
 }
 
 # T13b: the Ref a walk of an indexable collection holding unique elements names each one with - one index, a reference
@@ -23669,6 +23696,7 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
     }
     c.roLet(x, e!) # T25c: an element of a collection reached read-only is a read-only copy
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(x)), e!))
+    if coll >= 0: c.markWalkUnique(x, c.P.T.Elem(at))
     if c.rangeNow.Loop == 0 and coll < 0: c.rangeKnown.Put(pair.Pair(c.fr().Body, x), knownRange(c.rangeNow.Lo, c.rangeNow.Last, id))
     c.rangeNow = knownRange(0, -1, -1)
     c.walkBody(f, cm, ce)
