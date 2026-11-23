@@ -383,4 +383,3 @@ tools/variadic_migrate.olang 371
 build/compiler_tools_checkdump 3700
 build/compiler_tools_scopedump 3700
 build/compiler_tools_lowerdump 3700
-build/compiler_tools_emitdump 3700

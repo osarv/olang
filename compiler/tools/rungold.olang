@@ -1,4 +1,4 @@
-# rungold [COMPILER] - captures compiler/goldens/run.txt, the stored runs emitdiff and evaldiff hold the port's programs to
+# rungold [COMPILER] - captures compiler/goldens/run.txt, the stored runs evaldiff holds the evaluator to
 # (compiler/tools/toolkit.olang says the format): every file of tests of the corpus and std run as "COMPILER test FILE"
 # runs it, from the repository root, its status and its tests' endings kept; and every checks case that must run
 # ("# check: run") built and run as checks/checks.olang does - copied into a directory of its own, "COMPILER build
@@ -51,7 +51,7 @@ fn main() {
                  $given + " into " + $golden + "\n"))
 }
 
-# the files of tests emitdiff and evaldiff run by default: the corpus, std, std's prelude's tests
+# the files of tests evaldiff runs by default: the corpus, std, std's prelude's tests
 fn TestFiles() Vec<String&> {
     l := Vec<String&>()
     for d in Array<String&>["tests", "std", "std/prelude/tests"] {

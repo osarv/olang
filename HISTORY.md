@@ -42538,6 +42538,12 @@ tool's own harness, not the compiler - tests/cfnptr, tests/cimport and std/tls d
 import or libssl), tests/follow and tests/reclaim fail only under emitdump's path (the twins and followed functions the
 driver's whole-program steps give; the real compiler passes both), and the runtime row differs from the driver's.
 
+## 2026-11-23: emitdiff retired (the user's call; wt-noemitdiff)
+
+The port-era acceptance tool (compiler/tools/emitdiff.olang and its emitter emitdump.olang, `make emitdiff`, never in
+verify) is removed: the suite and the self-build fixed point cover what it held the port to, and its second emit path had
+drifted from the driver (C imports, libssl, the whole-program steps).
+
 ## 2026-11-23: UTF-8 in literals and comments (L1; mine; wt-utf8src)
 
 oagent writes Swedish words in its rules and had to spell å, ä and ö as `\u{..}` escapes; olang aims at natural
