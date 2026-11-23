@@ -110,6 +110,15 @@
 | ok - comptime gives constant data
 | ok - comptime for unrolls
 | ok - the evaluator agrees
+=== test tests/condimport.olang
+| status 0
+| ok - M13, B9c: a generic function's instance through an import a decided condition adds
+=== test tests/condimportcycle.olang
+| status 0
+| ok - M13, B9c: a chain through a decided import, inside an import cycle
+=== test tests/condimportx.olang
+| status 0
+| ok - M13, B9c: the decided import is part of the module
 === test tests/condnull.olang
 | status 0
 | ok - all: the null branch arrives as null, the other branch as the array, through every kind of callee

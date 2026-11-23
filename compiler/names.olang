@@ -97,6 +97,7 @@ type Resolver struct(L mut load.Loader&) {
     preludeConsts Map<source.NameId, Ref>  # M19d: an exported immutable global of the prelude ("Pi"): where it is
     uses Map<I64, Ref>                     # by where a name is written: its file and offset
     members Map<I64, Ref>                  # by where a member's name ends: x.y through an import's alias
+    missing Map<I64, I64>                  # M9: by where a type's path is written, the module its last name is not in
     # the item being resolved
     mi I64 = -1
     locals Vec<local>
@@ -401,6 +402,12 @@ fn (r Resolver&) Use(file I64, at I32) Ref {
 # what the member whose name ends at that offset is, where its base is an import's alias
 fn (r Resolver&) Member(file I64, end I32) Ref {
     return try r.members.Get(key(file, end)) catch default Ref(What.None, -1, -1)
+}
+
+# M9: the module an alias-qualified type path written at (file, at) reached, which declares no type of its last name,
+# or -1 - the checker says so (Checker.notInModule)
+fn (r Resolver&) MissingIn(file I64, at I32) I64 {
+    return try r.missing.Get(key(file, at)) catch default -1
 }
 
 # where the parameter, local or type variable a Ref of kind Local or TypeVar names is declared - its Index (B15)
@@ -1781,6 +1788,7 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
         last := path[path.Len() - 1]
         ref := r.memberOf(t, last)
         r.notPrivate(t, ref, last, source.Span(sp.End - I32(r.text(last).Len()), sp.End))
+        if ref.Kind == What.None and not r.survey: r.missing.Put(key(r.L.Mods[r.mi].File, sp.Start), t)
         r.record(sp, ref)
         return
     }

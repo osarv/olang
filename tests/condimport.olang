@@ -1,0 +1,14 @@
+# M13, B9c: a chain through an import that only compile-time evaluation adds - condimportx.olang imports cyclepick.olang
+# under a condition calling a function - reaching a generic function as a value (ci.Pk.First<I64>, no call after it:
+# only the parser's name oracle knows it lists type arguments). The importer is parsed again once the condition is decided.
+import ci "condimportx"
+
+fn firstThroughDecided() I64 {
+    first := ci.Pk.First<I64>
+    return first(7, 8)
+}
+
+test "M13, B9c: a generic function's instance through an import a decided condition adds" {
+    assert firstThroughDecided() == 7
+    assert ci.Pk.First<I64>(1, 2) == 1
+}

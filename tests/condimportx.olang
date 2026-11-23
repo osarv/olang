@@ -1,0 +1,13 @@
+# M13, B9c: the module condimport.olang and condimportcycle.olang reach cyclepick.olang through: its import of it stands
+# in a top-level if only evaluation decides (a call), and it is in an import cycle with condimportcycle.olang
+import cc "condimportcycle"
+
+fn n() I64 { return 5 }
+
+N I64 = n()
+
+if N > 3 { import Pk "cyclepick" }
+
+fn Two() I64 { return cc.One() + 1 }
+
+test "M13, B9c: the decided import is part of the module" { assert Pk.First<I64>(Two(), 0) == 2 }

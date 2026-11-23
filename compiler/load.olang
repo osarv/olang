@@ -65,6 +65,9 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
     Imports Vec<Import>
     Oracle mut parse.Oracle?& = null
     parser mut parse.Parser?& = null
+    parsed Bool = false
+    parseFrom I64 = 0                  # the diagnostics its parse reported: the records numbered from parseFrom to parseTo
+    parseTo I64 = 0
     # the top-level ifs: each chain's first condition (its key, an offset), the token index of every condition, the
     # branch it stands in, and what was decided
     chainAt Vec<I32>
@@ -1018,13 +1021,58 @@ fn (l mut Loader&) chains(o mut parse.Oracle&, mi I64, prefix String&, depth I64
     }
 }
 
-# the module parsed - every branch, those not chosen with their diagnostics dropped
+# the module parsed - every branch, those not chosen with their diagnostics dropped. Parsed again (M13, B9c: an import
+# a decided condition added names what it reaches), what the earlier parse said is dropped and its oracle made afresh
 fn (l mut Loader&) parse(mi I64) {
     m := l.Mods[mi]
+    if m.parsed {
+        l.Diags.DropRecords(m.parseFrom, m.parseTo)
+        m.Oracle = parse.Oracle()
+        l.ownNames(m)
+    }
     l.chains(m.Oracle!, mi, "", 0)
+    m.parseFrom = l.Diags.Count()
     m.parser = parse.Parser(m.Src!, m.Toks!, l.Names, m.Oracle!, l.Diags, m.File)
     m.Decls = m.parser!.File()
+    m.parseTo = l.Diags.Count()
+    m.parsed = true
     l.groups(mi, m.Decls)
+}
+
+# M13, B9c: the modules loaded or to be parsed again since the last check, parsed - before the next check, so every
+# import a decided condition added is known when any module is parsed
+fn (l mut Loader&) ParseDecided() {
+    if l.loading == 0: l.parseLoaded()
+}
+
+# whether module j's parse reads names through module mi's imports: mi is j, or j reaches it through an alias chain
+# the oracle follows (chains: four aliases deep)
+fn (l Loader&) reaches(j I64, mi I64, depth I64) Bool {
+    if j == mi: return true
+    if depth >= 3: return false
+    for imp in l.Mods[j].Imports {
+        if imp.Target >= 0 and l.reaches(imp.Target, mi, depth + 1): return true
+    }
+    return false
+}
+
+# M13, B9c: whether some module's import stands in a branch only evaluation decides - its names unknown to every parse yet
+fn (l mut Loader&) ImportsPending() Bool {
+    for mi in range l.Mods.Len() {
+        for imp in l.Mods[mi].Imports {
+            if imp.Target == -1 and l.taken(mi, imp.Guard) < 0: return true
+        }
+    }
+    return false
+}
+
+# how many of module mi's imports have a target
+fn (l Loader&) targets(mi I64) I64 {
+    n I64 = 0
+    for imp in l.Mods[mi].Imports {
+        if imp.Target >= 0: n++
+    }
+    return n
 }
 
 # chooses or drops each top-level branch's diagnostics as its chain was decided
@@ -1199,8 +1247,19 @@ fn (l mut Loader&) Decide(mi I64, condStart I32, chosen I64) {
         }
     }
     before := l.Mods.Len()
+    known := l.targets(mi)
+    # M13: what this loads is parsed with ParseDecided, before the next check - with every module that reads names
+    # through mi's imports, parsed again now that the new import's names are known
+    l.loading += 1
     l.loadImports(mi)
-    l.groups(mi, m.Decls)
+    l.loading -= 1
+    if l.targets(mi) > known {
+        for j in range before {
+            if l.Mods[j].parsed and j not in l.unparsed and l.reaches(j, mi, 0): l.unparsed.Push(j)
+        }
+    } else {
+        l.groups(mi, m.Decls)
+    }
     if l.Mods.Len() > before: l.checkReach()
 }
 

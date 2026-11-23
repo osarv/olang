@@ -1,0 +1,12 @@
+# M13, B9c: condimport.olang's chain from inside an import cycle (with condimportx.olang): before the module was parsed
+# again once the condition was decided, the "<" read as a comparison and the next line failed to parse (L9)
+import cx "condimportx"
+
+fn One() I64 { return 1 }
+
+fn firstInCycle() I64 {
+    first := cx.Pk.First<I64>
+    return first(cx.Two(), 9)
+}
+
+test "M13, B9c: a chain through a decided import, inside an import cycle" { assert firstInCycle() == 2 }

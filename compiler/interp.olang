@@ -80,7 +80,9 @@ fn Analyze(l mut load.Loader&, tests Bool, kept mut views.Kept& = views.Kept()) 
     rounds I64 = 0
     for {
         rounds++
+        l.ParseDecided()
         mark := l.Diags.Count()
+        warned := l.Diags.WarnCount()
         firm := l.Diags.Firm()
         r := names.Resolver(l)
         r.Resolve()
@@ -102,7 +104,7 @@ fn Analyze(l mut load.Loader&, tests Bool, kept mut views.Kept& = views.Kept()) 
             c.Rounds = rounds
             return c
         }
-        l.Diags.Forget(mark)
+        l.Diags.Forget(mark, warned)
     }
 }
 

@@ -22,6 +22,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   imported by `runner`.
 - `cycleorder.olang`, `cyclepartner.olang`, `cyclepick.olang` - an import cycle whose root re-exports a third module,
   the cyclic import declared first: the partner reaches the third module's generic through the re-export (M13).
+- `condimport.olang`, `condimportx.olang`, `condimportcycle.olang` - a chain through an import that a top-level `if`
+  only evaluation decides adds (B9c), alone and inside an import cycle: the importers are parsed again once it is decided (M13).
 - `any.olang` - run-time trait values (`any Trait&`, T32-T34).
 - `display.olang` - a type rendering itself richly (Display, B23): a small table shown as HTML in a notebook; checks' `jupyter` scenario imports it.
 - `weak.olang` - weak references and generational types (T2d, T13d, O8e): a list, a tree and an LRU cache with weak

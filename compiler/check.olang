@@ -12390,6 +12390,12 @@ fn (c mut Checker&) namedMet(tr ast.TypeRef&, nsp source.Span, path Array<source
         c.unknownType(nsp, path[0])
         return false
     }
+    # M9: an alias-qualified type its module does not declare ('time.Instant')
+    missing := c.P.R.MissingIn(c.fr().File, nsp.Start) if path.Len() > 1 else -1
+    if missing >= 0 {
+        c.notInModule(missing, path[path.Len() - 1], nsp)
+        return false
+    }
     # G1a: an error-set parameter is no type - it stands where an error set is written
     if path.Len() == 1 and c.fr().Ctx.Vars.Has(path[0]) {
         v := try c.fr().Ctx.Vars.Get(path[0]) catch default types.UnknownT
