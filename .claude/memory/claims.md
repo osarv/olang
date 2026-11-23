@@ -55,3 +55,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-utf8src merged - UTF-8 in literals and comments, validated (L1)
 - Orchestrator child (cloud, 2026-11-23): olang wt-chanwait merged - waits with a token block (no 10 ms polling); WaitUntil on a pidfd
 - Orchestrator child (cloud, 2026-11-23): olang wt-e73finds - e73 findings: Array<String>.Join refused (method lookup by element type on Array), a permutations walk in std
+- Orchestrator child (cloud, 2026-11-23): olang wt-homestd (time local offset, tls pinned fingerprint) and wt-homecimp (one type per C tag across header imports) - oagent home findings
