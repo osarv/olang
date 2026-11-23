@@ -177,6 +177,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/asserts
 |   os std/os
@@ -274,6 +275,7 @@
 ===  tests/bench.olang
 | module <fcntl.h>
 | module <math.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -307,6 +309,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/bench
 |   bench std/bench
@@ -1045,6 +1048,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/errsets
 |   os std/os
@@ -1109,6 +1113,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/errvalues
 |   os std/os
@@ -1173,6 +1178,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/facts
 |   io std/io
@@ -2683,6 +2689,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/reflect
 |   os std/os
@@ -3477,6 +3484,7 @@
 ===  std/bench.olang
 | module <fcntl.h>
 | module <math.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -3510,6 +3518,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  std/bitset.olang
 | module <math.h>
@@ -3542,6 +3551,7 @@
 ===  std/cancel.olang
 | module <math.h>
 | module <pthread.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -3574,10 +3584,12 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  std/chan.olang
 | module <math.h>
 | module <pthread.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -3615,6 +3627,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  std/crc32.olang
 | module <math.h>
@@ -3886,6 +3899,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  std/heap.olang
 | module <math.h>
@@ -4006,6 +4020,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  std/io.olang
 | module <fcntl.h>
@@ -4100,6 +4115,7 @@
 | module <math.h>
 | module <netdb.h>
 | module <poll.h>
+| module <stdlib.h>
 | module <string.h>
 | module <sys/socket.h>
 | module <time.h>
@@ -4135,6 +4151,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  std/order.olang
 | module <math.h>
@@ -4225,6 +4242,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  std/pair.olang
 | module <math.h>
@@ -4317,6 +4335,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  std/pool.olang
 | module <math.h>
@@ -4422,6 +4441,7 @@
 |   unistd <unistd.h>
 | module std/rand
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  std/rand.olang
 | module <math.h>
@@ -4627,6 +4647,7 @@
 | module std/tile
 ===  std/time.olang
 | module <math.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -4654,6 +4675,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  std/tls.olang
 | module <fcntl.h>
@@ -4727,6 +4749,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/tls
 |   net std/net
@@ -4768,6 +4791,7 @@
 | module <math.h>
 | module <netdb.h>
 | module <poll.h>
+| module <stdlib.h>
 | module <string.h>
 | module <sys/socket.h>
 | module <time.h>
@@ -4803,6 +4827,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/zmtp
 |   net std/net
@@ -5224,6 +5249,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/ast.olang
 | module <fcntl.h>
@@ -5292,6 +5318,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/bindgen.olang
 | module <fcntl.h>
@@ -5365,6 +5392,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/build.olang
 | module <fcntl.h>
@@ -5495,6 +5523,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/cabi.olang
 | module <fcntl.h>
@@ -5564,6 +5593,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/cells.olang
 | module <dlfcn.h>
@@ -5984,6 +6014,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/check.olang
 | module <fcntl.h>
@@ -6222,6 +6253,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/cond.olang
 | module <fcntl.h>
@@ -6309,6 +6341,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/definit.olang
 | module <fcntl.h>
@@ -6382,6 +6415,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/diag.olang
 | module <fcntl.h>
@@ -6455,6 +6489,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/diagmsg.olang
 | module <math.h>
@@ -6837,6 +6872,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/effects.olang
 | module <fcntl.h>
@@ -7051,6 +7087,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/emit.olang
 | module <fcntl.h>
@@ -7366,6 +7403,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/eval.olang
 | module <fcntl.h>
@@ -7450,6 +7488,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/explain.olang
 | module <dlfcn.h>
@@ -7792,6 +7831,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/facts.olang
 | module <math.h>
@@ -7894,6 +7934,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/fix.olang
 | module <fcntl.h>
@@ -8030,6 +8071,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/fmt.olang
 | module <fcntl.h>
@@ -8136,6 +8178,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/free.olang
 | module <fcntl.h>
@@ -8376,6 +8419,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/generic.olang
 | module <fcntl.h>
@@ -8582,6 +8626,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/interp.olang
 | module <dlfcn.h>
@@ -8904,6 +8949,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/jupyter.olang
 | module <dlfcn.h>
@@ -9387,6 +9433,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/zmtp
 |   net std/net
@@ -9468,6 +9515,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/listing.olang
 | module <fcntl.h>
@@ -9652,6 +9700,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/load.olang
 | module <fcntl.h>
@@ -9826,6 +9875,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/lower.olang
 | module <fcntl.h>
@@ -10107,6 +10157,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/lsp.olang
 | module <dlfcn.h>
@@ -10524,6 +10575,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/mcp.olang
 | module <dlfcn.h>
@@ -10942,6 +10994,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/measure.olang
 | module <fcntl.h>
@@ -11014,6 +11067,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/mir.olang
 | module <fcntl.h>
@@ -11087,6 +11141,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/msgs.olang
 | module <math.h>
@@ -11307,6 +11362,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/needs.olang
 | module <fcntl.h>
@@ -11553,6 +11609,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/notebook.olang
 | module <dlfcn.h>
@@ -12043,6 +12100,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/zmtp
 |   net std/net
@@ -12657,6 +12715,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/zmtp
 |   net std/net
@@ -12728,6 +12787,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/parse.olang
 | module <fcntl.h>
@@ -12816,6 +12876,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/profile.olang
 | module <fcntl.h>
@@ -12961,6 +13022,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/prompt.olang
 | module <dlfcn.h>
@@ -13419,6 +13481,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/records.olang
 | module <fcntl.h>
@@ -13702,6 +13765,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/runtime.olang
 | module <fcntl.h>
@@ -13880,6 +13944,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/scan.olang
 | module <math.h>
@@ -14130,6 +14195,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/session.olang
 | module <dlfcn.h>
@@ -14539,6 +14605,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/source.olang
 | module <fcntl.h>
@@ -14603,6 +14670,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/spin.olang
 | module <fcntl.h>
@@ -14669,6 +14737,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/target.olang
 | module <fcntl.h>
@@ -14750,6 +14819,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/token.olang
 | module <math.h>
@@ -14847,6 +14917,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/types.olang
 | module <fcntl.h>
@@ -14913,6 +14984,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/unparse.olang
 | module <fcntl.h>
@@ -14995,6 +15067,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/views.olang
 | module <fcntl.h>
@@ -15212,6 +15285,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/astdiff.olang
 | module <fcntl.h>
@@ -15280,6 +15354,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/checkdump.olang
 | module <fcntl.h>
@@ -15538,6 +15613,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/consistency.olang
 | module <fcntl.h>
@@ -15606,6 +15682,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/diaggold.olang
 | module <fcntl.h>
@@ -15685,6 +15762,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/diaggold_capture.olang
 | module <fcntl.h>
@@ -15755,6 +15833,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/drvdiff.olang
 | module <fcntl.h>
@@ -15823,6 +15902,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/dump.olang
 | module <fcntl.h>
@@ -16052,6 +16132,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/evaldiff.olang
 | module <fcntl.h>
@@ -16122,6 +16203,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/fmt.olang
 | module <fcntl.h>
@@ -16237,6 +16319,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/layoutdiff.olang
 | module <fcntl.h>
@@ -16305,6 +16388,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/layoutgold.olang
 | module <fcntl.h>
@@ -16372,6 +16456,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/lowerdump.olang
 | module <fcntl.h>
@@ -16667,6 +16752,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/memgate.olang
 | module <fcntl.h>
@@ -16734,6 +16820,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/modgraph.olang
 | module <fcntl.h>
@@ -16802,6 +16889,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/namesdiff.olang
 | module <fcntl.h>
@@ -16872,6 +16960,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/nesting.olang
 | module <fcntl.h>
@@ -16937,6 +17026,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/rungold.olang
 | module <fcntl.h>
@@ -17007,6 +17097,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/scopedump.olang
 | module <fcntl.h>
@@ -17270,6 +17361,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/seed.olang
 | module <dlfcn.h>
@@ -17888,6 +17980,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/zmtp
 |   net std/net
@@ -17958,6 +18051,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  compiler/tools/toolkit.olang
 | module <fcntl.h>
@@ -18023,6 +18117,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  checks/checks.olang
 | module <fcntl.h>
@@ -18095,6 +18190,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  fuzz/editgen.olang
 | module <fcntl.h>
@@ -18161,6 +18257,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  fuzz/fuzz.olang
 | module <fcntl.h>
@@ -18241,6 +18338,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  fuzz/gen.olang
 | module <fcntl.h>
@@ -18305,6 +18403,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  fuzz/scopegen.olang
 | module <math.h>
@@ -18398,6 +18497,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/binarytrees.olang
 | module <fcntl.h>
@@ -18463,6 +18563,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/dispatch.olang
 | module <fcntl.h>
@@ -18528,6 +18629,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/fannkuch.olang
 | module <fcntl.h>
@@ -18593,6 +18695,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/fasta.olang
 | module <fcntl.h>
@@ -18658,6 +18761,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/gen.olang
 | module <fcntl.h>
@@ -18723,6 +18827,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/ir.olang
 | module <fcntl.h>
@@ -18791,6 +18896,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/knucleotide.olang
 | module <fcntl.h>
@@ -18856,6 +18962,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/lanes.olang
 | module <fcntl.h>
@@ -18921,6 +19028,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/mandelbrot.olang
 | module <fcntl.h>
@@ -18986,6 +19094,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/matmul.olang
 | module <fcntl.h>
@@ -19051,6 +19160,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/nbody.olang
 | module <fcntl.h>
@@ -19116,6 +19226,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/parallel.olang
 | module <fcntl.h>
@@ -19181,6 +19292,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/regex.olang
 | module <fcntl.h>
@@ -19249,6 +19361,7 @@
 | module std/regex
 |   utf8 std/utf8
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/utf8
 ===  bench/revcomp.olang
@@ -19315,6 +19428,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/run.olang
 | module <fcntl.h>
@@ -19384,6 +19498,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/sha256.olang
 | module <fcntl.h>
@@ -19454,6 +19569,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/spectral.olang
 | module <fcntl.h>
@@ -19519,6 +19635,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/sum.olang
 | module <fcntl.h>
@@ -19586,6 +19703,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/text.olang
 | module <fcntl.h>
@@ -19651,6 +19769,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 ===  bench/vec.olang
 | module <fcntl.h>
@@ -19718,6 +19837,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t tests/Base.olang
 | module <math.h>
@@ -19898,6 +20018,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/asserts
 |   os std/os
@@ -19995,6 +20116,7 @@
 === -t tests/bench.olang
 | module <fcntl.h>
 | module <math.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -20028,6 +20150,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/bench
 |   bench std/bench
@@ -20766,6 +20889,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/errsets
 |   os std/os
@@ -20830,6 +20954,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/errvalues
 |   os std/os
@@ -20894,6 +21019,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/facts
 |   io std/io
@@ -22054,6 +22180,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/packed
 |   json std/json
@@ -22444,6 +22571,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/reflect
 |   os std/os
@@ -22507,6 +22635,7 @@
 | module tests/refltextindex
 === -t tests/runner.olang
 | module <math.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -22536,6 +22665,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/Base
 | module tests/geom/measure
@@ -23077,6 +23207,7 @@
 | module tests/weak
 === -t tests/worker.olang
 | module <math.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -23106,6 +23237,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module tests/Base
 | module tests/geom/measure
@@ -23246,6 +23378,7 @@
 === -t std/bench.olang
 | module <fcntl.h>
 | module <math.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -23279,6 +23412,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/bitset.olang
 | module <math.h>
@@ -23311,6 +23445,7 @@
 === -t std/cancel.olang
 | module <math.h>
 | module <pthread.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -23343,10 +23478,12 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/chan.olang
 | module <math.h>
 | module <pthread.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -23384,6 +23521,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/crc32.olang
 | module <math.h>
@@ -23626,6 +23764,7 @@
 | module std/prelude/vec
 | module std/stats
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/fuzz.olang
 | module <fcntl.h>
@@ -23693,6 +23832,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/heap.olang
 | module <math.h>
@@ -23820,6 +23960,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/io.olang
 | module <fcntl.h>
@@ -23919,6 +24060,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/list.olang
 | module <math.h>
@@ -23954,6 +24096,7 @@
 | module <math.h>
 | module <netdb.h>
 | module <poll.h>
+| module <stdlib.h>
 | module <string.h>
 | module <sys/socket.h>
 | module <time.h>
@@ -23989,6 +24132,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/order.olang
 | module <math.h>
@@ -24079,6 +24223,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/pair.olang
 | module <math.h>
@@ -24171,6 +24316,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/pool.olang
 | module <math.h>
@@ -24276,6 +24422,7 @@
 |   unistd <unistd.h>
 | module std/rand
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/rand.olang
 | module <math.h>
@@ -24481,6 +24628,7 @@
 | module std/tile
 === -t std/time.olang
 | module <math.h>
+| module <stdlib.h>
 | module <string.h>
 | module <time.h>
 | module <unistd.h>
@@ -24508,6 +24656,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t std/tls.olang
 | module <fcntl.h>
@@ -24581,6 +24730,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/tls
 |   net std/net
@@ -24622,6 +24772,7 @@
 | module <math.h>
 | module <netdb.h>
 | module <poll.h>
+| module <stdlib.h>
 | module <string.h>
 | module <sys/socket.h>
 | module <time.h>
@@ -24657,6 +24808,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/zmtp
 |   net std/net
@@ -25092,6 +25244,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/ast.olang
 | module <fcntl.h>
@@ -25160,6 +25313,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/bindgen.olang
 | module <fcntl.h>
@@ -25236,6 +25390,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/build.olang
 | module <fcntl.h>
@@ -25366,6 +25521,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/cabi.olang
 | module <fcntl.h>
@@ -25435,6 +25591,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/cells.olang
 | module <dlfcn.h>
@@ -25869,6 +26026,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/check.olang
 | module <fcntl.h>
@@ -26109,6 +26267,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/cond.olang
 | module <fcntl.h>
@@ -26196,6 +26355,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/definit.olang
 | module <fcntl.h>
@@ -26269,6 +26429,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/diag.olang
 | module <fcntl.h>
@@ -26342,6 +26503,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/diagmsg.olang
 | module <math.h>
@@ -26738,6 +26900,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/effects.olang
 | module <fcntl.h>
@@ -26954,6 +27117,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/emit.olang
 | module <fcntl.h>
@@ -27277,6 +27441,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/eval.olang
 | module <fcntl.h>
@@ -27361,6 +27526,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/explain.olang
 | module <dlfcn.h>
@@ -27717,6 +27883,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/facts.olang
 | module <math.h>
@@ -27819,6 +27986,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/fix.olang
 | module <fcntl.h>
@@ -27955,6 +28123,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/fmt.olang
 | module <fcntl.h>
@@ -28061,6 +28230,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/free.olang
 | module <fcntl.h>
@@ -28333,6 +28503,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/generic.olang
 | module <fcntl.h>
@@ -28541,6 +28712,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/interp.olang
 | module <dlfcn.h>
@@ -28877,6 +29049,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/jupyter.olang
 | module <dlfcn.h>
@@ -29374,6 +29547,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/zmtp
 |   net std/net
@@ -29455,6 +29629,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/listing.olang
 | module <fcntl.h>
@@ -29641,6 +29816,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/load.olang
 | module <fcntl.h>
@@ -29817,6 +29993,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/lower.olang
 | module <fcntl.h>
@@ -30106,6 +30283,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/lsp.olang
 | module <dlfcn.h>
@@ -30537,6 +30715,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/mcp.olang
 | module <dlfcn.h>
@@ -30969,6 +31148,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/measure.olang
 | module <fcntl.h>
@@ -31041,6 +31221,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/mir.olang
 | module <fcntl.h>
@@ -31114,6 +31295,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/msgs.olang
 | module <math.h>
@@ -31336,6 +31518,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/needs.olang
 | module <fcntl.h>
@@ -31584,6 +31767,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/notebook.olang
 | module <dlfcn.h>
@@ -32088,6 +32272,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/zmtp
 |   net std/net
@@ -32716,6 +32901,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/zmtp
 |   net std/net
@@ -32787,6 +32973,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/parse.olang
 | module <fcntl.h>
@@ -32875,6 +33062,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/profile.olang
 | module <fcntl.h>
@@ -33020,6 +33208,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/prompt.olang
 | module <dlfcn.h>
@@ -33492,6 +33681,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/records.olang
 | module <fcntl.h>
@@ -33789,6 +33979,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/runtime.olang
 | module <fcntl.h>
@@ -33969,6 +34160,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/scan.olang
 | module <math.h>
@@ -34256,6 +34448,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/session.olang
 | module <dlfcn.h>
@@ -34679,6 +34872,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/source.olang
 | module <fcntl.h>
@@ -34743,6 +34937,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/spin.olang
 | module <fcntl.h>
@@ -34809,6 +35004,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/target.olang
 | module <fcntl.h>
@@ -34890,6 +35086,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/token.olang
 | module <math.h>
@@ -34987,6 +35184,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/types.olang
 | module <fcntl.h>
@@ -35053,6 +35251,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/unparse.olang
 | module <fcntl.h>
@@ -35135,6 +35334,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/views.olang
 | module <fcntl.h>
@@ -35389,6 +35589,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/astdiff.olang
 | module <fcntl.h>
@@ -35457,6 +35658,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/checkdump.olang
 | module <fcntl.h>
@@ -35723,6 +35925,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/consistency.olang
 | module <fcntl.h>
@@ -35791,6 +35994,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/diaggold.olang
 | module <fcntl.h>
@@ -35870,6 +36074,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/diaggold_capture.olang
 | module <fcntl.h>
@@ -35940,6 +36145,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/drvdiff.olang
 | module <fcntl.h>
@@ -36008,6 +36214,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/dump.olang
 | module <fcntl.h>
@@ -36239,6 +36446,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/evaldiff.olang
 | module <fcntl.h>
@@ -36309,6 +36517,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/fmt.olang
 | module <fcntl.h>
@@ -36424,6 +36633,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/layoutdiff.olang
 | module <fcntl.h>
@@ -36492,6 +36702,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/layoutgold.olang
 | module <fcntl.h>
@@ -36559,6 +36770,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/lowerdump.olang
 | module <fcntl.h>
@@ -36862,6 +37074,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/memgate.olang
 | module <fcntl.h>
@@ -36929,6 +37142,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/modgraph.olang
 | module <fcntl.h>
@@ -36997,6 +37211,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/namesdiff.olang
 | module <fcntl.h>
@@ -37067,6 +37282,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/nesting.olang
 | module <fcntl.h>
@@ -37132,6 +37348,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/rungold.olang
 | module <fcntl.h>
@@ -37202,6 +37419,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/scopedump.olang
 | module <fcntl.h>
@@ -37473,6 +37691,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/seed.olang
 | module <dlfcn.h>
@@ -38105,6 +38324,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/zmtp
 |   net std/net
@@ -38175,6 +38395,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t compiler/tools/toolkit.olang
 | module <fcntl.h>
@@ -38240,6 +38461,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t checks/checks.olang
 | module <fcntl.h>
@@ -38312,6 +38534,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t fuzz/editgen.olang
 | module <fcntl.h>
@@ -38378,6 +38601,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t fuzz/fuzz.olang
 | module <fcntl.h>
@@ -38458,6 +38682,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t fuzz/gen.olang
 | module <fcntl.h>
@@ -38522,6 +38747,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t fuzz/scopegen.olang
 | module <math.h>
@@ -38615,6 +38841,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/binarytrees.olang
 | module <fcntl.h>
@@ -38680,6 +38907,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/dispatch.olang
 | module <fcntl.h>
@@ -38745,6 +38973,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/fannkuch.olang
 | module <fcntl.h>
@@ -38810,6 +39039,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/fasta.olang
 | module <fcntl.h>
@@ -38875,6 +39105,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/gen.olang
 | module <fcntl.h>
@@ -38940,6 +39171,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/ir.olang
 | module <fcntl.h>
@@ -39008,6 +39240,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/knucleotide.olang
 | module <fcntl.h>
@@ -39073,6 +39306,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/lanes.olang
 | module <fcntl.h>
@@ -39138,6 +39372,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/mandelbrot.olang
 | module <fcntl.h>
@@ -39203,6 +39438,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/matmul.olang
 | module <fcntl.h>
@@ -39268,6 +39504,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/nbody.olang
 | module <fcntl.h>
@@ -39333,6 +39570,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/parallel.olang
 | module <fcntl.h>
@@ -39398,6 +39636,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/regex.olang
 | module <fcntl.h>
@@ -39466,6 +39705,7 @@
 | module std/regex
 |   utf8 std/utf8
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 | module std/utf8
 === -t bench/revcomp.olang
@@ -39532,6 +39772,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/run.olang
 | module <fcntl.h>
@@ -39601,6 +39842,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/sha256.olang
 | module <fcntl.h>
@@ -39671,6 +39913,7 @@
 | module std/sha256
 |   hex std/hex
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/spectral.olang
 | module <fcntl.h>
@@ -39736,6 +39979,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/sum.olang
 | module <fcntl.h>
@@ -39805,6 +40049,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/text.olang
 | module <fcntl.h>
@@ -39870,6 +40115,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === -t bench/vec.olang
 | module <fcntl.h>
@@ -39939,6 +40185,7 @@
 |   cstring <string.h>
 | module std/prelude/vec
 | module std/time
+|   cstdlib <stdlib.h>
 |   ctime <time.h>
 === remote
 | module <math.h>

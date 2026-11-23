@@ -2741,6 +2741,7 @@ c348854a5b5acdb0 650c2aaaa99144b8 tests/arraypat.olang
 b0a30f43fcdb1650 56340cd553855ec5 tests/become.olang
 d1986413c494d127 004ced7dc1e3ca28 tests/bench.olang
 7ca9a95e47d1199d 768ed9cb8238521d tests/builders.olang
+af833f292a289ef1 fbb9dddb2093f798 tests/canon.olang
 b0de94a1bab69741 73ebd145f457d40b tests/cfnptr.olang
 19ec07e43e7308b9 d64e06c6b0c09d87 tests/cfnptr/table.olang
 b1d1030c082751b1 327b7ffb756c7103 tests/cfnptrmod.olang
