@@ -41,3 +41,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-memhelpers - on hold: lower/emit helpers wait for OLang Cloud's view of the mut-field placement rule (asked the Orchestrator, its Q3)
 - Orchestrator child (cloud, 2026-11-23): olang wt-mutplace - stopped: findings in plan.md "Build memory, open"; handed back to the Orchestrator
 - OLang Cloud (2026-11-23): olang wt-lwplace - Lowerer.Lower/LowerKey both scope directions (plan.md Build memory, open)
+- OLang Cloud (2026-11-23): olang wt-condimport - re-parse modules whose imports a compile-time top-level if decides (review10 F2)
