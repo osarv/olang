@@ -1,0 +1,140 @@
+# A joined task's results handed to its spawner at the join's wait (docs/freeing.md 2.4, question 1, the user's option
+# (c)): what a task builds for its target is built in a stand-in of the spawner's scope, the regions made there handed to
+# the spawner as the wait folds it back, released by the spawner past the join - their storage given back to the worker
+# that made it (runtime.ll's homes). M picks the parts: the results stored into a long-lived Vec's elements (1), many
+# tasks to a join, each result kept (2), results dropped - read, or never read (4), a result a join inside the task made
+# (8), tasks failing - into the join, and caught in the task, its clause's default building nothing - beside ones that
+# keep their results (16); and, off by default, shapes that keep (condition 3) though they must still run as built: a
+# target an array element of the spawner's (32), a join whose own code lets go of a value of its tasks' result type while they
+# run (64), and a task's clause whose default builds text, which the task's thread builds where it reaches the program's
+# scope (128) - with any of them, the other parts' places keep too, places being by type (O8d). The measure is
+# taskvals.olang's: the resident peak gained
+# over each of the last two quarters of the turns, flat where either gains under 2 MB. -free late, -sanitize, -race and
+# the evaluator agree at a smaller size
+import "std/io"
+import "std/os"
+
+N I64 = 100000
+M I64 = 31
+
+type E error { Odd }
+
+fn pad(i I64) String { return "t" + $i + " padded out to some length ..........................................." }
+
+fn peak() I64 {
+    for line in (try os.ReadFile("/proc/self/status") catch default "").Lines() {
+        if line.StartsWith("VmHWM:"): return try line[6:].Trim().Split(" ")[0].ParseInt(10) catch default -1
+    }
+    return -1
+}
+
+# a task's result: a Vec of text it grows on its own thread
+fn build(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push(pad(i + k))
+    return v
+}
+
+fn fails(i I64) Vec<String> ? E {
+    v Vec<String>
+    v.Push(pad(i))
+    if i % 2 == 1: error E.Odd
+    v.Push(pad(i + 1))
+    return v
+}
+
+# a task whose result a join of its own made: two levels of hand-off
+fn nest(i I64) Vec<String> {
+    x Vec<String>
+    join: spawn x = build(i)
+    return x
+}
+
+fn main() {
+    t := 0
+    kept Vec<Vec<String>>
+    for _ in range 8: kept.Push(Vec<String>())
+    slots := Array<Vec<String>>(8)
+    p0 := 0
+    p1 := 0
+    for i in range N {
+        if i == N / 2: p0 = peak()
+        if i == N * 3 / 4: p1 = peak()
+        if M % 2 == 1 {
+            r Vec<String>
+            join: spawn r = build(i)
+            kept[i % 4] = r
+            t += kept[(i + 3) % 4].Len()
+        }
+        if M / 2 % 2 == 1 {
+            a Vec<String>
+            b Vec<String>
+            c Vec<String>
+            d Vec<String>
+            join {
+                spawn a = build(i)
+                spawn b = build(i + 1)
+                spawn c = build(i + 2)
+                spawn d = build(i + 3)
+            }
+            kept[4] = a
+            kept[5] = b
+            kept[6 + i % 2] = c
+            t += d[2].Len() + kept[7 - i % 2].Len()
+        }
+        if M / 4 % 2 == 1 {
+            r Vec<String>
+            join {
+                spawn r = build(i)
+                spawn _ = build(i + 1)
+            }
+            t += r[1].Len()
+        }
+        if M / 8 % 2 == 1 {
+            r Vec<String>
+            join: spawn r = nest(i)
+            kept[(i + 1) % 4] = r
+            t += r.Len()
+        }
+        if M / 32 % 2 == 1 {
+            join: spawn slots[i % 8] = build(i)
+            t += slots[(i + 1) % 8].Len()
+        }
+        if M / 128 % 2 == 1 {
+            h Vec<String>
+            join: spawn h = try fails(i + 1) catch default Vec<String>[pad(i)]
+            kept[i % 3] = h
+        }
+        if M / 64 % 2 == 1 {
+            w := Vec<String>[pad(i)]
+            r Vec<String>
+            join {
+                spawn r = build(i)
+                w = Vec<String>[pad(i + 1)]
+            }
+            kept[i % 8] = r
+            t += w.Len()
+        }
+        # (last: a failed join's clause leaves the turn, P4d)
+        if M / 16 % 2 == 1 {
+            h Vec<String>
+            join: spawn h = try fails(i + 1) catch default Vec<String>()
+            kept[i % 3] = h
+            f Vec<String>
+            g Vec<String>
+            try join {
+                spawn f = try fails(i)
+                spawn g = build(i)
+            } catch E.Odd {
+                t += 1
+                continue
+            }
+            t += f.Len() + g.Len()
+        }
+    }
+    total := 0
+    for v in kept: total += v.Len()
+    io.PutLn($t + " " + $total)!
+    p2 := peak()
+    if N >= 100000: io.PutLn("flat" if p1 - p0 < 2048 or p2 - p1 < 2048 else "grew by " + $(p2 - p0) + " KB")!
+}

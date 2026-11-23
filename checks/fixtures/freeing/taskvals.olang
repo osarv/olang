@@ -1,17 +1,19 @@
 # review6's task probes (wt-taskcheck): text and Vecs of text the spawner made, read by its tasks and given them by
 # value while the join replaces the spawner's (1, 64); a task building and replacing its own Vec of text (64); a
-# joined task's result stored into a long-lived Vec's element past the join (2); tasks failing mid-way, caught in
-# the task (4) and failing the join (32); a task running a join of its own (8); a channel carrying Vec<String> between
-# two tasks (16). M picks the parts; the default leaves 2 out - its elements keep (docs/freeing.md 2.4, a join's
-# target type) and grow about 500 bytes a turn. The measure is tasks.olang's: the resident peak gained over each of
-# the last two quarters of the turns, flat where either gains under 2 MB. -free late, -sanitize and -race agree at a
-# smaller size; the evaluator runs no channel between a join's tasks (it runs them one after another)
+# joined task's result stored into a long-lived Vec's element past the join (2), handed to the spawner at the join's
+# wait (docs/freeing.md 2.4, question 1); tasks failing mid-way, caught in the task (4) and failing the join (32); a
+# task running a join of its own (8); a channel carrying a Vec between two tasks (16). M picks the parts, all by
+# default. Parts 64 and 16 keep what their joins let go of (condition 3: a task reads the Vec the join replaces; a
+# channel's ring is storage both tasks replace values in), so their values are of types of their own - places are by
+# type (O8d), and with Vec<String> they would be part 2's. The measure is tasks.olang's: the resident peak gained over
+# each of the last two quarters of the turns, flat where either gains under 2 MB. -free late, -sanitize and -race agree
+# at a smaller size, and the evaluator without the channel (it runs a join's tasks one after another)
 import "std/io"
 import "std/os"
 import "std/chan"
 
 N I64 = 100000
-M I64 = 125
+M I64 = 127
 
 type E error { Odd }
 
@@ -24,8 +26,14 @@ fn peak() I64 {
     return -1
 }
 
-# a task reading text and a Vec of text the parent made
-fn ownVec(v Vec<String>) I64 { return v.Len() + v[1].Len() }
+# text the parent made, held in a Vec a task is given by value while the join replaces the parent's (64): a type of its
+# own - the join lets go of what a task reads, so its places keep (condition 3), and places are by type (O8d): with
+# Vec<String> they would be part 2's
+type note struct(text String) {
+    text
+}
+
+fn ownVec(v Vec<note>) I64 { return v.Len() + v[1].text.Len() }
 
 # a task building its own Vec of text, replacing its elements
 fn churn(i I64) I64 {
@@ -65,14 +73,22 @@ fn inner(i I64) I64 {
     return a.Len() + b[2].Len()
 }
 
-fn send(c mut chan.Chan<Vec<String>>&, n I64, base I64) {
-    for k in range n: try chan.Send(c, build(base + k)) catch { return }
+# a Vec of numbers a task builds, sent over a channel (16): a channel's ring is storage both its tasks replace values in,
+# whose places keep (condition 3) - of a type of their own here, so that they are not part 2's (places are by type, O8d)
+fn nums(i I64) Vec<I64> {
+    v Vec<I64>
+    for k in range 3: v.Push(pad(i + k).Len())
+    return v
 }
 
-fn recv(c mut chan.Chan<Vec<String>>&, n I64, total mut Vec<I64>&) {
+fn send(c mut chan.Chan<Vec<I64>>&, n I64, base I64) {
+    for k in range n: try chan.Send(c, nums(base + k)) catch { return }
+}
+
+fn recv(c mut chan.Chan<Vec<I64>>&, n I64, total mut Vec<I64>&) {
     for _ in range n {
         v := try chan.Recv(c) catch { return }
-        total[0] += v[0].Len() + v[2].Len()
+        total[0] += v[0] + v[2]
     }
 }
 
@@ -100,17 +116,17 @@ fn main() {
             t += a + b
         }
         if M / 64 % 2 == 1 {
-            v Vec<String>
-            v.Push(pad(i))
-            v.Push(pad(i + 1))
+            v Vec<note>
+            v.Push(note(pad(i)))
+            v.Push(note(pad(i + 1)))
             a := 0
             c := 0
             join {
                 spawn a = ownVec(v)
                 spawn c = churn(i)
-                v = Vec<String>[pad(i + 2), pad(i + 3)]
+                v = Vec<note>[note(pad(i + 2)), note(pad(i + 3))]
             }
-            t += a + c + v[1].Len()
+            t += a + c + v[1].text.Len()
         }
         if M / 2 % 2 == 1 {
             r Vec<String>
@@ -133,7 +149,7 @@ fn main() {
             t += n
         }
         if M / 16 % 2 == 1 and i % 100 == 0 {
-            c mut chan.Chan<Vec<String>>& = chan.Chan<Vec<String>>(4)
+            c mut chan.Chan<Vec<I64>>& = chan.Chan<Vec<I64>>(4)
             join {
                 spawn send(c, 50, i)
                 spawn recv(c, 50, total)
