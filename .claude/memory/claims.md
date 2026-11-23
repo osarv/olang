@@ -47,3 +47,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Cloud (2026-11-23): olang wt-taskhandoff - task results handed to the spawner at the join (the user's option c)
 - Orchestrator child (cloud, 2026-11-23): olang wt-android - Android target (aarch64-linux-android, bionic via NDK r28c), NativeActivity sample and APK
 - Orchestrator child (cloud, 2026-11-23): olang wt-mapiter - Map iteration with values holding writable references (T25c in MapIter.Next), writable and read-only walks
+- Orchestrator child (cloud, 2026-11-23): olang wt-android - Android target (aarch64-linux-android, bionic via NDK r28c), NativeActivity sample and APK: merged
