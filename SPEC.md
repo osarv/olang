@@ -6251,6 +6251,13 @@ stores - so a stand-in lives as long as the scope it stands in for and, once fol
 through it afterwards builds in that scope, and a later task's stand-in whose parent is such a stand-in is folded into
 the scope it forwards to.
 
+What a task builds for its results is **handed to the spawner at the wait**: the regions it made in a stand-in (§8
+O8d - storage early freeing gives a value made for a sole place: a Vec's buffer the task grew, each text it built) go
+with the stand-in as it is folded, regions of the scope it stood in for from then on - released where the spawner's
+code lets their places go (O8f), else closed with that scope. A region released on a thread other than the one that
+made it gives its storage back to that thread (O8b); no thread releases into another's pool, and the hand-off costs
+nothing in the task and one step per join. A part (below) is folded the same way, its regions with it.
+
 Every other scope a thread builds into belongs to one thread, its **owner** - the thread that opened it, or for a
 stand-in the task it was made for - and no thread but its owner ever allocates there. A scope reaches another thread in
 two ways only, and each is answered where it is reached:
@@ -7130,12 +7137,20 @@ holder**:
    holder's node is stored elsewhere), a global, a closure kept past the call that made it, a task, or a call that may
    keep it (O10b, O26a);
 3. nothing it holds is reached by more than one thread (§6.8): the place is given no value and lets go of nothing in
-   a task's code (a spawned call and all it may call, every destructor, `Str`, `Eq` and `Hash` among it, and the
-   store into a spawn's target, P1g), and no let-go of it runs in a `join` block's code - all it calls included -
-   whose tasks may reach the spawner's storage: one handed a reference, or a by-value argument holding one beside
-   the arrays it owns (a by-value argument a task's callee keeps nothing of is the task's own copy), one storing its
-   result into anything but a local, or - any task of the program - reading a global. After the wait a join's tasks
-   reach nothing. A program with a task whose code is not known (a lambda or a function value spawned, a task calling
+   a task's code (a spawned call and all it may call, every destructor, `Str`, `Eq` and `Hash` among it) on storage
+   the task did not build - code given only plain values, or references it cannot write through to values holding no
+   reference beside their own arrays, reaching no global, writing through nothing it is given, calling through no
+   function value and starting no task, builds every value it lets go of itself, on the thread running it, and lets
+   go of what it likes; no let-go of it runs in a `join` block's code - all it calls included - whose tasks may reach
+   the spawner's storage: one handed a reference, or a by-value argument holding one beside the arrays it owns (a
+   by-value argument a task's callee keeps nothing of is the task's own copy), one storing its result into anything
+   but a local, or - any task of the program - reading a global. The store into a spawn's target (P1g), made on the
+   task's thread, is a let-go of the target's own place there; what the task built for the target, in a stand-in the
+   join's wait hands to the spawner (P2), is the spawner's from the wait on, so the places that value holds keep only
+   where the join's own code lets one go while its tasks run - unless it is built where no wait hands it over: in a
+   scope found while the program runs, in the program's scope, or by a clause's default (P4a) that builds. After the
+   wait a join's tasks reach nothing. Only code an entry of the program reaches - `main`, a method, an export, a
+   function value, a test, an initializer - starts a task. A program with a task whose code is not known (a lambda or a function value spawned, a task calling
    through a function value or an `any`) frees nothing early, nor does a program C may call back (X12): one giving
    an export fn or any function value to a C function (X13), built as a library (X14), or linking C of its own that
    may name one (a `.c` import, a `link`, X9, X21) - C may call it from a thread of its own;
@@ -7239,7 +7254,10 @@ foreign type reached through an array).
 allocation reuses kept storage of a suitable size whatever order it was reclaimed in - so a computation repeated, a
 loop's body or a function called again, settles at the memory one repetition needs rather than growing with the number
 of repetitions. What a thread keeps is bounded by an eighth of the machine's physical memory; storage reclaimed beyond
-the bound is returned to the operating system, what has gone longest unused first.
+the bound is returned to the operating system, what has gone longest unused first. Storage of a region (O8d) released on a thread other than the one that made it - a joined task's result
+the spawner lets go of past the join (P2) - goes back to the thread that made it, which reuses it before any storage
+every thread shares: a loop of joins keeping its tasks' results settles as one thread's loop would, rather than the
+spawner keeping what it released while the workers ask for more.
 
 A worker thread whose task has finished (§6.8 P1e) keeps no more than a small part of that while it waits for another
 task - 1MB, or a sixty-fourth of the bound where that is less - and the rest is kept where every thread can reuse it,

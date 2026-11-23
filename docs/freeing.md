@@ -319,11 +319,9 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   too, a let-go no release follows, and `-memory -check` passed while the program ran out of 8 MB. To close by that road
   the scope pass must place the Let's call's result in the local's own block while its storage and the assignment's
   result go where the store is - or keep the owner local and hand its leaves to the element (above). And the join form (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`, checks' freeing taskvals
-  part 2, `-define M=127`, still out of its default): the task's own code lets go of `Vec<String>.0` and its text array
-  (`build`'s Push grows them on the task's thread) and so they keep program-wide (condition 3 by origins, `taskArgs`),
-  besides the spawn target's own keep (`spawnSite`). Narrowing the target's keep to its join frees nothing while the
-  task's growth keeps the same places; freeing them needs a region a task made, or grew into, released on the spawner's
-  thread - question 1 below. (Closed by wt-globalfill for a first value nothing reads - `r := build(0)` then
+  part 2): closed by wt-taskhandoff - question 1 below, answered (c): the task's growth of what it builds itself keeps
+  nothing (`ownBody`), the target's type places keep only through its join, and the regions it made are the spawner's
+  from the wait, their storage given back to the worker that made them. (Closed by wt-globalfill for a first value nothing reads - `r := build(0)` then
   `r = build(i)` with no mention between, the shape named: the checker declares such a local with no value
   (`check.deadLet`, `definit.ReadIn`), the first call's value an Eval dropped where it stands, the assignment its first
   value (FirstSet), moved into the element - checks' freeing againkept. A first value read before the assignment: closed
@@ -369,18 +367,53 @@ Closed by wt-globalfill; checks' freeing globalviews.)
   run-time lookup, as a direct call through the same capture would. To close: a function value's builds through a
   captured field take O29's lookup where no caller knows the binding.
 
-**Question 1 (open; default in effect: a place a task's code lets go of keeps everywhere, condition 3 as built).** A
-value a joined task builds and hands back - a Vec grown by Push on the task's thread - can be freed by the spawner only
-if a region made (or a chunk taken) on one thread may be released on another. The runtime's pools and a region's kids
-list are one thread's (`runtime.ll`'s plain links), so today such a release would be a silent corruption. Options: (a)
-keep it as is - a task's results never freed early, the program's scope holding them (taskvals part 2 grows ~500 bytes
-a turn); (b) the spawner makes the regions a task's result and its growth go into before the spawn, and the task's
-allocations into a region it did not make take that region's lock (a cost per growth in a task, not per operation, and
-only where the result is kept past the join); (c) a hand-off at the join: the task's regions for its results are
-re-parented under the spawner's scope at the wait (their chunks returned to the pool they came from when released, the
-pools made safe to release into from another thread - a lock-free return list per pool). Recommendation: (c) - no cost
-in the task, one step per join, and it composes with condition 3 by origins (the task's own let-goes still keep
-where its values are not its own). Section-8 design (rules.md: Opus xhigh), so not built here.
+**Question 1 - answered (the user, 2026-11-23: option (c)), built by wt-taskhandoff.** A value a joined task builds and
+hands back - a Vec grown by Push on the task's thread - could be freed by the spawner only if a region made (or a chunk
+taken) on one thread may be released on another; the runtime's pools and a region's kids list are one thread's. The
+options were (a) keep it as is, (b) the spawner making the regions a task's results go into, the task taking their lock
+to grow into them, (c) a hand-off at the join. (c) is built:
+
+- **The runtime.** A stand-in's regions already went with it at the fold (`__olang_kids_move`); a part's now go with its
+  root as it is folded (`__olang_scope_fold_parts`), which they did not - its header was freed under them. Each region
+  names its **maker**, the home of the thread that made it (`%olang.region`'s ninth word, the header 168 bytes); a
+  thread's home (`%olang.home`) is a list of chunks any thread pushes onto with one compare-and-swap and its owner takes
+  whole with one exchange. `__olang_close_kids` gives a region another thread made back to its maker
+  (`__olang_region_give_back`: its arena's chunk list, its first block among them, pushed at once) instead of into this
+  thread's pool; a thread takes what was given back (`__olang_home_drain`) where its own pool or block list has nothing
+  that fits, before the shared pool or the system. A worker takes a home as it starts (a retired worker's, with what
+  was given back since, else a new one - a home is never freed) and drains it as it retires. Nothing is paid in the task
+  or on the paths every allocation takes; one push per released region of another thread's, one exchange per refill.
+  Without the give-back the spawner's block lists grew by what it released while the workers carved new slabs: part 2
+  freed by the compiler alone still grew ~190 bytes a turn.
+- **The compiler (condition 3).** A task's code lets go of what it likes where it lets go only of what it builds:
+  `free.ownBody` - plain values or read-only references to values holding no reference beside their arrays, reaching
+  no global, writing through nothing it is given, calling through no function value, spawning nothing (effects.olang's
+  facts, as `ownGoes` judges a call). What a task passes on is `taskLets`/`taskWalkLets`, the let-goes it may make on
+  storage it did not build: a call of an ownBody callee passes on nothing, nor does a spawn's own call (judged at that
+  spawn), and the walk from a task's root stops at an ownBody (`reached(.., ownCut)`); destructors, Str, Eq and Hash are
+  roots only where some task is not ownBody. A spawn target's type places keep only where the join's own code lets one
+  go while the task runs (`joinTargets` against `joinGoes`, the spawn's own call's let-goes no longer counted as the
+  join's code, `inTask`), where the result is handed over at the wait (`handedAtWait`: a local target, every scope the
+  task's call is given a block, a scope variable or inert - not the program's, which a worker builds into a part of its
+  own, nor one found at run time - and no clause default that builds). The target's own place, its feeder and owner
+  local still keep: the store into it is on the task's thread. Only a body an entry reaches starts tasks (`live`,
+  `reachedTasks` now before the final walk): std's test helpers spawning tasks with references (chan's `recvOrStop`,
+  cancel's `cancelOnExit`) made every place of any program importing them keep.
+- **Measured.** checks' freeing taskvals runs every part by default (`M=127`), part 2 flat (master: ~500 bytes a turn);
+  its parts 64 and 16 keep by condition 3 (a task reads the Vec its join replaces; a channel's ring is storage both its
+  tasks replace values in), so their values are of types of their own - places are by type, and with `Vec<String>`
+  they would be part 2's. checks' freeing taskkept (results kept in a long-lived Vec's elements, many to a join,
+  dropped, made by a join inside the task, beside tasks failing into the join and caught in the task): flat at 100,000
+  turns where master grows 136 MB over the second half; built, `-free late`, `-sanitize`, `-race` and the evaluator
+  agree, and with the shapes that keep on (`M=255`: a target an array element, a join's code letting go of a result
+  type's value, a clause default building text) `-check` passes and the oracles agree.
+- **Found, open.** A clause's default (P4a, `catch default Vec<String>[pad(i)]`) is built by the task's thread in its
+  worker's part of the program's scope (emit's trampoline passes `@__olang_prog_scope` to the handler): it is never
+  reclaimed - ~250 bytes a failure on master, with or without early freeing - and is no hand-off (it keeps). To close:
+  the trampoline gives a handler the stand-in of the target's storage, as a target's copy is given (P1g, `copyF`). And
+  the evaluator diverges, on master, from the built program for `m := mkMap(i); maps[i % 4] = m` with
+  `Map<I64, Vec<String>>` values built by `Put` in the callee ("it indexes outside the array" at Vec.SetAt; `-free late`
+  under the evaluator agrees) - a matter of its regions, not of tasks.
 
 ## 3. Order of work (phase 2)
 
@@ -949,3 +982,10 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   so -free late read flat too, and a loaded machine's extra worker (two 64 MB malloc arenas and an 8 MB stack: the full
   verify's "grew by 139268 KB") read as growth. It now reads the resident peak over each of the last two quarters of
   200,000 turns, flat where either gains under 2 MB: -free late grows 12.6 MB, the compiler before this 6.3 MB.
+- 2026-11-23, wt-taskhandoff: **question 1, option (c)** (the user's call) - a joined task's results handed to the
+  spawner at the join's wait. The runtime: regions name their maker's home, a region released on another thread gives
+  its storage back there (a lock-free list per thread, drained as its pool runs short), a part's regions go with its
+  root. The compiler: condition 3 narrowed to a task's let-goes on storage it did not build (`ownBody`, `taskLets`), a
+  spawn target's type places kept only through its join where the wait hands the result over, only live bodies'
+  spawns. taskvals runs every part by default, part 2 flat; taskkept new. Open: a clause default's storage on the
+  worker's program part; the evaluator's divergence on a moved Map of Vecs of text (2.4, question 1).
