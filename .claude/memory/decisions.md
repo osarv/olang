@@ -21,4 +21,10 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-(none)
+1. (2026-11-23, asked via the Orchestrator) AMX BF16 products (tdpbf16ps, 369 GMAC/s = 7.5x F32 at 2048x128x688 on one
+   thread) as one named std operation `tile.AddDot(...)` (C += A.B over the whole depth; runtime does the permission and
+   tile config; the pair-dot loop where the processor lacks it): its accumulation order matches no simple model (five
+   tested, 19-48% of elements differ), so a bit-exact fallback needs it reverse-engineered. Allow AddDot's result to
+   depend on the target (against B12c's one result on every target), or require bit-exact? Default in effect: nothing
+   built. Recommendation: allow it for this named operation, stated in SPEC (products exact, F32 accumulation, order
+   unspecified), as BLAS does.
