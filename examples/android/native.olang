@@ -1,0 +1,285 @@
+# A NativeActivity in olang, with no C and no Java (docs/android.md): Android loads this file built as
+# libnative.so (`olang build -library -target aarch64-linux-android`) and calls ANativeActivity_onCreate on the app's
+# main thread. It opens the window with EGL, clears it with OpenGL ES, logs touches and keys to logcat (tag "olang"),
+# and runs two checks of starting a program the app ships, drawn as bands over the background - green where the check
+# passed, red where it failed:
+#   top band     nativeLibraryDir/libprobe.so run directly (an olang executable packed as a native library)
+#   bottom band  the same program copied into the app's files directory and run as /system/bin/linker64 FILE
+# Each touch changes the background's colour.
+#
+# The NDK's functions are declared here with their handles (ANativeActivity*, ANativeWindow*, EGLDisplay ...) as U64:
+# this program only hands them back to the functions that gave them, so an address is all it keeps (X1a).
+import "std/os"
+import sysstat "sys/stat.h"
+
+extern link "android" {
+    fn ALooper_forThread() U64
+    fn AInputQueue_attachLooper(queue U64, looper U64, ident I32, callback fn&(fd I32, events I32, data U64) I32, data U64)
+    fn AInputQueue_detachLooper(queue U64)
+    fn AInputQueue_getEvent(queue U64, event mut Array<U64>&) I32
+    fn AInputQueue_preDispatchEvent(queue U64, event U64) I32
+    fn AInputQueue_finishEvent(queue U64, event U64, handled I32)
+    fn AInputEvent_getType(event U64) I32
+    fn AKeyEvent_getAction(event U64) I32
+    fn AKeyEvent_getKeyCode(event U64) I32
+    fn AMotionEvent_getAction(event U64) I32
+    fn AMotionEvent_getX(event U64, pointer U64) F32
+    fn AMotionEvent_getY(event U64, pointer U64) F32
+    fn ANativeWindow_getWidth(window U64) I32
+    fn ANativeWindow_getHeight(window U64) I32
+}
+
+extern link "log" {
+    fn __android_log_write(priority I32, tag Array<U8>, text Array<U8>) I32
+}
+
+extern link "EGL" {
+    fn eglGetDisplay(id U64) U64
+    fn eglInitialize(display U64, major mut Array<I32>&, minor mut Array<I32>&) U32
+    fn eglChooseConfig(display U64, attribs Array<I32>, configs mut Array<U64>&, size I32, count mut Array<I32>&) U32
+    fn eglCreateWindowSurface(display U64, config U64, window U64, attribs Array<I32>) U64
+    fn eglCreateContext(display U64, config U64, share U64, attribs Array<I32>) U64
+    fn eglMakeCurrent(display U64, draw U64, read U64, context U64) U32
+    fn eglSwapBuffers(display U64, surface U64) U32
+    fn eglDestroySurface(display U64, surface U64) U32
+    fn eglDestroyContext(display U64, context U64) U32
+    fn eglTerminate(display U64) U32
+}
+
+extern link "GLESv2" {
+    fn glClearColor(r F32, g F32, b F32, a F32)
+    fn glClear(mask U32)
+    fn glEnable(cap U32)
+    fn glDisable(cap U32)
+    fn glScissor(x I32, y I32, width I32, height I32)
+    fn glViewport(x I32, y I32, width I32, height I32)
+}
+
+# C's memmove, memcpy and mempcpy, declared for the three things the program does with addresses it holds as U64 -
+# each a copy of n bytes that C does as the program's word (X1a): memmove of no bytes gives back its destination, here
+# an export fn's C entry (X13), so its address; memcpy reads ANativeActivity's callbacks table into an array, and
+# mempcpy writes it back
+extern {
+    fn memmove(entry fn&(activity U64, other U64), from U64, n U64) U64
+    fn memcpy(to mut Array<U64>&, from U64, n U64) U64
+    fn mempcpy(to U64, from Array<U64>&, n U64) U64
+}
+
+# ANativeActivityCallbacks: sixteen function pointers, these the ones set (android/native_activity.h)
+OnDestroy I64 = 5
+OnNativeWindowCreated I64 = 7
+OnNativeWindowDestroyed I64 = 10
+OnInputQueueCreated I64 = 11
+OnInputQueueDestroyed I64 = 12
+# ANativeActivity: callbacks at 0, internalDataPath (the files directory) at 32
+CallbacksAt I64 = 0
+InternalDataPathAt I64 = 32
+
+# EGL's and GL's numbers (EGL/egl.h, GLES2/gl2.h)
+EglNone I32 = 0x3038
+EglWidth I32 = 0x3057
+EglHeight I32 = 0x3056
+GlColorBufferBit U32 = 0x4000
+GlScissorTest U32 = 0x0C11
+
+# the window and what draws into it, 0 while there is none; the input queue; the touches so far; the checks' results
+# (0 not run, 1 passed, 2 failed)
+Egl mut U64 = 0
+Surface mut U64 = 0
+Context mut U64 = 0
+Width mut I32 = 0
+Height mut I32 = 0
+Queue mut U64 = 0
+Touches mut I64 = 0
+DirectExec mut I64 = 0
+LinkerExec mut I64 = 0
+FilesDir mut String = ""
+
+fn log(text String&) { __android_log_write(4, "olang".ToC(), text.ToC()) }  # ANDROID_LOG_INFO
+
+# the 8 bytes at address at, read as C reads a pointer
+fn word(at U64) U64 {
+    one := Array<U64>(1)
+    memcpy(one, at, 8)
+    return one[0]
+}
+
+# the NUL-terminated text at address at, up to max bytes
+fn cText(at U64, max I64) String {
+    got := StringBuilder()
+    for i in range max {
+        one := Array<U64>(1)
+        memcpy(one, at + U64(i), 1)
+        if one[0] == 0: break
+        got.PushChar(Char(U8(one[0])))
+    }
+    return got.ToString()
+}
+
+# ---- the activity ----
+
+export fn ANativeActivity_onCreate(activity U64, saved U64, savedSize U64) {
+    log("onCreate")
+    table := word(activity + U64(CallbacksAt))
+    slots := Array<U64>(16)
+    memcpy(slots, table, 128)
+    slots[OnDestroy] = memmove(onDestroy, 0, 0)
+    slots[OnNativeWindowCreated] = memmove(onWindowCreated, 0, 0)
+    slots[OnNativeWindowDestroyed] = memmove(onWindowDestroyed, 0, 0)
+    slots[OnInputQueueCreated] = memmove(onQueueCreated, 0, 0)
+    slots[OnInputQueueDestroyed] = memmove(onQueueDestroyed, 0, 0)
+    mempcpy(table, slots, 128)
+    FilesDir = cText(word(activity + U64(InternalDataPathAt)), 4096)
+    runChecks()
+}
+
+# every callback takes the activity and one handle (a window, a queue): onDestroy, given only the activity, ignores
+# the second, which C's calling convention leaves unread
+export fn onDestroy(activity U64, other U64) { log("onDestroy") }
+
+export fn onWindowCreated(activity U64, window U64) {
+    log($"window created, " + $ANativeWindow_getWidth(window) + "x" + $ANativeWindow_getHeight(window))
+    openWindow(window)
+    draw()
+}
+
+export fn onWindowDestroyed(activity U64, window U64) {
+    log("window destroyed")
+    closeWindow()
+}
+
+export fn onQueueCreated(activity U64, queue U64) {
+    Queue = queue
+    AInputQueue_attachLooper(queue, ALooper_forThread(), 1, onInput, 0)
+}
+
+export fn onQueueDestroyed(activity U64, queue U64) {
+    AInputQueue_detachLooper(queue)
+    Queue = 0
+}
+
+# the looper's callback: every event waiting, logged; a touch going down changes the background
+export fn onInput(fd I32, events I32, data U64) I32 {
+    event := Array<U64>(1)
+    for AInputQueue_getEvent(Queue, event) >= 0 {
+        e := event[0]
+        if AInputQueue_preDispatchEvent(Queue, e) != 0: continue
+        handled := handle(e)
+        AInputQueue_finishEvent(Queue, e, 1 if handled else 0)
+    }
+    return 1    # keep the callback
+}
+
+# one event: true where the app handled it (a touch), false for what the system should (a key, so Back still works)
+fn handle(e U64) Bool {
+    if AInputEvent_getType(e) == 1 {        # AINPUT_EVENT_TYPE_KEY
+        log($"key " + $AKeyEvent_getKeyCode(e) + " action " + $AKeyEvent_getAction(e))
+        return false
+    }
+    action := AMotionEvent_getAction(e) & 0xff
+    log($"touch action " + $action + " at " + $AMotionEvent_getX(e, 0) + "," + $AMotionEvent_getY(e, 0))
+    if action == 0 {                       # AMOTION_EVENT_ACTION_DOWN
+        Touches++
+        draw()
+    }
+    return true
+}
+
+# ---- the window ----
+
+fn openWindow(window U64) {
+    Egl = eglGetDisplay(0)
+    major := Array<I32>(1)
+    minor := Array<I32>(1)
+    eglInitialize(Egl, major, minor)
+    # EGL_RENDERABLE_TYPE ES2, EGL_SURFACE_TYPE window, 8 bits of red, green and blue
+    wanted := Array<I32>[0x3040, 4, 0x3033, 4, 0x3024, 8, 0x3023, 8, 0x3022, 8, EglNone]
+    configs := Array<U64>(1)
+    count := Array<I32>(1)
+    eglChooseConfig(Egl, wanted, configs, 1, count)
+    Surface = eglCreateWindowSurface(Egl, configs[0], window, Array<I32>[EglNone])
+    Context = eglCreateContext(Egl, configs[0], 0, Array<I32>[0x3098, 2, EglNone])    # EGL_CONTEXT_CLIENT_VERSION 2
+    eglMakeCurrent(Egl, Surface, Surface, Context)
+    Width = ANativeWindow_getWidth(window)
+    Height = ANativeWindow_getHeight(window)
+}
+
+fn closeWindow() {
+    if Egl == 0: return
+    eglMakeCurrent(Egl, 0, 0, 0)
+    eglDestroySurface(Egl, Surface)
+    eglDestroyContext(Egl, Context)
+    eglTerminate(Egl)
+    Egl = 0
+}
+
+# the background in the touches' colour, and a band for each check
+fn draw() {
+    if Egl == 0: return
+    glViewport(0, 0, Width, Height)
+    glDisable(GlScissorTest)
+    shade := F32(Touches % 4) / 4.0
+    glClearColor(0.1, 0.2 + shade * 0.5, 0.6 - shade * 0.4, 1.0)
+    glClear(GlColorBufferBit)
+    glEnable(GlScissorTest)
+    band := Height / 8
+    paint(DirectExec, Height - 2 * band, band)
+    paint(LinkerExec, band, band)
+    eglSwapBuffers(Egl, Surface)
+}
+
+# a band at y (from the bottom) band high: green passed, red failed, grey not run
+fn paint(result I64, y I32, band I32) {
+    glScissor(0, y, Width, band)
+    if result == 1 {
+        glClearColor(0.1, 0.8, 0.2, 1.0)
+    } else if result == 2 {
+        glClearColor(0.9, 0.1, 0.1, 1.0)
+    } else {
+        glClearColor(0.5, 0.5, 0.5, 1.0)
+    }
+    glClear(GlColorBufferBit)
+}
+
+# ---- the checks ----
+
+# where this library was loaded from - the app's nativeLibraryDir, where Android put libprobe.so beside it - read from
+# /proc/self/maps; "" where it is not found
+fn libraryDir() String {
+    maps := try os.ReadFile("/proc/self/maps") catch os.Error { return "" }
+    for line in maps.Lines() {
+        if not line.EndsWith("/libnative.so"): continue
+        slash := try line.FindByte('/') catch default -1
+        if slash >= 0: return $line[slash:line.Len() - "/libnative.so".Len()]
+    }
+    return ""
+}
+
+fn runChecks() {
+    dir := libraryDir()
+    log($"nativeLibraryDir " + $dir + ", files " + $FilesDir)
+    probe := $dir + "/libprobe.so"
+    DirectExec = check("nativeLibraryDir exec", Array<String&>[probe, "direct"])
+    copy := $FilesDir + "/probe"
+    LinkerExec = 2
+    bytes := try os.ReadFile(probe) catch os.Error {
+        log("cannot read " + probe)
+        return
+    }
+    try os.WriteFile(copy, bytes) catch os.Error {
+        log("cannot write " + copy)
+        return
+    }
+    sysstat.chmod($copy + "\0", 0x1ed)     # 0755
+    LinkerExec = check("linker64 exec", Array<String&>["/system/bin/linker64", copy, "linker64"])
+}
+
+# runs the program args name, reading what it writes; 1 where it said it ran, else 2 - each said in logcat
+fn check(what String&, args Array<String&>&) I64 {
+    out := try os.Output.Exec(...args) catch os.Error {
+        log($what + ": could not start " + $args[0])
+        return 2
+    }
+    log($what + ": status " + $out.Status + ", said '" + $out.Stdout.Trim() + "', stderr '" + $out.Stderr.Trim() + "'")
+    return 1 if out.Status == 0 and out.Stdout.StartsWith("olang probe ok:") else 2
+}
