@@ -42197,7 +42197,9 @@ thread shares or the system (`__olang_home_drain`, from `__olang_new_chunk` and 
 takes a home as it starts - a retired worker's, with what was given back to it since, else a new one; a home is never
 freed, as another thread may still give to it - and drains it as it retires. The main thread's home is a global, and a
 thread RunOnStack makes builds as its caller does, so any thread draining any home is sound: what it takes is its own.
--sanitize keeps its quarantine and gives nothing back.
+-sanitize keeps its quarantine and gives nothing back. The evaluator needed nothing: it runs a join's tasks one after
+another on one thread, so a hand-off there is the fold it already made; it agrees with the build on both fixtures
+(taskvals without its channel part, which it cannot run).
 
 **The compiler: condition 3.** It kept every place a task's code lets go of, every place a spawn target's type holds,
 program-wide. Three narrowings:
