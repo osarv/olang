@@ -932,6 +932,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Constructors (C2d, C2g).** A bare field lives with the instance; an argument binds the instance only where the
   body can make it hold it; a constructor's top level allocates into the instance scope. A field given a lambda or an
   adapter lives where what it captured does.
+- **A shared field has a binding of its own (C2d, O28, O23a, O23b; field scopes option B, docs/fieldscopes.md, the
+  user's call 2026-11-23: "Yes, build this").** A helper's writable reference to a context it stores through (a bare
+  pun such as `lowering`'s `L`, `Pass`'s `C`) no longer pins the instance where its referent lives: where C2d's equality
+  would lift an instance above what its other uses need, the field inference gives the field the argument's own scope,
+  the instance asks only to be outlived by it, and the exactness O25g needs is the field's - stores through it held to
+  the binding, builds through it built there (a hidden scope argument; a temporary argument built in a callee's derived
+  scope through it), O29's lookup only where no caller knows it. O23b: where an instance is reached through an element,
+  another instance's field, a global, an `any` or an unfollowed capture and a store, build or call there needs the
+  binding, the declaration keeps none, for the whole program (today's equality) - a superset of the programs accepted
+  before, never placing anything later. The compiler's helpers: `lowering` holds the scope pass's plan by reference
+  (`Lowerer.planFor`), `explain Lowerer.LowerKey` says "lw outlives return" alone, and the cold self-build's lower+emit
+  peak fell 3814 -> 2990 MB.
 - **Scopes belong to one thread (P2, decision 48).** A task's scope arguments are private stand-ins folded at the join. A stand-in is made in the join block's own scope (P2b, 2026-11-17, mine), so a loop of joins keeps nothing; what
   may outlive the join - a closure, a generator, a scope handle - holds its keeper, a forwarder made in the stand-in's
   storage (handed to the parent at the fold), and regions made in a stand-in become the parent's at the fold.
