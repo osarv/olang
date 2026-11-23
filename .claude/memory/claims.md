@@ -39,3 +39,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Cloud (2026-11-23): olang wt-gaps6 - literal holding a local's value, global initializer, r := build(0) read before reassignment
 - Orchestrator child (cloud, 2026-11-23): olang wt-walkers merged - types.HeldParts under the type walkers
 - Orchestrator child (cloud, 2026-11-23): olang wt-mempeak2 merged - the analysis goes when Analyze returns (tree peak cold 5044 -> 4287 MB)
+- Orchestrator child (cloud, 2026-11-23): olang wt-memhelpers - lower/emit per-function helpers freed per function (lower.olang, emit.olang)
