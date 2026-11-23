@@ -320,6 +320,14 @@ group their programs and are by hand. Every top-level folder has a `README.md` (
 `SPEC.md`'s MCP tool list (B16), `editors/README.md` and `compiler/mcp.olang`'s tool list agree **[checked]**; the LSP's
 capabilities are described in SPEC B15 and `editors/README.md` by hand.
 
+## What source text may hold (L1: UTF-8 in comments and literals)
+
+`SPEC.md` L1, L13, L14, B11; `compiler/scan.olang` (`utf8`, `utf8Width`, `wideChar`, the L1/L13 diagnostics and their
+twins in `msgs.olang`); `compiler/diag.olang` `putExcerpt` (the caret counts characters, the headline column bytes);
+`compiler/fmt.olang` `width` (trailing comments aligned by characters); `compiler/session.olang` `Positions` (the
+language server's UTF-16 units or UTF-8 bytes); `tests/utf8text.olang`, `checks/cases/l1*`, `l13utf8char`. The editors'
+syntax files take any byte inside a comment or a literal and need no change.
+
 ## The editors
 
 `editors/nvim/syntax/olang.vim` (keywords and types), `ftplugin/olang.lua` (indent 4, comments `#`),

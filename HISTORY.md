@@ -42537,3 +42537,27 @@ probe asks std/ffi one question (`ffi.Has("")`). It then runs over 152 files: 14
 tool's own harness, not the compiler - tests/cfnptr, tests/cimport and std/tls do not link under emitdump (it links no C
 import or libssl), tests/follow and tests/reclaim fail only under emitdump's path (the twins and followed functions the
 driver's whole-program steps give; the real compiler passes both), and the runtime row differs from the driver's.
+
+## 2026-11-23: UTF-8 in literals and comments (L1; mine; wt-utf8src)
+
+oagent writes Swedish words in its rules and had to spell å, ä and ö as `\u{..}` escapes; olang aims at natural
+language and the user is Swedish. Looking at what refused it: nothing did, for strings and comments - the scanner took
+any byte inside a literal or a comment, as L1 said, but SPEC still called the source "ASCII" and nothing checked the
+bytes, so a stray Latin-1 byte or a broken sequence passed silently into a literal. What was refused was a non-ASCII
+byte outside (a name, rightly, with the message "olang source is ASCII") and `'å'`, as L13's "more than one character".
+
+Decided (mine; it costs nothing at run time): source is UTF-8 text. Comments, string literals and raw text hold any
+character, and the scanner checks the UTF-8 is well-formed as it reads them - the shortest form, no surrogate, nothing
+past `10FFFF` (the same bounds `\u{...}` already had) - one L1 error per comment or literal, the help naming `\xHH`
+for a byte that is no text. A literal is its UTF-8 bytes, as `\u{...}` writes them, so `"på".Len()` is 3 and the
+evaluator agrees untouched (it reads the same bytes). Names stay ASCII: allowing letters beyond ASCII in names would
+need Unicode identifier rules (normalisation, confusables) for little gain, and the message now says a name is ASCII
+and where non-ASCII text goes. `Char` is one byte (T29h), so `'å'` cannot be one: it stays refused, now by its own L13
+message ("a character literal holds one byte, and this character is several in UTF-8", help: write the text in `""`).
+
+Around it: the diagnostics' caret already stood under the token by characters (diag skips continuation bytes); B11 now
+says the headline column counts bytes - what Vim's errorformat `%c` reads - and the caret characters. `fmt` aligned a
+run of trailing comments by byte length, so a line holding `"på"` pushed its comment one column too far; it counts
+characters now. The language server already counted UTF-16 units (or UTF-8 bytes when the editor offers them); a test
+now pins it. Tests: tests/utf8text.olang (decided, baked and run), the scanner's, diag's and session's unit tests, and
+checks/cases l1badutf8str, l1badutf8comment, l1nonasciiname, l13utf8char and the run case l1utf8run.

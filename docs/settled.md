@@ -242,6 +242,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Numeric literals (L10-L12b).** `_` only between digits; a decimal above `I64`'s max is `U64`, beyond 128 bits an
   error; a hex/binary pattern adapting to an unsigned type is its bits (L10a); a float literal beyond its target's
   range is an error (L12b). Escapes include `\0` and `\r`; a literal never crosses its line (L13).
+- **UTF-8 in comments and literals (L1, L13, B11; mine, 2026-11-23, for natural language).** Source is UTF-8 text:
+  a comment, a string literal and raw text may hold any character (`"hej på dig"`), a literal being its UTF-8 bytes
+  (`Len` counts bytes); the scanner checks it is well-formed (no lone or overlong bytes, no surrogate, nothing past
+  `10FFFF`) and reports one L1 error per comment or literal otherwise. Names and code stay ASCII. A `Char` is one byte,
+  so `'å'` is an L13 error naming `"å"`. A diagnostic's column counts bytes (as editors' error lists do), its caret
+  characters; `fmt` aligns trailing comments by characters; the language server counts UTF-16 units or UTF-8 bytes.
 - **Text literals by number, and raw text (L13-L15, L14a, the user's decision 2026-10-24: "add all if they are
   standard").** `\x41` (a byte), `\u{1F600}` (a code point, UTF-8). `"""` is the one raw form: no escapes, one line or
   several; across lines the opening `"""` ends its line, the closing one stands alone and its indentation is removed
