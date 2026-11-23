@@ -1,0 +1,56 @@
+# check: run
+# flags: -sanitize
+# C2d, O25g, G16 (field scopes, option B): a generic helper over a writable reference, instantiated with a referent
+# holding references (whose field can be stored through: given a binding of its own) and with one of numbers only (not
+# pinned at all) - each instance judged as its own; read back after an arena churn
+type Names struct() {
+    all Vec<String&> = Vec<String&>()
+}
+
+fn (n mut Names&) add(i I64) { n.all.Push($i) }
+
+type Counts struct() {
+    all Vec<I64> = Vec<I64>()
+}
+
+fn (n mut Counts&) add(i I64) { n.all.Push(i * 2) }
+
+type Pass<T> struct(C mut T&) {
+    C
+}
+
+fn (p mut Pass<T>&) put(i I64) { p.C.add(i) }
+
+fn runNames(c mut Names&, i I64) {
+    p := Pass<Names>(c)
+    p.put(i)
+}
+
+fn runCounts(c mut Counts&, i I64) {
+    p := Pass<Counts>(c)
+    p.put(i)
+}
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i + "-" + $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+fn main() {
+    ns := Names()
+    cs := Counts()
+    for i in range 4 {
+        runNames(ns, i)
+        runCounts(cs, i)
+    }
+    churn()
+    b := StringBuilder()
+    for x in ns.all: b.Push(x)
+    for x in cs.all: b.Push($x)
+    assert b.ToString() == "01230246"
+}

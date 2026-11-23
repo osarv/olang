@@ -1,0 +1,63 @@
+# check: run
+# C2d, O28 (field scopes, option B): the lowerAs shape run 20,000 times over one context - each turn's helper and the
+# output it builds (an array of 4 KB) live where the turn puts the result, not as long as the context, so the peak stays
+# flat. With the helper pinned to the context (the instance exactly where its writable field's referent lives) every
+# turn's output and helper were kept to the context's end, over 300 MB
+import "std/os"
+import "std/io"
+
+fn peakKb() I64 {
+    status := try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0: return -1
+    line := status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+type Ctx struct() {
+    count I64 = 0
+    names Vec<String&> = Vec<String&>()
+}
+
+type Out struct(k I64) {
+    k
+    cells Array<I64> = Array<I64>(512, k)
+}
+
+type Pass struct(L mut Ctx&, made mut Out&) {
+    L
+    F Out = made
+}
+
+fn (p mut Pass&) work() {
+    p.L.count++
+    if p.L.count % 1000 == 0: p.L.names.Push($p.L.count)
+    p.F.cells[1] = p.F.k * 2
+}
+
+fn (c mut Ctx&) lowerAs(i I64) Out& {
+    f := Out(i)
+    p mut Pass& = Pass(c, f)
+    p.work()
+    return p.F
+}
+
+fn turns(c mut Ctx&, n I64) I64 {
+    total := 0
+    for i in range n {
+        o := c.lowerAs(i)
+        total += o.cells[1] - o.cells[0]
+    }
+    return total
+}
+
+fn main() ? {
+    c := Ctx()
+    first := turns(c, 1000)
+    before := peakKb()
+    rest := turns(c, 20000)
+    grew := peakKb() - before
+    if first != 999 * 1000 / 2 or rest != 19999 * 20000 / 2 or c.names.Len() != 21: unreachable "sum"
+    try io.PutLn("flat" if grew < 8000 else $"grew " + $grew + " kB")
+}

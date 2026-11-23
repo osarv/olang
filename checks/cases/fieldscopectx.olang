@@ -1,0 +1,45 @@
+# check: run
+# flags: -sanitize
+# C2d, O28, O23a (field scopes, option B): a helper holding a writable reference to shared state that holds references
+# (a bare pun) is placed by its own uses - each turn's Pass in run's frame - while the text built through its field is
+# built where the field's referent lives, the scope run's caller passes for it; read back after an arena churn. The
+# top-level assert is decided by the compile-time evaluator, which runs the same code
+type Ctx struct() {
+    names Vec<String&> = Vec<String&>()
+}
+
+type Pass struct(C mut Ctx&) {
+    C
+}
+
+fn (p mut Pass&) note(i I64) { p.C.names.Push($i + "-" + $(i * i)) }
+
+fn run(c mut Ctx&, i I64) {
+    p := Pass(c)
+    p.note(i)
+    p.note(i + 10)
+}
+
+fn churn(d I64) I64 {
+    a := Array<I64>[d, d, d, d, d, d, d, d]
+    l := Vec<I64>()
+    for i in range 30: l.Push(i)
+    if d == 0: return 0
+    return churn(d - 1) + a[3] - d
+}
+
+fn all(n I64) String {
+    c := Ctx()
+    for i in range n: run(c, i)
+    t := churn(40)
+    b := StringBuilder()
+    for x in c.names: b.Push(x + " ")
+    b.Push($t)
+    return b.ToString()
+}
+
+assert all(3) == "0-0 10-100 1-1 11-121 2-4 12-144 0"
+
+fn main() {
+    assert all(3) == "0-0 10-100 1-1 11-121 2-4 12-144 0"
+}

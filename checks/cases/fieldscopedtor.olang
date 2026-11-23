@@ -1,0 +1,40 @@
+# check: run
+# flags: -sanitize
+# O23a, O15 (field scopes, option B): a unique helper whose destructor builds through its writable field - the
+# destructor is passed the binding the helper's construction gave that field, so what it builds lives with the
+# referent, while the helper and its end stay in the loop's turn; read back after an arena churn
+type Tally struct() {
+    seen Vec<String&> = Vec<String&>()
+}
+
+type Logged unique struct(id I64, log mut Tally&) {
+    id, log
+} destruct { log.seen.Push("end " + $id) }
+
+fn (l mut Logged&) note() { l.log.seen.Push($l.id) }
+
+fn churn() I64 {
+    n := 0
+    for i in range 300 {
+        s := $i + "-" + $(i * 7)
+        a := Array<I64>(64, -7)
+        n += s.Len() + a[3]
+    }
+    return n
+}
+
+fn fill(t mut Tally&) {
+    for k in range 3 {
+        lg := Logged(k, t)
+        lg.note()
+    }
+}
+
+fn main() {
+    out := Tally()
+    fill(out)
+    churn()
+    b := StringBuilder()
+    for x in out.seen: b.Push(x + ",")
+    assert b.ToString() == "0,end 0,1,end 1,2,end 2,"
+}

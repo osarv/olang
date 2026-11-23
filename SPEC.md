@@ -7420,7 +7420,8 @@ value where it dangles. Accordingly:
   fields holds a reference, nothing can be stored. Exactness protects exactly those stores - what
   one builds is built in the reference's scope and kept where the referent really is - so where none can happen, a
   reference held somewhere it merely outlives misplaces nothing, and O25c, O25e, O25f, O14 and C2d ask only that it
-  outlive. A reference to plain data is the simplest such case. A field whose binding is one of several scopes (a
+  outlive - and C2d asks only that for a shared field with a binding of its own, whose exactness is its binding's
+  (O28). A reference to plain data is the simplest such case. A field whose binding is one of several scopes (a
   field set, O23) is exact in none: existing storage stored through it is exactly each member, and what is built
   through it is built where its referent is found (O29).
 - **O25h (a value holding references).** A value holding references keeps them where it was built: a value local's
@@ -7525,6 +7526,18 @@ resolved at each call from the argument as above - for an argument reached throu
 of that field (O23); where neither is known, the argument's own scope (O23).
 Writing such a field is held to the derived scope too, so no write can falsify the binding a caller resolves it
 from.
+
+**O23b (where a field's own binding is not kept).** A shared field given a binding of its own (O28, C2d) is judged at
+that binding wherever its instance is named: a local, a call's result, a `for ... in` element, a parameter (O23a). Where
+its instance is reached through a path that names none - an element of an array, a field of another instance, a payload,
+a global, an `any`'s instance, a capture of a function value not followed into its callee (T22c) - and a store through
+the field there, a temporary built through it there, a local taking what it reads there, or a call whose callee's
+obligation names the binding through such an instance needs the binding to be judged, it is not known there, and the
+field could point somewhere every other reader of the instance believes it does not. Rather than refuse it, the field's
+declaration keeps no binding of its own, for the whole program: its shared fields live in the instance scope, exactly
+where their referents do (C2d's equality), as though the inference had never given them one - so a program accepted
+without the inference is accepted with it, and a `Vec<Pass>` of handlers stored through by element is judged as it
+always was. Reads through such a path, and builds found where the referent lives (O29), keep the binding.
 
 **O22.** An assignment whose target's scope tag resolves to a scope variable of the **type** of a parameter —
 the container arrived as a parameter, so the binding was made wherever it was constructed — records a
@@ -7769,10 +7782,12 @@ of them allow, and every judgment of this section is then made of it. So:
   time it binds;
 - a call's result is built where it is put (O18a), where its callee's obligations need it (O18c) or, handed back from
   what the callee was given, lives where that does (O13);
-- a constructor field is its instance's, unless the field holds a view of what a reference parameter refers to and an
+- a constructor field is its instance's, unless the field holds what a reference parameter was given and either an
   instance must outlive itself to keep it - read out of the field, or held by an instance a function returns or a
-  constructor builds into its own field - when it lives where that parameter's argument does: a **binding of its own**
-  (O23a), decided over the whole program;
+  constructor builds into its own field - or something can be stored through it (O25g) and C2d's equality would lift an
+  instance above the scope its other uses need (a **shared field**: a helper's writable reference to a context, a
+  table, a sink) - when it lives where that parameter's argument does: a **binding of its own** (O23a), decided over
+  the whole program and kept only where every function reaching it can resolve it (O23b);
 - a generator's elements live where its yields say (D18c).
 
 The placement extends storage only for what is kept: a whole value where it is kept, the storage a view shows where
@@ -8197,11 +8212,12 @@ bare pun, where matching one is the whole point) or with an earlier field's name
   storage of its own — a referent, a nested constructor call's instance, text — is built there, and lives as
   long as the instance does;
 - a **bare-pun** field of a bare reference parameter lives in the instance scope too, and the argument stored
-  in it must outlive the instance (below);
+  in it must outlive the instance (below) - unless the inference gives it a binding of its own (the next bullet);
 - a field the inference gives a **binding of its own** (O28: one whose initializer reads a reference parameter, holding
-  a view of what the parameter refers to and kept longer than the instance would let it) lives where that parameter's
-  argument lives - `x := text.Trim()` lives where `text`'s argument does - and one initialized with a new value or
-  anything else lives with the instance, as a bare field does. The constructed value carries these bindings, so a
+  a view of what the parameter refers to and kept longer than the instance would let it, or a shared field something
+  can be stored through, whose equality below would make the instance live as long as its referent) lives where that
+  parameter's argument lives - `x := text.Trim()` lives where `text`'s argument does - and one initialized with a new
+  value or anything else lives with the instance, as a bare field does. The constructed value carries these bindings, so a
   short-lived instance may refer into longer-lived storage — a cursor or a view into a structure. A function
   receiving such a value as a parameter reads the field at a derived scope standing for that binding (O23a), which
   each call resolves, so it may read, walk, relate and repoint through the field, and what it builds into that scope -
@@ -8226,6 +8242,12 @@ holding numbers) is built where the sink is and read in the list's block. An arg
 (`&p`) must outlive the instance too, but never exactly: that field keeps the argument's own scope, so the instance may
 be shorter-lived than what it refers to (a cursor, a view), never longer - or the field would point into a scope that
 had closed while the instance could still be read.
+A shared field given a binding of its own (O28) is such a field: its argument must outlive the instance, never be
+exactly it. The exactness O25g needs moves from the instance to the field - existing storage stored through it is held
+exactly to its binding (O25c, O23a), what is built through it is built there (E12c), a reference read out of it is
+where its binding is (O25a) - so nothing about the field asks the instance to live longer, and the instance is placed by
+its other uses (O28): `p := Pass(c)` in a loop's turn lives in the turn while what `p.note(i)` builds through `p.C`
+lives where `c`'s argument does. O23b says where such a binding is not kept.
 A violation is a compile-time error at that point, reported at the argument.
 
 An argument binds the instance this way only when the instance **may hold** what it refers to, as read off the
