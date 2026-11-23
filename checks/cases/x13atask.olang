@@ -1,0 +1,10 @@
+# check: fail error[X13a]: a task is never a call through a C function pointer
+# X13a: a task calls a function or a function value; C's function is called from a function the task calls
+extern fn x13a_get() extern fn?&(x I32) I32
+
+fn main() {
+    p := x13a_get()
+    join {
+        spawn p!(3)
+    }
+}

@@ -1455,7 +1455,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`extern fn` and C interop (X1-X16; v2 the user's design 2026-10-24).** Across the boundary: Bool, numeric
   primitives, arrays of them, **extern types** (`extern type Db`, held as `Db&`/`Db?&`, X10), plain-data structs by
   reference and by value (X11). `link "name"` only on an extern block or a C import (X9). **Callbacks are `export
-  fn`s only** (X13). `build -library` (X14) makes `libNAME.so` and `NAME.h`. `t.ToC()` and `String.FromC(p, max)`
+  fn`s only** (X13). **C function pointers** (X13a, 2026-11-23): `extern fn&(...)`/`extern fn?&(...)` - one word, no
+  olang function value - in plain structs (callback tables), as extern parameters and results; made only of an export
+  fn named, `null` an `extern fn?&`'s zero value; called as a function value is (`p!(x)`), a call of C taken at its
+  word (X1a); no task, the evaluator and the interpreter refuse by name; C imports type function-pointer fields and
+  results so (a variadic one `CVoid?&`); a table behind a pointer (JNIEnv) is copied out with `memcpy`. `build -library` (X14) makes `libNAME.so` and `NAME.h`. `t.ToC()` and `String.FromC(p, max)`
   (X15). `olang bindgen HEADER.h` (X16). No extern variables; the X1a hole (a wrong prototype) stands. C math functions
   with exact prototypes are evaluated while compiling (X8). C's `T*` is `mut T&` (borrowed, no copy), `const T*` is
   `T&`; a source that cannot be borrowed writably (constant data, a bare parameter) is copied for C (the user,

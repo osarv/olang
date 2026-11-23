@@ -42364,3 +42364,32 @@ root is imported by every other prelude module without an import - and one writt
 the root's functions those callers name were never written; under full LTO the link drops the callers first, without it
 (-race, -debug, -sanitize) the link fails. `emit.othersReachRoot`: the root's every function is written where any other
 module imports it, or it is a prelude module.
+**C function pointers (X13a, 2026-11-23).** The Android sample's callbacks hack (above) went to the ledger as a direction
+question; decided within the user's direction: an extern plain struct may hold a C function pointer, assignable only from
+an export fn, the vocabulary X13 already uses for an extern's argument - and then (the Orchestrator, the same day) olang
+must also call through one read from C, as unchecked as any extern call, for JNI's `JNIEnv` table. The spelling reuses
+the function type with `extern` before it, `extern fn?&(x I32) I32` - the keyword already says "C's", and a word over a
+symbol (principle 3); a new type name (`CFn<...>`) would have needed a second signature syntax. It is a different type
+from `fn?&(...)`, never converted either way: an olang function value is two words (code, environment) and a C pointer
+one, and treating a struct's `fn&` field as C's pointer whenever the struct happened to be plain data would have changed
+the layout of existing structs silently. In the compiler it is a reference to the function type (`Ref(Func)`), which a
+function type otherwise never is: so it is one word, nullable by `?&`, narrowed, `!`-unwrapped, compared by identity and
+taken by section 8 for a value holding no reference exactly as an extern type's reference (types.ForeignRef), and only
+its making (an export fn's C entry, check.cEntry; emit's closure of that type, the entry's symbol) and its call (a MIR
+callee of its own, `Pointer`, emitted as an extern call through the loaded address, effects and free taking it as a
+call of C that may call back) are new. Decided details: reading one is allowed (it is a value C gave), calling one is a
+call of C (X1-X4); a null is unreachable through `!` or a test, and a null in an `extern fn&` is the program's word
+(X1a); its zero value is `null` for `extern fn?&` - a fresh callbacks table is all nulls, which is what C's tables mean by
+"not set" - and an `extern fn&` has none; a task through one is refused (emit has no task of an extern call); defaults,
+promises, errors and `...` are refused at the type (C fills in nothing and keeps no promise). A table behind a pointer
+to a pointer (JNI) needed no field of reference-to-struct: it is copied out with `memcpy` into a plain struct of
+`CVoid?&` and `extern fn?&` fields, as X22 already reads C's structs; a variadic function pointer has no form (its field
+is `CVoid?&`, JNI's `...A` forms take arrays). C imports (X18) now type a function-pointer field or result as
+`extern fn?&(a0 ...)` where it has the form - before, every such field was `CVoid?&`. The sample now writes its
+`Callbacks` table (sixteen typed fields, five set) with one `memcpy` and reads `internalDataPath` as a `CStr?&` field of
+an `Activity` struct, the memmove/mempcpy hack and its offsets gone. Tests: tests/cfnptr.olang (C calling a struct of the
+program's export fns, the program calling C's struct and lone pointer, a JNI-shaped table; its layout and nulls
+decided while compiling), checks/cases/x13a*.olang (glibc's fopencookie run with a by-value struct of pointers; the
+refusals). A library's header (X14) writes each C function pointer
+type as a typedef of its own (`olang_fn_K`), a struct it points to declared by its tag first, since the struct may be the
+one holding the pointer.

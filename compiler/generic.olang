@@ -1050,7 +1050,7 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
         case ast.TypeRef.Named(sp, path, args): p.named(c, sp, path, args)
         case ast.TypeRef.Func(sp, s): p.funcType(c, sp, s)
         case ast.TypeRef.Shape(_, body): p.shape(c, body)
-        case ast.TypeRef.Ref(sp, of, nullable, _): p.refType(c, sp, p.Resolve(c, of), nullable)
+        case ast.TypeRef.Ref(sp, of, nullable, _): p.cFunc(c, of, nullable) if cWritten(of) else p.refType(c, sp, p.Resolve(c, of), nullable)
         case ast.TypeRef.Perm(_, of, writable): p.perm(p.Resolve(c, of), writable)
         # T32: what "any R&" refers to - the trait R names, the checker saying where it names none (writtenMet)
         case ast.TypeRef.Any(_, of): p.T.Any(p.Resolve(c, of))
@@ -1058,6 +1058,21 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
         # D8g: a variadic parameter's, a read-only array of what it is written as - "...T" its spelling (Spread)
         case ast.TypeRef.Spread(_, of): p.T.Ref(p.T.Array(p.Resolve(c, of), types.TypeId(0)), types.Spread)
     }
+}
+
+# X13a: whether a written type is a function type after "extern" - a C function pointer
+fn cWritten(t ast.TypeRef&) Bool {
+    s := t.FuncSig()
+    return s != null and s.Extern
+}
+
+# X13a: a C function pointer, "extern fn&(...)" or "extern fn?&(...)": a reference to the function type, its parameters'
+# names kept for rendering and its scopes left out (C's function lives in none)
+fn (p mut Program&) cFunc(c Context&, of ast.TypeRef&, nullable Bool) types.TypeId {
+    f := p.Resolve(c, of)
+    if p.T.KindOf(f) != types.Kind.Func: return types.UnknownT
+    f = p.T.Func(p.T.PlainList(p.T.Params(f)), p.T.Plain(p.T.Result(f)), p.T.Errors(f), names = p.T.NamesIdOf(f))
+    return p.T.Ref(f, types.Nullable if nullable else types.ReadOnly)
 }
 
 # a reference to r, "?&" where it may be null (T2c) - an array's too, its null no array at all where its zero value is
@@ -5435,6 +5450,11 @@ fn (p mut Program&) reflName(b mut StringBuilder&, t types.TypeId) {
             b.Push("Array<")
             p.reflName(b, p.T.Elem(t))
             b.PushChar('>')
+        }
+        case types.Kind.Ref if p.T.CFunc(t) {
+            # X13a: a C function pointer, its marker on its "fn"
+            b.Push("extern ")
+            p.reflName(b, p.T.OrNull(p.T.Referent(t)) if (p.T.PermOf(t) & types.Nullable) != 0 else p.T.Referent(t))
         }
         case types.Kind.Ref {
             pm := p.T.PermOf(t)

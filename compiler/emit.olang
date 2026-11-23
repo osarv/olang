@@ -6611,6 +6611,7 @@ fn (e mut Emitter&) pow2(k I64) String { return e.constText(types.TypeId(14), I6
 
 # a function value (T21): the pair { code, environment } - the environment, where there are captures, built in s
 fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args mir.Range, caps mir.Range) String {
+    if fe.E.T.CFunc(ty): return fe.cEntry(code, fe.E.T.Referent(ty))
     fe.E.want(code)
     sym := fe.E.codeFor(code, ty)
     env := "null"
@@ -7252,6 +7253,12 @@ fn (fe mut fnEm&) call(c mir.Call) {
             isExtern = true
             variadic = fe.E.P.FnDecl(f).S.Variadic
         }
+        case mir.Callee.Pointer(x, fty) {
+            # X13a: through a C function pointer - its value the address C calls, by C's convention
+            ty = fty
+            target = fe.val(x, fe.otype(x))
+            isExtern = true
+        }
         case mir.Callee.Value(x) {
             ty = fe.otype(x)
             v := fe.val(x, ty)
@@ -7759,6 +7766,21 @@ fn (fe mut fnEm&) exportNamed(x mir.Operand) String {
 }
 
 # the name of the export fn a closure is made of, "" where the value is no such closure
+# X13a: a C function pointer made of an export fn, named - its C entry's address (check allows nothing else)
+# - declared where another module's object defines it (X12: the root's)
+fn (fe mut fnEm&) cEntry(code mir.FnKey, fty types.TypeId) String {
+    if code == mir.FnKey.Body {
+        of := fe.E.Lw.Bodies[I64(code.id)].Of
+        if of == typed.BodyOf.Fn {
+            name := $fe.E.text(fe.E.P.FnDecl(fe.E.P.InstanceFn(of.instance)).Name)
+            if not fe.E.has(name): fe.E.declare(name, $fe.E.cHeader(fty) + " @" + $name + "(" + $fe.E.cParamList(fty, false) + ")")
+            return "@" + $name
+        }
+    }
+    fe.gap("a C function pointer that is no export fn's entry")
+    return "null"
+}
+
 fn (e mut Emitter&) exportBody(rv mir.Rvalue) String {
     if rv != mir.Rvalue.Closure: return ""
     code := rv.code
@@ -8108,6 +8130,7 @@ type cDecls struct() {
     Foreign Vec<String&>
     Structs Vec<String&>
     seen Map<String&, Bool>
+    Fns Map<String&, String&>      # X13a: each C function pointer type's typedef, by its canonical text
 }
 
 # the C header of a library named lib built from file: its extern types declared, the plain structs its entries take
@@ -8165,7 +8188,7 @@ fn (e mut Emitter&) cEntryDecl(f I64, ty types.TypeId, ds mut cDecls&) String {
         pn := $e.text(fd.S.Params[j].Name) if j < fd.S.Params.Len() else $"a" + $j
         pt := pts[j]
         rp := t.Repr(pt)
-        if t.IsRef(rp) {
+        if t.IsRef(rp) and not t.CFunc(rp) {
             x := t.Repr(t.Referent(rp))
             ro := (t.PermOf(rp) & types.Writable) == 0
             if t.KindOf(x) == types.Kind.Array {
@@ -8247,6 +8270,7 @@ fn (e mut Emitter&) cType(ty types.TypeId, ds mut cDecls&) String {
             case _: "double"
         }
     }
+    if t.CFunc(r): return e.cFuncType(r, ds)
     if t.IsRef(r) {
         x := t.Referent(r)
         n := $e.text(t.DeclName(t.DeclOf(x)))
@@ -8280,6 +8304,39 @@ fn (e mut Emitter&) cType(ty types.TypeId, ds mut cDecls&) String {
         return n
     }
     return "void"
+}
+
+# X13a: a C function pointer's type in a header - a typedef of its own, "olang_fn_K", declared before what names it:
+# "typedef int32_t (*olang_fn_1)(int32_t);", a plain struct's reference its pointer (const where read-only)
+fn (e mut Emitter&) cFuncType(r types.TypeId, ds mut cDecls&) String {
+    t := e.T
+    f := t.Referent(r)
+    key := "p " + $t.Canon(t.Plain(f))
+    n := try ds.Fns.Get(key) catch default ""
+    if n != "": return n
+    ps := StringBuilder()
+    for k, p in t.Items(t.Params(f)) {
+        if k > 0: ps.Push(", ")
+        rp := t.Repr(p)
+        if t.IsRef(rp) and not t.CFunc(rp) and not t.ForeignRef(rp) {
+            # (by its tag, declared first: the struct may be the one being defined, which holds this pointer)
+            sn := e.cType(t.Referent(rp), ds)
+            if not ds.seen.Has("t " + $sn) {
+                ds.seen.Put("t " + $sn, true)
+                ds.Structs.Push("struct " + $sn + ";\n")
+            }
+            ps.Push($("const " if (t.PermOf(rp) & types.Writable) == 0 else "") + "struct " + $sn + " *")
+            continue
+        }
+        ps.Push(e.cType(p, ds))
+    }
+    if ps.Len() == 0: ps.Push("void")
+    res := t.Result(f)
+    ret := "void" if res == types.VoidT else e.cType(res, ds)
+    n = "olang_fn_" + $(ds.Fns.Len() + 1)
+    ds.Fns.Put(key, n)
+    ds.Structs.Push($"typedef " + $ret + " (*" + $n + ")(" + $ps.ToString() + ");\n\n")
+    return n
 }
 
 # X11a: a packed struct's fields as C bitfields, one each (an array's elements each one, name_0, name_1 ...): an unsigned
@@ -8890,6 +8947,11 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
             # refused by check (T32b): a task's call is through a function value or to a function
             ty = dty
             fe.gap("a task calling through an any")
+        }
+        case mir.Callee.Pointer(_, pty) {
+            # refused by check (X13a)
+            ty = pty
+            fe.gap("a task calling through a C function pointer")
         }
     }
     ps := t.Items(t.Params(ty))

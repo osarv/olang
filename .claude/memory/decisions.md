@@ -21,6 +21,4 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-1. (2026-11-23, Android target) May an extern plain struct hold a C function pointer field, assignable only from an
-   `export fn` (X13's vocabulary)? NativeActivity's callbacks table needs it; the terminal app will too. Default in
-   effect: examples/android writes the table through `memmove`/`mempcpy` with U64 handles (a hack). Recommendation: yes.
+(none)

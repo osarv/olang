@@ -497,7 +497,9 @@ fn (w mut writer&) types(ts Array<ast.TypeRef&>&) {
 fn (w mut writer&) funcType(s ast.Sig&, marker String&) {
     wrap := w.group or (w.item and (s.Results.Len() > 1 or s.Errors.Len() > 1))
     w.group = false
-    w.put("(fn" if wrap else "fn")
+    w.put("(" if wrap else "")
+    if s.Extern { w.put("extern ") }   # X13a: a C function pointer
+    w.put("fn")
     w.put(marker)
     was := w.item
     w.item = false

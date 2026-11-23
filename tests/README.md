@@ -103,6 +103,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `mapmut.olang` - a Map whose values hold writable references walked by `for e in m` (S9c, T25c): read-only through
   IterRef (each entry a read-only copy), writably through IterMut and ValuesMut, a write reaching the arrays the values
   refer to; a plain map as before; decided while compiling too.
+- `cfnptr.olang`, `cfnptr/` - C function pointers (X13a) with a C file of the corpus's own, imported: a struct of them
+  filled from export fns and called by C, C's own called through, and a table reached through a pointer to a pointer as
+  JNI's is; a fresh struct's nulls and its layout decided while compiling.
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.

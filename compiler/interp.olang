@@ -1105,7 +1105,7 @@ fn (x mut Exec&) callee(c mir.Callee, work mut Vec<mir.FnKey>&) {
                 x.M.DefineExtern(e, x.P.ExternSymbol(e), fd.S.Params.Len() if fd.S.Variadic else -1)
             }
         }
-        case mir.Callee.Value(_), mir.Callee.Dispatch(_, _, _) { }
+        case mir.Callee.Value(_), mir.Callee.Dispatch(_, _, _), mir.Callee.Pointer(_, _) { }
     }
 }
 

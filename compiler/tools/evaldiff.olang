@@ -44,6 +44,12 @@ Expected Array<String&> = Array<String&>[
     "tests/cimport.olang: a packed record of bitfields is a packed struct, its bits C's (X18, X11a) - a struct by value to C (B3e)"
     # X13: C is handed an export fn to call back, which under interpret is no function C can call (B3e)
     "checks/cases/x13qsort.olang - an export fn handed to C (B3e)"
+    # X13a: a C function pointer is made of an export fn's C entry, or called into C's code - neither of which
+    # interpret has (B3e); and the structs holding them are structs of pointers to C. A fresh one's null runs
+    "checks/cases/x13acookie.olang - a C function pointer made of an export fn (X13a, B3e)"
+    "tests/cfnptr.olang: C calls the export fns a struct of function pointers holds, and leaves a null one uncalled - a struct of C function pointers to C (X13a, B3e)"
+    "tests/cfnptr.olang: the program calls the functions C gives back, in a struct and alone - a call through a C function pointer (X13a, B3e)"
+    "tests/cfnptr.olang: a table reached through a pointer to a pointer, as JNI's is, is read out and called through - a call through a C function pointer (X13a, B3e)"
 ]
 
 # the tests the interpreter is not given at all, since they would never end - by name, as Expected names a test: a task

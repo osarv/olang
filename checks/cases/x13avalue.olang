@@ -1,0 +1,8 @@
+# check: fail error[X13a]: a C function pointer ('extern fn?&(x I32) I32') is made of an export fn, named
+# X13a: a function value held in a variable has no C entry, even one an export fn's name made
+export fn doubled(x I32) I32 { return 2 * x }
+
+fn main() {
+    g := doubled
+    p extern fn?&(x I32) I32 = g
+}
