@@ -41728,3 +41728,18 @@ assert). A lambda's capture copies a value (D16c), so the
 split keeps its meaning; a value array borrowed by a capture is EscHard. Checked by hand that a reference local, a
 `defer` and a capture print what master prints, the evaluator agreeing. SPEC D9i says both. checks' freeing againread
 (master fails `-memory -check`).
+## 2026-11-23: a collection's own storage kept by a growth is a row of the report (B18, O8f; mine; review10)
+
+wt-gaps6 met a `Vec<I64>.0` kept program-wide (~250 bytes a turn) while `-memory -check` counted nothing kept. The
+cause is the report, not the decision: a library collection's own storage - every `Vec<I64>`'s buffer is one place,
+`Vec<I64>.0` - is let go of only in the library's code (Push's growth), and `free.reported` took a field place only of
+a type the program declares, `shown` a let-go only in the program's own code or at a removal or `SetAt`. So whatever
+kept that place - a view of one Vec in use across a call growing another (condition 6 as the place is judged), a task,
+a gap's reason - was neither a row nor counted, and a gap kind (RInPlace, RCopied, RSplit) there never failed `-check`.
+Now such a place (`free.libraryStorage`: an array place of a library type some call of the program's own code, in code
+that runs again, may let go of) is reported at that call: `what a Vec<I64> grows out of in calls here is kept until its
+scope closes`, with the note of its reason, counted kept, and a gap where its reason is one. checks' freeing growkept
+(`r Vec<I64>& = base` in use across `rows[i % 4] = mk(i)`: 90 MB at 200,000 turns, the report said "no place lets go
+of storage"); the freeing and earlyfree fixtures gain rows (genviews, globalviews, ownertexts, taskvals, viewholders,
+viewlocals, earlyfree's server), none a gap. Left (a design question, docs/freeing.md 2.4): the place is the type's,
+so a view of one `Vec<I64>` keeps the growth of every other - the spec's condition 6 is a view "of the old storage".

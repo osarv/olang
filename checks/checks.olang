@@ -682,6 +682,12 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 globalviews.olang > out.txt 2>&1") == 0 and outOf(dir) == gv, "globalviews interpreted", dir)
     # (copyread: `c := v[j]` read after the element is replaced holds lowering's copy - no named view keep either)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check copyread.olang > out.txt 2>&1") == 0 and outOf(dir).Contains(", 0 keep it"), "copyread frees at once", dir)
+    # (growkept: a view of one Vec<I64> in use across a call growing another keeps every Vec<I64>'s growth - a let-go in
+    # the library's code, named at the program's call, review10; before, no row and nothing counted kept)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check growkept.olang > out.txt 2>&1") == 0, "growkept -memory -check", dir)
+    try r.expect(outOf(dir).Contains("growkept.olang:21:9: memory: what a Vec<I64> grows out of in calls here is kept until its scope closes") and outOf(dir).Contains(", 1 keeps it"), "growkept names its growth's keep", dir)
+    try late(r, dir, "growkept", "2000", "2059000\n")
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" growkept.olang > out.txt 2>&1") == 0 and outOf(dir) == "2059000\n", "growkept interpreted", dir)
     # (threads reserve address space of their own: these read their own growth, or their peak)
     try r.expect(sh(dir, "\"$OLANG\" -check joins.olang > out.txt 2>&1") == 0, "joins", dir)
     try r.expect(outOf(dir).EndsWith("flat 200000\n"), "joins kept what its joins made", dir)

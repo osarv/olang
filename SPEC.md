@@ -9228,13 +9228,15 @@ compiler's diagnostics are given only the files the compiler reports an error in
 each place that lets go of storage made for it in code that runs again (a loop, or a function other than `main`) and
 keeps it until its scope closes - `path:line:column: memory: 'PLACE' keeps what it lets go of until SCOPE closes`, at
 the statement letting go, or `removed elements of 'COLLECTION' are kept until SCOPE closes` for what a collection's
-removals let go of - then a `note:` row at the reason: the store of a reference into it elsewhere (condition 2), the
+removals let go of, or `what a TYPE grows out of in calls here is kept until its scope closes` at the program's first
+call, in code that runs again, that may grow a library collection's own storage (O8d: one place for every `TYPE` of
+the program, its let-go in the library's code) - then a `note:` row at the reason: the store of a reference into it elsewhere (condition 2), the
 value that was not made for it (condition 1), the view in use across the let-go (condition 6) - where the let-go is a
 call through a function value nothing is known of, or a call given one, saying so (`which may let go of anything: it is
 given a function value not followed whose type does not promise 'pure', and calls through it`) -, the task or the
 destructor (conditions 3 and 4); and last a line counting the places and how many free what they let go of at once. Only
-the program's places are reported - fields of its types, and what its collections hold - not those inside the
-library's collections, whose storage goes with what holds them. SCOPE is the scope of what the place's expression
+the program's places are reported - fields of its types, what its collections hold, and its collections' own storage
+grown by its calls - not other places inside the library's collections, whose storage goes with what holds them. SCOPE is the scope of what the place's expression
 starts from: a parameter's referent's, named by its type (`the Server's scope`), or a local's function's (`main's
 scope`). Places that free at once are counted, not listed; rows for one cause are written once. A collection whose
 values have destructors keeps what it lets go of (condition 4). Then a row for each weak place the program declares (T2d), in the order it declares them - `path:line:column: memory:

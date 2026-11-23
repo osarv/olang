@@ -1,0 +1,25 @@
+import "std/io"
+
+# O8f, B18 (review10): a collection's own storage is a place of its type - every Vec<I64>'s buffer is one place - so a
+# view of one Vec<I64> in use across a call that grows another keeps what every Vec<I64> grows out of (condition 6 as
+# the place is judged). Its let-go is in the library's code (Push's growth), so the report named no row and counted
+# nothing kept while the program kept ~450 bytes a turn; it is now a row at the program's call that grows one (mk(i))
+N I64 = 2000
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 30: w.Push(i + j)
+    return w
+}
+
+fn main() {
+    base := mk(0)
+    rows Array<Vec<I64>> = Array<Vec<I64>>(4, Vec<I64>())
+    t := 0
+    for i in range N {
+        r Vec<I64>& = base
+        rows[i % 4] = mk(i)
+        t += r[1] + rows[i % 4][29]
+    }
+    io.PutLn($t)!
+}

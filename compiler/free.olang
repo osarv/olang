@@ -8487,8 +8487,11 @@ fn (f mut Free&) Report() String {
         # the first call that lets go of it
         first := -1
         # ...its own: a call that may let go of anything names no place (its row, a view's, is said below)
+        # (a collection's own storage, a library type's: at the program's call that grows it, any callee - review10)
+        grown := f.libraryStorage(k)
         for g in range f.goes.Len() {
-            if f.goes[g].PlaceId != k or not f.shown(f.goes[g]) or not f.goes[g].Again: continue
+            if f.goes[g].PlaceId != k or not f.goes[g].Again: continue
+            if not f.shown(f.goes[g]) and not (grown and f.growsHere(f.goes[g])): continue
             if first < 0 or f.rowBefore(f.goes[g], f.goes[first]): first = g
         }
         if first < 0: continue
@@ -8498,11 +8501,14 @@ fn (f mut Free&) Report() String {
         row := first
         if f.whyKind[k] == RView { row = try f.viewGo.Get(k) catch default first }
         g := f.goes[row]
+        if grown and not f.programCode[g.Body]: g = f.goes[first]
         at := f.lineStart(g.File, I64(g.At.Start))
         # a row at a call - one that may let go of anything too - says the place as its own let-go writes it
         if g.Kind == LCall and f.goes[first].Kind != LCall: g = f.goes[first]
         what := ""
-        if ((f.keyField[k] < 0 and not f.isNamed(k)) or f.isContents(k)) and g.Kind != LAssign {
+        if grown {
+            what = $"what a " + $f.typeName(f.keyTy[k]) + " grows out of in calls here is kept until its scope closes"
+        } else if ((f.keyField[k] < 0 and not f.isNamed(k)) or f.isContents(k)) and g.Kind != LAssign {
             what = $"removed elements of '" + $f.collection(k, g.Body, g) + "' are kept until " + $f.scopeName(g, k) + " closes"
         } else {
             what = $"'" + $f.placeName(g) + "' keeps what it lets go of until " + $f.scopeName(g, k) + " closes"
@@ -8627,8 +8633,36 @@ fn (f mut Free&) reported(k I64) Bool {
     r := t.Repr(f.keyTy[k])
     if t.KindOf(r) != types.Kind.Named: return false
     m := t.DeclModule(t.DeclOf(r))
-    return m >= 0 and m < f.P.L.Mods.Len() and not f.P.L.Mods[m].Identity.StartsWith("std/")
+    if m < 0 or m >= f.P.L.Mods.Len(): return false
+    return not f.P.L.Mods[m].Identity.StartsWith("std/") or f.libraryStorage(k)
 }
+
+# whether place k is a field of a type the library declares
+fn (f mut Free&) libraryField(k I64) Bool {
+    if f.keyField[k] < 0: return false
+    t := f.T()
+    r := t.Repr(f.keyTy[k])
+    if t.KindOf(r) != types.Kind.Named: return false
+    m := t.DeclModule(t.DeclOf(r))
+    return m >= 0 and m < f.P.L.Mods.Len() and f.P.L.Mods[m].Identity.StartsWith("std/")
+}
+
+# review10: whether place k is a library collection's own storage (a Vec's buffer, a Map's slots) - a place of the
+# type, every instance's in the program: what its growth replaces is a let-go of the program's wherever the program's
+# own code, in code that runs again, calls what grows one (O8f) - kept, it is reported at that call
+fn (f mut Free&) libraryStorage(k I64) Bool {
+    if not f.arr[k] or not f.libraryField(k) or f.isContents(k): return false
+    for g in f.goes {
+        if g.PlaceId == k and g.Again and f.growsHere(g): return true
+    }
+    return false
+}
+
+# a type as the program spells it
+fn (f mut Free&) typeName(ty types.TypeId) String { return f.Sc.Spell!(ty) if f.Sc.Spell != null else $f.T().Canon(ty) }
+
+# whether let-go g is a call in the program's own code
+fn (f Free&) growsHere(g letGo) Bool { return g.Kind == LCall and g.Callee >= 0 and f.programCode[g.Body] }
 
 # whether the program's own code gives place k another value (an assignment's let-go) or lets go of a value moved out
 # of it (a dropped Pop's, a local holding one to its block's end)
@@ -8725,7 +8759,6 @@ fn (f mut Free&) scopeName(g letGo, k I64) String {
 # every candidate place and its decision, for debugging the analysis (OLANG_FREEDUMP)
 fn (f mut Free&) Dump() String {
     b := StringBuilder()
-    t := f.T()
     for k in range f.keyTy.Len() {
         lets I64 = 0
         for g in f.goes {
@@ -8735,7 +8768,7 @@ fn (f mut Free&) Dump() String {
         for st in f.stores {
             if st.PlaceId == k: sto++
         }
-        nm := f.Sc.Spell!(f.keyTy[k]) if f.Sc.Spell != null else $t.Canon(f.keyTy[k])
+        nm := f.typeName(f.keyTy[k])
         b.Push($"place " + $k + " " + $nm + "." + $f.keyField[k] + $(" handle" if f.handle[k] else "") + " sole " + $f.IsSole(k) + " lets " + $lets + " stores " + $sto + " why " + $f.whyKind[k] + " " + $f.why[k].Text + "\n")
     }
     for st in f.stores {
