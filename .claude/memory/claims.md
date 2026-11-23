@@ -48,3 +48,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-android - Android target (aarch64-linux-android, bionic via NDK r28c), NativeActivity sample and APK: merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-buildmem merged - plans by reference in lowering (-36 MB); the emitted text left as the next step
 - OLang Cloud (2026-11-23): olang wt-spawnrelease - spawn target declared outside a loop: -check names it, then release at reassignment after the wait
+- Orchestrator child (cloud, 2026-11-23): olang wt-buildmem2 - the emitted text freed as objects are made (items' IR, object text), the bump slack explained
