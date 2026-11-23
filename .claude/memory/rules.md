@@ -145,7 +145,12 @@ slimming of 2026-11-08").
 - **One-line bodies (the user, 2026-11-13: "a lot of places where we dont use the new : semantic for one-statement followups on conditions or loops blocks")**: a block of one simple statement after `if`, `else`, `for`, `catch` is written `if c: stmt` (S1b), always, in new code and in every refactor; the refactor pass converts the existing ones with a cheap tool ("just dont spend 10 percent of a week on it").
 - **Use the construct that fits**: the language's newer forms (guard clauses, narrowing, `case P: v`, conditional
   expressions, comprehensions, generators, `try` over a whole expression, named arguments, `become`, `defer`, reflection,
-  lane operators) over C-style habit.
+  lane operators) over C-style habit. **Every olang program, in every repo, uses the language as designed (the user,
+  2026-11-23: "Make sure you use weak references when it's appropriate ... whilst building. Use all the Olang features
+  as they are supposed to be used")**: `weak` for back links and peer links (parent, `prev`, observers, caches) with one
+  owning direction; `unique` where one owner is the point; errors as `?`/`try`, never a value beside a flag; generators,
+  comprehensions and `defer` where they fit; no C-style workarounds where a feature exists, and a missing feature or a
+  refusal that gets in the way goes to the olang session as a finding, not around it.
 - **Keep every dependent part in step**: walk DEPENDENTS.md for each change; a new edge found goes into the map in the
   same commit; `make consistency` checks the mechanical ones.
 - **Style and conciseness**: do exactly the refactor asked, to the destination named, without substituting; no leftover
