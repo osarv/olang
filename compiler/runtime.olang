@@ -197,8 +197,10 @@ fn WithAttributes(ir String&, attrs String&, race Bool) String {
 
 # the runtime's IR for a build for triple and arch, with attrs on its functions: what build compiles into the
 # runtime's object
-fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false, bench Bool = false, tile Bool = false) String ? Bad {
+fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false, bench Bool = false, tile Bool = false
+    system String& = "linux") String ? Bad {
     body := try Text(arch, san, false, prof, bench)
+    if system == "android": body = Bionic(body)
     # tile.AddDot: the runtime's AMX product runs where the target has it (target.Target's TileDot), declined elsewhere -
     # a constant here rather than a condition of Fill's, which the seed's own filling would not know
     if tile {
@@ -206,6 +208,45 @@ fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Boo
     }
     return WithAttributes($"target triple = \"" + $triple + "\"\n\n" + $body, attrs, race)
 }
+
+# B12e: the runtime filled in for aarch64 Linux made the runtime for Android, whose C library (bionic) differs from
+# glibc in what the runtime reaches in four ways - a transformation here rather than a condition or a fact of Fill's,
+# which the seed's own filling would not know. errno is reached through __errno, not __errno_location; sysconf's names
+# are other numbers; struct sigaction holds its flags first and its handler second (glibc: the handler first, the
+# flags after a 128-byte mask), so the runtime's glibc-shaped actions go through a function translating them; the other
+# structures the runtime sizes (stat, dirent, pthread_attr_t, jmp_buf, posix_spawn_file_actions_t, ucontext_t) are laid
+# out as on glibc or are smaller there, which the glibc row's sizes hold
+fn Bionic(text String&) String {
+    out := String(text.Replace("declare ptr @__errno_location()\n", ""))
+    out = String(out.Replace("call i32 @sigaction(", "call i32 @__olang_bionic_sigaction("))
+    out = String(out.Replace("call i64 @sysconf(i32 ", "call i64 @__olang_bionic_sysconf(i32 "))
+    return $out + BionicShims
+}
+
+# what Bionic adds: __errno_location over bionic's __errno (std's own C imports name __errno themselves), sysconf
+# taking glibc's numbers for the three names the runtime asks (_SC_PAGESIZE 30 -> 39, _SC_THREAD_STACK_MIN 75 -> 76,
+# _SC_PHYS_PAGES 85 -> 98), and sigaction taking and giving glibc's aarch64 layout (handler at 0, flags at 136)
+BionicShims := "\n; B12e: bionic's differences from glibc, as runtime.Bionic says\n" + $
+    "declare ptr @__errno()\n" + $
+    "define ptr @__errno_location() {\n  %p = call ptr @__errno()\n  ret ptr %p\n}\n" + $
+    "define internal i64 @__olang_bionic_sysconf(i32 %name) {\n" + $
+    "  %a = icmp eq i32 %name, 30\n  %b = icmp eq i32 %name, 75\n  %c = icmp eq i32 %name, 85\n" + $
+    "  %n1 = select i1 %a, i32 39, i32 %name\n  %n2 = select i1 %b, i32 76, i32 %n1\n  %n3 = select i1 %c, i32 98, i32 %n2\n" + $
+    "  %r = call i64 @sysconf(i32 %n3)\n  ret i64 %r\n}\n" + $
+    "define internal i32 @__olang_bionic_sigaction(i32 %sig, ptr %act, ptr %old) {\n" + $
+    "entry:\n  %b = alloca [32 x i8], align 16\n  %bo = alloca [32 x i8], align 16\n" + $
+    "  call void @llvm.memset.p0.i64(ptr %b, i8 0, i64 32, i1 false)\n" + $
+    "  call void @llvm.memset.p0.i64(ptr %bo, i8 0, i64 32, i1 false)\n" + $
+    "  %has = icmp ne ptr %act, null\n  br i1 %has, label %fill, label %call\n" + $
+    "fill:\n  %h = load ptr, ptr %act\n  %fp = getelementptr i8, ptr %act, i64 136\n  %f = load i32, ptr %fp\n" + $
+    "  store i32 %f, ptr %b\n  %hp = getelementptr i8, ptr %b, i64 8\n  store ptr %h, ptr %hp\n  br label %call\n" + $
+    "call:\n  %in = select i1 %has, ptr %b, ptr null\n  %wantold = icmp ne ptr %old, null\n" + $
+    "  %out = select i1 %wantold, ptr %bo, ptr null\n  %r = call i32 @sigaction(i32 %sig, ptr %in, ptr %out)\n" + $
+    "  br i1 %wantold, label %back, label %done\n" + $
+    "back:\n  call void @llvm.memset.p0.i64(ptr %old, i8 0, i64 152, i1 false)\n" + $
+    "  %of = load i32, ptr %bo\n  %ohp = getelementptr i8, ptr %bo, i64 8\n  %oh = load ptr, ptr %ohp\n" + $
+    "  store ptr %oh, ptr %old\n  %ofp = getelementptr i8, ptr %old, i64 136\n  store i32 %of, ptr %ofp\n  br label %done\n" + $
+    "done:\n  ret i32 %r\n}\n"
 
 # the end of the type starting at at in line - a bracketed or braced one whole, else one word - in a global's line
 fn typeEnd(line String&, at I64) I64 {
@@ -350,6 +391,14 @@ test "the runtime is filled in for an architecture and a mode, every placeholder
     r := try Ir("x86_64-pc-linux-gnu", "x86_64", "", false, true)
     assert r.Contains("attributes #0 = { null_pointer_is_valid sanitize_thread  nounwind }")
     assert r.Contains("@__olang_crash_handler(") and r.Contains(") #1 {")
+}
+
+test "B12e: the runtime for Android reaches bionic's errno, sysconf names and sigaction layout" {
+    a := try Ir("aarch64-unknown-linux-android29", "aarch64", "", false, false, system = "android") catch { unreachable }
+    assert a.Contains("define ptr @__errno_location() #0 {") and not a.Contains("declare ptr @__errno_location()")
+    assert a.Contains("call i32 @__olang_bionic_sigaction(i32 11,") and not a.Contains("call i64 @sysconf(i32 30)")
+    l := try Ir("aarch64-unknown-linux-gnu", "aarch64", "", false, false) catch { unreachable }
+    assert not l.Contains("bionic") and l.Contains("declare ptr @__errno_location()")
 }
 
 test "the runtime's AMX tile product is on only for a target that has it" {

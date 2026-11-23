@@ -521,6 +521,9 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     here := modeName(cl.Mode) if not foreignOk and not interpreting else ""
     c.Target = try target.Target.Resolve(cl.Spec, c.Clang, interpreting or (tool and c.Clang == ""), d, here = here)
         catch target.Bad { error Bad.Usage }
+    # B12e: Android is built with the NDK's clang, and a program of it run here - a test, run - linked statically
+    if c.Target.Clang != "": c.Clang = c.Target.Clang
+    c.Static = c.Target.Os == "android" and (cl.Mode == Test or cl.Mode == RunBuilt)
     if c.Target.Foreign and not foreignOk: try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec))
     c.Tests = cl.Mode == Test
     c.Profile = cl.Mode == Profile
@@ -917,7 +920,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         for x in e.ExportNames(): prog.Exports.Push($x)
         prog.Header = e.Header(build.LibName(root), root)
     }
-    prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench, tile = t.TileDot) catch rt.Bad {
+    prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile, cfg.Bench, tile = t.TileDot, system = t.Os) catch rt.Bad {
         error build.Failed.Reported
     }
     if cfg.Library: prog.Runtime = libraryIr(prog.Runtime)

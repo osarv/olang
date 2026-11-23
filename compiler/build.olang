@@ -141,6 +141,7 @@ type Config struct() {
     MemoryCheck Bool = false    # -check beside -memory: a let-go early freeing does not follow fails the build (B18a)
     Late Bool = false   # -free late: nothing reclaimed before its scope closes - early freeing off, the reviews' oracle (B18b)
     Library Bool = false    # -library: a shared library of the export fns, and its C header (X14)
+    Static Bool = false     # B12e: linked statically - an Android program run here, where bionic's loader is not
     Cell Bool = false       # B22: a session's cell - a shared object the cell worker loads, without the runtime (cells.olang)
     Fuzz String& = ""   # -fuzz NAME: the test fuzzed, built with libFuzzer (B19); "" for none
     FuzzTime I64 = 0    # -fuzztime SECONDS: how long it runs, 0 until a failure is found or it is stopped
@@ -268,7 +269,7 @@ fn (c Config&) CFlags() Vec<String&> {
     out Vec<String&>
     if c.Target.Foreign {
         out.Push($"--target=" + $c.Target.Triple)
-        root := target.Sysroot()
+        root := target.Sysroot() if c.Target.Clang == "" else "" # B12e: the NDK's clang knows its sysroot
         if root != "": out.Push($"--sysroot=" + $root)
     }
     if c.Target.CpuFlag != "": out.Push(c.Target.CpuFlag)
@@ -283,7 +284,8 @@ fn (c Config&) ModeFlags() Vec<String&> {
     out Vec<String&>
     if c.Target.Foreign {
         out.Push($"--target=" + $c.Target.Triple)
-        root := target.Sysroot() # B12a: another architecture's C library, where it is not where clang looks
+        # B12a: another architecture's C library, where it is not where clang looks (B12e: the NDK's clang knows its own)
+        root := target.Sysroot() if c.Target.Clang == "" else ""
         if root != "": out.Push($"--sysroot=" + $root)
     }
     if c.Target.CpuFlag != "": out.Push(c.Target.CpuFlag)
@@ -824,9 +826,8 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     args.Push(bin)
     for o in objs: args.Push(o)
     for x in links { args.Push(x) }      # X9: after the objects, so a static library's members are found
-    args.Push("-lm")
-    args.Push("-lpthread")
-    args.Push("-ldl") # os.RunOnStack asks glibc's dlsym for the least stack a thread may have
+    for x in c.SystemLibs(): args.Push(x)
+    if c.Static and exports == null: args.Push("-static")
     if c.Profile {
         args.Push("-lrt")                   # B20: the sampler's timers, in librt before glibc 2.34
         if not c.Quick and not c.Debug: args.Push("-Wl,-plugin-opt=-enable-shrink-wrap=false")
@@ -848,6 +849,13 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     c.Linked++
     info := try os.FileInfo.Stat(bin) catch os.Error { return }
     try os.WriteFile(stamp, $h + " " + $info.Size + " " + $info.ModTime + "\n") catch os.Error { }
+}
+
+# the C libraries every link names after the program's own: libm, libpthread and libdl (os.RunOnStack asks glibc's
+# dlsym for the least stack a thread may have); bionic has no libpthread, its threads are in libc (B12e)
+fn (c Config&) SystemLibs() Array<String&> {
+    if c.Target.Os == "android": return Array<String&>["-lm", "-ldl"]
+    return Array<String&>["-lm", "-lpthread", "-ldl"]
 }
 
 # whether bin is the binary a link hashed h made, and nothing has changed it since
@@ -1569,7 +1577,7 @@ fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir B
     args.Push($dir + "/code")
     for o in objs: args.Push(o)
     for x in prog.Links: args.Push(x)
-    for x in Array<String&>["-lm", "-lpthread", "-ldl"]: args.Push(x)
+    for x in c.SystemLibs(): args.Push(x)
     if prog.Dyncall != "": args.Push("-lffi")
     if c.Clang == "": error Failed.Unbuilt
     parts Vec<String&>
