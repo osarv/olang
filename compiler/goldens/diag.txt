@@ -8509,6 +8509,58 @@ x12type.olang:3:17: error[X12]: Vec<I64> cannot come from C
       |                 ^
 x12type.olang:3:17: note: an export fn's parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array by reference
 compilation failed with 1 error
+=== x13aerrors.olang
+x13aerrors.olang:6:14: error[X13a]: 'extern fn?&(x I32) I32 ? Bad' is no C function pointer
+    6 |     p extern fn?&(x I32) I32 ? Bad = null
+      |              ^~~~~~~~~~~~~~~~~~~~~
+x13aerrors.olang:6:14: note: C calls through one with parameters an export fn takes but arrays, a result C has a counterpart for or none, and no errors or promises
+x13aerrors.olang:6:14: help: write its parameters and result as an export fn's (X12), with no array, no '?' and no promise
+compilation failed with 1 error
+=== x13alambda.olang
+x13alambda.olang:5:31: error[X13a]: a C function pointer ('extern fn&(x I32) I32') is made of an export fn, named
+    5 |     f extern fn&(x I32) I32 = fn(x I32) I32 { return k * x }
+      |                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+x13alambda.olang:5:31: note: C calls it by an export fn's C entry, which a lambda, a function value or an ordinary function does not have
+x13alambda.olang:5:31: help: declare the function with 'export fn' and name it here, or give 'null' where the type is 'extern fn?&'
+compilation failed with 1 error
+=== x13anotexport.olang
+x13anotexport.olang:11:13: error[X13a]: a C function pointer ('extern fn?&(x I32) I32') is made of an export fn, named
+   11 |     h.twice = doubled
+      |             ^
+x13anotexport.olang:11:13: note: C calls it by an export fn's C entry, which a lambda, a function value or an ordinary function does not have
+x13anotexport.olang:11:13: help: declare the function with 'export fn' and name it here, or give 'null' where the type is 'extern fn?&'
+compilation failed with 1 error
+=== x13anull.olang
+x13anull.olang:7:5: error[T2c]: 'p' is a extern fn?&(x I32) I32, which may be null
+    7 |     p(3)
+      |     ^
+x13anull.olang:7:5: help: read through it where a test says it is not ('if x != null'), or write 'p!'
+compilation failed with 1 error
+=== x13aread.olang
+x13aread.olang:6:24: error[E12]: expected fn&(x I32) I32, found extern fn&(x I32) I32
+    6 |     f fn&(x I32) I32 = x13a_get()
+      |                        ^~~~~~~~~~
+compilation failed with 1 error
+=== x13ashape.olang
+x13ashape.olang:4:16: error[X13a]: 'extern fn?&(xs Array<I32>&) I64' is no C function pointer
+    4 |     sum extern fn?&(xs Array<I32>&) I64 = null
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~
+x13ashape.olang:4:16: note: C calls through one with parameters an export fn takes but arrays, a result C has a counterpart for or none, and no errors or promises
+x13ashape.olang:4:16: help: write its parameters and result as an export fn's (X12), with no array, no '?' and no promise
+compilation failed with 1 error
+=== x13atask.olang
+x13atask.olang:8:15: error[X13a]: a task is never a call through a C function pointer
+    8 |         spawn p!(3)
+      |               ^~~~~
+x13atask.olang:8:15: help: call it from a function the task calls
+compilation failed with 1 error
+=== x13avalue.olang
+x13avalue.olang:7:32: error[X13a]: a C function pointer ('extern fn?&(x I32) I32') is made of an export fn, named
+    7 |     p extern fn?&(x I32) I32 = g
+      |                                ^
+x13avalue.olang:7:32: note: C calls it by an export fn's C entry, which a lambda, a function value or an ordinary function does not have
+x13avalue.olang:7:32: help: declare the function with 'export fn' and name it here, or give 'null' where the type is 'extern fn?&'
+compilation failed with 1 error
 === x13lambda.olang
 x13lambda.olang:9:21: error[X13]: a C function is given a function by the name of an export fn
     9 |     qsort(xs, 3, 4, fn(a Box&, b Box&) I32 { return a.v - b.v })
