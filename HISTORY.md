@@ -41960,3 +41960,19 @@ the test runs under `-target x86-64-v3` and `x86-64-v4`. Tests: tests/lanes.olan
 hand, at run time, baked and decided while compiling; the rounding case 1 + 2^-24 + 2^-24 = 1; a subnormal result as
 zero; bit patterns across the range below overflow, bit for bit), and the checks scenario `listing` greps vdpbf16ps from
 `explain -asm` where /proc/cpuinfo has avx512_bf16.
+
+## 2026-11-23: tdpbf16ps's arithmetic, found (B12c; mine; probes in scratch)
+
+For a proposed named AMX operation (tile.AddDot, not built): five simple models of AMX's BF16 tile product disagreed
+on 19-48% of elements, which would have made its result target-dependent against B12c. Crafted probes settled it,
+and a model matched bit for bit on ~115k outputs (16x16 tiles, K 32/64/704, exponents from +-2 to +-120, subnormals,
+C as BF16 or full F32): per instruction (one tile row, up to 16 pairs), under DAZ+FTZ and round-to-nearest-even,
+  e = +0; o = +0
+  for k in 0..pairs-1: e = ftz(fma(A[m][2k], B[k][2n], e)); o = ftz(fma(A[m][2k+1], B[k][2n+1], o))
+  C[m][n] = ftz(daz(C) + ftz(e + o))
+- even and odd lanes in two F32 accumulators, each in K order, each step one fused multiply-add rounded once (a
+subnormal product is kept into a normal sum; a subnormal result flushes); C added last; longer K chains instructions,
+each result the next one's C. Probes: (2^24,2),(1,0) gives 2^24+2 but (2^24,2),(0,1) gives 2^24+4 (lane split);
+2^24,1,1 gives 2^24 and 1,1,2^24 gives 2^24+2 (K order, no tree); C=-2^30 with (2^30,1) gives 0 (C last); C=-0 with
+zero products gives +0. NaN/Inf follow SSE rules; NaN payload choice among several NaNs is not fully covered. A
+fallback is two vfmadd231ps chains per output (even, odd lanes) under MXCSR FTZ|DAZ, then (e+o), then C+(e+o).
