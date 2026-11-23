@@ -42053,3 +42053,12 @@ equal to the run time's, and an assert decided while compiling; the refused shap
 `-target x86-64-v4`, `cooperlake` and `x86-64-v3` (the fallback) and under `OLANG_EVALUATE=1`. `checks/cases/tileshape`:
 a global computing a refused shape is a compile-time error (K2). `compiler/runtime.olang` and `target.olang` test the
 switch and `TileDot`.
+
+## 2026-11-23: TargetHasTileDot, a build constant (B10a; mine; wt-tiledot)
+
+oann chooses its products by target with an ordinary `if` on build constants, and could not see whether tile.AddDot
+(E39a) runs on AMX tiles - `Target.TileDot` was the compiler's alone. `TargetHasTileDot` (a Bool, true where amx-bf16
+and amx-tile are enabled for the build's target) is the ninth constant of B10a beside `TargetHasFma`: cond's Builtins
+takes it (defaulted, so the tests' own calls are unchanged), the driver passes Target.TileDot, -define refuses to
+redefine it, and the evaluator reads the same value. true natively on an AMX Xeon, false under -target x86-64-v4;
+tests/tile.olang checks it only beside AVX-512.

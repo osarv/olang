@@ -2491,7 +2491,7 @@ e20178f94e07dfed 093e0335a8debfcd compiler/bindgen.olang
 9eb8d9916112f375 acad139c7c5a3871 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
 ad911105d096ca66 3106ac7c25466101 compiler/check.olang
-da018e972c2ecc90 2073133fd217ef43 compiler/cond.olang
+e0a0570ee1ea4f5b aaaf062f329cd03a compiler/cond.olang
 d5d87da3cf156c0a bba2773268c83e42 compiler/definit.olang
 10fe8de7e2c53448 07ee50d7637ae4d4 compiler/diag.olang
 8eecc7e6e624f53a 744bfcc1480f0aa4 compiler/diagmsg.olang
@@ -2520,7 +2520,7 @@ d567d78faab8844a 7d14ca379389e62a compiler/interp.olang
 04b2a622da19ca9a 835500f0b436639f compiler/names.olang
 3f072b84e716c304 59b46a3ae1383924 compiler/needs.olang
 79acbc010c9bf08a b1a3323292403dad compiler/notebook.olang
-386ae89038d2e3da d56c89523fac4a5d compiler/olang.olang
+f77d8646d753d0d1 484bb159ccc7c039 compiler/olang.olang
 b39996c18bbe72bf ac116c53952c20fd compiler/paint.olang
 972886cfacdeac38 5c46daaa6f7ab18e compiler/parse.olang
 2cf0b668dac274b7 b2471504fdad37d8 compiler/profile.olang
@@ -2789,7 +2789,7 @@ c452c9cb509c23e1 dca352c6c89a7600 tests/structpat.olang
 b043808fc75ce994 65143d47c35f3f5a tests/textfields.olang
 0d4b3ba0fcda27dc f54bfde8d599baa6 tests/textplus.olang
 2fb13fa3e9f7127c a1fe4e3375cf79b7 tests/textslot.olang
-c843c45bf8667f1e 5f9583acad88af6d tests/tile.olang
+080df24a5d98fd35 a39b74c5b210d615 tests/tile.olang
 306278cf38ee3057 34b0c2b9622614a4 tests/topassert.olang
 b85bbc40e839bded b5a7ded126f0400f tests/tuplefacts.olang
 865512a5b10174be 415d01faaa817e2d tests/typedefaults.olang

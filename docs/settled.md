@@ -1245,7 +1245,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   links `PREFIX/bin/olang`, adds `PREFIX/bin` to PATH in the shell's startup file once, installs editors/ as Neovim and Vim packages
   (`pack/olang`, `EDITORS=none` skips); `make uninstall` undoes it.
 - **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile; target constants
-  `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma`. No fast-math or contraction (the user's call).
+  `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma TargetHasTileDot` (the last 2026-11-23, for tile.AddDot). No fast-math or contraction (the user's call).
 - **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-define Name=value` build constants;
   an immutable top-level global is a default `-define` replaces (B10c); a local `if` the build decides is conditional
   compilation too (S8b); a constant condition not depending on the build is a dead-branch error (S8a). **A comparison

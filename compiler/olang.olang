@@ -430,15 +430,16 @@ fn buildWord(c build.Config&) String {
     return ""
 }
 
-# the eight built-in constants (B10a), once the target is known; a -define naming one is a mistake, the first such in
+# the nine built-in constants (B10a), once the target is known; a -define naming one is a mistake, the first such in
 # their order reported
 fn builtins(c mut build.Config&, testBuild Bool, d mut diag.Diagnostics&) ? Bad {
-    for name in Array<String&>["TargetOs", "TargetArch", "TargetCpu", "TargetVectorBits", "TargetHasFma", "DebugBuild"
+    for name in Array<String&>["TargetOs", "TargetArch", "TargetCpu", "TargetVectorBits", "TargetHasFma", "TargetHasTileDot", "DebugBuild"
         "RaceBuild", "TestBuild"] {
         if c.Consts.Has(name): try usage(d, msgs.DefineBuiltin(name))
     }
     t := c.Target
-    c.Consts.Builtins(t.Os, t.Arch, t.Cpu, t.VectorBits, 1 if t.Fma else 0, c.Debug, c.Race, testBuild)
+    c.Consts.Builtins(t.Os, t.Arch, t.Cpu, t.VectorBits, 1 if t.Fma else 0, c.Debug, c.Race, testBuild
+                      hasTileDot = 1 if t.TileDot else 0)
 }
 
 # B3h: -output's directory must be there - the compiler makes none

@@ -133,3 +133,6 @@ test "tile.AddDot refuses a shape it does not take, and adds nothing for an empt
     tile.AddDot(c, 16, 16, 16, Array<BF16>(0), 0, 0, Array<BF16>(0))!
     assert c[0].Bits() == 0x80000000
 }
+
+# B10a: TargetHasTileDot says whether AddDot runs on tile registers - AMX comes only with AVX-512
+test "B10a: TargetHasTileDot, only beside AVX-512" { assert not TargetHasTileDot or TargetVectorBits == 512 }

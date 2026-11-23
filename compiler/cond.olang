@@ -48,7 +48,7 @@ LiteralIntBits I64 = 64
 
 # ---- build constants (B10, B10a) ----
 
-# every build constant: -D's and the eight built in (B10a). A text's value lives in Texts; a decimal integer above
+# every build constant: -D's and the nine built in (B10a). A text's value lives in Texts; a decimal integer above
 # I64's maximum is a U64 (Big), which B9a does not compute in. Known is false for a built-in whose value this
 # compilation has not been told (the target's CPU before the driver resolves it): a condition reading one is undecided
 type Consts struct() {
@@ -101,14 +101,15 @@ fn (c Consts&) Defined(name String&) Bool {
     return i >= 0 and not c.builtin[i]
 }
 
-# the eight build constants of B10a. A target's facts the driver has not resolved are left unknown
+# the nine build constants of B10a. A target's facts the driver has not resolved are left unknown
 fn (c mut Consts&) Builtins(os String&, arch String&, cpu String&, vectorBits I64, hasFma I64, debug Bool, race Bool
-                             testBuild Bool) {
+                             testBuild Bool, hasTileDot I64 = 0) {
     c.add("TargetOs", Value(ValueKind.Text, 0, 0.0, c.text(os), 0, false), true, false, os != "")
     c.add("TargetArch", Value(ValueKind.Text, 0, 0.0, c.text(arch), 0, false), true, false, arch != "")
     c.add("TargetCpu", Value(ValueKind.Text, 0, 0.0, c.text(cpu), 0, false), true, false, cpu != "")
     c.add("TargetVectorBits", Value(ValueKind.Int, vectorBits, 0.0, 0, LiteralIntBits, false), true, false, vectorBits > 0)
     c.add("TargetHasFma", Value.bool(hasFma == 1), true, false, hasFma >= 0)
+    c.add("TargetHasTileDot", Value.bool(hasTileDot == 1), true, false, hasTileDot >= 0)
     c.add("DebugBuild", Value.bool(debug), true, false, true)
     c.add("RaceBuild", Value.bool(race), true, false, true)
     c.add("TestBuild", Value.bool(testBuild), true, false, true)
@@ -846,7 +847,7 @@ test "a -D value reads as its literal would" {
     try c.define("2x=1") catch DefineError.NotName { bad++ } catch { unreachable }
     try c.define("nothing") catch DefineError.Shape { bad++ } catch { unreachable }
     assert bad == 7
-    c.Builtins("linux", "x86_64", "", 0, -1, false, false, true)
+    c.Builtins("linux", "x86_64", "", 0, -1, false, false, true, hasTileDot = -1)
     try c.define("TestBuild=false") catch DefineError.Builtin { bad++ } catch { unreachable }
     assert bad == 8 and c.IsBuiltin("TargetOs") and not c.Defined("TargetOs") and c.Defined("A")
 }

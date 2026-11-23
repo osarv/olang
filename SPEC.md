@@ -8974,12 +8974,14 @@ Whether `-define` names it or not, it is configuration as a build constant is: a
 another type, one in the standard library - is B10's error; and a condition naming a name that exists nowhere (B9c,
 S8b) says it may be a build constant `-define` did not define.
 
-**B10a.** Every build defines eight build constants of its own, and `-define` may not redefine them. Five describe its
+**B10a.** Every build defines nine build constants of its own, and `-define` may not redefine them. Six describe its
 target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operating system (lowercase, `"linux"`), its
 architecture (`"x86_64"`, `"aarch64"`) and its CPU as clang names it (`"cascadelake"`, `"x86-64-v3"`, `"generic"`);
 `TargetVectorBits`, an `I64`, the width in bits of the vectors the generated code computes with - `512` where the
 target has AVX-512, `256` where it has AVX, `128` with only SSE2 or on `aarch64` (Advanced SIMD); and `TargetHasFma`, a
 `Bool`, whether the target has fused multiply-add instructions - whether a float's `Fma` (X8, M19d) is one instruction or a call.
+`TargetHasTileDot`, a `Bool`, whether the target has AMX BF16 tile products (amx-bf16 and amx-tile) - whether
+`tile.AddDot` (E39a) runs on tile registers or as its exact fallback.
 Three describe the build: `DebugBuild`, `RaceBuild` and `TestBuild`, `Bool`s saying whether it is `-debug`, `-race` and
 `test` respectively.
 
@@ -9008,7 +9010,8 @@ extensions are what clang resolves `-march=CPU` (`-mcpu=CPU` for `aarch64`) to. 
 architecture does not have, or `native` after another architecture's triple is a command-line error. Without clang -
 which the evaluator (B3e) otherwise does not need - scripting mode takes `native`, on x86-64, to be the x86-64 level this processor has.
 
-The target decides the build constants `TargetOs`, `TargetArch`, `TargetCpu`, `TargetVectorBits` and `TargetHasFma`
+The target decides the build constants `TargetOs`, `TargetArch`, `TargetCpu`, `TargetVectorBits`, `TargetHasFma` and
+`TargetHasTileDot`
 (B10a), so a program chooses code for its target with an ordinary `if` on them (B9, S8b) - and the compile-time
 evaluator, reading the same constants, takes the same branch (K1). Generated code computes with vectors of
 `TargetVectorBits`, whatever width a CPU's own tuning would prefer, so the width a program reads is the one its loops

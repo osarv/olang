@@ -1425,6 +1425,7 @@
 | status 0
 | ok - tile.AddDot is tdpbf16ps's arithmetic, bit for bit, here and while compiling
 | ok - tile.AddDot refuses a shape it does not take, and adds nothing for an empty one
+| ok - B10a: TargetHasTileDot, only beside AVX-512
 === test tests/topassert.olang
 | status 0
 | ok - a file whose top-level asserts hold builds and runs
