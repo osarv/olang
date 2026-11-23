@@ -363,7 +363,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   in `A`: `(x * w).Sum<I32>()` is the byte dot product (vpdpbusd), `(a * b).Sum<F32>()` over BF16/F16; `A` must be a
   number every element type widens to. An integer total in any order; a float one in order (no vdpbf16ps). `x += (a * w).Sum<F32>(2)` over BF16 into
   F32 lanes is the BF16 pair dot (mine, 2026-11-23): the second product then the first added into the lane, each exactly and rounded
-  once, subnormals as zeros of their sign - vdpbf16ps's arithmetic, on every target. `Sum()`
+  once, subnormals as zeros of their sign - vdpbf16ps's arithmetic, on every target. **The tile product (E39a, mine,
+  2026-11-23):** `std/tile`'s `tile.AddDot(c, cld, rows, cols, a, ald, depth, b)` adds BF16 `A . B` (B in the pair
+  layout) into F32 `C`, rows and columns multiples of 16 and depth of 32 (`tile.Error.Shape`, once a call); its meaning
+  is tdpbf16ps's arithmetic everywhere (per 32-deep step: even and odd lanes in two fma chains from +0, summed, then C,
+  each result flushed) - AMX where the target has amx-bf16 (runtime `__olang_tile_bf16`), std/tile's own steps elsewhere
+  and while compiling. `Sum()`
   is `Sum<A Number = T.Accumulator>()` (G4a, G4b, the user's call 2026-11-16): the type the call is wanted as, else
   `T.Accumulator` - an `Array<U8>` sums to a `U64`, an `Array<I32>` to an `I64`; wrapping in the elements' type is
   `Sum<U8>()`.

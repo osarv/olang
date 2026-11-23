@@ -42005,3 +42005,50 @@ blocking in the kernel (a few rows x columns of lanes as locals, as oann's int8 
 Tests: tests/lanes.olang and tests/keptfacts.olang natively, under `OLANG_EVALUATE=1` and (lanes) at `-target x86-64-v3`
 and `x86-64-v4`; checks `listing` still finds vpdpbusd and vdpbf16ps; `make fixedpoint` byte-identical. No goldens
 move (none holds a helper's text).
+
+## 2026-11-23: tile.AddDot - a named BF16 tile product, tdpbf16ps's arithmetic on every target (E39a, X6; mine; wt-adddot)
+
+The user's direction (via the Orchestrator): a named std operation for the products that dominate a CPU training step,
+built on AMX where the processor has it. `std/tile`'s `tile.AddDot(c, cld, rows, cols, a, ald, depth, b)` adds
+`A[rows x depth] . B` into `C[rows x cols]` (row strides `cld`, `ald`, in elements), `A` and `B` BF16, `C` F32, `B` in
+the pair layout E39's pair dot already uses (`b[(p * cols + n) * 2 + t] = B[2p + t][n]`) - so a weight matrix packed
+for the pair dot needs no second packing. The signature is the brief's; the layout was kept after measuring it against
+AMX's own tile-packed layout (each 16 x 16 B tile contiguous): 383 against 444 GMAC/s in C, not enough to give the
+user a second layout to pack for. Rows and columns are multiples of 16 and the depth of 32, each stride at least its
+row and each array long enough; anything else fails with `tile.Error.Shape`, checked once a call (errors are errors;
+no per-element check). A depth of 688 is padded to 704 by the caller.
+
+**The meaning is the instruction's (B12c).** The arithmetic found the same day (above, "tdpbf16ps's arithmetic,
+found") is the rule, SPEC E39a: per 32-deep step, even and odd lanes in two fused-multiply-add chains from +0, each step
+rounded once and flushed, summed and flushed, then added to C (read with denormals as zero) and flushed. Where the
+target has amx-bf16 and amx-tile (`target.Target.TileDot`, read from the probe's features) the runtime computes it;
+elsewhere `std/tile` computes the same steps in olang (`step`: per row, 16 pairs into two F32 rows of chains with
+`F32.Fma` and an explicit flush, which LLVM vectorizes over the columns), and the evaluator runs that same olang.
+
+**Where the AMX code lives.** In the runtime (`std/runtime/runtime.ll`, `__olang_tile_bf16`, an X6 function `std/tile`
+declares), as inline assembly - LLVM's AMX intrinsics would need the feature on every caller and the tile type in IR,
+and olang has no inline assembly of its own. Blocks of 32 x 32 hold four C tiles (tmm0-3) across the whole depth, two
+A and two B tiles loaded per step (one asm statement per block, its depth loop inside, so no tile register lives
+across statements LLVM schedules); a last block of 16 rows or columns goes tile by tile. ARCH_REQ_XCOMP_PERM for
+XTILEDATA is asked once per process (a relaxed atomic flag; a refusal - an old kernel - makes every call return 1 and
+`std/tile` compute it), and the tile configuration is loaded at each call and released after it, so no thread keeps
+tile state and nothing per thread needs setting up: the call is long enough that ldtilecfg/tilerelease cost nothing
+measurable. Which code runs is a constant in the runtime's IR, `@__olang_tile_on`, false as written and set true by
+`runtime.Ir` for a TileDot target - not a new `; @if` condition, which the seed's own runtime filling does not know (the
+first try, an `; @if amx`, stopped the bootstrap at stage 1); under LTO the constant folds the branch away. The code is
+under `; @if x86_64`, and the assembler takes the AMX instructions whatever the target's features. The runtime object's
+records key already holds the target's features, `+amx-bf16` among them.
+
+**Measured** (C[2048 x 128] += A[2048 x 704] . B, one thread pinned, median of 15 calls over three runs): AddDot by AMX
+425-449 GMAC/s (best 486-496); the fallback (`-target x86-64-v4` on the same machine, AVX-512 FMA) 9.6-11.5. The
+earlier C experiment's 369 was below what the instruction gives: a C harness with `malloc`'d (16-byte aligned) arrays
+reached 212, the same kernel on 64-byte aligned arrays 383 - a tile row straddling two cache lines halves the loads'
+throughput; olang's arrays are 64-byte aligned (O8a), so AddDot gets the aligned figure.
+
+Tests: `tests/tile.olang` - AddDot against the rule written out by hand, one output at a time, bit for bit, on four
+shapes (strides longer than rows, depth 704) with operands over 2^-30..2^30 of 1 and one in eight subnormal or zero;
+the probes that tell the readings apart (lane split, C added last, -0 C giving +0); a product baked while compiling
+equal to the run time's, and an assert decided while compiling; the refused shapes. Run natively (AMX), under
+`-target x86-64-v4`, `cooperlake` and `x86-64-v3` (the fallback) and under `OLANG_EVALUATE=1`. `checks/cases/tileshape`:
+a global computing a refused shape is a compile-time error (K2). `compiler/runtime.olang` and `target.olang` test the
+switch and `TileDot`.
