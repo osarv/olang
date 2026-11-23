@@ -3483,13 +3483,17 @@ hold for (`keep` not called past it); `Partition(keep)`, two new arrays as two r
 and of the rest, each in order - these three failing with what `keep` fails with; `LowerBound(x)`, `BinarySearch(x)`
 and `Cycle()` as on a type with `At` and `Len` (T35); `ChunkBy(same)`, the array cut into runs of consecutive elements
 `same(previous, next)` holds for, each a read-only slice of its own storage held in an array that lives where the
-receiver does, failing with what `same` fails with; and `Chunks(size)`, the array cut into consecutive pieces of `size`
+receiver does, failing with what `same` fails with; `Permutations()`, of an array reached writably, every arrangement of
+its elements once in lexicographic order by `<` (equal elements give no repeats; an empty array gives the one empty
+arrangement) - the walk rearranges the array itself, each step a read-only view of it valid until the next, nothing
+allocated beyond the first step's `Sort`, O(1) amortized a step, the array left sorted by a walk run to its end; and `Chunks(size)`, the array cut into consecutive pieces of `size`
 elements, the last holding what is left (fewer, never none; an empty array has none) - each piece a writable slice of
 the array's own storage (E16a), no two sharing an element, held in an array that lives where the receiver does (the
 receiver is written `mut`, so the pieces may be written). `size` is a `ChunkSize`, a declared `I64` whose constructor
 fails with `ArrayError.BadChunk` below one: a literal size is checked while compiling (T29d, `a.Chunks(0)` is a
 compile-time error) and a computed one is made one with `try ChunkSize(n)`, as a base is a `Radix`. A `String` has them as every array method (T29e), the new ones being
-`String`s. An array of texts, `Array<String&>`, has `Join(sep)`: its texts one after another with `sep` between each
+`String`s. An array of texts, `Array<String&>` or `Array<String>`, has `Join(sep)` (two methods, one per element
+type, M19): its texts one after another with `sep` between each
 two, built once at its length - `$` writes such an array as source instead (E11a). Text has `TrimStart()` and
 `TrimEnd()`, borrows of it as `Trim()` is; `ToUpper()` and `ToLower()`, new text with the ASCII letters changed and
 every other byte as it was; `FindLast(sub)`, where the last occurrence starts, failing as `Find` does (an empty `sub`

@@ -42673,3 +42673,32 @@ inlined by LTO). So the union's bytes are held for C (opaque words) and the memb
 or writing `flags` or `debounce_period_us` from olang needs a design (a question for the user). Tests: tests/canon.olang
 (an anonymous union between named members, an anonymous struct holding another, written from olang and read by C and
 back, sizes against C's; gpio_v2_line_attribute's id and padding).
+
+## 2026-11-23: an array's method picked by element type; Permutations (mine; wt-e73finds)
+
+Two findings from a research session using olang (oagent e73).
+
+**`Array<String>["a", "b"].Join(" ")` was refused** with E12 "expected Array<String&>&, found Array<String>". The
+prelude declares `Join` twice, on `Array<String&>&` and on `Array<String>&`, and M19 says an array receiver is
+identified by its element type. But method lookup (generic.olang `MethodOf`) walks the methods of one receiver key -
+every array shares `ArrayKey` - and `recvApplies`, which filters them by instance, answered "applies" for anything not
+a named generic type, so the first declared `Join` (the `String&` one) won for every array. `Vec<String>.Join` worked
+only because Vec is a named instance. Fixed in `recvApplies`: for an array, the receiver's element type is compared
+with the call's (`Same` where the receiver names one type, `Matches` where it is written with variables), and M21's
+precedence then picks the exact one. `Join` is the only prelude method overloaded by an array's element type; the
+others are written over `Array<T>`. Tests: std/prelude/tests/array.olang (owned and borrowed text arrays, a literal, a
+`Vec`'s `ToArray`, `Array<String>&` and `mut Array<String>&` parameters, baked while compiling as K2).
+
+**Permutations.** R23a refuses `fn nextPerm(a mut Array<I64>&) Bool` (an out-parameter beside a flag) and the `? E`
+form makes "no more" an error the caller has to catch per step, so the user hand-inlined the loop. Decided (mine): `fn
+(a mut Array<T>&) Permutations() PermutationIter<T>`, a walk (`for p in a.Permutations()`) that rearranges the array
+itself into each arrangement in lexicographic order by `<` (C++'s next_permutation), each step a read-only view of it
+valid until the next. Considered: a copy per step (an allocation per step, a cost the loop does not show) and a
+working copy inside the iterator (a hidden O(n) allocation, and a copy of elements holding references into storage of
+the iterator's own, which G11 makes awkward); the in-place walk costs nothing the call does not say - it needs `mut`,
+so the rearranging is written at the use site. The first step sorts (Sort, by `<` as Argsort compares, so T needs
+only a Less); each later step is O(1) amortized, O(n) at worst; equal elements give no repeats (n!/(m1!...mk!)
+steps); the empty array gives one, empty, arrangement. After the last arrangement the step reverses the array back to
+ascending, so a full walk leaves it sorted; a walk stopped early leaves it where it stopped. Its helper
+`nextArrangement` fails with `Exhausted.End` rather than returning a Bool (R23a holds in std too). Tests: duplicates,
+empty, one element, 6! = 720, texts, an early stop, and the walk baked while compiling as at run time.

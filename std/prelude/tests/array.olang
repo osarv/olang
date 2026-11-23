@@ -235,3 +235,85 @@ test "Argsort: the order that sorts, stable; running sums; even spacing; ranges 
     assert false, "a step of zero ranges over nothing: " + $none
     assert Array<String>["b", "a", "b", "a"].Argsort() == Array<I64>[1, 3, 0, 2]
 }
+
+# Join on an array of texts held by value picks the receiver for that element type, as a Vec's does: from a literal,
+# from a Vec's ToArray and through read-only and writable parameters (M21 for an array's element type)
+fn joinOwned(parts Array<String>&) String { return parts.Join("-") }
+fn joinOwnedMut(parts mut Array<String>&) String {
+    parts[0] = "z"
+    return parts.Join("-")
+}
+fn joinBorrowed(parts Array<String&>&) String { return parts.Join("-") }
+
+fn joinedTexts() String {
+    owned := Array<String>["a", "b"]
+    v := Vec<String>()
+    v.Push("c")
+    v.Push("d")
+    return owned.Join(" ") + "|" + v.ToArray().Join(" ") + "|" + Array<String&>["e", "f"].Join(" ")
+}
+joinedTextsBaked := joinedTexts()
+
+test "Join of owned and borrowed texts, from a literal, a Vec and through parameters" {
+    assert Array<String>["a", "b"].Join(" ") == "a b"
+    assert Array<String&>["a", "b"].Join(" ") == "a b"
+    assert Array<String>(0).Join(" ") == ""
+    v := Vec<String>()
+    v.Push("x")
+    v.Push("y")
+    assert v.ToArray().Join(", ") == "x, y"
+    owned := Array<String>["p", "q", "r"]
+    assert joinOwned(owned) == "p-q-r"
+    assert joinOwnedMut(owned) == "z-q-r" and owned[0] == "z"
+    assert joinBorrowed(Array<String&>["s", "t"]) == "s-t"
+    assert joinedTextsBaked == "a b|c d|e f" and joinedTexts() == joinedTextsBaked
+}
+
+# Permutations: every arrangement once, lexicographically, walked in the array itself
+fn arrangements(a mut Array<I64>&) String {
+    b := StringBuilder()
+    for p in a.Permutations() {
+        for x in p: b.Push($x)
+        b.Push(" ")
+    }
+    return b.ToString()
+}
+
+fn permutationsWalked() String {
+    a := Array<I64>[3, 1, 2]
+    d := Array<I64>[2, 1, 1]
+    return arrangements(a) + "|" + arrangements(d) + "|" + $a
+}
+permutationsBaked := permutationsWalked()
+
+test "Permutations gives each arrangement once, in lexicographic order, leaving the array sorted" {
+    a := Array<I64>[3, 1, 2]
+    assert arrangements(a) == "123 132 213 231 312 321 "
+    assert a == Array<I64>[1, 2, 3]                                 # a walk run to its end leaves it sorted
+    d := Array<I64>[1, 2, 1, 1]                                      # equal elements make no repeats: 4!/3! = 4
+    assert arrangements(d) == "1112 1121 1211 2111 "
+    one := Array<I64>[7]
+    assert arrangements(one) == "7 "
+    e := Array<I64>(0)
+    assert arrangements(e) == " "                                   # the empty array has one arrangement, the empty one
+    n I64 = 0
+    big := Array<I64>[k for k in range 6]
+    for _ in big.Permutations(): n++
+    assert n == 720
+    words := Array<String>["b", "a", "b"]
+    seen := Vec<String>()
+    for p in words.Permutations(): seen.Push(p.Join(""))
+    assert seen.ToArray().Join(" ") == "abb bab bba"
+    early := Array<I64>[1, 2, 3]
+    k I64 = 0
+    for _ in early.Permutations() {
+        k++
+        if k == 3: break
+    }
+    assert early == Array<I64>[2, 1, 3]                             # stopped early: left where it stopped
+}
+
+test "Permutations evaluated while compiling as at run time" {
+    assert permutationsBaked == "123 132 213 231 312 321 |112 121 211 |Array<I64>[1, 2, 3]"
+    assert permutationsWalked() == permutationsBaked
+}
