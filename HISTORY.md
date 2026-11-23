@@ -41981,7 +41981,7 @@ noise); the same with a run-time stride (`a[s:s + two]`, so the shared test is a
 N is a constant, so the j loop unrolls fully and the 8 accumulator vectors live in registers across the K loop; with N
 read at run time the same C (acc in memory) gives 26-27, and with one bounds check per step inside the K loop it keeps
 the values in registers but stores every step (34). The olang kernel with N constant unrolls the same way, but the
-per-step slice constructions (`a[...]`, `p[...]`, each checked once, B9-style) are early exits in the K loop, and the
+per-step slice constructions (`a[...]`, `p[...]`, each bounds-checked once) are early exits in the K loop, and the
 accumulator is a scope allocation that may escape, so LLVM keeps the stores and reloads 7 of the 8 lanes: the loop is
 bound by the store-to-load latency of the accumulator chain, not by the helper's instructions. Closing it is register
 blocking in the kernel (a few rows x columns of lanes as locals, as oann's int8 tiles do), not a codegen change.
