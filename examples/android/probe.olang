@@ -1,0 +1,10 @@
+# the program the sample app ships as lib/arm64-v8a/libprobe.so and runs (docs/android.md): it says it ran, with the
+# words it was given, so the app can tell that an executable of olang's starts on the phone
+import "std/os"
+
+fn main() {
+    said := StringBuilder()
+    said.Push("olang probe ok:")
+    for w in os.Args()[1:]: said.Push($" " + $w)
+    Print(said.ToString())
+}
