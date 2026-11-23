@@ -1,0 +1,16 @@
+# check: fail error[T22b]: 'moveIn' keeps 'n' in 'vs'
+# O25g, O26a: a vector read out of a vector of vectors and pushed into keeps what it is given in the outer one
+type N struct() {
+    v I64 = 0
+}
+fn moveIn(vs mut Vec<mut Vec<mut N&>&>&, n mut N&) {
+    inner := vs[0]
+    inner.Push(n)
+}
+fn main() {
+    fs := Vec<fn&(vs mut Vec<mut Vec<mut N&>&>&, n mut N&)>()
+    fs.Push(moveIn)
+    vs := Vec<mut Vec<mut N&>&>()
+    vs.Push(Vec<mut N&>())
+    fs[0](vs, N())
+}

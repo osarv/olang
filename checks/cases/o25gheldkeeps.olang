@@ -1,0 +1,18 @@
+# check: fail error[T22b]: 'keepFirst' keeps 'bs' in 'keep'
+# O25g, O26a: an element read out of a vector and kept by a local lives where the vector does - kept in another
+# vector, the function keeps the first argument in the second, which a function type held in a Vec does not say
+type N struct() {
+    v I64 = 0
+}
+fn keepFirst(bs mut Vec<mut N&>&, keep mut Vec<mut N&>&) {
+    b := bs[0]
+    keep.Push(b)
+}
+fn main() {
+    fs := Vec<fn&(bs mut Vec<mut N&>&, keep mut Vec<mut N&>&)>()
+    fs.Push(keepFirst)
+    keep := Vec<mut N&>()
+    bs := Vec<mut N&>()
+    bs.Push(N())
+    fs[0](bs, keep)
+}
