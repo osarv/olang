@@ -51,6 +51,8 @@ type Chan<T> struct(cap I64) {
     taken I64 = 0
     closed Bool = false
     waiting I64 = 0     # the receivers blocked waiting for a value: what a rendezvous send of Select's hands its value to
+    parked Vec<I64> = Vec<I64>()        # the waits given a token blocked on the channel (cancel's waiters), woken as it changes
+    wakes I64 = 0                       # how often those waits woke: what the tests count to see they block, not poll
     lock pthread.pthread_mutex_t
     notEmpty pthread.pthread_cond_t
     notFull pthread.pthread_cond_t
@@ -64,6 +66,7 @@ fn place<T>(c mut Chan<T>&, v T) I64 {
     c.count = c.count + 1
     c.sent = c.sent + 1
     pthread.pthread_cond_broadcast(c.notEmpty)
+    wakeParked(c)
     return c.sent - 1
 }
 
@@ -74,6 +77,7 @@ fn oldest<T>(c mut Chan<T>&) T {
     c.count = c.count - 1
     c.taken = c.taken + 1
     pthread.pthread_cond_broadcast(c.notFull)   # a sender waiting for a slot, or for its value to be taken
+    wakeParked(c)
     return v
 }
 
@@ -89,6 +93,7 @@ fn Close<T>(c mut Chan<T>&) {
     c.closed = true
     pthread.pthread_cond_broadcast(c.notEmpty)
     pthread.pthread_cond_broadcast(c.notFull)
+    wakeParked(c)
     pthread.pthread_mutex_unlock(c.lock)
 }
 
@@ -116,6 +121,36 @@ fn withdraw<T>(c mut Chan<T>&) {
     c.count = 0
     c.sent = c.sent - 1
     pthread.pthread_cond_broadcast(c.notFull)
+    wakeParked(c)
+}
+
+# every wait given a token parked on the channel woken to look again, the lock held: the channel changed
+fn wakeParked<T>(c mut Chan<T>&) {
+    for w in c.parked: cancel.Wake(w)
+}
+
+# a wait given a token, parked on the channel (cancel's waiter w) - the lock held, and the condition to be checked again
+fn park<T>(c mut Chan<T>&, tok cancel.Token&) I64 {
+    w := tok.Park()
+    c.parked.Push(w)
+    return w
+}
+
+# the waiter w unparked and let go, the lock held; nothing for -1, a wait that never parked
+fn unpark<T>(c mut Chan<T>&, w I64) {
+    if w < 0: return
+    c.parked.Remove(w)
+    cancel.Done(w)
+}
+
+# the lock let go while the waiter w sleeps until it is woken - the channel changed, the token was cancelled - or the
+# token's deadline passes; the lock taken again and the waiter rearmed, to check the condition again
+fn sleep<T>(c mut Chan<T>&, tok cancel.Token&, w I64) {
+    pthread.pthread_mutex_unlock(c.lock)
+    tok.Sleep(w)
+    pthread.pthread_mutex_lock(c.lock)
+    c.wakes++
+    cancel.Rearm(w)
 }
 
 # blocks while the channel is full, then appends - and on a rendezvous channel, blocks again until the value has been
@@ -157,30 +192,40 @@ fn (c mut Chan<T>&) Next() T ? Exhausted {
 
 # Send, giving up - with the token's reason - once the token fires while the channel is still full, or, on a
 # rendezvous channel, while the value has not been taken yet: it is withdrawn, so a value either reached a Recv or
-# was never sent. The wait wakes at the token's deadline, and every few milliseconds besides to notice a Cancel()
-# (cancel.WakeAt).
+# was never sent. The wait blocks until the channel changes, the token is cancelled or its deadline passes - nothing
+# else wakes it (cancel's waiters)
 fn SendUntil<T>(c mut Chan<T>&, v T, tok cancel.Token&) ? cancel.Stopped, Error {
-    ts := Array<I64>(2)
     pthread.pthread_mutex_lock(c.lock)
+    w I64 = -1
     for c.count == c.size and not c.closed {
         if tok.Cancelled() {
+            unpark(c, w)
             pthread.pthread_mutex_unlock(c.lock)
             try tok.Reason()
         }
-        tok.WakeAt(ts)
-        pthread.pthread_cond_timedwait(c.notFull, c.lock, ts)
+        if w < 0 {
+            w = park(c, tok)
+            continue
+        }
+        sleep(c, tok, w)
     }
+    if c.closed: unpark(c, w)
     try sendOpen(c)
     ticket := place(c, v)
     for c.rendezvous and c.taken <= ticket and not c.closed {
         if tok.Cancelled() {
             withdraw(c)
+            unpark(c, w)
             pthread.pthread_mutex_unlock(c.lock)
             try tok.Reason()
         }
-        tok.WakeAt(ts)
-        pthread.pthread_cond_timedwait(c.notFull, c.lock, ts)
+        if w < 0 {
+            w = park(c, tok)
+            continue
+        }
+        sleep(c, tok, w)
     }
+    unpark(c, w)
     if c.rendezvous and c.taken <= ticket {
         withdraw(c)
         try sendOpen(c)
@@ -189,20 +234,24 @@ fn SendUntil<T>(c mut Chan<T>&, v T, tok cancel.Token&) ? cancel.Stopped, Error 
 }
 
 # Recv, giving up - with the token's reason - once the token fires while the channel is still empty and open; fails
-# with Error.Closed once it is closed and drained
+# with Error.Closed once it is closed and drained. Blocks as SendUntil does
 fn RecvUntil<T>(c mut Chan<T>&, tok cancel.Token&) T ? cancel.Stopped, Error {
-    ts := Array<I64>(2)
     pthread.pthread_mutex_lock(c.lock)
+    w I64 = -1
     for c.count == 0 and not c.closed {
         if tok.Cancelled() {
+            unparkReceiver(c, w)
             pthread.pthread_mutex_unlock(c.lock)
             try tok.Reason()
         }
-        tok.WakeAt(ts)
-        c.waiting++
-        pthread.pthread_cond_timedwait(c.notEmpty, c.lock, ts)
-        c.waiting--
+        if w < 0 {
+            w = park(c, tok)
+            c.waiting++
+            continue
+        }
+        sleep(c, tok, w)
     }
+    unparkReceiver(c, w)
     if c.count == 0 {
         pthread.pthread_mutex_unlock(c.lock)
         error Error.Closed
@@ -210,6 +259,13 @@ fn RecvUntil<T>(c mut Chan<T>&, tok cancel.Token&) T ? cancel.Stopped, Error {
     v := oldest(c)
     pthread.pthread_mutex_unlock(c.lock)
     return v
+}
+
+# a receiver's waiter let go, and the receiver no longer counted as waiting
+fn unparkReceiver<T>(c mut Chan<T>&, w I64) {
+    if w < 0: return
+    c.waiting--
+    unpark(c, w)
 }
 
 # a producer and a consumer on separate tasks, communicating only through the channel. This is the shape
@@ -305,6 +361,101 @@ test "Cancel wakes a task blocked in a wait" {
     }
     assert got.v == -1
     assert cancel.NowNs() - start < 1000000000
+}
+
+# a wait given a token BLOCKS: it wakes for the channel changing, Cancel() or the deadline, never to look again on a
+# timer. Each test counts the wakes of the one wait on its channel - at most two (a wake whose change another wait took
+# first, a wait timing out a hair early), where looking every 10 ms woke some twenty times in 200 ms
+
+# how many waits given a token are parked on c, and how often they woke, read under the lock
+fn parkedNow<T>(c mut Chan<T>&) I64 {
+    pthread.pthread_mutex_lock(c.lock)
+    n := c.parked.Len()
+    pthread.pthread_mutex_unlock(c.lock)
+    return n
+}
+
+fn wakesNow<T>(c mut Chan<T>&) I64 {
+    pthread.pthread_mutex_lock(c.lock)
+    n := c.wakes
+    pthread.pthread_mutex_unlock(c.lock)
+    return n
+}
+
+test RecvUntil "a wait blocks until its deadline, without waking on a timer" {
+    c mut Chan<I32>& = Chan<I32>(1)
+    start := cancel.NowNs()
+    tok := cancel.Token.After(200)
+    assert (try RecvUntil(c, tok) catch cancel.Stopped.TimedOut default -1 catch default -2) == -1
+    assert cancel.NowNs() - start >= 200000000
+    assert wakesNow(c) <= 2
+}
+
+fn recvInto(c mut Chan<I32>&, tok cancel.Token&, got mut sumBox&) {
+    got.v = try RecvUntil(c, tok) catch cancel.Stopped.Cancelled default -1 catch default -2
+}
+
+test RecvUntil "a blocked wait wakes for a Cancel, once, at once" {
+    c mut Chan<I32>& = Chan<I32>(1)
+    tok mut cancel.Token& = cancel.Token()
+    got mut sumBox& = sumBox(0)
+    stopped I64 = 0
+    join {
+        spawn recvInto(c, tok, got)
+        for parkedNow(c) == 0 { }
+        realSleep(100000000)
+        stopped = cancel.NowNs()
+        tok.Cancel()
+    }
+    assert got.v == -1
+    assert cancel.NowNs() - stopped < 500000000
+    assert wakesNow(c) <= 2
+}
+
+test RecvUntil "a blocked wait wakes for a Send" {
+    c mut Chan<I32>& = Chan<I32>(1)
+    tok := cancel.Token()
+    got mut sumBox& = sumBox(0)
+    join {
+        spawn recvInto(c, tok, got)
+        for parkedNow(c) == 0 { }
+        realSleep(100000000)
+        try Send(c, 7)
+    }
+    assert got.v == 7
+    assert wakesNow(c) <= 2
+}
+
+fn sendFrom(c mut Chan<I32>&, v I32, tok cancel.Token&, got mut sumBox&) {
+    try SendUntil(c, v, tok) catch cancel.Stopped.Cancelled { got.v = -1 } catch { got.v = -2 }
+}
+
+test SendUntil "a send blocked on a full channel wakes for a Recv, a Cancel or its deadline" {
+    c mut Chan<I32>& = Chan<I32>(1)
+    try Send(c, 1)
+    got mut sumBox& = sumBox(0)
+    join {
+        spawn sendFrom(c, 2, cancel.Token(), got)
+        for parkedNow(c) == 0 { }
+        realSleep(100000000)
+        assert (try Recv(c)) == 1
+    }
+    assert got.v == 0 and (try Recv(c)) == 2
+    assert wakesNow(c) <= 2
+    try Send(c, 3)
+    tok mut cancel.Token& = cancel.Token()
+    join {
+        spawn sendFrom(c, 4, tok, got)
+        for parkedNow(c) == 0 { }
+        realSleep(100000000)
+        tok.Cancel()
+    }
+    assert got.v == -1
+    assert wakesNow(c) <= 4
+    start := cancel.NowNs()
+    try SendUntil(c, 5, cancel.Token.After(200)) catch cancel.Stopped.TimedOut { got.v = -3 }
+    assert got.v == -3 and cancel.NowNs() - start >= 200000000
+    assert wakesNow(c) <= 6 and parkedNow(c) == 0
 }
 
 # P4: a task's wait may fail - RecvUntil when its token is cancelled - and the error reaches the join, which a "try join"
