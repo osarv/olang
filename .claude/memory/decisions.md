@@ -21,4 +21,8 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-(none)
+1. (2026-11-23, asked via the Orchestrator; from oagent home/'s GPIO debounce) An anonymous C union's own members
+   (gpio_v2_line_attribute's flags / values / debounce_period_us) stay unreachable from olang: fields of different types
+   over the same bytes are type punning (T36). Generate per-member accessors that copy the bytes (a get returning the
+   member's value, a set writing it), or leave the union's bytes C's only? Default: C's only. Recommendation: accessors
+   - memcpy semantics, no punning, and they let home/ request the kernel's hardware debounce.
