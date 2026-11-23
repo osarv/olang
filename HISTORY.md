@@ -41599,3 +41599,18 @@ the scopes are inferred (a local stored past its block, a task argument from a c
 through `&`), a method may share a field's name, and the `&s`-style scope tags no longer exist - so their comments
 describe history. `structContainsBareScopeField` was stage 0's walker for the removed `<>` scopes; the port has no
 counterpart, and its own walkers are recorded in plan.md as the remaining debt.
+
+## 2026-11-23: one enumeration of what a type holds in place (mine; wt-walkers)
+
+The debt wt-debts left: the port's type walkers each listed a type's parts on their own, the C compiler's
+`structContainsBareScopeField` problem in a new form - a walker that misses a kind of part (an anonymous enum's payload,
+a declared type's base) answers wrongly for it, and nothing says so. `types.Table.HeldParts(id)` is now the one
+enumeration: a list (a struct's fields, an enum's or anonymous enum's payloads, a tuple's or record's parts) and one more
+part (a fixed array's element, a declared type's base, an error value's code). `Embedded` (layout, emit, eval, generic,
+check, lower) is built from it, and typed's `holdsOwned` and `mayHold` and effects' `heldIn` walk through it, each still
+deciding first what a kind means for its question (a run-time-length array's element, a reference, a type without a
+body). It returns list ids, not an array: the walkers run per expression, and `Embedded`'s array would cost an
+allocation each step. Two walkers stay on their own and say why: `holdsWritableRef` follows references and a type's
+arguments, more than what is held in place, and `mir.DropsParts` looks one level down, field by field. Behaviour is
+unchanged: the self-build reaches its fixed point, the run, layout and diagnostic goldens and every check pass as they
+were.

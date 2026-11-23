@@ -1781,41 +1781,43 @@ fn (t Table&) Repr(id TypeId) TypeId {
     return r
 }
 
-# the types whose layouts a type's layout is made of, which must be laid out first: a value's parts held in place. A
-# reference, a run-time-length array and a function value hold theirs elsewhere
-fn (t Table&) Embedded(id TypeId) Array<TypeId> {
-    out Vec<TypeId>
+# the parts a value of type id holds in place, as a list and one more part, ListId(0) and TypeId(0) where there is none:
+# a struct's fields (one not known yet is TypeId(0)), an enum's or an anonymous enum's payloads (TypeId(0) for a case
+# without one), a tuple's or a record's parts, a fixed array's element, a declared type's base (T29), an error value's
+# code. The one enumeration every walker over what a type holds goes through - Embedded, typed's holdsOwned and mayHold,
+# effects' heldIn - each deciding for itself what id's kind means before it asks (whether a reference's referent, a
+# run-time-length array's element or a type without a body counts). No allocation: walkers run per expression.
+fn (t Table&) HeldParts(id TypeId) ListId, TypeId {
     match t.KindOf(id) {
         case Kind.Named {
             match t.DeclKindOf(t.DeclOf(id)) {
-                case DeclKind.Struct {
-                    for f in t.Items(t.Fields(id)): out.Push(f)
-                }
-                case DeclKind.Enum { pushPayloads(t.Items(t.Cases(id)), out) }
-                case DeclKind.Over { out.Push(t.Base(id)) }
+                case DeclKind.Struct { return t.Fields(id), TypeId(0) }
+                case DeclKind.Enum { return t.Cases(id), TypeId(0) }
+                case DeclKind.Over { return ListId(0), t.Base(id) }
                 case _ { }
             }
         }
-        case Kind.Array {
-            if t.Length(id) != TypeId(0): out.Push(t.Elem(id))
-        }
-        case Kind.Tuple, Kind.Record {
-            for f in t.Items(t.Parts(id)): out.Push(f)
-        }
-        case Kind.AnonEnum { pushPayloads(t.Items(t.ShapeCases(id)), out) }
-        case Kind.ErrVal {
-            if t.Repr(id) != TypeId(5): out.Push(t.Repr(id))
-        }
+        case Kind.Array { if t.Length(id) != TypeId(0): return ListId(0), t.Elem(id) }
+        case Kind.Tuple, Kind.Record { return t.Parts(id), TypeId(0) }
+        case Kind.AnonEnum { return t.ShapeCases(id), TypeId(0) }
+        case Kind.ErrVal { if t.Repr(id) != TypeId(5): return ListId(0), t.Repr(id) }
         case _ { }
     }
-    return out.ToArray()
+    return ListId(0), TypeId(0)
 }
 
-# the payload types of a list of cases, the cases carrying one (0 for none)
-fn pushPayloads(cs Array<TypeId>&, out mut Vec<TypeId>&) {
-    for c in cs {
-        if c != TypeId(0): out.Push(c)
+# the types whose layouts a type's layout is made of, which must be laid out first: a value's parts held in place
+# (HeldParts; a struct's field not known yet kept). A reference, a run-time-length array and a function value hold
+# theirs elsewhere
+fn (t Table&) Embedded(id TypeId) Array<TypeId> {
+    out Vec<TypeId>
+    l, single := t.HeldParts(id)
+    fields := t.KindOf(id) == Kind.Named and t.DeclKindOf(t.DeclOf(id)) == DeclKind.Struct
+    for x in t.Items(l) {
+        if x != TypeId(0) or fields: out.Push(x)
     }
+    if single != TypeId(0): out.Push(single)
+    return out.ToArray()
 }
 
 # computes a type's layout from its embedded parts' (Embedded), which are laid out already - as LLVM lays out a struct

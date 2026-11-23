@@ -2774,20 +2774,25 @@ fn heldIn(t types.Table&, ty types.TypeId, into mut Map<I64, Bool>&, depth I64) 
     into.Put(I64(r), true)
     match t.KindOf(r) {
         case types.Kind.Ref { if t.KindOf(t.Referent(r)) == types.Kind.Any: error Unknowable.Held }
-        case types.Kind.Array { if t.Length(r) != types.TypeId(0): try heldIn(t, t.Elem(r), into, depth + 1) }
-        case types.Kind.Tuple, types.Kind.Record { try heldInAll(t, t.Items(t.Parts(r)), into, depth) }
+        case types.Kind.Array, types.Kind.Tuple, types.Kind.Record { try heldInParts(t, r, into, depth) }
         case types.Kind.Named {
             k := t.DeclKindOf(t.DeclOf(r))
             if k == types.DeclKind.Error: return
             if k != types.DeclKind.Struct and k != types.DeclKind.Enum or not t.HasBody(r): error Unknowable.Held
-            try heldInAll(t, t.Items(t.Fields(r)), into, depth)
-            try heldInAll(t, t.Items(t.Cases(r)), into, depth)
+            try heldInParts(t, r, into, depth)
         }
         case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16
              types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64, types.Kind.Int
              types.Kind.Void { }
         case _ { error Unknowable.Held }
     }
+}
+
+# what r holds in place (types.HeldParts: a fixed array's element, the parts, the fields or the payloads)
+fn heldInParts(t types.Table&, r types.TypeId, into mut Map<I64, Bool>&, depth I64) ? Unknowable {
+    l, single := t.HeldParts(r)
+    try heldIn(t, single, into, depth + 1)   # TypeId(0), none, holds nothing
+    try heldInAll(t, t.Items(l), into, depth)
 }
 
 fn heldInAll(t types.Table&, xs Array<types.TypeId>&, into mut Map<I64, Bool>&, depth I64) ? Unknowable {

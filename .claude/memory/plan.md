@@ -58,10 +58,6 @@ size cap, Go-style); with it, stack SIMD alignment for local arrays (O8a covers 
 **Revisit only if:** ThinLTO if programs get big; M:N scheduling only with async I/O; `volatileLoad`/`volatileStore`
 builtins only for MMIO. (The chunk pool's reuse beyond its head chunk was done 2026-10-09 - O8b size classes + an LRU cap.)
 
-**Small known debt (2026-11-23, wt-debts):** the port's type walkers (typed.holdsOwned, mayHold, holdsWritableRef,
-effects.heldIn/plainData, mir.DropsParts) each recurse over a type's parts on their own; `types.Table.Embedded` could
-be their one enumeration. (The 2026-10-08 debts are closed: import order in a cycle, M13; the hand-checked shapes are
-in checks/cases; `structContainsBareScopeField` went with stage 0.)
 
 **How to apply:** the user sets the order; don't start an item from the future-work list unasked. Fix bugs and debts
 on sight per rules.md, "Code rules".

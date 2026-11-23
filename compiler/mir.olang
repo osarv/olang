@@ -1111,7 +1111,8 @@ fn FnKey.DropFn(t types.Table&, ty types.TypeId, dtor I64) FnKey ? NoDrop {
     return FnKey.Helper(HelperKind.Drop, ty)
 }
 
-# whether a value of type ty holds by value a part with destructors of its own to run (a field, a payload)
+# whether a value of type ty holds by value a part with destructors of its own to run (a field, a payload) - one level
+# only, field by field (FieldHolds), so not through types.HeldParts
 fn DropsParts(t types.Table&, ty types.TypeId) Bool {
     for f in t.Items(FieldsOf(t, ty)) {
         if t.FieldHolds(ty, f): return true

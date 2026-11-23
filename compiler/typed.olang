@@ -813,24 +813,10 @@ fn HoldsOwned(t types.Table&, ty types.TypeId) Bool { return holdsOwned(t, ty, 0
 fn holdsOwned(t types.Table&, ty types.TypeId, depth I64) Bool {
     if depth > 16: return true
     r := t.Repr(ty)
-    match t.KindOf(r) {
-        case types.Kind.Array { return t.Length(r) == types.TypeId(0) or holdsOwned(t, t.Elem(r), depth + 1) }
-        case types.Kind.Tuple, types.Kind.Record { return listOwned(t, t.Parts(r), depth) }
-        case types.Kind.AnonEnum { return listOwned(t, t.ShapeCases(r), depth) }
-        case types.Kind.Named {
-            if not t.HasBody(r): return false
-            return match t.DeclKindOf(t.DeclOf(r)) {
-                case types.DeclKind.Struct: listOwned(t, t.Fields(r), depth)
-                case types.DeclKind.Enum: listOwned(t, t.Cases(r), depth)
-                case _: false
-            }
-        }
-        case _ { return false }
-    }
-}
-
-fn listOwned(t types.Table&, l types.ListId, depth I64) Bool {
-    if l == types.ListId(0): return false
+    if t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0): return true
+    if t.KindOf(r) == types.Kind.Named and not t.HasBody(r): return false
+    l, single := t.HeldParts(r)
+    if single != types.TypeId(0) and holdsOwned(t, single, depth + 1): return true
     for p in t.Items(l) {
         if p != types.TypeId(0) and holdsOwned(t, p, depth + 1): return true
     }
@@ -1286,19 +1272,14 @@ fn mayHold(t types.Table&, ty types.TypeId, depth I64) Bool {
     k := t.KindOf(r)
     if k == types.Kind.Void or k == types.Kind.Noreturn: return false
     if depth > 8 or k == types.Kind.Ref or t.OwnedPart(r) and depth > 0: return true
-    if k == types.Kind.Array: return mayHold(t, t.Elem(r), depth + 1)
-    if k == types.Kind.Tuple or k == types.Kind.Record {
-        for x in t.Items(t.Parts(r)) {
-            if mayHold(t, x, depth + 1): return true
-        }
-        return false
-    }
-    if k != types.Kind.Named or not t.HasBody(r): return true
-    dk := t.DeclKindOf(t.DeclOf(r))
-    if dk != types.DeclKind.Struct and dk != types.DeclKind.Enum: return true
-    for f in t.Items(t.Cases(r) if dk == types.DeclKind.Enum else t.Fields(r)) {
-        if f == types.TypeId(0) and dk == types.DeclKind.Struct: return true
-        if f != types.TypeId(0) and mayHold(t, f, depth + 1): return true
+    if k == types.Kind.Array: return mayHold(t, t.Elem(r), depth + 1)   # a run-time length's element as well
+    dk := t.DeclKindOf(t.DeclOf(r)) if k == types.Kind.Named and t.HasBody(r) else types.DeclKind.Trait
+    if k != types.Kind.Tuple and k != types.Kind.Record and dk != types.DeclKind.Struct and dk != types.DeclKind.Enum: return true
+    l, _ := t.HeldParts(r)
+    for f in t.Items(l) {
+        if f == types.TypeId(0) and dk == types.DeclKind.Enum: continue   # a case without a payload
+        if f == types.TypeId(0) and dk == types.DeclKind.Struct: return true   # a field not known yet
+        if mayHold(t, f, depth + 1): return true
     }
     return false
 }
@@ -2470,6 +2451,8 @@ fn (b Body&) ResultMark(t types.Table&, k I64) Mark {
     return Mark.Bare
 }
 
+# whether a value of type ty can reach writable storage: through references too, and a declared type's arguments - more
+# than what it holds in place (types.HeldParts), so it walks the type on its own
 fn holdsWritableRef(t types.Table&, ty types.TypeId, depth I64) Bool {
     if depth > 6: return true
     return match t.KindOf(ty) {
