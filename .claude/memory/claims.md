@@ -46,5 +46,5 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-adddot merged - tile.AddDot (AMX, bit-exact, 425-449 GMAC/s)
 - Orchestrator child (cloud, 2026-11-23): olang wt-mapiter merged - Map walks over values holding writable references (IterRef, IterMut, the loop picks)
 - Orchestrator child (cloud, 2026-11-23): olang wt-android - Android target (aarch64-linux-android, bionic via NDK r28c), NativeActivity sample and APK: merged
-- Orchestrator child (cloud, 2026-11-23): olang wt-buildmem - lower/emit per-function data freed per function (plan.md "Build memory, open"); scope.olang only locally for tracing unless coordinated
+- Orchestrator child (cloud, 2026-11-23): olang wt-buildmem merged - plans by reference in lowering (-36 MB); the emitted text left as the next step
 - OLang Cloud (2026-11-23): olang wt-spawnrelease - spawn target declared outside a loop: -check names it, then release at reassignment after the wait
