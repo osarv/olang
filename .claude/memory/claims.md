@@ -50,3 +50,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Cloud (2026-11-23): olang wt-spawnrelease - spawn target declared outside a loop: -check names it, then release at reassignment after the wait
 - Orchestrator child (cloud, 2026-11-23): olang wt-buildmem2 merged - objects spilled as assembled, items copied once (cold lower+emit 3116 -> 2757 MB)
 - Orchestrator child (cloud, 2026-11-23): olang wt-argmove merged - a fresh text or call result given to a reference built where it goes (E12c)
+- Orchestrator child (cloud, 2026-11-23): olang wt-chanwait - chan.RecvUntil and cancellation block (futex or condvar with a timed wait) instead of polling every 10 ms
