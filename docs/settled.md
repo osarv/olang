@@ -946,7 +946,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   scope through it), O29's lookup only where no caller knows it. O23b: where an instance is reached through an element,
   another instance's field, a global, an `any` or an unfollowed capture and a store, build or call there needs the
   binding, the declaration keeps none, for the whole program (today's equality) - a superset of the programs accepted
-  before, never placing anything later. The compiler's helpers: `lowering` holds the scope pass's plan by reference
+  before, never placing anything later. A freeing gap (docs/freeing.md 2.4): the equality O23b gives back is per declaration, not per
+  instance (the user wants freeing per instance), and a lambda passed as a function value building through a captured
+  helper's field gives the declaration back instead of O29's lookup. The compiler's helpers: `lowering` holds the scope pass's plan by reference
   (`Lowerer.planFor`), `explain Lowerer.LowerKey` says "lw outlives return" alone, and the cold self-build's lower+emit
   peak fell 3814 -> 2990 MB.
 - **Scopes belong to one thread (P2, decision 48).** A task's scope arguments are private stand-ins folded at the join. A stand-in is made in the join block's own scope (P2b, 2026-11-17, mine), so a loop of joins keeps nothing; what

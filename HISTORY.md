@@ -42140,6 +42140,13 @@ captured struct's reference field (`viaValue(fn(k I64) { p.C.names.Push($k + "b"
 environment (T22c's capRoot), which the evaluator finds as the closing frame's scope and the native runtime, the
 environment being on the stack, as the program's. Same on master; left for the next T22c round.
 
+Recorded as freeing gaps after the merge (the Orchestrator's ask, 2026-11-23; docs/freeing.md 2.4 "Still open"): the
+equality O23b gives back is per declaration, not per instance - one instance reached through an element, a field, a
+global, an `any` or an unfollowed capture takes the binding away from every instance of the type, so their builds live
+as long as the longest-lived referent's - and the user wants freeing per instance; it joins the per-instance buffer
+places item (plan.md). And a lambda passed as a function value that builds through a captured helper's field gives the
+declaration back where O29's run-time lookup would serve.
+
 ## 2026-11-23: a promoted field's part handed back keeps its exact half (O23, O23b, O25g; mine; review 11)
 
 Review 11 (field scopes option B, before its merge) found a hole older than B that B makes common. A writable reference

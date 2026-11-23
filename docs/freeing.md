@@ -358,6 +358,17 @@ where it stands - lent, rendered - across a later operand's let-go was no view t
 values holding no reference by type; `readOf` now records it, the place keeping, as any field's array place does.
 Closed by wt-globalfill; checks' freeing globalviews.)
 
+- **O23b's equality, per declaration, not per instance** (field scopes option B, wt-fieldscopes, 2026-11-23): where
+  an instance is reached through an element, another instance's field, a global, an `any` or an unfollowed capture, and
+  a store, build or call there needs its shared field's binding, the declaration keeps none for the whole program - C2d's
+  equality comes back for every instance of the type, so storage built through such a field lives as long as the
+  longest-lived instance's referent, not its own. The user wants freeing per instance: to close, the binding is carried
+  per instance (with the per-instance buffer places, plan.md), not dropped for the declaration.
+- **A lambda passed as a function value that builds through a captured helper's field** (wt-fieldscopes,
+  2026-11-23): the build gives the field's declaration back (O23b's equality) instead of reaching the binding by O29's
+  run-time lookup, as a direct call through the same capture would. To close: a function value's builds through a
+  captured field take O29's lookup where no caller knows the binding.
+
 **Question 1 (open; default in effect: a place a task's code lets go of keeps everywhere, condition 3 as built).** A
 value a joined task builds and hands back - a Vec grown by Push on the task's thread - can be freed by the spawner only
 if a region made (or a chunk taken) on one thread may be released on another. The runtime's pools and a region's kids
