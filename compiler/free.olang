@@ -7463,7 +7463,7 @@ fn (w mut walker&) spawnSite(s typed.Spawn&, tc typed.Call?&) {
         # regions made there handed to the spawner at the join's wait (P2) - so they keep only where the join's own code
         # lets one go while the task runs, unless the result is built where no wait hands it over: the program's scope,
         # a worker's own part of it, or a scope found while the program runs)
-        handed := w.handedAtWait(p, tc)
+        handed := w.handedAtWait(s, p, tc)
         for k in f.heldPlaces(ty) {
             if handed { f.joinTargets.Push(pair.Pair(w.inJoin[w.inJoin.Len() - 1], k)) } else { f.keep(k, RTask, w.body().File, p.Span(), why) }
         }
@@ -7487,9 +7487,13 @@ fn (w mut walker&) spawnSite(s typed.Spawn&, tc typed.Call?&) {
 # whether what a task builds for its target p is handed to the spawner at the join's wait: p a local, the spawn inside a
 # join, and every scope the task's call is given one the spawner builds into itself - a block or one of its body's scope
 # variables, whose stand-in the wait folds back (none the program's, which a worker builds into a part of its own, nor
-# one found while the program runs)
-fn (w mut walker&) handedAtWait(p typed.Lvalue&, tc typed.Call?&) Bool {
+# one found while the program runs); and no clause of its own giving the target a value (P4a), which the task's thread
+# builds where it reaches the program's scope
+fn (w mut walker&) handedAtWait(s typed.Spawn&, p typed.Lvalue&, tc typed.Call?&) Bool {
     if w.inJoin.Len() == 0 or tc == null or tc.Site < typed.SiteId(0) or w.Id >= w.F.Plans.Len(): return false
+    for c in s.Clauses {
+        if c.Handler != null and w.F.handlerBuilds(c.Handler!): return false
+    }
     match p {
         case typed.Lvalue.Local(_, _, _) { }
         case _ { return false }
@@ -7505,6 +7509,20 @@ fn (w mut walker&) handedAtWait(p typed.Lvalue&, tc typed.Call?&) Bool {
         }
     }
     return true
+}
+
+# whether a spawn's clause handler (P4a, a lambda the task's thread calls) may build storage: its body may allocate
+fn (f mut Free&) handlerBuilds(h typed.Expr&) Bool {
+    b := match h {
+        case typed.Expr.Fn(_, _, fv): match fv {
+            case typed.FnVal.Lambda(lb, _, _): I64(lb)
+            case _: -1
+        }
+        case _: -1
+    }
+    if b < 0 or b >= f.Bodies.Len(): return true
+    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+    return f.fx!.Of(b).Holds(effects.Fact.Allocates)
 }
 
 # decide's condition 3: C given a function value may run it on a thread of its own, as may a task whose code is not
