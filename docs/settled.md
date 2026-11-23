@@ -1484,7 +1484,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   library, `extern { }` what is already linked. Variadic C calls pass C's default promotions. `void *` is the prelude's
   `CVoid?&` (X22). A C type two C imports translate alike (same name, same declaration: one header included by both)
   is one type, the first module's, through either alias (`ssl.X509` is `x509.X509`, 2026-11-23); a tag translated
-  differently stays two types. Left: C extern variables and cast macros have no form.
+  differently stays two types. A struct with anonymous members (C11) is a plain struct of the members C reaches by
+  name, an anonymous struct's in place, at clang's offsets; an anonymous union's bytes are opaque words `c_gapOFFSET`
+  (T36: no overlapping fields). Left: C extern variables and cast macros have no form; union members unreachable.
 - **std/linalg is gone (2026-10-26, the user: "No linalg in stdlib ... Tensors are part of oann and they declare
   everything themselves").**
 - **std names never repeat their module's (the user's naming rule, 2026-10-24: "we don't integrate the knowledge that

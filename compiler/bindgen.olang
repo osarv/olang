@@ -70,6 +70,8 @@ type record struct(Key String&) {
     Align I64 = -1
     Packed Bool = false                                 # __attribute__((packed)) (X18, X11a)
     Widths Vec<I64>                                     # each field's bitfield width, -1 for one that is no bitfield
+    Anon Vec<I64>                                       # each field's anonymous struct or union (C11), -1 for a named one
+    Lay Vec<I64>                                        # each member C reaches (flat): offset, size, alignment (X18)
 }
 
 # a function the header declares: its name, its C type and its parameters' names ("" where unnamed) and types, whether
@@ -310,12 +312,15 @@ fn (g mut gen&) recordDecl(n json.Json&, name String&, own Bool) {
     if own: g.recs[r].Own = true
     if not flag(n, "completeDefinition") or g.recs[r].Complete: return
     g.recs[r].Complete = true
+    anon I64 = -1                                       # the unnamed record declared last: an anonymous member's
     for f in inner(n) {
         k := text(f, "kind")
         if k == "TransparentUnionAttr": g.recs[r].Transparent = true
         if k == "PackedAttr": g.recs[r].Packed = true
+        if k == "RecordDecl" and text(f, "name") == "": anon = g.recs.Len()
         if k == "RecordDecl": g.recordDecl(f, text(f, "name"), own)
         if k != "FieldDecl": continue
+        g.recs.RefMut(r).Anon.Push(anon if text(f, "name") == "" else -1)
         if flag(f, "isBitfield"): g.recs[r].Bitfields = true
         w := try constValue(f).ParseInt(10) catch default -1
         g.recs.RefMut(r).Widths.Push(w if flag(f, "isBitfield") else -1)
@@ -579,7 +584,9 @@ fn (g mut gen&) plain(i I64) Bool {
         return ok
     }
     ok := g.recs[i].Complete and not g.recs[i].Bitfields and not g.recs[i].Union and not g.recs[i].Returned
-    if ok {
+    if ok and g.hasAnon(i) {
+        ok = g.laidOut(i)
+    } else if ok {
         for k, ft in g.recs[i].Types {
             if g.recs[i].Names[k] == "" {
                 ok = false                              # an unnamed member, a struct or union of its own
@@ -595,6 +602,106 @@ fn (g mut gen&) plain(i I64) Bool {
     }
     g.recs[i].Plain = 1 if ok else 0
     return ok
+}
+
+# whether a struct has an anonymous member - a struct or union of no name, its members reached as the struct's own (C11)
+fn (g gen&) hasAnon(i I64) Bool {
+    for a in g.recs.Ref(i).Anon {
+        if a >= 0: return true
+    }
+    return false
+}
+
+# the members C reaches in a struct, by name, with their C types: an anonymous struct's in its place, recursively; an
+# anonymous union's none (X18: the bytes it takes are C's); Skip where a member has no form here (a bitfield, a record
+# not complete)
+fn (g mut gen&) flat(i I64, names mut Vec<String&>&, types mut Vec<String&>&) ? Skip {
+    r := g.recs[i]
+    if not r.Complete or r.Bitfields: error Skip.Why
+    for k in range r.Names.Len() {
+        a := r.Anon[k] if k < r.Anon.Len() else -1
+        if r.Names[k] != "" {
+            names.Push(r.Names[k])
+            types.Push(r.Types[k])
+        } else if a < 0 {
+            error Skip.Why
+        } else if not g.recs[a].Union {
+            try g.flat(a, names, types)
+        }
+    }
+}
+
+# whether a struct with anonymous members is plain data as its flat members at the offsets clang gave (X18), the bytes
+# between them - an anonymous union's - opaque words: each member's form olang lays out where C does, and the struct's
+# size and alignment C's
+fn (g mut gen&) laidOut(i I64) Bool {
+    names Vec<String&>
+    types Vec<String&>
+    try g.flat(i, names, types) catch Skip { return false }
+    if names.Len() == 0: return false
+    size := g.recs[i].Size
+    align := g.recs[i].Align
+    if g.recs[i].Lay.Len() != 3 * names.Len() or size <= 0 or align <= 0: return false
+    for k in range types.Len() {
+        t := g.parseType(types[k])
+        if g.nodes[t].Kind == CKind.Arr: t = g.nodes[t].To
+        try g.fieldType(t) catch Skip { return false }
+    }
+    pos I64 = 0
+    most I64 = 1
+    for k in range names.Len() {
+        off := g.recs[i].Lay[3 * k]
+        if off < pos or g.recs[i].Lay[3 * k + 2] <= 0: return false
+        if off > pos: most = most.Max(gapWord(pos, off - pos, align))
+        pos = off + g.recs[i].Lay[3 * k + 1]
+        most = most.Max(g.recs[i].Lay[3 * k + 2])
+    }
+    if pos > size: return false
+    if size > pos: most = most.Max(gapWord(pos, size - pos, align))
+    return most == align
+}
+
+# the width of the opaque words filling n bytes from offset at, in a struct aligned to align at most
+fn gapWord(at I64, n I64, align I64) I64 {
+    for w in Array<I64>[8, 4, 2] {
+        if w <= align and at % w == 0 and n % w == 0: return w
+    }
+    return 1
+}
+
+# a field's line of a struct: "name Type", an array's "name := Array<T>(N)"
+fn (g mut gen&) fieldLine(n String&, ctext String&) String {
+    ct := g.parseType(ctext)
+    if g.nodes[ct].Kind == CKind.Arr {
+        e := try g.fieldType(g.nodes[ct].To) catch Skip default "U8"
+        return $"    " + $n + " := Array<" + $e + ">(" + $g.nodes[ct].N + ")\n"
+    }
+    ft := try g.fieldType(ct) catch Skip default "U8"
+    return $"    " + $n + " " + $ft + "\n"
+}
+
+# a struct with anonymous members (X18): its flat members, the bytes between them opaque words ("c_gapOFFSET")
+fn (g mut gen&) flatFields(i I64) String {
+    names Vec<String&>
+    types Vec<String&>
+    try g.flat(i, names, types) catch Skip { }
+    b := StringBuilder()
+    used := Map<String&, I64>()
+    pos I64 = 0
+    for k in range names.Len() {
+        off := g.recs[i].Lay[3 * k]
+        if off > pos: b.Push(gapLine(pos, off - pos, g.recs[i].Align))
+        b.Push(g.fieldLine(g.paramName(names[k], k, used), types[k]))
+        pos = off + g.recs[i].Lay[3 * k + 1]
+    }
+    if g.recs[i].Size > pos: b.Push(gapLine(pos, g.recs[i].Size - pos, g.recs[i].Align))
+    return b.ToString()
+}
+
+fn gapLine(at I64, n I64, align I64) String {
+    w := gapWord(at, n, align)
+    elem := "I64" if w == 8 else "I32" if w == 4 else "I16" if w == 2 else "U8"
+    return $"    c_gap" + $at + " := Array<" + $elem + ">(" + $(n / w) + ")\n"
 }
 
 # X18, X11a: a packed record's members as a packed struct's fields ("name Type" lines; an array "name := ..."), where its
@@ -962,18 +1069,12 @@ fn (g mut gen&) structDecl(i I64) String {
         b.Push($"    bytes := Array<" + $elem + ">(" + $(r.Size / r.Align) + ")\n}\n")
         return b.ToString()
     }
-    used := Map<String&, I64>()
-    for k in range r.Names.Len() {
-        n := g.paramName(r.Names[k], k, used)
-        ct := g.parseType(r.Types[k])
-        if g.nodes[ct].Kind == CKind.Arr {
-            e := try g.fieldType(g.nodes[ct].To) catch Skip default "U8"
-            b.Push($"    " + $n + " := Array<" + $e + ">(" + $g.nodes[ct].N + ")\n")
-        } else {
-            ft := try g.fieldType(ct) catch Skip default "U8"
-            b.Push($"    " + $n + " " + $ft + "\n")
-        }
+    if g.hasAnon(i) {
+        b.Push($g.flatFields(i) + "}\n")
+        return b.ToString()
     }
+    used := Map<String&, I64>()
+    for k in range r.Names.Len(): b.Push(g.fieldLine(g.paramName(r.Names[k], k, used), r.Types[k]))
     b.Push("}\n")
     return b.ToString()
 }
@@ -1805,10 +1906,27 @@ fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, inclu
     pb := StringBuilder()
     pb.Push($include + "\n")
     for k, i in want { pb.Push("enum __olang_l" + $k + " : long long { __olang_z" + $k + " = sizeof(" + $g.spell(i) + "), __olang_a" + $k + " = _Alignof(" + $g.spell(i) + ") };\n") }
+    # a struct with anonymous members: where each member it reaches is, and its size and alignment
+    for k, i in want {
+        if not g.hasAnon(i): continue
+        names Vec<String&>
+        types Vec<String&>
+        try g.flat(i, names, types) catch Skip { continue }
+        g.recs.RefMut(i).Lay.Clear()
+        for j in range names.Len() {
+            g.recs.RefMut(i).Lay.Push(-1)
+            g.recs.RefMut(i).Lay.Push(-1)
+            g.recs.RefMut(i).Lay.Push(-1)
+            m := $"((" + $g.spell(i) + " *)0)->" + $names[j]
+            id := $k + "_" + $j
+            pb.Push("enum __olang_m" + $id + " : long long { __olang_mo" + $id + " = __builtin_offsetof(" + $g.spell(i) + ", " + $names[j] + "), __olang_ms" + $id + " = sizeof(" + $m + "), __olang_ma" + $id + " = __alignof__(" + $m + ") };\n")
+        }
+    }
     try os.WriteFile(probe, pb.ToString()) catch os.Error { try g.skip("the probe cannot be written") }
     doc := try g.dump(clang, flags, probe)
     for n in inner(doc) {
         nm := text(n, "name")
+        if text(n, "kind") == "EnumDecl" and nm.StartsWith("__olang_m"): g.member(want, nm, n)
         if text(n, "kind") != "EnumDecl" or not nm.StartsWith("__olang_l"): continue
         k := try nm[9:].ParseInt() catch default -1
         if k < 0 or k >= want.Len(): continue
@@ -1824,6 +1942,16 @@ fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, inclu
     }
     # the answers change what is plain data: decide it again
     for i in range g.recs.Len(): g.recs[i].Plain = -1
+}
+
+# a probe's answer for a member of a struct with anonymous members ("__olang_mK_J"): its offset, size and alignment
+fn (g mut gen&) member(want Vec<I64>&, nm String&, n json.Json&) {
+    ids := nm[9:].Split("_")
+    if ids.Len() != 2: return
+    k := try ids[0].ParseInt() catch default -1
+    j := try ids[1].ParseInt() catch default -1
+    if k < 0 or k >= want.Len() or j < 0 or 3 * j + 2 >= g.recs[want[k]].Lay.Len(): return
+    for v, c in inner(n): g.recs.RefMut(want[k]).Lay[3 * j + v] = try constValue(c).ParseInt() catch default -1
 }
 
 # ---- olang bindgen ----

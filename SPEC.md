@@ -10024,7 +10024,12 @@ into these:
   an unnamed member - as a packed struct (T13c) where the record is `__attribute__((packed))`, every member is a bitfield
 of an integer or `_Bool` type (none of width 0), an integer, `_Bool` or floating member, or an array of integers, and
 each member that is no bitfield starts at a whole byte of the running bits (so X11a's layout and C's agree), bitfields
-as integers of their width (signed where their type is signed: `int x : 3` an `I3`), `_Bool x : 1` a `Bool`; else as a
+as integers of their width (signed where their type is signed: `int x : 3` an `I3`), `_Bool x : 1` a `Bool`; a struct
+with **anonymous members** (C11's struct or union of no name, `union { __u64 flags; __u32 debounce; };`) as a plain
+struct of the members C reaches in it by name - an anonymous struct's own members in its place, nested to any depth -
+each at the offset clang gives it, the bytes between them and at the end (an anonymous union's, padding) opaque words
+named `c_gapOFFSET` (T36: a union's members overlap, so none of them is a field; they are C's to read and write), where
+each member has a field's form and the struct comes out of C's size and alignment; else as a
 struct of **opaque words** of its size and alignment (`bytes := Array<I64>(5)`, never read,
   C's to read and write), which may be held in place and passed by reference but crosses by value nowhere; else as an
   extern type (X10);

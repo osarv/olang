@@ -1,0 +1,40 @@
+# C imports (X18): a struct with anonymous members (C11) - an anonymous struct's members, nested once, reached as the
+# struct's own for reading and writing, and an anonymous union's bytes held for C between the members around it - laid
+# out as C lays it out; linux/gpio.h's line attribute, whose id and padding sit before such a union
+import cn "canon/canon.c"
+import gpio "linux/gpio.h"
+
+test "an anonymous struct's members, nested once, are the struct's own, where C has them" {
+    p := cn.cn_point()
+    p.tag = 10
+    p.b = 20
+    p.c = 30.0
+    p.d = 40
+    p.e = 50
+    p.last = 60
+    assert cn.cn_point_sum(p) == 210
+    q := cn.cn_point()
+    cn.cn_point_fill(q)
+    assert q.tag == 1 and q.b == 2 and q.c == 3.0 and q.d == 4 and q.e == 5 and q.last == 6
+}
+
+test "the members around an anonymous union are the struct's own, its bytes C's" {
+    a := cn.cn_attr()
+    a.id = 7
+    a.after = 100
+    cn.cn_attr_set(a, 1000)
+    assert a.id == 7 and a.after == 100
+    assert cn.cn_attr_flags(a) == 1107
+}
+
+test "a struct with anonymous members is as big as C's" {
+    assert cn.cn_sizes() == I32(cn.cn_attr.Size) * 100 + I32(cn.cn_point.Size)
+}
+
+test "linux/gpio.h's line attribute has its id and padding" {
+    at := gpio.gpio_v2_line_attribute()
+    at.id = U32(gpio.GPIO_V2_LINE_ATTR_ID_DEBOUNCE)
+    at.padding = 0
+    assert at.id == 3
+    assert gpio.gpio_v2_line_attribute.Size == 16
+}

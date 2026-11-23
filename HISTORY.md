@@ -42647,3 +42647,21 @@ Linking needed nothing: `link` is per import, but the libraries are the program'
 "crypto"` beside `ssl.h link "ssl"` links both, and libcrypto's functions reached through either module resolve.
 Tests: tests/cshare.olang (two C files of the corpus including one header, a struct and an opaque type passed between
 their functions and an olang function naming the type through the other alias).
+
+Second fix, same branch: a C struct with an anonymous member lost every field. linux/gpio.h's `struct
+gpio_v2_line_attribute { __u32 id; __u32 padding; union { __aligned_u64 flags; __aligned_u64 values; __u32
+debounce_period_us; }; }` was opaque words (X18 listed "an unnamed member" among what makes a record no plain data), so
+`attr.id` was "has no member 'id'". Now bindgen links each anonymous member to its record (`record.Anon`, from the
+unnamed RecordDecl clang lists before the implicit FieldDecl), flattens the members C reaches by name - an anonymous
+struct's own, recursively - and asks clang, in the probe that already gives sizes, each one's offset, size and alignment
+(`__builtin_offsetof`, `sizeof`/`__alignof__` of `((S *)0)->m`). The struct is plain data when each member has a field's
+form and laying them at those offsets, with the bytes between them as opaque words (`c_gapOFFSET`, the widest word the
+offset and length allow), gives C's size and alignment; else it stays opaque words as before. The members of an anonymous
+struct are read and written as the struct's own, at C's offsets.
+
+Decided: an anonymous union's members are not fields. olang has no union and no type punning (T36): two fields over one
+storage of different types would be exactly the overlapping accesses T36 rules out (and TBAA relies on, across C
+inlined by LTO). So the union's bytes are held for C (opaque words) and the members around it are the struct's; reading
+or writing `flags` or `debounce_period_us` from olang needs a design (a question for the user). Tests: tests/canon.olang
+(an anonymous union between named members, an anonymous struct holding another, written from olang and read by C and
+back, sizes against C's; gpio_v2_line_attribute's id and padding).
