@@ -41752,3 +41752,22 @@ looked at again, so a function never called built silently and one called with a
 not lower an unknown type"). The resolver now notes, where a type path is written, the module its last name was looked
 for in and not found (`Resolver.MissingIn`), and the checker's namedMet says M9 there through the message a value path
 gets ("module std/time declares no 'Instant'", with its nearest-name hint). checks/cases/m9missingtype.olang.
+
+## 2026-11-23: an import a decided condition adds is known to every parse (M13, B9c; mine; review10 F2)
+
+review10 F2: M13 says every module's imports are known before any module is parsed, but an import inside a top-level
+`if` that only evaluation decides (B9c) is loaded by `Loader.Decide` during checking, after every module was parsed. A
+chain through it to a generic function named as a value (`x.Pk.First<I64>`, no call after it) was misparsed: the
+parser's name oracle did not know `First`, read `<` as a comparison - G12 "not a value", or L9 inside an import cycle,
+where the parse error stopped the build before the check could decide the condition. The review recommended stating the
+limit in SPEC; I chose to close it, since a re-parse is cheap and M13 then holds as written. Now: Decide loads what the
+decided branch imports without parsing it, and when the branch added an import, marks every parsed module whose alias
+chains (the oracle's four aliases deep) reach the deciding module to be parsed again; `Loader.ParseDecided`, at the
+top of each round of `interp.Analyze` (before the round's mark), parses them with a fresh oracle, the records the
+earlier parse said dropped (`Diagnostics.DropRecords`). The loader no longer stops on a parse error while some import
+waits on such a condition (`Loader.ImportsPending`): the check decides it and the last round's errors are the
+program's. Two bugs met on the way, fixed: a module loaded by Decide was parsed after the round's mark, so its syntax
+errors were forgotten with the round (only a consequence, D10a, was said); and scripting mode's warnings (D3b, M5a)
+were never forgotten with a round, so a round reading the misparsed body warned "nothing here is reached through 'x'"
+after the next round had read it rightly (`Forget` takes the warnings' count too). tests/condimport, condimportx,
+condimportcycle (fail on master: G12 and L9), built and evaluated.

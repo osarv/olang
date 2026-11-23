@@ -1381,7 +1381,9 @@ fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnost
     l.Load(root)
     if p.Paths.Len() > 0 and l.Root >= 0: d.NameLines(l.Mods[l.Root].File, p.Paths, p.Lines)
     p.Loaded = l.Mods.Len()
-    if d.Errors() > 0: error build.Failed.Reported
+    # M13, B9c: where an import waits on a condition only evaluation decides, what a parse said may come of names that
+    # import brings - the check decides it and parses again, and its last round's errors are the program's
+    if d.Errors() > 0 and not l.ImportsPending(): error build.Failed.Reported
     return l
 }
 

@@ -417,18 +417,32 @@ fn (d mut Diagnostics&) Hold() I64 {
     return g
 }
 
+# drops the diagnostics numbered from to to: what a module's earlier parse said, the module parsed again (M13)
+fn (d mut Diagnostics&) DropRecords(from I64, to I64) {
+    g := d.groupParent.Len()
+    d.groupParent.Push(-1)
+    d.groupState.Push(Dropped)
+    for i in range from, to {
+        if i < d.records.Len(): d.records[i].group = g
+    }
+}
+
 # closes the group opened last
 fn (d mut Diagnostics&) EndHold() { try d.held.Pop() catch { } }
 
 # how many diagnostics have been reported, held ones included - whether a step reported one
 fn (d Diagnostics&) Count() I64 { return d.records.Len() }
 
+# how many warnings interpret has said (B3e) - Forget's second mark: a check done again says its own
+fn (d Diagnostics&) WarnCount() I64 { return d.warns.Len() }
+
 # how many diagnostics there are but those said only alone (ErrorAlone)
 fn (d Diagnostics&) Firm() I64 { return d.records.Len() - d.alone.Len() }
 
 # forgets every diagnostic reported since Count gave mark, and the notes on them - a step done again from the start
-# (the checker's attempts, R1a)
-fn (d mut Diagnostics&) Forget(mark I64) {
+# (the checker's attempts, R1a) - and the warnings said since WarnCount gave warned
+fn (d mut Diagnostics&) Forget(mark I64, warned I64 = -1) {
+    if warned >= 0 and warned < d.warns.Len(): d.warns.Truncate(warned)
     if mark >= d.records.Len(): return
     d.records.Truncate(mark)
     k I64 = 0

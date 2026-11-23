@@ -622,6 +622,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   alias-qualified across modules; an alias-less import takes the file's base name; capitalized aliases re-export,
   through chains of any depth; a cycle in public reachability, or one file reached two ways, is an error.
   The order of a module's imports never matters (M13): every module is loaded before any is parsed.
+  An import a B9c condition adds is known once it is decided: the modules whose chains reach it are parsed again.
 
 ### Generics
 

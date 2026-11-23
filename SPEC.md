@@ -3665,7 +3665,9 @@ the very enum of the value (its module and name), so another module's same-named
 **M13.** Resolving a multi-hop alias chain (M8) needs every intermediate module's imports known. They always
 are: every module the program reaches is loaded and its imports resolved before any module is parsed, so in a raw
 import cycle (M2) the order in which a module declares its imports never decides whether a chain through them
-resolves.
+resolves. An import in a top-level `if` that only compile-time evaluation decides (B9c) is known once the condition
+is decided: every module whose chains reach the deciding module is then read again with it, before the program is
+checked again, so such a chain resolves as any other.
 
 ### 4.5 Re-export
 
