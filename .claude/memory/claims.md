@@ -44,4 +44,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-loopval merged - S9a/S9g, a loop name is the element's value (the user's rule of 2026-11-23); oann/oagent migration notes sent
 - OLang Cloud (2026-11-23): olang wt-fieldscopes - field scopes option B (docs/fieldscopes.md, the user's yes)
 - Orchestrator child (cloud, 2026-11-23): olang wt-bf16dot merged - E39 BF16 pair dot (vdpbf16ps); AMX measured 7.5x F32, surface proposed, not built
-- Orchestrator child (cloud, 2026-11-23): olang wt-adddot - tile.AddDot: AMX BF16 tile products, bit-exact (the model in HISTORY "tdpbf16ps's arithmetic, found")
+- Orchestrator child (cloud, 2026-11-23): olang wt-adddot merged - tile.AddDot (AMX, bit-exact, 425-449 GMAC/s)
