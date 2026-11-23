@@ -2503,7 +2503,7 @@ e20178f94e07dfed 093e0335a8debfcd compiler/bindgen.olang
 1c0afe32dcaf03c1 9684b6618b8c6420 compiler/build.olang
 9eb8d9916112f375 acad139c7c5a3871 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
-ad911105d096ca66 3106ac7c25466101 compiler/check.olang
+5e751e609f4c8dc4 e8095dcf2c8b75f5 compiler/check.olang
 e0a0570ee1ea4f5b aaaf062f329cd03a compiler/cond.olang
 d5d87da3cf156c0a bba2773268c83e42 compiler/definit.olang
 10fe8de7e2c53448 07ee50d7637ae4d4 compiler/diag.olang
@@ -2529,7 +2529,7 @@ d567d78faab8844a 7d14ca379389e62a compiler/interp.olang
 7dc09dd9a3624990 5eddb899d10cc9ce compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
 245e694518ba3a33 4a80e8591deefac6 compiler/mir.olang
-4feb78fede446d67 ef0d3a53516cb323 compiler/msgs.olang
+4ebcb3e91a66d1d0 f17c87fdfe42b086 compiler/msgs.olang
 04b2a622da19ca9a 835500f0b436639f compiler/names.olang
 3f072b84e716c304 59b46a3ae1383924 compiler/needs.olang
 79acbc010c9bf08a b1a3323292403dad compiler/notebook.olang
@@ -2682,7 +2682,7 @@ bf4439d09464a49e d3b7295c84ebe3c3 std/prelude/float.olang
 02ef8799a43cf737 848f97b80edb3d41 std/prelude/hash.olang
 e2c6c18786ba2b7d 31f81d4ecfb8f70a std/prelude/input.olang
 9bc178df14e040b9 384c8ac462fcdf54 std/prelude/iterator.olang
-8d78604ee0f159ce 6f0aef1d355542e2 std/prelude/map.olang
+2768f485dc19ba8b 92946c30a9d95ae2 std/prelude/map.olang
 981cc35618f9ae23 96140841ac0a1718 std/prelude/number.olang
 73d1c1d2113c8ce4 481c5628e82754ca std/prelude/place.olang
 7367a130692c3681 893bc35ee58ad45a std/prelude/print.olang

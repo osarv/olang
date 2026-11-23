@@ -463,6 +463,10 @@
 | ok - the baked global agrees
 | ok - an element holding text, written through its own reference: the name keeps what the slot held
 | ok - the self-slot snapshot, baked, agrees
+=== test tests/mapmut.olang
+| status 0
+| ok - S9c: a map of values holding writable references, walked read-only and writably
+| ok - S9c: a plain map walks Iter as before
 === test tests/match.olang
 | status 0
 | ok - a value match's clauses give their values after ':', a value running on over lines

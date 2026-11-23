@@ -5275,6 +5275,7 @@ rv3roslice.olang:19:11: note: a copy of a place reached read-only writes nothing
 rv3roslice.olang:17:5: note: 'x' copies a place reached read-only, so it is read-only
    17 |     x := G
       |     ^
+rv3roslice.olang:19:11: help: reach the place writably - a 'mut' reference, a local - and write through it there; a walk of a collection reached writably gives writable copies
 compilation failed with 1 error
 === rv3strreceiver.olang
 rv3strreceiver.olang:11:10: error[E11c, T25c]: Str only reads its receiver
@@ -7232,6 +7233,7 @@ t25ccopyfield.olang:11:8: note: a copy of a place reached read-only writes nothi
 t25ccopyfield.olang:10:5: note: 'x' copies a place reached read-only, so it is read-only
    10 |     x := GB
       |     ^
+t25ccopyfield.olang:11:8: help: reach the place writably - a 'mut' reference, a local - and write through it there; a walk of a collection reached writably gives writable copies
 compilation failed with 1 error
 === t25ccopyfill.olang
 t25ccopyfill.olang:9:24: error[T25c]: a copy of a read-only Box cannot be stored where it can be written
@@ -7247,6 +7249,7 @@ t25ccopyforin.olang:11:21: note: a copy of a place reached read-only writes noth
 t25ccopyforin.olang:11:5: note: 'b' copies a place reached read-only, so it is read-only
    11 |     for b in GA: b.P[0] = 1
       |     ^~~~~~~~~~~~~~~~~~~~~~~
+t25ccopyforin.olang:11:21: help: reach the place writably - a 'mut' reference, a local - and write through it there; a walk of a collection reached writably gives writable copies
 compilation failed with 1 error
 === t25ccopyfuncvalue.olang
 t25ccopyfuncvalue.olang:9:10: error[T25c]: this lambda cannot be a function value
@@ -7284,6 +7287,7 @@ t25ccopymatch.olang:16:31: note: a copy of a place reached read-only writes noth
 t25ccopymatch.olang:16:23: note: 'b' copies a place reached read-only, so it is read-only
    16 |         case Opt.Some(b) { b.P[0] = 1 }
       |                       ^
+t25ccopymatch.olang:16:31: help: reach the place writably - a 'mut' reference, a local - and write through it there; a walk of a collection reached writably gives writable copies
 compilation failed with 1 error
 === t25ccopyparam.olang
 t25ccopyparam.olang:9:13: error[T25c]: this copies a read-only Box, and a written type declares a writable one
@@ -7325,6 +7329,16 @@ t25cforinwrites.olang:19:5: error[T25c]: a read-only reference cannot become wri
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~
 t25cforinwrites.olang:19:5: note: what is reached read-only stays so - a read-only parameter, and a local copied from one (x := r copies the reference, not what it names)
 t25cforinwrites.olang:19:5: help: pass a writable reference, change a copy of your own ('r.Copy()'), or, where a 'mut' parameter asks for it, make that parameter read-only
+compilation failed with 1 error
+=== t25cmapwalk.olang
+t25cmapwalk.olang:11:26: error[T25c]: this writes through a reference a read-only copy holds
+   11 |     for e in m: e.Value.d[0] = 1
+      |                          ^
+t25cmapwalk.olang:11:26: note: a copy of a place reached read-only writes nothing it shares
+t25cmapwalk.olang:11:5: note: 'e' copies a place reached read-only, so it is read-only
+   11 |     for e in m: e.Value.d[0] = 1
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+t25cmapwalk.olang:11:26: help: reach the place writably - a 'mut' reference, a local - and write through it there; a walk of a collection reached writably gives writable copies
 compilation failed with 1 error
 === t25crefkept.olang
 t25crefkept.olang:12:12: error[T25c]: 'put' keeps what its parameter 'x' reaches where it can be written
