@@ -9929,7 +9929,8 @@ with the word's position from 0 in its declaration added, so a library gives one
 returns it; and each entry, with the olang signature it is in a comment above it. Each type crosses as X2 says: a
 number as its `<stdint.h>` type (`int8_t` ... `uint64_t`), `float`, `double`, `_Float16`, `__bf16`, a `Bool` as `bool`,
 a `Char` as `char`, an extern type's reference and a plain struct's as pointers (`const` where olang's is read-only), an
-array as a pointer and its `int64_t` length (`const char *t, int64_t t_len` for a `String&`).
+array as a pointer and its `int64_t` length (`const char *t, int64_t t_len` for a `String&`), a C function pointer (X13a)
+as a typedef of its own declared before its first use (`typedef int32_t (*olang_fn_1)(int32_t);`).
 
 **X15 (text and C).** C's string - a `char *` naming bytes ended by a NUL - has two forms here. Text goes to C as
 `t.ToC()`, a method every `String` has (§4 M19d, the prelude): a new `Array<U8>` holding the text's bytes and a NUL

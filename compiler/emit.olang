@@ -8130,6 +8130,7 @@ type cDecls struct() {
     Foreign Vec<String&>
     Structs Vec<String&>
     seen Map<String&, Bool>
+    Fns Map<String&, String&>      # X13a: each C function pointer type's typedef, by its canonical text
 }
 
 # the C header of a library named lib built from file: its extern types declared, the plain structs its entries take
@@ -8187,7 +8188,7 @@ fn (e mut Emitter&) cEntryDecl(f I64, ty types.TypeId, ds mut cDecls&) String {
         pn := $e.text(fd.S.Params[j].Name) if j < fd.S.Params.Len() else $"a" + $j
         pt := pts[j]
         rp := t.Repr(pt)
-        if t.IsRef(rp) {
+        if t.IsRef(rp) and not t.CFunc(rp) {
             x := t.Repr(t.Referent(rp))
             ro := (t.PermOf(rp) & types.Writable) == 0
             if t.KindOf(x) == types.Kind.Array {
@@ -8269,6 +8270,7 @@ fn (e mut Emitter&) cType(ty types.TypeId, ds mut cDecls&) String {
             case _: "double"
         }
     }
+    if t.CFunc(r): return e.cFuncType(r, ds)
     if t.IsRef(r) {
         x := t.Referent(r)
         n := $e.text(t.DeclName(t.DeclOf(x)))
@@ -8302,6 +8304,39 @@ fn (e mut Emitter&) cType(ty types.TypeId, ds mut cDecls&) String {
         return n
     }
     return "void"
+}
+
+# X13a: a C function pointer's type in a header - a typedef of its own, "olang_fn_K", declared before what names it:
+# "typedef int32_t (*olang_fn_1)(int32_t);", a plain struct's reference its pointer (const where read-only)
+fn (e mut Emitter&) cFuncType(r types.TypeId, ds mut cDecls&) String {
+    t := e.T
+    f := t.Referent(r)
+    key := "p " + $t.Canon(t.Plain(f))
+    n := try ds.Fns.Get(key) catch default ""
+    if n != "": return n
+    ps := StringBuilder()
+    for k, p in t.Items(t.Params(f)) {
+        if k > 0: ps.Push(", ")
+        rp := t.Repr(p)
+        if t.IsRef(rp) and not t.CFunc(rp) and not t.ForeignRef(rp) {
+            # (by its tag, declared first: the struct may be the one being defined, which holds this pointer)
+            sn := e.cType(t.Referent(rp), ds)
+            if not ds.seen.Has("t " + $sn) {
+                ds.seen.Put("t " + $sn, true)
+                ds.Structs.Push("struct " + $sn + ";\n")
+            }
+            ps.Push($("const " if (t.PermOf(rp) & types.Writable) == 0 else "") + "struct " + $sn + " *")
+            continue
+        }
+        ps.Push(e.cType(p, ds))
+    }
+    if ps.Len() == 0: ps.Push("void")
+    res := t.Result(f)
+    ret := "void" if res == types.VoidT else e.cType(res, ds)
+    n = "olang_fn_" + $(ds.Fns.Len() + 1)
+    ds.Fns.Put(key, n)
+    ds.Structs.Push($"typedef " + $ret + " (*" + $n + ")(" + $ps.ToString() + ");\n\n")
+    return n
 }
 
 # X11a: a packed struct's fields as C bitfields, one each (an array's elements each one, name_0, name_1 ...): an unsigned
