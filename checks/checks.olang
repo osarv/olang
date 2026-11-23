@@ -688,6 +688,11 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(outOf(dir).Contains("growkept.olang:21:9: memory: what a Vec<I64> grows out of in calls here is kept until its scope closes") and outOf(dir).Contains(", 1 keeps it"), "growkept names its growth's keep", dir)
     try late(r, dir, "growkept", "2000", "2059000\n")
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" growkept.olang > out.txt 2>&1") == 0 and outOf(dir) == "2059000\n", "growkept interpreted", dir)
+    # (mapsplit, review12: a Map of Vecs copied out of a Vec's element, the element given new values - its slot array walked
+    # once, by its live entries (its entries' values keep, -check names them: copies of the element); built, -free late,
+    # -sanitize and the evaluator agree)
+    try late(r, dir, "mapsplit", "2000", "18890 7998\n")
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 mapsplit.olang > out.txt 2>&1") == 0 and outOf(dir) == "1688 798\n", "mapsplit interpreted", dir)
     # (threads reserve address space of their own: these read their own growth, or their peak)
     try r.expect(sh(dir, "\"$OLANG\" -check joins.olang > out.txt 2>&1") == 0, "joins", dir)
     try r.expect(outOf(dir).EndsWith("flat 200000\n"), "joins kept what its joins made", dir)

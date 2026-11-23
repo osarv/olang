@@ -8260,8 +8260,9 @@ fn (f mut Free&) vecWalksAt(ty types.TypeId, path Vec<I64>&, out mut Vec<VecWalk
         if q >= 0: out.Push(VecWalk(path.ToArray(), i, n, q, types.UnknownT))
         else if f.nestedBuffer(r, i): out.Push(VecWalk(path.ToArray(), i, n, -1, t.Elem(t.Repr(fs[i]))))
         else if f.arrayBuffer(r, i): out.Push(VecWalk(path.ToArray(), i, n, -1, fs[i]))
-        # (a split field's elements, walked by the array's own length: Count SplitCount)
-        else if f.SplitField(f.placeKey(r, i)) {
+        # (a split field's elements, walked by the array's own length: Count SplitCount - but a Map's slot array, whose
+        # live entries the walk below releases: walked twice, each entry's parts were released twice - review12)
+        else if f.SplitField(f.placeKey(r, i)) and not f.entryBuffer(r, i) {
             # (keptlast: a split field of text, `P{t Array<String>}` - each element's slot put back, by its length)
             tq := f.TextArray(fs[i])
             out.Push(VecWalk(path.ToArray(), i, SplitCount, tq, t.Elem(t.Repr(fs[i]))))

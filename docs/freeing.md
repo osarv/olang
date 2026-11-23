@@ -410,10 +410,10 @@ to grow into them, (c) a hand-off at the join. (c) is built:
 - **Found, open.** A clause's default (P4a, `catch default Vec<String>[pad(i)]`) is built by the task's thread in its
   worker's part of the program's scope (emit's trampoline passes `@__olang_prog_scope` to the handler): it is never
   reclaimed - ~250 bytes a failure on master, with or without early freeing - and is no hand-off (it keeps). To close:
-  the trampoline gives a handler the stand-in of the target's storage, as a target's copy is given (P1g, `copyF`). And
-  the evaluator diverges, on master, from the built program for `m := mkMap(i); maps[i % 4] = m` with
-  `Map<I64, Vec<String>>` values built by `Put` in the callee ("it indexes outside the array" at Vec.SetAt; `-free late`
-  under the evaluator agrees) - a matter of its regions, not of tasks.
+  the trampoline gives a handler the stand-in of the target's storage, as a target's copy is given (P1g, `copyF`). (The
+  evaluator's "it indexes outside the array" at Vec.SetAt for a `Map<I64, Vec<String>>` stored into a Vec's element and
+  copied back out was no divergence: the built program released each entry's parts twice too, by luck unseen there -
+  fixed by review12, checks' freeing mapsplit.)
 
 ## 3. Order of work (phase 2)
 

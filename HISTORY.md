@@ -42243,3 +42243,16 @@ the program's scope and never reclaimed - ~250 bytes a failure on master as here
 handler the stand-in of the target's storage. And on master the evaluator diverges from the built program for a
 `:=` local of `Map<I64, Vec<String>>` filled by Put in a callee and stored into a Vec's element ("it indexes outside the
 array" at Vec.SetAt; `-free late` under the evaluator agrees) - its regions, not tasks; docs/freeing.md 2.4 has both.
+## 2026-11-23: a Map's slot array walked twice at its let-go (review12, O8f)
+
+Found by review12 behind the evaluator's "it indexes outside the array" at Vec.SetAt that wt-taskhandoff recorded as a
+divergence: `maps[i % 4] = mkmap(i)` then `x := maps[i % 4]`, the values `Map<I64, Vec<String>>`, crashed built too
+(master as well; the task hand-off reached it through a join's results, which kept before). The copy into `x` splits
+the element's slot array (its entries' parts copied into part regions, free.SplitField), and `free.vecWalksAt` then
+listed that field twice for the element's let-go: once as a split field, walked by the array's length, and once as a
+Map's slot array (entryBuffer), walked by its live entries. Each entry's text slots and its Vec's buffer were released
+by the first walk - the buffer field left empty, its count not - and the second walk read the strings through the
+emptied buffer: a null read built (a double release where it reads stale storage), out of range interpreted. A Map's
+slot array is now walked by its live entries only (an emptied slot holds stale values the length walk would release
+again). checks' freeing mapsplit: the shape and a removal between stores; built, `-free late`, `-sanitize` and the
+evaluator agree, where master segfaults.
