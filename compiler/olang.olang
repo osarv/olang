@@ -1487,6 +1487,10 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
     args Vec<String&>
     args.Push(cfg.Clang)
     for f in cfg.CFlags(): args.Push(f)
+    # X14: a library's C is position-independent as its olang is - else clang's default (position-independent
+    # executable, on Android and most Linux distributions) marks the IR as an executable's, and the link's code
+    # generator, merging that mark, reaches every thread-local at an executable's fixed offsets, which a library cannot
+    if cfg.Library: args.Push("-fPIC")
     if cfg.Debug: args.Push("-g")
     if cfg.Race: args.Push("-fsanitize=thread")
     if cfg.Profile {
