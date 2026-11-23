@@ -2525,7 +2525,7 @@ d567d78faab8844a 7d14ca379389e62a compiler/interp.olang
 8299f0d6f657ceae ba0b78c0c7122d77 compiler/lineedit.olang
 211de0b5ecb13aac 4324dd1a83c4b615 compiler/listing.olang
 4d9b20ee19fcdada 9ea8ba280c896ad2 compiler/load.olang
-3cde6365c0d2f1c7 ba0409d48193742c compiler/lower.olang
+8f278feca2f2e518 3f0e263153b49f41 compiler/lower.olang
 0a6ba37a53fb9662 26f5ffd009f3d4b4 compiler/lsp.olang
 7dc09dd9a3624990 5eddb899d10cc9ce compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang

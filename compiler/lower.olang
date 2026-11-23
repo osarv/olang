@@ -294,19 +294,19 @@ fn (lw mut Lowerer&) lowerAs(id I64, t I64) mir.Fn& {
 
 # the plan body id is lowered with as twin t (-1 for the body itself): the twin's, the body's, else the stand-in's
 fn (lw Lowerer&) planFor(id I64, t I64) typed.Plan& {
-    if t >= 0: return lw.TwinPlans[t]
-    if id < lw.Plans.Len(): return lw.Plans[id]
+    if t >= 0: return lw.TwinPlans.Ref(t)
+    if id < lw.Plans.Len(): return lw.Plans.Ref(id)
     return lw.NoPlan
 }
 
 # the plan the code a key names was lowered with (a twin's own, else its body's) - an empty one for anything else
 fn (lw Lowerer&) planOf(k mir.FnKey) typed.Plan& {
     match k {
-        case mir.FnKey.Body(id) { if I64(id) < lw.Plans.Len(): return lw.Plans[I64(id)] }
-        case mir.FnKey.Twin(_, t) { if t < lw.TwinPlans.Len(): return lw.TwinPlans[t] }
+        case mir.FnKey.Body(id) { if I64(id) < lw.Plans.Len(): return lw.Plans.Ref(I64(id)) }
+        case mir.FnKey.Twin(_, t) { if t < lw.TwinPlans.Len(): return lw.TwinPlans.Ref(t) }
         case _ { }
     }
-    return typed.Plan(0, 0, 0)
+    return lw.NoPlan
 }
 
 # O23a, B3i: the fact naming how many derived scopes body id takes - a whole-program fact (the scope pass's field
@@ -345,7 +345,7 @@ fn (lw mut Lowerer&) DecideBuilds(spawned Vec<I64>&) {
 fn (lw mut Lowerer&) DecideDerived() {
     for id in range lw.Plans.Len() {
         name := lw.derivedFact(id)
-        if name != "": lw.P.Facts.Decide(name, $lw.Plans[id].DerivedP.Len(), false)
+        if name != "": lw.P.Facts.Decide(name, $lw.Plans.Ref(id).DerivedP.Len(), false)
     }
 }
 
@@ -398,8 +398,8 @@ fn (lw mut Lowerer&) ReadDerived(file I64, k mir.FnKey) {
 # O23a, C1: how many derived scopes the code a key names takes after its type's (typed.Plan's DerivedP)
 fn (lw Lowerer&) DerivedN(k mir.FnKey) I64 {
     return match k {
-        case mir.FnKey.Body(id): lw.Plans[I64(id)].DerivedP.Len() if I64(id) < lw.Plans.Len() else 0
-        case mir.FnKey.Twin(_, t): lw.TwinPlans[t].DerivedP.Len() if t < lw.TwinPlans.Len() else 0
+        case mir.FnKey.Body(id): lw.Plans.Ref(I64(id)).DerivedP.Len() if I64(id) < lw.Plans.Len() else 0
+        case mir.FnKey.Twin(_, t): lw.TwinPlans.Ref(t).DerivedP.Len() if t < lw.TwinPlans.Len() else 0
         case _: 0
     }
 }
