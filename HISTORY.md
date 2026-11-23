@@ -42062,3 +42062,10 @@ and amx-tile are enabled for the build's target) is the ninth constant of B10a b
 takes it (defaulted, so the tests' own calls are unchanged), the driver passes Target.TileDot, -define refuses to
 redefine it, and the evaluator reads the same value. true natively on an AMX Xeon, false under -target x86-64-v4;
 tests/tile.olang checks it only beside AVX-512.
+
+## 2026-11-23: tile.AddDot's fallback allocates nothing (E39a; mine; wt-tiledot)
+
+oann pins its products allocation-free (`assert not Gemm<...>.Allocates`), and AddDot's fallback made its two chains
+as `Array<F32>(cols)`. They are now `Array<F32>(64)`, a known length held in the call's frame (T7c), and the columns go
+64 at a time - each element's two chains and sum depend on no other column, so the result is the same bit for bit
+(tests/tile.olang unchanged, on AMX and under -target x86-64-v4). tests/tile.olang pins `assert not tile.AddDot.Allocates`.

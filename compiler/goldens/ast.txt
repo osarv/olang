@@ -2693,7 +2693,7 @@ f32716d6d9c12ec4 463f9aff9e332ee5 std/regex.olang
 ac5bc791fca142dc 322190b1abb48cbd std/sha256.olang
 a81faf81143e4029 4459d73325ec9b06 std/stats.olang
 61284ebe07008756 2bb02ed4d46b936f std/sync.olang
-dcf1a3732f553966 6b343480a1734748 std/tile.olang
+cec14acad2356597 54d51ead4dd8d2db std/tile.olang
 c85cc7ff6bb88b66 cb292a8c1f4206cf std/time.olang
 ca1ed8bbef28692e d9219123dbc87d14 std/tls.olang
 dc957db12eea5034 04e163ebae4a8df8 std/utf8.olang
@@ -2789,7 +2789,7 @@ c452c9cb509c23e1 76ad53a3573a5846 tests/structpat.olang
 b043808fc75ce994 719c84153e3808ff tests/textfields.olang
 0d4b3ba0fcda27dc 9f05e76fef4e032b tests/textplus.olang
 2fb13fa3e9f7127c 83979588bf3c969f tests/textslot.olang
-080df24a5d98fd35 54359c73cf31ea9e tests/tile.olang
+15d8321c264566d3 3ac23cfa15ade5a2 tests/tile.olang
 306278cf38ee3057 a890abeac25f11d9 tests/topassert.olang
 b85bbc40e839bded 30079888e4e808ba tests/tuplefacts.olang
 865512a5b10174be 5f39bd86c0f79ae0 tests/typedefaults.olang

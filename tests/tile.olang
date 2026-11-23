@@ -136,3 +136,6 @@ test "tile.AddDot refuses a shape it does not take, and adds nothing for an empt
 
 # B10a: TargetHasTileDot says whether AddDot runs on tile registers - AMX comes only with AVX-512
 test "B10a: TargetHasTileDot, only beside AVX-512" { assert not TargetHasTileDot or TargetVectorBits == 512 }
+
+# the fallback allocates nothing (its chains in the frame), so a product kernel calling it can be pinned allocation-free
+assert not tile.AddDot.Allocates

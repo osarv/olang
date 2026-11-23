@@ -23,19 +23,26 @@ fn AddDot(c mut Array<F32>&, cld I64, rows I64, cols I64, a Array<BF16>&, ald I6
     if cld < cols or ald < depth: error Error.Shape
     if c.Len() < (rows - 1) * cld + cols or a.Len() < (rows - 1) * ald + depth or b.Len() < depth * cols: error Error.Shape
     if __olang_tile_bf16(c, cld, rows, cols, a, ald, depth, b) == 0: return
-    even := Array<F32>(cols)
-    odd := Array<F32>(cols)
+    # (the chains of up to 64 columns at a time, in the call's frame: the fallback allocates nothing; each element's own
+    # arithmetic does not depend on the columns beside it)
+    even := Array<F32>(64)
+    odd := Array<F32>(64)
     for m in range rows {
-        for s in range depth / 32: step(c, m * cld, cols, a, m * ald + 32 * s, b, 16 * s * cols * 2, even, odd)
+        for n0 in range 0, cols, 64 {
+            w := (cols - n0).Min(64)
+            for s in range depth / 32: step(c, m * cld + n0, w, a, m * ald + 32 * s, b, (16 * s * cols + n0) * 2, cols, even, odd)
+        }
     }
 }
 
 # the zero of its sign for a subnormal, else itself
 fn flush(v F32) F32 { return F32.FromBits(v.Bits() & 0x80000000) if (v.Bits() & 0x7F800000) == 0 else v }
 
-# one 32-deep step into one row of C (from c[at]), its A from a[from], its pairs from b[pairs]
-fn step(c mut Array<F32>&, at I64, cols I64, a Array<BF16>&, from I64, b Array<BF16>&, pairs I64, even mut Array<F32>&, odd mut Array<F32>&) {
-    for n in range cols {
+# one 32-deep step into w columns of one row of C (from c[at]), its A from a[from], its pairs from b[pairs] in rows of
+# cols pairs
+fn step(c mut Array<F32>&, at I64, w I64, a Array<BF16>&, from I64, b Array<BF16>&, pairs I64, cols I64, even mut Array<F32>&
+        odd mut Array<F32>&) {
+    for n in range w {
         even[n] = 0.0
         odd[n] = 0.0
     }
@@ -43,10 +50,10 @@ fn step(c mut Array<F32>&, at I64, cols I64, a Array<BF16>&, from I64, b Array<B
         x0 := flush(F32(a[from + 2 * k]))
         x1 := flush(F32(a[from + 2 * k + 1]))
         row := pairs + k * cols * 2
-        for n in range cols {
+        for n in range w {
             even[n] = flush(x0.Fma(flush(F32(b[row + 2 * n])), even[n]))
             odd[n] = flush(x1.Fma(flush(F32(b[row + 2 * n + 1])), odd[n]))
         }
     }
-    for n in range cols: c[at + n] = flush(flush(c[at + n]) + flush(even[n] + odd[n]))
+    for n in range w: c[at + n] = flush(flush(c[at + n]) + flush(even[n] + odd[n]))
 }
