@@ -23,6 +23,7 @@
 import "std/io"
 import "std/os"
 import "std/sha256"
+import "std/pair"
 import "source"
 import "ast"
 import "diag"
@@ -58,6 +59,8 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     Attrs String& = ""              # what every function carries for the target (B12: CPU, features, vector width)
     Gaps Vec<String&>              # what emission met and does not emit yet, a line each
     queue Vec<mir.FnKey>           # the functions to write, in the order first referred to
+    globalBodies Map<pair.Pair<I64, I64>, I64> # a global's initializing body, by (module, name): the first of the bodies scanned
+    globalsScanned I64 = 0                      # ... the bodies globalBodies covers
     queued Map<mir.FnKey, I64>      # each function's index in queue
     cur I64 = -1                    # the function being written
     named Vec<types.TypeId>        # the declared structs whose types are spelled by name, to define
@@ -1330,15 +1333,18 @@ fn storedType(b typed.Body&, m I64, n source.NameId) types.TypeId {
 }
 
 fn (e mut Emitter&) globalBody(m I64, n source.NameId) I64 {
-    for i in range e.Lw.Bodies.Len() {
+    for e.globalsScanned < e.Lw.Bodies.Len() {
+        i := e.globalsScanned
+        e.globalsScanned++
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Global(gm, gn) {
-                if gm == m and gn == n: return i
+                k := pair.Pair<I64, I64>(gm, I64(gn))
+                if not e.globalBodies.Has(k): e.globalBodies.Put(k, i)
             }
             case _ { }
         }
     }
-    return -1
+    return try e.globalBodies.Get(pair.Pair<I64, I64>(m, I64(n))) catch default -1
 }
 
 # ---- names ----
@@ -2968,34 +2974,18 @@ fn insertedSlot(line String&) String {
 # what clang parses, and keeps whole at -O0. nlocals is how many locals the function has (the slots are %l0 ...)
 fn foldSlots(body String&, nlocals I64) String {
     n := body.Len()
-    # each line's start, its end, and the block it is in (a label line starts one) - arrays of the lines' count, which
-    # Vecs doubling as they fill held twice over (the many local ifs' 340,000 lines)
-    lines I64 = 0
-    for c in body {
-        if c == '\n': lines++
-    }
-    if n > 0 and body[n - 1] != '\n': lines++
-    starts := Array<I64>(lines)
-    ends := Array<I64>(lines)
-    blocks := Array<I64>(lines)
-    s I64 = 0
-    blk I64 = 0
-    for li in range lines {
-        e := s
-        for e < n and body[e] != '\n': e++
-        if e > s and body[s] != ' ' and body[e - 1] == ':': blk++
-        starts[li] = s
-        ends[li] = e
-        blocks[li] = blk
-        s = e + 1
-    }
+    # by slot: how often it is named, and the start of its alloca's, store's and load's lines (-1 for none); and the
+    # starts of the label lines, each starting a block - found in one pass over the lines
     mentions := Array<I64>(nlocals)
     allocaAt := Array<I64>(nlocals, -1)
     storeAt := Array<I64>(nlocals, -1)
     loadAt := Array<I64>(nlocals, -1)
-    for li in range starts.Len() {
-        a := starts[li]
-        z := ends[li]
+    labels Vec<I64>
+    a I64 = 0
+    for a < n {
+        z := a
+        for z < n and body[z] != '\n': z++
+        if z > a and body[a] != ' ' and body[z - 1] == ':': labels.Push(a)
         i := a
         for i < z {
             c := body[i]
@@ -3022,59 +3012,73 @@ fn foldSlots(body String&, nlocals I64) String {
             mentions[v] += 1
             atEnd := j == z or body[j] == ','
             if i == a + 2 and body[a:i] == "  " and body[j:z].StartsWith(" = alloca ") {
-                allocaAt[v] = li
+                allocaAt[v] = a
             } else if atEnd and i >= a + 6 and body[i - 6:i] == ", ptr " {
-                if body[a:z].StartsWith("  store "): storeAt[v] = li
-                else if body[a:z].Contains(" = load "): loadAt[v] = li
+                if body[a:z].StartsWith("  store "): storeAt[v] = a
+                else if body[a:z].Contains(" = load "): loadAt[v] = a
             }
             i = j
         }
+        a = z + 1
     }
-    skip := Array<Bool>(starts.Len())
+    # the starts of the lines folded away
+    skips Vec<I64>
     # by the number of the temporary a folded load defined (%tK, fnEm.tmp), the value it is named by instead: a
     # temporary's number read where it is written - a Map of names asked of every name in the body had been a third
     # of this function's work
     subst Vec<String&>
-    folded := false
     for v in range nlocals {
         if mentions[v] != 3 or allocaAt[v] < 0 or storeAt[v] < 0 or loadAt[v] < 0: continue
         sl := storeAt[v]
         ll := loadAt[v]
-        if not (blocks[sl] == blocks[ll] and sl < ll or blocks[sl] == 1 and blocks[ll] != 1): continue
+        sb := blockOf(labels, sl)
+        lb := blockOf(labels, ll)
+        if not (sb == lb and sl < ll or sb == 1 and lb != 1): continue
         al := allocaAt[v]
-        tyAt := try body[starts[al]:ends[al]].Find(" = alloca ") catch { continue }
-        ty := body[starts[al] + tyAt + 10:ends[al]]
+        alEnd := lineEnd(body, al)
+        tyAt := try body[al:alEnd].Find(" = alloca ") catch { continue }
+        ty := body[al + tyAt + 10:alEnd]
         if ty.Contains(", align"): continue
         slot := $"%l" + $v
         # the load: "  %X = load TY, ptr %lN..."
-        ld := body[starts[ll]:ends[ll]]
+        ld := body[ll:lineEnd(body, ll)]
         eq := try ld.Find(" = load ") catch { continue }
         if not ld[eq + 8:].StartsWith($ty + ", ptr " + $slot): continue
         name := ld[2:eq]
         if not name.StartsWith("%t"): continue
         k := try name[2:].ParseInt() catch { continue }
         # the store: "  store TY V, ptr %lN...", V one token
-        st := body[starts[sl]:ends[sl]]
+        st := body[sl:lineEnd(body, sl)]
         if not st[8:].StartsWith($ty + " "): continue
         vs := 8 + ty.Len() + 1
         ve := try st.Find($", ptr " + $slot) catch { continue }
         if ve <= vs: continue
         val := st[vs:ve]
         if val.Contains(" ") or val.Contains(","): continue
-        skip[al] = true
-        skip[sl] = true
-        skip[ll] = true
+        skips.Push(al)
+        skips.Push(sl)
+        skips.Push(ll)
         for subst.Len() <= k: subst.Push("")
         subst[k] = $val
-        folded = true
     }
-    if not folded: return $body
+    if skips.Len() == 0: return $body
+    skips.Sort(fn(x I64, y I64) Bool { return x < y })
+    # the text again, line by line: a folded line left out, a folded temporary named by its value, the text between
+    # copied as one piece from at
     out := StringBuilder()
-    for li in range starts.Len() {
-        if skip[li]: continue
-        a := starts[li]
-        z := ends[li]
-        at := a
+    next I64 = 0
+    at I64 = 0
+    a = 0
+    for a < n {
+        z := a
+        for z < n and body[z] != '\n': z++
+        for next < skips.Len() and skips[next] < a: next++
+        if next < skips.Len() and skips[next] == a {
+            out.Push(body[at:a])
+            at = z + 1 if z < n else n
+            a = z + 1
+            continue
+        }
         i := a
         for i < z {
             c := body[i]
@@ -3098,10 +3102,30 @@ fn foldSlots(body String&, nlocals I64) String {
             }
             i = j
         }
-        out.Push(body[at:z])
-        if z < n: out.PushChar('\n')
+        a = z + 1
     }
+    out.Push(body[at:n])
     return out.ToString()
+}
+
+# the end of the line starting at a of text: its newline, or the text's end
+fn lineEnd(text String&, a I64) I64 {
+    z := a
+    for z < text.Len() and text[z] != '\n': z++
+    return z
+}
+
+# the block the line starting at a is in, by the starts of the label lines (each starting one, in order): how many of
+# them start at a or before
+fn blockOf(labels Vec<I64>&, a I64) I64 {
+    lo I64 = 0
+    hi := labels.Len()
+    for lo < hi {
+        mid := (lo + hi) / 2
+        if labels[mid] <= a: lo = mid + 1
+        else: hi = mid
+    }
+    return lo
 }
 
 # foldSlots' text for the temporary numbered m: what it was folded into, followed through the temporaries that names
