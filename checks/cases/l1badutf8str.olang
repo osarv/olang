@@ -1,0 +1,6 @@
+# check: fail error[L1]: invalid UTF-8
+# L1: a literal holds UTF-8 text; a lone lead byte is no character - a byte is written \xHH
+fn main() {
+    s := "a√b"
+    Println(s)
+}

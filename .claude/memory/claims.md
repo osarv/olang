@@ -51,3 +51,5 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-buildmem2 merged - objects spilled as assembled, items copied once (cold lower+emit 3116 -> 2757 MB)
 - Orchestrator child (cloud, 2026-11-23): olang wt-argmove merged - a fresh text or call result given to a reference built where it goes (E12c)
 - Orchestrator child (cloud, 2026-11-23): olang wt-chanwait - chan.RecvUntil and cancellation block (futex or condvar with a timed wait) instead of polling every 10 ms
+- Orchestrator child (cloud, 2026-11-23): olang wt-utf8src - UTF-8 in string and character literals and comments (identifiers ASCII), validated by the scanner
+- Orchestrator child (cloud, 2026-11-23): olang wt-utf8src merged - UTF-8 in literals and comments, validated (L1)

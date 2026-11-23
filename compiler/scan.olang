@@ -16,6 +16,7 @@ import "token"
 type LexError enum {
     UnknownChar
     NonAscii
+    BadUtf8
     NulByte
     CarriageReturn
     Semicolon
@@ -27,6 +28,7 @@ type LexError enum {
     CharNewline
     EmptyChar
     LongChar
+    WideChar
     BadEscape
     BadHexEscape
     BadUnicodeEscape
@@ -57,7 +59,7 @@ type Diag struct(Kind LexError, Start I32, End I32, Byte Char) {
 fn (d Diag) Rule() String& {
     return match d.Kind {
         case LexError.UnknownChar: "L16"
-        case LexError.NonAscii, LexError.NulByte: "L1"
+        case LexError.NonAscii, LexError.BadUtf8, LexError.NulByte: "L1"
         case LexError.CarriageReturn: "L3"
         case LexError.Semicolon: "L18"
         case LexError.CommaEndsLine: "L18a"
@@ -65,6 +67,7 @@ fn (d Diag) Rule() String& {
         case LexError.UnclosedString, LexError.StringNewline: "L14"
         case LexError.UnclosedChar, LexError.CharNewline, LexError.EmptyChar, LexError.LongChar: "L13"
         case LexError.BadEscape, LexError.BadHexEscape, LexError.BadUnicodeEscape, LexError.BadCodePoint: "L15"
+        case LexError.WideChar: "L13"
         case LexError.WideCharEscape: "L13, L15"
         case LexError.RawUnclosed, LexError.RawAfterOpen, LexError.RawCloseNotAlone, LexError.RawIndent: "L14a"
         case LexError.HexNoDigits, LexError.HexDigit: "L10a"
@@ -79,7 +82,8 @@ fn (d Diag) Message() String {
     b := d.Byte
     return match d.Kind {
         case LexError.UnknownChar: "unexpected character '" + $b + "'"
-        case LexError.NonAscii: "non-ASCII byte - olang source is ASCII"
+        case LexError.NonAscii: "non-ASCII character outside a comment or literal - names and code are ASCII"
+        case LexError.BadUtf8: "invalid UTF-8 - olang source is UTF-8 text"
         case LexError.NulByte: "NUL byte in the source - is this a text file?"
         case LexError.CarriageReturn: "carriage return - save the file with LF line endings"
         case LexError.Semicolon: "olang has no ';'"
@@ -91,6 +95,7 @@ fn (d Diag) Message() String {
         case LexError.CharNewline: "character literal not closed on its line"
         case LexError.EmptyChar: "empty character literal"
         case LexError.LongChar: "character literal holds more than one character - text is written in \"\""
+        case LexError.WideChar: "a character literal holds one byte, and this character is several in UTF-8"
         case LexError.BadEscape: "unknown escape '\\" + $b + "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\" \\xHH \\u{H}"
         case LexError.BadHexEscape: "'\\x' needs two hexadecimal digits, as \\x41"
         case LexError.BadUnicodeEscape: "'\\u' needs one to six hexadecimal digits in braces, as \\u{1F600}"
@@ -124,7 +129,9 @@ fn (d Diag) Help() String {
     return match d.Kind {
         case LexError.Semicolon: "put the next statement on a line of its own"
         case LexError.CommaEndsLine: "remove it"
-        case LexError.WideCharEscape: "write the text in \"\""
+        case LexError.WideCharEscape, LexError.WideChar: "write the text in \"\""
+        case LexError.NonAscii: "a name is ASCII letters, digits and '_' - non-ASCII text goes in a comment or a literal"
+        case LexError.BadUtf8: "save the file as UTF-8 - a byte that is no text is written \\xHH in a literal"
         case _: ""
     }
 }
@@ -198,11 +205,14 @@ fn (s mut scanner&) run() {
                 nl = true
                 i++
             } else if c == '#' and (i + 1 >= n or t[i + 1] != '#') {
-                i = lineEnd(t, i)
+                e := lineEnd(t, i)
+                s.utf8(i, e)
+                i = e
                 if i == n: nl = true
             } else if c == '#' {
                 end := s.blockEnd(i)
                 if hasLineEnd(t, i + 2, end): nl = true
+                s.utf8(i, end)
                 i = end
             } else {
                 break
@@ -222,6 +232,7 @@ fn (s mut scanner&) run() {
         } else if c == '"' {
             k = token.Tok.StrLit
             end = s.str(i)
+            s.utf8(i, end)
         } else if c == '\'' {
             k = token.Tok.CharLit
             end = s.char(i)
@@ -664,6 +675,8 @@ fn (s mut scanner&) char(i I64) I64 {
             return j + 1
         }
         j = s.escape(j, '\'')
+    } else if c >= 0x80 {
+        return s.wideChar(i, j)
     } else {
         j++
     }
@@ -682,6 +695,61 @@ fn (s mut scanner&) char(i I64) I64 {
     end := k + 1 if k < n and t[k] == '\'' else k
     s.diag(LexError.LongChar, i, end)
     return end
+}
+
+# a character literal at i whose character at j is no ASCII (L13): one well-formed in UTF-8 is several bytes, and invalid
+# UTF-8 is no text (L1) - either said; where the literal ends, never past its line's end
+fn (s mut scanner&) wideChar(i I64, j I64) I64 {
+    t := s.text
+    le := lineEnd(t, j)
+    w := utf8Width(t, j, le)
+    k := j + w if w > 0 else j + 1
+    if w == 0: s.diag(LexError.BadUtf8, j, k)
+    if k < le and t[k] == '\'' {
+        if w > 0: s.diag(LexError.WideChar, i, k + 1)
+        return k + 1
+    }
+    for k < le and t[k] != '\'': k++
+    if k >= le {
+        s.diag(LexError.UnclosedChar if le == t.Len() else LexError.CharNewline, i, k)
+        return k
+    }
+    if w > 0: s.diag(LexError.LongChar, i, k + 1)
+    return k + 1
+}
+
+# L1: the text in t[from:to] - a comment or a literal - is well-formed UTF-8; the first byte where it is not is said
+fn (s mut scanner&) utf8(from I64, to I64) {
+    t := s.text
+    x := from
+    for x < to {
+        if t[x] < 0x80 {
+            x++
+            continue
+        }
+        w := utf8Width(t, x, to)
+        if w == 0 {
+            s.diag(LexError.BadUtf8, x, x + 1)
+            return
+        }
+        x += w
+    }
+}
+
+# the length of the well-formed UTF-8 sequence at t[i], within t[:to] - 2 to 4 bytes, no overlong form, no surrogate,
+# nothing past 10FFFF - or 0 where none starts there
+fn utf8Width(t String&, i I64, to I64) I64 {
+    b := t[i]
+    w I64 = 2 if b >= 0xC2 and b <= 0xDF else 3 if b >= 0xE0 and b <= 0xEF else 4 if b >= 0xF0 and b <= 0xF4 else 0
+    if w == 0 or i + w > to: return 0
+    c := t[i + 1]
+    lo := 0xA0 if b == 0xE0 else 0x90 if b == 0xF0 else 0x80
+    hi := 0x9F if b == 0xED else 0x8F if b == 0xF4 else 0xBF
+    if c < lo or c > hi: return 0
+    for k in range i + 2, i + w {
+        if t[k] < 0x80 or t[k] > 0xBF: return 0
+    }
+    return w
 }
 
 # raw text at i, its opening '"""' (L14a): where it ends - after its closing '"""', or at the file's end
@@ -929,6 +997,22 @@ test "bytes that begin no token are reported once a run and passed over" {
     v := "f(x)!\ny != z!"                   # E35: a postfix '!' ends a statement at a line's end, and "!=" is one token
     assert spelled(v, Tokens.Scan(v)) == "f ( x ) ! ; y != z ! ;"
     assert spelled(u, Tokens.Scan(u)) == "x ; y ;"
+}
+
+test "UTF-8 is text in comments and literals, checked as it is read, and no name (L1)" {
+    t := "# på\nx := \"håll ö\" ## ä ##\ny := \"\"\"\n    å\n    \"\"\"\n"
+    ts := Tokens.Scan(t)
+    assert ts.Diags.Len() == 0 and spelled(t, ts) == "x := \"håll ö\" ; y := \"\"\"\n    å\n    \"\"\" ;"
+    bad := Array<String&>["\"a\xC3b\"", "# \xC0\xAF", "## \xED\xA0\x80 ##", "\"\xF4\x90\x80\x80\"", "\"\xE2\x82\"", "'\xFF'"]
+    for b in bad {
+        u := Tokens.Scan(b)
+        assert u.Diags.Len() == 1 and u.Diags[0].Kind == LexError.BadUtf8 and u.Diags[0].Rule() == "L1"
+    }
+    w := Tokens.Scan("c := 'å'\nd := 'åb'\n")
+    assert w.Diags.Len() == 2 and w.Diags[0].Kind == LexError.WideChar and w.Diags[1].Kind == LexError.LongChar
+    assert w.Toks[2].Kind == token.Tok.CharLit and w.Toks[2].End - w.Toks[2].Start == 4
+    n := Tokens.Scan("på := 1")
+    assert n.Diags.Len() == 1 and n.Diags[0].Kind == LexError.NonAscii
 }
 
 test "literals are checked as they are read" {

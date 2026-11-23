@@ -147,6 +147,24 @@
 | 9 ;
 | 10 }
 | error L13 7:10
+=== checks/cases/l13utf8char.olang
+| 4 fn
+| 4 main
+| 4 (
+| 4 )
+| 4 {
+| 5 c
+| 5 :=
+| 5 '√•'
+| 5 ;
+| 6 Println
+| 6 (
+| 6 $
+| 6 c
+| 6 )
+| 6 ;
+| 7 }
+| error L13 5:10
 === checks/cases/l13widechar.olang
 | 3 fn
 | 3 main
@@ -391,6 +409,36 @@
 | 8 ;
 | 9 }
 | error L18 7:36
+=== checks/cases/l1badutf8comment.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 {
+| 5 Println
+| 5 (
+| 5 "x"
+| 5 )
+| 5 ;
+| 6 }
+| error L1 4:11
+=== checks/cases/l1badutf8str.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 {
+| 4 s
+| 4 :=
+| 4 "a√b"
+| 4 ;
+| 5 Println
+| 5 (
+| 5 s
+| 5 )
+| 5 ;
+| 6 }
+| error L1 4:12
 === checks/cases/l1junkline.olang
 | 5 import
 | 5 "std/io"
@@ -422,6 +470,23 @@
 | 10 ;
 | 11 }
 | error L16 8:1
+=== checks/cases/l1nonasciiname.olang
+| 4 fn
+| 4 main
+| 4 (
+| 4 )
+| 4 {
+| 5 p
+| 5 :=
+| 5 1
+| 5 ;
+| 6 Println
+| 6 (
+| 6 "x"
+| 6 )
+| 6 ;
+| 7 }
+| error L1 5:6
 === checks/cases/l1nul.olang
 | 3 fn
 | 3 main

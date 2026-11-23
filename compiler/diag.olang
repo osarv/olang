@@ -981,7 +981,7 @@ fn SpecPath() String& {
     return $exe[:slash] + "/../SPEC.md"
 }
 
-# the section sign, which olang source (ASCII, L1) cannot write: U+00A7 in UTF-8
+# the section sign: U+00A7 in UTF-8, built from its bytes
 fn section() String {
     b := StringBuilder()
     b.PushChar(Char(194))
@@ -1064,6 +1064,14 @@ test "a span is written as path:line:col, with its line and a caret under it" {
     d.Error(Where.Span(f, 26, 29), msgs.Expected("I32", msgs.Tok("1.5")))
     assert d.Render() == "a.olang:2:13: error: expected I32, found '1.5'\n    2 |     x I32 = 1.5\n      |             ^~~\n"
     assert d.Summary() == "compilation failed with 1 error\n"
+}
+
+test "on a line holding UTF-8 text the column counts bytes and the caret stands under the token (B11, L1)" {
+    src := "s := \"påö\" + zz\n"
+    d := Diagnostics(false)
+    f := d.AddFile("u.olang", src)
+    d.Error(Where.Span(f, 15, 17), msgs.Expected("a name", msgs.Tok("zz")))
+    assert d.Render() == "u.olang:1:16: error: expected a name, found 'zz'\n    1 | s := \"påö\" + zz\n      |              ^~\n"
 }
 
 test "a rule is written in brackets, and an error with no rule has none" {

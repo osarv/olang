@@ -1,0 +1,6 @@
+# check: fail error[L1]: invalid UTF-8
+# L1: a comment holds UTF-8 text; an overlong form (C0 AF for /) is none
+fn main() {
+    # bad À¯ here
+    Println("x")
+}

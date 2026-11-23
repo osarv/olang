@@ -1,0 +1,7 @@
+# check: fail error[L13]: a character literal holds one byte, and this character is several in UTF-8
+# also: write the text in
+# L13: a Char is one byte (T29h); a character beyond ASCII is text, written in ""
+fn main() {
+    c := 'å'
+    Println($c)
+}

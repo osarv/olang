@@ -86,11 +86,16 @@ mutable private global, whose lengths are known only at run time.
 
 ### 1.1 Source files
 
-**L1.** A source file is a sequence of 8-bit bytes, treated as ASCII. There is no escape for
-non-ASCII source text. Outside a comment and a string or character literal, a byte that begins no token, whitespace
-or comment - a non-ASCII byte, a control character, a NUL - is a compile-time error, reported once for a run of such
-bytes and then passed over, so the rest of the file is read as though it were not there. The file ends where its
-bytes do: a NUL byte inside it is one more byte, never its end.
+**L1.** A source file is a sequence of 8-bit bytes, read as UTF-8 text. Its tokens - names, keywords, numbers,
+operators - are ASCII; any character beyond ASCII (`å`, `€`, `😀`) is written in a comment (L4, L4a) or a string or
+character literal (L13, L14, L14a), where its bytes must be **well-formed UTF-8**: each character the shortest sequence
+of two to four bytes that encodes it, no surrogate (`D800`-`DFFF`) and nothing above `10FFFF`. A byte there that begins
+no such sequence - a lone lead or continuation byte, an overlong form, a surrogate - is a compile-time error, reported
+once per comment or literal; a byte that is no text is written in a literal as `\xHH` (L15). Outside a comment and a
+literal, a byte that begins no token, whitespace or comment - a non-ASCII character, a control character, a NUL - is a
+compile-time error, reported once for a run of such bytes and then passed over, so the rest of the file is read as
+though it were not there. The file ends where its bytes do: a NUL byte inside it is one more byte, never its end.
+Checking the text costs nothing at run time: a literal is the bytes written (L14), and `Len` counts bytes.
 
 **L2.** A source file's name conventionally ends in `.olang`. A file is the unit of tokenization,
 parsing, and (per §4) the unit of module identity.
@@ -235,9 +240,12 @@ be an infinity (`1e400`), is a compile-time error: no literal is an infinity. On
 zero or a subnormal, and is valid.
 
 **L13.** `CHAR_LIT ::= "'" char-content "'"`, where `char-content` is exactly one of:
-- any single byte other than `'`, `\`, or newline (including `"`, which needs no escaping here), or
+- any single ASCII byte other than `'`, `\`, or newline (including `"`, which needs no escaping here), or
 - an escape sequence (L15): `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, `\'`, `\xHH`, or `\u{H}` for a code point below
   `0x80` - a character literal holds one byte.
+
+A character beyond ASCII (`'å'`) is several bytes of UTF-8 and no `Char` (T29h): it is a compile-time error naming
+this, and the character is written as text, `"å"`.
 
 A `CHAR_LIT` is of type `Char` (T29h). An empty (`''`), unterminated, or newline-containing `CHAR_LIT` is
 a compile-time error. A character or string literal never extends past its line: a newline - after a `\` too - stops
@@ -248,7 +256,8 @@ it there, unterminated, and that line's end then ends the statement as any other
 - an escape sequence (L15): `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, `\"`, `\xHH`, or `\u{H...}`.
 
 A `STR_LIT` is text (T29c) whose length, `N`, the number of bytes after escape processing, is known while
-compiling (T7c). A `STR_LIT` is not implicitly nul-terminated; `N` reflects exactly its own content. An unterminated or
+compiling (T7c). A character beyond ASCII written in it (L1) is its UTF-8 bytes, as `\u{...}` would write it:
+`"på" == "p\u{E5}"`, and `"på".Len()` is 3. A `STR_LIT` is not implicitly nul-terminated; `N` reflects exactly its own content. An unterminated or
 newline-containing `STR_LIT` is a compile-time error.
 
 **L14a (raw text).** `RAW_LIT ::= '"""' { byte } '"""'` is text written as it stands: no escapes - a `\` is a `\` - and
@@ -9127,6 +9136,8 @@ holds at least twice their precision and two bits more), which is what a target'
 
 **B11.** Every compile-time error is reported as one line, `path:line:column: error[RULE]: message`, followed by the
 source line it is about and a caret line marking the token it is about (`^`, then `~` under the rest of the token).
+`line` and `column` count from 1, the column in bytes (as editors' error lists read it); the caret line counts
+characters, so it stands under the token on a line holding UTF-8 text (L1).
 `RULE` is the rule of this specification the error applies, and is left out, with its brackets, for an error no rule
 states (`expected '}', found 'x'`); several are separated by `, `. An error about a whole file is `path: error[RULE]:
 message`, and one about no file - the command line - is `olang: error[RULE]: message`. A **note**, adding to the error

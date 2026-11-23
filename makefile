@@ -153,16 +153,6 @@ lowerdump: build/compiler_tools_lowerdump
 	build/compiler_tools_lowerdump $(LOWER_CASES) > build/lowerdump.cases.txt
 	grep '^== total' build/lowerdump.txt build/lowerdump.cases.txt
 
-# M9's acceptance, measured: each program of the corpus and std's tests built by the self-hosted pipeline (load, names,
-# check, the scope pass, lower, emit - compiler/tools/emitdump.olang), compiled by clang with the port's runtime, run,
-# and compared test by test with stage 0's run as compiler/goldens/run.txt stores it (compiler/tools/emitdiff.olang; the
-# rows in build/emitdiff.txt, not in verify until it is required)
-build/compiler_tools_emitdump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/emitdump.olang
-	$(OLANG) build compiler/tools/emitdump.olang
-emitdiff: build/compiler_tools_emitdump build/compiler_tools_emitdiff
-	build/compiler_tools_emitdiff -v > build/emitdiff.txt
-	grep '^== total' build/emitdiff.txt
-
 # B3e, in the suite: the evaluator held to the built programs - each file of tests of the corpus and std run by
 # "OLANG_EVALUATE=1 olang test" (interp@FILE), the checks' run cases by "OLANG_EVALUATE=1 olang FILE" in four parts (interp@casesK), each
 # compared with the built run compiler/goldens/run.txt stores (compiler/tools/evaldiff.olang, which lists by name the
@@ -181,7 +171,7 @@ evaldiff: build/compiler_tools_evaldiff
 	$(OLANG_ENV) build/compiler_tools_evaldiff -v > build/evaldiff.txt; grep '^== total' build/evaldiff.txt
 
 # captures compiler/goldens/run.txt again from $(GOLD_OLANG) - stage 0's runs of the corpus's and std's tests and of
-# the checks' run cases, which emitdiff and evaldiff hold the port to - after a test or a run case is added or changes
+# the checks' run cases, which evaldiff holds the evaluator to - after a test or a run case is added or changes
 # what it prints (minutes)
 rungold: $(GOLD_OLANG) build/compiler_tools_rungold
 	build/compiler_tools_rungold $(GOLD_OLANG)
@@ -709,4 +699,4 @@ uninstall:
 	echo "uninstall: done (left as they are: ~/.cache/olang, a Jupyter kernel spec, builds' build/ directories)"
 
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: consistency dumptool all build android-test android-apk prereq install install-editors uninstall bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean
+.PHONY: consistency dumptool all build android-test android-apk prereq install install-editors uninstall bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean
