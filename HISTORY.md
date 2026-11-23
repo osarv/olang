@@ -42173,3 +42173,40 @@ give-back) and reports fit's error where nothing gives back - so the declaration
 instance lives where its referent does, and the program runs as it would without the inference. Nothing that B
 relaxes is lost (the probes accepted beyond master stay accepted; checks' fieldscopeflat stays flat).
 checks/cases/fieldscopepart.olang: the four shapes, read back after a churn, with a decided assert the evaluator runs.
+
+## 2026-11-23: a Map whose values hold writable references, walked read-only and writably (S9c, T25c; mine; wt-mapiter)
+
+Found by oann (tensor.Tensor values): a read-only `for e in m` over `Map<I64, Buf>`, Buf holding `mut Array<F32>&`,
+only reading `e.Value.d[0]`, failed inside the prelude - `map.olang: error[T25c]: 'MapEntry' writes through or keeps
+its parameter 'value'`. MapIter's Next builds a fresh MapEntry out of a slot of a map reached read-only; with such a V
+that value is a read-only copy, which no result may hand out as writable (T25c) - the same refusal the literal path met
+in ArrayIter (wt-t25c, above). `m.Keys()` plus `m.Ref(key)` worked.
+
+The Orchestrator asked for a writable walk where the map is the caller's, plus a read-only one. Decided (mine):
+
+- **Writable**: `IterMut()` on `mut Map<K, V>&` giving a `MapIterMut<K, V>` (entries copied out of writable storage,
+  legal), and `ValuesMut()` giving a `MapValueIterMut` - Values suffered the same. Keys were left: a key holding a
+  writable reference is not a case anyone has, and Hash/Eq over one is unusual.
+- **Read-only**: the least surprising meaning is the one an array of such values already has - `for l in ls` over a
+  read-only `Array<Link>&` gives each element as a read-only copy, reading allowed, writing through `l.to` refused.
+  A Next result cannot be a read-only copy (a result is writable), so the read-only walk is `IterRef()`, a
+  `MapIterRef<K, V>` whose Next gives a read-only `MapEntry<K, V>&` to the slot (useful on its own: nothing copied).
+  Handing the loop that reference as `e` would have let `e.Value.d[0] = 1` through - permissions are shallow, a
+  writable reference reached through a read-only one keeps its own permission (T25 example: a `Buf&` parameter writes
+  `e.d[0]`) - so the loop names the value the reference names as a read-only copy, exactly as the array walk does.
+- **The loop picks (S9c)**: where an iterable's `Iter()` gives values (not references) holding writable references
+  (Checker.holdsWritable), `for e in m` walks `IterMut()` when `m` is reached writably (a `mut` reference not read out
+  of a read-only copy, or a value whose place may be written - `check.walkedWritably`) and the type has one, else
+  `IterRef()` when it has one (each value read through the reference, marked a read-only copy; a unique one stays the
+  reference, read-only, as S9a's unique element), else `Iter()` as before. General, not Map's alone: any collection
+  declaring the two gets the same walk. Plain maps (and every iterable whose values hold no writable reference) are
+  untouched. `check.heldWalk` finds the walk from the methods' signatures, so MapIter's Next is never instantiated for
+  such a V.
+- The T25c write-through error (`ReadOnlyCopyWrite`) had no help row; it now says what to write: reach the place
+  writably and write through it there, a walk of a collection reached writably giving writable copies.
+
+`m.Iter()` named explicitly over a read-only map of such values is still refused inside the prelude (the user named the
+walk; `IterRef()` is the one that works). tests/mapmut.olang (read-only walk reading, writable walk writing through
+`e.Value` reaching the original arrays through a `mut Map&` and through the map's own local, ValuesMut, IterRef, a
+comprehension, a plain map; decided while compiling too), checks/cases/t25cmapwalk.olang (a write through the
+read-only walk refused, naming the help).

@@ -3344,7 +3344,10 @@ none (`Get` and `Remove` in one), and `Len()` counts. `Iter()` hands out a fresh
 goes on, and any other change to the map during a walk leaves which entries the rest of it gives unspecified.
 Everything a `Map` stores lives where the `Map` does, and a key's slot, once the key is removed, holds the next key
 put - so a map whose keys come and go stays the size of what it holds. `Keys()` and `Values()` hand out iterators over
-one part of each entry, in `Iter()`'s order and under its rule for changes made during a walk; `Clear()` removes every
+one part of each entry, in `Iter()`'s order and under its rule for changes made during a walk. A map reached writably
+also has `IterMut()` and `ValuesMut()`, the same walks over a writable map, so they may hand out values holding writable
+references, which a walk of a map reached read-only may not (T25c); `IterRef()` walks the entries where the map holds
+them, each a read-only `MapEntry<K, V>&`, whatever `V` holds - `for e in m` picks among them as S9c says. `Clear()` removes every
 key, keeping the slots and buckets for the keys put next. A `Map` holds its storage **by value**, as a `Vec` does (QCE): a
 copy of a `Map` value (`b := a` of a place, a field, an element, a by-value argument, a capture, a task's argument) is a
 map of its own with the same keys and values, walked in the same order, and two names for one map are written with `&`
@@ -5655,6 +5658,13 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
 - an **iterable** (S9c): a value with no `Next()` of its own and a method `Iter()`, taking no arguments, whose
   result is an iterator. The loop walks `e.Iter()`. An iterable keeps no position — every loop, nested or
   repeated, gets a fresh iterator — which is why a collection is an iterable rather than an iterator itself.
+  Where the values `Iter()` gives (by value, not references) **hold writable references** (T25c), a walk of a
+  collection reached read-only may not hand out copies of them, so the loop walks as an array's walk does: where `e`
+  is reached writably (a `mut` reference not read out of a read-only copy, or a value whose place may be written) and
+  its type has `IterMut()`, the loop walks `e.IterMut()` - `x` each value, writable; otherwise, where its type has
+  `IterRef()`, whose `Next()` gives a read-only reference to each value, the loop walks `e.IterRef()` and `x` is the
+  value that reference names - a **read-only copy** (T25c; a unique one named where it is, read-only, as S9a's array
+  element). A type with neither walks `Iter()`. A `Map` has both (T35b).
 
 Each method the loop calls - `Next`, `Iter`, `RunFrom`, `At`, `Len` - may be the type's private spelling, which only
 a loop in its own module calls (M6b). Anything else after `in` is a compile-time error. `break` and `continue` (S11)
