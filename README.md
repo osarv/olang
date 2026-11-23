@@ -1,8 +1,8 @@
 # olang Android sample APK
 
-`olang-sample.apk`: built reproducibly from olang master 5554672f9 with `make android-apk` (examples/android, docs/android.md).
+`olang-sample.apk`: built reproducibly from olang master d892910c7 with `make android-apk` (examples/android, docs/android.md).
 NDK r28c, build-tools 36.1.0, platform android-36; minSdk 29, targetSdk 36, arm64-v8a only; signed with olang's committed debug key.
-sha256 ba668e0e5c1f9213403d2b0948688166c203f4e12e4a3dc7a9f39e8be3d01633
+sha256 a5eba3cd86b1f617d84f37781f868e988eeccc0d9a7a5d1aea4e86a13ee5c87e
 
 ## Install
 
