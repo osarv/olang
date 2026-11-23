@@ -42271,3 +42271,35 @@ walk; `IterRef()` is the one that works). tests/mapmut.olang (read-only walk rea
 `e.Value` reaching the original arrays through a `mut Map&` and through the map's own local, ValuesMut, IterRef, a
 comprehension, a plain map; decided while compiling too), checks/cases/t25cmapwalk.olang (a write through the
 read-only walk refused, naming the help).
+## 2026-11-23: each function's plan read where the Lowerer keeps it (build memory; mine; wt-buildmem)
+
+The open item from wt-mempeak2 and wt-mutplace - each function's MIR and its helpers (`lower.lowering`,
+`emit.fnEm`) kept as long as the Lowerer and the Emitter, `explain Lowerer.LowerKey` giving "return outlives lw" -
+was closed by field scopes (wt-fieldscopes, the entry above): `explain` gives Lower, LowerKey and lowerAs "lw
+outlives return" alone, and the IR places a lowered function in `Emitter.function`'s frame (LowerKey's result scope),
+the `lowering` and everything it builds in that result scope, and the `fnEm` in `writeBody`'s frame - all freed as
+each function is written.
+
+What was left per function, found by attributing what the long-lived scope (the one holding the Lowerer, the Emitter
+and the type table) gains while functions are written: a scratch build of the compiler with frame pointers and a
+runtime calling a preloaded C library at each new chunk, each chunk given back and every 16 KB allocated, with the
+call stack (a throwaway tool, not committed). Up to the 8000th function written it took 146 MB of allocations, of
+which ~20 MB were whole copies of scope plans: `Lowerer.planFor` and `planOf` returned `lw.Plans[i]` /
+`lw.TwinPlans[t]` - an element read of a Vec of `typed.Plan`, a copy (vectors and maps deep) - as a `typed.Plan&`,
+so every function lowered and every call `passedFor` lowered with derived scopes copied a plan into the Lowerer's
+scope (planOf's fallback built an empty plan there too). Now both return `Plans.Ref(i)` / `TwinPlans.Ref(t)` (the
+plans are set before lowering and never grow during it) and planOf's fallback is the Lowerer's `NoPlan`; `DerivedN`
+and `DecideDerived` read `DerivedP` through `Ref` too (they copied a whole plan in their frame to read one length).
+The long-lived scope's allocations to the 8000th function: 146 -> 122 MB, nearly all the items' own IR.
+
+Measured (`OLANG_TIMES`, a 4-core 15 GB container; the same source tree compiled by the compiler before and after):
+the cold -quick self-build's lower+emit peak 2994 -> 2958 MB (612 -> 577 MB above facts), the compile phase's
+3012 -> 2976 MB; warm 2541 -> 2537 MB; the test build of compiler/olang.olang 3192 -> 3157 MB (692 -> 657 above
+facts). IR unchanged: every .ll of the cold build byte-identical (the location constants differ only by the tree's
+path); the self-build's fixed point holds, its lower+emit at 2946 MB (2990 when wt-fieldscopes measured it).
+
+Left: what lower+emit still grows is its output - the items' IR (~100 MB of text and ~30 MB of per-item names and
+declarations) kept in the Emitter, the objects' text assembled from it in Objects (~290 MB) beside it, both until
+Analyze returns - and ~60 MB more bumped in that scope than its allocations ask, not yet explained (no buffer grows
+in place there; alignment accounts for a few MB). Letting go of the items' text once the objects hold it is the next
+step (plan.md).
