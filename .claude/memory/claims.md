@@ -40,5 +40,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-mempeak2 merged - the analysis goes when Analyze returns (tree peak cold 5044 -> 4287 MB)
 - Orchestrator child (cloud, 2026-11-23): olang wt-memhelpers - on hold: lower/emit helpers wait for OLang Cloud's view of the mut-field placement rule (asked the Orchestrator, its Q3)
 - Orchestrator child (cloud, 2026-11-23): olang wt-mutplace - stopped: findings in plan.md "Build memory, open"; handed back to the Orchestrator
-- OLang Cloud (2026-11-23): olang wt-condimport - re-parse modules whose imports a compile-time top-level if decides (review10 F2)
 - Orchestrator child (cloud, 2026-11-23): olang wt-speed - compile speed: profile the self-build and a mid-size program per phase, cut olang's own hotspots (not scope.olang/free.olang)
