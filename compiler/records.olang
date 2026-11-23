@@ -25,7 +25,7 @@ fn BuildInputs(cfg build.Config&, tests Bool) String {
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
     return ($exe + " " + $info.Size + " " + $info.ModTime + "\n" + $cfg.Debug + " " + $cfg.Race + " " + $cfg.San + " " + $cfg.Quick + " " + $cfg.Library + " " + $tests + $(" prof" if cfg.Profile else "") + $(" listing" if cfg.Listing else "") + $(" fuzz" if cfg.Fuzz != "" else "") + $(" bench" if cfg.Bench else "") + $(" checked" if cfg.Checked else "") + $(" late" if cfg.Late else "") + "\n" + $
-            t.Triple + "\n" + $t.Arch + "\n" + $t.Cpu + "\n" + $t.Attrs + "\n" + $cfg.Consts.Fingerprint() + "\n" + $cwd + "\n" + $load.StdDir() + "\n" + $runtimeStamp())
+            t.Triple + "\n" + $t.Arch + "\n" + $t.Cpu + "\n" + $t.Attrs + $(" pairdot" if t.PairDot else "") + "\n" + $cfg.Consts.Fingerprint() + "\n" + $cwd + "\n" + $load.StdDir() + "\n" + $runtimeStamp())
 }
 
 # the runtime's files (std/runtime) by name, size and time: each module's IR carries what the runtime marks for

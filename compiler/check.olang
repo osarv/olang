@@ -22922,6 +22922,17 @@ fn (c mut Checker&) laneDotShape(k I64, w types.TypeId) Bool {
     return true
 }
 
+# whether node k is a product of two arrays of BF16 summed in F32: the pair dot's shape (vdpbf16ps)
+fn (c mut Checker&) laneBF16Shape(k I64, w types.TypeId) Bool {
+    n := c.laneNodes[k]
+    if n.Kind != LaneBin or n.Op != token.Tok.Star or c.isNamed(w) or c.P.T.Repr(w) != types.TypeId(13): return false
+    for x in Array<I64>[n.A, n.B] {
+        l := c.laneNodes[x]
+        if l.Kind != LaneArr or c.isNamed(l.Elem) or c.P.T.Repr(l.Elem) != types.TypeId(12): return false
+    }
+    return true
+}
+
 # the total of a byte product's cnt lanes: one LaneDot over all of them from lane 0, w's zero where there are none (an
 # empty array has no lane 0 to refer to; z: a constant index into a fixed array of none is an error)
 fn (c mut Checker&) laneDot(sp source.Span, k I64, lv laneVals&, w types.TypeId, cnt typed.Expr&) typed.Expr& {
@@ -23077,19 +23088,23 @@ fn (c mut Checker&) laneGroupOut(sp source.Span, k I64) typed.Expr& {
 
 # "x += (p * q).Sum<A>(4)" (E39) with p and q arrays of bytes, A and x's elements one 32-bit integer: each group of four
 # products added into x's lane in place by one LaneDots - vpdpbusd where the target has it, an operand of one group's
-# four bytes a broadcast. false for any other shape, which is the plain loop
+# four bytes a broadcast. "x += (p * q).Sum<F32>(2)" with p and q arrays of BF16 and x's elements F32 likewise, a pair a
+# lane - vdpbf16ps where the target has it, its rounding the meaning everywhere (E39). false for any other shape, which
+# is the plain loop
 fn (c mut Checker&) laneDotGroups(sp source.Span, t types.TypeId, h I64, g I64) Bool {
     n := c.laneNodes[g]
-    if n.Kind != LaneGroup or n.B != 4 or not c.laneDotShape(n.A, n.Elem) or c.P.T.Bits(n.Elem) != 32: return false
+    if n.Kind != LaneGroup: return false
+    gn := 2 if c.laneBF16Shape(n.A, n.Elem) else 4
+    if gn == 4 and not c.laneDotShape(n.A, n.Elem) or n.B != gn or c.P.T.Bits(n.Elem) != 32: return false
     e := c.laneElemOf(t)
     if not c.P.T.Same(e, n.Elem): return false
     bn := c.laneNodes[n.A]
     lv := laneVals()
     lv.W = n.Elem
     c.laneHoldLeaves(n.A, lv)
-    l := c.laneGroupLength(sp, n.OpSp, n.A, 4, lv)
+    l := c.laneGroupLength(sp, n.OpSp, n.A, gn, lv)
     gs := c.hidden(sp, c.i64())
-    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(gs)), c.prim(sp, c.i64(), typed.PrimOp.Div, c.readLocal(sp, l), c.lit(sp, c.i64(), 4))))
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(gs)), c.prim(sp, c.i64(), typed.PrimOp.Div, c.readLocal(sp, l), c.lit(sp, c.i64(), gn))))
     c.laneSame(sp, c.readLocal(sp, gs), c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, h), null))   # a lane of x a group
     z := c.hidden(sp, c.i64())
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(z)), c.lit(sp, c.i64(), 0)))
@@ -23100,7 +23115,7 @@ fn (c mut Checker&) laneDotGroups(sp source.Span, t types.TypeId, h I64, g I64) 
     c.exprs.Push(c.readLocal(sp, gs))
     for x in Array<I64>[bn.A, bn.B] {
         sh := try lv.shared.Get(x) catch default -1
-        c.exprs.Push(typed.Expr.Cond(sp, c.i64(), typed.Cond(c.readLocal(sp, sh), c.lit(sp, c.i64(), 0), c.lit(sp, c.i64(), 4))))
+        c.exprs.Push(typed.Expr.Cond(sp, c.i64(), typed.Cond(c.readLocal(sp, sh), c.lit(sp, c.i64(), 0), c.lit(sp, c.i64(), gn))))
     }
     dots := typed.Expr.Prim(sp, types.VoidT, typed.PrimOp.LaneDots, typed.Check.None, gather(c.exprs, from))
     # only where there is a group: an empty array has no lane 0 to refer to

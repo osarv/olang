@@ -1995,10 +1995,15 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
             if not t.IsInt(t.Repr(ty)): v.bad("LaneDot typed " + $v.canon(ty))
         }
         case typed.PrimOp.LaneDots {
-            ok := t.IsRef(ra) and t.IsInt(t.Repr(t.Referent(ra))) and t.Bits(t.Repr(t.Referent(ra))) == 32
+            # 32-bit integers and bytes, or F32 lanes and BF16 pairs
+            ok := t.IsRef(ra) and t.Bits(t.Repr(t.Referent(ra))) == 32
+            fl := ok and t.Repr(t.Referent(ra)) == types.TypeId(13)
+            if ok and not fl and not t.IsInt(t.Repr(t.Referent(ra))): ok = false
             for j in range 1, 3 {
                 b := t.Repr(v.operandType(v.arg(r, j)))
-                if not t.IsRef(b) or not t.IsInt(t.Repr(t.Referent(b))) or t.Bits(t.Repr(t.Referent(b))) != 8: ok = false
+                if not t.IsRef(b): ok = false
+                else if fl and t.Repr(t.Referent(b)) != types.TypeId(12): ok = false
+                else if not fl and (not t.IsInt(t.Repr(t.Referent(b))) or t.Bits(t.Repr(t.Referent(b))) != 8): ok = false
             }
             if not ok: v.bad("LaneDots of a " + $v.canon(a))
             if ty != types.VoidT: v.bad("LaneDots typed " + $v.canon(ty))

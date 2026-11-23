@@ -3441,6 +3441,10 @@ fn (m mut Machine&) laneDots(fi I64, args mir.Range) {
     ps, qs := m.scalar(fi, m.arg(fi, args, 4)), m.scalar(fi, m.arg(fi, args, 5))
     et := m.T.Repr(m.T.Referent(m.T.Repr(m.opType(fi, x))))
     ft := m.T.Repr(m.T.Referent(m.T.Repr(m.opType(fi, y))))
+    if et == types.TypeId(12) {
+        m.pairDots(a, p, q, g, ps, qs)
+        return
+    }
     for j in range g {
         at := Ptr(a.Id, a.Off + 4 * j)
         s := m.rd(at, 4)
@@ -3453,6 +3457,32 @@ fn (m mut Machine&) laneDots(fi I64, args mir.Range) {
         m.wr(at, 4, s & bmask(32))
     }
 }
+
+# E39's "x += (p * q).Sum<F32>(2)" over BF16 (LaneDots): into each of g F32 lanes from x's first, the pair of products
+# of p's BF16s from j * ps and q's from j * qs (elements), as vdpbf16ps adds them: the second pair's product first, then
+# the first's, each added exactly and rounded once to F32, a subnormal operand or result taken as zero of its sign
+fn (m mut Machine&) pairDots(a Ptr, p Ptr, q Ptr, g I64, ps I64, qs I64) {
+    for j in range g {
+        at := Ptr(a.Id, a.Off + 4 * j)
+        s := flushF32(F32.FromBits(U32(m.rd(at, 4) & 0xFFFFFFFF)))
+        for t in Array<I64>[1, 0] {
+            u := flushBF16(U16(m.rd(Ptr(p.Id, p.Off + 2 * (j * ps + t)), 2) & 0xFFFF))
+            v := flushBF16(U16(m.rd(Ptr(q.Id, q.Off + 2 * (j * qs + t)), 2) & 0xFFFF))
+            s = flushF32(u.Fma(v, s))
+        }
+        if m.halted: return
+        m.wr(at, 4, I64(s.Bits()))
+    }
+}
+
+# an F32 whose exponent bits are zero (a subnormal) as the zero of its sign, else itself - vdpbf16ps's DAZ and FTZ
+fn flushF32(x F32) F32 {
+    b := x.Bits()
+    return F32.FromBits(b & 0x80000000) if (b & 0x7F800000) == 0 else x
+}
+
+# a BF16's bits as an F32, a subnormal as the zero of its sign
+fn flushBF16(b U16) F32 { return F32.FromBits((U32(b) << 16) & (0x80000000 if (b & 0x7F80) == 0 else 0xFFFFFFFF)) }
 
 # an atomic operation, evaluated as the plain one on its place (K1, P9)
 fn (m mut Machine&) atomic(fi I64, op typed.PrimOp, args mir.Range, at types.TypeId) I64 {

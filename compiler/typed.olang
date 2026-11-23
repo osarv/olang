@@ -2128,7 +2128,9 @@ type PrimOp enum {
     # E39's "x += (p * q).Sum<A>(4)": args [x, p, q, g, ps, qs] - x a writable reference to the first of g 32-bit integers,
     # p and q references to bytes: into x's lane j the four products of p's bytes from j * ps and q's from j * qs (ps, qs
     # 4, or 0 for an operand of one group's four bytes, shared by every group), each widened by its own signedness -
-    # wrapping, as I32's "+" does. vpdpbusd where the target has it
+    # wrapping, as I32's "+" does. vpdpbusd where the target has it. Or x a reference to F32s and p, q to BF16s, ps
+    # and qs 2 or 0 (elements): the pair dot - the second product, then the first, each added exactly and rounded once,
+    # a subnormal as the zero of its sign (vdpbf16ps)
     LaneDots
     # T13c: args [x, k] - field k (a constant) of the packed value x, its bits read out as the field's type ty
     Unpack

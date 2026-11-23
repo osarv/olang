@@ -5183,8 +5183,8 @@ Arrays have these **lane methods**, the compiler's as `Len()` is, on any array t
   operand's element type widens to with nothing lost (a mask's `Bool`s take no part); any other `A` is an error. A
   float `A` adds in order, as `Sum` does; an integer total is exact in any order, so the compiler adds it in any - a
   product of two byte arrays into a wider integer uses the target's byte dot instructions where it has them
-  (vpdpbusd). A dot instruction that would reorder a float sum (vdpbf16ps) is not used: `Sum<F32>` over `BF16` is the
-  sequential sum of the widened products.
+  (vpdpbusd). A dot instruction that would reorder a float sum (vdpbf16ps) is not used here: `Sum<F32>` over `BF16` is
+  the sequential sum of the widened products (the grouped `x += ` below is the pair dot's own form).
 - `a.Sum<A>(n)`, `a.Sum(n)` - the **grouped total**: an `Array<A>` of a lane per group of `n` lanes in turn, its lane `j`
   the `Sum<A>` of lanes `j * n` to `j * n + n - 1` (`A` as in `Sum` - the one named, else `T.Accumulator` - each
   lane computed in it). `n` is a whole number above zero known while compiling (a literal, a constant); anything else
@@ -5195,6 +5195,13 @@ Arrays have these **lane methods**, the compiler's as `Len()` is, on any array t
   and `w` an `Array<I8>` of `4 * x.Len()` adds into each lane of `x` its four products - the VNNI layout's step, which
   the compiler makes vpdpbusd with `a` broadcast where the target has it (avx512vnni, avxvnni), `x`'s lanes loaded,
   added into and stored, and else the plain sum; an integer total wraps in `A` as `+` does, whatever the instruction.
+  `x += (a * w).Sum<F32>(2)` with `a` and `w` arrays of `BF16` (either one a single pair, shared) and `x`'s elements
+  `F32` is the **BF16 pair dot**, the BF16 dot layout's step, on every target: each lane of `x` gets its second
+  product added, then its first, each exactly (the product of two `BF16`s is exact) and rounded once to `F32`, to
+  nearest even - and a subnormal (an operand, `x`'s lane or a result) counts as the zero of its sign. That is
+  vdpbf16ps's arithmetic, which the compiler uses where the target has it (avx512bf16, and avx512vl at 256 bits), and
+  computes lane by lane elsewhere; it differs from the plain sum `x + (p0 + p1)` in the last bit and below `F32`'s
+  least normal.
   Taken as an array anywhere else it is a new array, made where it stands; `x += ` of any other shape is the
   in-place loop below.
 - `a.Min()`, `a.Max()` - the least and greatest by `<` (E31's `Less` for a type of its own), ties the first; a float
@@ -5228,6 +5235,7 @@ reference points, nothing written back, as `v[i].xs[j] += k` is.
 d := (a * b).Sum()                      # a dot product: one loop, no array
 q := (x * w).Sum<I32>()                 # bytes widened to I32, multiplied and summed there (vpdpbusd)
 acc += (a4 * w).Sum<I32>(4)             # each lane of acc += four adjacent products, a4's four bytes shared (vpdpbusd)
+y += (a2 * wb).Sum<F32>(2)              # BF16 pairs into F32 lanes, the pair dot's rounding (vdpbf16ps)
 y += a * k                              # in place
 m := try (a - b).Max()                  # fails with ArrayError.Empty on empty arrays
 c := a.LanesLess(b).Select(a, b)        # the lesser of each pair

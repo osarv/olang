@@ -361,7 +361,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   compiling or once per operation. `x op= v` is in place. Not for text; `a < b` on arrays is an error naming
   `LanesLess`. `Sum<A>` (the user's call, 2026-11-16) computes every lane in `A`, the operands widened first, and adds
   in `A`: `(x * w).Sum<I32>()` is the byte dot product (vpdpbusd), `(a * b).Sum<F32>()` over BF16/F16; `A` must be a
-  number every element type widens to. An integer total in any order; a float one in order (no vdpbf16ps). `Sum()`
+  number every element type widens to. An integer total in any order; a float one in order (no vdpbf16ps). `x += (a * w).Sum<F32>(2)` over BF16 into
+  F32 lanes is the BF16 pair dot (mine, 2026-11-23): the second product then the first added into the lane, each exactly and rounded
+  once, subnormals as zeros of their sign - vdpbf16ps's arithmetic, on every target. `Sum()`
   is `Sum<A Number = T.Accumulator>()` (G4a, G4b, the user's call 2026-11-16): the type the call is wanted as, else
   `T.Accumulator` - an `Array<U8>` sums to a `U64`, an `Array<I32>` to an `I64`; wrapping in the elements' type is
   `Sum<U8>()`.
@@ -1448,6 +1450,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   2026-11-17, no syntax added) is an `Array<A>` of a lane per `n` lanes, an operand of exactly `n` lanes one group's,
   shared by every group; `x += (a4 * w).Sum<I32>(4)` over bytes (`LaneDots`) is vpdpbusd acc, broadcast(a4), w where
   the target has VNNI, x's lanes loaded and stored, else the plain sum; any other use builds the array.
+  `x += (a2 * w).Sum<F32>(2)` over BF16 is the same LaneDots, vdpbf16ps where the processor has avx512bf16 (written
+  as inline assembly: the feature stays off in function attributes, B12c, so `Target.PairDot` carries it), else
+  per lane by two fmas with subnormals flushed - bit for bit the instruction's (2026-11-23).
 - **Exclusive parameters (O43, mine, 2026-11-17).** A writable reference parameter passed as one pointer is written
   `noalias dereferenceable(size) align(a)` where the compiler proves nothing else the call reaches can reach its
   storage: by T36 two places overlap only where one's type holds the other's in place, so no other parameter, the

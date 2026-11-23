@@ -330,3 +330,68 @@ test "E39: Sum<A>(n), the grouped total, agrees with the loop written by hand - 
     assert groupsAll() and groupsAgree(Groups33) and groupsExtreme(Groups33) and GroupsBaked
     assert groupsAll() and groupsExtreme(17) # S18c: decided while compiling
 }
+
+# the BF16 pair dot by hand, from E39's words: into each lane the second product, then the first, each by one fma, a
+# subnormal operand, lane or result the zero of its sign
+fn flushed(v F32) F32 { return F32.FromBits(v.Bits() & 0x80000000) if (v.Bits() & 0x7F800000) == 0 else v }
+
+fn plainPairs(x Array<F32>&, a Array<BF16>&, b Array<BF16>&) Array<F32> {
+    r := Array<F32>(x.Len())
+    for j in range x.Len() {
+        s := flushed(x[j])
+        for t in [1, 0] {
+            at := t if a.Len() == 2 else 2 * j + t
+            s = flushed(flushed(F32(a[at])).Fma(flushed(F32(b[2 * j + t])), s))
+        }
+        r[j] = s
+    }
+    return r
+}
+
+fn pairsAgree(n I64) Bool {
+    a := Array<BF16>[BF16(F64((p * 37 + 11) % 97 - 48) / 8.0) for p in range 2 * n]
+    b := Array<BF16>[BF16(F64((p * 53 + 5) % 89 - 44) * 1.0009765625) for p in range 2 * n]
+    one := Array<BF16>[BF16(0.75), BF16(-3.0)]
+    x := Array<F32>[F32(j) * 0.3 - 2.0 for j in range n]
+    y := Array<F32>[v for v in x]
+    y += (a * b).Sum<F32>(2)
+    s := Array<F32>[v for v in x]
+    s += (one * b).Sum<F32>(2)           # one pair, broadcast to every group
+    return y == plainPairs(x, a, b) and s == plainPairs(x, one, b)
+}
+
+fn pairsAll() Bool {
+    return [0, 1, 7, 8, 9, 15, 16, 17, 33, 100].Every(pairsAgree)
+}
+
+# where the pair dot differs from x + (p0 + p1): 1 + 2^-24 rounds to 1 before the second 2^-24 is added; a product
+# below F32's least normal counts as zero
+fn pairsEdges(n I64) Bool {
+    tiny := Array<BF16>(2 * n, BF16(0.000244140625))   # 2^-12, its square 2^-24
+    x := Array<F32>(n, 1.0)
+    x += (tiny * tiny).Sum<F32>(2)
+    small := Array<BF16>[BF16.FromBits(0x0080), BF16(0.0)]   # 2^-126, F32's least normal
+    half := Array<BF16>(2 * n, BF16(0.5))
+    z := Array<F32>(n, 0.0)
+    z += (small * half).Sum<F32>(2)      # 2^-127: subnormal, so zero
+    return n == 0 or x == Array<F32>(n, 1.0) and (Array<F32>(n, 1.0) + (tiny * tiny).Sum<F32>(2))[0] > 1.0 and
+        z == Array<F32>(n, 0.0) and (small * half).Sum<F32>(2)[0] > 0.0
+}
+
+# bits from all over the range below overflow - subnormals and zeros of both signs among them - compared bit for bit
+fn pairsBits(n I64) Bool {
+    a := Array<BF16>[BF16.FromBits(U16((p * 40503 + 977) % 20224) ^ (0x8000 if p % 3 == 0 else 0)) for p in range 2 * n]
+    b := Array<BF16>[BF16.FromBits(U16((p * 25033 + 61) % 20224) ^ (0x8000 if p % 5 == 0 else 0)) for p in range 2 * n]
+    x := Array<F32>[F32.FromBits(U32((j * 2654435761) % 1300000000) ^ (0x80000000 if j % 2 == 0 else 0)) for j in range n]
+    want := plainPairs(x, a, b)
+    x += (a * b).Sum<F32>(2)
+    return [x[j].Bits() == want[j].Bits() for j in range n].Every()
+}
+
+Pairs33 mut I64 = 33 # read at run time
+PairsBaked := pairsAll() and pairsEdges(17) and pairsBits(100)
+
+test "E39: x += (a * b).Sum<F32>(2) over BF16 is the pair dot - vdpbf16ps's rounding, the same everywhere" {
+    assert pairsAll() and pairsAgree(Pairs33) and pairsEdges(Pairs33) and PairsBaked and pairsBits(Pairs33 * 300)
+    assert pairsAll() and pairsEdges(17) # S18c: decided while compiling
+}

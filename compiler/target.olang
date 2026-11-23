@@ -30,6 +30,9 @@ type Target struct() {
     VectorBits I64 = 0
     Fma Bool = false
     Foreign Bool = false
+    # E39, B12c: the processor has vdpbf16ps (avx512bf16, turned off in Attrs as IEEE-unsafe) - the BF16 pair dot's
+    # instruction, written by the compiler where it means it
+    PairDot Bool = false
 }
 
 # a target that could not be resolved - its diagnostic said
@@ -256,7 +259,9 @@ fn (t mut Target&) FromProbe(out String&) ? Probe {
     if dl.Len() == 0 or dl[0] != 'e' or dl.Contains("-p:32") or dl.Contains("-p:16"): error Probe.Unsupported
     t.Triple = tl
     t.Cpu = $(try attrValue(al, "target-cpu") catch { error Probe.Unknown })
-    features := StripUnsafe(try attrValue(al, "target-features") catch default "")
+    raw := try attrValue(al, "target-features") catch default ""
+    features := StripUnsafe(raw)
+    t.PairDot = HasFeature(raw, "avx512bf16")
     # B10a: the width of the vectors the generated code uses for its loops, and whether it has fused multiply-add
     if t.Arch == "aarch64" {
         t.VectorBits = 128 if HasFeature(features, "neon") else 0
@@ -467,7 +472,7 @@ test "a probe gives the triple, the CPU, the features without the IEEE-unsafe on
     try t.FromProbe(SkylakeProbe) catch { unreachable }
     assert t.Triple == "x86_64-pc-linux-gnu"
     assert t.Cpu == "skylake-avx512"
-    assert t.VectorBits == 512 and t.Fma
+    assert t.VectorBits == 512 and t.Fma and t.PairDot
     assert t.Attrs == "\"target-cpu\"=\"skylake-avx512\" \"target-features\"=\"+avx,-avx512bf16,+avx512f,+fma," + $
         "-avxneconvert,+sse2\" \"tune-cpu\"=\"generic\" \"prefer-vector-width\"=\"512\""
     # a 32-bit machine's layout, and no attributes at all

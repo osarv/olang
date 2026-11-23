@@ -1931,6 +1931,11 @@ fn listed(r mut report&) ? Failed {
         try r.expect(sh(dir, $xp + "explain -asm vnni.olang main > out.txt 2>&1") == 0 and outOf(dir).Contains("vpdpbusd")
                      "Sum<I32> of a byte product: vpdpbusd", dir)
     }
+    # E39: BF16 pairs summed into F32 lanes in place is the target's pair dot instruction where it has one
+    if sh(dir, "grep -q avx512_bf16 /proc/cpuinfo") == 0 {
+        try r.expect(sh(dir, $xp + "explain -asm bf16dot.olang pairs > out.txt 2>&1") == 0 and outOf(dir).Contains("vdpbf16ps")
+                     "x += (a * b).Sum<F32>(2) over BF16: vdpbf16ps", dir)
+    }
     try r.expect(sh(dir, "\"$OLANG\" help explain > out.txt 2>&1") == 0 and outOf(dir).Contains("  -asm") and
                  outOf(dir).Contains("  -quick"), "help explain", dir)
 }

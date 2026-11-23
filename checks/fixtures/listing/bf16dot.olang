@@ -1,0 +1,8 @@
+# E39: BF16 pairs summed into F32 lanes in place - LaneDots, the BF16 pair dot (vdpbf16ps where the target has it)
+N mut I64 = 64
+fn pairs(x mut Array<F32>&, a Array<BF16>&, b Array<BF16>&) { x += (a * b).Sum<F32>(2) }
+fn main() {
+    x := Array<F32>(N, 1.0)
+    pairs(x, Array<BF16>(2 * N, 1.5), Array<BF16>(2 * N, -2.0))
+    Println($x[0])
+}

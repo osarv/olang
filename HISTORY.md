@@ -41924,3 +41924,39 @@ wrong is the literal: its array is its own, made where the call is, yet it was w
 as for ArrayIter), and a literal whose element holds a writable reference (Checker.holdsWritable) is walked by it;
 every other literal is built as before. A Map literal of such values works through the same path. tests/litmut.olang
 (also decided while compiling).
+
+## 2026-11-23: the BF16 pair dot - `x += (a * w).Sum<F32>(2)` is vdpbf16ps's arithmetic (E39; mine; wt-bf16dot)
+
+oann's BF16 products widened every BF16 to F32 and multiplied there, because olang never formed vdpbf16ps: E39 said a
+dot instruction that reorders a float sum is not used, and `Sum<F32>` over BF16 is the sequential sum. Products are most
+of a language-model training step on the CPU, so the grouped total's in-place form - the shape E39 already gives
+vpdpbusd for bytes (`x += (a4 * w).Sum<I32>(4)`, LaneDots) - now has a BF16 twin: `x += (a * w).Sum<F32>(2)` with `a`
+and `w` BF16 arrays (either one a single pair, shared by every group) and `x`'s lanes F32.
+
+**The meaning is the instruction's, on every target.** For an integer total the order is free; for a float it is not,
+so the choice was between a target-dependent result and one meaning that the fallback computes exactly. The second
+holds what B12c holds (native code changes how fast, never what): the evaluator, `-i` and a build for another CPU give
+the same bits. What vdpbf16ps computes was measured on this Xeon (Sapphire Rapids class) rather than read: against 48
+million random lanes - normal, subnormal, zero, large and cancelling values - the instruction equals, bit for bit,
+`x = ftz(fma(a1, b1, daz(x))); x = ftz(fma(a0, b0, x))` with BF16 subnormal operands taken as zeros of their sign: the
+odd (second) product first, then the even one, each product exact (two 8-bit significands) and each addition rounded
+once to F32, to nearest even, a subnormal result flushed to the zero of its sign. Other readings were refuted by the
+same run: even-first (2.2M mismatches of 32M on normal values), the pair summed first, one rounding of the three-term
+sum, and the plain F32 sum with products rounded to F32 (a product beyond F32's range is not rounded: inf - inf gives
+inf). So SPEC E39 states the pair dot as the form's meaning, and says how it differs from `x + (p0 + p1)`: in the last
+bit and below F32's least normal. Any other use of `Sum<F32>(2)` over BF16 (taken as an array, a total) keeps E39's
+sequential sum.
+
+**Where.** `check.olang` `laneBF16Shape` and `laneDotGroups` build the same LaneDots for group size 2 (strides in
+elements, 0 for a shared pair); `mir.olang`'s verifier takes F32 lanes with BF16 operands; `eval.olang` `pairDots`
+computes the definition with `F32.Fma`; `emit.olang` `pairDotsFn` writes the helper. B12c turns avx512bf16 off in
+every function's features (LLVM would select vcvtneps2bf16 for `fptrunc`, which flushes subnormals), so the
+instruction cannot be the intrinsic: LLVM refuses to inline a function with more features into one with fewer, and the
+helper must inline for the accumulator to stay in registers. It is written as inline assembly (`vdpbf16ps $2, $1, $0`,
+which the assembler takes with the feature off), on 16 lanes at 512 bits or 8 at 256 with avx512vl; whether the
+processor has it is `Target.PairDot`, read from the probe's features before they are stripped, carried into the
+emitter and the build records' key. Elsewhere the helper goes lane by lane with `llvm.fma.f32` and the flushes, which
+the test runs under `-target x86-64-v3` and `x86-64-v4`. Tests: tests/lanes.olang (against the definition written by
+hand, at run time, baked and decided while compiling; the rounding case 1 + 2^-24 + 2^-24 = 1; a subnormal result as
+zero; bit patterns across the range below overflow, bit for bit), and the checks scenario `listing` greps vdpbf16ps from
+`explain -asm` where /proc/cpuinfo has avx512_bf16.

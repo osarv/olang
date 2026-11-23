@@ -85,6 +85,15 @@ odd-width paths (`tests/intsweep.olang`); `tools/precedence_migrate.olang` if pr
 E11b's join (`check.olang` `textPlus`/`opAst`, `String.Plus` in `std/prelude/text.olang`); the parser's `Adjacent` reading
 stays for `tools/textjoin_migrate.olang`, so a change to how `$` or a literal is read keeps it reading the old joins.
 
+## A lane dot instruction (E39's LaneDot, LaneDots)
+
+A shape the compiler gives a target's dot instruction: `check.olang` (`laneDotShape`, `laneBF16Shape`,
+`laneDotGroups`), `mir.olang`'s verifier (the operand types LaneDots takes), `emit.olang` (`laneDotsFn`, `pairDotsFn`),
+`eval.olang` (`laneDots`, `pairDots`: the same arithmetic, bit for bit), SPEC E39, `tests/lanes.olang`, and the checks
+scenario `listing` (`checks/fixtures/listing/vnni.olang`, `bf16dot.olang`, the instruction grepped from `explain -asm`).
+A feature turned off as IEEE-unsafe (`target.olang` `IeeeUnsafe`, B12c) that such a shape needs is carried beside the
+attributes (`Target.PairDot`), into the emitter (`olang.olang` `emitter`) and the build records' key (`records.olang`).
+
 ## A declaration form (D4-D19; type members D4a)
 
 A new top-level form - a case of `ast.Decl`, or a new spelling after `type`/`fn`: `parse.olang` (`typeDecl`,

@@ -57,6 +57,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     # sixth of the front end's work on the compiler's own build at -O3, and a seventh of it at -debug
     VerifyMir Bool = true
     Attrs String& = ""              # what every function carries for the target (B12: CPU, features, vector width)
+    PairDot Bool = false            # the target has vdpbf16ps (target.Target's PairDot)
     Gaps Vec<String&>              # what emission met and does not emit yet, a line each
     queue Vec<mir.FnKey>           # the functions to write, in the order first referred to
     globalBodies Map<pair.Pair<I64, I64>, I64> # a global's initializing body by (module, name), of the bodies scanned
@@ -6118,10 +6119,15 @@ fn (fe mut fnEm&) laneDots(a String&, args mir.Range) {
     p, q := fe.val(po, pt), fe.val(qo, qt)
     g := fe.val(fe.arg(args, 3), fe.otype(fe.arg(args, 3)))
     sp, sq := fe.val(fe.arg(args, 4), fe.otype(fe.arg(args, 4))), fe.val(fe.arg(args, 5), fe.otype(fe.arg(args, 5)))
-    swap := uy and not ux
     # T36: the lanes' and the bytes' access tags - x's elements, p's and q's
     ta := fe.E.tbaa(t.Referent(t.Repr(fe.otype(fe.arg(args, 0)))), true)
     tp, tq := fe.E.tbaa(t.Referent(t.Repr(pt)), true), fe.E.tbaa(t.Referent(t.Repr(qt)), true)
+    if t.Repr(t.Referent(t.Repr(pt))) == types.TypeId(12) {
+        pf := fe.E.pairDotsFn(laneTags(ta, tp, tq))
+        fe.w("call void @" + $pf + "(ptr " + $a + ", ptr " + $p + ", ptr " + $q + ", i64 " + $g + ", i64 " + $sp + ", i64 " + $sq + ")")
+        return
+    }
+    swap := uy and not ux
     f := fe.E.laneDotsFn(uy if swap else ux, ux if swap else uy, laneTags(ta, tq if swap else tp, tp if swap else tq))
     x, y := (q if swap else p), (p if swap else q)
     xs, ys := (sq if swap else sp), (sp if swap else sq)
@@ -6195,6 +6201,77 @@ fn laneDotsBody(name String&, d laneDotForm&) String {
     }
     b.Push($"  store i32 %s4, ptr %akp, align 4" + $d.Tags.A + "\n  %k1 = add i64 %k, 1\n  br label %sh\ndone:\n  ret void\n}\n")
     return b.ToString()
+}
+
+# E39's LaneDots over BF16: the helper adding pairs of BF16 products into F32 lanes - a group j's pair from p at j * ps
+# and q at j * qs (elements; 0: the same pair, broadcast) - its name. On a target with avx512bf16 a step is vdpbf16ps
+# on L lanes (16 at 512 bits, 8 at 256 with avx512vl), the lanes loaded, added into and stored, the groups left one by
+# one; else every group one by one, computing what the instruction does: the second product, then the first, each
+# added by one fma, a subnormal operand or result the zero of its sign (pairFlush). The instruction is written as
+# inline assembly: the feature stays off in what functions carry (B12c), LLVM selecting vcvtneps2bf16 under it
+fn (e mut Emitter&) pairDotsFn(tags laneTags) String {
+    width := 512 if e.Attrs.Contains("\"prefer-vector-width\"=\"512\"") else
+        (256 if e.Attrs.Contains("\"prefer-vector-width\"=\"256\"") else 128)
+    dp := 0
+    if width == 512 and e.PairDot: dp = 512
+    else if width >= 256 and e.PairDot and e.feature("avx512vl"): dp = 256
+    name := $"olang_pairdots.dp" + $dp + $tags.Suffix()
+    if e.has(name): return name
+    e.declare("llvm.fma.f32", "float @llvm.fma.f32(float, float, float)")
+    l := dp / 32
+    ft, it := $"<" + $l + " x float>", $"<" + $l + " x i32>"
+    b := StringBuilder()
+    b.Push($"define linkonce_odr hidden void @" + $name + "(ptr %a, ptr %p, ptr %q, i64 %g, i64 %ps, i64 %qs) alwaysinline #0 {\nentry:\n")
+    if dp == 0: b.Push("  br label %t\nt:\n  br label %sh\n")
+    else {
+        b.Push("  br label %h\nh:\n  %j = phi i64 [ 0, %entry ], [ %j1, %pq ]\n")
+        b.Push($"  %j1 = add i64 %j, " + $l + "\n  %cj = icmp sle i64 %j1, %g\n  br i1 %cj, label %v, label %t\nv:\n")
+        b.Push($"  %ap = getelementptr float, ptr %a, i64 %j\n  %av = load " + $ft + ", ptr %ap, align 4" + $tags.A + "\n  br label %p0\n")
+        for side in Array<String&>["p", "q"] {
+            o := $"%" + $side
+            tag := tags.P if side == "p" else tags.Q
+            b.Push($side + "0:\n  " + $o + "o = mul i64 %j, %" + $side + "s\n  " + $o + "a = getelementptr i16, ptr " + $o + ", i64 " + $o + "o\n")
+            b.Push($"  " + $o + "one = icmp eq i64 %" + $side + "s, 0\n  br i1 " + $o + "one, label %" + $side + "b, label %" + $side + "l\n")
+            b.Push($side + "b:\n  " + $o + "w = load i32, ptr " + $o + "a, align 2" + $tag + "\n")
+            b.Push($"  " + $o + "i = insertelement " + $it + " poison, i32 " + $o + "w, i64 0\n")
+            b.Push($"  " + $o + "s1 = shufflevector " + $it + " " + $o + "i, " + $it + " poison, " + $it + " zeroinitializer\n  br label %" + $side + "j\n")
+            b.Push($side + "l:\n  " + $o + "v1 = load " + $it + ", ptr " + $o + "a, align 2" + $tag + "\n  br label %" + $side + "j\n")
+            b.Push($side + "j:\n  " + $o + "x = phi " + $it + " [ " + $o + "s1, %" + $side + "b ], [ " + $o + "v1, %" + $side + "l ]\n")
+            b.Push($"  br label %" + $("q0" if side == "p" else "pq") + "\n")
+        }
+        b.Push($"pq:\n  %r = call " + $ft + " asm \"vdpbf16ps $2, $1, $0\", \"=v,v,v,0\"(" + $it + " %px, " + $it + " %qx, " + $ft + " %av)\n")
+        b.Push($"  store " + $ft + " %r, ptr %ap, align 4" + $tags.A + "\n  br label %h\nt:\n  br label %sh\n")
+    }
+    # the groups left, one by one
+    from := "0" if dp == 0 else "%j"
+    b.Push($"sh:\n  %k = phi i64 [ " + $from + ", %t ], [ %k1, %sb ]\n  %ck = icmp slt i64 %k, %g\n  br i1 %ck, label %sb, label %done\nsb:\n")
+    b.Push($"  %akp = getelementptr float, ptr %a, i64 %k\n  %s0 = load float, ptr %akp, align 4" + $tags.A + "\n")
+    pairFlush(b, "%s0", "s")
+    b.Push("  %pko = mul i64 %k, %ps\n  %qko = mul i64 %k, %qs\n")
+    for i in Array<I64>[1, 0] {
+        for side in Array<String&>["p", "q"] {
+            o := $"%" + $side + $i
+            tag := tags.P if side == "p" else tags.Q
+            b.Push($"  " + $o + "i = add i64 %" + $side + "ko, " + $i + "\n  " + $o + "a = getelementptr i16, ptr %" + $side + ", i64 " + $o + "i\n")
+            b.Push($"  " + $o + "b = load i16, ptr " + $o + "a, align 2" + $tag + "\n  " + $o + "z = zext i16 " + $o + "b to i32\n")
+            b.Push($"  " + $o + "w = shl i32 " + $o + "z, 16\n  " + $o + "f = bitcast i32 " + $o + "w to float\n")
+            pairFlush(b, $o + "f", $side + $i + "d")
+        }
+        acc := "%s" if i == 1 else "%f1"
+        b.Push($"  %m" + $i + " = call float @llvm.fma.f32(float %p" + $i + "d, float %q" + $i + "d, float " + $acc + ")\n")
+        pairFlush(b, $"%m" + $i, $"f" + $i)
+    }
+    b.Push($"  store float %f0, ptr %akp, align 4" + $tags.A + "\n  %k1 = add i64 %k, 1\n  br label %sh\ndone:\n  ret void\n}\n")
+    e.item(name, HomeShared, b.ToString())
+    return name
+}
+
+# %r: the float v, or the zero of its sign where its exponent bits are zero (a subnormal: vdpbf16ps's DAZ and FTZ)
+fn pairFlush(b mut StringBuilder&, v String&, r String&) {
+    b.Push($"  %" + $r + ".b = bitcast float " + $v + " to i32\n  %" + $r + ".e = and i32 %" + $r + ".b, 2139095040\n")
+    b.Push($"  %" + $r + ".s = and i32 %" + $r + ".b, -2147483648\n  %" + $r + ".z = icmp eq i32 %" + $r + ".e, 0\n")
+    b.Push($"  %" + $r + ".c = select i1 %" + $r + ".z, i32 %" + $r + ".s, i32 %" + $r + ".b\n")
+    b.Push($"  %" + $r + " = bitcast i32 %" + $r + ".c to float\n")
 }
 
 # how a LaneDot helper adds: V bytes a step into L lanes of i32, by vpdpbusd of Dp bits (0 for none: a widening

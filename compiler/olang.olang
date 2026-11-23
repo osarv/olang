@@ -960,6 +960,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.Attrs = $("sanitize_thread " if cfg.Race else "") + $cfg.FnAttrs()
     e.Module = kind == build.Kind.Module
     e.Triple = cfg.Target.Triple
+    e.PairDot = cfg.Target.PairDot
     e.Arch = cfg.Target.Arch
     e.San = cfg.San
     e.Debug = cfg.Debug
