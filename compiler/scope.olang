@@ -345,6 +345,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     ctorOf Map<types.TypeId, I64>  # a type's constructor's body (twin 0)
     dtorOf Map<types.TypeId, I64>  # a type's destructor's body, by its representation
     stTypes Map<types.TypeId, I64> # storeThrough, once asked: 1 being asked, 2 no, 3 yes
+    heldExact Map<pair.Pair<I64, I64>, Bool> # by body and call site: a result bound where its callee holds it exactly (bindResult)
     asTypes Map<pair.Pair<I64, I64>, I64> # admitsAt, by (type, writable): 1 being asked, 2 no, 3 yes
     texts Map<I64, String&>        # a diag file's text, by file
     judged Vec<Bool>              # by body: whether its scopes were judged (it had code and no unknown type)
@@ -7931,7 +7932,20 @@ fn (s mut Scoper&) letMoved(l typed.LocalId, t types.TypeId, x typed.Expr?&, mov
     }
     v := s.val(x, moved)
     s.bindLocal(l, x!)
-    if v.K == ValKind.Existing: s.fit(v.T, moved, s.isRef(t) or s.storeThrough(t), x!, FitLocal)
+    if v.K != ValKind.Existing: return
+    # ... and a reference local assigned once, given what lives longer: it names it where it lives, which outlives
+    # where the result goes - held exactly to the result's scope instead, a writable one (O25g) would ask its
+    # referent's scope to be the result's (the Lowerer's bodies, each read out to lower one, held as long as the
+    # Lowerer, and with them every function lowered)
+    if s.isRef(t) and v.T != moved and not s.reassigned(I64(l)) {
+        o := s.order(v.T, moved)
+        if o == Holds or o == Obliged {
+            s.terms[I64(l)] = v.T
+            s.fit(v.T, moved, false, x!, FitLocal)
+            return
+        }
+    }
+    s.fit(v.T, moved, s.isRef(t) or s.storeThrough(t), x!, FitLocal)
 }
 
 # letBody's handle a for-in walks that a call gives (users[0][0]): lent as its reference where the call landed (O17b,
@@ -11062,6 +11076,39 @@ fn (s mut Scoper&) bindResult(sp source.Span, ty types.TypeId, c typed.Call&, ft
     # of a system planned through it needed one argument's scope to outlive another's with no argument: O10c)
     cb := s.bodyOf(c.Target)
     if cb >= 0 and s.staticResult(cb, rv): beta[rv] = Term.Program
+    # ... and one it holds exactly to a parameter's - a writable reference read out of what it is given, "b := bs[i]"
+    # for a Vec<mut Body&> - lives where that argument's does, wherever it is put, where that outlives the place: bound
+    # to where the result goes instead, the callee's exactness would ask the argument's scope to be that place's (the
+    # Lowerer's bodies, hence every lowered function, held as long as the Lowerer)
+    key := pair.Pair<I64, I64>(s.Id, I64(c.Site))
+    s.heldExact.Remove(key)
+    # (a reference only: a value's own storage is built where it lands, which a destructor's moment follows - C11)
+    if cb < 0 or beta[rv] == Term.Program or not s.isRef(ty): return
+    v := s.exactParamOf(cb, rv)
+    if v < 0 or beta[v] == Term.None or beta[v] == beta[rv] or s.order(beta[rv], beta[v]) != Obliged: return
+    o := s.order(beta[v], beta[rv])
+    if o != Holds and o != Obliged: return
+    beta[rv] = beta[v]
+    s.heldExact.Put(key, true)
+}
+
+# the scope variable callee's summary holds its result's, rv, exactly equal to - each outliving the other - where it
+# builds nothing in rv; -1 for none
+fn (s mut Scoper&) exactParamOf(callee I64, rv I64) I64 {
+    if not s.summed(callee) or s.sumBuilds(callee, rv): return -1
+    rels := s.sum(callee).Rels
+    for r in rels {
+        if r.Hi != Term.Var(rv): continue
+        v := match r.Lo {
+            case Term.Var(k): k
+            case _: -1
+        }
+        if v < 0 or v == rv: continue
+        for q in rels {
+            if q.Hi == Term.Var(v) and q.Lo == Term.Var(rv): return v
+        }
+    }
+    return -1
 }
 
 # whether callee's summary requires its result's scope variable rv to outlive the program's scope, and builds nothing there
@@ -11241,6 +11288,9 @@ fn (s mut Scoper&) callValue(c typed.Call&, ty types.TypeId, callee I64, fty typ
         }
         return Val.existing(Term.Untraced)
     }
+    # ... and one its callee holds exactly to a parameter's, building nothing there (bindResult): what that argument
+    # refers to already, never storage the call makes
+    if rv >= 0 and s.heldExact.Has(pair.Pair<I64, I64>(s.Id, I64(c.Site))): return Val.existing(beta[rv])
     # ... and one a reference local is assigned whole from, only read out of what one argument refers to: where that
     # argument does, as the read written in place of the call would be (O13, O25i)
     if s.cursorSite == I64(c.Site) {

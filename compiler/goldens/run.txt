@@ -345,6 +345,9 @@
 | status 0
 | ok - mid: a view of a mutable global's storage is copied where a call may write the global before it is read
 | ok - mid: a view of what an immutable global's writable reference names is copied where a call may write it
+=== test tests/heldexact.olang
+| status 0
+| ok - O25g: a writable reference read out of a vector lives where the vector does
 === test tests/heldfields.olang
 | status 0
 | ok - ByBuilder: ends a field a builder's, a fallible call's or a catch default's value made, once, wherever it is held

@@ -1056,6 +1056,11 @@ eb3abd5f83c5d5f1 8a9ed5c65727838f checks/cases/o25derived.olang
 a62114323d44cd61 6dce03c7f2ecd317 checks/cases/o25gfieldbinding.olang
 18f3744df0d26fbd f90b029fff8deb4e checks/cases/o25gfieldreassign.olang
 910e57cf7a18eba2 5676f6f7fe765163 checks/cases/o25gfieldreassigndtor.olang
+9a51f1f49acb9395 82ab75070c80f225 checks/cases/o25gheldkeeps.olang
+a004919144dbd18a e5e72a5801656748 checks/cases/o25gheldkeepsdirect.olang
+638216805d0dae15 efda72d6bd4419f6 checks/cases/o25gheldlambda.olang
+7cc22be97c31c8b1 14ed3214e9531d11 checks/cases/o25gheldnested.olang
+294bb66f825321b1 712bd1a8fb2daa02 checks/cases/o25gheldthrough.olang
 fa779f4c3edb2bb3 1f4784eccbaf06fc checks/cases/o25harrayreturn.olang
 c0a7304bcb9bc9c8 35b7cfc1e7f7a362 checks/cases/o25harrayslice.olang
 642dde1bb159df24 d36d7e5691c728a3 checks/cases/o25hcopyelem.olang
@@ -2521,7 +2526,7 @@ e2b2b02653bc4b63 28b9ec011557160d compiler/prompt.olang
 fc27f6b5dfde0c34 82854c3a2354b606 compiler/records.olang
 0c3f8c24752ad48a 95536513b050b2a4 compiler/runtime.olang
 74927aaea47abc0f 36130c34ac2dc3c0 compiler/scan.olang
-e6f055c7fd199749 23d92f56746bb151 compiler/scope.olang
+219d8c751814e3e7 743b2470fa420955 compiler/scope.olang
 ad0b24259637a1f2 b4e672fd8bdacd75 compiler/session.olang
 8981299fcf27ba06 e84af040edacca63 compiler/source.olang
 9bee4e94ca053127 837a4be40276ab63 compiler/spin.olang
@@ -2736,6 +2741,7 @@ f4210a439844ee95 64594afbcc5ce1a2 tests/geom/rect.olang
 6f377ad68087b253 efcc42b94e7d08e5 tests/globalstart.olang
 7a5c2bc482d2ad87 a6df497d754db90e tests/handover.olang
 258685af1bea4cb8 b5410c0661318bec tests/handoverglobal.olang
+dde55a3912452137 87df1e00289d750d tests/heldexact.olang
 b92b9f9009878c79 10512059a3af9d68 tests/heldfields.olang
 d4f05d57d6a40715 37043a366ff21d11 tests/immut.olang
 ef74496ac1efc479 2597c26849901793 tests/inplace.olang

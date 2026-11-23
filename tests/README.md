@@ -91,6 +91,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   given, held in locals, handed back by calls, chosen by a conditional, given again in a loop, an adapter held in a
   local - each call through one judged as the direct call it is; read back after an arena churn, baked globals and
   top-level asserts deciding the same while compiling.
+- `heldexact.olang` - a writable reference read out of a vector (`b := bs[i]` for a `Vec<mut N&>`) and kept by a
+  local lives where the vector does (O25g, O26a): kept outside a block, linked to, pushed into, captured, given to a task;
+  read back after an arena churn, decided while compiling beside the run time.
 - `viewplace.olang` - storage kept for a view (O27 as placement): a turn's text kept through views of it, a view handed
 - `litmut.olang` - a Vec and a Map literal of elements holding writable references (E19, T25c): walked writably, each
   reference still reaching its referent.
