@@ -81,3 +81,7 @@ The weekly limit reset Sat 05:00 CET; this week has no cap (the user: "really ma
 ## 2026-11-22
 
 The user decided energy-based models are the main research line (direction.md). For the GPU when the PC is on, in this order: (1) e55b, the language gate at GPU scale: a masked-diffusion LM with an energy ranker against an autoregressive baseline at equal compute, plus an AR model as verifier of diffusion samples (oagent experiments/e55-langgate, README "Next"); at CPU scale the gate failed (AR ppl 17.5 vs diffusion 64-71). Add a 4th arm: a residual energy over the AR (Deng 2020; oagent experiments/e57, README) - at CPU scale it gave no gain over spending the same compute on the AR, so check it at GPU scale. (2) Then e2 scaling as before. oann now has the EBM pieces: nn/potts local fitters (CD/PCD/EP), nn/diffusion + ad/score ranking, nn/chain hidden chains.
+
+## 2026-11-24
+
+Settling and energy LMs are closed (direction.md, 2026-11-23); the agent is one growable language model. When the PC is on: measure oann eaa9b08 BF16 pair-dot micro-kernel on the Ryzen 7600 (`make bf16bench` in oann; on only for znver4/5 via Workspace.Pairs; it lost on the cloud SPR, 50-64 vs 34-40 GMAC/s widened-F32), and send the numbers to the Orchestrator.
