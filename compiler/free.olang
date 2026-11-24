@@ -1720,9 +1720,9 @@ fn (f mut Free&) genLetsOf() Vec<Vec<I64>> {
 fn (f Free&) GenOkNow() Vec<pair.Pair<I64, types.TypeId>> { return f.genOk }
 
 # whether the program may start a task (condition 3): a body that starts one (tasks), or gives C a function value
-# (cThreads; os.RunOnStack's is a call, syncCall), reached from where the program's code may begin - every body but a plain function's (main, a test, an
-# initializer, a lambda, a method a table may call, a constructor, a destructor), a function named as a value or
-# exported - through the calls the scope pass and the walks found. A function nothing reaches starts nothing (std/os's
+# (cThreads; os.RunOnStack's is a call, syncCall), reached from where the program's code may begin - every body but a
+# plain function's (main, a test, an initializer, a lambda, a method a table may call, a constructor, a destructor), a
+# function named as a value or exported - through the calls the scope pass and the walks found. A function nothing reaches starts nothing (std/os's
 # RunOnStack, never called)
 fn (f mut Free&) reachedTasks() {
     roots Vec<I64>
@@ -4962,7 +4962,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     helper := false
     foreign := false
     calls := false      # (a C function that may call an export fn back)
-    sync := false       # (the runtime's __olang_run_on_stack: its function called while the call waits, as f() - O8d's condition 3)
+    sync := false       # (the runtime's __olang_run_on_stack: its function called while the call waits, as f() - O8d)
     match c.Target {
         case typed.Callee.Body(id) {
             b2 = I64(id)
@@ -7756,8 +7756,8 @@ fn (f mut Free&) cRoots(roots mut Vec<I64>&) {
 }
 
 # decide's condition 3: C given a function value that is no export fn may run it on a thread of its own, as may a task
-# whose code is not known - every place keeps; C that may call export fns back runs them as tasks (cRoots). Else what the tasks' code (and every body running where no call is written) changes
-# keeps, and - where a task may reach the spawner's storage - what a join's code lets go of while its tasks run
+# whose code is not known - every place keeps; C that may call export fns back runs them as tasks (cRoots). Else what
+# the tasks' code (and every body running where no call is written) changes keeps, and - where a task may reach the spawner's storage - what a join's code lets go of while its tasks run
 fn (f mut Free&) taskKeeps() {
     n := f.keyTy.Len()
     if f.cAll {
