@@ -149,7 +149,11 @@ and its memset): `__olang_close_kids` gives a region another thread made back th
 `__olang_new_chunk`, `__olang_region_blk_new`, a retiring worker) takes it - condition 3's narrowing for joined tasks
 (`free.olang` ownBody, taskLets, joinTargets, handedAtWait) relies on it, and ownBody reads `effects.olang`'s facts as
 ownGoes does, so a fact added or renamed there changes both; its `globReach` (a join's tasks' globals) reads
-`effects.olang`'s `GlobalsOf`, which must list every global a body counts as ReadsGlobals, RefGlobals or WritesGlobals. A slot release puts back only a slot - text in a
+`effects.olang`'s `GlobalsOf`, which must list every global a body counts as ReadsGlobals, RefGlobals or WritesGlobals.
+A let-go releasing what a D9h view handed back names is kept from it only by D9h's own judgement: `typed.olang`'s
+`NothingAfter` (no view from a body running code after its return takes the value - a new kind of such code, beside
+deferred code and destructors, joins it) and `lower.olang`'s `stillWhile` (quietLife over the body for a local handed
+back holding views). A slot release puts back only a slot - text in a
 region is left to it - in the runtime (`__olang_slot_release`, the chunk's owner read first) and the evaluator
 (`releaseHeld`'s `slotRegion`) alike. An element's let-go of a Vec it walks (O8f gap 17: `free.olang` VecWalks, PartsLet,
 VecFields - the prelude Vec's `data` and `n` by name, so renaming them changes these and `emit.olang`'s and `views.olang`'s

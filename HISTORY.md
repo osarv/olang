@@ -43269,3 +43269,29 @@ free.olang does the same with drive's join removed by hand (539 places freed), s
 one this change exposes, not condition 3's. A bisect over the decisions (each place kept in turn) names one place:
 keeping `Map<I64, mir.ScopeRef>`'s field 2 (`buckets`; lower.olang's `fieldStor` and `regionPar`, let go of by
 Map.Put's first buckets and rehash) alone makes the tests pass. To fix before merging.
+
+## 2026-11-24: a D9h view handed back while the body changes or lets go of what it names (D9h, O8f; mine; wt-joinreach)
+
+The crash above was not in the freeing analysis's places but in D9h. The trace under `-sanitize -debug` stops in
+Checker.ExprBodyIn copying `onlyFixed`'s result, a `Map<NameId, I64>`: `onlyFixed` saves `c.fixedOut`, gives it a new
+map, `defer: c.fixedOut = saved`, and `return c.fixedOut`. Check had recorded the body as handing back a view of its
+receiver's storage (ViewResults), so the return handed `c.fixedOut` back uncopied for the caller to copy - and the
+deferred assignment then ran, letting go of that map's parts (its Vec and Map places are sole), before the caller
+copied what the view named. The same holds without a defer: `r := c.out` then `c.out = Vec<I64>()` (or a growth, or
+`c.out[0] = 99`) then `return r` - `Settle` counted `r` a local handed back holding views of the parameter, so its copy
+was left out though the body changed the storage it viewed; a scratch program printed `99 99` where `1 99` is right
+(an element written after the copy), built and interpreted alike, so it was a meaning bug before it was a freeing one,
+and master's compiler has it too. The bisect's `Map<I64, mir.ScopeRef>.buckets` was a layout accident: keeping it moved
+what the released chunks held. Joinreach only exposed it, by freeing the checker's places for the first time.
+
+Fix, at D9h's two judgements, as SPEC's "where nothing could tell" already required: a body with deferred code or a
+destructor to run as it returns (a Defer, ErrDefer or Drop block, a local of a type needing a drop) hands back no view
+(`typed.NothingAfter`, read by check's settleViews, so ViewResults, the free pass, the scope pass and lowering all see
+the same zero); and lowering's `resultViews` keeps a local in `rvl` only where quietLife over the body's root block, for
+the local's type, finds nothing that may write the storage it views (`stillWhile`), a store into a value local's own
+bytes (`ownBytes`: a Var or a constructor's Field, through fields and payloads - the part stores Settle allows) being
+quiet there; a banned local copies, and Settle runs again with it banned so no local holds views through it
+(`settleStill`). Judging from the declaration to the return rather than the whole body was not needed: the self-build
+hands back 145 views where it handed back 157. Case d9hstillret (a field replaced and an element written after the local
+took it, a deferred restore of a Map, a write through a second reference to the same storage; under -sanitize, baked
+and decided by the evaluator). With it the compiler built by itself passes `olang test` of needs, lsp and check.

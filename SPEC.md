@@ -2567,8 +2567,13 @@ it calls (C but its math functions and the runtime's own counts as one), no dest
 is the copy it means where a call in its block may write the global. The same holds for
 the copies a function makes itself where nothing could tell: a value local made from existing storage, a walk's
 element, a temporary lent whole to such a body, and the part stores and fields of a value the function hands back made
-of its parameters' views. A function value, an `any`'s table and an operator's adapter copy at the call, since their
-caller cannot know. A value result owning parts that is no such view - existing storage of another's, a global's - is
+of its parameters' views. Nothing could tell only where nothing changes what the views name before the caller copies
+them: a function with deferred code, or a value with a destructor to run as it returns, hands back no view (`defer:
+c.out = saved` after `return c.out` would replace what the caller is about to copy); and a local handed back holding
+views is a copy where anything the function runs may write storage of the types those views cover - the types of its
+by-value parts, judged as a view held where it stands is below (`r := c.out` then `c.out[0] = 9`, or a write through
+another reference to the same storage), its own part stores aside. A function value, an `any`'s table and an
+operator's adapter copy at the call, since their caller cannot know. A value result owning parts that is no such view - existing storage of another's, a global's - is
 copied by the function itself where it hands it back. A result read where it stands that is copied, since something
 the statement does could change what it views, is copied into the innermost block the statement stands in: it is dead
 by the statement's end (O8f). Unobservable in what a program computes: the compile-time evaluator copies every time and
