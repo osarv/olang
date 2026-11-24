@@ -1,0 +1,40 @@
+# check: run
+# flags: -sanitize
+# D16d: a lambda capturing a reference read out of a field of its body's receiver (`lw := ln.L`, the referent's scope
+# derived from the receiver's, O23a) lives where that referent does - built there, passed or found at run time - and is
+# returned in a struct to a caller that calls it later. It was built in the block it was made in while judged to live
+# in the referent's scope, so the caller called it after that block had closed (lowering's viewWalk, the compiler
+# crashing in olang test of cells once early freeing reused the storage); read after the block closed, under the
+# sanitizer and the evaluator (interp@), each of which stopped on it
+type Outer struct() {
+    n I64 = 0
+    views Vec<I64>
+}
+
+type Walk struct(F fn&(id I64) I64) { F }
+
+type Low struct(L mut Outer&) { L }
+
+fn (ln mut Low&) walk() Walk {
+    lw := ln.L
+    return Walk(fn(id I64) I64 { return lw.n + id })
+}
+
+fn (ln mut Low&) ret(x I64) I64 {
+    w := ln.walk()
+    return w.F(x)
+}
+
+fn body(o mut Outer&) I64 {
+    ln mut Low& = Low(o)
+    s := 0
+    for i in range 40: s += ln.ret(i)
+    return s
+}
+
+fn main() {
+    o := Outer()
+    t := 0
+    for _ in range 30: t += body(o)
+    assert t == 23400
+}

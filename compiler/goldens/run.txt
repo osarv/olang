@@ -2405,6 +2405,8 @@
 | 42
 === run d16dcomposeshort.olang
 | status 0
+=== run d16dfieldscope.olang
+| status 0
 === run d16dlambdaown.olang
 | status 0
 === run d16dtwoscopes.olang
