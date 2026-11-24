@@ -60,6 +60,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     NoPlan typed.Plan = typed.Plan(0, 0, 0)   # the stand-in placement's: what a body or helper without a plan reads
     fx mut effects.Effects?& = null    # P2: what a task's callee may do (buildsFact), made when first asked
     buildsDecided Map<I64, Bool>       # ...the bodies whose fact is decided
+    writesDecided Map<I64, Bool>       # D9h: the bodies whose fact of storing into globals is decided (writesFact)
     Exclusive Map<I64, I64>            # O43: by body, its exclusive parameters (effects.Exclusive), where its type allows any
     # T22c: by twin (scope.twinTab), its plan, and whether it has code of its own (else a call of it reaches the body's)
     TwinPlans Vec<typed.Plan>
@@ -337,6 +338,28 @@ fn (lw mut Lowerer&) buildsFact(id I64) String {
     return name
 }
 
+# D9h, B3i: the fact naming whether body id, through all it may call, stores into no global ("none", else "writes") -
+# read by the code of a function holding a view of storage a mutable global may be (mayWriteGlobals); "" for a body no
+# fact names
+fn (lw mut Lowerer&) writesFact(id I64) String {
+    name := match lw.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): $"D9h " + $lw.P.InstanceName(inst)
+        case _: ""
+    }
+    if name == "" or lw.writesDecided.Has(id): return name
+    lw.writesDecided.Put(id, true)
+    if lw.fx == null: lw.fx = effects.Effects(lw.P, lw.Bodies)
+    lw.P.Facts.Decide(name, "writes" if lw.fx!.Of(id).Holds(effects.Fact.WritesGlobals) else "none", false)
+    return name
+}
+
+# ...decided for every body, before any module's code is reused - where the program has a mutable global, the only
+# case any code reads them
+fn (lw mut Lowerer&) DecideWrites() {
+    if lw.P.L.MutGlobals.Len() == 0: return
+    for id in range lw.Bodies.Len(): lw.writesFact(id)
+}
+
 # ...decided for every body a task calls, before any module's code is reused (B3i)
 fn (lw mut Lowerer&) DecideBuilds(spawned Vec<I64>&) {
     for b in spawned: lw.buildsFact(b)
@@ -608,6 +631,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     qCover Map<I64, Bool>      # quietLife: the types whose storage the view held covers (its by-value parts)
     qRoot types.TypeId = types.TypeId(0)   # ... and the type of the object it is a view into
     qSelf I64 = -1             # ... and windowQuiet's view call: its own try's clauses run only where it gave no view
+    qGlobal Bool = false       # ... and whether a mutable global may be or reach that storage: a call that may write a global is not quiet
     qWrites Map<I64, Bool>     # ... and writesCover's answers for it, by type (false while a type is being walked)
     noLetCopy Map<I64, Bool>
     ownSlots Map<I64, mir.LocalId>   # by reference local: its own slot (ownSlot), NoLocal where it has none
@@ -6079,15 +6103,13 @@ fn (ln mut lowering&) windowFor(of types.TypeId, k typed.Call?&, p typed.Lvalue?
     ln.qWrites.Clear()
     ln.coverAdd(of, 0)
     ln.qRoot = of
+    ln.qGlobal = ln.globalHits()
     ok := true
-    for g in ln.mutGlobals() {
-        gt := types.TypeId(I32(g))
-        if ln.objHits(gt) or ln.writesCover(gt, 0): ok = false
-    }
-    if ok and k != null: ok = ln.quietCall(k)
+    if k != null: ok = ln.quietCall(k)
     if ok and p != null: ok = ln.quietPlace(p)
     ln.qCover.Clear()
     ln.qWrites.Clear()
+    ln.qGlobal = false
     return ok
 }
 
@@ -6161,7 +6183,7 @@ fn (ln mut lowering&) quietX(x typed.Expr?&) Bool {
         case typed.Expr.Promote(_, _, pr): ln.quietX(pr.X)
         case typed.Expr.Call(_, _, c): ln.quietCall(c)
         case typed.Expr.Make(_, _, m): ln.quietAll(m.Items) and ln.quietX(m.Length)
-        case typed.Expr.Prim(_, _, _, _, args): ln.quietAll(args)
+        case typed.Expr.Prim(_, _, op, _, args): ln.quietAll(args) and not (ln.qGlobal and globalWrite(op))
         case typed.Expr.Slice(_, _, sl): ln.quietPlace(sl.Base) and ln.quietX(sl.Lo) and ln.quietX(sl.Hi)
         case typed.Expr.Cond(_, _, k): ln.quietX(k.C) and ln.quietX(k.A) and ln.quietX(k.B)
         case typed.Expr.Seq(_, _, q): q.Stmts.Len() == 0 and ln.quietX(q.X)
@@ -6171,6 +6193,16 @@ fn (ln mut lowering&) quietX(x typed.Expr?&) Bool {
         # (a function value made: making it writes only its own environment - what its code writes is judged where it is
         # called, or where it is given a call, by the type it is given as, docs/fnvalues.md 4.6)
         case typed.Expr.Fn(_, _, _): true
+        case _: false
+    }
+}
+
+# (an operation that may write a mutable global itself: an atomic or lane store into a place it is given - a global's
+# with no call - or a holder's destructors run, O15)
+fn globalWrite(op typed.PrimOp) Bool {
+    return match op {
+        case typed.PrimOp.Drop, typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap: true
+        case typed.PrimOp.AtomicCompareSwap, typed.PrimOp.LaneDots: true
         case _: false
     }
 }
@@ -6228,7 +6260,7 @@ fn (ln mut lowering&) quietCall(c typed.Call&) Bool {
         case typed.Callee.Value(x): t.Repr(x.Type()) if t.PromisesPure(t.Repr(x.Type())) and ln.quietX(x) else types.TypeId(-1)
         case _: types.TypeId(-1)
     }
-    if ty == types.TypeId(-1): return false
+    if ty == types.TypeId(-1) or ln.qGlobal and ln.mayWriteGlobals(c): return false
     ps := t.Items(t.Params(ty)) if ty != types.UnknownT else Array<types.TypeId>(0)
     for k in range c.Args.Len() {
         a := c.Args[k].Type()
@@ -6769,16 +6801,43 @@ fn (ln mut lowering&) quietLife(of types.TypeId) Bool {
     ln.qWrites.Clear()
     ln.coverAdd(of, 0)
     ln.qRoot = of
-    # (any call may write a mutable global, and what it reaches writably)
-    ok := true
-    for g in ln.mutGlobals() {
-        gt := types.TypeId(I32(g))
-        if ln.objHits(gt) or ln.writesCover(gt, 0): ok = false
-    }
-    ok = ok and ln.quietBlock(b)
+    # (a call that may write a global may write a mutable global the storage is, and what it reaches writably)
+    ln.qGlobal = ln.globalHits()
+    ok := ln.quietBlock(b)
     ln.qCover.Clear()
     ln.qWrites.Clear()
+    ln.qGlobal = false
     return ok
+}
+
+# whether a mutable global of the program may be, hold or reach writably the storage the view held covers (qCover)
+fn (ln mut lowering&) globalHits() Bool {
+    for g in ln.mutGlobals() {
+        gt := types.TypeId(I32(g))
+        if ln.objHits(gt) or ln.writesCover(gt, 0): return true
+    }
+    return false
+}
+
+# whether a call may store into a global, through anything it may call (effects.Fact.WritesGlobals): a body by its
+# whole-program fact (B3i, read through the table), C but its math functions and the runtime's own, a function value
+# but one whose type promises "pure" (which writes no mutable global, T21c); a helper is the language's own
+fn (ln mut lowering&) mayWriteGlobals(c typed.Call&) Bool {
+    match c.Target {
+        case typed.Callee.Body(id) {
+            name := ln.L.writesFact(I64(id))
+            if name == "": return true
+            return (try ln.L.P.Facts.Read(ln.B.File, name) catch default "writes") != "none"
+        }
+        case typed.Callee.Extern(f) {
+            fd := ln.L.P.FnDecl(f)
+            name := ln.L.P.L.Names.Text(fd.Name)
+            return not typed.MathExtern(name, fd.S.Params.Len()) and not name.StartsWith("__olang_")
+        }
+        case typed.Callee.Helper(_, _): return false
+        case typed.Callee.Value(x): return not ln.T.PromisesPure(ln.T.Repr(x.Type()))
+        case _: return true
+    }
 }
 
 # whether an object of type o - what a reference names, a local's own storage - may be, hold by value or be held by
@@ -6911,7 +6970,9 @@ fn (ln mut lowering&) quietBlock(b typed.Block&) Bool {
 
 fn (ln mut lowering&) quietNested(s typed.Stmt&) Bool {
     return match s {
-        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x): ln.quietX(x)
+        # (a local's destructors, run as it lets go, may write a mutable global - qGlobal)
+        case typed.Stmt.Let(_, l, x): ln.quietX(x) and not (ln.qGlobal and ln.T.NeedsDrop(ln.B.Locals[I64(l)].Ty))
+        case typed.Stmt.Eval(_, x): ln.quietX(x)
         case typed.Stmt.Assign(_, p, x): ln.quietStore(p) and ln.quietPlace(p) and ln.quietX(x)
         case typed.Stmt.If(_, f): ln.quietX(f.Test) and ln.quietBlock(f.Then) and (f.Else == null or ln.quietBlock(f.Else!))
         case typed.Stmt.Block(_, k): ln.quietBlock(k)

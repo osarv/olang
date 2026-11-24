@@ -1,0 +1,24 @@
+# D9h: a method's local made from its receiver's array field (`d := f.data`) reads it in place where nothing its block
+# runs may write a global - in a program with a mutable global of the type, the receiver that global or a local: no
+# copy of the 8 MB array per call, so the program runs flat under a 14 MB address space (N, -define, sizes it)
+
+type Font struct(data Array<I64>) {
+    data
+}
+
+fn (f Font&) Sum() I64 {
+    d := f.data
+    s := 0
+    for i in range d.Len(): s += d[i]
+    return s
+}
+
+N I64 = 1000000
+font mut Font = Font(Array<I64>(N))
+
+fn main() {
+    font.data[7] = 3
+    t := 0
+    for _ in range 50: t += font.Sum()
+    Print($t)
+}

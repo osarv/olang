@@ -99,6 +99,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `heldexact.olang` - a writable reference read out of a vector (`b := bs[i]` for a `Vec<mut N&>`) and kept by a
   local lives where the vector does (O25g, O26a): kept outside a block, linked to, pushed into, captured, given to a task;
   read back after an arena churn, decided while compiling beside the run time.
+- `globalview.olang` - a method's local made from its receiver's array field (`d := f.data`) in a program with a mutable
+  global of the type (D9h): read in place, the global's or a local's, where nothing its block runs may write a global;
+  the copy it means where a call in it may.
 - `viewplace.olang` - storage kept for a view (O27 as placement): a turn's text kept through views of it, a view handed
   back of what a function builds, a slice of a temporary kept in a parameter's field, a generator's views of a local it
   made, a closure over a turn's local kept in a field, a part of an instance kept past its turn; read back after an arena

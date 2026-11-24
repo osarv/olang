@@ -702,6 +702,11 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(sh(dir, "(ulimit -v 8192 && ./build/slotcopy) > out.txt 2>&1") == 0 and outOf(dir) == "233993 7.5 0\n", "slotcopy under 8 MB", dir)
     try late(r, dir, "slotcopy", "200", "1199 1.5 0\n")
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 slotcopy.olang > out.txt 2>&1") == 0 and outOf(dir) == "1199 1.5 0\n", "slotcopy interpreted", dir)
+    # (globalview, D9h: `d := f.data` in a method reads a mutable global receiver's 8 MB array in place, no copy a
+    # call - under 14 MB; the evaluator agrees)
+    try r.expect(sh(dir, "\"$OLANG\" build globalview.olang > out.txt 2>&1") == 0, "globalview build", dir)
+    try r.expect(sh(dir, "(ulimit -v 14336 && ./build/globalview) > out.txt 2>&1") == 0 and outOf(dir) == "150", "globalview under 14 MB", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=1000 globalview.olang > out.txt 2>&1") == 0 and outOf(dir) == "150", "globalview interpreted", dir)
     # (threads reserve address space of their own: these read their own growth, or their peak)
     try r.expect(sh(dir, "\"$OLANG\" -check joins.olang > out.txt 2>&1") == 0, "joins", dir)
     try r.expect(outOf(dir).EndsWith("flat 200000\n"), "joins kept what its joins made", dir)

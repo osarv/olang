@@ -1,0 +1,68 @@
+# A value local made from existing storage, held as a view where nothing could tell (D9h), in a program with a
+# mutable global of the very type: `d := f.data` in a method reads the receiver's array in place - the global's or a
+# local's - wherever nothing the view's block runs may write a global; where a call in it may (stamp), the local is the
+# copy it means, and keeps the values it was given. The evaluator decides the same values while compiling (top-level
+# asserts).
+
+type Font struct(data Array<I64>, n I64) {
+    data
+    n
+}
+
+fn at(d Array<I64>&, i I64) I64 { return d[i] }
+
+# reads the receiver's array through a local holding it (no copy where nothing in the block may write a global)
+fn (f Font&) Sum() I64 {
+    d := f.data
+    s := 0
+    for i in range d.Len(): s += at(d, i)
+    return s
+}
+
+font mut Font = Font(Array<I64>(4), 1)
+
+# writes the mutable global's array - a call that may write a global
+fn stamp(v I64) { font.data[0] = v }
+
+# the local is a copy: what stamp writes into the global's array is not seen through it
+fn (f Font&) SumStamped() I64 {
+    d := f.data
+    s := 0
+    for i in range d.Len() {
+        stamp(100)
+        s += d[i]
+    }
+    return s
+}
+
+fn Font.Filled(n I64) Font {
+    f := Font(Array<I64>(n), n)
+    for i in range n: f.data[i] = i + 1
+    return f
+}
+
+fn localSum(n I64) I64 { return Font.Filled(n).Sum() }
+
+fn localStamped(n I64) I64 {
+    f := Font.Filled(n)
+    return f.SumStamped()
+}
+
+assert localSum(4) == 10 and localSum(100) == 5050
+
+test Font.Sum "a method's local reads a mutable global receiver's array in place" {
+    for i in range 4: font.data[i] = 2 * i
+    assert font.Sum() == 12
+    font.data[3] = 10
+    assert font.Sum() == 16
+}
+
+test Font.SumStamped "a local whose block may write the global is its copy" {
+    for i in range 4: font.data[i] = i + 1
+    assert font.SumStamped() == 10
+    assert font.data[0] == 100
+}
+
+test localSum "the same methods on a local receiver" {
+    assert localSum(4) == 10 and localStamped(4) == 10
+}

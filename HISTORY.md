@@ -42999,3 +42999,28 @@ given that scope, followed a few deep), and the walker's `unfollowed` one for a 
 returns (`copiedRet`: a choice with a read among its values, or a read of anything but a local living where the result
 goes). checks' freeing gaps19 asserts both rows; -free late, -sanitize and the evaluator agree on every shape.
 
+## 2026-11-24: a view local of a mutable global's storage, judged by what its block calls (D9h; mine; wt-fieldborrow)
+
+Found by the OAgent phone app: a glyph lookup took 5 ms, 160x more than once worked around. `d := f.data` in a
+method on `f Font&` copied the whole array on every call where the program had a `mut` global of type `Font` - the
+receiver the global or a local alike (the finding's "global receiver" was the program having one). SPEC already had
+the local held as a view where nothing could tell (D9h); lowering's judgement of what a reference names
+(`heldReferent` -> `quietLife`) refused it wholesale as soon as a mutable global could be or reach the viewed storage,
+on the reading that "any call may write a mutable global". That is a sound over-approximation, not the rule: only
+something that can write a global can.
+
+Now `quietLife` and `windowFor` set `qGlobal` (the mutable globals that hit the view's storage, `globalHits`), and
+under it `quietCall` refuses only a call that may store into a global: a body by a new whole-program fact `D9h NAME`
+("none" or "writes", effects.Fact.WritesGlobals through everything it calls; decided for every body before any module's
+code is reused, only where the program has a mutable global - `DecideWrites`; read through the table, B3i), an extern
+but C's math functions and the runtime's own, a function value but one whose type promises `pure`; a helper is the
+language's own. Two writes that are no call are refused under it too: a local with a destructor declared in the block
+(`NeedsDrop`, run as it lets go) and an atomic or lane store or a `Drop` (`globalWrite`). Direct stores into a global's
+place were already unquiet (`quietStore`: a global's object is unknown). The statement-level `quiet()` (a view read
+where it stands) keeps its wholesale `mutStorage` refusal - nothing needed it.
+
+The effects fact `Allocates` still counts the copy (it does not replicate lowering's view-local judgement: `assert not
+Font.Sum.Allocates` stays false either way), so the proof is a run under a limited address space: checks' freeing
+`globalview` (an 8 MB array summed 50 times through `d := f.data` on a `mut` global receiver) runs under 14 MB, where it
+needed more than 20 before. tests/globalview.olang pins the meaning: a block calling something that writes the global
+holds the copy and does not see the write (run, and under OLANG_EVALUATE=1, which copies every time and agrees).

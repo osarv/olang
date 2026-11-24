@@ -305,6 +305,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   may be a field, element, payload or type argument by value (T7a relaxed): the container's own, a store copying into
   it; `Map<String, V>` holds its own key text, `Map<String&, V>` shares. A by-value array of any size is copied at the
   call where something could tell (D9h, an optimization with no meaning).
+  A value local made from what a reference names (`d := f.data`) is held as a view of it where nothing in its block
+  can write it; a mutable global that may be that storage makes only a call that may store into a global (its
+  whole-program fact, `D9h NAME`), a destructor run or an atomic store unquiet - no longer every call (2026-11-24,
+  wt-fieldborrow: an 8 MB array copied per method call when the program had a `mut` global of the type).
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31: "knowing whether or not a
   function you pass things into mutates what you passed is valuable", and "globals shouldn't be mut unless you say
   so").** `mut T&` writable, `T&` read-only, at every level, shallow. Locals and parameters are always assignable

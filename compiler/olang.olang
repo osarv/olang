@@ -785,6 +785,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.DecideBuilds(fr.Spawned())
     lw.DecideExclusive()
     lw.DecideGen()
+    lw.DecideWrites()
     lw.Free = fr
     build.Phase("scope")
     if cfg.Memory and d.Errors() == 0: spin.Say(io.Stdout, $fr.Report() + $weakRows(c) + $fr.Sc.PlacedReport())

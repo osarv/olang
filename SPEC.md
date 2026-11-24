@@ -2558,7 +2558,12 @@ in a program no global of which can be written so (a `mut` global of anything bu
 payload, or a global reaching a writable reference, a function value or an `any`) - or holds it in a local that nothing could tell from a copy: a local never written but in a
 scalar field, lent writably only to bodies that keep its parts as they are (a walk's `Next`), never escaping, never
 handed back, whose views are of storage nothing changes while it lives and that outlives it - constant data, an
-immutable global's, a local's own storage nothing writes, lends or keeps, or another such local's. The same holds for
+immutable global's, a local's own storage nothing writes, lends or keeps, or another such local's - or what a reference
+names (a parameter's, a receiver's) where nothing in the local's block can write it: no store into it, no call given it
+writably, and, where a `mut` global may be or reach that storage, no call that may store into a global through anything
+it calls (C but its math functions and the runtime's own counts as one), no destructor run and no atomic store, so
+`d := f.data` in a method reads the receiver's array in place whether the receiver is a mutable global or a local, and
+is the copy it means where a call in its block may write the global. The same holds for
 the copies a function makes itself where nothing could tell: a value local made from existing storage, a walk's
 element, a temporary lent whole to such a body, and the part stores and fields of a value the function hands back made
 of its parameters' views. A function value, an `any`'s table and an operator's adapter copy at the call, since their
