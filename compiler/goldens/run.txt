@@ -1372,7 +1372,7 @@
 | ok - S4c, E31: a parallel assignment of elements stores through SetAt
 | ok - S1b: a one-line body for every block of statements
 | ok - S4e: writes through a mut reference reach the caller, a repoint read after is kept
-| ok - S4e: a write through a repointed reference parameter, read back or reaching the caller
+| ok - S4e: a reference parameter repointed at existing storage is a cursor
 | ok - two tasks run concurrently and are joined before the block ends
 | ok - several tasks may be handed the same instance
 | ok - the same instance may be shared read-only by several tasks
