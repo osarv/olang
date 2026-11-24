@@ -71,10 +71,9 @@ Target String& = try os.Env("CHECKS_TARGET") catch default ""
 CrossSkip := Array<String&>["externruntime2.olang"]
 
 # B12f: the cases not built for Windows - what reaches glibc's own (fopencookie, getuid, bits/waitstatus.h) or /proc,
-# C's printf family (mingw-w64's are inline functions of a variable number of arguments, which no C import reaches), or
-# std/net
+# C's printf family (mingw-w64's are inline functions of a variable number of arguments, which no C import reaches)
 WindowsSkip := Array<String&>["g42exportkept.olang", "x13acookie.olang", "x17broken.olang", "x17header.olang", "x21bool.olang"
-    "x21struct.olang", "x21wide.olang", "m9builderold.olang", "o27destructorfiles.olang"]
+    "x21struct.olang", "x21wide.olang", "o27destructorfiles.olang"]
 
 fn withParts(names Array<String&>&) Array<String&>& {
     all Vec<String&>
