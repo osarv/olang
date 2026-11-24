@@ -43024,3 +43024,14 @@ Font.Sum.Allocates` stays false either way), so the proof is a run under a limit
 `globalview` (an 8 MB array summed 50 times through `d := f.data` on a `mut` global receiver) runs under 14 MB, where it
 needed more than 20 before. tests/globalview.olang pins the meaning: a block calling something that writes the global
 holds the copy and does not see the write (run, and under OLANG_EVALUATE=1, which copies every time and agrees).
+
+Checked against B3i the same day (wt-writesfact): `D9h NAME` conforms - decided whole-program at the top (`DecideWrites`,
+beside `DecideBuilds`/`DecideExclusive`, on the effects they already found) and read by a module only through the table,
+its record keyed by the values read. It adds no recompilation: a module reading a body's fact reaches that body's text
+(an instance's code is the root's), so any edit flipping the fact already rebuilds it. Measured on a 3-module program
+(app holding a `mut` global of mid's type, mid's view block calling leaf, side unrelated), OLANG_FACTSTATS: leaf
+starting to write its global, dropping it, or only a comment in leaf - leaf and mid lowered, side reused, each alike;
+side edited - side alone. What does recompile more is the older mutable-globals fact (2026-11-21): leaf gaining a `mut`
+global of a type no global had (`Array<I64>`) lowered side and std/prelude's columns, text and vec too - every module
+whose views are judged against the globals' types. Cost on the cold self-build: `DecideWrites` 33 ms and 4 MB resident
+(of 3.2 GB peak).
