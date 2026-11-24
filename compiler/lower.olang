@@ -637,10 +637,6 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     ownSlots Map<I64, mir.LocalId>   # by reference local: its own slot (ownSlot), NoLocal where it has none
     vlSites Map<I64, Bool>
     vlIn typed.BlockId = typed.BlockId(0)   # ... the block of the local being asked about (viewLocals)
-    # D9h: the locals that may not be handed back holding views (resultViews), and whether quietLife is asked for them
-    # (stillWhile): a store into a local's own bytes is quiet then
-    rvlBan Map<I64, Bool>
-    qOwn Bool = false
     stmts Vec<typed.Stmt&>       # ... the statements being lowered, innermost last, and whether each writes nothing
     stmtSafe Vec<I64>            # it reaches but through its own last store (quietStmt): -1 not yet asked, 0 no, 1 yes
     # D9h by evaluation order: the view calls read where they stand whose window - what is evaluated while the value
@@ -5969,7 +5965,7 @@ fn (ln mut lowering&) viewWalk() typed.ViewWalk {
     }
     lw := ln.L
     return typed.ViewWalk(ln.T, b, m, fn(id typed.BodyId) I64 { return lw.ViewsOf(id) }
-                          fn(id typed.LocalId) I64 { return -1 if ln.rvlBan.Has(I64(id)) else try ln.rvl.Get(I64(id)) catch default I64(-1) })
+                          fn(id typed.LocalId) I64 { return try ln.rvl.Get(I64(id)) catch default I64(-1) })
 }
 
 # whether a return hands back a view of what the arguments reach, as it is: its calls handing back views marked read
@@ -6435,7 +6431,7 @@ fn (ln mut lowering&) viewTemps(u typed.LocalUses&) {
 # the locals handed back holding views (D9h for every value): those whose views check recorded, each one's copies of
 # them left out - its declaration's and its part stores'
 fn (ln mut lowering&) resultViews(u typed.LocalUses&, views I64) {
-    for ln.settleStill(u) { }
+    ln.viewWalk().Settle(u, typed.StillParams(ln.T, ln.B, u), ln.rvl)
     # (only where check recorded the views of every one - a local may hold another's: all copies are kept otherwise)
     for i in range ln.B.Locals.Len() {
         bits := try ln.rvl.Get(i) catch { continue }
@@ -6453,55 +6449,6 @@ fn (ln mut lowering&) resultViews(u typed.LocalUses&, views I64) {
         }
     }
 }
-
-# the locals handed back holding views (Settle), but none whose views something the body runs while it lives could
-# change: such a local is banned - it copies, and holds no views another local could hold in turn - and true is
-# returned for Settle to run again without it
-fn (ln mut lowering&) settleStill(u typed.LocalUses&) Bool {
-    ln.rvl.Clear()
-    ln.viewWalk().Settle(u, ln.rvl)
-    banned := false
-    for i in range ln.B.Locals.Len() {
-        if not ln.rvl.Has(i): continue
-        if ln.rvlBan.Has(i) {
-            ln.rvl.Remove(i)
-            continue
-        }
-        if ln.stillWhile(ln.B.Locals[i].Ty): continue
-        ln.rvlBan.Put(i, true)
-        banned = true
-    }
-    return banned
-}
-
-# D9h: whether what a local of type ty handed back holding views of the arguments views is changed by nothing the body
-# runs while it lives: every statement of the body quiet for that storage (quietLife over its root block) - so a write
-# to it after the local is given its value (`r := c.out` then `c.out = Vec<I64>()`), which would change or let go of
-# what the local views, has the local copy instead
-fn (ln mut lowering&) stillWhile(ty types.TypeId) Bool {
-    if ln.B.Root == null: return false
-    saved := ln.vlIn
-    ln.vlIn = ln.B.Root!.Id
-    ln.qOwn = true
-    ok := ln.quietLife(ty)
-    ln.qOwn = false
-    ln.vlIn = saved
-    return ok
-}
-
-# whether a place is a local's own bytes: a value local the body declares or a constructor's field - never a parameter,
-# a binding, a capture or a reference, which may be the arguments' storage - or a field or payload of one (a part store
-# into a local handed back holding views)
-fn (ln lowering&) ownBytes(p typed.Lvalue&) Bool {
-    return match p {
-        case typed.Lvalue.Local(_, ty, id): not ln.T.IsRef(ty) and ln.ownKind(ln.B.Locals[I64(id)].Kind)
-        case typed.Lvalue.Field(_, _, b, _): ln.ownBytes(b)
-        case typed.Lvalue.Payload(_, _, py): ln.ownBytes(py.Base)
-        case _: false
-    }
-}
-
-fn (ln lowering&) ownKind(k typed.LocalKind) Bool { return k == typed.LocalKind.Var or k == typed.LocalKind.Field }
 
 # a stored value's copy left out where it is a view of the arguments (ElidedCopy): a MakeKind.Copy by its site, a value
 # array local's T7b copy at its declaration
@@ -7002,7 +6949,6 @@ fn findIn(a typed.Block&, e typed.Block?&, id typed.BlockId) typed.Block?& {
 fn (ln mut lowering&) quietStore(p typed.Lvalue&) Bool {
     t := ln.T
     if p == typed.Lvalue.Local and (t.IsNumber(p.Type()) or p.Type() == types.BoolT or t.IsRef(p.Type())): return true
-    if ln.qOwn and ln.ownBytes(p): return true
     if ln.qCover.Len() == 0: return false
     o := ln.objectOf(p)
     return o != types.UnknownT and not ln.objHits(o)

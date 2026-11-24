@@ -24556,7 +24556,7 @@ fn (c mut Checker&) settleViews(b typed.Body&, file I64) {
     c.viewHeld.Clear()
     w := typed.ViewWalk(c.P.T, b, c.viewElig(b, file), fn(id typed.BodyId) I64 { return c.ViewsOf(id) }
                         fn(id typed.LocalId) I64 { return try c.viewHeld.Get(I64(id)) catch default I64(-1) })
-    w.Settle(u, c.viewHeld)
+    w.Settle(u, typed.StillParams(c.P.T, b, u), c.viewHeld)
     if key >= 0 {
         m I64 = 0
         for f in b.Fields { m |= try c.viewHeld.Get(I64(f)) catch default I64(0) }

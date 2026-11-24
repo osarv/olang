@@ -4,7 +4,8 @@
 # views before the caller copies it. A local made from a parameter's storage that the body then changes - given a new
 # value, an element written, through another name for the same storage - is copied where it is made; a body with
 # deferred code that runs after its return takes the value (check's onlyFixed: `defer: c.fixedOut = saved`) hands back
-# no view. Each one's old storage is let go of early (O8f) while the value handed back still names it: read after the
+# no view; a by-value parameter the body writes, or a constructor's field given what a reference parameter names, the
+# same. Each one's old storage is let go of early (O8f) while the value handed back still names it: read after the
 # release under the sanitizer, and by the evaluator, baking and deciding
 type Coll struct() {
     out Vec<I64>
@@ -42,6 +43,25 @@ fn picked(a Coll&, b mut Coll&) Vec<I64> {
     return r
 }
 
+# a by-value parameter written in a part after the local took it
+fn written(p Coll) Vec<I64> {
+    r := p.out
+    p.out[0] = 5
+    return r
+}
+
+fn grow(a mut Vec<I64>&) I64 {
+    for i in range 100: a.Push(i)
+    a[0] = 99
+    return a.Len()
+}
+
+# a constructor's field given what a reference parameter names, a later field's initializer then growing it
+type Held struct(a mut Vec<I64>&) {
+    X Vec<I64> = a
+    Y I64 = grow(a)
+}
+
 fn all() I64 {
     c := Coll()
     s := 0
@@ -54,13 +74,19 @@ fn all() I64 {
     c.out.Push(1)
     w := c.snapped()
     p := picked(c, c)
-    return s * 1000 + w[0] * 100 + p[0]
+    q := written(c)
+    for k in range 20 {
+        v := Vec<I64>[k, 2, 3]
+        h := Held(v)
+        s += h.X[0] + h.X.Len() + h.Y
+    }
+    return s * 1000 + w[0] * 100 + p[0] + q[0] * 10000000
 }
 
 Baked := all()
 
-assert all() == 8944199, "every value handed back is what it was when the body took it"
+assert all() == 81254199, "every value handed back is what it was when the body took it"
 
 fn main() {
-    assert all() == Baked and Baked == 8944199
+    assert all() == Baked and Baked == 81254199
 }

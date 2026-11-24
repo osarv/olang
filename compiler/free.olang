@@ -8751,12 +8751,13 @@ fn (f mut Free&) PartsLet(ty types.TypeId, depth I64 = 0, entry Bool = false) Ve
     }
     # (a Vec<Array<I64>>'s walk: each live element's array, its buffer's element place - arrayBuffer)
     if f.T().KindOf(f.T().Repr(ty)) == types.Kind.Array {
-        addTo(out, f.placeKey(ty, -1))
+        k := f.placeKey(ty, -1)
+        if k >= 0: addTo(out, k)
         # (an element array's own elements' parts: a Vec<Array<Q>>'s Qs')
         addAllTo(out, f.PartsLet(f.T().Elem(f.T().Repr(f.T().Elem(f.T().Repr(ty)))), depth + 1))
         return out
     }
-    for lf in f.ReleaseLeaves(ty): addTo(out, lf.PlaceId)
+    for lf in f.ReleaseLeaves(ty) { if lf.PlaceId >= 0: addTo(out, lf.PlaceId) }
     for vw in f.VecWalks(ty) {
         if vw.Texts >= 0: addTo(out, vw.Texts)
         else: addAllTo(out, f.PartsLet(vw.Elem, depth + 1, vw.Next >= 0))
