@@ -1,31 +1,26 @@
-# OLang Cloud hand-off (2026-11-23)
+# OLang Cloud hand-off (2026-11-24)
 
-Written for a fresh OLang Cloud session. The previous one stopped because its context had grown to about 440k tokens.
+Stopped by the Orchestrator's pacing guard; no new items until it restarts this session.
 
 ## Read first
-1. `.claude/memory/orchestrator-notes.md`, `claims.md` (the lines marked "OLang Cloud" are this session's), `plan.md`, and `decisions.md` (no questions open).
-2. The review notes `/home/user/review9.md`, `review10.md`, `review11.md` and `review12.md`, and `docs/freeing.md` section 2.4, "Still open".
+`orchestrator-notes.md`, `claims.md` ("OLang Cloud" lines), `plan.md`, `decisions.md` (question 2 is mine: a supplied `p.Replace(v)` through a `mut T&`).
+
+## Merged 2026-11-24
+- wt-spawnrelease 9cfeb4375 (reviewed: builder-made struct double drop fixed with `__olang_region_settle_in`; Task.FreshGuard).
+- wt-cond3 cf42abcac (condition 3 narrowed: RunOnStack a call, export fns as task code, lambdas/function values not task roots; taskvals passes).
+- wt-gap19 0cf530df0 + wt-gap19b 8cde655cc (gap 19 closed; `h.last = f()!` built once).
+- wt-vecclear f5d1359d0 (D9h result views no longer defer a copy of what a `mut` reference points to).
+- wt-mutparam 95b2fa459 (S4e: a reference parameter repointed at a fresh value is refused, FreshParamRepoint).
 
 ## In progress
-- **wt-spawnrelease** (branch `wt-spawnrelease` at 8931c644e, rebased on master f689d46d5, not merged; worktree `/home/user/wt/spawnrelease`):
-  - **Status:** done and checked, but it still needs a soundness review (Opus high, like review12) before merging.
-  - **What it does:** a spawn target declared outside its loop is released by the spawner at the spawn, before the task starts. The task builds the new value in a region of its own, owned by the worker.
-  - **Measured:** the review12 shape stays at 2 MB over 200k turns, where master reaches 911 MB. Fixture: checks' freeing `spawnlocal`. `-check` names every target that still keeps.
-  - **Checks passed:** make quick, the fixed point (byte-identical), make race, and the freeing and earlyfree scenarios.
-  - **Still open:** a `String` or array target keeps (now named). A struct target frees, but `-check` reports it as the already-known gap for a plain assignment.
-  - **The review should attack:** sibling tasks reaching the released value, a failing task, views across the spawn, and the two new runtime functions in runtime.ll. Probes: /tmp/claude-0/sr (run.sh) and review12's a1-a9.
+- **wt-joinreach** (worktree /home/user/wt/joinreach, pushed, NOT merged): a join's let-go keeps only if a task it spawns reads a global reaching the place (free.olang joinReached/globReach). Self-build frees 538/1007 places (peak 2.71 -> 2.60 GB). Blocked by an older use-after-free it exposes: early freeing of `Map<I64, mir.ScopeRef>` field 2 (buckets; lower.olang fieldStor/regionPar; let go by Map.Put's first buckets and rehash) crashes the self-built compiler's `olang test` of ~15 compiler files ("use after scope closed" in Checker.ExprBodyIn). An Opus-high agent was debugging it at the stop; check the branch's last commits and HISTORY for its state.
 
-## Queue, in order
-1. Finish, review and merge wt-spawnrelease.
-2. **Condition 3 for the compiler itself.** OLang Debts found (wt-buildmem2, olang 23800823c) that the compiler's own build gets no early freeing at all: `-memory` shows 0 freed and 996 keeps. Condition 3 fires program-wide because the compiler hands a function value to C. Narrow it to what C can actually call back into. That is section-8 work, and no direction decision is needed unless knowing what C reaches needs a new annotation (if so, send a numbered question to the Orchestrator).
-3. **Per-instance buffer places** (the user, 2026-11-23: "do vectors and views not per type, but per instance"): count a view keeping a type's growth as a gap, make collection buffer places per value, and give O23b's equality per instance as well (field scopes B currently gives it back per declaration). Section-8 work, Opus xhigh.
-4. Open items in freeing.md 2.4: a lambda passed as a function value that builds through a captured helper's field; a task's catch default that allocates (about 250 B per failure); storage given back to a retired worker's home.
-5. A full verify after the next big merge. The last one passed on master cd11ed19d.
+## Queue after it
+1. Per-instance buffer places (decided; Opus xhigh) - should close gap 17b.
+2. Gap 17a (an element holding a struct with a Map field built by S(m) keeps old storage).
+3. freeing.md 2.4 leftovers: lambda passed as a function value building through a captured helper's field; a task's catch default that allocates; storage given back to a retired worker's home.
+4. A full verify after the next big merge.
 
-## State
-- **v1.0.0:** the user is tagging it on GitHub at cd11ed19d, because cloud sessions get 403 on tag pushes. When the Orchestrator says the tag exists, record "v1.0.0 = cd11ed19d" in HISTORY.md and plan.md.
-- **Other sessions:**
-  - OLang Debts owns the loop rule (loop names are values) and wt-argmove (moving temporary arguments, in lower.olang). Coordinate before touching shared files.
-  - The olang Android session is fixing OTerm's crash at scope.olang:3227.
-- **Stale goldens on master** (layoutdiff, interp@tests/pty.olang): probably from the Android merge; recapture them if they block a check.
-- **How this session worked:** agents do the work in worktrees under `/home/user/wt`. Commits are authored as Oscar Arvidsson with no attribution lines. Build only with `/home/user/vlock make build`. Disk is tight, so delete build output.
+## Notes
+- Disk fills fast (each worktree's build/ is 8-12 GB): delete build/ output and merged worktrees.
+- master's make quick had stale goldens/eval runs (std/time diag, canon, cshare) and pushtexts' second shape (40 MB) - seen, not mine.
