@@ -23341,8 +23341,23 @@ fn (c mut Checker&) lostParamWrites(root typed.Block&) {
         if l.Name == source.NameId(0) or c.text(l.Name) == "_": continue
         w := typed.LostStores(p)
         w.Stmts(root.Stmts)
+        if c.isRef(l.Ty) and c.freshRepoints(c.text(l.Name), w): continue
         for k in w.Lost(): c.err(w.Spans[k], msgs.LostParamWrite(c.text(l.Name), c.isRef(l.Ty) and w.Whole[k], w.Through[k]))
     }
+}
+
+# S4e: a reference parameter repointed at storage the body gives a value (E12c) - a constructor call, a literal, any
+# call returning a value - is an error whatever reads it after: the caller still sees what it passed. A repoint at
+# storage that exists (another reference, a field, a call returning a reference) is a cursor, and kept. Whether one was
+# said
+fn (c mut Checker&) freshRepoints(n String&, w typed.LostStores&) Bool {
+    said := false
+    for k in range w.Fresh.Len() {
+        if not w.Fresh[k]: continue
+        c.err(w.Spans[k], msgs.FreshParamRepoint(n))
+        said = true
+    }
+    return said
 }
 
 # S9g: a write to a loop's name n, or into what it holds by value, that nothing in the turn reads after it - the

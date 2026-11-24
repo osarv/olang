@@ -17865,8 +17865,9 @@ fn w8Depth(t R2Tree&) I64 {
     return n
 }
 fn w8Leaf(t R2Tree&) I64 {
-    for t != R2Tree.Leaf: t = R2Tree.Leaf(7)
-    return t.v
+    u := t
+    for u != R2Tree.Leaf: u = R2Tree.Leaf(7)
+    return u.v
 }
 W8Baked := w8Big(R2Shape.Round(R2Disk(2.0))) and not w8Big(R2Shape.Round(R2Disk(1.0))) and w8W(R2Shape.Box(2.0, 1.0)) == 2.0 and
     w8H(R2Shape.Box(2.0, 5.0)) == 5.0 and w8Depth(R2Tree.r2Tree(5)) == 4 and w8Leaf(R2Tree.Leaf(3)) == 3
@@ -18814,39 +18815,36 @@ test "S4e: writes through a mut reference reach the caller, a repoint read after
     assert paramBump(41) == 42
 }
 
-# S4e: once a reference parameter is repointed at the callee's own storage, a write through it is a store too - kept
-# where something reads the parameter after it, or where the repoint may name the caller's storage
-fn paramRepointRead(b mut ParamBox&) I64 {
-    b = ParamBox()
-    b.N = 5
-    return b.N
+# S4e: a reference parameter repointed at storage that exists is a cursor - another reference, a field reached through
+# one, a call returning a reference - and a write through it reaches that storage
+type ParamNode struct(V I64, Next ParamNode?&) {
+    V
+    Next
 }
 fn paramRepointOther(b mut ParamBox&, other mut ParamBox&) {
     b = other
     b.N = 6
 }
-fn paramRepointMaybe(b mut ParamBox&, fresh Bool) {
-    if fresh: b = ParamBox()
-    b.N = 7
+fn paramNodeLast(n ParamNode&) I64 {
+    for n.Next != null: n = n.Next!
+    return n.V
 }
-fn paramRepointLoop(b mut ParamBox&, other mut ParamBox&) {
-    b = ParamBox()
-    for i in range 2 {
-        b.N = 8 + i
-        b = other
-    }
+fn paramPick(a mut ParamBox&, b mut ParamBox&) mut ParamBox& { return b if b.N > a.N else a }
+fn paramRepointPicked(b mut ParamBox&, other mut ParamBox&) {
+    b = paramPick(b, other)
+    b.N += 10
 }
 
-test "S4e: a write through a repointed reference parameter, read back or reaching the caller" {
+test "S4e: a reference parameter repointed at existing storage is a cursor" {
     b := ParamBox()
-    assert paramRepointRead(b) == 5 and b.N == 0
     o := ParamBox()
     paramRepointOther(b, o)
     assert o.N == 6 and b.N == 0
-    paramRepointMaybe(b, false)
-    assert b.N == 7
-    paramRepointMaybe(o, true)
-    assert o.N == 6
-    paramRepointLoop(b, o)
-    assert o.N == 9
+    paramRepointPicked(b, o)
+    assert o.N == 16 and b.N == 0
+    assert paramNodeLast(ParamNode(1, ParamNode(2, ParamNode(3, null)))) == 3
 }
+
+# K1/K2: the cursor walk decided at compile time agrees with the run time
+ParamNodeLastBaked I64 = paramNodeLast(ParamNode(4, ParamNode(5, null)))
+assert ParamNodeLastBaked == 5

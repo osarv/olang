@@ -5449,6 +5449,15 @@ it on, borrowing into it). A repoint at what another reference names (`p = q`) k
 S9g's loop name follows the same rule. To change what the caller passed, write its fields through a `mut` reference,
 or return the new value.
 
+A reference parameter or receiver repointed at **storage the callee gives a value** - an assignment `p = x` where `x`
+is a value, not a reference, so the storage is built where it is given (E12c): a constructor call, a literal, a call
+returning a value, a copy - is a compile-time error **whatever reads it after**: the caller still sees what it passed,
+and the callee goes on with a value no one else sees (`if not ok: p = S("fallback")` before a read of `p`, or `p =
+S(); p.xs.Push(1)`). A repoint at storage that **exists** - another reference (`p = q`), a field reached through one
+(`p = p.next!`), a call returning a reference - is a cursor and stays allowed. Write the fields through the reference
+(`p.f = ...`), return the new value, or give the scratch value a local of its own (`t := S(...)`). S9g's loop names
+keep the rule above (a loop name is the body's own local).
+
 **S4.** `assign-stmnt ::= lvalue assign-op expr STMNT_END`, where `lvalue` is a postfix expression
 (§5.1 E1) whose outermost form is a variable read, an index (`E16`), or a member access (`E17`) —
 anything else on the left of an assignment operator is a compile-time error.
