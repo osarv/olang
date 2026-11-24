@@ -3580,7 +3580,10 @@ fn (p mut Program&) typesOverlap(a types.TypeId, b types.TypeId, depth I64) Bool
 }
 
 # whether method f's receiver is written for x (M19, M21): its receiver's type arguments x's, or variables binding them
+# - an array's by its element type, as an instance's by its arguments ("fn (parts Array<String>&) Join" is not
+# Array<String&>'s)
 fn (p mut Program&) recvApplies(f I64, x types.TypeId) Bool {
+    if p.T.KindOf(x) == types.Kind.Array: return p.arrayRecvApplies(f, x)
     if p.T.KindOf(x) != types.Kind.Named or p.T.Items(p.T.Args(x)).Len() == 0: return true
     ps := p.T.Items(p.T.Params(p.Sig(f)))
     if ps.Len() == 0: return true
@@ -3590,6 +3593,15 @@ fn (p mut Program&) recvApplies(f I64, x types.TypeId) Bool {
     n := p.VarCount(owner)
     if n == 0: return p.T.Same(p.T.Plain(r), p.T.Plain(x))
     return p.Matches(r, x, owner, n, true)
+}
+
+fn (p mut Program&) arrayRecvApplies(f I64, x types.TypeId) Bool {
+    r := p.recvOf(f)
+    if p.T.KindOf(r) != types.Kind.Array: return true
+    owner := FnOwner(f)
+    n := p.VarCount(owner)
+    if n == 0: return p.T.Same(p.T.Plain(p.T.Elem(r)), p.T.Plain(p.T.Elem(x)))
+    return p.Matches(p.T.Elem(r), p.T.Elem(x), owner, n, true)
 }
 
 # whether a declared type extends its base (T29f): it takes the base's methods and operators

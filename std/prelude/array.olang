@@ -639,6 +639,51 @@ fn (it mut CycleIter<T>&) Next() T ? Exhausted {
 # building nothing
 fn (a Array<T>&) Cycle() CycleIter<T> { return CycleIter<T>(a) }
 
+# the arrangements of an array's elements in lexicographic order, walked in the array itself - what Permutations gives
+type PermutationIter<T> struct(of mut Array<T>&) {
+    arr mut Array<T>& = of
+    started Bool = false
+}
+
+# the array put in its next arrangement and given as a read-only view of itself; Exhausted.End once the last (the
+# elements in descending order) is past, the array then in ascending order again
+fn (it mut PermutationIter<T>&) Next() Array<T>& ? Exhausted {
+    if not it.started {
+        it.started = true
+        it.arr.Sort(fn(x T, y T) Bool: return x < y)
+        return it.arr
+    }
+    try nextArrangement(it.arr)
+    return it.arr
+}
+
+# rearranges a into the arrangement after it in lexicographic order by "<" - failing with Exhausted.End, a put back in
+# ascending order, where a was the last
+fn nextArrangement<T>(a mut Array<T>&) ? Exhausted {
+    i := a.Len() - 2
+    for i >= 0 and not (a[i] < a[i + 1]): i--
+    if i < 0 {
+        reverseRange(a, 0, a.Len())
+        error Exhausted.End
+    }
+    j := a.Len() - 1
+    for not (a[i] < a[j]): j--
+    sortSwap(a, i, j)
+    reverseRange(a, i + 1, a.Len())
+}
+
+fn reverseRange<T>(a mut Array<T>&, lo I64, hi I64) {
+    for k in range (hi - lo) / 2: sortSwap(a, lo + k, hi - 1 - k)
+}
+
+# every arrangement of the elements, each once, in lexicographic order by "<" (the element type's Less) - "for p in
+# a.Permutations()", C++'s next_permutation as a walk. Equal elements make no repeats: [1, 1, 2] gives 3 arrangements,
+# not 6; an empty array gives one, the empty one. The walk rearranges the array itself and each step is a read-only
+# view of it, valid until the next: nothing is allocated (but the first step's Sort scratch, O(n log n)), each later step
+# costs O(1) amortized and O(n) at worst - n!/(m1!...mk!) steps in all. A walk run to its end leaves the array sorted;
+# one stopped early leaves it at the arrangement it stopped at. Copy a step that has to outlive the next: "p.ToVec()"
+fn (a mut Array<T>&) Permutations() PermutationIter<T> { return PermutationIter<T>(a) }
+
 # the array cut into runs of consecutive elements same holds for, called on each element and the one before it: each run
 # a read-only view of the array's own storage (a slice, E16a), nothing copied - "a.ChunkBy(fn(x, y): return x == y)"
 # gives the runs of equal elements. The views are held in an array that lives where the array does, as Windows' and
