@@ -1,0 +1,92 @@
+# check: run
+# flags: -sanitize
+# D9h: a value handed back as a view of what the arguments reach is the caller's copy only where nothing changes what it
+# views before the caller copies it. A local made from a parameter's storage that the body then changes - given a new
+# value, an element written, through another name for the same storage - is copied where it is made; a body with
+# deferred code that runs after its return takes the value (check's onlyFixed: `defer: c.fixedOut = saved`) hands back
+# no view; a by-value parameter the body writes, or a constructor's field given what a reference parameter names, the
+# same. Each one's old storage is let go of early (O8f) while the value handed back still names it: read after the
+# release under the sanitizer, and by the evaluator, baking and deciding
+type Coll struct() {
+    out Vec<I64>
+    seen Map<I64, I64>
+}
+
+# the local given the field's value, the field then given a new one (its old buffer let go of)
+fn (c mut Coll&) taken(n I64) Vec<I64> {
+    for i in range n: c.out.Push(i)
+    r := c.out
+    c.out = Vec<I64>()
+    return r
+}
+
+# the local given the field's value, an element of the field then written
+fn (c mut Coll&) snapped() Vec<I64> {
+    r := c.out
+    c.out[0] = 99
+    return r
+}
+
+# the field handed back, deferred code then putting back the value it had (a Map's buckets let go of)
+fn (c mut Coll&) gathered(n I64) Map<I64, I64> {
+    saved := c.seen
+    c.seen = Map<I64, I64>()
+    defer: c.seen = saved
+    for i in range n: c.seen.Put(i, i * 2)
+    return c.seen
+}
+
+# the local made from one name for the storage, written through another
+fn picked(a Coll&, b mut Coll&) Vec<I64> {
+    r := a.out
+    b.out[0] = 7
+    return r
+}
+
+# a by-value parameter written in a part after the local took it
+fn written(p Coll) Vec<I64> {
+    r := p.out
+    p.out[0] = 5
+    return r
+}
+
+fn grow(a mut Vec<I64>&) I64 {
+    for i in range 100: a.Push(i)
+    a[0] = 99
+    return a.Len()
+}
+
+# a constructor's field given what a reference parameter names, a later field's initializer then growing it
+type Held struct(a mut Vec<I64>&) {
+    X Vec<I64> = a
+    Y I64 = grow(a)
+}
+
+fn all() I64 {
+    c := Coll()
+    s := 0
+    for k in range 50 {
+        v := c.taken(20 + k % 7)
+        s += v.Len() + v[v.Len() - 1]
+        m := c.gathered(10 + k % 5)
+        for e in m: s += e.Value
+    }
+    c.out.Push(1)
+    w := c.snapped()
+    p := picked(c, c)
+    q := written(c)
+    for k in range 20 {
+        v := Vec<I64>[k, 2, 3]
+        h := Held(v)
+        s += h.X[0] + h.X.Len() + h.Y
+    }
+    return s * 1000 + w[0] * 100 + p[0] + q[0] * 10000000
+}
+
+Baked := all()
+
+assert all() == 81254199, "every value handed back is what it was when the body took it"
+
+fn main() {
+    assert all() == Baked and Baked == 81254199
+}

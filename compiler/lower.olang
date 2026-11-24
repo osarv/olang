@@ -6431,7 +6431,7 @@ fn (ln mut lowering&) viewTemps(u typed.LocalUses&) {
 # the locals handed back holding views (D9h for every value): those whose views check recorded, each one's copies of
 # them left out - its declaration's and its part stores'
 fn (ln mut lowering&) resultViews(u typed.LocalUses&, views I64) {
-    ln.viewWalk().Settle(u, ln.rvl)
+    ln.viewWalk().Settle(u, typed.StillParams(ln.T, ln.B, u), ln.rvl)
     # (only where check recorded the views of every one - a local may hold another's: all copies are kept otherwise)
     for i in range ln.B.Locals.Len() {
         bits := try ln.rvl.Get(i) catch { continue }

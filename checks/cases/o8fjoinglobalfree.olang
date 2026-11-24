@@ -1,0 +1,33 @@
+# check: build
+# flags: -memory
+# also: memory: 1 place lets go of storage in code that runs again - 1 frees it at once, 0 keep it
+# never: a task reads a global
+# O8f condition 3 by the globals a task reads: the ticker task reads 'Quit' and 'Title' - numbers and a text, whose
+# values hold no Log - while the join's code lets go of 'l.last' each turn; no global the task reads reaches a Log's
+# place, so it frees at once (spin's ticker beside the compiler's drive)
+type Log struct() {
+    last String = ""
+}
+
+Quit mut I64 = 0
+Title mut String = ""
+
+fn tick() I64 {
+    n := 0
+    for Quit.AtomicLoad() == 0 {
+        if Title.Len() > 0: n++
+    }
+    return n
+}
+
+fn main() {
+    l := Log()
+    Title = "working"
+    t := 0
+    join {
+        spawn t = tick()
+        for i in range 100: l.last = $i
+        Quit.AtomicStore(1)
+    }
+    assert l.last == "99" and t >= 0
+}

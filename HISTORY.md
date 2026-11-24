@@ -43224,3 +43224,99 @@ host's `openssl` to make a certificate and serve it: under Wine a Windows progra
 which neither waits for a program of the host's nor passes back its status, so the test writes a script that goes to
 the test's directory and writes its status, and waits for that. An HTTPS GET to a public host works from the Windows
 build under Wine, the chain checked against the host's roots.
+
+
+## 2026-11-24: condition 3 by the globals a join's tasks reach (O8f; mine; wt-joinreach)
+
+After wt-cond3 the compiler's own build still froze nothing early: `drive` runs the whole compiler inside a join beside
+spin's ticker task (`spawn spin.Run()`), the ticker reads spin's globals, and condition 3 kept every let-go of a join's
+code wherever any task of the program read any global (`taskReach`, one flag for the program) - 397 rows. Scratch
+build without that join: 540 of 1004 places freed.
+
+The rule now (free.olang `joinReached`, `globReach`; SPEC O8d condition 3): a let-go in join J's code keeps for a
+global only where a task J itself spawns - the bodies its spawns call, recorded by the final walk as `joinTasks`, and
+all they call, make as lambdas or give a slot (`taskBodies`, over the scope pass's callees and effects' calls) - reads
+or stores into a global that may reach the place. effects.olang now records, per body, the globals it reads or stores
+into where they count as ReadsGlobals/RefGlobals/WritesGlobals (`GlobalsOf`, `GlobalAt`). What a global reaches is
+judged by type, as places are keyed by type: its own place; a field's or an element's place whose container type a
+value of the global holds, by value or through a reference (`reachTys`); any place whose value holds, by value, a
+type a reference in the global names (`refTys`, `holdsRefTy` - an owner local, another global, a field holding such a
+value); and every place where the global's type holds a function value, an `any`, a type variable or a type with no
+body. A global that is not `mut` and whose initializer, with all it calls, reaches no global but itself and calls
+through nothing (`initClean`, `onlyGlobal` - the initializer's own store into it is not counted) refers only to static
+data or to what its initializer built, which no other place holds: where its type holds no writable reference nothing
+can change or let go of what it refers to, so it reaches nothing; with a writable reference, only the containers (a
+write through it lets go of a field's place of a type it holds). Why per join and not per program: a let-go in J's code
+runs while J's tasks run; a nested join's tasks run only during that join's code, and a let-go there is recorded for
+every join around it (`go`), so it is judged against each; a task's own let-goes stay `taskLets`' as before.
+
+Tried first: the rule over every task of the program (one place set). It freed only 41 places - other joins' tasks
+(the build's workers) read globals reaching most types; judging each join by its own tasks is what the brief asked
+and what makes drive's join free. Also found: the initializer of every global stores into it and reads it, so
+effects' flags called every initializer unclean - `initClean` reads the globals it reaches instead.
+
+Cases: o8fjoinglobalfree (a ticker reading `Quit` and a text `Title`; main's `l.last` frees at once - kept on master),
+o8fjoinglobalkeeps (the ticker reads a global Log; every Log's `last` keeps, naming "a task reads a global that may
+reach it"). A scratch case with a `String?&` global read by the ticker kept a Box's Log field and its text, as it
+must. Measured on the self-build (`build -memory compiler/olang.olang`): 0 of 1001 places freed at once before, 538 of
+1007 after; peak RSS of that build 2.71 GB before (master's compiler), 2.60 GB after (the compiler built by itself).
+The remaining keeps are views and references kept (126 rows), instances with destructors to run (30) and the rest of
+the -memory report's usual reasons; no let-go keeps for a task's global any more.
+
+Not merged yet: with drive's join freeing, the compiler built by itself crashes in `olang test` of 15 compiler files
+(compiler/needs.olang, lsp, check, ...; -sanitize: "use after scope closed" in Checker.ExprBodyIn). Master's own
+free.olang does the same with drive's join removed by hand (539 places freed), so the bug is an older early-freeing
+one this change exposes, not condition 3's. A bisect over the decisions (each place kept in turn) names one place:
+keeping `Map<I64, mir.ScopeRef>`'s field 2 (`buckets`; lower.olang's `fieldStor` and `regionPar`, let go of by
+Map.Put's first buckets and rehash) alone makes the tests pass. To fix before merging.
+
+## 2026-11-24: a D9h view handed back while the body changes or lets go of what it names (D9h, O8f; mine; wt-joinreach)
+
+The crash above was not in the freeing analysis's places but in D9h. The trace under `-sanitize -debug` stops in
+Checker.ExprBodyIn copying `onlyFixed`'s result, a `Map<NameId, I64>`: `onlyFixed` saves `c.fixedOut`, gives it a new
+map, `defer: c.fixedOut = saved`, and `return c.fixedOut`. Check had recorded the body as handing back a view of its
+receiver's storage (ViewResults), so the return handed `c.fixedOut` back uncopied for the caller to copy - and the
+deferred assignment then ran, letting go of that map's parts (its Vec and Map places are sole), before the caller
+copied what the view named. The same holds without a defer: `r := c.out` then `c.out = Vec<I64>()` (or a growth, or
+`c.out[0] = 99`) then `return r` - `Settle` counted `r` a local handed back holding views of the parameter, so its copy
+was left out though the body changed the storage it viewed; a scratch program printed `99 99` where `1 99` is right
+(an element written after the copy), built and interpreted alike, so it was a meaning bug before it was a freeing one,
+and master's compiler has it too. The bisect's `Map<I64, mir.ScopeRef>.buckets` was a layout accident: keeping it moved
+what the released chunks held. Joinreach only exposed it, by freeing the checker's places for the first time.
+
+Fix, at D9h's two judgements, as SPEC's "where nothing could tell" already required, both in typed.olang so check and
+lowering decide alike: a body with deferred code or a destructor to run as it returns (a Defer, ErrDefer or Drop block,
+a local of a type needing a drop) hands back no view (`NothingAfter`, read by check's settleViews, so ViewResults, the
+free pass, the scope pass and lowering all see the same zero); and a local handed back holding views - a constructor's
+field too - holds views only of by-value parameters holding no reference that the body never writes (`StillParams`,
+the mask both callers pass `Settle`). What a reference parameter names can change under any name for it - a write
+through it, another parameter or a global naming the same storage - while a by-value parameter's storage is the
+callee's own by meaning (D9b: where the caller lends it in place, nothing may change it during the call).
+
+Tried first and replaced: banning such locals in lowering alone, by quietLife over the whole body (`stillWhile`, with
+part stores into the body's own locals quiet). A ban check does not see is a second answer to one question - check's
+CtorViews, which the scope pass places a constructor's instance by, would still say a banned field views its argument
+while lowering copies it - so the rule now has one answer, in typed.olang. A constructor's field viewing a writable reference parameter that a later field's initializer grows was a live
+case of the same bug (scratch, now in d9hstillret: -free late printed the right sum by luck, -sanitize and the evaluator
+stopped on the freed buffer). Also fixed on the way: `PartsLet` put -1 (a type with no place) into its list, which
+walkBufs then indexed - an out-of-range read a -debug compiler stops on (master's too).
+
+Case d9hstillret: a field replaced and an element written after the local took it, a deferred restore of a Map, a write
+through a second reference to the same storage, a by-value parameter written, a constructor field grown by a later
+initializer; under -sanitize, baked and decided by the evaluator.
+
+The second crash (D16d, scope.olang). After the rebase on master the compiler built by itself still crashed, in `olang
+test` of cells (and, with the lowering-only ban, of prompt, jupyter and notebook), always in lowering's viewWalk lambda
+`fn(id) { return lw.ViewsOf(id) }`: its environment pointer read back as -1, the storage refilled by a Map's
+`Array<I64>(n, -1)`. A bisect over the freeing decisions named `Map<I64, mir.ScopeRef>.buckets` again (keeping it moved
+what reused the storage), but the program alone shows it, with early freeing off: `lw := ln.L` (a reference read out of
+the receiver's field, its scope derived from the receiver's, O23a) captured by a lambda returned in a struct - `-free
+late -sanitize` and the evaluator both stop on the call in the caller. scope.fnVal found the lambda's home in that
+derived scope, judged the value to live there (so the return was allowed), but built it with `home if home.Runs() else
+s.here()` - in the block it was made in, which closed at the return. Now it is built where buildSite can build in a
+derived scope (passed, or found at run time, O29) and, where no build there is possible, in its block with that block
+among the scopes it is judged to live in (D16d's "or else the block it is made in", which the code built but did not
+say). Case d16dfieldscope (-sanitize, the evaluator's run). With both fixes the compiler built by itself passes `olang
+test` of needs, lsp, check, cells, prompt, jupyter and notebook. Measured on the self-build after both
+(`build -memory compiler/olang.olang`, the compiler built by itself, rebased on master): 547 of 1008 places free at once,
+461 keep; 144 returns hand back a view; peak RSS 2.68 GB under -memory, 2.66 GB for fixedpoint's plain build.

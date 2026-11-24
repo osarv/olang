@@ -2567,8 +2567,14 @@ it calls (C but its math functions and the runtime's own counts as one), no dest
 is the copy it means where a call in its block may write the global. The same holds for
 the copies a function makes itself where nothing could tell: a value local made from existing storage, a walk's
 element, a temporary lent whole to such a body, and the part stores and fields of a value the function hands back made
-of its parameters' views. A function value, an `any`'s table and an operator's adapter copy at the call, since their
-caller cannot know. A value result owning parts that is no such view - existing storage of another's, a global's - is
+of its parameters' views. Nothing could tell only where nothing changes what the views name before the caller copies
+them: a function with deferred code, or a value with a destructor to run as it returns, hands back no view (`defer:
+c.out = saved` after `return c.out` would replace what the caller is about to copy); and a local handed back holding
+views - a constructor's field among them - holds views only of by-value parameters holding no reference that the
+function never writes: what a reference parameter names may change under any name for it while the local lives (`r :=
+c.out` then `c.out[0] = 9`, or a write through another parameter naming the same storage), so such a local is a copy.
+A function value, an `any`'s table and an
+operator's adapter copy at the call, since their caller cannot know. A value result owning parts that is no such view - existing storage of another's, a global's - is
 copied by the function itself where it hands it back. A result read where it stands that is copied, since something
 the statement does could change what it views, is copied into the innermost block the statement stands in: it is dead
 by the statement's end (O8f). Unobservable in what a program computes: the compile-time evaluator copies every time and
@@ -2685,7 +2691,7 @@ is a top-level `fn`, or reaches itself through a captured reference holding it (
 **D16d (where a lambda lives).** A lambda's value is a reference to what it captured (T21). One capturing no
 reference is built where it lands, as any temporary is (E12c). One capturing references - or values holding them
 (D16c) - lives where they do:
-in their one scope, or - when they live in several - in the innermost block among them, or else the block it is
+in their one scope (one found from a field it was read out of too, O23a), or - when they live in several - in the innermost block among them, or else the block it is
 made in; one capturing what a `Str`'s receiver reaches, where nothing is built (E11c), lives in the block it is made in;
 one **returned where it is made** (`return fn(x I64) I64 { return g(f(x)) }`) is built in the result scope
 instead, each scope it captures from required to outlive that - an obligation of the function (O10b) where it is
@@ -7186,7 +7192,13 @@ holder**:
    go of what it likes; no let-go of it runs in a `join` block's code - all it calls included - whose tasks may reach
    the spawner's storage: one handed a reference, or a by-value argument holding one beside the arrays it owns (a
    by-value argument a task's callee keeps nothing of is the task's own copy), one storing its result into anything
-   but a local, or - any task of the program - reading a global. The store into a spawn's target (P1g), made on the
+   but a local, or - any task of the program - reading or storing into a global that may reach the place: the global's
+   own place; a field's or an element's place of a type a value of the global holds, by value or through a reference;
+   a place whose value holds by value a type a reference in the global names; and every place where the global's type
+   holds a function value, an `any` or a type variable. A global that is not `mut`, whose initializer reads and stores
+   into no global and calls through no function value refers only to static data or what its initializer built, held
+   by no other place: it reaches no place where its type holds no writable reference, else only the field and element
+   places of the types it holds. The store into a spawn's target (P1g), made on the
    task's thread, is a let-go of the target's own place there; what the task built for the target, in a stand-in the
    join's wait hands to the spawner (P2), is the spawner's from the wait on, so the places that value holds keep only
    where the join's own code lets one go while its tasks run - unless it is built where no wait hands it over: in a

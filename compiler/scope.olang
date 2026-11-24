@@ -10872,7 +10872,10 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
             }
             # what captured a Str's receiver's parts lives in the block it is made in - a task's, in its join block (D16e)
             if s.noBuildTerm(home) { home = d if spawned and d.Runs() else s.here() }
-            s.build(site, home if home.Runs() else s.here())
+            # (built where its captures live - a derived scope too, passed or found at run time (O23a, O29); where no
+            # build there is possible, in this block, which it then lives no longer than)
+            at := home if home.Runs() or s.finds(home) or s.capPassed(home) or s.derivedBuilt(home) else s.here()
+            s.build(site, at)
             s.plan.Pass(site, scopes.ToArray())
             # D16d: it lives no longer than any of its captures - one not shown to outlive the innermost found is a term
             # of its own beside it, so a slot it is put into is judged against each (a closure capturing two parameters'
@@ -10881,6 +10884,7 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
             for t in terms {
                 if t != home and s.order(t, home) != Holds: whole = s.setOf(whole, t)
             }
+            if at != home: whole = s.setOf(whole, at)
             return Val.existing(whole)
         }
         case typed.FnVal.Adapter(cb, r, site) {

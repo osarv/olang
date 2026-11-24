@@ -315,6 +315,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   wt-fieldborrow: an 8 MB array copied per method call when the program had a `mut` global of the type).
   A value result is never handed back as a view of what a `mut` reference names (2026-11-24, wt-vecclear: `taken := a.Outs`
   then `a.Outs.Clear()` returned a view whose elements Clear had ended - typed.ViewWalk.refRoots).
+  A view is handed back only where nothing changes it before the caller copies: a body with deferred code or a
+  destructor to run hands back none (`typed.NothingAfter`, check's settleViews), and a local handed back holding views
+  (a constructor's field too) views only by-value parameters holding no reference that the body never writes
+  (`typed.StillParams`, Settle's mask, the same for check and lowering); d9hstillret (wt-joinreach).
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31: "knowing whether or not a
   function you pass things into mutates what you passed is valuable", and "globals shouldn't be mut unless you say
   so").** `mut T&` writable, `T&` read-only, at every level, shallow. Locals and parameters are always assignable
@@ -560,7 +564,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   read-only, references still naming their instance, value arrays borrowed); types from the expected function type
   (D16a) or the body (D16b). A function value is `{code, environment}`. `(args)` after any postfix expression calls
   (E13b). `spawn fn() { }` runs a lambda as a task (D16e). A lambda assigned to a variable it captures is an error (D16c,
-  2026-11-15, the AI study: it held the earlier value); recursion is a top-level `fn` or a captured holder.
+  2026-11-15, the AI study: it held the earlier value); recursion is a top-level `fn` or a captured holder. A lambda
+  lives where its captures do (D16d) - built in a derived scope too (a reference read out of a receiver's field, O23a,
+  passed or found at run time); where it cannot be built there it is built in its block and judged to live no longer
+  than it (scope.fnVal; d16dfieldscope, wt-joinreach).
 - **No shadowing (D3a, the user's call)**, types included: no local or parameter named like a global, function, build
   constant or type; a type and a function or global of one module may not share a name (D2).
 - **`:=` declares any settled expression's type (D15, the user's call).** `null` and a call giving nothing are errors.
@@ -1013,7 +1020,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   Str, Eq, Hash among it, a spawn's target) gives a value or lets go of keeps, and a let-go in a join's code keeps
   where that join's tasks are handed a reference (a by-value argument its callee keeps nothing of is the task's own
   copy, made in the join's arena - before, in main's frame, ~63 B a spawn for the run) or store into anything but a
-  local, or any task reads a global; a lambda task, one calling through a function value or an `any`, and C given a
+  local, or a task of that join reads or stores into a global that may reach the place (by type: the global's own
+  place, the containers its value holds by value or through a reference, the places holding by value a type a
+  reference in it names; a non-`mut` global whose initializer reaches no other global reaches nothing where its
+  references are read-only - 2026-11-24, mine); a lambda task, one calling through a function value or an `any`, and C given a
   function value keep everything, as all tasks did. **A joined task's results handed to the spawner at the wait (the
   user's call, 2026-11-23, option (c) of docs/freeing.md 2.4's question 1):** the regions a task makes in a stand-in go
   with it as the wait folds it back (runtime.ll's kids_move; a part's too, folded at its root's close), and a region
@@ -1044,7 +1054,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   export fn keeps everything; `os.RunOnStack`'s function is a call (`f()`). A lambda's call through what it captured (its
   maker's parameter or capture, never assigned) is judged where the lambda is written as an argument, as the maker's
   call through it; functions named as values and lambdas are no task roots (the walks judge every call through a
-  value). The compiler still keeps everything: spin's ticker task reads globals beside `drive`'s join.
+  value). The compiler's self-build frees 538 of its 1007 places at once: spin's ticker task beside `drive`'s join
+  reads only numbers, a text and constant text.
   A let-go the compiler does not follow is a gap:
   `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. **Captures and local copies
   (2026-11-21, mine; docs/freeing.md):** a value a lambda captures is the lambda's own copy, its parts split, made in

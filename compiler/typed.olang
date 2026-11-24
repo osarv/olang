@@ -427,6 +427,20 @@ type ViewWalk struct(T types.Table&, B Body&, Elig I64, Views fn&(id BodyId) I64
     T, B, Elig, Views, Held
 }
 
+# whether nothing runs in body b after a return takes its value - no deferred code, no destructor (a by-value holder's
+# drop, a local holding a value with one to run) - so a view it hands back (D9h) names what it named when the return
+# took it: a body where something may run then hands back no view (`defer: c.out = saved` would change or let go of
+# the `c.out` a `return c.out` hands back before its caller copies it)
+fn NothingAfter(t types.Table&, b Body&) Bool {
+    for bi in b.Blocks {
+        if bi.Kind == BlockKind.Defer or bi.Kind == BlockKind.ErrDefer or bi.Kind == BlockKind.Drop: return false
+    }
+    for l in b.Locals {
+        if t.NeedsDrop(l.Ty): return false
+    }
+    return true
+}
+
 # the bits a function's view facts use: one per parameter below ViewBits, ViewOther for a view of anything else (a
 # tail call's argument that is no parameter's) - its result copied at every call, never read in place
 # B3i: the name of the whole-program fact lowering's D9h judgements read the program's mutable globals through
@@ -576,7 +590,7 @@ fn (w ViewWalk&) localRoots(id LocalId) I64 {
 # left out where the body hands it back (ElidedCopy) - or values of their own: put in out, which the walk's Held reads
 # (so a local may hold another's views). One function for check, which records the bits at its returns, and
 # lowering, which leaves the copies out where they were recorded
-fn (w ViewWalk&) Settle(u LocalUses&, out mut Map<I64, I64>&) {
+fn (w ViewWalk&) Settle(u LocalUses&, still I64, out mut Map<I64, I64>&) {
     ctor := w.B.Of == BodyOf.Ctor
     for i in range w.B.Locals.Len() {
         if not w.resultLocal(u, i, ctor): continue
@@ -584,8 +598,25 @@ fn (w ViewWalk&) Settle(u LocalUses&, out mut Map<I64, I64>&) {
         for k in range u.StoreAt.Len() {
             if u.StoreAt[k] == i: bits |= w.copyViews(u.StoreX[k])
         }
-        if bits > 0: out.Put(i, bits)
+        if bits > 0 and (bits & still) == bits: out.Put(i, bits)
     }
+}
+
+# the parameters whose arguments a local handed back - a constructor's field among them - may hold views of (Settle's
+# still): by-value ones holding no reference that the body never writes, whose storage is the callee's own by meaning,
+# changed by nothing while the body runs (D9b). What a reference parameter names, or a reference a parameter holds, may
+# change under any name for it while the local lives - a write through it (`r := c.out` then `c.out = Vec<I64>()`, the
+# old buffer let go of before the caller copies `r`), another parameter or a global naming the same storage - so a
+# local holding such views copies
+fn StillParams(t mut types.Table&, b Body&, u LocalUses&) I64 {
+    m I64 = 0
+    for k in range b.Params.Len().Min(ViewBits) {
+        p := I64(b.Params[k])
+        ty := b.Locals[p].Ty
+        if t.IsRef(ty) or t.SharesRefs(ty) or u.WrOther[p] or u.WrScalar[p] or u.Whole[p] or p in u.StoreAt or p in u.LendAt: continue
+        m |= I64(1) << k
+    }
+    return m
 }
 
 fn (w ViewWalk&) resultLocal(u LocalUses&, i I64, ctor Bool) Bool {
