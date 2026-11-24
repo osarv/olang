@@ -57,9 +57,21 @@ clipboard ([its README](../examples/windows/README.md)). `make windows-example` 
   its status: Windows never puts another program in a process's place. `os.ReadLink` fails with `Failed`. A temporary
   directory (`os.MkTemp`) is made in `TMPDIR`, else `TEMP` or `TMP`.
 - `time.LocalOffset` reads Windows' own time zone (`TZ` as Windows reads it, not the POSIX zone names).
-- Not on Windows yet: `net`, `tls` and `zmtp` (sockets: mingw-w64 has no `sys/socket.h`; Winsock is to come), `prop`
-  (it runs each property in a forked process), `ffi` (no libffi for Windows here). A program importing them does not
-  build for Windows.
+- `net` is Winsock's (ws2_32): the same API, its calls declared in net itself (mingw-w64's `winsock2.h` brings the
+  whole of `windows.h`). A SOCKET is held in the I32 a descriptor is elsewhere (Windows keeps a handle's value within
+  32 bits). Winsock is started (WSAStartup) for each socket and lookup - it counts its callers, and the process's end
+  gives it back. `Readable` is WSAPoll; Winsock's error codes are read into the same `net.Error`s. A listener does not
+  set SO_REUSEADDR, which on Windows lets a second socket take the port; Windows lets an address be listened at again
+  without it. `zmtp` works over it unchanged.
+- `tls` is Schannel, Windows' own TLS (secur32 and crypt32): nothing to install or ship beside the program. The
+  server's chain is built by crypt32 from what it sent and checked by the SSL policy - a trusted root, the dates, the
+  usage and the host's name; with `ca` named, the chain must end at one of that file's certificates and Windows' roots do
+  not count, as OpenSSL's file does on Linux. A pin is compared with std/sha256's digest of the certificate. The session
+  runs over a duplicate of the TCP socket (WSADuplicateSocket), and the destructor sends a close_notify. SSPI's
+  structures are built as bytes, their pointers the addresses of arrays tls holds (memcpy hands back its first
+  argument's address, X22).
+- Not on Windows yet: `prop` (it runs each property in a forked process), `ffi` (no libffi for Windows here). A program
+  importing them does not build for Windows.
 
 ## The runtime on Windows
 
@@ -87,11 +99,12 @@ what it asked of glibc:
 
 `make windows-test` builds the corpus's, std's and the prelude's tests for Windows and runs them under Wine (it says it
 skipped where Wine or mingw-w64 is missing). `WINDOWS_SKIP` leaves out what has no Windows form: std/os's own tests (they
-run `sh`, `printf` and the like, and open `/dev/ptmx`), std/time's (POSIX zone names), `net`, `tls`, `zmtp`, `prop` and
-`ffi` (above), tests/canon (`linux/gpio.h`), tests/pty (`pty.h`) and tests/cimport (mingw-w64's `snprintf` is an inline
+run `sh`, `printf` and the like, and open `/dev/ptmx`), std/time's (POSIX zone names), `prop` and `ffi` (above), tests/canon (`linux/gpio.h`), tests/pty (`pty.h`) and tests/cimport (mingw-w64's `snprintf` is an inline
 function of a variable number of arguments, which no C import reaches). `CHECKS_TARGET=x86_64-windows olang test
 checks/checks.olang` builds the checks' cases for Windows and runs the run cases under Wine; `WindowsSkip` there
-names the nine that reach glibc's own, `/proc`, C's printf family or std/net.
+names the eight that reach glibc's own, `/proc` or C's printf family. std/tls's test runs the host's `openssl` (a
+certificate made, `s_server` serving it) through Wine's `start /unix`, from a script that writes its status: Wine
+neither waits for a program of the host's nor passes its status back.
 
 `-sanitize`, `-race` and `-profile` are not built for Windows yet.
 

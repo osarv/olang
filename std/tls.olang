@@ -1,13 +1,16 @@
-# tls - a TLS client connection over a TCP one, through OpenSSL's header imported (§11 X17) with the library linked
-# (X9). Opt-in: only a program importing "std/tls" links libssl; net and the rest of std do not.
+# tls - a TLS client connection over a TCP one: on Linux and Android through OpenSSL's header imported (§11 X17) with
+# the library linked (X9); on Windows (B12f) through Schannel, the system's own TLS (secur32 and crypt32, declared here
+# by hand), so a Windows program needs no library beside it. Opt-in: only a program importing "std/tls" links them; net
+# and the rest of std do not.
 #
 # A Conn is verified: the server's certificate chain must lead to a certificate the system trusts (OpenSSL's default
-# store, or the one file given as "ca") and must name the host dialed, or the dial fails with Verify. There is no way to
-# turn the checks off - except by pinning: a dial given the SHA-256 fingerprint of the peer's certificate (for a device
-# on a LAN with a self-signed one) replaces the chain and name checks with comparing that certificate's DER digest to the
-# pin, and fails with Pin when they differ. No pin, no change. The one other way to skip the checks is DialToLearn, for
-# trust on first use: it verifies nothing, so its Conn is unauthenticated and only good for reading Fingerprint(). A Conn shuts down its TLS session and closes its socket where its holder lets go (a destructor,
-# C9, O15), as net.Conn does.
+# store or Windows' root store, or the one file given as "ca") and must name the host dialed, or the dial fails with
+# Verify. There is no way to turn the checks off - except by pinning: a dial given the SHA-256 fingerprint of the peer's
+# certificate (for a device on a LAN with a self-signed one) replaces the chain and name checks with comparing that
+# certificate's DER digest to the pin, and fails with Pin when they differ. No pin, no change. The one other way to skip
+# the checks is DialToLearn, for trust on first use: it verifies nothing, so its Conn is unauthenticated and only good
+# for reading Fingerprint(). A Conn shuts down its TLS session and closes its socket where its holder lets go (a
+# destructor, C9, O15), as net.Conn does. Reading and writing change the session, so both take the Conn writably.
 #
 # Imported with `import "std/tls"`.
 
@@ -15,25 +18,12 @@ import "net"
 import "os"
 import "time"
 
-import unistd "unistd.h"
-import sock "sys/socket.h"
-import ssl "openssl/ssl.h" link "ssl"
-import ossl "openssl/x509_vfy.h" link "crypto"
-
-sslCtrlSetTlsextHostname I32 = 55
-solSocket I32 = 1
-soRcvtimeo I32 = 20
-soSndtimeo I32 = 21
-sslErrorSsl I32 = 1
-sslErrorWantRead I32 = 2
-sslErrorWantWrite I32 = 3
-sslErrorSyscall I32 = 5
-sslErrorZeroReturn I32 = 6
-
-# why a TLS call failed (a dial's TCP failures are net.Error's). Pin: the peer's certificate is not the one pinned, or the pin is not 32 bytes of hex; Verify: the server's certificate is not one to trust - the text says why OpenSSL refused it (an untrusted issuer, a
-# name that is not the host dialed, an expired date); Handshake: the server did not speak TLS, or no protocol and cipher
-# both sides accept; Closed: the other side ended the session, so there is nothing more to read (a clean close_notify,
-# or a connection cut off); Timeout: a timeout set by SetTimeout passed; Failed: any other reason, or an unreadable "ca"
+# why a TLS call failed (a dial's TCP failures are net.Error's). Pin: the peer's certificate is not the one pinned, or
+# the pin is not 32 bytes of hex; Verify: the server's certificate is not one to trust - the text says why it was
+# refused (an untrusted issuer, a name that is not the host dialed, an expired date); Handshake: the server did not
+# speak TLS, or no protocol and cipher both sides accept; Closed: the other side ended the session, so there is nothing
+# more to read (a clean close_notify, or a connection cut off); Timeout: a timeout set by SetTimeout passed; Failed:
+# any other reason, or an unreadable "ca"
 type Error error {
     Verify(why String)
     Pin
@@ -41,23 +31,6 @@ type Error error {
     Closed
     Timeout
     Failed
-}
-
-# a TLS session as a stream of bytes, to the server dialed, until it is destroyed (where its holder lets go)
-type Conn unique struct(fd I32, session ssl.SSL&, ctx ssl.SSL_CTX&) {
-    fd, session, ctx
-} destruct {
-    ssl.SSL_shutdown(session)
-    ssl.SSL_free(session)
-    ssl.SSL_CTX_free(ctx)
-    unistd.close(fd)
-}
-
-# the text OpenSSL gives for the verification failure of "session", "" when the certificate passed
-fn verifyFailure(session ssl.SSL&) String {
-    code := ssl.SSL_get_verify_result(session)
-    if code == 0: return ""
-    return String.FromC(ossl.X509_verify_cert_error_string(code)!, 128)
 }
 
 # the value of the hex digit c, -1 when it is not one
@@ -89,59 +62,6 @@ fn parsePin(pin String&) Array<U8> ? Error.Pin {
     return out
 }
 
-# whether the peer's certificate has the SHA-256 (of its DER form) "want"
-fn pinMatches(session ssl.SSL&, want Array<U8>&) Bool {
-    cert := ssl.SSL_get1_peer_certificate(session)
-    if cert == null: return false
-    got := Array<U8>(32)
-    len := Array<U32>(1)
-    ok := ssl.X509_digest(cert, ssl.EVP_sha256(), got, len) == 1 and len[0] == 32
-    ssl.X509_free(cert)
-    if not ok: return false
-    diff := 0
-    for i in range 32: diff |= I64(got[i] ^ want[i])
-    return diff == 0
-}
-
-# a context trusting "ca" where that names a file and the system's store where it is empty - or, for a pinned dial, one
-# that checks no chain (the pin is the check)
-fn newContext(ca String&, pinned Bool) ssl.SSL_CTX& ? Error {
-    ctx := ssl.SSL_CTX_new(ssl.TLS_client_method())
-    if ctx == null: error Error.Failed
-    if pinned: return ctx
-    ok := ssl.SSL_CTX_load_verify_file(ctx, ca.ToC()) if ca != "" else ssl.SSL_CTX_set_default_verify_paths(ctx)
-    if ok != 1 {
-        ssl.SSL_CTX_free(ctx)
-        error Error.Failed
-    }
-    return ctx
-}
-
-# the handshake over the socket "fd" to "host" - the name sent for the server to choose its certificate by, and the
-# name that certificate must carry - and the session it made; "ctx" and "fd" are let go of here when the session does not come
-fn newSession(ctx ssl.SSL_CTX&, fd I32, host String&, pin Array<U8>&, learn Bool = false) ssl.SSL& ? Error {
-    session := ssl.SSL_new(ctx)
-    if session == null {
-        ssl.SSL_CTX_free(ctx)
-        unistd.close(fd)
-        error Error.Failed
-    }
-    ssl.SSL_set_fd(session, fd)
-    ssl.SSL_ctrl(session, sslCtrlSetTlsextHostname, 0, host.ToC())
-    pinned := pin.Len() > 0
-    unchecked := pinned or learn
-    connected := (unchecked or ssl.SSL_set1_host(session, host.ToC()) == 1) and ssl.SSL_connect(session) == 1
-    why := "" if unchecked else verifyFailure(session)
-    mismatch := connected and pinned and not pinMatches(session, pin)
-    if connected and why == "" and not mismatch: return session
-    ssl.SSL_free(session)
-    ssl.SSL_CTX_free(ctx)
-    unistd.close(fd)
-    if mismatch: error Error.Pin
-    if why != "": error Error.Verify(why)
-    error Error.Handshake
-}
-
 # a TLS session to "host" at "port", the server's certificate checked against the system's trusted ones - or the file
 # "ca", a PEM bundle, where one is named - and against the name "host"; fails with Verify where it does not pass.
 # "pin", where given, is the SHA-256 fingerprint of the server's certificate (64 hex digits, ':' between bytes allowed,
@@ -150,10 +70,7 @@ fn newSession(ctx ssl.SSL_CTX&, fd I32, host String&, pin Array<U8>&, learn Bool
 fn Conn.Dial(host String&, port U16, ca String& = "", pin String& = "") Conn ? Error, net.Error {
     want := try parsePin(pin) if pin != "" else Array<U8>(0)
     tcp := try net.Conn.Dial(try net.Addr.Resolve($host + ":" + $port))
-    ctx := try newContext(ca, pin != "")
-    fd := unistd.dup(tcp.Fd())
-    session := try newSession(ctx, fd, host, want)
-    return Conn(fd, session, ctx)
+    return try Conn.over(tcp, host, ca, want, false)
 }
 
 # a TLS session to "host" at "port" with NO verification at all - no chain, no host name, no pin - for trust on first
@@ -162,22 +79,22 @@ fn Conn.Dial(host String&, port U16, ca String& = "", pin String& = "") Conn ? E
 # secret over it and trust nothing it says; it is good for reading Fingerprint() and nothing else
 fn Conn.DialToLearn(host String&, port I64) Conn ? Error, net.Error {
     tcp := try net.Conn.Dial(try net.Addr.Resolve($host + ":" + $port))
-    ctx := try newContext("", true)
-    fd := unistd.dup(tcp.Fd())
-    session := try newSession(ctx, fd, host, Array<U8>(0), true)
-    return Conn(fd, session, ctx)
+    return try Conn.over(tcp, host, "", Array<U8>(0), true)
+}
+
+# whether "got", a certificate's SHA-256, is "want" - compared in time that does not depend on where they differ
+fn sameDigest(got Array<U8>&, want Array<U8>&) Bool {
+    if got.Len() != 32 or want.Len() != 32: return false
+    diff := 0
+    for i in range 32: diff |= I64(got[i] ^ want[i])
+    return diff == 0
 }
 
 # the SHA-256 of the peer's certificate (over its DER form) as 64 lowercase hex digits - the form Dial's "pin" takes;
 # "" when the peer sent no certificate
 fn (c Conn&) Fingerprint() String {
-    cert := ssl.SSL_get1_peer_certificate(c.session)
-    if cert == null: return ""
-    got := Array<U8>(32)
-    len := Array<U32>(1)
-    ok := ssl.X509_digest(cert, ssl.EVP_sha256(), got, len) == 1 and len[0] == 32
-    ssl.X509_free(cert)
-    if not ok: return ""
+    got := c.peerDigest()
+    if got.Len() != 32: return ""
     digits := "0123456789abcdef"
     out := Array<Char>(64)
     for i in range 32 {
@@ -187,56 +104,645 @@ fn (c Conn&) Fingerprint() String {
     return String(out)
 }
 
-# the Error for a read or write that returned "n" <= 0: what SSL_get_error says of it. A close_notify, and a connection
-# cut off without one, are the end of the stream; "waiting" for more on a socket with a timeout is the timeout passing
-fn failure(session ssl.SSL&, n I32) ? Error {
-    match ssl.SSL_get_error(session, n) {
-        case sslErrorZeroReturn { error Error.Closed }
-        case sslErrorSyscall {
-            if n == 0: error Error.Closed
-            error Error.Failed
-        }
-        case sslErrorWantRead, sslErrorWantWrite { error Error.Timeout }
-        case _ { error Error.Failed }
-    }
-}
-
-# what arrives next, up to buf's length, read into the front of buf and handed back as that front - a borrow of buf -
-# waiting until something does. Fails with Closed once the other side has ended the session and everything it sent
-# has been read, Timeout when a timeout set by SetTimeout passes first
-fn (c Conn&) Read(buf mut Array<U8>&) Array<U8>& ? Error {
-    if buf.Len() == 0: return buf[:0]
-    n := ssl.SSL_read(c.session, buf, I32(buf.Len().Min(0x7FFFFFFF)))
-    if n <= 0: try failure(c.session, n)
-    return buf[:I64(n)]
-}
-
-# all of data written, however many records it takes - failing with Closed when the other side has gone, Timeout when
-# a timeout set by SetTimeout passes
-fn (c Conn&) Write(data Array<U8>&) ? Error {
-    sent I64 = 0
-    for sent < data.Len() {
-        n := ssl.SSL_write(c.session, data[sent:], I32((data.Len() - sent).Min(0x7FFFFFFF)))
-        if n <= 0: try failure(c.session, n)
-        sent += I64(n)
-    }
-}
-
-# a Read or Write waiting longer than d fails with Timeout from now on; 0 waits for ever (the default)
-fn (c Conn&) SetTimeout(d time.Duration) {
-    tv := Array<U8>(16)
-    sec := I64(d) / 1000000000
-    usec := I64(d) % 1000000000 / 1000
-    for i in range 8 {
-        tv[i] = U8((sec >> (8 * i)) & 0xFF)
-        tv[8 + i] = U8((usec >> (8 * i)) & 0xFF)
-    }
-    sock.setsockopt(c.fd, solSocket, soRcvtimeo, tv, 16)
-    sock.setsockopt(c.fd, solSocket, soSndtimeo, tv, 16)
-}
-
 # the descriptor of the socket under the session
 fn (c Conn&) Fd() I32 { return c.fd }
+
+if TargetOs != "windows" {
+    import unistd "unistd.h"
+    import sock "sys/socket.h"
+    import ssl "openssl/ssl.h" link "ssl"
+    import ossl "openssl/x509_vfy.h" link "crypto"
+
+    sslCtrlSetTlsextHostname I32 = 55
+    solSocket I32 = 1
+    soRcvtimeo I32 = 20
+    soSndtimeo I32 = 21
+    sslErrorSsl I32 = 1
+    sslErrorWantRead I32 = 2
+    sslErrorWantWrite I32 = 3
+    sslErrorSyscall I32 = 5
+    sslErrorZeroReturn I32 = 6
+
+    # a TLS session as a stream of bytes, to the server dialed, until it is destroyed (where its holder lets go)
+    type Conn unique struct(fd I32, session ssl.SSL&, ctx ssl.SSL_CTX&) {
+        fd, session, ctx
+    } destruct {
+        ssl.SSL_shutdown(session)
+        ssl.SSL_free(session)
+        ssl.SSL_CTX_free(ctx)
+        unistd.close(fd)
+    }
+
+    # the text OpenSSL gives for the verification failure of "session", "" when the certificate passed
+    fn verifyFailure(session ssl.SSL&) String {
+        code := ssl.SSL_get_verify_result(session)
+        if code == 0: return ""
+        return String.FromC(ossl.X509_verify_cert_error_string(code)!, 128)
+    }
+
+    # the SHA-256 (of its DER form) of the peer's certificate - empty when there is none
+    fn digestOf(session ssl.SSL&) Array<U8> {
+        cert := ssl.SSL_get1_peer_certificate(session)
+        if cert == null: return Array<U8>(0)
+        got := Array<U8>(32)
+        len := Array<U32>(1)
+        ok := ssl.X509_digest(cert, ssl.EVP_sha256(), got, len) == 1 and len[0] == 32
+        ssl.X509_free(cert)
+        if not ok: return Array<U8>(0)
+        return got
+    }
+
+    fn (c Conn&) peerDigest() Array<U8> { return digestOf(c.session) }
+
+    # a context trusting "ca" where that names a file and the system's store where it is empty - or, for a pinned dial,
+    # one that checks no chain (the pin is the check)
+    fn newContext(ca String&, pinned Bool) ssl.SSL_CTX& ? Error {
+        ctx := ssl.SSL_CTX_new(ssl.TLS_client_method())
+        if ctx == null: error Error.Failed
+        if pinned: return ctx
+        ok := ssl.SSL_CTX_load_verify_file(ctx, ca.ToC()) if ca != "" else ssl.SSL_CTX_set_default_verify_paths(ctx)
+        if ok != 1 {
+            ssl.SSL_CTX_free(ctx)
+            error Error.Failed
+        }
+        return ctx
+    }
+
+    # the handshake over the socket "fd" to "host" - the name sent for the server to choose its certificate by, and the
+    # name that certificate must carry - and the session it made; "ctx" and "fd" are let go of here when the session
+    # does not come
+    fn newSession(ctx ssl.SSL_CTX&, fd I32, host String&, pin Array<U8>&, learn Bool) ssl.SSL& ? Error {
+        session := ssl.SSL_new(ctx)
+        if session == null {
+            ssl.SSL_CTX_free(ctx)
+            unistd.close(fd)
+            error Error.Failed
+        }
+        ssl.SSL_set_fd(session, fd)
+        ssl.SSL_ctrl(session, sslCtrlSetTlsextHostname, 0, host.ToC())
+        pinned := pin.Len() > 0
+        unchecked := pinned or learn
+        connected := (unchecked or ssl.SSL_set1_host(session, host.ToC()) == 1) and ssl.SSL_connect(session) == 1
+        why := "" if unchecked else verifyFailure(session)
+        mismatch := connected and pinned and not sameDigest(digestOf(session), pin)
+        if connected and why == "" and not mismatch: return session
+        ssl.SSL_free(session)
+        ssl.SSL_CTX_free(ctx)
+        unistd.close(fd)
+        if mismatch: error Error.Pin
+        if why != "": error Error.Verify(why)
+        error Error.Handshake
+    }
+
+    # the session over a copy of tcp's socket (tcp closes its own where its holder lets go)
+    fn Conn.over(tcp net.Conn&, host String&, ca String&, pin Array<U8>&, learn Bool) Conn ? Error {
+        ctx := try newContext(ca, pin.Len() > 0 or learn)
+        fd := unistd.dup(tcp.Fd())
+        session := try newSession(ctx, fd, host, pin, learn)
+        return Conn(fd, session, ctx)
+    }
+
+    # the Error for a read or write that returned "n" <= 0: what SSL_get_error says of it. A close_notify, and a
+    # connection cut off without one, are the end of the stream; "waiting" for more on a socket with a timeout is the
+    # timeout passing
+    fn failure(session ssl.SSL&, n I32) ? Error {
+        match ssl.SSL_get_error(session, n) {
+            case sslErrorZeroReturn { error Error.Closed }
+            case sslErrorSyscall {
+                if n == 0: error Error.Closed
+                error Error.Failed
+            }
+            case sslErrorWantRead, sslErrorWantWrite { error Error.Timeout }
+            case _ { error Error.Failed }
+        }
+    }
+
+    # what arrives next, up to buf's length, read into the front of buf and handed back as that front - a borrow of
+    # buf - waiting until something does. Fails with Closed once the other side has ended the session and everything it
+    # sent has been read, Timeout when a timeout set by SetTimeout passes first
+    fn (c mut Conn&) Read(buf mut Array<U8>&) Array<U8>& ? Error {
+        if buf.Len() == 0: return buf[:0]
+        n := ssl.SSL_read(c.session, buf, I32(buf.Len().Min(0x7FFFFFFF)))
+        if n <= 0: try failure(c.session, n)
+        return buf[:I64(n)]
+    }
+
+    # all of data written, however many records it takes - failing with Closed when the other side has gone, Timeout
+    # when a timeout set by SetTimeout passes
+    fn (c mut Conn&) Write(data Array<U8>&) ? Error {
+        sent I64 = 0
+        for sent < data.Len() {
+            n := ssl.SSL_write(c.session, data[sent:], I32((data.Len() - sent).Min(0x7FFFFFFF)))
+            if n <= 0: try failure(c.session, n)
+            sent += I64(n)
+        }
+    }
+
+    # a Read or Write waiting longer than d fails with Timeout from now on; 0 waits for ever (the default)
+    fn (c Conn&) SetTimeout(d time.Duration) {
+        tv := Array<U8>(16)
+        sec := I64(d) / 1000000000
+        usec := I64(d) % 1000000000 / 1000
+        for i in range 8 {
+            tv[i] = U8((sec >> (8 * i)) & 0xFF)
+            tv[8 + i] = U8((usec >> (8 * i)) & 0xFF)
+        }
+        sock.setsockopt(c.fd, solSocket, soRcvtimeo, tv, 16)
+        sock.setsockopt(c.fd, solSocket, soSndtimeo, tv, 16)
+    }
+}
+
+if TargetOs == "windows" {
+    import "base64"
+    import "sha256"
+    import cstring "string.h"
+
+    # B12f: Schannel through SSPI, Winsock's sockets as std/net's, crypt32 for the certificate checks. SSPI's structures
+    # are built as bytes (SecBuffer: a U32 length, a U32 kind, a pointer; SecBufferDesc: a U32 version, a U32 count, a
+    # pointer to the SecBuffers), the pointers in them the storage addresses of arrays held here (addressOf), and what
+    # C hands back (a token, a certificate, a chain) copied out by memcpy (X22)
+    extern link "kernel32" {
+        fn GetCurrentProcessId() U32
+    }
+
+    extern link "ws2_32" {
+        fn WSAGetLastError() I32
+        fn WSADuplicateSocketW(s U64, pid U32, info mut Array<U8>&) I32
+        fn WSASocketW(af I32, kind I32, protocol I32, info CVoid?&, group U32, flags U32) U64
+        fn closesocket(s U64) I32
+        fn recv(s U64, buf mut Array<U8>&, len I32, flags I32) I32
+        fn send(s U64, buf Array<U8>&, len I32, flags I32) I32
+        fn setsockopt(s U64, level I32, name I32, value Array<U8>&, len I32) I32
+    }
+
+    extern link "secur32" {
+        fn AcquireCredentialsHandleA(principal CVoid?&, package Array<U8>&, use U32, logon CVoid?&, auth Array<U8>&
+            getKey CVoid?&, arg CVoid?&, cred mut Array<U64>&, expiry mut Array<I64>&) U32
+        fn FreeCredentialsHandle(cred Array<U64>&) U32
+        fn InitializeSecurityContextA(cred Array<U64>&, prev CVoid?&, target Array<U8>&, req U32, reserved U32, rep U32
+            input CVoid?&, reserved2 U32, next mut Array<U64>&, output mut Array<U8>&, attrs mut Array<U32>&
+            expiry mut Array<I64>&) U32
+        fn DeleteSecurityContext(ctx Array<U64>&) U32
+        fn FreeContextBuffer(p CVoid?&) U32
+        fn QueryContextAttributesA(ctx Array<U64>&, attr U32, out mut CVoid?&) U32
+        fn EncryptMessage(ctx Array<U64>&, qop U32, desc mut Array<U8>&, seq U32) U32
+        fn DecryptMessage(ctx Array<U64>&, desc mut Array<U8>&, seq U32, qop CVoid?&) U32
+        fn ApplyControlToken(ctx Array<U64>&, input mut Array<U8>&) U32
+    }
+
+    extern link "crypt32" {
+        fn CertFreeCertificateContext(cert CVoid?&) I32
+        fn CertOpenStore(provider U64, encoding U32, prov U64, flags U32, para CVoid?&) CVoid?&
+        fn CertCloseStore(store CVoid?&, flags U32) I32
+        fn CertEnumCertificatesInStore(store CVoid?&, prev CVoid?&) CVoid?&
+        fn CertAddCertificateContextToStore(store CVoid?&, cert CVoid?&, how U32, added CVoid?&) I32
+        fn CertCreateCertificateContext(encoding U32, der Array<U8>&, len U32) CVoid?&
+        fn CertGetCertificateChain(engine CVoid?&, cert CVoid?&, at CVoid?&, store CVoid?&, para Array<U8>&, flags U32
+            reserved CVoid?&, chain mut Array<CVoid?&>&) I32
+        fn CertFreeCertificateChain(chain CVoid?&)
+        fn CertVerifyCertificateChainPolicy(policy U64, chain CVoid?&, para Array<U8>&, status mut Array<U8>&) I32
+    }
+
+    secOk U32 = 0
+    secContinue U32 = 0x00090312                   # SEC_I_CONTINUE_NEEDED
+    secIncomplete U32 = 0x80090318                 # SEC_E_INCOMPLETE_MESSAGE
+    secExpired U32 = 0x00090317                    # SEC_I_CONTEXT_EXPIRED: the server's close_notify
+    secRenegotiate U32 = 0x00090321                # SEC_I_RENEGOTIATE: a handshake message after the handshake
+    secIncompleteCreds U32 = 0x00090320            # SEC_I_INCOMPLETE_CREDENTIALS: a client certificate asked for
+    # ISC_REQ_ REPLAY_DETECT, SEQUENCE_DETECT, CONFIDENTIALITY, ALLOCATE_MEMORY, EXTENDED_ERROR, STREAM,
+    # MANUAL_CRED_VALIDATION: the chain is checked here, as OpenSSL's is
+    iscFlags U32 = 0x8C11C
+    bufEmpty U64 = 0
+    bufData U64 = 1
+    bufToken U64 = 2
+    bufExtra U64 = 5
+    bufTrailer U64 = 6
+    bufHeader U64 = 7
+    rawCap I64 = 65536                             # a handshake's flight or a record (at most 16 KB and its framing)
+
+    # a TLS session as a stream of bytes, to the server dialed, until it is destroyed (where its holder lets go): the
+    # credentials and context handles, the record sizes, the bytes received and not yet decrypted (raw[:rawLen]) and
+    # those decrypted and not yet read (plain[plainAt:plainLen])
+    type Conn unique struct(fd I32, cred Array<U64>, target Array<U8>) {
+        fd, cred, target
+        ctx := Array<U64>(2)
+        sizes := Array<U32>(5)
+        raw := Array<U8>(rawCap)
+        rawLen I64 = 0
+        plain := Array<U8>(rawCap)
+        plainAt I64 = 0
+        plainLen I64 = 0
+    } destruct {
+        closeNotify(fd, cred, ctx)
+        DeleteSecurityContext(ctx)
+        FreeCredentialsHandle(cred)
+        closesocket(U64(fd))
+    }
+
+    # the address of a's storage, as a number, for a structure C reads to point at it (memcpy hands back its first
+    # argument's address); the array is an extern call's argument, so it is kept (docs/memory.md, 2.6)
+    fn addressOf(a mut Array<U8>&) U64 {
+        p := Array<CVoid?&>(1)
+        p[0] = cstring.memcpy(a, a, 0)
+        v := Array<U64>(1)
+        cstring.memcpy(v, p, 8)
+        return v[0]
+    }
+
+    fn putU32(b mut Array<U8>&, at I64, v U64) {
+        for i in range 4: b[at + i] = U8((v >> U64(8 * i)) & 0xFF)
+    }
+
+    fn putU64(b mut Array<U8>&, at I64, v U64) {
+        for i in range 8: b[at + i] = U8((v >> U64(8 * i)) & 0xFF)
+    }
+
+    fn u32At(b Array<U8>&, at I64) U64 {
+        v U64 = 0
+        for i in range 4: v |= U64(b[at + i]) << U64(8 * i)
+        return v
+    }
+
+    fn u64At(b Array<U8>&, at I64) U64 {
+        v U64 = 0
+        for i in range 8: v |= U64(b[at + i]) << U64(8 * i)
+        return v
+    }
+
+    # the pointer C wrote at b[at]
+    fn pointerAt(b Array<U8>&, at I64) CVoid?& {
+        word := Array<U8>(8)
+        for i in range 8: word[i] = b[at + i]
+        p := Array<CVoid?&>(1)
+        cstring.memcpy(p, word, 8)
+        return p[0]
+    }
+
+    # the n bytes C holds at p
+    fn bytesAt(p CVoid?&, n I64) Array<U8> {
+        out := Array<U8>(n)
+        cstring.memcpy(out, p, U64(n))
+        return out
+    }
+
+    # SecBuffer i of bufs
+    fn setBuffer(bufs mut Array<U8>&, i I64, kind U64, len I64, at U64) {
+        putU32(bufs, 16 * i, U64(len))
+        putU32(bufs, 16 * i + 4, kind)
+        putU64(bufs, 16 * i + 8, at)
+    }
+
+    # the SecBufferDesc of bufs
+    fn descOf(bufs mut Array<U8>&) Array<U8> {
+        desc := Array<U8>(16)
+        putU32(desc, 4, U64(bufs.Len() / 16))
+        putU64(desc, 8, addressOf(bufs))
+        return desc
+    }
+
+    # all of data sent on the socket - Closed when the other side has gone, Timeout when a timeout set passes
+    fn sendAll(fd I32, data Array<U8>&) ? Error {
+        sent I64 = 0
+        for sent < data.Len() {
+            n := send(U64(fd), data[sent:], I32((data.Len() - sent).Min(0x7FFFFFFF)), 0)
+            if n >= 0 {
+                sent += I64(n)
+                continue
+            }
+            match WSAGetLastError() {
+                case 10060 { error Error.Timeout }
+                case 10054, 10053, 10058 { error Error.Closed }
+                case _ { error Error.Failed }
+            }
+        }
+    }
+
+    # a second SOCKET for tcp's socket, which closes its own where its holder lets go
+    fn duplicate(fd I32) I32 ? Error {
+        info := Array<U8>(628)                     # WSAPROTOCOL_INFOW
+        if WSADuplicateSocketW(U64(fd), GetCurrentProcessId(), info) != 0: error Error.Failed
+        s := WSASocketW(-1, -1, -1, info, 0, 0x81)    # FROM_PROTOCOL_INFO; overlapped, not inherited
+        if s == 0xFFFFFFFFFFFFFFFF: error Error.Failed
+        return I32(s)
+    }
+
+    # Schannel's client credentials: SCHANNEL_CRED version 4, the protocols the system enables, no client certificate,
+    # the server's certificate left to check here (SCH_CRED_MANUAL_CRED_VALIDATION | SCH_CRED_NO_DEFAULT_CREDS)
+    fn credentials() Array<U64> ? Error {
+        auth := Array<U8>(80)
+        putU32(auth, 0, 4)
+        putU32(auth, 72, 0x18)
+        cred := Array<U64>(2)
+        expiry := Array<I64>(1)
+        name := "Microsoft Unified Security Protocol Provider".ToC()
+        if AcquireCredentialsHandleA(null, name, 2, null, auth, null, null, cred, expiry) != secOk: error Error.Failed
+        return cred
+    }
+
+    # the session over a copy of tcp's socket
+    fn Conn.over(tcp net.Conn&, host String&, ca String&, pin Array<U8>&, learn Bool) Conn ? Error {
+        fd := try duplicate(tcp.Fd())
+        cred := try credentials() catch Error e {
+            closesocket(U64(fd))
+            error e
+        }
+        c := Conn(fd, cred, host.ToC())
+        try c.settle(try c.step(true))
+        try c.check(host, ca, pin, learn)
+        if QueryContextAttributesA(c.ctx, 4, c.sizes) != secOk: error Error.Failed     # SECPKG_ATTR_STREAM_SIZES
+        return c
+    }
+
+    # more bytes from the socket after raw[:rawLen]
+    fn (c mut Conn&) fill() ? Error {
+        if c.rawLen == c.raw.Len(): error Error.Failed
+        n := recv(U64(c.fd), c.raw[c.rawLen:], I32(c.raw.Len() - c.rawLen), 0)
+        if n == 0: error Error.Closed
+        if n > 0 {
+            c.rawLen += I64(n)
+            return
+        }
+        match WSAGetLastError() {
+            case 10060 { error Error.Timeout }
+            case 10054, 10053 { error Error.Closed }
+            case _ { error Error.Failed }
+        }
+    }
+
+    # one call of InitializeSecurityContext - the first with no input, the next ones reading raw[:rawLen] - with the
+    # token it makes sent to the server, and what it did not read (an EXTRA buffer) kept at raw's front
+    fn (c mut Conn&) step(first Bool) U32 ? Error {
+        inBufs := Array<U8>(32)
+        setBuffer(inBufs, 0, bufToken, c.rawLen, addressOf(c.raw))
+        inDesc := descOf(inBufs)
+        outBufs := Array<U8>(16)
+        setBuffer(outBufs, 0, bufToken, 0, 0)
+        outDesc := descOf(outBufs)
+        attrs := Array<U32>(1)
+        expiry := Array<I64>(1)
+        prev := Array<U64>[c.ctx[0], c.ctx[1]]
+        st U32 = 0
+        if first {
+            st = InitializeSecurityContextA(c.cred, null, c.target, iscFlags, 0, 0, null, 0, c.ctx, outDesc, attrs
+                expiry)
+        } else {
+            st = InitializeSecurityContextA(c.cred, prev, c.target, iscFlags, 0, 0, inDesc, 0, c.ctx, outDesc, attrs
+                expiry)
+        }
+        token := pointerAt(outBufs, 8)
+        if token != null {
+            out := bytesAt(token, I64(u32At(outBufs, 0)))
+            FreeContextBuffer(token)
+            try sendAll(c.fd, out)
+        }
+        if first or st == secIncomplete: return st
+        extra := I64(u32At(inBufs, 16)) if u32At(inBufs, 20) == bufExtra else 0
+        c.keepLast(extra)
+        return st
+    }
+
+    # the last n bytes of raw[:rawLen] moved to its front, and all it holds
+    fn (c mut Conn&) keepLast(n I64) {
+        from := c.rawLen - n
+        for i in range n: c.raw[i] = c.raw[from + i]
+        c.rawLen = n
+    }
+
+    # the handshake carried on from a step that answered st, reading the server's messages, until it is done
+    fn (c mut Conn&) settle(st U32) ? Error {
+        for st == secContinue or st == secIncomplete or st == secIncompleteCreds {
+            if st == secIncomplete or c.rawLen == 0 {
+                try c.fill() catch Error.Closed { error Error.Handshake }
+            }
+            st = try c.step(false)
+        }
+        if st != secOk: error Error.Handshake
+    }
+
+    # the peer's certificate (a CERT_CONTEXT C holds, to be freed), null where there is none
+    fn (c Conn&) peerCert() CVoid?& {
+        out := Array<CVoid?&>(1)
+        if QueryContextAttributesA(c.ctx, 0x53, out) != secOk: return null     # SECPKG_ATTR_REMOTE_CERT_CONTEXT
+        return out[0]
+    }
+
+    # a CERT_CONTEXT's DER form: its pbCertEncoded and cbCertEncoded
+    fn derOf(cert CVoid?&) Array<U8> {
+        fields := bytesAt(cert, 40)
+        return bytesAt(pointerAt(fields, 8), I64(u32At(fields, 16)))
+    }
+
+    fn (c Conn&) peerDigest() Array<U8> {
+        cert := c.peerCert()
+        if cert == null: return Array<U8>(0)
+        der := derOf(cert)
+        CertFreeCertificateContext(cert)
+        return sha256.Sum(der)
+    }
+
+    # the session's certificate checked as Dial says: the pin, or the chain and the name, or (learning) nothing
+    fn (c Conn&) check(host String&, ca String&, pin Array<U8>&, learn Bool) ? Error {
+        if learn: return
+        if pin.Len() > 0 {
+            if not sameDigest(c.peerDigest(), pin): error Error.Pin
+            return
+        }
+        cert := c.peerCert()
+        if cert == null: error Error.Verify("no certificate")
+        defer: CertFreeCertificateContext(cert)
+        why := try verifyChain(cert, host, ca)
+        if why != "": error Error.Verify(why)
+    }
+
+    # the certificates of the PEM file "ca", each in its DER form - none for ""
+    fn anchorsIn(ca String&) Vec<Array<U8>> ? Error {
+        out := Vec<Array<U8>>()
+        if ca == "": return out
+        text := String(try os.ReadFile(ca) catch { error Error.Failed })
+        body := StringBuilder()
+        for line in text.Lines() {
+            l := line.Trim()
+            if l == "-----BEGIN CERTIFICATE-----" {
+                body.Clear()
+            } else if l == "-----END CERTIFICATE-----" {
+                out.Push(try base64.Decode(body.ToString()) catch { error Error.Failed })
+            } else {
+                body.Push(l)
+            }
+        }
+        if out.Len() == 0: error Error.Failed
+        return out
+    }
+
+    # the DER form of the last certificate of a chain's first simple chain: the root it was built to
+    fn rootOf(chain CVoid?&) Array<U8> {
+        context := bytesAt(chain, 24)                           # CERT_CHAIN_CONTEXT: cChain, rgpChain
+        if u32At(context, 12) == 0: return Array<U8>(0)
+        simple := bytesAt(pointerAt(bytesAt(pointerAt(context, 16), 8), 0), 24)
+        n := I64(u32At(simple, 12))                             # CERT_SIMPLE_CHAIN: cElement, rgpElement
+        if n == 0: return Array<U8>(0)
+        last := pointerAt(bytesAt(pointerAt(simple, 16), 8 * n), 8 * (n - 1))
+        return derOf(pointerAt(bytesAt(last, 16), 8))           # CERT_CHAIN_ELEMENT: pCertContext
+    }
+
+    # why the server's certificate is not to be trusted for "host", "" when it is: its chain built from what the server
+    # sent (and "ca"'s certificates), then checked by the SSL policy - trusted roots, dates, usage, the name. With "ca"
+    # named, the chain must end at one of its certificates, and the system's roots do not count
+    fn verifyChain(cert CVoid?&, host String&, ca String&) String ? Error {
+        anchors := try anchorsIn(ca)
+        store := CertOpenStore(2, 0, 0, 0, null)                # CERT_STORE_PROV_MEMORY
+        if store == null: error Error.Failed
+        defer: CertCloseStore(store, 0)
+        sent := pointerAt(bytesAt(cert, 40), 32)                # the store of what the server sent
+        e := CertEnumCertificatesInStore(sent, null)
+        for e != null {
+            CertAddCertificateContextToStore(store, e, 4, null)     # CERT_STORE_ADD_ALWAYS
+            e = CertEnumCertificatesInStore(sent, e)
+        }
+        for der in anchors {
+            x := CertCreateCertificateContext(0x10001, der, U32(der.Len()))   # X509_ASN_ENCODING | PKCS_7_ASN_ENCODING
+            if x == null: error Error.Failed
+            CertAddCertificateContextToStore(store, x, 4, null)
+            CertFreeCertificateContext(x)
+        }
+        para := Array<U8>(24)                                   # CERT_CHAIN_PARA, no usage asked
+        putU32(para, 0, 24)
+        out := Array<CVoid?&>(1)
+        if CertGetCertificateChain(null, cert, null, store, para, 0, null, out) == 0: error Error.Failed
+        chain := out[0]
+        defer: CertFreeCertificateChain(chain)
+        if ca != "" and rootOf(chain) not in anchors: return "unable to get local issuer certificate"
+        return policy(chain, host, ca != "")
+    }
+
+    # what CertVerifyCertificateChainPolicy's SSL policy says of chain for a server named host, "" for a pass;
+    # "anchored" when the root is one of "ca"'s, so an untrusted root is not a failure (SECURITY_FLAG_IGNORE_UNKNOWN_CA)
+    fn policy(chain CVoid?&, host String&, anchored Bool) String {
+        name := Array<U8>(2 * host.Len() + 2)                   # UTF-16, NUL-ended: a host name is ASCII
+        for i, ch in host: name[2 * i] = U8(ch)
+        extra := Array<U8>(24)                                  # SSL_EXTRA_CERT_CHAIN_POLICY_PARA
+        putU32(extra, 0, 24)
+        putU32(extra, 4, 2)                                     # AUTHTYPE_SERVER
+        putU32(extra, 8, 0x100 if anchored else 0)
+        putU64(extra, 16, addressOf(name))
+        para := Array<U8>(16)                                   # CERT_CHAIN_POLICY_PARA
+        putU32(para, 0, 16)
+        putU64(para, 8, addressOf(extra))
+        status := Array<U8>(24)                                 # CERT_CHAIN_POLICY_STATUS
+        putU32(status, 0, 24)
+        if CertVerifyCertificateChainPolicy(4, chain, para, status) == 0: return "the chain could not be checked"
+        code := u32At(status, 4)
+        match code {
+            case 0 { return "" }
+            case 0x800B0109 { return "certificate chain ends at an untrusted root" }
+            case 0x800B010A { return "unable to get local issuer certificate" }
+            case 0x800B0101 { return "certificate has expired" }
+            case 0x800B010F { return "hostname mismatch" }
+            case 0x800B0110 { return "unsupported certificate purpose" }
+            case 0x800B010C { return "certificate revoked" }
+            case _ { return "certificate refused (0x" + code.Format(16) + ")" }
+        }
+    }
+
+    # the close_notify sent: SCHANNEL_SHUTDOWN applied to the context, then the token it makes
+    fn closeNotify(fd I32, cred Array<U64>&, ctx Array<U64>&) {
+        if ctx[0] == 0 and ctx[1] == 0: return
+        token := Array<U8>(4)
+        putU32(token, 0, 1)
+        bufs := Array<U8>(16)
+        setBuffer(bufs, 0, bufToken, 4, addressOf(token))
+        desc := descOf(bufs)
+        if ApplyControlToken(ctx, desc) != secOk: return
+        outBufs := Array<U8>(16)
+        setBuffer(outBufs, 0, bufToken, 0, 0)
+        outDesc := descOf(outBufs)
+        next := Array<U64>[ctx[0], ctx[1]]
+        attrs := Array<U32>(1)
+        expiry := Array<I64>(1)
+        InitializeSecurityContextA(cred, ctx, "".ToC(), iscFlags, 0, 0, null, 0, next, outDesc, attrs, expiry)
+        sent := pointerAt(outBufs, 8)
+        if sent == null: return
+        out := bytesAt(sent, I64(u32At(outBufs, 0)))
+        FreeContextBuffer(sent)
+        try sendAll(fd, out) catch { }
+    }
+
+    # the next record decrypted into plain - or raw's bytes kept for more to arrive
+    fn (c mut Conn&) decrypt() ? Error {
+        if c.rawLen == 0: try c.fill()
+        bufs := Array<U8>(64)
+        base := addressOf(c.raw)
+        setBuffer(bufs, 0, bufData, c.rawLen, base)
+        desc := descOf(bufs)
+        st := DecryptMessage(c.ctx, desc, 0, null)
+        if st == secIncomplete {
+            try c.fill()
+            return
+        }
+        if st == secExpired: error Error.Closed
+        if st != secOk and st != secRenegotiate: error Error.Failed
+        extra I64 = 0
+        c.plainAt = 0
+        c.plainLen = 0
+        for i in range 4 {
+            kind := u32At(bufs, 16 * i + 4)
+            len := I64(u32At(bufs, 16 * i))
+            if kind == bufExtra: extra = len
+            if kind != bufData or len == 0: continue
+            at := I64(u64At(bufs, 16 * i + 8) - base)
+            for k in range len: c.plain[k] = c.raw[at + k]
+            c.plainLen = len
+        }
+        c.keepLast(extra)
+        if st == secRenegotiate: try c.settle(try c.step(false))
+    }
+
+    # what arrives next, up to buf's length, read into the front of buf and handed back as that front - a borrow of
+    # buf - waiting until something does. Fails with Closed once the other side has ended the session and everything it
+    # sent has been read, Timeout when a timeout set by SetTimeout passes first
+    fn (c mut Conn&) Read(buf mut Array<U8>&) Array<U8>& ? Error {
+        if buf.Len() == 0: return buf[:0]
+        for c.plainAt == c.plainLen: try c.decrypt()
+        n := (c.plainLen - c.plainAt).Min(buf.Len())
+        for i in range n: buf[i] = c.plain[c.plainAt + i]
+        c.plainAt += n
+        return buf[:n]
+    }
+
+    # all of data written, however many records it takes - failing with Closed when the other side has gone, Timeout
+    # when a timeout set by SetTimeout passes
+    fn (c mut Conn&) Write(data Array<U8>&) ? Error {
+        header := I64(c.sizes[0])
+        trailer := I64(c.sizes[1])
+        most := I64(c.sizes[2])
+        msg := Array<U8>(header + most.Min(data.Len()) + trailer)
+        base := addressOf(msg)
+        sent I64 = 0
+        for sent < data.Len() {
+            n := (data.Len() - sent).Min(most)
+            for i in range n: msg[header + i] = data[sent + i]
+            bufs := Array<U8>(64)
+            setBuffer(bufs, 0, bufHeader, header, base)
+            setBuffer(bufs, 1, bufData, n, base + U64(header))
+            setBuffer(bufs, 2, bufTrailer, trailer, base + U64(header + n))
+            desc := descOf(bufs)
+            if EncryptMessage(c.ctx, 0, desc, 0) != secOk: error Error.Failed
+            total := I64(u32At(bufs, 0) + u32At(bufs, 16) + u32At(bufs, 32))
+            try sendAll(c.fd, msg[:total])
+            sent += n
+        }
+    }
+
+    # a Read or Write waiting longer than d fails with Timeout from now on; 0 waits for ever (the default). Windows'
+    # SO_RCVTIMEO and SO_SNDTIMEO are a DWORD of milliseconds
+    fn (c Conn&) SetTimeout(d time.Duration) {
+        ms := ((I64(d) + 999999) / 1000000).Min(0x7FFFFFFF)
+        v := Array<U8>(4)
+        for i in range 4: v[i] = U8((ms >> (8 * i)) & 0xFF)
+        setsockopt(U64(c.fd), 0xFFFF, 0x1006, v, 4)
+        setsockopt(U64(c.fd), 0xFFFF, 0x1005, v, 4)
+    }
+}
 
 # --- tests: a local server, openssl's own s_server, with a certificate for "localhost" made for the test ---
 
@@ -244,6 +750,39 @@ fn (c Conn&) Fd() I32 { return c.fd }
 fn freePort() I64 ? net.Error {
     l := try net.Listener.Listen(try net.Addr.Parse("127.0.0.1:0"))
     return I64((try l.Addr()).Port)
+}
+
+# where p is, as the host's sh names it - on Windows (under Wine, B12f) the Z: drive is the host's /
+fn hostPath(p String&) String {
+    if TargetOs != "windows": return p
+    full := try os.RealPath(p) catch { return p }
+    b := StringBuilder()
+    for ch in full[2:]: b.PushChar('/' if ch == '\\' else ch)
+    return b.ToString()
+}
+
+# cmd run by the host's sh, and whether it succeeded - "background" leaves it running, its output dropped. On Windows
+# (under Wine, B12f) the host's sh is started by Wine's "start /unix" from a script written to dir: it starts in no
+# directory of the test's and is not waited for, so the script goes to the test's directory and writes its status, which
+# is waited for
+fn sh(dir String&, cmd String&, background Bool = false) Bool {
+    if TargetOs != "windows" {
+        if background: return os.Run(cmd + " >/dev/null 2>&1 &") == 0
+        return os.Run(cmd) == 0
+    }
+    host := hostPath(dir)
+    name := "bg.sh" if background else "run.sh"
+    tail := " >/dev/null 2>&1 &\n" if background else "\necho $? > " + host + "/status\n"
+    try os.WriteFile(dir + "/" + name, "cd '" + hostPath(".") + "'\n" + cmd + tail) catch { return false }
+    if background: return os.Run("start /unix /bin/sh " + host + "/" + name) == 0
+    try os.Remove(dir + "/status") catch { }
+    os.Run("start /unix /bin/sh " + host + "/" + name)
+    for _ in range 600 {                                # "start" does not wait for a program of the host's
+        status := try os.ReadFile(dir + "/status") catch default ""
+        if status.EndsWith("\n"): return status.Trim() == "0"
+        time.Sleep(time.Duration.Millis(100))
+    }
+    return false
 }
 
 # the first line the server answers a GET with, as seen by a session dialed to "host" - or what the dial failed with
@@ -269,24 +808,21 @@ fn learnedPrint(port I64) String ? Error, net.Error {
 
 test "a session to a server whose certificate is trusted and names the host carries bytes both ways" {
     dir := try os.MkTemp("build", "tls")
-    assert os.Run("openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=localhost -addext subjectAltName=DNS:localhost -keyout " + dir + "/k.pem -out " + dir + "/c.pem 2>/dev/null") == 0
+    assert sh(dir, "openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=localhost -addext subjectAltName=DNS:localhost -keyout " + dir + "/k.pem -out " + dir + "/c.pem 2>/dev/null")
     port := try freePort()
     # a wall-clock limit (timeout) ends the server even if this test dies
-    cmd := "exec timeout 60 openssl s_server -www -naccept 8 -accept " + $port + " -cert " + dir + "/c.pem -key " + dir + "/k.pem"
-    srv := try os.Process.Start("sh", "-c", cmd)
-    defer {                                                                # on every exit, a failed assert included
-        srv.Kill()
-        try srv.Wait() catch { }
-        os.Run("pkill -f 's_server.*-accept " + $port + " ' 2>/dev/null")
-    }
+    server := "exec timeout 60 openssl s_server -www -naccept 8 -accept " + $port + " -cert " + dir + "/c.pem -key " + dir
+    assert sh(dir, server + "/k.pem", true)
+    # on every exit, a failed assert included
+    defer: sh(dir, "pkill -f 's_server.*-accept " + $port + " ' 2>/dev/null")
     first := firstLine("localhost", port, dir + "/c.pem")
     assert first == "HTTP/1.0 200"
     assert firstLine("localhost", port, "") == "verify"                    # a certificate nothing trusts
     assert firstLine("127.0.0.1", port, dir + "/c.pem") == "verify"        # trusted, but not for this name
     # pinning: the certificate's SHA-256 replaces the chain and name checks, so a name that does not match passes
     fpCmd := "openssl x509 -in " + dir + "/c.pem -noout -fingerprint -sha256 | cut -d= -f2 | tr -d '\\n'"
-    assert os.Run(fpCmd + " > " + dir + "/fp") == 0
-    assert os.Run(fpCmd + " | tr -d : | tr A-F a-f > " + dir + "/fp2") == 0
+    assert sh(dir, fpCmd + " > " + dir + "/fp")
+    assert sh(dir, fpCmd + " | tr -d : | tr A-F a-f > " + dir + "/fp2")
     pin := String(try os.ReadFile(dir + "/fp"))
     assert pin.Len() == 95
     assert firstLine("127.0.0.1", port, "", pin) == "HTTP/1.0 200"

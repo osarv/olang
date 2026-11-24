@@ -9156,8 +9156,8 @@ with the Win64 calling convention (X11): a struct of 1, 2, 4 or 8 bytes as an in
 pointer to a copy, and as a result through a pointer the caller gives. `test` and `run` run the program under **Wine**
 (`wine64` found on `PATH`, else `/usr/lib/wine/wine64`, else `wine`; `OLANG_EMULATOR` names another), as for B12a.
 `build -library` is not built for Windows. Not on Windows (a program naming them does not build): POSIX headers
-mingw-w64 does not have (`sys/wait.h`, `poll.h`, `sys/mman.h`, `sys/socket.h` ...), and therefore std's `net`, `tls`,
-`zmtp`, `prop` and `ffi`; `os.ReadLink` fails with `Failed`; `os.ExecInPlace` runs the program and ends this one with its
+mingw-w64 does not have (`sys/wait.h`, `poll.h`, `sys/mman.h`, `sys/socket.h` ...), and therefore std's `prop` and
+`ffi`; std's `net` is Winsock's there and `tls` Schannel's (secur32, crypt32), with the same API; `os.ReadLink` fails with `Failed`; `os.ExecInPlace` runs the program and ends this one with its
 status, since Windows replaces no process's program.
 
 **B12d (clang).** A build compiles and links with clang, of LLVM 18, 19 or 20 - the intermediate form written is one
