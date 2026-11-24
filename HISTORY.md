@@ -42825,3 +42825,17 @@ transparent huge pages are `madvise` here, the measure is VmHWM). Since the chan
 (std/prelude/array.olang, `fn(i I64, j I64) Bool { return try less(a[i], a[j]) }`, a call through a function value),
 which lets go of any place - every place keeps. Left to the condition 3 narrowing (wt-cond3): a lambda need be a root
 only where a task can reach it, and a task calling through a function value already keeps everything (`taskAll`).
+
+## 2026-11-24: oann's pair-dot slices measured against O44 - already hoisted, nothing to change (O44; mine; wt-slicehoist)
+
+oann's BF16 pair-dot kernel (kernels/gemm.olang pairTile, eaa9b08) reported that slices built in the depth loop at
+`i0 * kp + 2 * q + i * kp` kept their bounds checks in the loop (29-31 GMAC/s against the shipped form's ~35), and it
+moved to row and strip slices taken once per tile. Rebuilt here: that form written back into pairTile (`for q in range
+kp / 2`, `tb[j0 * kp + 2 * q * 16 * nv : ...]`, `ta[i0 * kp + 2 * q + i * kp : ... + 2]` under the comptime fors) is
+versioned by O44 on master - every copy of both spans proven, only `bs[v * 32 : v * 32 + 32]` (a base the loop declares)
+left checked, which LLVM folds since its length is a constant 64 - and bench/bf16gemm's pair-dot column is the same
+for both forms within noise, default target and `-target znver4` (e.g. 512^3 36.0-37.5 vs 38.0, 128 x 784 x 128
+31-33 vs 28-34 GMAC/s); standalone repros of the shape time the same too. So no codegen change: the check is
+per construction and already leaves the loop wherever O44's conditions hold. Where a form does keep it, the usual
+cause is one of those conditions - a bound through a local the loop assigns (a running offset `o += 2` rather than
+the counter), a call or a non-scalar store in the loop - which the kernel's shape should avoid, as the shipped one does.
