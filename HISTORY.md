@@ -43153,3 +43153,52 @@ PROT_NONE closes pages keeping what they hold (VirtualProtect), as the scope san
 (a window, its message loop and window procedure as an export fn, OpenGL through WGL, the clipboard) passes its `-check`
 under Wine on Xvfb: the window made, a frame drawn and a pixel read back green, a clipboard round trip, the window closed.
 Codegen for the other targets is unchanged (every change is keyed on the target's OS; `abiArch` is the arch elsewhere).
+
+## 2026-11-24: sockets and TLS on Windows (B12f; mine; wt-windows)
+
+The OAgent desktop app needs HTTPS to model APIs, so std's net and tls had to build for Windows.
+
+**net over Winsock.** mingw-w64 has no `sys/socket.h`, `netdb.h` or `poll.h`, and a C import of `winsock2.h` pulls in
+the whole of `windows.h`, whose COM declarations bindgen cannot all give a form (a struct field named `Number`, a
+function pointer returning a pointer). So net declares the ws2_32 calls it makes by hand in a top-level `if TargetOs ==
+"windows"` branch (B9), and the calls that differ - socket, bind, listen, accept, connect, recv, send and their
+datagram forms, the names, setsockopt, shutdown, the timeouts, poll, getaddrinfo's walk, the error and the close - are
+`sys*` functions defined once in each branch; the rest of net is shared. A SOCKET is kept in the I32 descriptor field
+(Windows keeps handle values within 32 bits for 32-bit programs), INVALID_SOCKET read as -1. Winsock's constants differ
+(AF_INET6 23, SOL_SOCKET 0xFFFF, SO_RCVTIMEO 0x1006, IPV6_V6ONLY 27); the timeouts are a DWORD of milliseconds;
+Windows' ADDRINFOA has the name before the address; WSAPoll takes POLLRDNORM | POLLRDBAND for "readable"; WSAGetLastError's
+codes (WSAECONNREFUSED, WSAEADDRINUSE, ...) map onto the X6 classes raise already reads, and getaddrinfo's Winsock answers
+(WSAHOST_NOT_FOUND, WSATRY_AGAIN, ...) onto UnknownHost and Unreachable. WSAStartup is called for each socket and lookup
+rather than once at start: it counts its callers, needs no lock that way, and leaves programs that use no sockets
+without the call; the process's end gives it back. SO_REUSEADDR is not set on Windows - there it lets a second socket
+bind a port in use (net's own test of InUse caught it under Wine), and Windows lets an address be listened at again
+without it. zmtp needed nothing more. checks' m9builderold case (std/net) builds for Windows again.
+
+**tls over Schannel.** OpenSSL has no mingw-w64 package here, and building and shipping it with each program is the
+largest route; Schannel is the system's own TLS, nothing to install beside the program, and Wine implements it (over
+GnuTLS), so the test runs. Decided: Schannel through SSPI (secur32) and crypt32 for the checks. The client asks for
+SCHANNEL_CRED version 4 with manual validation, so every check is tls's own, as with OpenSSL: the chain is built by
+CertGetCertificateChain from the certificates the server sent, and CertVerifyCertificateChainPolicy's SSL policy checks
+the root, the dates, the usage and the host's name; a `ca` file is read (PEM, std/base64) into the chain's store and the
+chain must end at one of its certificates - then an unknown root is no failure, but Windows' own roots never count, as
+OpenSSL's `ca` file replaces its default paths. A pin compares std/sha256's digest of the certificate's DER form.
+DialToLearn checks nothing. The handshake loop, records (EncryptMessage/DecryptMessage with their header and trailer,
+data kept across reads, EXTRA bytes kept for the next record), SEC_I_RENEGOTIATE (TLS 1.3's messages after the
+handshake), close_notify in the destructor (ApplyControlToken) are written in tls.
+
+SSPI's structures hold pointers to the caller's buffers, and olang has no address-of (E5); X22 passes an array's storage
+only as an argument. Rather than a runtime helper per SSPI call, tls builds each SecBuffer and SecBufferDesc as bytes and
+writes in it the address of an array it holds, which memcpy hands back as its result (an extern call's argument is kept,
+so the array stays alive across the call, docs/memory.md 2.6); pointers C hands back (a token, the certificate, a chain's
+elements) are copied out by memcpy. The session runs over a duplicate of net.Conn's socket (WSADuplicateSocketW), as the
+Linux form runs over a `dup`: a unique net.Conn cannot be held in tls.Conn (T13b).
+
+Schannel's session is state each read changes (records half-received, plaintext not yet read), so `Read` and `Write`
+take a `mut Conn&` - on every target, since the API is one; OpenSSL's state was simply out of olang's sight. The Linux
+form is otherwise unchanged: its OpenSSL calls moved into the other branch, the pin comparison shared (`sameDigest`).
+
+**Tests.** std/net (8), std/zmtp (2) and std/tls (2) pass under Wine; WINDOWS_SKIP loses them. std/tls's test needs the
+host's `openssl` to make a certificate and serve it: under Wine a Windows program starts it with Wine's `start /unix`,
+which neither waits for a program of the host's nor passes back its status, so the test writes a script that goes to
+the test's directory and writes its status, and waits for that. An HTTPS GET to a public host works from the Windows
+build under Wine, the chain checked against the host's roots.

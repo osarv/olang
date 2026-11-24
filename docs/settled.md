@@ -1339,8 +1339,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   std/runtime/windows.ll's functions replace their namesakes - VirtualAlloc, CreateThread, SRW locks and condition
   variables, the clocks, CreateProcess - and msvcrt's spellings glibc's), with its own 16-bit float conversions (libgcc's
   disagree with clang) and binary standard streams. C imports: `long` is `I32` (LLP64); `pthread.h` is the runtime's
-  own header (std/runtime/windows). Win64 C ABI in cabi. std's core works; net, tls, zmtp, prop, ffi do not build there
-  yet; `-library` is not built. examples/windows: Win32 window, message loop, WGL, clipboard. docs/windows.md.
+  own header (std/runtime/windows). Win64 C ABI in cabi. std works but prop and ffi; `-library` is not built.
+  net is Winsock (ws2_32, declared by hand behind net's `sys*` branch; WSAStartup per socket and lookup; WSAPoll;
+  WSAGetLastError's codes onto net.Error; no SO_REUSEADDR, which lets a port be taken there), so zmtp follows; tls is
+  Schannel (secur32, crypt32: the system's TLS, no library shipped): the chain built by crypt32 and checked by its SSL
+  policy (roots, dates, the name), a `ca` file its only anchors, pins by std/sha256; Read and Write take a `mut Conn&`
+  on every target. SSPI's structures are bytes holding arrays' addresses (memcpy hands its first argument back).
+  examples/windows: Win32 window, message loop, WGL, clipboard. docs/windows.md.
 - **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-define Name=value` build constants;
   an immutable top-level global is a default `-define` replaces (B10c); a local `if` the build decides is conditional
   compilation too (S8b); a constant condition not depending on the build is a dead-branch error (S8a). **A comparison
