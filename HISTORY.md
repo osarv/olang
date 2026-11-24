@@ -42817,3 +42817,11 @@ carries the guarding place (`FreshGuard`), read at the spawn, and `__olang_stand
 region was made. Left as it is: two spawns into one target in one join (a loop of spawns inside the join) now crash
 where master stored one of the results - both store into the target unordered, a data race (P8b), whose behaviour is
 undefined; `-race` names it.
+
+Found beside it, not this branch's: checks' freeing `taskvals` grows ~25 MB on master too (its parts 2 and 16 together;
+transparent huge pages are `madvise` here, the measure is VmHWM). Since the channel's waits block on cancel's waiters
+(wt-chanwait), a plain `chan.Send`/`Recv` reaches cancel's global waiter table, so "a task reads a global" (condition
+3's `taskReach`); that makes every lambda of the program a task root, the prelude's sort lambda among them
+(std/prelude/array.olang, `fn(i I64, j I64) Bool { return try less(a[i], a[j]) }`, a call through a function value),
+which lets go of any place - every place keeps. Left to the condition 3 narrowing (wt-cond3): a lambda need be a root
+only where a task can reach it, and a task calling through a function value already keeps everything (`taskAll`).
