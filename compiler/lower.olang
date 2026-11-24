@@ -574,6 +574,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     plan typed.Plan& = given  # the scope pass's plan for B where planned, else the Lowerer's stand-in
     freeing Bool = false            # whether this body frees early what sole places let go of (O8d, free.Frees)
     regions Map<I64, mir.LocalId>   # the regions made for sites being lowered (plan.RegionKind), by site
+    spawnHeld Map<I64, mir.LocalId> # O8d, P1g: by a local spawns let go of (free.SpawnLets), the region its value is in
     regionPar Map<I64, mir.ScopeRef> # ... and the scope each is a kid of (a split copy's other parts go there)
     feedRegions Map<I64, Bool>       # ... the sites of feeders' declarations (free.FeedSite), whose regions stay made
     # O29: the reference arguments lowered, and their operands - a scope found from one is found from its operand
@@ -2126,6 +2127,13 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
     match s {
         case typed.Stmt.Let(sp, l, init) {
             ty := ln.B.Locals[I64(l)].Ty
+            # (O8d, P1g: a local whose spawns let go of its old value - the handle of the region its value is in, none
+            # before its first spawn: what its declaration gives it is released by that value's anchors - spawnLets)
+            if ln.freeing and ln.L.Free!.SpawnLets(I64(ln.B.Id), I64(l)) {
+                hs := ln.temp(mir.I64T, sp)
+                ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(hs), mir.Rvalue.Use(mir.Operand.Const(mir.I64T, 0))))
+                ln.spawnHeld.Put(I64(l), hs)
+            }
             ln.homeKept(l)
             ln.feedHome(l, init)
             if ln.B.Locals[I64(l)].Unset {
@@ -3438,12 +3446,73 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
             # a target holding an array by value is stored as the assignment it is judged as (P1g, T11b): a copy where
             # that assignment copies, made where the target's storage is
             cps := ln.targetCopies(sw, task) if ln.valueTargets(sw) else mir.Range(0, 0)
-            k := ln.F.AddTask(callee, args, ln.taskPassed(callee, ty, c.Site), places, cls, ends
-                              sw.Task.Span(), cps)
+            scopes := ln.taskPassed(callee, ty, c.Site)
+            ln.spawnLets(sw, I64(c.Site), sp)
+            if ln.dead: return
+            fresh := ln.freshScopes(sw, scopes, I64(c.Site))
+            guard := ln.plan.RegionGuard[I64(c.Site)] if fresh != 0 else -1
+            k := ln.F.AddTask(callee, args, scopes, places, cls, ends, sw.Task.Span(), cps, fresh, guard)
             ln.emit(mir.Stmt.Spawn(sp, j, k))
         }
         case _ { }
     }
+}
+
+# O8d, P1g: a target local whose spawns let go of its old value (free.SpawnLets), where its place is decided sole: on the
+# spawner's thread, its arguments evaluated and before the task starts, the region its old value is in released - by
+# that value's anchors, or where it holds nothing (a default, an empty result) by the handle kept beside it (Settle) - and
+# the handle given the region made for the new value at the call's site, which the task builds into whole (freshScopes).
+# Where it is not sole, its parts as an owner's that keeps (releases' ownerParts)
+fn (ln mut lowering&) spawnLets(sw typed.Spawn&, site I64, sp source.Span) {
+    if not ln.freeing: return
+    fr := ln.L.Free!
+    for tg in sw.Targets {
+        if tg == null or ln.dead: continue
+        match tg {
+            case typed.Lvalue.Local(_, _, l) {
+                held := try ln.spawnHeld.Get(I64(l)) catch default mir.NoLocal
+                if held == mir.NoLocal or not fr.SpawnLets(I64(ln.B.Id), I64(l)): continue
+                lv := mir.Lvalue.L(mir.LocalId(I32(l)))
+                g := ln.guardOf(fr.LocalPlaceOf(I64(ln.B.Id), I64(l)))
+                if g != free.NotSole {
+                    after := ln.whenSole(g, true, sp) if g >= 0 else mir.NoBlock
+                    ln.emit(mir.Stmt.Settle(sp, held, lv))
+                    h := try ln.regions.Get(site) catch default mir.NoLocal
+                    v := mir.Operand.Copy(mir.Lvalue.L(h)) if h != mir.NoLocal else mir.Operand.Const(mir.I64T, 0)
+                    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(held), mir.Rvalue.Use(v)))
+                    if after != mir.NoBlock: ln.joinAt(after)
+                }
+                ln.releaseAt(mir.LocalId(I32(l)), ln.releases(tg, true), sp)
+            }
+            case _ { }
+        }
+    }
+}
+
+# P2, O8d: the scopes a task is given that are the region made at its call's site for a target spawns let go of
+# (spawnLets) - a region of its own, made at the spawn - handed to the task whole, no stand-in, where that region is made
+# (a bit by scope). Never one a value already lives in (kind 2), which the spawner builds into too
+fn (ln mut lowering&) freshScopes(sw typed.Spawn&, scopes mir.Range, site I64) I64 {
+    if not ln.freeing or site < 0 or site >= ln.plan.RegionKind.Len() or ln.plan.RegionKind[site] != 1: return 0
+    lets := false
+    for tg in sw.Targets {
+        if tg == null: continue
+        match tg {
+            case typed.Lvalue.Local(_, _, l) { lets = lets or ln.spawnHeld.Has(I64(l)) and ln.L.Free!.SpawnLets(I64(ln.B.Id), I64(l)) }
+            case _ { }
+        }
+    }
+    if not lets: return 0
+    h := try ln.regions.Get(site) catch { return 0 }
+    out I64 = 0
+    for i in range I64(scopes.N) {
+        if i >= 63: break
+        match ln.F.Refs[I64(scopes.At) + i] {
+            case mir.ScopeRef.Held(x) { if x == h: out = out | (I64(1) << i) }
+            case _ { }
+        }
+    }
+    return out
 }
 
 # the site of the call an argument is, through a try passing its value on and a conversion; -1 for none

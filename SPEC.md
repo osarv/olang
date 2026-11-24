@@ -6279,7 +6279,10 @@ the scope it forwards to.
 What a task builds for its results is **handed to the spawner at the wait**: the regions it made in a stand-in (§8
 O8d - storage early freeing gives a value made for a sole place: a Vec's buffer the task grew, each text it built) go
 with the stand-in as it is folded, regions of the scope it stood in for from then on - released where the spawner's
-code lets their places go (O8f), else closed with that scope. A region released on a thread other than the one that
+code lets their places go (O8f), else closed with that scope. A result made for a target the spawner lets go of at the
+spawn (O8d, condition 3) is built in storage of its own the spawner makes at the spawn and hands the task whole, no
+stand-in: the task alone builds there until the wait, its storage the task's thread's (O8b), the spawner's from the
+wait on. A region released on a thread other than the one that
 made it gives its storage back to that thread (O8b); no thread releases into another's pool, and the hand-off costs
 nothing in the task and one step per join. A part (below) is folded the same way, its regions with it.
 
@@ -7173,8 +7176,13 @@ holder**:
    task's thread, is a let-go of the target's own place there; what the task built for the target, in a stand-in the
    join's wait hands to the spawner (P2), is the spawner's from the wait on, so the places that value holds keep only
    where the join's own code lets one go while its tasks run - unless it is built where no wait hands it over: in a
-   scope found while the program runs, in the program's scope, or by a clause's default (P4a) that builds. After the
-   wait a join's tasks reach nothing. Only code an entry of the program reaches - `main`, a method, an export, a
+   scope found while the program runs, in the program's scope, or by a clause's default (P4a) that builds. But a
+   target that is a local declared outside a loop the spawn is in, given values by its declaration and by spawns alone,
+   whose every task writes it - none fails into its join (P4d leaves it unwritten, its old value still to be read) and
+   no clause gives it a default that is existing storage - is let go of by the **spawner, at the spawn**, before the
+   task starts: judged as an assignment's let-go at that point, against its own join's tasks reaching the spawner's
+   storage (not against what they build), its new value made for it - built where its place is, in storage the task is
+   handed whole and builds into alone until the wait. After the wait a join's tasks reach nothing. Only code an entry of the program reaches - `main`, a method, an export, a
    function value, a test, an initializer - starts a task. A program with a task whose code is not known (a lambda or a function value spawned, a task calling
    through a function value or an `any`) frees nothing early, nor does a program C may call back (X12): one giving
    an export fn or any function value to a C function (X13), built as a library (X14), or linking C of its own that

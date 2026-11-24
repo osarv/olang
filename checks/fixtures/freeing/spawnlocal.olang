@@ -1,0 +1,122 @@
+# review12's F3: a spawn's target a local declared outside the loop the spawn is in, given a joined task's result each
+# turn - the spawner lets go of its old value at the spawn, before the task starts, and the task builds the new one in
+# a region of its own the spawner made for it (O8d, P1g). M picks the parts: the review's shape, read past the wait (1);
+# several such targets in one join beside a task building its own, a copy of one kept in a Vec now and then (2); a
+# clause's default on failing turns, its turn's region released by the handle kept beside the target (4); a target in
+# an outer loop's body, spawned in an inner loop (8); and, off by default, shapes that keep, which must still run as
+# built: a task failing into its join, the target left unwritten and read after the clause (16), a sibling given the
+# old value by value (32), a view of the old value in use across the spawn (64). The measure is taskkept.olang's: the
+# resident peak gained over each of the last two quarters of the turns, flat where either gains under 2 MB. -free late,
+# -sanitize, -race and the evaluator agree at a smaller size
+import "std/io"
+import "std/os"
+
+N I64 = 100000
+M I64 = 15
+
+type E error { Odd }
+
+fn pad(i I64) String { return "t" + $i + " padded out to some length ..........................................." }
+
+fn peak() I64 {
+    for line in (try os.ReadFile("/proc/self/status") catch default "").Lines() {
+        if line.StartsWith("VmHWM:"): return try line[6:].Trim().Split(" ")[0].ParseInt(10) catch default -1
+    }
+    return -1
+}
+
+# a task's result: a Vec of text it grows on its own thread
+fn build(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push(pad(i + k))
+    return v
+}
+
+fn fails(i I64) Vec<String> ? E {
+    v := build(i)
+    if i % 3 == 1: error E.Odd
+    return v
+}
+
+fn total(v Vec<String>) I64 {
+    n := 0
+    for s in v: n += s.Len()
+    return n
+}
+
+# a task building a value of its own, given a plain value
+fn width(i I64) I64 { return total(build(i)) }
+
+fn main() {
+    t := 0
+    a Vec<String>
+    b Vec<String>
+    c Vec<String>
+    d Vec<String>
+    f Vec<String>
+    g Vec<String>
+    h Vec<String>
+    kept Vec<Vec<String>>
+    p0 := 0
+    p1 := 0
+    for i in range N {
+        if i == N / 2: p0 = peak()
+        if i == N * 3 / 4: p1 = peak()
+        if M % 2 == 1 {
+            join: spawn a = build(i)
+            t += a[1].Len()
+        }
+        if M / 2 % 2 == 1 {
+            w := 0
+            join {
+                spawn b = build(i + 1)
+                spawn c = build(i + 2)
+                spawn w = width(i + 3)
+            }
+            if i % 1000 == 0: kept.Push(c)
+            t += b[0].Len() + c[2].Len() + w
+        }
+        if M / 4 % 2 == 1 {
+            join: spawn d = try fails(i) catch default Vec<String>()
+            t += d.Len()
+        }
+        if M / 8 % 2 == 1 and i % 100 == 0 {
+            e Vec<String>
+            for k in range 100 {
+                join: spawn e = build(i + k)
+                t += e[2].Len()
+            }
+        }
+        if M / 32 % 2 == 1 {
+            q := 0
+            join {
+                spawn q = total(g)
+                spawn g = build(i)
+            }
+            t += q
+        }
+        if M / 64 % 2 == 1 {
+            n := 0
+            for s in h {
+                if n == 1 { join: spawn h = build(i) }
+                t += s.Len()
+                n++
+            }
+            if h.Len() == 0 { join: spawn h = build(i) }
+        }
+        # (last: a failed join's clause leaves the turn, P4d)
+        if M / 16 % 2 == 1 {
+            try join {
+                spawn f = try fails(i)
+            } catch E.Odd {
+                t += f.Len()
+                continue
+            }
+            t += f[0].Len()
+        }
+    }
+    for v in kept: t += v.Len()
+    io.PutLn($t + " " + $kept.Len())!
+    p2 := peak()
+    if N >= 100000: io.PutLn("flat" if p1 - p0 < 2048 or p2 - p1 < 2048 else "grew by " + $(p2 - p0) + " KB")!
+}

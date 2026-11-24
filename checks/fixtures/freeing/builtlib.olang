@@ -1,0 +1,17 @@
+# builtinside's module: a spawn target that is the function's result, its place not decided sole where the caller keeps a
+# reference into what it returns - its region's making guarded in this module's code, its parent the caller's region
+fn pad(i I64) String { return "t" + $i + " padded out to some length ..........................................." }
+
+fn Build(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push(pad(i + k))
+    return v
+}
+
+fn Gather(n I64) Vec<String> {
+    r Vec<String>
+    for i in range n {
+        join: spawn r = Build(i)
+    }
+    return r
+}

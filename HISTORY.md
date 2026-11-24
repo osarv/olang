@@ -42733,3 +42733,95 @@ Measured: pushtexts' two new shapes 50 -> 25 MB each (its expected output now fo
 Found along the way: the goldens left stale by wt-homecimp (compiler/load's layout, std/time's line in diag.txt,
 canon's and cshare's runs) captured again; checks' taskvals "grew by 25 MB" fails on master's compiler in this container
 too, not from this change.
+
+## 2026-11-23: a spawn's target local declared outside its loop lets go of its old value at the spawn (O8d condition 3, P1g, P2, O8b; mine; wt-spawnrelease)
+
+review12's F3: `r Vec<String>` declared before a loop, `join: spawn r = build(i)` each turn, never released its previous
+value - ~9 KB a turn, 1.8 GB at 200,000 turns - while `-memory -check` reported no keep. The store into a target is
+the task's (P1g), and the free pass recorded the target's own place as keeping (condition 3) through `ownLocal`, but a
+local given values only by spawns was no owner local: there was no place, no let-go and no store, so the report counted
+nothing. Both halves were fixed the same way: the target became what an assignment's target is.
+
+**Named.** A local declared outside a loop the spawn is in is an owner local (`findStmt`, the loops around each
+declaration counted as findCands walks), and the spawn gives it the task's result as an assignment would - `give`,
+`store`, and the place's let-go at the spawn (`walker.spawnLets`). Where it keeps, `-memory` names the row; a target
+that is not a local was already named at the growth of what it holds.
+
+**Released.** The let-go of a target's old value cannot run on the task's thread (the value is the spawner's, in its
+scope's kids list since the last wait - condition 3's reason), but it can run on the spawner's, at the spawn, before
+the task starts: nothing but the task writes the target until the wait (reading it before is a data race, P8b). That
+is sound where (`free.SpawnLets`):
+- every task into it writes it - one failing into its join leaves the target unwritten (P4d), and the code after a
+  clause that leaves (`continue`) may read the old value; a clause's default that could be existing storage (a capture,
+  a global, anything allocating - `plainDefault`) is excluded as well, `catch default Vec<String>()` is not;
+- spawns alone give it values after its declaration (an assignment is the ordinary owner path, which releases by
+  anchors only - the handle below would go stale);
+- its own join's tasks reach none of the spawner's storage: the spawn's let-goes are judged as a join's code's
+  (`spawnGoes` beside `joinGoes`, keeping where `joinReach` or `taskReach` says), but not against `joinTargets` -
+  what the join's tasks build is not the old value, which an earlier wait handed over or the spawner made. A sibling
+  given the old value by value, a task given it by reference, a view of it in use across the spawn (condition 6), a
+  copy kept in a collection: each keeps or copies as for an assignment, measured below.
+Being an assignment's let-go, the place is decided as one: sole, each value is made for it in a region of its own at
+the call's site (writePlans, as `r = build(i)` gets). The first build of this put the task's result in a stand-in of
+the target's scope and released only its parts at the spawn (an owner kept, `ownerParts`): the Vec's buffer went,
+but its texts were slots in the stand-in's chunks, which the fold splices into the spawner's scope for good (their
+owner the stand-in's keeper, a forwarder `__olang_slot_release` passes over) - still ~2 KB a turn. A stand-in of a
+region cannot be folded either (`__olang_scope_merge` splices chunks into the region's header). So the region the
+spawner makes for the new value is handed to the task **whole**: `mir.Task.Fresh` marks the scope that is the site's
+region (kind 1 only - never a region a value already lives in, kind 2, which the spawner builds into too), emit passes
+it through `__olang_standin_or` (the region itself where the guard made one, a stand-in otherwise), the fold passes over
+a region, and the trampoline names the task's thread its maker (`__olang_region_adopt`), so that its storage goes back
+there when the spawner releases it (O8b, as the hand-off's kid regions do). The task alone builds into it until the
+wait. The evaluator needed nothing: it hands a task its scopes as they are and runs it at the wait.
+At the spawn, lowering (`lower.spawnLets`) releases the old value's region by its anchors (`Release`, the owner path of
+`releases`), and first - for a value that holds nothing, an empty result or a default, whose region no anchor names -
+the region by a handle kept beside the local (`Settle` of the previous spawn's region, then the handle given this
+one's); where the place is not sole at link time, the parts as an owner's that keeps (gap 22's `ownerParts`).
+
+**Measured.** The review's shape: flat (2 MB peak at 200,000 turns; master 911 MB). checks' freeing spawnlocal: that
+shape read past the wait, three targets in a join beside a task building its own with a copy kept every 1,000 turns, a
+clause default on failing turns, a target in an outer loop's body spawned in an inner loop - flat at 100,000 turns
+where master grows 909 MB; built, `-free late`, `-sanitize`, `-race` and the evaluator agree; with the keeping shapes on
+(a task failing into its join, a sibling given the old value by value, a view of it across the spawn) `-check` names each
+and the oracles agree. Probes not kept: a target given the task's own old value by value and by reference, a struct
+target (it frees as `g = Rec.Of(i)` does - both named as RCopied's gap), two targets of one call (kept: the destructured
+store is no value made for either), review12's a1-a9 and c1-c2 (unchanged under every oracle). Open: a `String` or array
+target keeps, named - a text built through a slot scope (the spawner's stack) and an array target written in place by
+T11b's copy in the trampoline need a design of their own.
+
+## 2026-11-24: the spawnrelease review - a builder's part released with its value's empty region, a guarded region's parent handed to a task (O8d, P1g; mine; wt-spawnrelease)
+
+A soundness review of the spawn release above, with probe programs: a sibling reading the old value by reference, a
+task given a reference into it, a view across the spawn, two targets of one spawn, a task handing back storage it was
+given, generic and struct targets, a String target built from the old one, a target in a nested loop - all keep or free
+correctly, `-memory -check` naming what keeps. Two findings.
+
+First, a struct target built by a builder, `fn Box.of(i I64) Box { return Box(build(i), i) }`, crashed the program -
+and so did the plain assignment `b = Box.of(i)` in a loop on master: the builder makes a region of its own for
+`build(i)`'s Vec (a part of the value, built where the result goes) as a kid of its result scope, which is the region
+the caller made for the value. The caller's settle (O8d: release the value's region at once where none of its anchors
+names it - the value holds nothing there) compared the anchors' region with its own region, found the kid instead,
+and dropped its region, kids and all: the Vec's buffer was gone while `b` held it. The spawn release reached the same
+crash by a second road: its settle of the old value dropped the old region with the kid, then the release by anchors
+dropped the kid again. The kid is now moved out to the region's parent before an empty region goes
+(`__olang_region_settle_in`, which walks up from the anchors' region to the kid of the settled one; the evaluator's
+`settle` does the same through `moveOut`), so the part is released with the value, by its anchors, as a sibling region
+built in the caller is - no leak of the emptied region, which is dropped. The evaluator had refused the same program
+("uses storage after the scope it was made in closed"), the same bug run as MIR.
+
+Second, the region handed to a task whole was marked by a static bit (`mir.Task.Fresh`), but in code outside the root's
+object the region's making is guarded by its place's decision (wholeprog 2.1): a place not decided sole leaves the
+handle at the region's parent - a caller's region where the target is the function's result - and that parent was
+handed to the task whole and named as the worker's, though the spawner may build there beside the task. The task now
+carries the guarding place (`FreshGuard`), read at the spawn, and `__olang_standin_or` makes a stand-in unless the
+region was made. Left as it is: two spawns into one target in one join (a loop of spawns inside the join) now crash
+where master stored one of the results - both store into the target unordered, a data race (P8b), whose behaviour is
+undefined; `-race` names it.
+
+Found beside it, not this branch's: checks' freeing `taskvals` grows ~25 MB on master too (its parts 2 and 16 together;
+transparent huge pages are `madvise` here, the measure is VmHWM). Since the channel's waits block on cancel's waiters
+(wt-chanwait), a plain `chan.Send`/`Recv` reaches cancel's global waiter table, so "a task reads a global" (condition
+3's `taskReach`); that makes every lambda of the program a task root, the prelude's sort lambda among them
+(std/prelude/array.olang, `fn(i I64, j I64) Bool { return try less(a[i], a[j]) }`, a call through a function value),
+which lets go of any place - every place keeps. Left to the condition 3 narrowing (wt-cond3): a lambda need be a root
+only where a task can reach it, and a task calling through a function value already keeps everything (`taskAll`).

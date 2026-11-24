@@ -414,6 +414,23 @@ to grow into them, (c) a hand-off at the join. (c) is built:
   evaluator's "it indexes outside the array" at Vec.SetAt for a `Map<I64, Vec<String>>` stored into a Vec's element and
   copied back out was no divergence: the built program released each entry's parts twice too, by luck unseen there -
   fixed by review12, checks' freeing mapsplit.)
+- **A spawn's target local declared outside its loop (review12 F3, closed by wt-spawnrelease).** `r Vec<String>` before
+  the loop, `join: spawn r = build(i)` each turn: the store was the task's, no let-go anywhere, so each turn's value
+  stayed in the spawner's scope (~9 KB a turn, 1.8 GB at 200,000 turns) and `-memory -check` counted no keep (no place,
+  no let-go: a false proof). The target is now an owner local (`findStmt`: declared outside a loop the spawn is in),
+  given the task's result as an assignment's target is - its store and let-go in the spawner, at the spawn
+  (`walker.spawnLets`), so `-memory` names it where it keeps. Where every spawn into it lets go itself
+  (`free.SpawnLets`: given values by its declaration and spawns alone, no task failing into its join - P4d leaves the
+  target unwritten, its old value still read after the clause - and no clause default that could be existing storage,
+  `plainDefault`), its let-goes are judged against its own join's tasks reaching the spawner's storage (`spawnGoes`, as
+  `joinGoes` are) but not against what those tasks build (`joinTargets`). Sole, lowering (`lower.spawnLets`) releases
+  the old value's region on the spawner's thread before the task starts - by its anchors, or where it holds nothing (a
+  default, an empty result) by the handle kept beside the local (`Settle`) - and the region made for the new value at
+  the call's site goes to the task whole (`mir.Task.Fresh`; runtime.ll's `__olang_standin_or`, a region no stand-in
+  and passed over by the fold; `__olang_region_adopt` names the worker its maker, so its storage goes back there).
+  Measured: flat (2 MB peak at 200,000 turns where master grows 911 MB); a struct target frees as its assignment does
+  (named as RCopied's gap as `g = Rec.Of(i)` is); a `String` or array target keeps, named (a text's slot scope is the
+  spawner's stack, an array target is written in place by T11b's copy - open). checks' freeing spawnlocal.
 
 ## 3. Order of work (phase 2)
 
