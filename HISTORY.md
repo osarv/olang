@@ -42927,3 +42927,13 @@ so the next let-go released scope storage as a region. A conditional with an arm
 text may change now keeps (`made`; case o8dcondconst). Also: the freeing scenario's taskvals, failing on master since
 wt-chanwait (chan's Send and Recv read cancel's global waiter table, so every lambda became a task root, std's sort lambda
 among them), passes: lambdas are no roots now, and the sort lambda's captured call is followed.
+
+## 2026-11-24: interp@array's "3 differ" was a stale stored run, and evaldiff now says so (B3e; mine; wt-arrayeval)
+
+The full verify failed interp@std/prelude/tests/array.olang: "built 11 ok, interpreted 14 ok, 3 differ", the three
+being e73finds' new Join and Permutations tests "not in the built run". Not a compiler or test-runner bug: built, the
+file runs all 14 (the verify log's own test@ run shows them); evaldiff's "built" side is compiler/goldens/run.txt,
+captured before those tests were added (recaptured meanwhile on master by wt-cond3's goldens). A test the
+stored run lacks is now reported as "not in the stored built run (compiler/goldens/run.txt is older than the test -
+make rungold)", so the next such failure names its remedy instead of reading as a lost test. The token and tree goldens
+(make tokgold, astgold) were recaptured too; every file changed since capture was changed by its committed edits.

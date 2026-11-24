@@ -2133,7 +2133,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-fddc434ced3ad5dc a3aa339eb781c03f checks/checks.olang
+1ecd37c974ed2bcb 4d2a1101337289ad checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2268,6 +2268,9 @@ ed65e1c871a90895 f027d66ab67504be checks/fixtures/freeing/elements.olang
 635d890092195116 ee301f1a82942b4c checks/fixtures/freeing/fixeddefaults.olang
 478c2c45c6a1d059 3ee0bcd066656c61 checks/fixtures/freeing/fixedfills.olang
 658cd15b20393216 49056b0a8ff733fb checks/fixtures/freeing/gaps.olang
+3d498da06322d08c 5c0c382c27340712 checks/fixtures/freeing/gaps17.olang
+161ed777e4ee79f7 4ccbe3bd6235a7cc checks/fixtures/freeing/gaps17b.olang
+2f2fdeded84c6069 a3c9de3943eea165 checks/fixtures/freeing/gaps19.olang
 8f51a875a88e3c20 abf5a8fc50ff6728 checks/fixtures/freeing/genviews.olang
 217397296d19aecc 54f099facf748fa7 checks/fixtures/freeing/global.olang
 c92dc198c42716e3 04940b8c8584997e checks/fixtures/freeing/globalinit.olang
@@ -2598,7 +2601,7 @@ e80657e77bb89289 8872ecfd680a31d9 compiler/testdata/lex/strateof.olang
 05e909abce8f3d22 5a2cb9d13c05b79e compiler/tools/diaggold_capture.olang
 17332ebb578748da ccbd230905b38421 compiler/tools/drvdiff.olang
 a4d11107338659ab c2600e07c4d9f411 compiler/tools/dump.olang
-c9d0a1e5defd756f b21bbe62c2f0cabc compiler/tools/evaldiff.olang
+509a40918b9f93d4 664158fb2db79faa compiler/tools/evaldiff.olang
 92398fd91ceec3f7 5e240514a1a7010b compiler/tools/fmt.olang
 90cdc4e1817524f3 dad4eabeef84a98f compiler/tools/layoutdiff.olang
 293aacc26d544a2b 35d25c91432c2269 compiler/tools/layoutgold.olang

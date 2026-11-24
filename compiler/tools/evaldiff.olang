@@ -177,7 +177,9 @@ fn result.tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result 
         if a.Has(name): continue
         diffs++
         if not listed(f): unlisted++
-        rows.Push("    " + $name + ": not in the built run, interpreted " + $(try b.Get(name) catch default "") + "\n")
+        # a test the stored run lacks was added after compiler/goldens/run.txt was captured: the golden is stale, not the evaluator
+        rows.Push("    " + $name + ": not in the stored built run (compiler/goldens/run.txt is older than the test - make rungold), interpreted " +
+                  $(try b.Get(name) catch default "") + "\n")
     }
     # a status differs as the tests that differ say (1 where one fails) - with none differing, only a listed file may
     statusDiffers := p.Status != s0.Status
