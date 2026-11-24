@@ -42825,3 +42825,58 @@ transparent huge pages are `madvise` here, the measure is VmHWM). Since the chan
 (std/prelude/array.olang, `fn(i I64, j I64) Bool { return try less(a[i], a[j]) }`, a call through a function value),
 which lets go of any place - every place keeps. Left to the condition 3 narrowing (wt-cond3): a lambda need be a root
 only where a task can reach it, and a task calling through a function value already keeps everything (`taskAll`).
+
+## 2026-11-24: condition 3 for C, narrowed (O8d; mine; wt-cond3)
+
+The compiler's own build freed nothing early: `-memory` on compiler/olang.olang kept all 999 places, 389 of them
+reported "C is given a function value, which it may call from a thread of its own". The value was os.RunOnStack's
+lambda (`olang.olang`'s `drive`, parse's deep recursion): `__olang_run_on_stack` is the runtime's own, runs the function
+on a thread with a big stack while the call waits, and nothing else runs - the call `f()` would be. free.olang set `cAt`
+for any foreign call given a function value, and one such call anywhere live kept every place of the program.
+
+What changed, in free.olang:
+
+- **os.RunOnStack is a call** (`syncCall`): the extern's function argument is judged as a call through it with no
+  arguments - through RunOnStack's parameter `f`, so each caller's lambda composes into the caller (letsVia), as
+  `apply(xs, fn...)` does. A region released on that thread goes home through the per-thread return lists
+  (wt-taskhandoff), so nothing else is needed at run time.
+- **C's export fns are tasks' code** (`cRoots`): a C function given an export fn (X13), a `-library` build (X14), or C of
+  the program's own that may name one (X9, X21) may call those export fns from a thread of C's, beside anything and
+  with no join to wait for - so each export fn C may call (`exports`) is a task root: one reaching a global, or calling
+  through a function value, an `any` or code not checked, keeps every place (no join bounds when it runs, so every
+  let-go of the program may race it); else what its code lets go of on storage it did not build keeps, as a task's.
+  What else C could reach of the program's storage it reaches through a reference the program gave it, which keeps by
+  condition 2 as any reference given to C does. A function value given C that is not an export fn - only the runtime's
+  own externs take one (X13 refuses the rest) - keeps every place as before (`cOpaque`). `-library` and C of the
+  program's own had kept every place only on paper: the implementation set `cThreads` only for a value handed to C, and
+  kept every place where an export fn was callable at all (`f.exports.Len() > 0`); both now go through cRoots.
+- **A lambda's calls through what it captured** (`capVia`, letsVia's bit `CapBit`): std's `sortByPositions` sorts by
+  `sortMergeBuffered(p, fn(i, j) { return try less(a[i], a[j]) })` - a call through the captured parameter `less`,
+  which the walks did not follow, so the lambda, sortByPositions, every Sort and every caller of a Sort let go of
+  anything; os.ReadDir sorts, so fix's builder and checker tasks did. A call through a Capture local of function type the
+  lambda never assigns is now recorded by the local; where the lambda is written as an argument (letsThrough), the
+  maker composes it by what it captured there: its own parameter (letsVia) or capture (capVia again), never assigned;
+  anything else, and the lambda met any other way (viaCall), lets go of anything.
+- **Task roots**: taskKeeps took every function named as a value, and every lambda where a task reads a global, as roots
+  of the tasks' code. A function value runs in a task only where the tasks' code calls through it, and the walks judge
+  each such call - as the bodies it is (asRecord, letsThrough: an edge the reach follows), through a parameter or a
+  capture (judged by the callers, which are reached too), or as letting go of anything (goAll) - so neither is a root
+  any more. A body reached that lets go through its parameters, or a final walk's let-go through one (`CalleeVia`,
+  `CalleeViaGiven`), is judged by its callers; a root's own still keeps everything. Kept: every destructor, Str, Eq and
+  Hash, which run where no call is written.
+
+Tried first and dropped: narrowing the named and lambda roots by type - the parameter counts of the function values a
+global's type or a spawn's arguments may hold (a types.FuncArities walk). Sound, but the compiler's `cells.Builder`
+global holds `buildCell`, which builds a whole cell, so it stayed a root letting go of anything; the argument above
+makes the roots unnecessary instead.
+
+Cases: o8dcback (an export fn given qsort, a place freed elsewhere), o8dcbackglobal (the export fn writes a global:
+every place keeps), o8drunonstack, o8dcapturevia (tasks sorting through a captured parameter, main's place frees),
+o8dcapturekeeps (the lambda given through the capture lets go of a Log's text: every Log's place keeps).
+
+Measured on the self-build (`build -memory compiler/olang.olang`): 0 of 1004 places free before and after; peak RSS of
+that build 2.69 GB both. The reason moved from C to the tasks: "a task reads a global, and the join's code lets go of it
+while the task may run" (397 rows) - `drive` runs the whole compiler in a join beside spin's ticker task, which reads
+spin's globals (Title, Frames, the atomics), and condition 3 keeps every let-go of a join's code where any task reads a
+global. With that join removed (a scratch build, not committed) 540 of the 1004 places free at once. Next: judge a
+join's reach by the globals its tasks read and the types their values reach, rather than every let-go of its code.

@@ -33,7 +33,8 @@ Where a fact the conditions need **cannot be known** the place keeps, and only t
   function written as an argument, not a parameter the body never assigns - and whose type promises nothing (`pure`,
   fnvalues round 10): it may keep any argument and let go of anything;
 - **C that may call back** (X12, O8d condition 3): an `extern` in a program that gives C an `export fn`, is built
-  `-library`, or links C of its own - but for libc's I/O, text, memory and time functions;
+  `-library`, or links C of its own - but for libc's I/O, text, memory and time functions; the export fns C may call
+  run as tasks' code, beside anything (every place keeps where one reaches a global or code not known);
 - **storage a task can reach** (condition 3), and **an instance whose destructor is still to run** (condition 4).
 
 Not exceptions any more (checked 2026-11-15): a module compiled on its own (W2, wholeprog 2.1: every module's code
@@ -1006,3 +1007,26 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   spawn target's type places kept only through its join where the wait hands the result over, only live bodies'
   spawns. taskvals runs every part by default, part 2 flat; taskkept new. Open: a clause default's storage on the
   worker's program part; the evaluator's divergence on a moved Map of Vecs of text (2.4, question 1).
+- 2026-11-24, wt-cond3: **condition 3 for C, narrowed** - the compiler's own build froze nothing early: "C is given a
+  function value" kept all 999 places, though the value was os.RunOnStack's lambda, which the runtime's
+  `__olang_run_on_stack` runs on a thread of its own while the call waits. Now (free.olang): (1) that call is the call
+  `f()` would be (`syncCall`: through f's parameter, composed by each caller's lambda); (2) C given an export fn, a
+  `-library` build or C of the program's own run the export fns C may call as tasks' code (`cRoots`) - with no join to
+  wait for them, so one reaching a global or code not known keeps every place, else what its code lets go of on
+  storage it did not build keeps; a function value given C that is no export fn (the runtime's own aside) keeps every
+  place as before (`cOpaque`). A `-library` build or C of its own kept every place only in the spec before: the
+  implementation now does what it says. (3) A lambda calling through what it captured - a parameter of its maker's (or a
+  capture of its own) never assigned - lets go as the value its maker gives, composed where the lambda is written as an
+  argument (`capVia`, letsVia's `CapBit`): std's `sortByPositions` (`fn(i, j) { return try less(a[i], a[j]) }`) made
+  every Sort let go of anything, so every task that sorted (fix's builder, through os.ReadDir) did. (4) taskKeeps took
+  every function named as a value, and every lambda where a task reads a global, among the tasks' roots: a function
+  value runs in a task only where the tasks' code calls through it, and the walks judge each such call - as the bodies
+  it is (an edge the reach follows), through a parameter or capture (judged by the callers, reached too), or as letting
+  go of anything - so neither is a root now; a root's own calls through a parameter still keep everything. Cases
+  o8dcback, o8dcbackglobal, o8drunonstack, o8dcapturevia, o8dcapturekeeps. The compiler's -memory: the condition-3
+  reason moved from "C is given a function value" (389 rows) to "a task reads a global, and the join's code lets go of
+  it while the task may run" (397): `drive`'s join runs the whole compiler beside spin's ticker task, which reads
+  spin's globals (Title, Frames), and condition 3 keeps every let-go in a join's code where any task reads a global.
+  Without that task the build frees 540 of its 1004 places (measured with drive's join removed). **Where to pick up**:
+  judge a join's reach by the globals its tasks read - their places, and the places of the types their values reach -
+  rather than keeping every let-go of the join's code.
