@@ -62,3 +62,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Debts (cloud, 2026-11-24): oann wt-bf16gemm merged (eaa9b08) - pair-dot micro-kernel, on only for znver4/5 (widened F32 wins on SPR); measure on the Ryzen with make bf16bench
 - OLang Debts (cloud, 2026-11-24): olang wt-copyonce - a conditional given to a reference and a call result placed elsewhere built where they go (no double copy)
 - OLang Debts (cloud, 2026-11-24): olang wt-e73finds merged (bee87cb62) - M19, Array.Permutations
+- OLang Debts (cloud, 2026-11-24): olang wt-copyonce merged (ad0147dbe) - cond arms and try-wrapped calls built where the reference goes (-54 MB lower+emit)
