@@ -3449,7 +3449,9 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
             scopes := ln.taskPassed(callee, ty, c.Site)
             ln.spawnLets(sw, I64(c.Site), sp)
             if ln.dead: return
-            k := ln.F.AddTask(callee, args, scopes, places, cls, ends, sw.Task.Span(), cps, ln.freshScopes(sw, scopes, I64(c.Site)))
+            fresh := ln.freshScopes(sw, scopes, I64(c.Site))
+            guard := ln.plan.RegionGuard[I64(c.Site)] if fresh != 0 else -1
+            k := ln.F.AddTask(callee, args, scopes, places, cls, ends, sw.Task.Span(), cps, fresh, guard)
             ln.emit(mir.Stmt.Spawn(sp, j, k))
         }
         case _ { }

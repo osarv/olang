@@ -1,0 +1,39 @@
+# a value built by a builder whose part another call builds where the result goes - `Box(builtlib.Build(i), i)` returned,
+# the part in a region the builder made inside the caller's region for the value - given to an owner local each turn:
+# by an assignment (1), as a spawn's target (2); and a spawn target that is a callee's result, not decided sole, the
+# caller's place sole (4). The value's region holds none of it - the part's region is moved out to its parent before
+# that region goes, and released with the value (O8d, P1g). Built, -free late, -sanitize and the evaluator agree
+import "std/io"
+import "builtlib"
+
+N I64 = 20000
+M I64 = 7
+
+type Box struct(V Vec<String>, At I64) {
+    V
+    At
+}
+
+fn Box.of(i I64) Box { return Box(builtlib.Build(i), i) }
+
+fn main() {
+    t := 0
+    a := Box.of(0)
+    b := Box.of(0)
+    c := builtlib.Gather(1)
+    for i in range N {
+        if M % 2 == 1 {
+            a = Box.of(i)
+            t += a.V[1].Len() + a.At
+        }
+        if M / 2 % 2 == 1 {
+            join: spawn b = Box.of(i)
+            t += b.V[2].Len() + b.At
+        }
+        if M / 4 % 2 == 1 {
+            c = builtlib.Gather(2 + i % 3)
+            t += c[0].Len()
+        }
+    }
+    io.PutLn($t)!
+}

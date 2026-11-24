@@ -3234,9 +3234,13 @@ make:
 
 ; O8d, P2: a task's scope that is the region its spawner made for the task's result (lower.spawnLets) - the region itself,
 ; which the task alone builds into until the join's wait (the spawner reads nothing of it before then); any other a
-; stand-in, as __olang_standin_in makes one. The join's fold passes over a region (__olang_scope_merge)
-define ptr @__olang_standin_or(ptr %parent, ptr %home) {
+; stand-in, as __olang_standin_in makes one. The join's fold passes over a region (__olang_scope_merge). whole is false
+; where the region's making was guarded and its place is not decided sole: parent is then the region's own parent,
+; which may be a region the spawner builds in too (a caller's, given as the result's scope)
+define ptr @__olang_standin_or(ptr %parent, ptr %home, i1 %whole) {
 entry:
+  br i1 %whole, label %look, label %sub
+look:
   %h = load ptr, ptr %parent
   %isreg = icmp eq ptr %h, @__olang_region_chunk
   br i1 %isreg, label %reg, label %sub
@@ -3937,6 +3941,91 @@ drop:
   tail call void @__olang_region_drop(ptr %r)
   br label %done
 done:
+  ret void
+}
+
+; O8d: an owner's value built in region r, a its anchors' region (__olang_region_home of the first one naming one): r
+; kept where a is r, else released - but where a is a region made inside r (a callee building where its result goes made
+; a region of its own there for a part, `Box(build(i), i)` returned: the value is in that one, r holds nothing of it),
+; the kid of r on the way to a is moved out to r's parent first, so the value outlives r and is released by its anchors
+; as a value in a region of its own is
+define void @__olang_region_settle_in(ptr %r, ptr %a) {
+entry:
+  %same = icmp eq ptr %a, %r
+  br i1 %same, label %done, label %walk
+walk:
+  %c = phi ptr [ %a, %entry ], [ %p, %up ]
+  %none = icmp eq ptr %c, null
+  br i1 %none, label %drop, label %look
+look:
+  %ch = load ptr, ptr %c
+  %creg = icmp eq ptr %ch, @__olang_region_chunk
+  br i1 %creg, label %par, label %drop
+par:
+  %pp = getelementptr %olang.region, ptr %c, i32 0, i32 4
+  %p = load ptr, ptr %pp
+  %inr = icmp eq ptr %p, %r
+  br i1 %inr, label %move, label %up
+up:
+  br label %walk
+move:
+  call void @__olang_region_out(ptr %c, ptr %r)
+  br label %drop
+drop:
+  tail call void @__olang_region_drop(ptr %r)
+  br label %done
+done:
+  ret void
+}
+
+; O8d: region c, a kid of region r, made a kid of r's parent instead (__olang_region_settle_in) - linked as
+; __olang_region_make links a new one, its owner the parent where that is no region
+define void @__olang_region_out(ptr %c, ptr %r) {
+entry:
+  %pp = getelementptr %olang.region, ptr %c, i32 0, i32 2
+  %prev = load ptr, ptr %pp
+  %np = getelementptr %olang.region, ptr %c, i32 0, i32 3
+  %next = load ptr, ptr %np
+  %hasnext = icmp ne ptr %next, null
+  br i1 %hasnext, label %fixnext, label %fixprev
+fixnext:
+  %npp = getelementptr %olang.region, ptr %next, i32 0, i32 2
+  store ptr %prev, ptr %npp
+  br label %fixprev
+fixprev:
+  %hasprev = icmp ne ptr %prev, null
+  br i1 %hasprev, label %intoprev, label %intor
+intoprev:
+  %pnp = getelementptr %olang.region, ptr %prev, i32 0, i32 3
+  store ptr %next, ptr %pnp
+  br label %link
+intor:
+  %rkp = getelementptr %olang.scope, ptr %r, i32 0, i32 6
+  store ptr %next, ptr %rkp
+  br label %link
+link:
+  %parp = getelementptr %olang.region, ptr %r, i32 0, i32 4
+  %parent = load ptr, ptr %parp
+  %kp = getelementptr %olang.scope, ptr %parent, i32 0, i32 6
+  %first = load ptr, ptr %kp
+  store ptr %first, ptr %np
+  store ptr null, ptr %pp
+  %has = icmp ne ptr %first, null
+  br i1 %has, label %back, label %head
+back:
+  %fpp = getelementptr %olang.region, ptr %first, i32 0, i32 2
+  store ptr %c, ptr %fpp
+  br label %head
+head:
+  store ptr %c, ptr %kp
+  %cpp = getelementptr %olang.region, ptr %c, i32 0, i32 4
+  store ptr %parent, ptr %cpp
+  %parhp = getelementptr %olang.scope, ptr %parent, i32 0, i32 0
+  %parh = load ptr, ptr %parhp
+  %inregion = icmp eq ptr %parh, @__olang_region_chunk
+  %owner = select i1 %inregion, ptr null, ptr %parent
+  %ownp = getelementptr %olang.region, ptr %c, i32 0, i32 6
+  store ptr %owner, ptr %ownp
   ret void
 }
 

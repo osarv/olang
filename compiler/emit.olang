@@ -4559,9 +4559,10 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
         case mir.Stmt.Settle(_, h, p) {
             at, pty := fe.addr(p)
             r := fe.let("inttoptr i64 " + $fe.load("i64", fe.localAt(h)) + " to ptr")
-            keep := fe.let("icmp eq ptr " + $fe.anchorRegion(at, pty) + ", " + $r)
-            fe.E.runtime("__olang_region_settle")
-            fe.w("call void @__olang_region_settle(ptr " + $r + ", i1 " + $keep + ")")
+            # (kept where the anchors name r; a region a callee made inside r for the value moved out of it first)
+            a := fe.anchorRegion(at, pty)
+            fe.E.runtime("__olang_region_settle_in")
+            fe.w("call void @__olang_region_settle_in(ptr " + $r + ", ptr " + $a + ")")
         }
         case mir.Stmt.Write(_, b, how, x) {
             if fe.directRef(b) {
@@ -9020,10 +9021,15 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
         match r {
             case mir.ScopeRef.Program { vals.Push("null") }
             case _ {
-                # (O8d: the region made for the task's result handed to it whole, where it is one - mir.Task.Fresh)
-                how := "__olang_standin_or" if freshScope(k, I64(i)) else "__olang_standin_in"
+                # (O8d: the region made for the task's result handed to it whole, where it is one - mir.Task.Fresh - and,
+                # where its making is guarded by its place's decision, where that place is decided sole: else the scope
+                # is the region's parent, which the spawner may build in beside the task)
+                fresh := freshScope(k, I64(i))
+                how := "__olang_standin_or" if fresh else "__olang_standin_in"
                 e.runtime(how)
-                sub := fe.let("call ptr @" + $how + "(ptr " + $fe.scope(r) + ", ptr " + $js + ")")
+                whole := ""
+                if fresh: whole = ", i1 " + $("true" if k.FreshGuard < 0 else fe.load("i1", "@" + $e.sole(k.FreshGuard)))
+                sub := fe.let("call ptr @" + $how + "(ptr " + $fe.scope(r) + ", ptr " + $js + $whole + ")")
                 subs.Push($sub)
                 vals.Push($sub)
             }

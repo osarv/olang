@@ -1611,11 +1611,32 @@ fn (m mut Machine&) regionHomeOf(r I64) I64 {
     return c
 }
 
-# O8d: the region an owner's value at p was built in (h) closed where none of its anchors names it - nothing reaches it
+# O8d: the region an owner's value at p was built in (h) closed where none of its anchors names it - nothing reaches it;
+# where they name a region made inside h (a callee building where its result goes made one there for a part), the kid
+# of h on the way to it moved out to h's parent first (__olang_region_settle_in)
 fn (m mut Machine&) settle(h I64, p Ptr, ty types.TypeId) {
     if h == 0 or not m.live(h) or m.scopes[h & slotMask].Kind != sRegion: return
-    if m.anchorRegion(p, ty) == h or m.halted: return
+    a := m.anchorRegion(p, ty)
+    if a == h or m.halted: return
+    m.moveOut(a, h)
     m.closeRegion(h)
+}
+
+# region c, or the region it is inside of that is a kid of region h, made a kid of h's parent (settle)
+fn (m mut Machine&) moveOut(c0 I64, h I64) {
+    c := c0
+    for c != 0 and m.live(c) and m.scopes[c & slotMask].Kind == sRegion {
+        p := m.scopes[c & slotMask].Parent
+        if p == h {
+            par := m.scopes[h & slotMask].Parent
+            if par == 0 or not m.live(par): return
+            m.disown(c)
+            m.adopt(c, par)
+            m.scopes[c & slotMask].Owner = par if m.scopes[par & slotMask].Kind != sRegion else 0
+            return
+        }
+        c = p
+    }
 }
 
 fn (m mut Machine&) closeRegion(region I64) {

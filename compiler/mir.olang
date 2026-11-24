@@ -477,7 +477,8 @@ type Case struct(Value I64, To BlockId) {
 # the storage it holds where the length is unchanged, else given the result's - a copy of it where Copies (f.Refs, one
 # per target) names where the target's storage is (ScopeRef.Frame: the result taken as it is), made on the task's thread
 type Task struct(Target Callee, Args Range, Scopes Range, Targets Range, Clauses Range, Ends Range = Range(0, 0)
-                 EndsSp source.Span = source.Span(0, 0), Copies Range = Range(0, 0), Fresh I64 = 0) {
+                 EndsSp source.Span = source.Span(0, 0), Copies Range = Range(0, 0), Fresh I64 = 0
+                 FreshGuard I64 = -1) {
     Target
     Args
     Scopes
@@ -490,6 +491,8 @@ type Task struct(Target Callee, Args Range, Scopes Range, Targets Range, Clauses
     # where it is one (a sole target's), handed to the task whole - the task alone builds there until the wait - and
     # named as made by the task's thread, which its storage goes back to; else a stand-in, as any other scope
     Fresh
+    FreshGuard   # the place whose decision guards that region's making (lower.guarded), -1 for none: where it is not
+                 # decided sole the scope is the region's parent, a stand-in made for it
 }
 
 # a task's clause: the errors it takes (f.Items: an error type and a word, -1 every word; All for every error) and
@@ -1037,13 +1040,13 @@ fn (f mut Fn&) AddCases(cs Array<Case>&) Range {
 
 fn (f mut Fn&) AddTask(target Callee, args Range, scopes Range, targets Array<Lvalue>&, clauses Array<TaskClause>&
                        ends Range = Range(0, 0), endsSp source.Span = source.Span(0, 0), copies Range = Range(0, 0)
-                       fresh I64 = 0) I32 {
+                       fresh I64 = 0, freshGuard I64 = -1) I32 {
     at := f.Places.Len()
     for p in targets: f.Places.Push(p)
     ct := f.Clauses.Len()
     for c in clauses: f.Clauses.Push(c)
     f.Tasks.Push(Task(target, args, scopes, Range(I32(at), I32(targets.Len())), Range(I32(ct), I32(clauses.Len())), ends
-                      endsSp, copies, fresh))
+                      endsSp, copies, fresh, freshGuard))
     return I32(f.Tasks.Len() - 1)
 }
 

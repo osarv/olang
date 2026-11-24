@@ -771,6 +771,15 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(outOf(dir).Contains("spawnlocal.olang:110:17: memory: 'f' keeps what it lets go of until main's scope closes"), "spawnlocal names a target its failing task leaves unwritten", dir)
     try r.expect(sh(dir, "\"$OLANG\" -sanitize -define M=127 -define N=2000 spawnlocal.olang > out.txt 2>&1") == 0 and outOf(dir) == "2040441 2\n", "spawnlocal's keeping shapes -sanitize", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define M=127 -define N=200 spawnlocal.olang > out.txt 2>&1") == 0 and outOf(dir) == "200951 1\n", "spawnlocal's keeping shapes interpreted", dir)
+    # (builtinside: a builder's value whose part another call built where the result goes, in a region the builder made
+    # inside the caller's region for the value - given to an owner local by an assignment and as a spawn's target - and
+    # a spawn target that is a callee's result, not decided sole, the caller's place sole: the value's region let go of
+    # with the part's region moved out of it first, and a guarded region's parent never handed to a task whole; built,
+    # -free late, -sanitize and the evaluator agree, where master released the part with the value's empty region)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check builtinside.olang > out.txt 2>&1") == 0 and outOf(dir).Contains(" 5 free it at once, 1 keeps it"), "builtinside -memory -check", dir)
+    try r.expect(sh(dir, "./build/builtinside > out.txt 2>&1") == 0 and outOf(dir) == "404437792\n", "builtinside released a part with its value's empty region", dir)
+    try late(r, dir, "builtinside", "2000", "4439789\n")
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 builtinside.olang > out.txt 2>&1") == 0 and outOf(dir) == "83586\n", "builtinside interpreted", dir)
     for p in Array<String&>["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec"
                             "vecreassign", "dropvec", "exportquiet", "maptake", "mapput", "mapdrop", "globals", "fieldfeed", "getread"
                             "mapkeys"] {
