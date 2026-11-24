@@ -42846,3 +42846,20 @@ were reported failing; on master after ad0147dbe none reproduces. The golden was
 changes nothing now); `evaldiff` and `interp@` say "same" for the three files, and std/time's TZ test sets TZ itself
 (`setenv`), so it passes under any ambient TZ (tried Asia/Tokyo, Europe/Stockholm); pushtexts prints
 `104857600 once once once once` on three runs under its 4 GB `ulimit -v`. No code changed.
+
+## 2026-11-24: freeing gaps 17 and 19 re-checked - open shapes found, fixtures name them (O8f, B18a; mine; wt-gaps1719)
+
+plan.md listed gaps 17 and 19 as "unverified, no repro". Programs of shapes beside the closed ones, measured by peak
+resident set at two sizes and built with `-memory -check`, found both still open in places. Gap 17: a struct holding a
+Map by value, built by its constructor from a local and stored into an array element, keeps the old Map (100 MB at
+20,000 turns): the constructor's value is a call's value copied, and a copy holding a Map is untracked - gaps.olang's
+literal shape by another route. And an `Array<Vec<Map<String, I64>>>` element, flat on its own, keeps beside a Map of
+the same Maps whose values Put replaces - its Maps become an owner in a one-region place, the places being per type
+(191 MB at 200,000 turns); the per-instance places decided 2026-11-23 should close it. -memory -check names both
+(checks' freeing gaps17, gaps17b, asserted as gaps.olang is). Gap 19: a returned local landing in an element keeps
+storage in the element's scope each call where it is text (~29 B a call, gap 19's original symptom), text reassigned
+before the return (~450 B), or one of two Vec locals returned by a conditional (~1 KB) - `Plan.RetFrame` covers a
+single Vec local only - and -memory -check reports all of it freed, so the check is not yet a proof here (gaps19,
+asserted over 8 MB). -sanitize, -free late and the evaluator agree on every shape: nothing is freed too early. Reported
+to the session that owns scope.olang/free.olang/lower.olang; no compiler code changed. docs/freeing.md's log has the
+shapes tried that free.

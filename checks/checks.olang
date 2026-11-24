@@ -789,6 +789,18 @@ fn freeing(r mut report&) ? Failed {
     o := outOf(dir)
     try r.expect(o.Contains("gaps.olang:9:9: memory: 'rows[i % 10]' keeps what it lets go of until main's scope closes: a let-go early freeing does not follow (O8f)"), "no row for the element", dir)
     try r.expect(o.Contains("error[B18]: 2 let-goes early freeing does not follow (O8f)"), "no B18 error", dir)
+    # (gaps17, gaps17b: gap 17's open part - a struct holding a Map built by its constructor, a Vec of Maps beside a Map
+    # of the same Maps - named by -memory -check; gaps19: gap 19's open part, returned text locals and a conditional of
+    # two Vec locals, which -memory -check misses - over 8 MB, its output right under -free late, -sanitize and the
+    # evaluator. Each moves to `limited` once closed)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check gaps17.olang > out.txt 2>&1") == 1, "gaps17 passed -memory -check", dir)
+    try r.expect(outOf(dir).Contains("gaps17.olang:23:9: memory: 'rows[i % 10]' keeps what it lets go of"), "gaps17 names no element", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check gaps17b.olang > out.txt 2>&1") == 1, "gaps17b passed -memory -check", dir)
+    try r.expect(outOf(dir).Contains("gaps17b.olang:26:9: memory: 'rows[i % 10]' keeps what it lets go of"), "gaps17b names no element", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build gaps19.olang > out.txt 2>&1") == 0, "gaps19 build", dir)
+    try r.expect(sh(dir, "(ulimit -v 8192 && ./build/gaps19) > out.txt 2>&1") != 0, "gaps19 fits 8 MB: move it to limited", dir)
+    try late(r, dir, "gaps19", "200", "29180\n")
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 gaps19.olang > out.txt 2>&1") == 0 and outOf(dir) == "29180\n", "gaps19 interpreted", dir)
 }
 
 # B18b: an oracle that runs no freeing code - the program built at size N as usual and built with early freeing off

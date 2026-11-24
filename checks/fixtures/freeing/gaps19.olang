@@ -1,0 +1,45 @@
+import "std/io"
+
+# docs/freeing.md gap 19's open part (2026-11-24, wt-gaps1719): a returned value local landing in an array's element
+# keeps storage in the array's scope each call, and -memory -check names none of it (every let-go "frees it at once"):
+# a text local returned (`txt`, ~29 bytes a call: 128 MB at 4,000,000), a text local given a second value before it is
+# returned (`again`, ~450 bytes a call), a conditional of two Vec locals returned (`pick`, ~1 KB a call). Over 8 MB at
+# 400,000 turns; under -sanitize and the evaluator its output stays right (no use after free)
+N I64 = 400000
+
+fn txt(i I64) String {
+    s := $i + " padded out a little"
+    return s
+}
+
+fn again(i I64) String {
+    s := $i + " padded out a little"
+    s = s + "!"
+    return s
+}
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 4: w.Push(i + j)
+    return w
+}
+
+fn pick(i I64) Vec<I64> {
+    a := mk(i)
+    b := mk(i + 1)
+    return a if i % 2 == 0 else b
+}
+
+fn main() {
+    c := Array<String>(10)
+    d := Array<String>(10)
+    w := Array<Vec<I64>>(10)
+    t := 0
+    for i in range N {
+        c[i % 10] = txt(i)
+        d[i % 10] = again(i)
+        w[i % 10] = pick(i)
+        t += c[i % 10].Len() + d[i % 10].Len() + w[i % 10][0]
+    }
+    io.PutLn($t)!
+}

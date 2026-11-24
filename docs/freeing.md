@@ -1006,3 +1006,16 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   spawn target's type places kept only through its join where the wait hands the result over, only live bodies'
   spawns. taskvals runs every part by default, part 2 flat; taskkept new. Open: a clause default's storage on the
   worker's program part; the evaluator's divergence on a moved Map of Vecs of text (2.4, question 1).
+- 2026-11-24, wt-gaps1719: **gaps 17 and 19 re-checked on master 1cc282a15 - both still have open shapes** (no code
+  changed; fixtures name them). Gap 17: an element holding a struct with a Map field built by its constructor (`S(m)`,
+  a call's value copied - a copy holding a Map stays untracked, as gaps.olang's literal) keeps the old Map, 13 MB to
+  100 MB at 20,000 turns (checks' freeing gaps17); an `Array<Vec<Map<String, I64>>>` element, flat alone, keeps beside a
+  `Map<String, Map<String, I64>>` whose values Put replaces (the element's Maps then an owner in a one-region place:
+  places per type, not per value), 13 MB to 191 MB at 200,000 turns (gaps17b) - both named by -memory -check. Gap 19:
+  a returned value local landing in an array element still keeps storage in the array's scope per call where it is
+  text (`s := ...; return s`, ~29 B a call, 128 MB at 4,000,000), text given a second value before the return (~450 B a
+  call), or one of two Vec locals returned by a conditional (`return a if c else b`, ~1 KB a call) - and -memory -check
+  reports every let-go freed (gaps19; the check misses it). No use after free: -sanitize, -free late and the evaluator
+  agree on all. Free of growth: a Map/Vec of Maps/Vecs given alone (`Array<Map<I64, Vec<String>>>` is flat over
+  2,000,000 turns though -check names a keep), `Vec<Vec<Vec<String>>>` by SetAt, a Map of Maps by Put, returned Maps,
+  structs, generic and passed-through Vec locals.

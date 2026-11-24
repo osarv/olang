@@ -1,0 +1,31 @@
+import "std/io"
+
+# B18a, docs/freeing.md gap 17's open part (2026-11-24, wt-gaps1719): an Array<Vec<Map<String, I64>>>'s element given
+# another frees what it held alone, but keeps it beside a Map of the same Maps whose values Put replaces - the element's
+# Maps are then an owner in a place whose storage is one region (places per type, not per value): 13 MB to 191 MB at
+# 200,000 turns. -memory -check names it
+N I64 = 20000
+
+fn mkm(i I64) Map<String, I64> {
+    m Map<String, I64>
+    for j in range 10: m.Put($i + "-" + $j + " padded out a little", j)
+    return m
+}
+
+fn mk(i I64) Vec<Map<String, I64>> {
+    v Vec<Map<String, I64>>
+    for _ in range 3: v.Push(mkm(i))
+    return v
+}
+
+fn main() {
+    rows := Array<Vec<Map<String, I64>>>(10)
+    mm Map<String, Map<String, I64>>
+    t := 0
+    for i in range N {
+        rows[i % 10] = mk(i)
+        mm.Put($(i % 10), mkm(i))
+        t += rows[i % 10].Len() + mm.Ref($(i % 10))!.Len()
+    }
+    io.PutLn($t)!
+}
