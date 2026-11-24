@@ -1945,6 +1945,9 @@
 | ok - Chunks cuts an array into consecutive pieces, the last holding what is left
 | ok - a size computed while running is a ChunkSize, refused below one
 | ok - Argsort: the order that sorts, stable; running sums; even spacing; ranges by a step
+| ok - Join of owned and borrowed texts, from a literal, a Vec and through parameters
+| ok - Permutations gives each arrangement once, in lexicographic order, leaving the array sorted
+| ok - Permutations evaluated while compiling as at run time
 | ok - tasks each write their own piece of an array, read back after the join
 === test std/prelude/tests/columns.olang
 | status 0
@@ -3062,6 +3065,9 @@
 | status 0
 === run o4bvalueparamgeneric.olang
 | status 0
+=== run o8dcondconst.olang
+| status 0
+| 10
 === run o8dfeed.olang
 | status 0
 | 6555 n33 87 29
