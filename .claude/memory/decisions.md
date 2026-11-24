@@ -26,3 +26,8 @@ Open questions:
    over the same bytes are type punning (T36). Generate per-member accessors that copy the bytes (a get returning the
    member's value, a set writing it), or leave the union's bytes C's only? Default: C's only. Recommendation: accessors
    - memcpy semantics, no punning, and they let home/ request the kernel's hardware debounce.
+
+2. (2026-11-24, asked via the Orchestrator; from oagent's chatview.View.Relay) Replacing a whole value through a
+   `mut T&` can only be written field by field (S4a: `p = v` repoints the parameter). Add a supplied method
+   (`p.Replace(v)`, running the old value's destructor) or keep field by field? Default: field by field (and S4e now
+   refuses pointing a reference parameter at a fresh value). Recommendation: the supplied method, so `=` keeps one meaning.
