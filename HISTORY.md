@@ -42788,3 +42788,32 @@ target (it frees as `g = Rec.Of(i)` does - both named as RCopied's gap), two tar
 store is no value made for either), review12's a1-a9 and c1-c2 (unchanged under every oracle). Open: a `String` or array
 target keeps, named - a text built through a slot scope (the spawner's stack) and an array target written in place by
 T11b's copy in the trampoline need a design of their own.
+
+## 2026-11-24: the spawnrelease review - a builder's part released with its value's empty region, a guarded region's parent handed to a task (O8d, P1g; mine; wt-spawnrelease)
+
+A soundness review of the spawn release above, with probe programs: a sibling reading the old value by reference, a
+task given a reference into it, a view across the spawn, two targets of one spawn, a task handing back storage it was
+given, generic and struct targets, a String target built from the old one, a target in a nested loop - all keep or free
+correctly, `-memory -check` naming what keeps. Two findings.
+
+First, a struct target built by a builder, `fn Box.of(i I64) Box { return Box(build(i), i) }`, crashed the program -
+and so did the plain assignment `b = Box.of(i)` in a loop on master: the builder makes a region of its own for
+`build(i)`'s Vec (a part of the value, built where the result goes) as a kid of its result scope, which is the region
+the caller made for the value. The caller's settle (O8d: release the value's region at once where none of its anchors
+names it - the value holds nothing there) compared the anchors' region with its own region, found the kid instead,
+and dropped its region, kids and all: the Vec's buffer was gone while `b` held it. The spawn release reached the same
+crash by a second road: its settle of the old value dropped the old region with the kid, then the release by anchors
+dropped the kid again. The kid is now moved out to the region's parent before an empty region goes
+(`__olang_region_settle_in`, which walks up from the anchors' region to the kid of the settled one; the evaluator's
+`settle` does the same through `moveOut`), so the part is released with the value, by its anchors, as a sibling region
+built in the caller is - no leak of the emptied region, which is dropped. The evaluator had refused the same program
+("uses storage after the scope it was made in closed"), the same bug run as MIR.
+
+Second, the region handed to a task whole was marked by a static bit (`mir.Task.Fresh`), but in code outside the root's
+object the region's making is guarded by its place's decision (wholeprog 2.1): a place not decided sole leaves the
+handle at the region's parent - a caller's region where the target is the function's result - and that parent was
+handed to the task whole and named as the worker's, though the spawner may build there beside the task. The task now
+carries the guarding place (`FreshGuard`), read at the spawn, and `__olang_standin_or` makes a stand-in unless the
+region was made. Left as it is: two spawns into one target in one join (a loop of spawns inside the join) now crash
+where master stored one of the results - both store into the target unordered, a data race (P8b), whose behaviour is
+undefined; `-race` names it.
