@@ -897,7 +897,10 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     for x in links { args.Push(x) }      # X9: after the objects, so a static library's members are found
     for x in c.SystemLibs(): args.Push(x)
     if (c.Static or c.Target.Os == "windows") and exports == null: args.Push("-static")
-    if c.Target.Os == "windows": args.Push("-fuse-ld=lld")  # B12f: LLVM's linker, the one that links LTO objects for COFF
+    if c.Target.Os == "windows" {
+        args.Push("-fuse-ld=lld")             # B12f: LLVM's linker, the one that links LTO objects for COFF
+        args.Push("-Wl,--stack,8388608")      # the main thread's stack, and a new thread's, 8MB reserved as Linux gives
+    }
     if c.Profile {
         args.Push("-lrt")                   # B20: the sampler's timers, in librt before glibc 2.34
         if not c.Quick and not c.Debug: args.Push("-Wl,-plugin-opt=-enable-shrink-wrap=false")

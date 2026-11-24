@@ -43095,7 +43095,13 @@ name). Not ported: net, tls, zmtp (Winsock), prop (fork), ffi (libffi).
 
 **Tests.** Under Wine: every test of the corpus, std and the prelude passes but the ten WINDOWS_SKIP names (makefile,
 docs/windows.md, each with its reason); tests/shared's `extern fn write` declares msvcrt's prototype on Windows, and its
-TargetOs assertion admits `"windows"`. The checks' cases built for Windows: see the report of this round. examples/windows
+TargetOs assertion admits `"windows"`. The checks' cases built for Windows (`CHECKS_TARGET=x86_64-windows`) all pass
+but nine (checks.olang `WindowsSkip`: glibc's own - fopencookie, getuid, bits/waitstatus.h, /proc - mingw-w64's inline
+printf family, std/net). That run found the cross run of a run case broken for every target: checks ran another
+machine's program as `olang FLAGS FILE`, scripting mode, which B12a refuses for another machine - it is `olang run` now.
+Programs reserve an 8MB stack (`-Wl,--stack`), as Linux gives, for the main thread and every new one; mprotect's
+PROT_NONE closes pages keeping what they hold (VirtualProtect), as the scope sanitizer would need - though `-sanitize`,
+`-race` and `-profile` are not built for Windows yet (their signals, ThreadSanitizer and the sampler's timers). examples/windows
 (a window, its message loop and window procedure as an export fn, OpenGL through WGL, the clipboard) passes its `-check`
 under Wine on Xvfb: the window made, a frame drawn and a pixel read back green, a clipboard round trip, the window closed.
 Codegen for the other targets is unchanged (every change is keyed on the target's OS; `abiArch` is the arch elsewhere).

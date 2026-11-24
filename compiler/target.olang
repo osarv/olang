@@ -641,6 +641,18 @@ test "B12e: an Android triple names its API level, 29 where it names none, and a
     assert run.Len() == 1     # linked statically: qemu needs no C library pointed at
 }
 
+test "B12f: a Windows triple, however it is spelled, is x86_64-w64-windows-gnu, on x86-64 alone" {
+    assert windowsTriple("x86_64-windows") and windowsTriple("x86_64-pc-windows-gnu") and windowsTriple("x86_64-w64-mingw32")
+    assert not windowsTriple("x86_64-linux-gnu") and not windowsTriple("x86_64-pc-windows-msvc")
+    assert mistake("aarch64-windows", "", false, "linux", "x86_64").Contains("does not build for 'aarch64-windows'")
+    assert mistake("x86_64-windows", "", true, "linux", "x86_64").Contains("error[B12a]: scripting mode runs on this machine")
+    clang := FindClang()
+    if clang == "": return
+    d := quiet()
+    t := try Target.ResolveOn("x86_64-w64-mingw32", clang, false, "linux", "x86_64", d) catch Bad { return } # no mingw-w64 here
+    assert t.Os == "windows" and t.Arch == "x86_64" and t.Triple == "x86_64-w64-windows-gnu" and t.Foreign
+}
+
 test "with clang, native is this machine's CPU, a triple of this machine its baseline, and a bad CPU is unknown" {
     clang := FindClang()
     if clang == "": return

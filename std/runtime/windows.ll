@@ -73,19 +73,28 @@ done:
   ret i32 0
 }
 
-; mprotect(2) over reserved address space: readable and writable is committed, PROT_NONE decommitted
+; mprotect(2) over reserved address space: readable and writable is committed (and made so, where it was committed
+; and closed), PROT_NONE closed with what it holds kept - as the scope sanitizer's poisoning needs
+declare i32 @VirtualProtect(ptr, i64, i32, ptr)
 define internal i32 @mprotect(ptr %p, i64 %len, i32 %prot) {
 entry:
+  %old = alloca i32, align 4
   %none = icmp eq i32 %prot, 0
-  br i1 %none, label %decommit, label %commit
-decommit:
-  %d = call i32 @VirtualFree(ptr %p, i64 %len, i32 16384)
-  ret i32 0
+  br i1 %none, label %close, label %commit
+close:
+  %v = call i32 @VirtualProtect(ptr %p, i64 %len, i32 1, ptr %old) ; PAGE_NOACCESS
+  %closed = icmp ne i32 %v, 0
+  %rc = select i1 %closed, i32 0, i32 -1
+  ret i32 %rc
 commit:
   %c = call ptr @VirtualAlloc(ptr %p, i64 %len, i32 4096, i32 4) ; MEM_COMMIT, PAGE_READWRITE
   %failed = icmp eq ptr %c, null
-  %r = select i1 %failed, i32 -1, i32 0
-  ret i32 %r
+  br i1 %failed, label %fail, label %open
+open:
+  %o = call i32 @VirtualProtect(ptr %p, i64 %len, i32 4, ptr %old)
+  ret i32 0
+fail:
+  ret i32 -1
 }
 
 ; madvise(2): MADV_DONTNEED (4) gives the pages back, zero when next touched and still usable - decommitted and

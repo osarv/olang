@@ -411,3 +411,19 @@ test "a narrow integer or a Bool crosses extended on x86-64, as itself on AArch6
     assert Ext(t, "x86_64", types.BoolT) == "zeroext" and Ext(t, "x86_64", t.Prim("I32")) == ""
     assert Ext(t, "aarch64", t.Prim("I8")) == "" and Ext(t, "aarch64", types.BoolT) == ""
 }
+
+test "B12f: on Windows a struct of 1, 2, 4 or 8 bytes crosses as an integer, any other by reference, as clang 18 passes it" {
+    names := source.Names()
+    t := types.Table.New(names)
+    t.AddModule("t")
+    i32, i64, f32 := t.Prim("I32"), t.Prim("I64"), t.Prim("F32")
+    for p in Array<types.TypeId>[i32, i64, f32, types.BoolT]: assert t.ComputeLayout(p)
+    f2 := testStruct(t, names, "F2", Array<types.TypeId>[f32, f32])
+    i3 := testStruct(t, names, "I3", Array<types.TypeId>[i32, i32, i32])
+    regs := Regs(6, 8)
+    w := Way.Param(t, "x86_64-windows", f2, regs)
+    assert w.Kind == Pass.Parts and w.Parts.Len() == 1 and w.Parts[0] == "i64"
+    assert Way.Param(t, "x86_64-windows", i3, regs).Kind == Pass.Copy
+    assert Way.Result(t, "x86_64-windows", i3).Kind == Pass.Sret and Way.Result(t, "x86_64-windows", f2).Parts[0] == "i64"
+    assert Ext(t, "x86_64-windows", t.Prim("I8")) == "" and Ext(t, "x86_64-windows", types.BoolT) == "zeroext"
+}

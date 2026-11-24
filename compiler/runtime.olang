@@ -465,6 +465,16 @@ test "B12e: the runtime for Android reaches bionic's errno, sysconf names and si
     assert not l.Contains("bionic") and l.Contains("declare ptr @__errno_location()")
 }
 
+test "B12f: the runtime for Windows is the x86-64 one with windows.ll's functions in place of their namesakes" {
+    w := try Ir("x86_64-w64-windows-gnu", "x86_64", "", false, false, system = "windows") catch { unreachable }
+    assert w.Contains("define internal ptr @mmap(") and not w.Contains("declare ptr @mmap(")
+    assert w.Contains("call ptr @_errno()") and not w.Contains("@__errno_location(") and not w.Contains("@stderr")
+    assert w.Contains("call i32 @_setjmp(ptr %jb, ptr null)") and w.Contains("alloca [256 x i8]")
+    assert w.Contains("define i32 @__olang_stat(") and not w.Contains("@@STAT_MODE@@")
+    # one definition of each function windows.ll replaces
+    assert w.Split("define i32 @__olang_err()").Len() == 2 and w.Split("define i32 @pthread_mutex_lock(").Len() == 2
+}
+
 test "the runtime's AMX tile product is on only for a target that has it" {
     cpu := "\"target-cpu\"=\"x86-64\""
     off := try Ir("x86_64-pc-linux-gnu", "x86_64", cpu, false, false) catch { unreachable }

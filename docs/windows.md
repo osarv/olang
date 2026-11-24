@@ -90,6 +90,9 @@ skipped where Wine or mingw-w64 is missing). `WINDOWS_SKIP` leaves out what has 
 run `sh`, `printf` and the like, and open `/dev/ptmx`), std/time's (POSIX zone names), `net`, `tls`, `zmtp`, `prop` and
 `ffi` (above), tests/canon (`linux/gpio.h`), tests/pty (`pty.h`) and tests/cimport (mingw-w64's `snprintf` is an inline
 function of a variable number of arguments, which no C import reaches). `CHECKS_TARGET=x86_64-windows olang test
-checks/checks.olang` builds the checks' cases for Windows and runs the run cases under Wine.
+checks/checks.olang` builds the checks' cases for Windows and runs the run cases under Wine; `WindowsSkip` there
+names the nine that reach glibc's own, `/proc`, C's printf family or std/net.
+
+`-sanitize`, `-race` and `-profile` are not built for Windows yet.
 
 `build -library` is not built for Windows: a DLL's exports are not given yet.
