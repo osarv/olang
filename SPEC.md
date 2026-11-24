@@ -7709,7 +7709,10 @@ kept, stored, captured, handed to a task, or handed back): one every `return` gi
 names past the body, keeps its own slot in the function's frame, its value copied out as the result (unobservable but in
 memory) - with nothing written. A local is
 returned when, in the rest of the block declaring it, a `return` gives it (or a field read through it, `return b.items`)
-as its value, as one of its results (D8c), or as a value a conditional (E28) or a `match` (S12b) there gives. It applies
+as its value, as one of its results (D8c), or as a value a conditional (E28) or a `match` (S12b) there gives - but not
+where that conditional or `match` is copied into the result scope: one giving a value that owns its storage and shares no
+reference, with a place read among its values, in a function handing back no view (D9h) - the locals it gives whole stay
+in their blocks, and only the copy goes (unobservable but in memory). It applies
 to a local whose value its declaration makes - a call's result, a constructor's instance, an array or literal built
 here, its zero value (D13c), a result destructured into it (S4b), a copy of another place's value (`cur := head`, its
 own storage) - when it holds references (T17c, O4b), or when the
