@@ -42880,3 +42880,12 @@ while the task may run" (397 rows) - `drive` runs the whole compiler in a join b
 spin's globals (Title, Frames, the atomics), and condition 3 keeps every let-go of a join's code where any task reads a
 global. With that join removed (a scratch build, not committed) 540 of the 1004 places free at once. Next: judge a
 join's reach by the globals its tasks read and the types their values reach, rather than every let-go of its code.
+
+Found by the suite once test builds froze less (they kept every place, as os.RunOnStack's lambda counted as C):
+tools/textjoin_migrate's and nulltest_migrate's tests crashed in `__olang_region_drop`, and so did the main build of
+textjoin_migrate on a Markdown file, on master too. `fence = "olang" if c else "other"`, a text local: free took each
+arm as constant data (made for the place), but lowering copies the conditional's value where the scope is - no region -
+so the next let-go released scope storage as a region. A conditional with an arm of constant text given a place whose
+text may change now keeps (`made`; case o8dcondconst). Also: the freeing scenario's taskvals, failing on master since
+wt-chanwait (chan's Send and Recv read cancel's global waiter table, so every lambda became a task root, std's sort lambda
+among them), passes: lambdas are no roots now, and the sort lambda's captured call is followed.
