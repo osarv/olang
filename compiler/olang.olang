@@ -524,6 +524,7 @@ fn CommandLine.Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Dia
     # B12e: Android is built with the NDK's clang, and a program of it run here - a test, run - linked statically
     if c.Target.Clang != "": c.Clang = c.Target.Clang
     c.Static = c.Target.Os == "android" and (cl.Mode == Test or cl.Mode == RunBuilt)
+    if c.Target.Os == "windows": c.WinInclude = $load.StdDir() + "/runtime/windows"
     if c.Target.Foreign and not foreignOk: try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec))
     c.Tests = cl.Mode == Test
     c.Profile = cl.Mode == Profile
@@ -978,6 +979,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.Triple = cfg.Target.Triple
     e.PairDot = cfg.Target.PairDot
     e.Arch = cfg.Target.Arch
+    e.Os = cfg.Target.Os
     e.San = cfg.San
     e.Debug = cfg.Debug
     e.Traced = cfg.Checked

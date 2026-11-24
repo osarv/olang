@@ -70,6 +70,12 @@ Target String& = try os.Env("CHECKS_TARGET") catch default ""
 # the distribution does not hold
 CrossSkip := Array<String&>["externruntime2.olang"]
 
+# B12f: the cases not built for Windows - what reaches glibc's own (fopencookie, getuid, bits/waitstatus.h) or /proc,
+# C's printf family (mingw-w64's are inline functions of a variable number of arguments, which no C import reaches), or
+# std/net
+WindowsSkip := Array<String&>["g42exportkept.olang", "x13acookie.olang", "x17broken.olang", "x17header.olang", "x21bool.olang"
+    "x21struct.olang", "x21wide.olang", "m9builderold.olang", "o27destructorfiles.olang"]
+
 fn withParts(names Array<String&>&) Array<String&>& {
     all Vec<String&>
     for n in names {
@@ -316,6 +322,7 @@ fn runCase(name String&) String& {
     # target changes) - and those needing what a cross C library holds alone (CrossSkip)
     cross := Target != "" and not written.Contains("-target") and not check.StartsWith("doc")
     if Target != "" and CrossSkip.Has(name): return ""
+    if Target.Contains("windows") and WindowsSkip.Has(name): return ""
     flags := $written + " -target " + $Target if cross else written
     base := name[:name.Len() - 6]
     dir := fresh("cases/" + $base)
@@ -352,8 +359,9 @@ fn runCase(name String&) String& {
     }
     if san: bin = $bin + ".san"
     if check.Eq("run") {
-        # another architecture's program is run by olang, through its emulator (B3g, B12a)
-        run := "./build/" + $bin if not cross else $store() + " \"$OLANG\" " + $flags + " " + $name
+        # another architecture's program is run by olang run, through its emulator (B12a; scripting mode runs on this
+        # machine alone)
+        run := "./build/" + $bin if not cross else $store() + " \"$OLANG\" run " + $flags + " " + $name
         if sh(dir, $run + " > out.txt 2> err.txt") != 0 {
             return $failure($name + " built but did not run cleanly", dir) + $(try os.ReadFile($dir + "/err.txt") catch default "")
         }

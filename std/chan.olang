@@ -767,7 +767,7 @@ fn realSleep(ns I64) {
     if ns <= 0: return
     req := ctime.timespec()
     req.tv_sec = ns / 1000000000
-    req.tv_nsec = ns % 1000000000
+    req.tv_nsec = I32(ns % 1000000000)          # C's long: 32 bits on Windows (B12f)
     rem := ctime.timespec()
     ctime.nanosleep(req, rem)
 }

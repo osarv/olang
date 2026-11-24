@@ -487,6 +487,34 @@ android-test: $(OLANG)
 $(ANDROID_RUNS): android@%: FORCE
 	@$(OLANG_ENV) $(OLANG) test -target $(ANDROID_TARGET) $* || echo "$* ($(ANDROID_TARGET))" >> build/failed.txt
 
+# B12f: the same tests built for Windows (WINDOWS_TARGET) with mingw-w64 and run under Wine; skipped, saying so,
+# where Wine or mingw-w64 is missing (docs/windows.md). WINDOWS_SKIP leaves out what has no Windows form: std/os's own
+# tests (they run sh, printf and the like, and /dev/ptmx), std/time's (POSIX TZ names), std/net, std/tls and std/zmtp
+# (sockets, sys/socket.h), std/prop (fork and wait), std/ffi (no libffi for Windows here), and tests/canon (linux/gpio.h),
+# tests/pty (pty.h) and tests/cimport (mingw-w64's snprintf is an inline function taking a variable number of arguments)
+WINDOWS_TARGET ?= x86_64-windows
+WINDOWS_SKIP ?= std/os.olang std/time.olang std/net.olang std/tls.olang std/zmtp.olang std/prop.olang std/ffi.olang \
+	tests/canon.olang tests/pty.olang tests/cimport.olang
+WINDOWS_TESTS = $(filter-out $(WINDOWS_SKIP),$(CROSS_TESTS) $(CROSS_SKIP))
+WINDOWS_RUNS = $(addprefix windows@,$(WINDOWS_TESTS))
+OLANG_WINE = $$(command -v wine64 || command -v wine || echo /usr/lib/wine/wine64)
+windows-test: $(OLANG)
+	@if [ ! -d /usr/x86_64-w64-mingw32 ] || [ ! -x "$(OLANG_WINE)" ]; then \
+		echo "windows-test: skipped - install mingw-w64 and wine64 (docs/windows.md)"; exit 0; fi; \
+	rm -f build/failed.txt; \
+	$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(WINDOWS_RUNS) && [ ! -s build/failed.txt ] || $(FAILED); \
+	echo "windows-test: every test passed on $(WINDOWS_TARGET)"
+$(WINDOWS_RUNS): windows@%: FORCE
+	@$(OLANG_ENV) $(OLANG) test -target $(WINDOWS_TARGET) $* || echo "$* ($(WINDOWS_TARGET))" >> build/failed.txt
+
+# B12f: the Windows desktop example (examples/windows) as build/windows/window.exe, and its own check - a window, an
+# OpenGL frame read back and a clipboard round trip - run under Wine on a virtual X display (xvfb-run) where there is one
+windows-example: $(OLANG)
+	@mkdir -p build/windows
+	$(OLANG) build -target $(WINDOWS_TARGET) -output build/windows/window.exe examples/windows/window.olang
+	@if command -v xvfb-run > /dev/null; then WINEDEBUG=-all xvfb-run -a "$(OLANG_WINE)" build/windows/window.exe -check; \
+		else echo "windows-example: built; not run - install xvfb to run its check here"; fi
+
 # B12e: the sample Android app (examples/android, docs/android.md) as build/android/olang-sample.apk: native.olang built
 # as libnative.so, the NativeActivity's code, and probe.olang as libprobe.so, a program the app runs; the manifest linked
 # against ANDROID_JAR by aapt2, the libraries added (lib/arm64-v8a, every entry's time fixed so the bytes are the same
@@ -699,4 +727,4 @@ uninstall:
 	echo "uninstall: done (left as they are: ~/.cache/olang, a Jupyter kernel spec, builds' build/ directories)"
 
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: consistency dumptool all build android-test android-apk prereq install install-editors uninstall bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean
+.PHONY: consistency dumptool all build android-test android-apk windows-test windows-example prereq install install-editors uninstall bootstrap boot fixedpoint seedrun runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold lowerdump evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz editfuzz editfuzzcheck clean

@@ -357,6 +357,11 @@
 | status 0
 | ok - a mutable global starts at the value its initializer gives, and is written as any
 | ok - the evaluator computes the initializer as the run time would
+=== test tests/globalview.olang
+| status 0
+| ok - Font.Sum: a method's local reads a mutable global receiver's array in place
+| ok - Font.SumStamped: a local whose block may write the global is its copy
+| ok - localSum: the same methods on a local receiver
 === test tests/handover.olang
 | status 0
 | ok - inner: hands a view over where the caller only reads it, and copies it where the caller keeps it
@@ -366,6 +371,7 @@
 | ok - cutWith: copies the view an adapter's Call hands back
 | ok - skipSpaces: hands a tail call's view back, and copies one of new text
 | ok - joinedFired: copies a view where a closure an argument holds may write what it views before it is read
+| ok - Take: keeps the copy of a field the body clears before handing it back
 === test tests/handoverglobal.olang
 | status 0
 | ok - mid: a view of a mutable global's storage is copied where a call may write the global before it is read

@@ -1,0 +1,276 @@
+# A Windows desktop program in olang, with no C (docs/windows.md): a window made with CreateWindowEx, its messages taken
+# by a message loop and a window procedure (an export fn's C entry, X13), drawn with OpenGL through a WGL context, and
+# the clipboard written and read back. A click changes the background's colour; Ctrl+C puts the colour's name on the
+# clipboard, Ctrl+V reads the clipboard and prints it. Built with
+#   olang build -target x86_64-windows examples/windows/window.olang
+# and run on Windows (or under Wine). With "-check" it opens the window, draws one frame, reads a pixel of it back, makes
+# a clipboard round trip and closes again - each step printed, the status 0 where all of them worked.
+#
+# Win32's handles (HWND, HDC, HGLRC, HGLOBAL ...) are U64 here: the program only hands them back to the functions that
+# gave them (X1a). Every function is declared in the extern block of the library that has it, which also names the
+# import library the link takes (X9).
+import "std/os"
+
+extern link "kernel32" {
+    fn GetModuleHandleA(name U64) U64
+    fn GlobalAlloc(flags U32, bytes U64) U64
+    fn GlobalLock(mem U64) CStr?&
+    fn GlobalUnlock(mem U64) I32
+    fn GetLastError() U32
+}
+
+extern link "user32" {
+    fn RegisterClassExA(class WndClass&) U16
+    fn CreateWindowExA(exStyle U32, class CStr?&, title Array<U8>, style U32, x I32, y I32, width I32, height I32
+        parent U64, menu U64, instance U64, param U64) U64
+    fn DefWindowProcA(window U64, msg U32, wparam U64, lparam I64) I64
+    fn ShowWindow(window U64, show I32) I32
+    fn UpdateWindow(window U64) I32
+    fn DestroyWindow(window U64) I32
+    fn GetMessageA(msg mut Msg&, window U64, first U32, last U32) I32
+    fn PeekMessageA(msg mut Msg&, window U64, first U32, last U32, remove U32) I32
+    fn TranslateMessage(msg Msg&) I32
+    fn DispatchMessageA(msg Msg&) I64
+    fn PostQuitMessage(code I32)
+    fn GetDC(window U64) U64
+    fn ReleaseDC(window U64, dc U64) I32
+    fn ValidateRect(window U64, rect U64) I32
+    fn InvalidateRect(window U64, rect U64, erase I32) I32
+    fn LoadCursorA(instance U64, name U64) U64
+    fn GetKeyState(key I32) I16
+    fn OpenClipboard(owner U64) I32
+    fn EmptyClipboard() I32
+    fn SetClipboardData(format U32, mem U64) U64
+    fn GetClipboardData(format U32) U64
+    fn CloseClipboard() I32
+}
+
+extern link "gdi32" {
+    fn ChoosePixelFormat(dc U64, pfd Array<U8>) I32
+    fn SetPixelFormat(dc U64, format I32, pfd Array<U8>) I32
+    fn SwapBuffers(dc U64) I32
+}
+
+extern link "opengl32" {
+    fn wglCreateContext(dc U64) U64
+    fn wglMakeCurrent(dc U64, context U64) I32
+    fn wglDeleteContext(context U64) I32
+    fn glClearColor(r F32, g F32, b F32, a F32)
+    fn glClear(mask U32)
+    fn glViewport(x I32, y I32, width I32, height I32)
+    fn glFinish()
+    fn glReadPixels(x I32, y I32, width I32, height I32, format U32, kind U32, pixels mut Array<U8>&)
+}
+
+# msvcrt's, for the two copies between olang's text and the C memory the clipboard and the class name live in
+extern {
+    fn _strdup(text Array<U8>) CStr?&
+    fn memcpy(to CStr?&, from Array<U8>, n U64) CStr?&
+}
+
+# WNDCLASSEXA, laid out as winuser.h lays it out
+type WndClass struct() {
+    size U32 = 80
+    style U32 = 0x23                                    # CS_VREDRAW | CS_HREDRAW | CS_OWNDC
+    proc extern fn?&(window U64, msg U32, wparam U64, lparam I64) I64 = null
+    classExtra I32 = 0
+    windowExtra I32 = 0
+    instance U64 = 0
+    icon U64 = 0
+    cursor U64 = 0
+    background U64 = 0
+    menuName U64 = 0
+    className CStr?& = null
+    smallIcon U64 = 0
+}
+
+# MSG
+type Msg struct() {
+    window U64 = 0
+    message U32 = 0
+    wparam U64 = 0
+    lparam I64 = 0
+    time U32 = 0
+    x I32 = 0
+    y I32 = 0
+    private U32 = 0
+}
+
+# the messages and numbers used (winuser.h, wingdi.h, GL/gl.h)
+WmDestroy U32 = 0x0002
+WmSize U32 = 0x0005
+WmPaint U32 = 0x000F
+WmClose U32 = 0x0010
+WmKeyDown U32 = 0x0100
+WmLButtonDown U32 = 0x0201
+VkControl I32 = 0x11
+CwUseDefault I32 = I32.Min                            # CW_USEDEFAULT, (int)0x80000000
+CfText U32 = 1
+GlColorBufferBit U32 = 0x4000
+GlRgba U32 = 0x1908
+GlUnsignedByte U32 = 0x1401
+
+# the colours a click steps through, and their names
+Colours := Array<F32>[0.10, 0.30, 0.60, 0.85, 0.35, 0.15, 0.20, 0.65, 0.30, 0.90, 0.80, 0.25]
+Names := Array<String&>["blue", "orange", "green", "yellow"]
+
+Window mut U64 = 0
+Dc mut U64 = 0
+Gl mut U64 = 0
+Width mut I32 = 640
+Height mut I32 = 400
+Colour mut I64 = 0
+
+fn main() {
+    check := os.Args().Len() > 1 and os.Args()[1] == "-check"
+    if not openWindow() {
+        Println($"the window could not be made (error " + $GetLastError() + ")")
+        os.Exit(1)
+    }
+    if check: os.Exit(0 if selfCheck() else 1)
+    msg := Msg()
+    for GetMessageA(msg, 0, 0, 0) > 0 {
+        TranslateMessage(msg)
+        DispatchMessageA(msg)
+    }
+}
+
+# ---- the window ----
+
+fn openWindow() Bool {
+    instance := GetModuleHandleA(0)
+    class := WndClass()
+    class.proc = windowProc
+    class.instance = instance
+    class.cursor = LoadCursorA(0, 32512)                # IDC_ARROW
+    class.className = _strdup("OlangWindow".ToC())
+    if RegisterClassExA(class) == 0: return false
+    # WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, placed where Windows places a new window
+    Window = CreateWindowExA(0, class.className, "olang on Windows".ToC(), 0x06CF0000, CwUseDefault, 0, Width, Height
+        0, 0, instance, 0)
+    if Window == 0: return false
+    Dc = GetDC(Window)
+    if not openGl(): return false
+    ShowWindow(Window, 5)                               # SW_SHOW
+    UpdateWindow(Window)
+    return true
+}
+
+# a pixel format for OpenGL - 32-bit colour, double-buffered, a 24-bit depth buffer - and a WGL context made current
+fn openGl() Bool {
+    pfd := Array<U8>(40)                                # PIXELFORMATDESCRIPTOR
+    pfd[0] = 40                                         # nSize
+    pfd[2] = 1                                          # nVersion
+    pfd[4] = 0x25                                       # PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER
+    pfd[9] = 32                                         # cColorBits
+    pfd[23] = 24                                        # cDepthBits
+    format := ChoosePixelFormat(Dc, pfd)
+    if format == 0 or SetPixelFormat(Dc, format, pfd) == 0: return false
+    Gl = wglCreateContext(Dc)
+    return Gl != 0 and wglMakeCurrent(Dc, Gl) != 0
+}
+
+fn draw() {
+    glViewport(0, 0, Width, Height)
+    k := Colour * 3
+    glClearColor(Colours[k], Colours[k + 1], Colours[k + 2], 1)
+    glClear(GlColorBufferBit)
+    SwapBuffers(Dc)
+}
+
+export fn windowProc(window U64, msg U32, wparam U64, lparam I64) I64 {
+    if msg == WmPaint {
+        draw()
+        ValidateRect(window, 0)
+        return 0
+    }
+    if msg == WmSize {
+        Width = I32(lparam & 0xFFFF)
+        Height = I32((lparam >> 16) & 0xFFFF)
+        return 0
+    }
+    if msg == WmLButtonDown {
+        Colour = (Colour + 1) % Names.Len()
+        InvalidateRect(window, 0, 0)
+        return 0
+    }
+    if msg == WmKeyDown and GetKeyState(VkControl) < 0 {
+        if wparam == 0x43 {                             # Ctrl+C
+            copyText($"olang: " + $Names[Colour])
+            Println($"copied " + $Names[Colour])
+        }
+        if wparam == 0x56: Println($"clipboard: " + $pasteText())   # Ctrl+V
+        return 0
+    }
+    if msg == WmClose {
+        DestroyWindow(window)
+        return 0
+    }
+    if msg == WmDestroy {
+        wglMakeCurrent(0, 0)
+        wglDeleteContext(Gl)
+        PostQuitMessage(0)
+        return 0
+    }
+    return DefWindowProcA(window, msg, wparam, lparam)
+}
+
+# ---- the clipboard ----
+
+# text on the clipboard, as CF_TEXT: copied into memory the clipboard then owns
+fn copyText(text String&) Bool {
+    if OpenClipboard(Window) == 0: return false
+    EmptyClipboard()
+    bytes := text.ToC()
+    mem := GlobalAlloc(2, U64(bytes.Len()))             # GMEM_MOVEABLE
+    to := GlobalLock(mem)
+    memcpy(to, bytes, U64(bytes.Len()))
+    GlobalUnlock(mem)
+    set := SetClipboardData(CfText, mem)
+    CloseClipboard()
+    return set != 0
+}
+
+# the clipboard's text, "" where it holds none
+fn pasteText() String {
+    if OpenClipboard(Window) == 0: return ""
+    out := ""
+    mem := GetClipboardData(CfText)
+    if mem != 0 {
+        p := GlobalLock(mem)
+        if p != null: out = String.FromC(p, 65536)
+        GlobalUnlock(mem)
+    }
+    CloseClipboard()
+    return out
+}
+
+# ---- -check ----
+
+# every part once, without anyone at the window: the messages waiting handled, a frame drawn and a pixel of it read
+# back, the clipboard written and read, the window closed
+fn selfCheck() Bool {
+    msg := Msg()
+    for PeekMessageA(msg, 0, 0, 0, 1) != 0 {            # PM_REMOVE
+        TranslateMessage(msg)
+        DispatchMessageA(msg)
+    }
+    Colour = 2
+    draw()
+    k := Colour * 3
+    glClearColor(Colours[k], Colours[k + 1], Colours[k + 2], 1)
+    glClear(GlColorBufferBit)
+    glFinish()
+    pixel := Array<U8>(4)
+    glReadPixels(1, 1, 1, 1, GlRgba, GlUnsignedByte, pixel)
+    drawn := I64(pixel[1]) > I64(pixel[0]) and I64(pixel[1]) > I64(pixel[2])  # green
+    Println($"window: made, pixel " + $pixel[0] + "," + $pixel[1] + "," + $pixel[2] + (" green" if drawn else " not green"))
+    copied := copyText("olang clipboard check")
+    back := pasteText()
+    clip := copied and back == "olang clipboard check"
+    Println($"clipboard: " + ("round trip" if clip else $"read back '" + $back + "'"))
+    DestroyWindow(Window)
+    for PeekMessageA(msg, 0, 0, 0, 1) != 0 { DispatchMessageA(msg) }
+    Println("window: closed")
+    return drawn and clip
+}

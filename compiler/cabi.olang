@@ -7,6 +7,9 @@
 #   holds, a pointer where it is one) or SSE (float, double, <2 x float>, a 16-bit float or a vector of them), each its
 #   own parameter while registers are left (6 integer, 8 SSE), else on the stack ("byval"); larger, on the stack, and
 #   as a result through a pointer the caller gives ("sret");
+# - x86-64 Windows (B12f, "x86_64-windows" as the arch here): one of 1, 2, 4 or 8 bytes as an integer of its bytes,
+#   floats included; any other as a pointer to a copy the caller makes, and as a result through "sret"; integers
+#   narrower than 32 bits as themselves, a Bool zero-extended;
 # - AArch64 (AAPCS64): a homogeneous floating-point aggregate - up to four members of one float type - as an array of
 #   them (a result as a struct of them); any other of at most 16 bytes as one i64 or [2 x i64] (a result of at most 8
 #   bytes as an integer of its bytes); larger, as a pointer to a copy the caller makes, and as a result through "sret".
@@ -86,6 +89,7 @@ fn IsStruct(t types.Table&, ty types.TypeId) Bool {
 # the extension a C scalar of this type takes as a parameter or a result: "signext"/"zeroext" for an integer narrower
 # than 32 bits on x86-64 (a Bool zero-extended), "" for anything else
 fn Ext(t types.Table&, arch String&, ty types.TypeId) String {
+    if arch == "x86_64-windows" { return "zeroext" if t.Repr(ty) == types.BoolT else "" }
     if arch != "x86_64": return ""
     r := t.Repr(ty)
     if r == types.BoolT: return "zeroext"
@@ -130,6 +134,14 @@ fn Way.Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) 
     parts Vec<String&>
     offs Vec<I64>
     sizes Vec<I64>
+    if arch == "x86_64-windows" {
+        # B12f: Win64 - a struct the size of an integer register's part as that integer, any other by reference
+        if size != 1 and size != 2 and size != 4 and size != 8 { return Way(Pass.Sret if result else Pass.Copy, parts, offs, sizes, "") }
+        parts.Push($"i" + $(size * 8))
+        offs.Push(0)
+        sizes.Push(size)
+        return Way(Pass.Parts, parts, offs, sizes, "")
+    }
     if arch == "aarch64" {
         # AAPCS64 B.4: a homogeneous floating-point aggregate
         hfa := sc.Len() >= 1 and sc.Len() <= 4
@@ -398,4 +410,20 @@ test "a narrow integer or a Bool crosses extended on x86-64, as itself on AArch6
     assert Ext(t, "x86_64", t.Prim("I8")) == "signext" and Ext(t, "x86_64", t.Prim("U16")) == "zeroext"
     assert Ext(t, "x86_64", types.BoolT) == "zeroext" and Ext(t, "x86_64", t.Prim("I32")) == ""
     assert Ext(t, "aarch64", t.Prim("I8")) == "" and Ext(t, "aarch64", types.BoolT) == ""
+}
+
+test "B12f: on Windows a struct of 1, 2, 4 or 8 bytes crosses as an integer, any other by reference, as clang 18 passes it" {
+    names := source.Names()
+    t := types.Table.New(names)
+    t.AddModule("t")
+    i32, i64, f32 := t.Prim("I32"), t.Prim("I64"), t.Prim("F32")
+    for p in Array<types.TypeId>[i32, i64, f32, types.BoolT]: assert t.ComputeLayout(p)
+    f2 := testStruct(t, names, "F2", Array<types.TypeId>[f32, f32])
+    i3 := testStruct(t, names, "I3", Array<types.TypeId>[i32, i32, i32])
+    regs := Regs(6, 8)
+    w := Way.Param(t, "x86_64-windows", f2, regs)
+    assert w.Kind == Pass.Parts and w.Parts.Len() == 1 and w.Parts[0] == "i64"
+    assert Way.Param(t, "x86_64-windows", i3, regs).Kind == Pass.Copy
+    assert Way.Result(t, "x86_64-windows", i3).Kind == Pass.Sret and Way.Result(t, "x86_64-windows", f2).Parts[0] == "i64"
+    assert Ext(t, "x86_64-windows", t.Prim("I8")) == "" and Ext(t, "x86_64-windows", types.BoolT) == "zeroext"
 }
