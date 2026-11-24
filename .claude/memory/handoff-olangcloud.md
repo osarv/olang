@@ -12,8 +12,8 @@ Stopped by the Orchestrator's pacing guard; no new items until it restarts this 
 - wt-vecclear f5d1359d0 (D9h result views no longer defer a copy of what a `mut` reference points to).
 - wt-mutparam 95b2fa459 (S4e: a reference parameter repointed at a fresh value is refused, FreshParamRepoint).
 
-## In progress
-- **wt-joinreach** (worktree /home/user/wt/joinreach, pushed, NOT merged): a join's let-go keeps only if a task it spawns reads a global reaching the place (free.olang joinReached/globReach). Self-build frees 538/1007 places (peak 2.71 -> 2.60 GB). Blocked by an older use-after-free it exposes: early freeing of `Map<I64, mir.ScopeRef>` field 2 (buckets; lower.olang fieldStor/regionPar; let go by Map.Put's first buckets and rehash) crashes the self-built compiler's `olang test` of ~15 compiler files ("use after scope closed" in Checker.ExprBodyIn). An Opus-high agent was debugging it at the stop; check the branch's last commits and HISTORY for its state.
+## Also merged
+- wt-joinreach ec4686e35: a join's let-go keeps only if a spawned task reads a global reaching the place. Exposed and fixed two older bugs: D9h (a body with deferred code/destructor, or a local viewing a written parameter, hands back no view) and D16d (a lambda capturing a field built in its derived scope). Self-build frees 547/1008 places, peak 2.68 GB. strheld order fixture migrated to S4e (f4dc86167).
 
 ## Queue after it
 1. Per-instance buffer places (decided; Opus xhigh) - should close gap 17b.
