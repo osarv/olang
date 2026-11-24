@@ -43224,3 +43224,41 @@ host's `openssl` to make a certificate and serve it: under Wine a Windows progra
 which neither waits for a program of the host's nor passes back its status, so the test writes a script that goes to
 the test's directory and writes its status, and waits for that. An HTTPS GET to a public host works from the Windows
 build under Wine, the chain checked against the host's roots.
+
+
+## 2026-11-24: condition 3 by the globals a join's tasks reach (O8f; mine; wt-joinreach)
+
+After wt-cond3 the compiler's own build still froze nothing early: `drive` runs the whole compiler inside a join beside
+spin's ticker task (`spawn spin.Run()`), the ticker reads spin's globals, and condition 3 kept every let-go of a join's
+code wherever any task of the program read any global (`taskReach`, one flag for the program) - 397 rows. Scratch
+build without that join: 540 of 1004 places freed.
+
+The rule now (free.olang `joinReached`, `globReach`; SPEC O8d condition 3): a let-go in join J's code keeps for a
+global only where a task J itself spawns - the bodies its spawns call, recorded by the final walk as `joinTasks`, and
+all they call, make as lambdas or give a slot (`taskBodies`, over the scope pass's callees and effects' calls) - reads
+or stores into a global that may reach the place. effects.olang now records, per body, the globals it reads or stores
+into where they count as ReadsGlobals/RefGlobals/WritesGlobals (`GlobalsOf`, `GlobalAt`). What a global reaches is
+judged by type, as places are keyed by type: its own place; a field's or an element's place whose container type a
+value of the global holds, by value or through a reference (`reachTys`); any place whose value holds, by value, a
+type a reference in the global names (`refTys`, `holdsRefTy` - an owner local, another global, a field holding such a
+value); and every place where the global's type holds a function value, an `any`, a type variable or a type with no
+body. A global that is not `mut` and whose initializer, with all it calls, reaches no global but itself and calls
+through nothing (`initClean`, `onlyGlobal` - the initializer's own store into it is not counted) refers only to static
+data or to what its initializer built, which no other place holds: where its type holds no writable reference nothing
+can change or let go of what it refers to, so it reaches nothing; with a writable reference, only the containers (a
+write through it lets go of a field's place of a type it holds). Why per join and not per program: a let-go in J's code
+runs while J's tasks run; a nested join's tasks run only during that join's code, and a let-go there is recorded for
+every join around it (`go`), so it is judged against each; a task's own let-goes stay `taskLets`' as before.
+
+Tried first: the rule over every task of the program (one place set). It freed only 41 places - other joins' tasks
+(the build's workers) read globals reaching most types; judging each join by its own tasks is what the brief asked
+and what makes drive's join free. Also found: the initializer of every global stores into it and reads it, so
+effects' flags called every initializer unclean - `initClean` reads the globals it reaches instead.
+
+Cases: o8fjoinglobalfree (a ticker reading `Quit` and a text `Title`; main's `l.last` frees at once - kept on master),
+o8fjoinglobalkeeps (the ticker reads a global Log; every Log's `last` keeps, naming "a task reads a global that may
+reach it"). A scratch case with a `String?&` global read by the ticker kept a Box's Log field and its text, as it
+must. Measured on the self-build (`build -memory compiler/olang.olang`): 0 of 1001 places freed at once before, 538 of
+1007 after; peak RSS of that build 2.71 GB before (master's compiler), 2.60 GB after (the compiler built by itself).
+The remaining keeps are views and references kept (126 rows), instances with destructors to run (30) and the rest of
+the -memory report's usual reasons; no let-go keeps for a task's global any more.

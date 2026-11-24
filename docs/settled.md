@@ -1013,7 +1013,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   Str, Eq, Hash among it, a spawn's target) gives a value or lets go of keeps, and a let-go in a join's code keeps
   where that join's tasks are handed a reference (a by-value argument its callee keeps nothing of is the task's own
   copy, made in the join's arena - before, in main's frame, ~63 B a spawn for the run) or store into anything but a
-  local, or any task reads a global; a lambda task, one calling through a function value or an `any`, and C given a
+  local, or a task of that join reads or stores into a global that may reach the place (by type: the global's own
+  place, the containers its value holds by value or through a reference, the places holding by value a type a
+  reference in it names; a non-`mut` global whose initializer reaches no other global reaches nothing where its
+  references are read-only - 2026-11-24, mine); a lambda task, one calling through a function value or an `any`, and C given a
   function value keep everything, as all tasks did. **A joined task's results handed to the spawner at the wait (the
   user's call, 2026-11-23, option (c) of docs/freeing.md 2.4's question 1):** the regions a task makes in a stand-in go
   with it as the wait folds it back (runtime.ll's kids_move; a part's too, folded at its root's close), and a region
@@ -1044,7 +1047,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   export fn keeps everything; `os.RunOnStack`'s function is a call (`f()`). A lambda's call through what it captured (its
   maker's parameter or capture, never assigned) is judged where the lambda is written as an argument, as the maker's
   call through it; functions named as values and lambdas are no task roots (the walks judge every call through a
-  value). The compiler still keeps everything: spin's ticker task reads globals beside `drive`'s join.
+  value). The compiler's self-build frees 538 of its 1007 places at once: spin's ticker task beside `drive`'s join
+  reads only numbers, a text and constant text.
   A let-go the compiler does not follow is a gap:
   `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. **Captures and local copies
   (2026-11-21, mine; docs/freeing.md):** a value a lambda captures is the lambda's own copy, its parts split, made in

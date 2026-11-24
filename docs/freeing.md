@@ -1053,6 +1053,18 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   Without that task the build frees 540 of its 1004 places (measured with drive's join removed). **Where to pick up**:
   judge a join's reach by the globals its tasks read - their places, and the places of the types their values reach -
   rather than keeping every let-go of the join's code.
+- 2026-11-24, wt-joinreach: **condition 3 by the globals a join's tasks reach.** A let-go in a join's code no longer
+  keeps because some task of the program reads some global: it keeps where a task of that join (its own spawns,
+  recorded by the final walk, `joinTasks`; a let-go in a nested join's code is judged against both joins) - with all
+  its code calls - reads or stores into a global that may reach the place (`globReach`, effects' `GlobalsOf`): the
+  global's own place; a field's or an element's place whose container type the global's value holds, by value or
+  through a reference; any place whose value holds by value a type a reference in the global names; every place where
+  the type holds a function value, an `any` or a type variable. A global that is not `mut`, whose initializer with all
+  it calls reaches no other global and calls through nothing, refers only to static data or to what its initializer
+  built, held by no other place: it reaches nothing where its references are read-only (spin's `Frames`, `Wipe`), else
+  only the containers. Cases o8fjoinglobalfree (a ticker reading a number and a text: main's `l.last` frees),
+  o8fjoinglobalkeeps (the ticker reads a global Log: every Log's place keeps). The self-build's `-memory`: 0 of 1001
+  places freed at once before, 538 of 1007 after (540 of 1004 with the join removed); its peak RSS 2.71 -> 2.60 GB.
 - 2026-11-24, wt-gap19: **gap 19 - two of its three shapes freed, the rest named by -memory -check.** A returned text
   local (`s := $i + "..."; return s`) now keeps its own slot in the frame as a returned Vec local does (`Plan.RetFrame`
   for a run-time array or a value holding one - the scope pass's `letMoved` excluded every `arenaValue`, lowering's
