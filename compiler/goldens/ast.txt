@@ -2133,7 +2133,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-cec98463b5a909b8 38a71ec02876b329 checks/checks.olang
+a47cbdbb1755af8c 2946570d709de201 checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2699,7 +2699,7 @@ b93a943edf2e8c97 381931e954cbfbd5 std/hex.olang
 96d82620911aeaf5 66e903eab395794e std/io.olang
 c40abb18bd5bc0e8 dde88c3ea060ce90 std/json.olang
 40854ce6087f112c 75a97cd9f2afbb71 std/list.olang
-7ffd70be0ceab32b 82754c0412eb4841 std/net.olang
+aab801ff0bc5ae17 e662c7d34f39a16f std/net.olang
 e9aa94e405345e7a f136bf23c1f483ab std/order.olang
 95dcf3689ec654e2 977686d6256abc58 std/os.olang
 17c08f79ab55afc4 b4a22233d00c7e49 std/pair.olang
@@ -2743,7 +2743,7 @@ a81faf81143e4029 4459d73325ec9b06 std/stats.olang
 61284ebe07008756 2bb02ed4d46b936f std/sync.olang
 cec14acad2356597 54d51ead4dd8d2db std/tile.olang
 eeee247184686052 72553dbefe86d122 std/time.olang
-3940ccce7f408782 dec22da8f4e3325f std/tls.olang
+f0f3f185d0128011 f812902d2953b293 std/tls.olang
 dc957db12eea5034 04e163ebae4a8df8 std/utf8.olang
 1868ee0e15269bcc 75bc51694bfbb49d std/zmtp.olang
 a56142c30b36b352 474d244d62248f51 tests/Base.olang
