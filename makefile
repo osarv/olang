@@ -489,11 +489,11 @@ $(ANDROID_RUNS): android@%: FORCE
 
 # B12f: the same tests built for Windows (WINDOWS_TARGET) with mingw-w64 and run under Wine; skipped, saying so,
 # where Wine or mingw-w64 is missing (docs/windows.md). WINDOWS_SKIP leaves out what has no Windows form: std/os's own
-# tests (they run sh, printf and the like, and /dev/ptmx), std/time's (POSIX TZ names), std/tls
-# (OpenSSL), std/prop (fork and wait), std/ffi (no libffi for Windows here), and tests/canon (linux/gpio.h),
+# tests (they run sh, printf and the like, and /dev/ptmx), std/time's (POSIX TZ names), std/prop (fork
+# and wait), std/ffi (no libffi for Windows here), and tests/canon (linux/gpio.h),
 # tests/pty (pty.h) and tests/cimport (mingw-w64's snprintf is an inline function taking a variable number of arguments)
 WINDOWS_TARGET ?= x86_64-windows
-WINDOWS_SKIP ?= std/os.olang std/time.olang std/tls.olang std/prop.olang std/ffi.olang \
+WINDOWS_SKIP ?= std/os.olang std/time.olang std/prop.olang std/ffi.olang \
 	tests/canon.olang tests/pty.olang tests/cimport.olang
 WINDOWS_TESTS = $(filter-out $(WINDOWS_SKIP),$(CROSS_TESTS) $(CROSS_SKIP))
 WINDOWS_RUNS = $(addprefix windows@,$(WINDOWS_TESTS))

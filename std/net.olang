@@ -22,7 +22,7 @@ if TargetOs == "windows" {
     extern link "ws2_32" {
         fn WSAStartup(version U16, data mut Array<U8>&) I32
         fn WSAGetLastError() I32
-        fn WSASocketW(af I32, kind I32, protocol I32, info U64, group U32, flags U32) U64
+        fn WSASocketW(af I32, kind I32, protocol I32, info CVoid?&, group U32, flags U32) U64
         fn closesocket(s U64) I32
         fn bind(s U64, sa Array<U8>&, len I32) I32
         fn listen(s U64, backlog I32) I32
@@ -78,7 +78,7 @@ if TargetOs == "windows" {
     # a socket not inherited by programs this one starts (WSA_FLAG_NO_HANDLE_INHERIT), overlapped as socket() makes them
     fn sysSocket(family I32, kind I32) I32 {
         wsaStart()
-        return fromSocket(WSASocketW(family, kind, 0, 0, 0, 0x81))
+        return fromSocket(WSASocketW(family, kind, 0, null, 0, 0x81))
     }
     fn sysBind(fd I32, sa Array<U8>&) I32 { return bind(U64(fd), sa, I32(sa.Len())) }
     fn sysListen(fd I32, backlog I32) I32 { return listen(U64(fd), backlog) }
