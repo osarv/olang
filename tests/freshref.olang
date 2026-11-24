@@ -1,0 +1,90 @@
+# E12c, O6 (D9i): a fresh value given to a read-only reference is built where the reference goes, not built and copied
+# there again - a conditional's chosen arm (`a if c else $b`), a try's call (`try f()`, `f()!`, a constant default), a
+# text stored in a field early freeing gives a region of its own (O8d). Each test reads the references back after an
+# arena churn: what a reference names must still be its own text, the arms not taken left alone.
+
+type Fail error { No }
+
+type Box struct() {
+    texts Vec<String&>
+    last String&
+}
+
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+
+fn settle() I64 {
+    s I64 = 0
+    for i in range 1, 50: s += churn(i * 8)
+    return s
+}
+
+fn made(s String&) String {
+    b := StringBuilder()
+    b.Push(s)
+    b.Push("!")
+    return b.ToString()
+}
+
+fn maybe(s String&, ok Bool) String ? Fail {
+    if not ok: error Fail.No
+    return made(s)
+}
+
+fn (b mut Box&) chosen(s String&, c Bool) { b.texts.Push(s if c else $s + "?") }
+
+fn (b mut Box&) called(s String&, c Bool) { b.texts.Push(made(s) if c else s) }
+
+fn (b mut Box&) tried(s String&, ok Bool) ? Fail { b.texts.Push(try maybe(s, ok)) }
+
+fn (b mut Box&) defaulted(s String&, ok Bool) { b.texts.Push(try maybe(s, ok) catch default "none") }
+
+fn (b mut Box&) ended(s String&) { b.texts.Push(maybe(s, true)!) }
+
+fn (b mut Box&) kept(s String&) { b.last = $s + "." }
+
+test "a conditional's chosen arm given to a reference" {
+    b mut Box& = Box()
+    t := made("a")
+    b.chosen(t, true)
+    b.chosen(t, false)
+    b.called(t, true)
+    b.called(t, false)
+    settle()
+    assert b.texts[0] == "a!" and b.texts[1] == "a!?"
+    assert b.texts[2] == "a!!" and b.texts[3] == "a!"
+    assert t == "a!"
+}
+
+test "a try's call given to a reference" {
+    b mut Box& = Box()
+    b.tried("x", true)!
+    failed := false
+    try b.tried("y", false) catch { failed = true }
+    b.defaulted("z", true)
+    b.defaulted("w", false)
+    b.ended("v")
+    settle()
+    assert failed and b.texts.Len() == 4
+    assert b.texts[0] == "x!" and b.texts[1] == "z!" and b.texts[2] == "none" and b.texts[3] == "v!"
+}
+
+test "a text stored in a field, its region's own" {
+    b mut Box& = Box()
+    for i in range 5: b.kept($i)
+    settle()
+    assert b.last == "4."
+}
+
+fn counted(n I64) I64 {
+    b mut Box& = Box()
+    for i in range n: b.called($i, i % 2 == 0)
+    t I64 = 0
+    for x in b.texts: t += x.Len()
+    return t
+}
+
+# decided while compiling (S18c), as the run time does
+assert counted(4) == 6

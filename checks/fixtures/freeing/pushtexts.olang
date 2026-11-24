@@ -5,8 +5,11 @@ import "std/os"
 # into a Vec<String&> held where the call does not close - is built where the reference goes, once. Before, each was
 # built there and copied there again, the first copy left behind until that scope closed: twice the text resident. The
 # measure is the peak address space gained (VmPeak, as growth.olang's): N texts of 256 KB, each in a chunk mapped for
-# itself, are 25 MB at N = 100 for each shape; a program building each twice is at 50, and the limit is midway, 37 MB
+# itself, are 25 MB at N = 100 for each shape; a program building each twice is at 50, and the limit is midway, 37 MB.
+# (wt-copyonce) The same for a conditional's chosen arm (`s if c else $s`) and a try's call (`try f(s)`)
 N I64 = 100
+
+type Fail error { No }
 
 type Holder struct() {
     texts Vec<String&>
@@ -19,6 +22,17 @@ fn (h mut Holder&) made(s String&) {
     b.Push(s)
     h.texts.Push(b.ToString())
 }
+
+fn (h mut Holder&) chosen(s String&, c Bool) { h.texts.Push(s if c else $s) }
+
+fn built(s String&, ok Bool) String ? Fail {
+    if not ok: error Fail.No
+    b := StringBuilder()
+    b.Push(s)
+    return b.ToString()
+}
+
+fn (h mut Holder&) tried(s String&) ? Fail { h.texts.Push(try built(s, true)) }
 
 # the peak address space, in KB (VmPeak)
 fn peak() I64 {
@@ -41,7 +55,11 @@ fn main() {
     p1 := peak()
     for _ in range N: h.made(s)
     p2 := peak()
+    for _ in range N: h.chosen(s, false)
+    p3 := peak()
+    for _ in range N: h.tried(s)!
+    p4 := peak()
     t := 0
     for x in h.texts: t += x.Len()
-    io.PutLn($t + " " + verdict((p1 - p0) / 1024) + " " + verdict((p2 - p1) / 1024))!
+    io.PutLn($t + " " + verdict((p1 - p0) / 1024) + " " + verdict((p2 - p1) / 1024) + " " + verdict((p3 - p2) / 1024) + " " + verdict((p4 - p3) / 1024))!
 }

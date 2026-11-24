@@ -5104,9 +5104,40 @@ fn (ln mut lowering&) promote(pr typed.Promote&, ty types.TypeId, sp source.Span
     t0 := ln.T
     a0 := ln.arrayOf(ty)
     if t0.IsRef(t0.Repr(ty)) and a0 != types.UnknownT and ln.fixedLen(a0) < 0 {
+        k := condOf(pr.X)
+        if k != null: return ln.promotedCond(k, pr.Site, ty, sp)
         return try ln.promotedInPlace(pr, ty, sp, a0) catch NotInPlace default ln.promoteNew(pr, ty, sp)
     }
     return ln.promoteNew(pr, ty, sp)
+}
+
+# a conditional's value (E28, "a if c else b") promoted, null for any other value
+fn condOf(x typed.Expr&) typed.Cond?& {
+    return match x {
+        case typed.Expr.Cond(_, _, k): k if k.A != null else null
+        case _: null
+    }
+}
+
+# E12c, O6: a conditional's value promoted to a run-time-length array reference is each arm's value promoted - the
+# chosen arm made where the reference goes when it is fresh (a text, a call's result: promotedInPlace), else copied
+# there once as before - rather than the arm's value made, then copied there again
+fn (ln mut lowering&) promotedCond(k typed.Cond&, site typed.SiteId, ty types.TypeId, sp source.Span) mir.Operand {
+    x := ln.val(k.C)
+    if ln.dead: return mir.Operand.None
+    slot := ln.temp(ty, sp)
+    yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(x, yes, no))
+    ends Vec<mir.BlockId>
+    for i in range 2 {
+        ln.start(yes if i == 0 else no)
+        pa := typed.Promote(k.A! if i == 0 else k.B, site)
+        v := ln.promote(pa, ty, sp)
+        if not ln.dead: ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(slot), mir.Rvalue.Use(v)))
+        ln.leaveOpen(ends)
+    }
+    ln.patch(ends)
+    return mir.Operand.Copy(mir.Lvalue.L(slot))
 }
 
 # a fresh run-time-length array made only to be promoted - "s.data = Array<T>(n)", a literal - made where the reference
@@ -5145,34 +5176,53 @@ fn (ln mut lowering&) promotedInPlace(pr typed.Promote&, ty types.TypeId, sp sou
 }
 
 # E12c, O6: a fresh value promoted to a read-only run-time-length array reference - a text (`v.Push($s)` into a
-# Vec<String&>), or a call's result of a body handing back no view of what it is given (`v.Push(b.ToString())`) - is
-# built where the reference goes, the reference its pair, rather than built and copied there again (the first copy
-# left in that scope until it closes). A text's site is adopted there; a call's result is taken only where the plan
-# already passes that scope for it. Never a region of early freeing's (O8d) on either side
+# Vec<String&>), or a call's result of a body handing back no view of what it is given (`v.Push(b.ToString())`), alone
+# or as a try's operand (`v.Push(try f())`, no default) - is built where the reference goes, the reference
+# its pair, rather than built and copied there again (the first copy left in that scope until it closes). A text's site
+# is adopted there; a call's result is taken only where the plan already passes that scope for it. A region of early
+# freeing's (O8d) only for a text built in the reference's own region already: a region's objects are found from the
+# word before them (O8d), which a call's result - a view into storage of its own - may not start at
 fn (ln mut lowering&) freshInPlace(pr typed.Promote&, ty types.TypeId) Bool {
     t := ln.T
     if not ln.planned or (t.PermOf(ty) & types.Writable) != 0 or t.RunsCopy(t.Referent(ty)): return false
-    if pr.Site < typed.SiteId(0) or I64(pr.Site) >= ln.plan.Built.Len() or ln.plan.RegionKind[I64(pr.Site)] != 0: return false
+    if pr.Site < typed.SiteId(0) or I64(pr.Site) >= ln.plan.Built.Len(): return false
     to := ln.plan.Built[I64(pr.Site)]
-    if to == typed.Scope.Unset or heldRef(ln.built(pr.Site)): return false
     site := freshSite(pr.X)
-    if site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() or ln.plan.RegionKind[I64(site)] != 0 or heldRef(ln.built(site)): return false
+    if to == typed.Scope.Unset or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() or ln.plan.RegionKind[I64(site)] != 0: return false
     x := pr.X
+    if x == typed.Expr.Text and to == typed.Scope.Region and ln.plan.Built[I64(site)] == to: return true
+    if ln.plan.RegionKind[I64(pr.Site)] != 0 or heldRef(ln.built(pr.Site)) or heldRef(ln.built(site)): return false
     if x == typed.Expr.Text: return true
-    if x != typed.Expr.Call: return false
-    c := x.c
+    c := freshCall(x)
+    if c == null: return false
     id := typed.CalleeBody(c)
     if id < 0 or ln.L.ViewsOf(typed.BodyId(I32(id))) != 0 or ln.freshCtor(c): return false
     return ln.resultScopeAt(c, id) == to
 }
 
-# the site a fresh value's storage is made at: a text's, a call's; -1 for any other value
-fn freshSite(x typed.Expr&) typed.SiteId {
-    return match x {
-        case typed.Expr.Text(_, _, tx): tx.Site
-        case typed.Expr.Call(_, _, c): c.Site
-        case _: typed.SiteId(-1)
+# the call a fresh value is: itself, or the operand of a try whose clauses give no default - null for any other value
+fn freshCall(x typed.Expr&) typed.Call?& {
+    match x {
+        case typed.Expr.Call(_, _, c) { return c }
+        case typed.Expr.Try(_, _, tr) {
+            for cl in tr.Clauses {
+                if cl.Defaults.Len() > 0: return null
+            }
+            if tr.X == null: return null
+            return match tr.X! {
+                case typed.Expr.Call(_, _, c): c
+                case _: null
+            }
+        }
+        case _ { return null }
     }
+}
+
+# the site a fresh value's storage is made at: a text's, a call's (a try's operand's); -1 for any other value
+fn freshSite(x typed.Expr&) typed.SiteId {
+    if x == typed.Expr.Text: return x.t.Site
+    c := freshCall(x)
+    return c.Site if c != null else typed.SiteId(-1)
 }
 
 # a fresh value made where the reference it is promoted to goes (freshInPlace): the reference its pair
