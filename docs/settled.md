@@ -895,8 +895,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`v.Push($s)` into a `Vec<String&>`) or a call's result whose callee hands back no view of its arguments
   (`v.Push(b.ToString())`), promoted to a read-only reference to a run-time-length array, is built in the reference's
   scope and the reference is its pair - not built and then copied there, the first copy left until the scope closed
-  (a text adopts the reference's scope; a call's result only where the plan already passes that scope for it; never a
-  region of early freeing's). Lowering only (`promotedFresh`); a by-value argument never had the double copy.
+  (a text adopts the reference's scope; a call's result only where the plan already passes that scope for it; a region
+  of early freeing's only for a text the plan already builds in the reference's own region - a call's result there may
+  not start where the region's word before it is). A conditional's value is each arm promoted (`promotedCond`), so its
+  chosen arm is built in place where it is fresh; a try's call (`try f()`, `f()!`, no default) is taken as
+  its call is. Lowering only (`promotedFresh`); a by-value argument never had the double copy.
 - **Lending (O17, O17a, O17b; R1 of docs/refusals.md, 2026-11-08, mine within the user's decisions).** A split value
   (references living elsewhere than its storage) is lent where its references live, so a callee builds where they hang;
   its own storage is lifted there too only where the callee keeps it (stores, captures, returns or hands on the

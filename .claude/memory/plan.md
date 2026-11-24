@@ -94,8 +94,9 @@ on 2026-11-07. The remaining work is /home/user/review/remaining/LIST.md.)
   text is spilled to build/spill as assembled and each item's text copied once - cold self-build lower+emit 3116 ->
   2757 MB. Left: the items' text (~106 MB) and emitter state until Analyze returns (the compiler gets no early freeing:
   condition 3, so only a scope closing reclaims; routed to OLang Cloud). Done since: a fresh text or call result given
-  to a reference is built where it goes (wt-argmove, 68ab4d176) - the double copy is gone for E12c promotion; a
-  conditional given to a reference and a call result placed elsewhere still copy.
+  to a reference is built where it goes (wt-argmove, 68ab4d176) - the double copy is gone for E12c promotion (a
+  conditional's arm, a try's call and a text in a field's region too: wt-copyonce); left: a call's result in a region of
+  early freeing's (its start may not carry the region's word) and a try with a default.
 - Decided (the user, 2026-11-23): a joined task's results freed early by option (c) of docs/freeing.md 2.4 question 1 (result regions handed to the spawner at the join's wait; pools take cross-thread releases via a lock-free return list); section-8, Opus xhigh, after condimport, exactlocal and the full verify. Field scopes (decisions 3): docs/fieldscopes.md for option B (soundness argument, run-time lookup, cost) first; no building until the user has seen it.
 - Decided (the user, 2026-11-23: "We want to free when we can ... do vectors and views not per type, but per instance"): a view of one Vec keeping every Vec's growth (review10 Q) - count it as a gap now, and make collection buffer places per value so the keep goes; section-8, Opus xhigh, after the task-results hand-off.
 - Order (the Orchestrator, 2026-11-23): condimport (done), exactlocal merge, loop names as values (wt-loopvals), full verify; field scopes option B (the user: "Yes, build this"; O23b; Opus xhigh; peak measured; review before merge), full verify; task results hand-off (c); per-instance buffer places, and O23b's equality per instance.

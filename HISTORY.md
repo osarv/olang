@@ -42702,3 +42702,34 @@ steps); the empty array gives one, empty, arrangement. After the last arrangemen
 ascending, so a full walk leaves it sorted; a walk stopped early leaves it where it stopped. Its helper
 `nextArrangement` fails with `Exhausted.End` rather than returning a Bool (R23a holds in std too). Tests: duplicates,
 empty, one element, 6! = 720, texts, an early stop, and the walk baked while compiling as at run time.
+
+## 2026-11-24: a conditional's arm, a try's call and a text in its reference's region built where the reference goes (D9i; mine; wt-copyonce)
+
+wt-argmove's entry left two shapes still made, then copied into the reference's scope: a conditional's value given to
+a reference and a call's result the plan places elsewhere. Shown first by IR (`h.texts.Push(s if c else $s)`: the text
+copied into the Vec's scope, then that copy copied there again) and by checks/fixtures/freeing/pushtexts.olang's peak
+address space (100 texts of 256 KB: 50 MB for each shape against 25 for argmove's two). Looking for where a call's
+result is placed elsewhere found three shapes, not one:
+
+- A conditional (`a if c else b`) promoted is now each arm promoted (`promotedCond`): the chosen arm goes through
+  promote as a value of its own, so a fresh one (a text, a call's result, a fill...) is built in place and anything
+  else is copied there once - as before, when the conditional's value was copied once.
+- A try around a call (`try f()`, `f()!`) was the commonest "call placed elsewhere": the call already passed the
+  reference's scope for its result, but freshInPlace saw a Try, not a Call. A try whose clauses give no default is now
+  taken as its call (`freshCall`). One with a default (`catch default ""`) still copies: the default's value is no
+  fresh storage, and the slot would hold it uncopied.
+- A text stored in a field early freeing gives a region (O8d, `h.last = $s`) was built in the region and copied into the
+  same region again. argmove kept every region out; a text whose site the plan already builds in the reference's own
+  region (`Built` equal, a Region) is now taken: it is a fresh allocation, so the word before it names the region, as
+  release reads it. A call's result in a region stays copied (`h.last = made(s)`): what a callee hands back may be a
+  view into storage of its own that does not start where the region's word is (a `Trim()` of its own text), and
+  `__olang_region_release` reads that word - so that one needs a fact about the callee (hands back the start of an
+  allocation) that nothing records yet.
+
+Lowering only; the evaluator copies every time and agrees (tests/freshref.olang, run and under OLANG_EVALUATE=1).
+Measured: pushtexts' two new shapes 50 -> 25 MB each (its expected output now four "once"s); the cold -quick self-build
+(same tree, master's compiler against this one, two runs each) lower+emit 2742 -> 2688 MB, the compile phase's peak
+2760 -> 2702 MB. Fixed point holds.
+Found along the way: the goldens left stale by wt-homecimp (compiler/load's layout, std/time's line in diag.txt,
+canon's and cshare's runs) captured again; checks' taskvals "grew by 25 MB" fails on master's compiler in this container
+too, not from this change.
