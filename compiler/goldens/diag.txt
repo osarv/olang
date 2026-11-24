@@ -8093,8 +8093,8 @@ timevirtualbuild.olang:6:10: error[S18c]: this assertion is false: time.Virtual 
     6 |     time.Virtual(fn() { time.Sleep(time.Duration.Seconds(1)) })
       |          ^~~~~~~
 timevirtualbuild.olang:6:10: note: it was evaluated while compiling
-$ROOT/std/time.olang:145:12: note: in the standard library's code, here
-  145 |     assert TestBuild, "time.Virtual runs only in a test build ('olang test') - a program's clock is the real one"
+$ROOT/std/time.olang:146:12: note: in the standard library's code, here
+  146 |     assert TestBuild, "time.Virtual runs only in a test build ('olang test') - a program's clock is the real one"
       |            ^~~~~~~~~
 timevirtualbuild.olang:6:10: note: instantiated here, with E = nothing
     6 |     time.Virtual(fn() { time.Sleep(time.Duration.Seconds(1)) })
