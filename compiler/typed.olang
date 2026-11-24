@@ -427,6 +427,20 @@ type ViewWalk struct(T types.Table&, B Body&, Elig I64, Views fn&(id BodyId) I64
     T, B, Elig, Views, Held
 }
 
+# whether nothing runs in body b after a return takes its value - no deferred code, no destructor (a by-value holder's
+# drop, a local holding a value with one to run) - so a view it hands back (D9h) names what it named when the return
+# took it: a body where something may run then hands back no view (`defer: c.out = saved` would change or let go of
+# the `c.out` a `return c.out` hands back before its caller copies it)
+fn NothingAfter(t types.Table&, b Body&) Bool {
+    for bi in b.Blocks {
+        if bi.Kind == BlockKind.Defer or bi.Kind == BlockKind.ErrDefer or bi.Kind == BlockKind.Drop: return false
+    }
+    for l in b.Locals {
+        if t.NeedsDrop(l.Ty): return false
+    }
+    return true
+}
+
 # the bits a function's view facts use: one per parameter below ViewBits, ViewOther for a view of anything else (a
 # tail call's argument that is no parameter's) - its result copied at every call, never read in place
 # B3i: the name of the whole-program fact lowering's D9h judgements read the program's mutable globals through

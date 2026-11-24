@@ -2476,6 +2476,8 @@
 | status 0
 === run d9hheldwrite.olang
 | status 0
+=== run d9hstillret.olang
+| status 0
 === run d9htryview.olang
 | status 0
 === run deeparray.olang

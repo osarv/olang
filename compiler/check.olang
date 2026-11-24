@@ -24551,6 +24551,7 @@ fn (c Checker&) ctorViewKey(b typed.Body&) I64 {
 fn (c mut Checker&) settleViews(b typed.Body&, file I64) {
     key := c.ctorViewKey(b)
     inst := c.viewable(b)
+    if not typed.NothingAfter(c.P.T, b): return
     u := typed.LocalUses.Uses(c.P.T, b)
     c.viewHeld.Clear()
     w := typed.ViewWalk(c.P.T, b, c.viewElig(b, file), fn(id typed.BodyId) I64 { return c.ViewsOf(id) }
