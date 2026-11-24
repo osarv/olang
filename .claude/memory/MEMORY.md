@@ -5,3 +5,4 @@
 - [Archive](archive/) — not imported: `rules_log.md` (rules' stories and the pre-slimming full text), `direction_log.md` (same for direction), `decisions_log.md`, `next_steps_log.md`, `concurrency_gaps.md`, `open_language_gaps.md`, `vec_growth_question.md`
 - [Claims](claims.md) — who is doing what across sessions; add a line and push before starting an item
 - [Orchestrator notes](orchestrator-notes.md) — work orders from the Orchestrator; read before starting work
+- [Windows hand-off](handoff-windows.md) — state of the x86_64-windows target (B12f), what is skipped and left
