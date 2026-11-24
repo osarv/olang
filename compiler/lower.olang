@@ -3143,10 +3143,15 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
     # (QCE: a struct or an enum owning parts - existing storage not handed back as a view its callers copy, D9h - is
     # copied as an array is; while compiling no body's result is such a view, so each is copied here)
     if ln.retOwns(res) {
-        if ln.retCopies(value, res) {
-            cp := ln.arrayCopy(mir.Operand.Copy(mir.Lvalue.L(l)), res, sp, ln.resultScope())
-            ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(cp)))
+        if not ln.retCopies(value, res): return
+        # (gap 19: a PartsOnly value's parts each copied in a part region of its own where its place is decided sole -
+        # `return a if c else b` over two Vec locals - so the let-go of the place it lands in releases the copy)
+        if ln.planned and ln.L.Free != null and ln.L.Free!.Done and ln.L.Free!.PartsOnly(res) and not ln.T.RunsCopy(res) {
+            ln.partsCopied(pl(mir.Base.Local(l)), res, ln.resultScope(), sp)
+            return
         }
+        cp := ln.arrayCopy(mir.Operand.Copy(mir.Lvalue.L(l)), res, sp, ln.resultScope())
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(l), mir.Rvalue.Use(cp)))
         return
     }
     r := t.Repr(res)

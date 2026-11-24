@@ -907,7 +907,6 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     if f.genOn: f.genDecide()
     f.Done = true
     f.writePlans()
-    f.resultRegionGaps()
     f.taskCopied()
     t5 := time.Now()
     if f.Debug: f.debugOut($"free: final " + $((t4 - t3) / 1000000) + " ms, " + $f.goes.Len() + " let-goes, " + $f.stores.Len() + " stores; decide " + $((t5 - t4) / 1000000) + " ms\n")
@@ -7372,12 +7371,24 @@ fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bo
             }
         }
         case typed.Expr.Away(_, _, y) { f.redirect(b, y, top, at, self, copied) }
+        # a try whose clauses give no default (`h.last = f()!`) is its call's value (lower's freshCall)
+        case typed.Expr.Try(_, _, tr) {
+            if tr.X != null and tr.X! == typed.Expr.Call and noDefaults(tr): f.redirect(b, tr.X!, top, at, self, copied)
+        }
         # a sequence's value is built in the region, its statements where they stand
         case typed.Expr.Seq(_, _, sq) {
             if sq.X != null: f.redirect(b, sq.X!, top, at, self, copied)
         }
         case _ { }
     }
+}
+
+# whether a try's clauses give no default: its value is its operand's
+fn noDefaults(tr typed.Try&) Bool {
+    for cl in tr.Clauses {
+        if cl.Defaults.Len() > 0: return false
+    }
+    return true
 }
 
 # ---- what lowering asks ----
@@ -9062,6 +9073,9 @@ fn (f mut Free&) retCopies(b I64) Bool {
     if t.KindOf(bd.Ty) != types.Kind.Func: return false
     rt := t.Result(bd.Ty)
     if t.IsRef(rt) or t.KindOf(t.Repr(rt)) == types.Kind.Array or not t.OwnsParts(rt): return false
+    # (a PartsOnly value's copy is built part by part, each in a part region of its own where its place is sole - lower's
+    # retArrays - which the let-go of the place it lands in releases)
+    if f.PartsOnly(rt) and not t.RunsCopy(rt): return false
     match bd.Of {
         case typed.BodyOf.Fn(inst) { if (try f.P.L.ViewResults.Get(inst) catch default I64(0)) != 0: return false }
         case _ { return false }
@@ -9108,46 +9122,6 @@ fn readArms(m typed.Match&) Bool {
         if readChoice(a.Value): return true
     }
     return m.NoMatch != null and readChoice(m.NoMatch!.Value)
-}
-
-# O8f, gap 19: a call's value stored into a slot place - its let-go puts a slot back (__olang_slot_release) - whose
-# callee builds part of it in a region of its own made where its result goes (a returned local given more than one
-# value, each in a region of its own): the let-go finds no slot, and the region stays until the place's scope closes.
-# A row of the report for each, which -check fails on (written once the plans' regions are)
-fn (f mut Free&) resultRegionGaps() {
-    for st in f.stores {
-        if st.Kind != SFresh or st.X == null or not f.programCode[st.Body]: continue
-        top := f.topSite(st.X!)
-        if top < 0 or f.Plans.Ref(st.Body).RegionKind[top] != 3: continue
-        c := typed.Call.Of(st.X!)
-        if c == null: continue
-        cb := typed.CalleeBody(c)
-        if not f.resultRegions(cb, 0): continue
-        for g in f.goes {
-            if g.PlaceId != st.PlaceId or g.Body != st.Body or g.Kind != LAssign or not g.Again or g.At.Start > st.Sp.Start or st.Sp.Start >= g.At.End: continue
-            row := $f.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) + ": memory: '" + $f.textOf(g.File, g.Sp) + "' keeps what '" + $f.fnName(cb) + "' builds in a region of its own where its result goes, which the let-go of a slot does not release - kept until its scope closes: a let-go early freeing does not follow (O8f)\n"
-            if row not in f.gapRows: f.gapRows.Push(row)
-        }
-    }
-}
-
-# whether body b makes a region where its result goes - at a site of its own, or through a call it returns, given that
-# scope as its result's (depth: the calls followed, a few at most - recursion ends there)
-fn (f mut Free&) resultRegions(b I64, depth I64) Bool {
-    v := f.resultVar(b)
-    if v < 0 or depth > 8: return false
-    pl := f.Plans.Ref(b)
-    for i in range pl.RegionKind.Len() {
-        if pl.RegionKind[i] == 1 and pl.RegionParent[i] == typed.Scope.Var(v): return true
-    }
-    u := typed.LocalUses.Uses(f.T(), f.Bodies[b])
-    for x in u.Rets {
-        c := typed.Call.Of(x)
-        if c == null or c.Site < typed.SiteId(0): continue
-        cb := typed.CalleeBody(c)
-        if cb >= 0 and pl.Passed(c.Site, f.resultVar(cb)) == typed.Scope.Var(v) and f.resultRegions(cb, depth + 1): return true
-    }
-    return false
 }
 
 # O8f: the rows for a library's place (a Map entry's value, a collection's element) the program's own call lets go of in

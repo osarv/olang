@@ -43035,3 +43035,32 @@ side edited - side alone. What does recompile more is the older mutable-globals 
 global of a type no global had (`Array<I64>`) lowered side and std/prelude's columns, text and vec too - every module
 whose views are judged against the globals' types. Cost on the cold self-build: `DecideWrites` 33 ms and 4 MB resident
 (of 3.2 GB peak).
+
+## 2026-11-24: freeing gap 19 closed, and a try's call built in a field's region (O8f, D9i; the design the coordinator gave; wt-gap19b)
+
+wt-gap19 left two shapes of gap 19 named by -memory -check (docs/freeing.md 2.4). Both are closed as decided:
+
+- (a) A text local given a second value before it is returned (`s := ...; s = s + "!"; return s`), its call's value
+  landing in an element of text. Each of its values is built in a region of its own made in the result scope, which
+  for an element of text is the slot scope the store gives its call - a record on the caller's stack. The region was
+  linked into that record's kids, so nothing ever closed it, and the slot's let-go (`__olang_slot_release`) did nothing
+  for text in a region. Now `__olang_region_make` makes a region asked of a slot scope a kid of the scope the slot scope
+  builds into (its tail), and marks it: its flag word holds 2. The part flag moved to bit 0 (a part region's flag is 1,
+  or its count shifted above bit 0, M19d), so the four places reading it test that bit; `__olang_region_make_part`
+  writes its flag over the mark, so a part region made in a slot scope is never released by a slot's let-go. A slot's
+  let-go of text in a marked region releases the region: a region made there holds that one value. `again` at 100k and
+  400k calls: 43.9 and 170.6 MB peak resident -> 1.7 MB both.
+- (b) The copy a return of a choice makes (`return a if c else b` over two Vec locals): lower's `retArrays` copied it
+  whole where the result goes, in no part region, so the element's part let-go found none. A PartsOnly result (no Copy
+  of its own) is now copied part by part as a store into its place builds it (`partsCopied` over the value's bytes):
+  each array in a part region of its own where its place is decided sole, else in the result scope as before. `pick`:
+  8.0 and 26.9 MB -> 1.7 MB both.
+
+Both rows of -memory -check went: `free.resultRegionGaps` (and `resultRegions`) are removed, and `copiedRet` holds no
+more for a PartsOnly value. gaps19 moved to checks' `limited` (flat under 8 MB, -memory -check clean, the same output
+built, under -free late, -sanitize and the evaluator).
+
+Also `h.last = f()!` (left by wt-copyonce2): `free.redirect` stopped at the Try, so the plan passed no region for the
+try's call and lowering copied its result into the field's region. A try whose clauses give no default is now followed
+to its call, as lower's `freshCall` takes it, and `regionCall` takes the result in place. pushtexts' seventh shape
+(N holders each keeping `built(s, true)!`): twice (57 MB) -> once.

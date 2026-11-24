@@ -605,7 +605,9 @@ fn freeing(r mut report&) ? Failed {
     # againkept: 2.4's `:=` local of a call's value given a call's result before its store, its first value unread;
     # litlocal: array literals holding a local's value given to a place; globalinit: mutable globals initialized by a
     # literal or a fill, given another literal; againread: againkept's local with its first value read; rettext: gap 19's
-    # returned text local, its slot in the frame)
+    # returned text local, its slot in the frame; gaps19: gap 19's open part, a returned text local given a second value -
+    # its region made in the element's slot scope, released by the slot's let-go - and the copy a return of a choice of
+    # two Vec locals makes, in a part region of its own)
     limited := Array<String&>["append", "global", "arrays", "fields", "elements", "mapvalues", "unset", "vecelems", "mapcopy"
                               "returned", "vectexts", "vecvecs", "mapelems", "views", "copytext", "ownerelems", "soleelems"
                               "structelems", "copyelems", "fillelems", "elemcopies", "fillread", "ownerpair", "fillreturn", "nestedowners", "ownervecs"
@@ -614,7 +616,7 @@ fn freeing(r mut report&) ? Failed {
                               "captures", "veccopies", "fieldreads", "fieldagain", "owntrees", "writeback", "fills", "conds", "fillargs"
                               "fixeddefaults", "textstructs", "textarrays", "pushjoin", "constargs", "fixedfills", "ctortexts", "splitlocal", "widenlocal", "elemarg"
                               "mapfill", "mapcopies", "assignkept", "ctorkept", "zerofill", "litstores", "againkept"
-                              "litlocal", "globalinit", "againread", "rettext"]
+                              "litlocal", "globalinit", "againread", "rettext", "gaps19"]
     full := Array<String&>["88890 88890 15288890\n", "88890\n", "220049997\n", "88890 88890 20000 20000\n"
                     "name 319993 value 319993\n", "1 10 value 99993 padded out to some length .........................\n"
                     "19999 20000\n", "401980000 100 100\n", "5980000 7\n", "80001000000 4\n", "1346674 19998 20\n"
@@ -641,7 +643,7 @@ fn freeing(r mut report&) ? Failed {
                     "600478900 19999 3 4 c19999 padded out to some lengthd19999 199995\n"
                     "59997 t19999 padded out to some length\n", "200878890 t20001 padded out to some length y19999 19999\n"
                     "Array<I64>[1, 2] Array<String>[\"a\", \"b\"] Array<I64>[4, 4, 4]\n201038890 x19999 padded out to some length 5 19999\n"
-                    "679997 t19999 padded out to some length\n", "10288890 399993 padded out a little\n"]
+                    "679997 t19999 padded out to some length\n", "10288890 399993 padded out a little\n", "80020977780\n"]
     part := Array<String&>["490 490 148890\n", "490\n", "220494\n", "490 490 200 200\n", "name 193 value 193\n"
                     "1 10 value 193 padded out to some length .........................\n", "199 200\n", "59800 100 100\n", "59800 7\n"
                     "20500 4\n", "12272 198 20\n", "66300 5 30\n"
@@ -663,7 +665,7 @@ fn freeing(r mut report&) ? Failed {
                     "28237 t199 padded out to some length\n", "46168 196\n", "46168 196\n", "64400 199 3 4 c199 padded out to some lengthd199 1995\n"
                     "597 t199 padded out to some length\n", "28390 t201 padded out to some length y199 199\n"
                     "Array<I64>[1, 2] Array<String>[\"a\", \"b\"] Array<I64>[4, 4, 4]\n29990 x199 padded out to some length 5 199\n"
-                    "6797 t199 padded out to some length\n", "4490 193 padded out a little\n"]
+                    "6797 t199 padded out to some length\n", "4490 193 padded out a little\n", "29180\n"]
     for i in range limited.Len() {
         p := limited[i]
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)
@@ -729,9 +731,9 @@ fn freeing(r mut report&) ? Failed {
     # where the reference goes, once, not built there and copied there again - its peak address space, limited as growth's)
     try r.expect(sh(dir, "\"$OLANG\" build -check pushtexts.olang > out.txt 2>&1 && (ulimit -v 4194304 && ./build/pushtexts) > out.txt 2>&1") == 0
                  "pushtexts", dir)
-    try r.expect(outOf(dir) == "157286400 once once once once once once\n", "pushtexts built each text once", dir)
+    try r.expect(outOf(dir) == "183500800 once once once once once once once\n", "pushtexts built each text once", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=4 pushtexts.olang > out.txt 2>&1") == 0, "pushtexts interpreted", dir)
-    try r.expect(outOf(dir) == "6291456 once once once once once once\n", "pushtexts interpreted output", dir)
+    try r.expect(outOf(dir) == "7340032 once once once once once once once\n", "pushtexts interpreted output", dir)
     # (tasks, condition 3 by origins: elements replaced beside tasks that cannot reach them are freed at once - its
     # peak address space over a second half of its joins; the oracles, and ThreadSanitizer, at a smaller size)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check tasks.olang > out.txt 2>&1") == 0, "tasks -memory -check", dir)
@@ -796,21 +798,11 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(o.Contains("gaps.olang:9:9: memory: 'rows[i % 10]' keeps what it lets go of until main's scope closes: a let-go early freeing does not follow (O8f)"), "no row for the element", dir)
     try r.expect(o.Contains("error[B18]: 2 let-goes early freeing does not follow (O8f)"), "no B18 error", dir)
     # (gaps17, gaps17b: gap 17's open part - a struct holding a Map built by its constructor, a Vec of Maps beside a Map
-    # of the same Maps - named by -memory -check; gaps19: gap 19's open part, a text local given a second value before it
-    # is returned (its region made where the result goes, which an element's slot let-go does not release) and the copy a
-    # return of a choice of two Vec locals makes - both named by -memory -check, over 8 MB, its output right under -free
-    # late, -sanitize and the evaluator. Each moves to `limited` once closed)
+    # of the same Maps - named by -memory -check. Each moves to `limited` once closed)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check gaps17.olang > out.txt 2>&1") == 1, "gaps17 passed -memory -check", dir)
     try r.expect(outOf(dir).Contains("gaps17.olang:23:9: memory: 'rows[i % 10]' keeps what it lets go of"), "gaps17 names no element", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check gaps17b.olang > out.txt 2>&1") == 1, "gaps17b passed -memory -check", dir)
     try r.expect(outOf(dir).Contains("gaps17b.olang:26:9: memory: 'rows[i % 10]' keeps what it lets go of"), "gaps17b names no element", dir)
-    try r.expect(sh(dir, "\"$OLANG\" build -memory -check gaps19.olang > out.txt 2>&1") == 1, "gaps19 passed -memory -check", dir)
-    try r.expect(outOf(dir).Contains("gaps19.olang:40:9: memory: 'd[i % 10]' keeps what 'again' builds in a region of its own"), "gaps19 names no region", dir)
-    try r.expect(outOf(dir).Contains("gaps19.olang:41:9: memory: 'w[i % 10]' keeps the copy 'pick' makes"), "gaps19 names no copy", dir)
-    try r.expect(sh(dir, "\"$OLANG\" build gaps19.olang > out.txt 2>&1") == 0, "gaps19 build", dir)
-    try r.expect(sh(dir, "(ulimit -v 8192 && ./build/gaps19) > out.txt 2>&1") != 0, "gaps19 fits 8 MB: move it to limited", dir)
-    try late(r, dir, "gaps19", "200", "29180\n")
-    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 gaps19.olang > out.txt 2>&1") == 0 and outOf(dir) == "29180\n", "gaps19 interpreted", dir)
 }
 
 # B18b: an oracle that runs no freeing code - the program built at size N as usual and built with early freeing off

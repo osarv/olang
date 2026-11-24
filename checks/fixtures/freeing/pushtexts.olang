@@ -8,7 +8,8 @@ import "std/os"
 # itself, are 25 MB at N = 100 for each shape; a program building each twice is at 50, and the limit is midway, 37 MB.
 # (wt-copyonce) The same for a conditional's chosen arm (`s if c else $s`) and a try's call (`try f(s)`); (wt-copyonce2)
 # a try with a default (`try f(s) catch default ""`), and a call's result stored in a field early freeing gives a region
-# (`h.last = copied(s)`), its body handing back an allocation's start: N such results kept in N holders
+# (`h.last = copied(s)`), its body handing back an allocation's start: N such results kept in N holders; (wt-gap19b)
+# the same through a try with no default (`h.last = built(s, true)!`)
 N I64 = 100
 
 type Fail error { No }
@@ -47,6 +48,8 @@ fn copied(s String&) String {
 
 fn (h mut Holder&) kept(s String&) { h.last = copied(s) }
 
+fn (h mut Holder&) keptTried(s String&) { h.last = built(s, true)! }
+
 # the peak address space, in KB (VmPeak)
 fn peak() I64 {
     st := try os.ReadFile("/proc/self/status") catch default ""
@@ -81,8 +84,16 @@ fn main() {
         hs.Push(k)
     }
     p6 := peak()
+    ts Vec<Holder&>
+    for _ in range N {
+        k mut Holder& = Holder()
+        k.keptTried(s)
+        ts.Push(k)
+    }
+    p7 := peak()
     t := 0
     for x in h.texts: t += x.Len()
     for k in hs: t += k.last.Len()
-    io.PutLn($t + " " + verdict((p1 - p0) / 1024) + " " + verdict((p2 - p1) / 1024) + " " + verdict((p3 - p2) / 1024) + " " + verdict((p4 - p3) / 1024) + " " + verdict((p5 - p4) / 1024) + " " + verdict((p6 - p5) / 1024))!
+    for k in ts: t += k.last.Len()
+    io.PutLn($t + " " + verdict((p1 - p0) / 1024) + " " + verdict((p2 - p1) / 1024) + " " + verdict((p3 - p2) / 1024) + " " + verdict((p4 - p3) / 1024) + " " + verdict((p5 - p4) / 1024) + " " + verdict((p6 - p5) / 1024) + " " + verdict((p7 - p6) / 1024))!
 }
