@@ -633,9 +633,10 @@ declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)
 ;         released first; a list through each region's own header (%olang.region)
 %olang.scope = type { ptr, ptr, ptr, ptr, ptr, ptr, ptr }
 ; a region (O8d): its scope, its inner scope (what is built there), prev and next among its parent's kids, its parent,
-; its destructors' chain, its owner (the parent where that is no region), whether it is a PART region - one made
-; for an array a value holds by value (a Vec's buffer, a Map's slots: O8f), which a growth releases and an owner's
-; release reads as part of the region holding it (__olang_region_home) - and its MAKER, the home of the thread that made
+; its destructors' chain, its owner (the parent where that is no region), its flag - bit 0 set for a PART region, one
+; made for an array a value holds by value (a Vec's buffer, a Map's slots: O8f), which a growth releases and an owner's
+; release reads as part of the region holding it (__olang_region_home), its count above it (M19d); 2 for one made in a
+; slot scope, which a slot's let-go releases (__olang_slot_release) - and its MAKER, the home of the thread that made
 ; it (%olang.home), where its storage goes back when another thread releases it
 %olang.region = type { %olang.scope, %olang.scope, ptr, ptr, ptr, ptr, ptr, i64, ptr }
 ; O8f, P2: a thread's HOME - the storage of its regions released on another thread comes back to it here, a list of
@@ -1253,7 +1254,9 @@ done:
 ; list - nothing for null, constant data or one past 2,032 bytes (a zero word before it). The early-free analysis proved
 ; nothing still uses it, so no view is compared. Nothing either for text in a region (O8f: a Vec of text copied with its
 ; buffer into a part region, whose release reclaims it; a slot built in a region): the word before such text names its
-; region, no slot's class - read only once the chunk it is in is found to be no region's
+; region, no slot's class - read only once the chunk it is in is found to be no region's. Gap 19: text in a region made
+; in a slot scope (its flag 2, __olang_region_make: a callee's returned local given a value of its own region where the
+; result goes) is that region's one value, so the region is released with it
 define void @__olang_slot_release(ptr %buf) noinline {
 entry:
   %none = icmp eq ptr %buf, null
@@ -1270,9 +1273,18 @@ owner:
 kind:
   %oh = load ptr, ptr %o
   %isreg = icmp eq ptr %oh, @__olang_region_chunk
+  br i1 %isreg, label %region, label %notreg
+region:
+  %fp = getelementptr %olang.region, ptr %o, i32 0, i32 7
+  %f = load i64, ptr %fp
+  %slotmade = icmp eq i64 %f, 2
+  br i1 %slotmade, label %drop, label %done
+drop:
+  tail call void @__olang_region_drop(ptr %o)
+  br label %done
+notreg:
   %isfwd = icmp eq ptr %oh, @__olang_fwd_chunk
-  %odd = or i1 %isreg, %isfwd
-  br i1 %odd, label %done, label %head
+  br i1 %isfwd, label %done, label %head
 head:
   %hp = getelementptr i8, ptr %buf, i64 -8
   %hw = load i64, ptr %hp
@@ -3797,11 +3809,23 @@ done:
 }
 
 ; a new region, a kid of parent: empty, closed with parent unless released before
-define ptr @__olang_region_make(ptr %parent) noinline {
+define ptr @__olang_region_make(ptr %parent0) noinline {
 entry:
   %r = call ptr @__olang_region_hdr_new()
   call void @llvm.memset.p0.i64(ptr %r, i8 0, i64 168, i1 false)
   store ptr @__olang_region_chunk, ptr %r
+  ; gap 19: one made in a slot scope (a callee building a text where its result goes, an element of text's slot) is a
+  ; kid of the scope that slot scope builds into, marked (its flag 2) so that the slot's let-go releases it
+  ; (__olang_slot_release); a part region made there has its flag rewritten (__olang_region_make_part)
+  %p0h = load ptr, ptr %parent0
+  %inslot = icmp eq ptr %p0h, @__olang_slot_chunk
+  %p0t = getelementptr %olang.scope, ptr %parent0, i32 0, i32 2
+  %under = load ptr, ptr %p0t
+  %parent = select i1 %inslot, ptr %under, ptr %parent0
+  %mark = zext i1 %inslot to i64
+  %mark2 = shl i64 %mark, 1
+  %flagp = getelementptr %olang.region, ptr %r, i32 0, i32 7
+  store i64 %mark2, ptr %flagp
   %mkp = getelementptr %olang.region, ptr %r, i32 0, i32 8
   %home = load ptr, ptr @__olang_home
   store ptr %home, ptr %mkp
@@ -4072,7 +4096,8 @@ kind:
 flag:
   %fp = getelementptr %olang.region, ptr %o, i32 0, i32 7
   %f = load i64, ptr %fp
-  %part = icmp ne i64 %f, 0
+  %f1 = and i64 %f, 1
+  %part = icmp ne i64 %f1, 0
   br i1 %part, label %grown, label %done
   ; M19d: an array shorter than the one its storage was lengthened to in place (the flag's count, __olang_grow_in_place)
   ; is what that growth replaced - the storage is the new array's, kept
@@ -4152,7 +4177,8 @@ kind:
 ispart:
   %pfp = getelementptr %olang.region, ptr %o, i32 0, i32 7
   %pf = load i64, ptr %pfp
-  %partof = icmp ne i64 %pf, 0
+  %pf1 = and i64 %pf, 1
+  %partof = icmp ne i64 %pf1, 0
   br i1 %partof, label %up, label %no
   ; this thread's storage only: the scope the owner is (a region's owner - the scope it was made in - or, for one made
   ; in another region, that region's, up the parents) opened here or claimed by this thread (P2) - another thread may
@@ -4276,7 +4302,8 @@ up:
 flag:
   %fp = getelementptr %olang.region, ptr %c, i32 0, i32 7
   %f = load i64, ptr %fp
-  %part = icmp ne i64 %f, 0
+  %f1 = and i64 %f, 1
+  %part = icmp ne i64 %f1, 0
   br i1 %part, label %parent, label %out
 parent:
   %pp = getelementptr %olang.region, ptr %c, i32 0, i32 4

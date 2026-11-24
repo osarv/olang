@@ -1,10 +1,9 @@
 import "std/io"
 
-# docs/freeing.md gap 19's open part (wt-gaps1719; wt-gap19): a returned value local landing in an array's element
-# keeps storage there each call where it is text given a second value before the return (`again`, ~450 bytes a call: its
-# last value's region, made where the result goes, which the element's slot let-go does not release) or a choice of two
-# Vec locals (`pick`, 48 bytes a call: the copy its return makes, in no region); a returned text local (`txt`, rettext)
-# and the two Vec locals are freed. Over 8 MB at 400,000 turns, both named by -memory -check; output right everywhere
+# docs/freeing.md gap 19's open part (wt-gaps1719; wt-gap19; closed by wt-gap19b): a returned value local landing in
+# an array's element - text given a second value before the return (`again`: each value's region made in the element's
+# slot scope, which the slot's let-go releases), a choice of two Vec locals (`pick`: the copy its return makes, in a part
+# region of its own), a returned text local (`txt`, rettext) - flat under 8 MB at 400,000 turns, -memory -check clean
 N I64 = 400000
 
 fn txt(i I64) String {
