@@ -59,3 +59,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-homestd and wt-homecimp merged - time.LocalOffset, tls pin and DialToLearn, one C type per tag, anonymous C members
 - OLang Debts (cloud, 2026-11-24): olang wt-e73finds - finishing (verify, records, merge)
 - OLang Debts (cloud, 2026-11-24): oann wt-bf16gemm - kernels/gemm register blocking for the BF16 pair dot
+- OLang Debts (cloud, 2026-11-24): oann wt-bf16gemm merged (eaa9b08) - pair-dot micro-kernel, on only for znver4/5 (widened F32 wins on SPR); measure on the Ryzen with make bf16bench
