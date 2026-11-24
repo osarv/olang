@@ -5984,8 +5984,10 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
         }
         # (O8f: a conditional's value is one of its branches', each a store of its own - lowering builds each branch at its
         # site, in the region its store gives it)
+        # (but constant text an arm gives a place of text that may change: lowering copies the conditional's value where
+        # its scope is, no region a let-go may release - review: tools' migrateMarkdown, `fence = "a" if c else "b"`)
         case typed.Expr.Cond(_, _, c) {
-            if c.A != null {
+            if c.A != null and not (ConstRead(c.A!) or ConstRead(c.B)) {
                 w.made(k, c.A!, sp, multi)
                 w.made(k, c.B, sp, multi)
                 return

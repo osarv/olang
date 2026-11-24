@@ -1,0 +1,24 @@
+# check: run
+# O8d: a text local given constant text by a conditional (`fence = "olang" if c else "other"`) holds a copy lowering
+# makes where its scope is, no region: the local keeps it (no let-go releases it), as tools' migrateMarkdown needs
+import "std/io"
+
+fn mk(src String&) I64 {
+    fence := ""
+    t I64 = 0
+    lines := src.Split("\n")
+    for k in range lines.Len() {
+        line := lines[k]
+        if fence != "" {
+            if line.StartsWith("`"): fence = ""
+        } else if line.StartsWith("`") {
+            fence = "olang" if k == 1 else "other"
+        }
+        t += fence.Len()
+    }
+    return t
+}
+
+fn main() ? {
+    try io.PutLn($mk("a\n`o\nx\n`\n"))
+}
