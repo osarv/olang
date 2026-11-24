@@ -317,8 +317,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   then `a.Outs.Clear()` returned a view whose elements Clear had ended - typed.ViewWalk.refRoots).
   A view is handed back only where nothing changes it before the caller copies: a body with deferred code or a
   destructor to run hands back none (`typed.NothingAfter`, check's settleViews), and a local handed back holding views
-  copies where the body may write storage of the types it views (`lower.stillWhile`, quietLife over the whole body);
-  d9hstillret (wt-joinreach).
+  (a constructor's field too) views only by-value parameters holding no reference that the body never writes
+  (`typed.StillParams`, Settle's mask, the same for check and lowering); d9hstillret (wt-joinreach).
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31: "knowing whether or not a
   function you pass things into mutates what you passed is valuable", and "globals shouldn't be mut unless you say
   so").** `mut T&` writable, `T&` read-only, at every level, shallow. Locals and parameters are always assignable

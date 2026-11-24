@@ -43284,17 +43284,27 @@ was left out though the body changed the storage it viewed; a scratch program pr
 and master's compiler has it too. The bisect's `Map<I64, mir.ScopeRef>.buckets` was a layout accident: keeping it moved
 what the released chunks held. Joinreach only exposed it, by freeing the checker's places for the first time.
 
-Fix, at D9h's two judgements, as SPEC's "where nothing could tell" already required: a body with deferred code or a
-destructor to run as it returns (a Defer, ErrDefer or Drop block, a local of a type needing a drop) hands back no view
-(`typed.NothingAfter`, read by check's settleViews, so ViewResults, the free pass, the scope pass and lowering all see
-the same zero); and lowering's `resultViews` keeps a local in `rvl` only where quietLife over the body's root block, for
-the local's type, finds nothing that may write the storage it views (`stillWhile`), a store into a value local's own
-bytes (`ownBytes`: a Var or a constructor's Field, through fields and payloads - the part stores Settle allows) being
-quiet there; a banned local copies, and Settle runs again with it banned so no local holds views through it
-(`settleStill`). Judging from the declaration to the return rather than the whole body was not needed: the self-build
-hands back 145 views where it handed back 157. Case d9hstillret (a field replaced and an element written after the local
-took it, a deferred restore of a Map, a write through a second reference to the same storage; under -sanitize, baked
-and decided by the evaluator). With it the compiler built by itself passes `olang test` of needs, lsp and check.
-Measured on the self-build after the fix (`build -memory compiler/olang.olang`, the compiler built by itself): 538 of
-1008 places free at once, 470 keep; peak RSS 2.71 GB under `-memory` (2.59 GB before the fix, the same build), 2.69 GB
-for fixedpoint's plain build (2.68 GB before) - the views handed back that now copy cost little.
+Fix, at D9h's two judgements, as SPEC's "where nothing could tell" already required, both in typed.olang so check and
+lowering decide alike: a body with deferred code or a destructor to run as it returns (a Defer, ErrDefer or Drop block,
+a local of a type needing a drop) hands back no view (`NothingAfter`, read by check's settleViews, so ViewResults, the
+free pass, the scope pass and lowering all see the same zero); and a local handed back holding views - a constructor's
+field too - holds views only of by-value parameters holding no reference that the body never writes (`StillParams`,
+the mask both callers pass `Settle`). What a reference parameter names can change under any name for it - a write
+through it, another parameter or a global naming the same storage - while a by-value parameter's storage is the
+callee's own by meaning (D9b: where the caller lends it in place, nothing may change it during the call).
+
+Tried first and reverted: banning such locals in lowering alone, by quietLife over the whole body (`stillWhile`, with
+part stores into the body's own locals quiet). It fixed the original crash, but after the rebase on master it banned
+constructor fields (`lowering`'s `F mir.Fn = made`, effects' and free's `Bodies`) that check had recorded in CtorViews:
+the scope pass placed the instance for a constructor viewing its arguments, lowering then copied the field into storage
+that did not outlive it, and the compiler built by itself crashed in `olang test` of prompt, jupyter and notebook
+(a closed scope read in retView's walk). A ban check does not see is a second answer to one question; the rule now has
+one. A constructor's field viewing a writable reference parameter that a later field's initializer grows was a live
+case of the same bug (scratch, now in d9hstillret: -free late printed the right sum by luck, -sanitize and the evaluator
+stopped on the freed buffer). Also fixed on the way: `PartsLet` put -1 (a type with no place) into its list, which
+walkBufs then indexed - an out-of-range read a -debug compiler stops on (master's too).
+
+Case d9hstillret: a field replaced and an element written after the local took it, a deferred restore of a Map, a write
+through a second reference to the same storage, a by-value parameter written, a constructor field grown by a later
+initializer; under -sanitize, baked and decided by the evaluator. With it the compiler built by itself passes `olang
+test` of needs, lsp, check, prompt, jupyter and notebook.

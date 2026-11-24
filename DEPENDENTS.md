@@ -152,8 +152,8 @@ ownGoes does, so a fact added or renamed there changes both; its `globReach` (a 
 `effects.olang`'s `GlobalsOf`, which must list every global a body counts as ReadsGlobals, RefGlobals or WritesGlobals.
 A let-go releasing what a D9h view handed back names is kept from it only by D9h's own judgement: `typed.olang`'s
 `NothingAfter` (no view from a body running code after its return takes the value - a new kind of such code, beside
-deferred code and destructors, joins it) and `lower.olang`'s `stillWhile` (quietLife over the body for a local handed
-back holding views). A slot release puts back only a slot - text in a
+deferred code and destructors, joins it) and `StillParams` (the parameters a local handed back may view, Settle's mask -
+check and lowering must pass the same one, or CtorViews and the scope pass disagree with the copies lowering makes). A slot release puts back only a slot - text in a
 region is left to it - in the runtime (`__olang_slot_release`, the chunk's owner read first) and the evaluator
 (`releaseHeld`'s `slotRegion`) alike. An element's let-go of a Vec it walks (O8f gap 17: `free.olang` VecWalks, PartsLet,
 VecFields - the prelude Vec's `data` and `n` by name, so renaming them changes these and `emit.olang`'s and `views.olang`'s
