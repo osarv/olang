@@ -564,7 +564,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   read-only, references still naming their instance, value arrays borrowed); types from the expected function type
   (D16a) or the body (D16b). A function value is `{code, environment}`. `(args)` after any postfix expression calls
   (E13b). `spawn fn() { }` runs a lambda as a task (D16e). A lambda assigned to a variable it captures is an error (D16c,
-  2026-11-15, the AI study: it held the earlier value); recursion is a top-level `fn` or a captured holder.
+  2026-11-15, the AI study: it held the earlier value); recursion is a top-level `fn` or a captured holder. A lambda
+  lives where its captures do (D16d) - built in a derived scope too (a reference read out of a receiver's field, O23a,
+  passed or found at run time); where it cannot be built there it is built in its block and judged to live no longer
+  than it (scope.fnVal; d16dfieldscope, wt-joinreach).
 - **No shadowing (D3a, the user's call)**, types included: no local or parameter named like a global, function, build
   constant or type; a type and a function or global of one module may not share a name (D2).
 - **`:=` declares any settled expression's type (D15, the user's call).** `null` and a call giving nothing are errors.

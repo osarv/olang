@@ -2691,7 +2691,7 @@ is a top-level `fn`, or reaches itself through a captured reference holding it (
 **D16d (where a lambda lives).** A lambda's value is a reference to what it captured (T21). One capturing no
 reference is built where it lands, as any temporary is (E12c). One capturing references - or values holding them
 (D16c) - lives where they do:
-in their one scope, or - when they live in several - in the innermost block among them, or else the block it is
+in their one scope (one found from a field it was read out of too, O23a), or - when they live in several - in the innermost block among them, or else the block it is
 made in; one capturing what a `Str`'s receiver reaches, where nothing is built (E11c), lives in the block it is made in;
 one **returned where it is made** (`return fn(x I64) I64 { return g(f(x)) }`) is built in the result scope
 instead, each scope it captures from required to outlive that - an obligation of the function (O10b) where it is

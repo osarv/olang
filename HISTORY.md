@@ -43293,18 +43293,28 @@ the mask both callers pass `Settle`). What a reference parameter names can chang
 through it, another parameter or a global naming the same storage - while a by-value parameter's storage is the
 callee's own by meaning (D9b: where the caller lends it in place, nothing may change it during the call).
 
-Tried first and reverted: banning such locals in lowering alone, by quietLife over the whole body (`stillWhile`, with
-part stores into the body's own locals quiet). It fixed the original crash, but after the rebase on master it banned
-constructor fields (`lowering`'s `F mir.Fn = made`, effects' and free's `Bodies`) that check had recorded in CtorViews:
-the scope pass placed the instance for a constructor viewing its arguments, lowering then copied the field into storage
-that did not outlive it, and the compiler built by itself crashed in `olang test` of prompt, jupyter and notebook
-(a closed scope read in retView's walk). A ban check does not see is a second answer to one question; the rule now has
-one. A constructor's field viewing a writable reference parameter that a later field's initializer grows was a live
+Tried first and replaced: banning such locals in lowering alone, by quietLife over the whole body (`stillWhile`, with
+part stores into the body's own locals quiet). A ban check does not see is a second answer to one question - check's
+CtorViews, which the scope pass places a constructor's instance by, would still say a banned field views its argument
+while lowering copies it - so the rule now has one answer, in typed.olang. A constructor's field viewing a writable reference parameter that a later field's initializer grows was a live
 case of the same bug (scratch, now in d9hstillret: -free late printed the right sum by luck, -sanitize and the evaluator
 stopped on the freed buffer). Also fixed on the way: `PartsLet` put -1 (a type with no place) into its list, which
 walkBufs then indexed - an out-of-range read a -debug compiler stops on (master's too).
 
 Case d9hstillret: a field replaced and an element written after the local took it, a deferred restore of a Map, a write
 through a second reference to the same storage, a by-value parameter written, a constructor field grown by a later
-initializer; under -sanitize, baked and decided by the evaluator. With it the compiler built by itself passes `olang
-test` of needs, lsp, check, prompt, jupyter and notebook.
+initializer; under -sanitize, baked and decided by the evaluator.
+
+The second crash (D16d, scope.olang). After the rebase on master the compiler built by itself still crashed, in `olang
+test` of cells (and, with the lowering-only ban, of prompt, jupyter and notebook), always in lowering's viewWalk lambda
+`fn(id) { return lw.ViewsOf(id) }`: its environment pointer read back as -1, the storage refilled by a Map's
+`Array<I64>(n, -1)`. A bisect over the freeing decisions named `Map<I64, mir.ScopeRef>.buckets` again (keeping it moved
+what reused the storage), but the program alone shows it, with early freeing off: `lw := ln.L` (a reference read out of
+the receiver's field, its scope derived from the receiver's, O23a) captured by a lambda returned in a struct - `-free
+late -sanitize` and the evaluator both stop on the call in the caller. scope.fnVal found the lambda's home in that
+derived scope, judged the value to live there (so the return was allowed), but built it with `home if home.Runs() else
+s.here()` - in the block it was made in, which closed at the return. Now it is built where buildSite can build in a
+derived scope (passed, or found at run time, O29) and, where no build there is possible, in its block with that block
+among the scopes it is judged to live in (D16d's "or else the block it is made in", which the code built but did not
+say). Case d16dfieldscope (-sanitize, the evaluator's run). With both fixes the compiler built by itself passes `olang
+test` of needs, lsp, check, cells, prompt, jupyter and notebook.
