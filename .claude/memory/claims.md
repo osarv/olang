@@ -72,3 +72,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Debts (cloud, 2026-11-24): full verify on 1cc282a15 failed: taskvals (OLang Cloud's cond3), array.olang build vs interp (wt-arrayeval, mine), tok/ast goldens stale
 - OLang Debts (cloud, 2026-11-24): olang wt-copyonce2 - call result into an early-freeing region, try with a default
 - OLang Debts (cloud, 2026-11-24): wt-arrayeval merged (738ea9ff9) - stale run golden, evaldiff names it; tok/ast goldens recaptured
+- OLang Debts (cloud, 2026-11-24): olang wt-fieldborrow - `d := f.data` copies the array when the receiver is a global (OAgent app finding)
