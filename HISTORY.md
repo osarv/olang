@@ -43317,4 +43317,6 @@ s.here()` - in the block it was made in, which closed at the return. Now it is b
 derived scope (passed, or found at run time, O29) and, where no build there is possible, in its block with that block
 among the scopes it is judged to live in (D16d's "or else the block it is made in", which the code built but did not
 say). Case d16dfieldscope (-sanitize, the evaluator's run). With both fixes the compiler built by itself passes `olang
-test` of needs, lsp, check, cells, prompt, jupyter and notebook.
+test` of needs, lsp, check, cells, prompt, jupyter and notebook. Measured on the self-build after both
+(`build -memory compiler/olang.olang`, the compiler built by itself, rebased on master): 547 of 1008 places free at once,
+461 keep; 144 returns hand back a view; peak RSS 2.68 GB under -memory, 2.66 GB for fixedpoint's plain build.
