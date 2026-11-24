@@ -5427,7 +5427,8 @@ never the pointed-to value, uniformly and in every position. `a = b` on a local 
 to everyone else holding that instance; and `p = q` on a reference **parameter** repoints the function's
 own copy, which is a cursor local to that call and is not visible to the caller. All three are the same
 rule, and the third is useful in its own right — a reference parameter doubles as a mutable cursor
-without needing a separate local declared from it.
+without needing a separate local declared from it - a cursor over storage that exists: repointing a parameter at a new value
+is refused (S4e).
 
 This is why assignment does *not* copy contents through a reference: `x = y` must imply `x == y`, and
 T26 compares references by identity. Write-through would satisfy neither that nor O15, which runs a value's
@@ -5441,12 +5442,10 @@ error: it changes the callee's own copy (D9) that no one sees again, or repoints
 caller's value is unchanged. Read after it is S9g's, over the function's body: a mention of the name, other than as a
 store's own target, later in the order written, or anywhere inside a loop around the store; a mention in deferred code,
 a task, a `join`'s clauses or a lambda's capture counts as after every store. A write **through** a reference
-parameter (`p.f = 7` where `p` is a `mut T&`) is no store to the name and is kept - except once `p` has been repointed
-at **storage the callee gives a value** (`p = T()`, E12c) on every path to the write, with no repoint in a loop around
-the write naming other storage: then a write through it (`p.f = ...`, `p.f.g = ...`, `p[j] = ...`, a payload) reaches
-only that storage and is a store too, lost unless something reads `p` after it (reading it back, returning it, passing
-it on, borrowing into it). A repoint at what another reference names (`p = q`) keeps every write through `p` after it.
-S9g's loop name follows the same rule. To change what the caller passed, write its fields through a `mut` reference,
+parameter (`p.f = 7` where `p` is a `mut T&`) is no store to the name and is kept; a repoint at what another reference
+names (`p = q`) keeps every write through `p` after it, and a repoint at storage the callee gives a value is refused
+outright (below). S9g's loop name keeps the read-after rule: once it is repointed at storage the body gives a value
+(`n = T()`, E12c) on every path to a write through it, that write is a store too, lost unless something reads it after. To change what the caller passed, write its fields through a `mut` reference,
 or return the new value.
 
 A reference parameter or receiver repointed at **storage the callee gives a value** - an assignment `p = x` where `x`
