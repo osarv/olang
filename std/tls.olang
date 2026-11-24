@@ -67,6 +67,9 @@ fn parsePin(pin String&) Array<U8> ? Error.Pin {
 # "pin", where given, is the SHA-256 fingerprint of the server's certificate (64 hex digits, ':' between bytes allowed,
 # as `openssl x509 -fingerprint -sha256` prints it): the chain, "ca" and the name are then not checked, the certificate
 # must be exactly that one, and the dial fails with Pin when it is not (or when "pin" is not a fingerprint)
+# the handshake's longest wait for the server's next message (Windows; OpenSSL's waits as its socket does)
+HandshakeMs I64 = 10000
+
 fn Conn.Dial(host String&, port U16, ca String& = "", pin String& = "") Conn ? Error, net.Error {
     want := try parsePin(pin) if pin != "" else Array<U8>(0)
     tcp := try net.Conn.Dial(try net.Addr.Resolve($host + ":" + $port))
@@ -447,9 +450,11 @@ if TargetOs == "windows" {
             error e
         }
         c := Conn(fd, cred, host.ToC())
+        c.SetTimeout(time.Duration.Millis(HandshakeMs))     # a server that stops answering ends the handshake with Timeout
         try c.settle(try c.step(true))
         try c.check(host, ca, pin, learn)
         if QueryContextAttributesA(c.ctx, 4, c.sizes) != secOk: error Error.Failed     # SECPKG_ATTR_STREAM_SIZES
+        c.SetTimeout(time.Duration.Millis(0))                 # reads wait as long as the caller says again
         return c
     }
 
