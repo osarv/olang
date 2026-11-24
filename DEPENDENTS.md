@@ -218,6 +218,7 @@ cases `checks/cases/d17*.olang`.
 | `README.md`, `docs/install.md`, `makefile` (the bootstrap sets `OLANG_TIMES`) | where users are told of it |
 | `OLANG_AUTORACE`: `compiler/build.olang` (`racesSpawners`), `olang.olang` `help` ("environment:"), SPEC P7a, `checks/checks.olang` (`racetests`) | `olang test`'s race build of the tests that start a task, turned off by 0 |
 | `OLANG_CLANG` and the clangs looked for on PATH: `compiler/target.olang` (`FindClang`, `Clangs`), `makefile` (`SEED_CLANG`), `checks/checks.olang` (`findClang`, each C compile as `"$CLANG"`, the `sidebyside` wrapper set as `OLANG_CLANG`) | the checks compile C with the clang the compiler uses; a hardcoded `clang` fails where only `clang-NN` is installed |
+| `OLANG_EMULATOR` (B12a, B12f): `compiler/target.olang` (`Runner`, `wine`), `makefile` (`windows-test`, `windows-example`'s Wine), `docs/windows.md`, `docs/android.md` | what runs another machine's programs here: qemu-user, or Wine for Windows |
 | `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT` (B12e): `compiler/target.olang` (`NdkClang`), `olang.olang` `help` ("environment:"), `makefile` (`android-test`, `android-apk`), `docs/android.md` | the NDK an Android build uses |
 | `OLANG_SPINNER`: `compiler/spin.olang` (`Enabled`), `makefile` (`bootstrap`'s loop around clang), `checks/checks.olang` (the prompt's pty scenario sets it to 0; the `spinner` scenario drives it) | the busy indicator (B25) |
 
@@ -283,6 +284,19 @@ shows it; `tools/errorcase_rename.olang` is the migration for a renaming (reads 
 `eval.olang` if the evaluator must do the same without it; `checks/checks.olang` scenarios that read the IR
 (`irHas`, `gsym`) and the C-driven region test; `seed/` (the runtime is in the seed: regenerate when the runtime or
 emit changes what a bootstrap needs, `make seed`); `docs/optsurvey.md` / `bench/` if it is a measured path.
+
+## A target (an operating system or an architecture, B12-B12f)
+
+| place | why |
+|---|---|
+| `compiler/target.olang` (`ResolveOn`, `windowsTriple`/`androidLevel`, `Runner`), `msgs.olang` (`TargetUnknown`, `TargetUnsupported`, `TargetNoEmulator`) and `compiler/goldens/diag.txt`, `drv.txt` | what `-target` accepts and says it builds for |
+| `compiler/build.olang` (`SystemLibs`, `Link`'s flags, `CFlags`, `exe`), `olang.olang` (the Config: `Static`, `WinInclude`; `emitter`'s `Os`) | how it is compiled and linked |
+| `compiler/runtime.olang` (`Ir`: `Bionic`, `Windows`, the facts rows) and `std/runtime/windows.ll`, `std/runtime/windows/pthread.h` | the runtime for its C library; a runtime.ll function calling something new of the C library needs its Windows form there |
+| `compiler/emit.olang` (`abiArch`, `jmpBuf`, `setjmpCall`, `stderrLoad`, the location strings' comdat) and `compiler/cabi.olang` | the C ABI and what generated code asks of C |
+| `compiler/bindgen.olang` (`llp64`, `plainCall`) | C's types as the target's headers give them |
+| std's `if TargetOs == ...` branches (prelude `print`/`input`, `io`, `os`, `time`, `chan`) | the C library's calls where it differs |
+| `makefile` (`cross`, `android-test`, `windows-test` and their SKIP lists), `tests/shared.olang` (the target constants test) | where it is tested |
+| SPEC B10a, B12, the target's own rule (B12e, B12f), `docs/settled.md`, `docs/android.md`/`docs/windows.md`, `README.md`, `compiler/README.md`, `docs/README.md`, `examples/` | where it is described |
 
 ## A file format
 

@@ -80,6 +80,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     SpillDir String& = ""
     nspill I64 = 0
     Triple String& = "x86_64-pc-linux-gnu"    # the target written into every module (B12)
+    Os String& = "linux"                      # its operating system, TargetOs (B12e, B12f)
     nconst I64 = 0
     badType Bool = false            # a type met with no layout, in the function being written
     ntask I64 = 0                   # tasks' trampolines made
@@ -199,6 +200,30 @@ fn (e Emitter&) traced() Bool { return e.Tests or e.Debug or e.Traced }
 # whether functions carry debug information: all of it under -debug (B2e), their lines and names in a profile build
 # (B20) or a listing build (B11d)
 fn (e Emitter&) dbg() Bool { return e.Debug or e.Lines }
+
+# B12f: what differs on Windows in the code the compiler writes around C - the C ABI's arch for cabi, a recovery
+# point's jmp_buf (msvcrt's 256 bytes; glibc's 200 on both architectures) taken by _setjmp with no frame to unwind
+# (a jump that only restores registers, as glibc's does), and C's stderr, which mingw-w64 reaches by __acrt_iob_func(2)
+fn (e Emitter&) abiArch() String { return "x86_64-windows" if e.Os == "windows" else $e.Arch }
+fn (e Emitter&) jmpBuf() String { return "[256 x i8]" if e.Os == "windows" else "[200 x i8]" }
+fn (e Emitter&) setjmpCall() String {
+    return "call i32 @_setjmp(ptr %jb, ptr null)" if e.Os == "windows" else "call i32 @setjmp(ptr %jb)"
+}
+fn (e mut Emitter&) declareSetjmp() {
+    if e.Os == "windows" {
+        e.declare("_setjmp", "i32 @_setjmp(ptr, ptr) returns_twice")
+    } else {
+        e.declare("setjmp", "i32 @setjmp(ptr) returns_twice")
+    }
+}
+fn (e mut Emitter&) stderrLoad(v String&) String {
+    if e.Os == "windows" {
+        e.declare("__acrt_iob_func", "ptr @__acrt_iob_func(i32)")
+        return $"  " + $v + " = call ptr @__acrt_iob_func(i32 2)\n"
+    }
+    e.define("stderr", "@stderr = external global ptr")
+    return $"  " + $v + " = load ptr, ptr @stderr\n"
+}
 
 fn (e mut Emitter&) gap(what String&) {
     if what not in e.Gaps: e.Gaps.Push($what)
@@ -1565,6 +1590,8 @@ fn (fe mut fnEm&) located(sp source.Span, rest String&, column Bool = false) Str
     sym := $"olang_loc_" + $U64(key.Hash()).Format(16) + "_" + $U64(second.Hash()).Format(16)
     if not e.itemAt.Has(sym) {
         def := $"@" + $sym + " = weak_odr constant [" + $(text.Len() + 1) + " x i8] c\"" + $escape(text) + "\\00\"\n"
+        # B12f: COFF has a weak definition two objects may both hold only in a comdat of its own
+        if e.Os == "windows": def = $"$" + $sym + " = comdat any\n" + $def[:def.Len() - 1] + ", comdat\n"
         e.item(sym, HomeLoc, def, $"@" + $sym + " = external constant [0 x i8]\n")
     }
     fe.locSeen.Put($text, $"@" + $sym)
@@ -7600,7 +7627,7 @@ fn (e mut Emitter&) cHeader(ty types.TypeId) String {
     r := e.T.Result(ty)
     if r == types.VoidT or r == types.NoreturnT: return "void"
     e.P.Layout(r)
-    w := cabi.Way.Result(e.T, e.Arch, r)
+    w := cabi.Way.Result(e.T, e.abiArch(), r)
     return match w.Kind {
         case cabi.Pass.Direct: $($w.Attr + " " if w.Attr != "" else "") + $e.ty(r)
         case cabi.Pass.Parts: cabi.PartsType(w)
@@ -7615,7 +7642,7 @@ fn (e mut Emitter&) cParamList(ty types.TypeId, runtime Bool) String {
     first := true
     regs := cabi.Regs(6, 8)
     r := t.Result(ty)
-    if r != types.VoidT and r != types.NoreturnT and e.P.Layout(r) and cabi.Way.Result(e.T, e.Arch, r).Kind == cabi.Pass.Sret {
+    if r != types.VoidT and r != types.NoreturnT and e.P.Layout(r) and cabi.Way.Result(e.T, e.abiArch(), r).Kind == cabi.Pass.Sret {
         b.Push($"ptr sret(" + $e.ty(r) + ") align " + $t.Align(r))
         first = false
         regs.Int--
@@ -7646,7 +7673,7 @@ fn (e mut Emitter&) cParamSpelled(p types.TypeId, regs mut cabi.Regs&, runtime B
         return "ptr"
     }
     e.P.Layout(p)
-    w := cabi.Way.Param(e.T, e.Arch, p, regs)
+    w := cabi.Way.Param(e.T, e.abiArch(), p, regs)
     return match w.Kind {
         case cabi.Pass.Direct: $e.ty(p) + $(" " + $w.Attr if w.Attr != "" else "")
         case cabi.Pass.Parts: cabi.PartsList(w)
@@ -7666,7 +7693,7 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
     rw := cabi.Way(cabi.Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), "")
     if res != types.VoidT and res != types.NoreturnT {
         fe.E.P.Layout(res)
-        rw = cabi.Way.Result(t, fe.E.Arch, res)
+        rw = cabi.Way.Result(t, fe.E.abiArch(), res)
         if rw.Kind == cabi.Pass.Sret {
             sret = fe.slot(res)
             args.Push($"ptr sret(" + $fe.ty(res) + ") align " + $t.Align(res) + " " + $sret)
@@ -7701,7 +7728,7 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
             continue
         }
         fe.E.P.Layout(p)
-        w := cabi.Way.Param(t, fe.E.Arch, p, regs)
+        w := cabi.Way.Param(t, fe.E.abiArch(), p, regs)
         fe.cArg(args, w, p, x)
     }
     # X21: the variable arguments, each at the type the checker promoted it to
@@ -7905,7 +7932,7 @@ fn (e mut Emitter&) exportEntry(i I64) {
     errs := t.Items(t.Errors(ty)).Len() > 0
     arr := hasRes and e.exportArrayResult(res)
     rw := cabi.Way(cabi.Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), "")
-    if hasRes and not errs and not arr: rw = cabi.Way.Result(t, e.Arch, res)
+    if hasRes and not errs and not arr: rw = cabi.Way.Result(t, e.abiArch(), res)
     cps Vec<String&>          # C's parameters
     regs := cabi.Regs(6, 8)
     if rw.Kind == cabi.Pass.Sret {
@@ -7992,7 +8019,7 @@ fn (e mut Emitter&) exportParams(fe mut fnEm&, ty types.TypeId, cps mut Vec<Stri
             }
             continue
         }
-        w := cabi.Way.Param(t, e.Arch, pt, regs)
+        w := cabi.Way.Param(t, e.abiArch(), pt, regs)
         match w.Kind {
             case cabi.Pass.Direct {
                 cps.Push($e.ty(pt) + $(" " + $w.Attr if w.Attr != "" else "") + " " + $v)
@@ -8552,8 +8579,7 @@ fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
     b.Push("  call void @__olang_prog_end()\n  ret i32 0\n")
     b.Push("err:\n")
     e.declare("fputs", "i32 @fputs(ptr, ptr)")
-    e.define("stderr", "@stderr = external global ptr")
-    b.Push("  %s = load ptr, ptr @stderr\n")
+    b.Push(e.stderrLoad("%s"))
     msg := "%m0"
     b.Push("  %m0 = getelementptr i8, ptr " + $e.cstr("unhandled error\n") + ", i64 0\n")
     n I64 = 0
@@ -8657,7 +8683,7 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
     e.define("__olang_jmp_target", "@__olang_jmp_target = external thread_local(initialexec) global ptr")
     e.define("__olang_unwind_top", "@__olang_unwind_top = external thread_local(initialexec) global ptr")
     e.define("__olang_unwind_mark", "@__olang_unwind_mark = external thread_local(initialexec) global ptr")
-    e.declare("setjmp", "i32 @setjmp(ptr) returns_twice")
+    e.declareSetjmp()
     e.declare("printf", "i32 @printf(ptr, ...)")
     e.declare("fflush", "i32 @fflush(ptr)")
     e.runtime("__olang_thread_init")
@@ -8712,7 +8738,7 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
     }
     e.testSource()
     b.Push("\ndefine i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
-    b.Push("  %pass = alloca i32\n  %fail = alloca i32\n  %k = alloca i64\n  %jb = alloca [200 x i8], align 16\n")
+    b.Push("  %pass = alloca i32\n  %fail = alloca i32\n  %k = alloca i64\n  %jb = alloca " + $e.jmpBuf() + ", align 16\n")
     b.Push("  %sel = alloca i32\n  store volatile i32 0, ptr %sel\n")
     b.Push("  store volatile i32 0, ptr %pass\n  store volatile i32 0, ptr %fail\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
@@ -8722,7 +8748,7 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
     if gs.Len() > 0 {
         b.Push("  store volatile i64 0, ptr %k\n  br label %gloop\ngloop:\n  %gk = load volatile i64, ptr %k\n")
         b.Push($"  %gm = icmp slt i64 %gk, " + $gs.Len() + "\n  br i1 %gm, label %gbody, label %gdone\ngbody:\n")
-        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %gj = call i32 @setjmp(ptr %jb)\n")
+        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %gj = " + $e.setjmpCall() + "\n")
         b.Push("  %gz = icmp eq i32 %gj, 0\n  br i1 %gz, label %grun, label %gnext\ngrun:\n  %gk2 = load volatile i64, ptr %k\n")
         b.Push($"  %gp = getelementptr [" + $gs.Len() + " x ptr], ptr @olang.harness.inits, i64 0, i64 %gk2\n")
         b.Push("  %gf = load ptr, ptr %gp\n  call void %gf()\n  br label %gnext\ngnext:\n")
@@ -8740,7 +8766,7 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         b.Push("  br i1 %tsel, label %tbody, label %tnext\ntbody:\n")
         b.Push("  %sl = load volatile i32, ptr %sel\n  %sl2 = add i32 %sl, 1\n  store volatile i32 %sl2, ptr %sel\n")
         b.Push("  %top = load ptr, ptr @__olang_unwind_top\n  store ptr %top, ptr @__olang_unwind_mark\n")
-        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %tj = call i32 @setjmp(ptr %jb)\n")
+        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %tj = " + $e.setjmpCall() + "\n")
         b.Push("  %tk2 = load volatile i64, ptr %k\n")
         b.Push($"  %tfp = getelementptr " + $tt + ", ptr @olang.harness.tests, i64 0, i64 %tk2, i32 0\n")
         b.Push($"  %tnp = getelementptr " + $tt + ", ptr @olang.harness.tests, i64 0, i64 %tk2, i32 1\n")
@@ -8880,7 +8906,7 @@ fn (e mut Emitter&) fuzzHarness(tests Vec<I64>, gs Vec<String&>, b mut StringBui
     fnp := $"@" + $e.sym(mir.FnKey.Body(typed.BodyId(I32(id))))
     tn := e.cstr(name)
     b.Push("\ndefine i32 @LLVMFuzzerInitialize(ptr %pargc, ptr %pargv) #0 {\nentry:\n")
-    b.Push("  %k = alloca i64\n  %jb = alloca [200 x i8], align 16\n")
+    b.Push("  %k = alloca i64\n  %jb = alloca " + $e.jmpBuf() + ", align 16\n")
     b.Push("  %argc = load i32, ptr %pargc\n  %argv = load ptr, ptr %pargv\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push($"  store ptr " + $e.cstr(file) + ", ptr @__olang_test_file\n  store ptr " + $tn + ", ptr @__olang_test_name\n")
@@ -8889,7 +8915,7 @@ fn (e mut Emitter&) fuzzHarness(tests Vec<I64>, gs Vec<String&>, b mut StringBui
     if gs.Len() > 0 {
         b.Push("  store volatile i64 0, ptr %k\n  br label %gloop\ngloop:\n  %gk = load volatile i64, ptr %k\n")
         b.Push($"  %gm = icmp slt i64 %gk, " + $gs.Len() + "\n  br i1 %gm, label %gbody, label %gdone\ngbody:\n")
-        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %gj = call i32 @setjmp(ptr %jb)\n")
+        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %gj = " + $e.setjmpCall() + "\n")
         b.Push("  %gz = icmp eq i32 %gj, 0\n  br i1 %gz, label %grun, label %gnext\ngrun:\n  %gk2 = load volatile i64, ptr %k\n")
         b.Push($"  %gp = getelementptr [" + $gs.Len() + " x ptr], ptr @olang.harness.inits, i64 0, i64 %gk2\n")
         b.Push("  %gf = load ptr, ptr %gp\n  call void %gf()\n  br label %gnext\ngnext:\n")
@@ -8911,10 +8937,10 @@ fn (e mut Emitter&) fuzzHarness(tests Vec<I64>, gs Vec<String&>, b mut StringBui
     b.Push("  %i2 = add i32 %i, 1\n  br label %copy\nend:\n")
     b.Push("  %nw = sext i32 %n to i64\n  %last = getelementptr ptr, ptr %mem, i64 %nw\n  store ptr null, ptr %last\n")
     b.Push("  store i32 %n, ptr %pargc\n  store ptr %mem, ptr %pargv\n  ret i32 0\n}\n\n")
-    b.Push("define i32 @LLVMFuzzerTestOneInput(ptr %data, i64 %size) #0 {\nentry:\n  %jb = alloca [200 x i8], align 16\n")
+    b.Push("define i32 @LLVMFuzzerTestOneInput(ptr %data, i64 %size) #0 {\nentry:\n  %jb = alloca " + $e.jmpBuf() + ", align 16\n")
     b.Push("  store ptr %data, ptr @__olang_fuzz_data\n  store i64 %size, ptr @__olang_fuzz_size\n")
     b.Push("  %top = load ptr, ptr @__olang_unwind_top\n  store ptr %top, ptr @__olang_unwind_mark\n")
-    b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %j = call i32 @setjmp(ptr %jb)\n")
+    b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %j = " + $e.setjmpCall() + "\n")
     b.Push("  %z = icmp eq i32 %j, 0\n  br i1 %z, label %run, label %bad\nrun:\n")
     b.Push($"  call void " + $fnp + "()\n  store ptr null, ptr @__olang_jmp_target\n  ret i32 0\nbad:\n")
     b.Push($"  call void @__olang_test_failed(ptr " + $tn + ")\n  call i32 @fflush(ptr null)\n  call void @abort()\n")

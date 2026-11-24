@@ -15,11 +15,39 @@ type Error error {
 # thin wrappers so the tests can open a real descriptor; the raw calls take a NUL-terminated path, which
 # olang string literals do not add, so callers write the "\0" themselves
 fn openReadOnly(path Array<U8>&) I32 {
-    return fcntl.open(path, 0)
+    return fcntl.open(path, binary)
 }
 
 fn closeFd(fd I32) I32 {
     return unistd.close(fd)
+}
+
+# B12f: what differs on Windows, where msvcrt's descriptors are POSIX's with a 32-bit count, open in text mode unless
+# O_BINARY (0x8000) is asked for, and a pipe is made by _pipe
+binary I32 = 0x8000 if TargetOs == "windows" else 0
+
+fn rawWrite(fd I32, data Array<U8>&) I64 {
+    if TargetOs == "windows" {
+        return unistd.write(fd, data, U32(data.Len().Min(1 << 30)))
+    } else {
+        return unistd.write(fd, data, U64(data.Len()))
+    }
+}
+
+fn rawRead(fd I32, buf mut Array<U8>&) I64 {
+    if TargetOs == "windows" {
+        return unistd.read(fd, buf, U32(buf.Len().Min(1 << 30)))
+    } else {
+        return unistd.read(fd, buf, U64(buf.Len()))
+    }
+}
+
+fn pipe(fds mut Array<I32>&) I32 {
+    if TargetOs == "windows" {
+        return unistd._pipe(fds, 65536, binary)
+    } else {
+        return unistd.pipe(fds)
+    }
 }
 
 # what io.Reader, io.Writer and io.Lines read or write through: anything giving a descriptor's number - an os.File,
@@ -44,7 +72,7 @@ fn Write(fd I32, data Array<U8>&) ? Error {
     sent I64 = 0
     do {
         tail := data[sent:]
-        n I64 = unistd.write(fd, tail, U64(tail.Len()))
+        n := rawWrite(fd, tail)
         if n < 0: error Error.Failed
         # no bytes moved with bytes still outstanding: retrying would spin rather than make progress
         if n == 0: error Error.Partial(sent)
@@ -58,7 +86,7 @@ fn Write(fd I32, data Array<U8>&) ? Error {
 # buffer, so its lifetime is that buffer's, and saying so is what lets it be returned at all - a bare "&"
 # return type is rejected outright (O13).
 fn Read(fd I32, buf mut Array<U8>&) Array<U8>& ? Error {
-    n I64 = unistd.read(fd, buf, U64(buf.Len()))
+    n := rawRead(fd, buf)
     if n < 0: error Error.Failed
     return buf[:n]
 }
@@ -416,7 +444,7 @@ test "FormatInt renders decimals, including zero and negatives" {
 # for the tests of Lines, which need no file. Under a pipe's own buffer, 64KB, so the write never waits for a reader
 fn reading(text String&) I32 {
     fds := Array<I32>(2)
-    assert unistd.pipe(fds) == 0
+    assert pipe(fds) == 0
     Write(fds[1], text)!
     unistd.close(fds[1])
     return fds[0]
@@ -530,7 +558,7 @@ fn drained(fd I32) String& {
 
 test "a Writer gathers what is written and writes it when flushed" {
     fds := Array<I32>(2)
-    assert unistd.pipe(fds) == 0
+    assert pipe(fds) == 0
     w := Writer(fds[1], 16)
     w.Write("alpha ")
     w.WriteChar('b')
@@ -552,7 +580,7 @@ test "a Writer gathers what is written and writes it when flushed" {
 
 test "a Writer keeps every byte in order across its buffer's edges" {
     fds := Array<I32>(2)
-    assert unistd.pipe(fds) == 0
+    assert pipe(fds) == 0
     w := Writer(fds[1], 7)
     want := StringBuilder()
     for i in range 200 {
@@ -582,7 +610,7 @@ fn failedFlushes(fd I32) I64 {
 test "a Writer's failed write is Flush's, and every Flush's after it" {
     assert failedFlushes(-1) == 3
     fds := Array<I32>(2)
-    assert unistd.pipe(fds) == 0
+    assert pipe(fds) == 0
     unistd.close(fds[0])
     unistd.close(fds[1])
     assert failedFlushes(fds[1]) == 3 # closed: the system refuses the write
@@ -600,7 +628,7 @@ fn reportTo(fd I32, n I64) ? Error {
 
 test "a deferred Flush writes what was written however the function is left" {
     fds := Array<I32>(2)
-    assert unistd.pipe(fds) == 0
+    assert pipe(fds) == 0
     try reportTo(fds[1], 2)
     left := false
     try reportTo(fds[1], 9) catch Error.Partial e { left = e.written == 3 } catch Error { }
@@ -731,7 +759,7 @@ test Reader.All "gives everything left, and the empty text at the end" {
 # the pieces of "pieces" written one at a time to a pipe, each read as Available gives it, in brackets, after Line took the first
 test Reader.Available "gives what a read brought, keeps a split character whole, and mixes with Line" {
     fds := Array<I32>(2)
-    assert unistd.pipe(fds) == 0
+    assert pipe(fds) == 0
     r := Reader(fds[0])
     Write(fds[1], "first\nsec")!
     assert (try r.Line() catch default "?") == "first" # the read brought more than the line: "sec" waits

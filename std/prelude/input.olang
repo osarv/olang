@@ -47,7 +47,7 @@ fn (s mut InputBuffer&) Fill() ? InputError, Exhausted {
         s.buf = String(Array<U8>(old.Len() * 2))
         for k in range s.end: s.buf[k] = old[k]
     }
-    got := unistd.read(s.fd, s.buf[s.end:], U64(s.buf.Len() - s.end))
+    got := sysRead(s.fd, s.buf[s.end:])
     if got < 0: error InputError.Failed
     if got == 0: error Exhausted.End
     s.end += got
@@ -206,3 +206,13 @@ fn StdinBytes(n I64) Array<U8>& ? InputError, Exhausted { return try stdinBuffer
 fn StdinAvailable() String& ? InputError, Exhausted { return try stdinBuffer.Available() }
 fn StdinAll() String& ? InputError { return try stdinBuffer.All() }
 fn StdinBuffered() Bool { return stdinBuffer.Buffered() }
+
+# read(2) into buf, as many bytes as one call takes: the count as wide as the C library's (msvcrt's read takes an
+# unsigned int, B12f)
+fn sysRead(fd I32, buf mut Array<U8>&) I64 {
+    if TargetOs == "windows" {
+        return unistd.read(fd, buf, U32(buf.Len().Min(1 << 30)))
+    } else {
+        return unistd.read(fd, buf, U64(buf.Len()))
+    }
+}

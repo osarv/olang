@@ -73,6 +73,12 @@ fn androidLevel(triple String&) I64 {
     return level
 }
 
+# B12f: whether a triple's operating system part names Windows with mingw-w64's C runtime: x86_64-windows,
+# x86_64-windows-gnu, x86_64-w64-windows-gnu, x86_64-w64-mingw32 (MSVC's own C runtime, "-windows-msvc", is not built for)
+fn windowsTriple(triple String&) Bool {
+    return triple.EndsWith("-windows") or triple.EndsWith("-windows-gnu") or triple.EndsWith("-mingw32")
+}
+
 # a target that could not be resolved - its diagnostic said
 type Bad error { Target }
 
@@ -179,6 +185,7 @@ fn (t Target&) Runner() Array<String&> ? Bad {
         out[0] = whereIs(out[0]) # run by its path: the program is put in this process's place by it
         return out.ToArray()
     }
+    if t.Os == "windows": return try wine()
     for name in Array<String&>[$"qemu-" + $t.Arch, $"qemu-" + $t.Arch + "-static"] {
         at := whereIs(name)
         if at == "": continue
@@ -192,6 +199,19 @@ fn (t Target&) Runner() Array<String&> ? Bad {
             out.Push(root)
         }
         return out.ToArray()
+    }
+    error Bad.Target
+}
+
+# B12f: Wine running a Windows program here - wine64 on PATH, else Debian's /usr/lib/wine/wine64, else wine - through env,
+# which quiets Wine's own notes (WINEDEBUG=-all) so the program's standard error is its own
+fn wine() Array<String&> ? Bad {
+    for name in Array<String&>["wine64", "/usr/lib/wine/wine64", "wine"] {
+        at := whereIs(name)
+        if at == "": continue
+        envAt := whereIs("env")
+        if envAt == "": return Array<String&>[at]
+        return Array<String&>[envAt, "WINEDEBUG=-all", at]
     }
     error Bad.Target
 }
@@ -233,6 +253,11 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
             at := try triple.Find("-linux-android") catch default 0
             triple = $triple[:at] + "-linux-android" + $t.Api
             t.Os = "android"
+        } else if windowsTriple(triple) {
+            # B12f: Windows on x86-64, with mingw-w64's C runtime and import libraries - one triple however it is spelled
+            if Archs[ai] != "x86_64": try refuse(d, msgs.TargetUnsupported(spec))
+            triple = "x86_64-w64-windows-gnu"
+            t.Os = "windows"
         } else if not (triple.Len() > 10 and triple.EndsWith("-linux-gnu")) {
             try refuse(d, msgs.TargetUnsupported(spec))
         }
@@ -580,7 +605,7 @@ test "what cannot be built for is said as stage 0 says it, before clang is asked
     # no clang is named, so every one of these is decided from the spec alone
     assert mistake("mips-linux-gnu", "", false, "linux", "x86_64") ==
         "olang: error[B12]: olang does not build for 'mips-linux-gnu'\n" + $
-        "olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library, and aarch64 Android (aarch64-linux-android)\n"
+        "olang: note: it builds for x86_64 and aarch64 Linux with the GNU C library, aarch64 Android (aarch64-linux-android) and x86_64 Windows (x86_64-windows)\n"
     assert mistake("aarch64-apple-darwin", "", false, "linux", "x86_64").Contains("does not build for")
     assert mistake("aarch64-linux-gnu:native", "", false, "linux", "x86_64").Contains("native is this machine's CPU")
     assert mistake("aarch64-linux-gnu:", "", false, "linux", "x86_64").Contains("unknown target")
@@ -614,6 +639,18 @@ test "B12e: an Android triple names its API level, 29 where it names none, and a
     assert t.Os == "android" and t.Api == 35 and t.Foreign and t.Triple == "aarch64-unknown-linux-android35" and t.Clang != ""
     run := try t.Runner() catch Bad { return } # no emulator on this machine
     assert run.Len() == 1     # linked statically: qemu needs no C library pointed at
+}
+
+test "B12f: a Windows triple, however it is spelled, is x86_64-w64-windows-gnu, on x86-64 alone" {
+    assert windowsTriple("x86_64-windows") and windowsTriple("x86_64-pc-windows-gnu") and windowsTriple("x86_64-w64-mingw32")
+    assert not windowsTriple("x86_64-linux-gnu") and not windowsTriple("x86_64-pc-windows-msvc")
+    assert mistake("aarch64-windows", "", false, "linux", "x86_64").Contains("does not build for 'aarch64-windows'")
+    assert mistake("x86_64-windows", "", true, "linux", "x86_64").Contains("error[B12a]: scripting mode runs on this machine")
+    clang := FindClang()
+    if clang == "": return
+    d := quiet()
+    t := try Target.ResolveOn("x86_64-w64-mingw32", clang, false, "linux", "x86_64", d) catch Bad { return } # no mingw-w64 here
+    assert t.Os == "windows" and t.Arch == "x86_64" and t.Triple == "x86_64-w64-windows-gnu" and t.Foreign
 }
 
 test "with clang, native is this machine's CPU, a triple of this machine its baseline, and a bad CPU is unknown" {

@@ -10,13 +10,18 @@ import unistd "unistd.h"
 import fcntl "fcntl.h"
 import stdlib "stdlib.h"
 import stdio "stdio.h"
-import sysstat "sys/stat.h"
-import syswait "sys/wait.h"
-import csignal "signal.h"
 import ctime "time.h"
-import mman "sys/mman.h"
-import cpoll "poll.h"
-import ceventfd "sys/eventfd.h"
+
+# B12f: POSIX's processes, memory files, waits and signals - not on Windows, where the runtime's functions below do
+# what they did (mingw-w64's headers have none of these)
+if TargetOs != "windows" {
+    import sysstat "sys/stat.h"
+    import syswait "sys/wait.h"
+    import csignal "signal.h"
+    import mman "sys/mman.h"
+    import cpoll "poll.h"
+    import ceventfd "sys/eventfd.h"
+}
 
 extern {
     fn __olang_arg_count() I64
@@ -31,6 +36,13 @@ extern {
     fn __olang_mkdtemp(template mut Array<U8>&) I32
     fn __olang_run_on_stack(bytes I64, f fn&())
     fn __olang_on_crash(message Array<U8>, len I64)
+    # B12f: Windows' processes and files (std/runtime/windows.ll)
+    fn __olang_win_spawn(app Array<U8>, cmd Array<U8>, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
+    fn __olang_win_wait(pid I32, status Array<I32>, nohang I32) I32
+    fn __olang_win_kill(pid I32)
+    fn __olang_win_tempfd() I32
+    fn __olang_win_rename(from Array<U8>, to Array<U8>) I32
+    fn __olang_win_link(from Array<U8>, to Array<U8>) I32
 }
 
 # why a file-system call failed - errno's commonest answers, by name (X6's classes, in their order), and Failed for
@@ -141,6 +153,7 @@ fn IsTerminal(fd I32) Bool { return unistd.isatty(fd) == 1 }
 fn Run(cmd String&) I32 {
     status := stdlib.system($cmd + "\0")
     if status < 0: return 127
+    if TargetOs == "windows": return status              # B12f: the command's exit code itself, no wait status
     if status % 256 != 0 { return 128 + status % 128 }        # ended by a signal
     return status / 256
 }
@@ -204,7 +217,17 @@ fn ExecInPlace(path String&, args ...String&) ? Error {
         }
         at++
     }
-    __olang_exec($path + "\0", line, args.Len())
+    if TargetOs == "windows" {
+        # B12f: Windows starts a program, never puts one in a process's place: it runs with this program's streams,
+        # and this one ends with its status
+        pid := __olang_win_spawn($path + "\0", winCommandLine(args), -1, -1, -1, "\0")
+        if pid < 0: try raise(__olang_err(), path)
+        waited := Array<I32>(1)
+        __olang_win_wait(pid, waited, 0)
+        Exit((waited[0] >> 8) & 0xFF)
+    } else {
+        __olang_exec($path + "\0", line, args.Len())
+    }
     try raise(__olang_err(), path)
     error Error.Failed(path)
 }
@@ -264,7 +287,7 @@ fn Process.Start(args ...String&, input Array<U8>& = "", capture Bool = true, di
         if e < 0: try closeAndRaise(out, __olang_err(), "")
         errs = e
     }
-    pid := __olang_spawn(line, args.Len(), feed, out, errs, $dir + "\0")
+    pid := startProgram(args, line, feed, out, errs, $dir + "\0")
     if pid < 0 {
         code := __olang_err()
         if capture {
@@ -276,12 +299,60 @@ fn Process.Start(args ...String&, input Array<U8>& = "", capture Bool = true, di
     return Process(pid, out, errs, capture)
 }
 
+# __olang_spawn, or on Windows the command line CreateProcess takes (B12f)
+fn startProgram(args Array<String&>&, line Array<U8>&, feed I32, out I32, errs I32, dir String&) I32 {
+    if TargetOs == "windows" {
+        return __olang_win_spawn("\0", winCommandLine(args), feed, out, errs, dir)
+    } else {
+        return __olang_spawn(line, args.Len(), feed, out, errs, dir)
+    }
+}
+
+# B12f: args as one Windows command line, NUL-terminated: each as msvcrt's startup takes a command line apart - as it
+# is where it holds no space, tab or quote and is not empty, else quoted, a quote in it escaped by a backslash and the
+# backslashes before a quote doubled
+fn winCommandLine(args Array<String&>&) String {
+    b := StringBuilder()
+    for i, a in args {
+        if i > 0: b.PushChar(' ')
+        if a.Len() > 0 and not a.Contains(" ") and not a.Contains("\t") and not a.Contains("\"") {
+            b.Push(a)
+            continue
+        }
+        b.PushChar('"')
+        slashes I64 = 0
+        for c in a {
+            if c == '\\' {
+                slashes++
+                continue
+            }
+            n := slashes * 2 + 1 if c == '"' else slashes
+            for _ in range n: b.PushChar('\\')
+            b.PushChar(Char(c))
+            slashes = 0
+        }
+        for _ in range slashes * 2: b.PushChar('\\')
+        b.PushChar('"')
+    }
+    b.PushChar('\0')
+    return b.ToString()
+}
+
+# waitpid(2), or on Windows the runtime's wait on the process (B12f) - giving a wait status alike
+fn waitFor(pid I32, waited mut Array<I32>&, nohang Bool) I32 {
+    if TargetOs == "windows" {
+        return __olang_win_wait(pid, waited, 1 if nohang else 0)
+    } else {
+        return syswait.waitpid(pid, waited, 1 if nohang else 0)
+    }
+}
+
 # waits for the program to end and gives what it did - its status, and what it wrote when Start captured it, built where
 # the caller puts it. Fails with Failed when it was waited for already
 fn (p mut Process&) Wait() Output ? Error {
     if p.waited: error Error.Failed("")
     waited := Array<I32>(1)
-    if syswait.waitpid(p.pid, waited, 0) < 0: try p.lost(__olang_err())
+    if waitFor(p.pid, waited, false) < 0: try p.lost(__olang_err())
     return try p.ended(waited[0])
 }
 
@@ -303,45 +374,88 @@ fn (p mut Process&) lost(code I32) ? Error {
 # at once
 fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? Error, cancel.Stopped {
     if p.waited: error Error.Failed("")
-    waited := Array<I32>(1)
-    set := Array<cpoll.pollfd>(2)
-    set[0].fd = I32(unistd.syscall(434, p.pid, 0))     # pidfd_open(2): the same number on every Linux architecture
-    set[1].fd = ceventfd.eventfd(0, I32(ceventfd.EFD_CLOEXEC))
-    set[0].events = I16(cpoll.POLLIN)
-    set[1].events = I16(cpoll.POLLIN)
-    w := cancel.Park(set[1].fd)
-    defer {
-        cancel.Done(w)
-        for e in set {
-            if e.fd >= 0: unistd.close(e.fd)
-        }
+    if TargetOs == "windows" {
+        return try p.waitNapping(tok)
+    } else {
+        return try p.waitPolling(tok)
     }
-    step I64 = 50000                                    # the fallback's nap, in nanoseconds
+}
+
+# B12f: WaitUntil on Windows, which has no descriptor a program's end makes readable: the program asked after in naps
+# doubling from 50 microseconds to 10 milliseconds, as where Linux has no pidfd_open
+fn (p mut Process&) waitNapping(tok cancel.Token&) Output ? Error, cancel.Stopped {
+    waited := Array<I32>(1)
+    step I64 = 50000
     for {
-        got := syswait.waitpid(p.pid, waited, 1)                # WNOHANG
+        got := waitFor(p.pid, waited, true)
         if got < 0: try p.lost(__olang_err())
         if got == p.pid: return try p.ended(waited[0])
         if tok.Cancelled() {
             p.Kill()
-            if syswait.waitpid(p.pid, waited, 0) < 0: try p.lost(__olang_err())
+            if waitFor(p.pid, waited, false) < 0: try p.lost(__olang_err())
             try p.ended(waited[0]) catch Error { }
             try tok.Reason()
         }
         ns := tok.LeftNs()
-        if set[0].fd < 0 {
-            if ns < 0 or ns > step: ns = step
-            if step < 10000000: step = step * 2
-        }
-        cpoll.poll(set, 2, I32(-1 if ns < 0 else (ns + 999999) / 1000000))
+        if ns < 0 or ns > step: ns = step
+        if step < 10000000: step = step * 2
+        nap := ctime.timespec()
+        nap.tv_sec = ns / 1000000000
+        nap.tv_nsec = I32(ns % 1000000000)
+        ctime.nanosleep(nap, nap)
         p.wakes++
     }
     unreachable
 }
 
+# WaitUntil where the system has poll(2), eventfd and pidfd_open (Linux, Android)
+if TargetOs != "windows" {
+    fn (p mut Process&) waitPolling(tok cancel.Token&) Output ? Error, cancel.Stopped {
+        waited := Array<I32>(1)
+        set := Array<cpoll.pollfd>(2)
+        set[0].fd = I32(unistd.syscall(434, p.pid, 0))     # pidfd_open(2): the same number on every Linux architecture
+        set[1].fd = ceventfd.eventfd(0, I32(ceventfd.EFD_CLOEXEC))
+        set[0].events = I16(cpoll.POLLIN)
+        set[1].events = I16(cpoll.POLLIN)
+        w := cancel.Park(set[1].fd)
+        defer {
+            cancel.Done(w)
+            for e in set {
+                if e.fd >= 0: unistd.close(e.fd)
+            }
+        }
+        step I64 = 50000                                    # the fallback's nap, in nanoseconds
+        for {
+            got := syswait.waitpid(p.pid, waited, 1)                # WNOHANG
+            if got < 0: try p.lost(__olang_err())
+            if got == p.pid: return try p.ended(waited[0])
+            if tok.Cancelled() {
+                p.Kill()
+                if syswait.waitpid(p.pid, waited, 0) < 0: try p.lost(__olang_err())
+                try p.ended(waited[0]) catch Error { }
+                try tok.Reason()
+            }
+            ns := tok.LeftNs()
+            if set[0].fd < 0 {
+                if ns < 0 or ns > step: ns = step
+                if step < 10000000: step = step * 2
+            }
+            cpoll.poll(set, 2, I32(-1 if ns < 0 else (ns + 999999) / 1000000))
+            p.wakes++
+        }
+        unreachable
+    }
+}
+
 # ends the program now (SIGKILL), unless it has ended and been waited for - then nothing, since its process id may
 # already be another program's. Wait still has to be called, and gives a status of 137 (128 + 9) when this ended it
 fn (p mut Process&) Kill() {
-    if not p.waited: csignal.kill(p.pid, 9)
+    if p.waited: return
+    if TargetOs == "windows" {
+        __olang_win_kill(p.pid)
+    } else {
+        csignal.kill(p.pid, 9)
+    }
 }
 
 # what the program did, from its wait status, its descriptors closed after what it wrote is read back
@@ -368,7 +482,9 @@ fn memFile() I32 ? Error {
 # memfd_create(2) with MFD_CLOEXEC: a descriptor, or -1. Android's C library declares it from API level 30 only, so a
 # build for an earlier one (B12e) makes the system call itself
 fn memfd() I32 {
-    if TargetOs == "android" {
+    if TargetOs == "windows" {
+        return __olang_win_tempfd()                         # B12f: a temporary file, deleted once closed
+    } else if TargetOs == "android" {
         return I32(unistd.syscall(279, "olang\0".ToC(), 1)) # SYS_memfd_create on aarch64
     } else {
         return mman.memfd_create("olang\0", 1)
@@ -377,13 +493,13 @@ fn memfd() I32 {
 
 # everything written to the file fd, from its start, as text built where the caller puts it
 fn readBack(fd I32) String& ? Error {
-    size := unistd.lseek(fd, 0, 2)
+    size := seek(fd, 2)
     if size < 0: try raise(__olang_err(), "")
-    unistd.lseek(fd, 0, 0)
+    seek(fd, 0)
     text := Array<U8>(size)
     got I64 = 0
     for got < size {
-        n := unistd.read(fd, text[got:], U64(size - got))
+        n := rawRead(fd, text[got:])
         if n < 0: try raise(__olang_err(), "")
         if n == 0: error Error.Failed("")
         got += n
@@ -400,13 +516,13 @@ fn ReadFile(path String&) String& ? Error {
     # so a file that has it becomes the String in the storage it was read into, not copied (D9i); a read of one byte
     # past it finds the end - or more: a file in /proc, or a pipe, has no size to give (lseek fails or says 0), and a
     # file may grow while it is read
-    size := unistd.lseek(f.fd, 0, 2)
-    if size < 0 { size = 0 } else { unistd.lseek(f.fd, 0, 0) }
+    size := seek(f.fd, 2)
+    if size < 0 { size = 0 } else { seek(f.fd, 0) }
     text := Array<U8>(size)
     got := try readInto(f.fd, text, 0, path)
     if got < size: return String(text[:got])
     past := Array<U8>(1)
-    n := unistd.read(f.fd, past, 1)
+    n := rawRead(f.fd, past)
     if n < 0: try raise(__olang_err(), path)
     if n > 0 {
         grown := Array<U8>((size * 2).Max(4096))
@@ -424,11 +540,30 @@ fn ReadFile(path String&) String& ? Error {
     return String(text)                             # the file's bytes, read as text (T29c)
 }
 
+# lseek(2) to the start (whence 0) or the end (2), giving the offset: msvcrt's _lseeki64 on Windows, whose lseek's
+# offset is 32 bits wide (B12f)
+fn seek(fd I32, whence I32) I64 {
+    if TargetOs == "windows" {
+        return unistd._lseeki64(fd, 0, whence)
+    } else {
+        return unistd.lseek(fd, 0, whence)
+    }
+}
+
+# read(2) into buf, as much as one call takes: msvcrt's count is 32 bits wide (B12f)
+fn rawRead(fd I32, buf mut Array<U8>&) I64 {
+    if TargetOs == "windows" {
+        return unistd.read(fd, buf, U32(buf.Len().Min(1 << 30)))
+    } else {
+        return unistd.read(fd, buf, U64(buf.Len()))
+    }
+}
+
 # reads from fd into text from "at" until text is full or the input ends, giving back how much text holds then
 fn readInto(fd I32, text mut Array<U8>&, at I64, path String&) I64 ? Error {
     got := at
     for got < text.Len() {
-        n := unistd.read(fd, text[got:], U64(text.Len() - got))
+        n := rawRead(fd, text[got:])
         if n < 0: try raise(__olang_err(), path)
         if n == 0: break
         got += n
@@ -462,7 +597,7 @@ type File unique struct(fd I32) {
 
 # the file at "path", to write: created or emptied - 0666 less the process's umask, as C's creat gives it
 fn File.Create(path String&) File ? Error {
-    fd := fcntl.creat($path + "\0", 0x1B6)
+    fd := fcntl.creat($path + "\0", 0x1B6) if TargetOs != "windows" else fcntl.open($path + "\0", 0x8301, 0x180) # B12f: O_WRONLY | O_CREAT | O_TRUNC | O_BINARY
     try check(fd, path)
     return File(fd)
 }
@@ -470,14 +605,14 @@ fn File.Create(path String&) File ? Error {
 # the file at "path", to write at its end: created when it is not there, kept as it is when it is (O_WRONLY | O_CREAT |
 # O_APPEND, 0666 less the umask) - every write lands after what the file held, whoever else appends too
 fn File.Append(path String&) File ? Error {
-    fd := fcntl.open($path + "\0", 0x441, 0x1B6)
+    fd := fcntl.open($path + "\0", 0x441, 0x1B6) if TargetOs != "windows" else fcntl.open($path + "\0", 0x8109, 0x180) # B12f: O_APPEND is 8
     try check(fd, path)
     return File(fd)
 }
 
 # the file at "path", to read
 fn File.Open(path String&) File ? Error {
-    fd := fcntl.open($path + "\0", 0)
+    fd := fcntl.open($path + "\0", 0x8000 if TargetOs == "windows" else 0)
     try check(fd, path)
     return File(fd)
 }
@@ -531,7 +666,7 @@ fn IsDir(path String&) Bool {
 
 # makes the directory "path" - 0777 less the process's umask - whose parent must be there already
 fn MkDir(path String&) ? Error {
-    try check(sysstat.mkdir($path + "\0", 0x1FF), path)
+    try check(mkdir($path + "\0"), path)
 }
 
 # makes the directory "path" and every one above it that is missing; a directory already there is left as it is, and
@@ -541,7 +676,8 @@ fn MkDirAll(path String&) ? Error {
     for i in range 1, path.Len() + 1 {
         if i < path.Len() and path[i] != '/': continue
         part := path[:i]
-        if sysstat.mkdir($part + "\0", 0x1FF) != 0 {
+        if TargetOs == "windows" and part.EndsWith(":"): continue     # B12f: a drive, "C:"
+        if mkdir($part + "\0") != 0 {
             code := __olang_err()
             if code != 2 { try raise(code, part) }      # 2 is Exists: fine, when what exists is a directory
             if not IsDir(part): error Error.NotDir(part)
@@ -549,9 +685,28 @@ fn MkDirAll(path String&) ? Error {
     }
 }
 
+# mkdir(2), 0777 less the umask; Windows' takes the path alone (B12f)
+fn mkdir(p String&) I32 {
+    if TargetOs == "windows" {
+        return unistd.mkdir(p)
+    } else {
+        return sysstat.mkdir(p, 0x1FF)
+    }
+}
+
+# remove(3): a file, or an empty directory - which Windows' remove leaves to rmdir (B12f)
+fn remove(p String&) I32 {
+    if TargetOs == "windows" {
+        if IsDir(p[:p.Len() - 1]): return unistd.rmdir(p)
+        return stdio.remove(p)
+    } else {
+        return stdio.remove(p)
+    }
+}
+
 # removes the file, the symbolic link or the empty directory at "path"
 fn Remove(path String&) ? Error {
-    try check(stdio.remove($path + "\0"), path)
+    try check(remove($path + "\0"), path)
 }
 
 # removes what is at "path" and, when it is a directory, everything in it, depth first - as "rm -rf" does. A symbolic
@@ -573,12 +728,12 @@ fn RemoveAll(path String&) ? Error {
 fn removeTree(path String&) ? Error {
     if path.Len() == 0: return
     p := $path + "\0"
-    if stdio.remove(p) == 0: return
+    if remove(p) == 0: return
     code := __olang_err()
     if code == 1 { return }                            # NotFound: nothing to remove
     if code != 6 and code != 2 { try raise(code, path) }   # NotEmpty, or Exists, which POSIX allows rmdir to say
     for n in try ReadDir(path): try removeTree($path + "/" + $n)
-    try check(stdio.remove(p), path)
+    try check(remove(p), path)
 }
 
 # a new, empty directory, made where no other directory or file is, and its path, built where the caller puts it: in
@@ -599,33 +754,50 @@ fn tempDir(dir String&) String {
     if dir.Len() > 0: return $dir
     env := try Env("TMPDIR") catch default ""
     if env.Len() > 0: return $env
+    if TargetOs == "windows" {
+        # B12f: where Windows keeps temporary files
+        win := try Env("TEMP") catch default (try Env("TMP") catch default ".")
+        return $win if win.Len() > 0 else "."
+    }
     return "/tmp"
 }
 
 # moves what is at "from" to "to", in one step, replacing a file already at "to"
 fn Rename(from String&, to String&) ? Error {
-    try check(stdio.rename($from + "\0", $to + "\0"), from)
+    if TargetOs == "windows" {
+        try check(__olang_win_rename($from + "\0", $to + "\0"), from)   # B12f: msvcrt's will not replace a file
+    } else {
+        try check(stdio.rename($from + "\0", $to + "\0"), from)
+    }
 }
 
 # a second name, "to", for the file at "from" - a hard link: one file under two names, on one file system. Fails with
 # EXISTS where "to" is taken
 fn Link(from String&, to String&) ? Error {
-    try check(unistd.link($from + "\0", $to + "\0"), from)
+    if TargetOs == "windows" {
+        try check(__olang_win_link($from + "\0", $to + "\0"), from)
+    } else {
+        try check(unistd.link($from + "\0", $to + "\0"), from)
+    }
 }
 
 # what the symbolic link at "path" holds, as it was written - not resolved further
 fn ReadLink(path String&) String& ? Error {
-    p := $path + "\0"
-    cap I64 = 256
-    buf mut Array<U8>& = Array<U8>(cap)
-    n := unistd.readlink(p, buf, U64(cap))
-    for n == cap {                                  # it may not all have fitted: again, with twice the room
-        cap = cap * 2
-        buf = Array<U8>(cap)
-        n = unistd.readlink(p, buf, U64(cap))
+    if TargetOs == "windows" {
+        error Error.Failed(path)                        # B12f: not read on Windows yet
+    } else {
+        p := $path + "\0"
+        cap I64 = 256
+        buf mut Array<U8>& = Array<U8>(cap)
+        n := unistd.readlink(p, buf, U64(cap))
+        for n == cap {                                  # it may not all have fitted: again, with twice the room
+            cap = cap * 2
+            buf = Array<U8>(cap)
+            n = unistd.readlink(p, buf, U64(cap))
+        }
+        try check(n, path)
+        return String(buf[:n])
     }
-    try check(n, path)
-    return String(buf[:n])
 }
 
 # "path" made absolute, with every symbolic link, "." and ".." resolved - what it really names, which must exist

@@ -4823,7 +4823,11 @@ test "T2a: a null field is an ordinary field" {
 # report. getpid takes no arguments and returns a plain scalar; write exercises the array-marshalling path
 # (X3: a "Array<U8>" argument becomes a raw pointer to its first element, length dropped, passed separately).
 extern fn getpid() I32
-extern fn write(fd I32, buf Array<U8>, count I64) I64
+if TargetOs == "windows" {
+    extern fn write(fd I32, buf Array<U8>, count U32) I32       # msvcrt's (B12f)
+} else {
+    extern fn write(fd I32, buf Array<U8>, count I64) I64
+}
 
 # D9a on an ARRAY parameter. "b mut Array<U8>&" is the caller's own array, so writes through it are visible
 # at the call site - which is what makes an out-parameter expressible at all. The marker is load-bearing:
@@ -4891,7 +4895,7 @@ test "'extern fn' links against and calls a real external scalar-only function" 
 
 test "'extern fn' marshals a Array<U8> argument to a raw pointer at the call boundary" {
     msg Array<U8> = "unused - fd -1 always fails before this is read"
-    n I64 = write(-1, msg, I64(msg.Len()))
+    n I64 = write(-1, msg, 8)
     assert n < 0
 }
 
@@ -6895,7 +6899,7 @@ ccRunFma mut Bool = TargetHasFma
 ccRunCpu mut String = TargetCpu
 
 test "B12: the target's build constants describe one machine, while compiling and at run time" {
-    assert TargetCpu.Len() > 0 and (TargetOs == "linux" or TargetOs == "android")
+    assert TargetCpu.Len() > 0 and (TargetOs == "linux" or TargetOs == "android" or TargetOs == "windows")
     assert TargetArch == "x86_64" or TargetArch == "aarch64"
     assert TargetVectorBits == 128 or TargetVectorBits == 256 or TargetVectorBits == 512
     # on x86-64 an FMA instruction comes with AVX's wide vectors, never with SSE's alone

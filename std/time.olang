@@ -123,7 +123,7 @@ fn Sleep(d Duration) {
     }
     req := ctime.timespec()
     req.tv_sec = I64(d) / 1000000000
-    req.tv_nsec = I64(d) % 1000000000
+    req.tv_nsec = I32(I64(d) % 1000000000)      # C's long: 32 bits on Windows (B12f)
     rem := ctime.timespec()
     for ctime.nanosleep(req, rem) != 0 {
         req.tv_sec = rem.tv_sec
@@ -349,12 +349,25 @@ fn LocalOffset(wall I64 = Wall()) I64 {
     if wall % 1000000000 < 0: secs--
     t := Array<I64>(1)
     t[0] = secs
-    tm := ctime.localtime(t)
-    buf := Array<U8>(16)
-    n := ctime.strftime(buf, 16, "%z\0", tm!)
-    if n < 5: return 0                                    # "+hhmm"
-    mag := I64(buf[1] - '0') * 36000 + I64(buf[2] - '0') * 3600 + I64(buf[3] - '0') * 600 + I64(buf[4] - '0') * 60
-    return -mag if buf[0] == '-' else mag
+    if TargetOs == "windows" {
+        # B12f: msvcrt's %z is the zone's name: the offset is the local reading taken as UTC, less the instant
+        local := ctime._localtime64(t)
+        return ctime._mkgmtime64(local!) - secs
+    } else {
+        return offsetOf(t)
+    }
+}
+
+if TargetOs != "windows" {
+    # the offset localtime and strftime's %z give for the instant t holds, in seconds east of UTC
+    fn offsetOf(t Array<I64>&) I64 {
+        tm := ctime.localtime(t)
+        buf := Array<U8>(16)
+        n := ctime.strftime(buf, 16, "%z\0", tm!)
+        if n < 5: return 0                                    # "+hhmm"
+        mag := I64(buf[1] - '0') * 36000 + I64(buf[2] - '0') * 3600 + I64(buf[3] - '0') * 600 + I64(buf[4] - '0') * 60
+        return -mag if buf[0] == '-' else mag
+    }
 }
 
 # the instant "wall" (the clock reading by default) as a Date in the local time zone, Offset in minutes as LocalOffset

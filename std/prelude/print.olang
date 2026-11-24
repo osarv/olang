@@ -23,10 +23,20 @@ fn writeOut(t String&, at Place) ? output {
     sent I64 = 0
     for sent < t.Len() {
         tail := t[sent:]
-        n I64 = unistd.write(1, tail, U64(tail.Len()))
+        n := sysWrite(1, tail)
         if n < 0: error output.Refused($at)
         if n == 0: error output.Stalled($at)
         sent += n
+    }
+}
+
+# write(2) of t's bytes to fd, as many as one call takes: the count as wide as the C library's (msvcrt's write takes an
+# unsigned int, B12f)
+fn sysWrite(fd I32, t String&) I64 {
+    if TargetOs == "windows" {
+        return unistd.write(fd, t, U32(t.Len().Min(1 << 30)))
+    } else {
+        return unistd.write(fd, t, U64(t.Len()))
     }
 }
 
