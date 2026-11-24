@@ -69,3 +69,5 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Debts (cloud, 2026-11-24): full make verify on master f916af036 (wt-verify)
 - OLang Debts (cloud, 2026-11-24): freeing gaps 17/19 repro check
 - OLang Debts (cloud, 2026-11-24): gaps 17/19 reproduced, fixtures merged (c71ce26dd), for OLang Cloud
+- OLang Debts (cloud, 2026-11-24): full verify on 1cc282a15 failed: taskvals (OLang Cloud's cond3), array.olang build vs interp (wt-arrayeval, mine), tok/ast goldens stale
+- OLang Debts (cloud, 2026-11-24): olang wt-copyonce2 - call result into an early-freeing region, try with a default
