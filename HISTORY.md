@@ -43295,3 +43295,6 @@ quiet there; a banned local copies, and Settle runs again with it banned so no l
 hands back 145 views where it handed back 157. Case d9hstillret (a field replaced and an element written after the local
 took it, a deferred restore of a Map, a write through a second reference to the same storage; under -sanitize, baked
 and decided by the evaluator). With it the compiler built by itself passes `olang test` of needs, lsp and check.
+Measured on the self-build after the fix (`build -memory compiler/olang.olang`, the compiler built by itself): 538 of
+1008 places free at once, 470 keep; peak RSS 2.71 GB under `-memory` (2.59 GB before the fix, the same build), 2.69 GB
+for fixedpoint's plain build (2.68 GB before) - the views handed back that now copy cost little.
