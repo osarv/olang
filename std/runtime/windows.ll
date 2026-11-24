@@ -590,3 +590,187 @@ entry:
   store i32 40, ptr %ep
   ret i32 -1
 }
+
+; ---- half and bfloat conversions ----
+
+; LLVM converts to and from 16-bit floats by calling these where the CPU has no instruction for it, and mingw-w64's
+; libgcc passes the 16-bit value otherwise than clang does (a conversion from it reads garbage) - so the runtime has
+; its own, on the bits alone, rounding to nearest with ties to even as the instructions do. A NaN stays a NaN (quiet),
+; its payload not kept
+define float @__extendhfsf2(half %h) {
+entry:
+  %b = bitcast half %h to i16
+  %x = zext i16 %b to i32
+  %sign = and i32 %x, 32768
+  %s = shl i32 %sign, 16
+  %e = lshr i32 %x, 10
+  %exp = and i32 %e, 31
+  %man = and i32 %x, 1023
+  %isinf = icmp eq i32 %exp, 31
+  %iszero = icmp eq i32 %exp, 0
+  br i1 %iszero, label %small, label %normal
+normal:
+  %e1 = add i32 %exp, 112
+  %e2 = select i1 %isinf, i32 255, i32 %e1
+  %eb = shl i32 %e2, 23
+  %mb = shl i32 %man, 13
+  %r0 = or i32 %eb, %mb
+  %r1 = or i32 %r0, %s
+  %f = bitcast i32 %r1 to float
+  ret float %f
+small:
+  %mf = uitofp i32 %man to float
+  %v = fmul float %mf, 0x3E70000000000000 ; 2^-24
+  %vb = bitcast float %v to i32
+  %vs = or i32 %vb, %s
+  %g = bitcast i32 %vs to float
+  ret float %g
+}
+
+define half @__truncsfhf2(float %f) {
+entry:
+  %x = bitcast float %f to i32
+  %sign = and i32 %x, -2147483648
+  %a = xor i32 %x, %sign
+  %s16 = lshr i32 %sign, 16
+  %big = icmp uge i32 %a, 1199570944 ; 0x47800000, 2^16
+  br i1 %big, label %inf, label %finite
+inf:
+  %nan = icmp ugt i32 %a, 2139095040
+  %ib = select i1 %nan, i32 32256, i32 31744
+  br label %done
+finite:
+  %tiny = icmp ult i32 %a, 947912704 ; 0x38800000, 2^-14
+  br i1 %tiny, label %sub, label %norm
+sub:
+  %af = bitcast i32 %a to float
+  %sf = fadd float %af, 0.5
+  %sb = bitcast float %sf to i32
+  %sv = sub i32 %sb, 1056964608
+  br label %done
+norm:
+  %sh = lshr i32 %a, 13
+  %odd = and i32 %sh, 1
+  %a1 = add i32 %a, -939520001 ; ((15 - 127) << 23) + 0xfff
+  %a2 = add i32 %a1, %odd
+  %nv = lshr i32 %a2, 13
+  br label %done
+done:
+  %o = phi i32 [ %ib, %inf ], [ %sv, %sub ], [ %nv, %norm ]
+  %r = or i32 %o, %s16
+  %r16 = trunc i32 %r to i16
+  %h = bitcast i16 %r16 to half
+  ret half %h
+}
+
+define half @__truncdfhf2(double %d) {
+entry:
+  %x = bitcast double %d to i64
+  %sign = and i64 %x, -9223372036854775808
+  %a = xor i64 %x, %sign
+  %s48 = lshr i64 %sign, 48
+  %big = icmp uge i64 %a, 4679240012837945344 ; 0x40F0000000000000, 2^16
+  br i1 %big, label %inf, label %finite
+inf:
+  %nan = icmp ugt i64 %a, 9218868437227405312
+  %ib = select i1 %nan, i64 32256, i64 31744
+  br label %done
+finite:
+  %tiny = icmp ult i64 %a, 4544132024016830464 ; 0x3F10000000000000, 2^-14
+  br i1 %tiny, label %sub, label %norm
+sub:
+  %af = bitcast i64 %a to double
+  %sf = fadd double %af, 0x41B0000000000000 ; 2^28, whose last place is 2^-24
+  %sb = bitcast double %sf to i64
+  %sv = sub i64 %sb, 4733283208366391296
+  br label %done
+norm:
+  %sh = lshr i64 %a, 42
+  %odd = and i64 %sh, 1
+  %a1 = sub i64 %a, 4539628424389459968 ; (1023 - 15) << 52
+  %a2 = add i64 %a1, 2199023255551 ; 2^41 - 1
+  %a3 = add i64 %a2, %odd
+  %nv = lshr i64 %a3, 42
+  br label %done
+done:
+  %o = phi i64 [ %ib, %inf ], [ %sv, %sub ], [ %nv, %norm ]
+  %r = or i64 %o, %s48
+  %r16 = trunc i64 %r to i16
+  %h = bitcast i16 %r16 to half
+  ret half %h
+}
+
+define bfloat @__truncsfbf2(float %f) {
+entry:
+  %x = bitcast float %f to i32
+  %nan = fcmp uno float %f, %f
+  br i1 %nan, label %quiet, label %round
+quiet:
+  %q0 = lshr i32 %x, 16
+  %q = or i32 %q0, 64
+  br label %done
+round:
+  %hi = lshr i32 %x, 16
+  %odd = and i32 %hi, 1
+  %x1 = add i32 %x, 32767
+  %x2 = add i32 %x1, %odd
+  %r0 = lshr i32 %x2, 16
+  br label %done
+done:
+  %r = phi i32 [ %q, %quiet ], [ %r0, %round ]
+  %r16 = trunc i32 %r to i16
+  %b = bitcast i16 %r16 to bfloat
+  ret bfloat %b
+}
+
+define bfloat @__truncdfbf2(double %d) {
+entry:
+  %x = bitcast double %d to i64
+  %sign = and i64 %x, -9223372036854775808
+  %a = xor i64 %x, %sign
+  %s48 = lshr i64 %sign, 48
+  %big = icmp uge i64 %a, 5183643171103440896 ; 0x47F0000000000000, 2^128
+  br i1 %big, label %inf, label %finite
+inf:
+  %nan = icmp ugt i64 %a, 9218868437227405312
+  %ib = select i1 %nan, i64 32704, i64 32640
+  br label %done
+finite:
+  %tiny = icmp ult i64 %a, 4039728865751334912 ; 0x3810000000000000, 2^-126
+  br i1 %tiny, label %sub, label %norm
+sub:
+  %af = bitcast i64 %a to double
+  %sf = fadd double %af, 0x3AE0000000000000 ; 2^-81, whose last place is 2^-133
+  %sb = bitcast double %sf to i64
+  %sv = sub i64 %sb, 4242390848983007232
+  br label %done
+norm:
+  %sh = lshr i64 %a, 45
+  %odd = and i64 %sh, 1
+  %a1 = sub i64 %a, 4035225266123964416 ; (1023 - 127) << 52
+  %a2 = add i64 %a1, 17592186044415 ; 2^44 - 1
+  %a3 = add i64 %a2, %odd
+  %nv = lshr i64 %a3, 45
+  br label %done
+done:
+  %o = phi i64 [ %ib, %inf ], [ %sv, %sub ], [ %nv, %norm ]
+  %r = or i64 %o, %s48
+  %r16 = trunc i64 %r to i16
+  %b = bitcast i16 %r16 to bfloat
+  ret bfloat %b
+}
+
+; kept through LTO, which sees no call of them - code generation makes those after it - and would drop them
+@llvm.used = appending global [5 x ptr] [ptr @__extendhfsf2, ptr @__truncsfhf2, ptr @__truncdfhf2, ptr @__truncsfbf2, ptr @__truncdfbf2], section "llvm.metadata"
+
+; the standard streams in binary mode as the program starts, as every descriptor is on POSIX: msvcrt's text mode would
+; write "\r\n" for each "\n" and end a read at a 0x1A byte
+declare i32 @_setmode(i32, i32)
+@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 101, ptr @__olang_win_start, ptr null }]
+define internal void @__olang_win_start() {
+entry:
+  %a = call i32 @_setmode(i32 0, i32 32768) ; _O_BINARY
+  %b = call i32 @_setmode(i32 1, i32 32768)
+  %c = call i32 @_setmode(i32 2, i32 32768)
+  ret void
+}
