@@ -43035,3 +43035,67 @@ side edited - side alone. What does recompile more is the older mutable-globals 
 global of a type no global had (`Array<I64>`) lowered side and std/prelude's columns, text and vec too - every module
 whose views are judged against the globals' types. Cost on the cold self-build: `DecideWrites` 33 ms and 4 MB resident
 (of 3.2 GB peak).
+
+## 2026-11-24: Windows as a target (B12f, X1, X11; mine; wt-windows)
+
+Asked for by the OAgent app, which needs a native Windows desktop build; modelled on Android (B12e). `-target
+x86_64-windows` (any of the four spellings mingw-w64 triples take) resolves to `x86_64-w64-windows-gnu`, `TargetOs`
+`"windows"`, x86-64 alone. It is cross-compiled from Linux with the build's own clang (no separate toolchain as the NDK
+is): mingw-w64's headers and import libraries from the distribution's `mingw-w64` package, linked by lld (`-fuse-ld=lld`,
+the linker that links LTO objects for COFF) and `-static`, so a program is one `.exe` needing only the system's DLLs.
+`build` names it `NAME.exe` (lld adds the extension; the driver now names the file it made). `test` and `run` run it
+under Wine (`env WINEDEBUG=-all wine64`), as qemu runs aarch64 programs.
+
+**The runtime.** As with bionic, a transformation of the filled x86-64 runtime rather than a condition of Fill's (the
+seed fills runtime.ll itself and must not meet anything new): std/runtime/windows.ll is appended and each function it
+defines replaces the definition and declarations of that name in runtime.ll (runtime.Windows). It gives mmap and its
+family over VirtualAlloc (a writable mapping asked to charge nothing, MAP_NORESERVE, is refused - Windows has no lazy
+commit - so the slot range falls back to its strict mode: reserved, each slot committed as carved; MADV_DONTNEED
+decommits and commits again so a reused slot reads zero), sysconf's three names, getrlimit, pthread's threads (a
+trampoline over CreateThread, the stack reserved not committed), mutexes, condition variables and read-write locks over
+SRW locks and condition variables, clock_gettime and nanosleep, an exception filter for os.OnCrash, and the runtime's own
+OS functions (a file's facts by `_stat64`, `_fullpath`, `_mktemp`+`_mkdir`, the error classes by msvcrt's numbers).
+glibc's spellings become msvcrt's by text: errno through `_errno`, stderr/stdout through `__acrt_iob_func`, setjmp as
+`_setjmp(buf, NULL)` (no frame: longjmp restores registers alone, no SEH unwind through code that has no unwind tables),
+the printf family and strtod as mingw-w64's C99 ones (msvcrt prints three exponent digits), aligned_alloc's chunk given
+back by `_aligned_free`. A Windows facts row (FactWin) gives msvcrt's 256-byte jmp_buf and mingw's `d_name` offset.
+The compiler's own generated code changes the same three things for Windows (emit's `jmpBuf`, `setjmpCall`,
+`stderrLoad`).
+
+**Found along the way.** (1) The 16-bit float conversions LLVM calls where the CPU has none (`__extendhfsf2`,
+`__truncsfhf2`, `__truncdfhf2`, `__truncsfbf2`, `__truncdfbf2`) are broken against clang 18 in mingw-w64's GCC 13
+libgcc - a plain C program converting a half gets garbage - which showed as F16/BF16 rendering 17 digits and `F16.Exp`
+wrong. The runtime has its own, on the bits alone with ties to even (the double ones round once, from the double),
+kept through LTO by `@llvm.used` (LTO sees no call: code generation makes them after it; `-Wl,-u` did not keep them).
+(2) msvcrt's descriptors are in text mode: `\n` written as `\r\n` - the standard streams are set binary by a global
+constructor and every file os opens is opened `O_BINARY`. (3) A `weak_odr` definition is a COFF weak external without a
+comdat, and two objects holding one (the location strings, B3l) collide as `.weak.NAME.default`: on Windows each is put
+in a comdat of its own. (4) Bindgen read every `long` as `I64`; Windows is LLP64, so on a Windows target `long` is `I32`
+(`timespec.tv_nsec`, `lseek`'s result) - std's two stores of a nanosecond count convert with `I32(...)`, which widens
+back on Linux. (5) mingw-w64's headers write `__attribute__((cdecl))` in every function type, which bindgen now reads
+past. (6) The C ABI for Windows (cabi, arch "x86_64-windows"): a struct of 1, 2, 4 or 8 bytes as an integer, any other
+by a pointer to a copy or through sret; no extension of narrow integers but a Bool's.
+
+**pthread.h.** winpthreads' `pthread_mutex_t` is an `intptr_t` that must start as -1 (zero crashes), and a typedef of a
+number has no olang name (X1), so std's lock fields could not be declared from it. Rather than give sync, chan and cancel
+a second form, a C import of `pthread.h` in a Windows build reads the runtime's own header,
+std/runtime/windows/pthread.h (each lock a struct of one word, zero when ready), which declares exactly what windows.ll
+defines; winpthreads is not linked. A read-write lock is exclusive for readers too (unlocking does not say which way it
+was held) - correct, less concurrent; recorded in docs/windows.md.
+
+**std.** The changes are `if TargetOs == "windows"` branches (S8b) and one top-level conditional import (B9): the prelude's
+and io's read and write (msvcrt's count is an unsigned int), io's test pipe (`_pipe`); os's POSIX imports (sys/wait.h,
+poll.h, sys/mman.h, sys/eventfd.h, signal.h, sys/stat.h) only off Windows, with Process over the runtime's CreateProcess
+(arguments quoted as msvcrt takes a command line apart; the process handle kept so the id names it until waited for;
+Kill is TerminateProcess with 137), WaitUntil napping as where Linux lacks pidfd_open, the memory file a temporary file
+deleted on close, `_lseeki64`, mkdir with one argument, remove falling to rmdir for a directory, rename and link over
+MoveFileEx and CreateHardLink (msvcrt's rename will not replace), TEMP for MkTemp, ExecInPlace running the program and
+exiting with its status, ReadLink failing; time's LocalOffset from `_localtime64` and `_mkgmtime64` (msvcrt's `%z` is a
+name). Not ported: net, tls, zmtp (Winsock), prop (fork), ffi (libffi).
+
+**Tests.** Under Wine: every test of the corpus, std and the prelude passes but the ten WINDOWS_SKIP names (makefile,
+docs/windows.md, each with its reason); tests/shared's `extern fn write` declares msvcrt's prototype on Windows, and its
+TargetOs assertion admits `"windows"`. The checks' cases built for Windows: see the report of this round. examples/windows
+(a window, its message loop and window procedure as an export fn, OpenGL through WGL, the clipboard) passes its `-check`
+under Wine on Xvfb: the window made, a frame drawn and a pixel read back green, a clipboard round trip, the window closed.
+Codegen for the other targets is unchanged (every change is keyed on the target's OS; `abiArch` is the arch elsewhere).

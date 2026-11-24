@@ -7693,7 +7693,7 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
     rw := cabi.Way(cabi.Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), "")
     if res != types.VoidT and res != types.NoreturnT {
         fe.E.P.Layout(res)
-        rw = cabi.Way.Result(t, fe.E.Arch, res)
+        rw = cabi.Way.Result(t, fe.E.abiArch(), res)
         if rw.Kind == cabi.Pass.Sret {
             sret = fe.slot(res)
             args.Push($"ptr sret(" + $fe.ty(res) + ") align " + $t.Align(res) + " " + $sret)
@@ -7728,7 +7728,7 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
             continue
         }
         fe.E.P.Layout(p)
-        w := cabi.Way.Param(t, fe.E.Arch, p, regs)
+        w := cabi.Way.Param(t, fe.E.abiArch(), p, regs)
         fe.cArg(args, w, p, x)
     }
     # X21: the variable arguments, each at the type the checker promoted it to

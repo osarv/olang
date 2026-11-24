@@ -91,6 +91,8 @@ The compiler finds the standard library beside itself, so the checkout must stay
 set `OLANG_CLANG=/path/to/clang` for both `make` and the compiler.
 To build for Android phones (`-target aarch64-linux-android`), set `ANDROID_NDK_HOME` to the Android NDK: programs,
 app libraries and a sample app written in olang alone are in [docs/android.md](docs/android.md).
+To build Windows programs (`-target x86_64-windows`), install mingw-w64 (and Wine, to run them here): see
+[docs/windows.md](docs/windows.md).
 
 ### Notebooks
 

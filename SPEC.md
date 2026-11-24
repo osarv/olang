@@ -9062,7 +9062,7 @@ another type, one in the standard library - is B10's error; and a condition nami
 S8b) says it may be a build constant `-define` did not define.
 
 **B10a.** Every build defines nine build constants of its own, and `-define` may not redefine them. Six describe its
-target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operating system (lowercase: `"linux"`, or `"android"`, B12e), its
+target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operating system (lowercase: `"linux"`, `"android"` (B12e) or `"windows"` (B12f)), its
 architecture (`"x86_64"`, `"aarch64"`) and its CPU as clang names it (`"cascadelake"`, `"x86-64-v3"`, `"generic"`);
 `TargetVectorBits`, an `I64`, the width in bits of the vectors the generated code computes with - `512` where the
 target has AVX-512, `256` where it has AVX, `128` with only SSE2 or on `aarch64` (Advanced SIMD); and `TargetHasFma`, a
@@ -9092,10 +9092,12 @@ own CPU with every instruction set extension it has, as clang's `-march=native` 
 - a triple, `ARCH-linux-gnu` (with any vendor between, `x86_64-pc-linux-gnu`), and after it `:CPU` for a CPU of that
   architecture - without one, the architecture's own baseline (`x86-64`, or `generic` for `aarch64`);
 - an Android triple, `aarch64-linux-android` or `aarch64-linux-androidLEVEL` with an API level from 29 up
-  (`aarch64-linux-android35`), `:CPU` after it as for the others (B12e).
+  (`aarch64-linux-android35`), `:CPU` after it as for the others (B12e);
+- a Windows triple, `x86_64-windows` (also written `x86_64-windows-gnu`, `x86_64-w64-windows-gnu` or
+  `x86_64-w64-mingw32`), `:CPU` after it as for the others (B12f).
 
-The architectures are `x86_64` and `aarch64`, the operating system Linux with the GNU C library, and Android on
-`aarch64` (B12e). A CPU and its
+The architectures are `x86_64` and `aarch64`, the operating system Linux with the GNU C library, Android on
+`aarch64` (B12e), and Windows on `x86_64` (B12f). A CPU and its
 extensions are what clang resolves `-march=CPU` (`-mcpu=CPU` for `aarch64`) to. Any other target, a CPU its
 architecture does not have, or `native` after another architecture's triple is a command-line error. Without clang -
 which the evaluator (B3e) otherwise does not need - scripting mode takes `native`, on x86-64, to be the x86-64 level this processor has.
@@ -9132,6 +9134,22 @@ level. `build` gives a position-independent executable linked against the system
 `libdl.so`; `build -library` (X14) a shared library an Android app loads - a NativeActivity's, its export fns its
 entries (`ANativeActivity_onCreate` among them where the program defines it). `test` and `run` link the program
 **statically** (bionic's loader is not on this machine) and run it in the emulator (`qemu-aarch64`), as for B12a.
+
+**B12f (Windows).** `-target x86_64-windows` builds a Windows program for x86-64 (the triple `x86_64-w64-windows-gnu`):
+`TargetOs` is `"windows"` and `TargetArch` `"x86_64"`. It is another machine (B12a), built by the build's own clang (B12d)
+with mingw-w64's C runtime headers and import libraries - which clang finds where the distribution installs them
+(`/usr/x86_64-w64-mingw32`), or under `OLANG_SYSROOT` - and linked by LLVM's linker, lld, into `NAME.exe`, the C runtime
+(msvcrt) and the system's libraries (`kernel32`, `ws2_32`, and those `extern link` names, X9) linked as their DLLs,
+everything else statically. C imports (X18) are translated from mingw-w64's headers, on which C's `long` is 32 bits wide (X1
+"long" is `I32` there), except `pthread.h`, which is the runtime's own (its locks, conditions and threads are a word each,
+zero when ready, over Windows' SRW locks, condition variables and threads). An extern function and an export fn cross
+with the Win64 calling convention (X11): a struct of 1, 2, 4 or 8 bytes as an integer of its bytes, any other by a
+pointer to a copy, and as a result through a pointer the caller gives. `test` and `run` run the program under **Wine**
+(`wine64` found on `PATH`, else `/usr/lib/wine/wine64`, else `wine`; `OLANG_EMULATOR` names another), as for B12a.
+`build -library` is not built for Windows. Not on Windows (a program naming them does not build): POSIX headers
+mingw-w64 does not have (`sys/wait.h`, `poll.h`, `sys/mman.h`, `sys/socket.h` ...), and therefore std's `net`, `tls`,
+`zmtp`, `prop` and `ffi`; `os.ReadLink` fails with `Failed`; `os.ExecInPlace` runs the program and ends this one with its
+status, since Windows replaces no process's program.
 
 **B12d (clang).** A build compiles and links with clang, of LLVM 18, 19 or 20 - the intermediate form written is one
 all three read. The clang used is the first of: the one `OLANG_CLANG` names (a path, or a name looked up on `PATH`);
