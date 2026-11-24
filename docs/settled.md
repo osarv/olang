@@ -1061,7 +1061,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   program (an owner holding a Vec whole, a copy: no reason to keep), with no cost per operation or per copy (the
   400-byte-per-copy design, asked of the user, was not needed); an element owning storage only as such arrays of plain
   values (`Array<Vec<I64>>`) frees them where it is given another; a returned value local keeps its slot in the frame,
-  its parts where the result goes (gap 19). A local lowering
+  its parts where the result goes (gap 19; text and values holding a run-time array too), and the locals a returned
+  choice lowering copies reads whole stay in their blocks (`scope.dropCopied`); -memory -check names a call's value
+  whose callee builds a region where its result goes into a slot place, or copies its returned value (gap 19's open
+  part, docs/freeing.md 2.4). A local lowering
   surely copies a view call's value into owns its parts (a `Map` value copied and changed frees, gap 18). Round 6
   (wt-freeing6): an element holding a Vec of text or a Vec of Vecs frees it all where it is given another - each live
   element's slot or parts released (a walk at the let-go, none per operation), a copy built in a part region split so

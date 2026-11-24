@@ -427,6 +427,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     taskCopyCallee Vec<I64>               # ...each one's call's callee
     fx mut effects.Effects?& = null       # what the tasks' code may do (effects.Facts), made where a program has tasks
     gapRows Vec<String&>      # O8f: the report's rows for let-goes early freeing does not follow (gap)
+    retCopy Map<I64, Bool>    # O8f, gap 19: by body, whether a return copies its value where the result goes (copiedRet)
     Gaps I64 = 0              # ...how many the report printed - with -check, a failed build (B18)
     olBody Vec<I64>           # by place: an owner local's body and local, -1 for any other place
     olLocal Vec<I64>
@@ -906,6 +907,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
     if f.genOn: f.genDecide()
     f.Done = true
     f.writePlans()
+    f.resultRegionGaps()
     f.taskCopied()
     t5 := time.Now()
     if f.Debug: f.debugOut($"free: final " + $((t4 - t3) / 1000000) + " ms, " + $f.goes.Len() + " let-goes, " + $f.stores.Len() + " stores; decide " + $((t5 - t4) / 1000000) + " ms\n")
@@ -4355,6 +4357,10 @@ fn (w mut walker&) ownsStorage(ty types.TypeId) Bool {
 # O8f: an assignment's let-go no place follows - a local, a global or a field that is no candidate place, an element
 fn (w mut walker&) unfollowed(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     if not w.ownsStorage(p.Type()): return
+    # (gap 19: a call's value its callee copies at its return - built where the result goes as a copy is, in no region
+    # of its own, which no let-go of the place releases)
+    c := typed.Call.Of(x)
+    if c != null and w.F.copiedRet(typed.CalleeBody(c)) { w.gap(p.Span(), "keeps the copy '" + $w.F.fnName(typed.CalleeBody(c)) + "' makes of the value it returns, which no let-go releases") }
     # (keptlast2: a fixed array of text no place follows - an element of an array of them, a field holding one - given
     # another value whole: a let-go of its text place, each element's slot put back by lowering (releases, FixedText); a
     # fill builds the new value's text in slots, as that place's stores do (makeStores), anything else - a copy of
@@ -9034,6 +9040,112 @@ fn (f mut Free&) coveredBy(g letGo, k I64) Bool {
     for o in f.goes {
         if o.Body != g.Body or o.Kind == LCall or o.PlaceId < 0 or o.At != g.At: continue
         if f.IsSole(o.PlaceId) and f.owner[o.PlaceId] and has(f.heldPlaces(f.valTy[o.PlaceId]), k): return true
+    }
+    return false
+}
+
+# O8f, gap 19: whether body b returns a value owning storage that lowering copies where the result goes (lower's retOwns
+# and retCopies): existing storage handed back - a choice of values one of which is a place read, a place read other
+# than of a local living where the result goes - by a function handing back no view (D9h). The copy is built in that
+# scope as any copy is, in no region a let-go finds
+fn (f mut Free&) copiedRet(b I64) Bool {
+    if b < 0 or b >= f.Bodies.Len(): return false
+    if f.retCopy.Has(b) { return try f.retCopy.Get(b) catch default false }
+    out := f.retCopies(b)
+    f.retCopy.Put(b, out)
+    return out
+}
+
+fn (f mut Free&) retCopies(b I64) Bool {
+    bd := f.Bodies[b]
+    t := f.T()
+    if t.KindOf(bd.Ty) != types.Kind.Func: return false
+    rt := t.Result(bd.Ty)
+    if t.IsRef(rt) or t.KindOf(t.Repr(rt)) == types.Kind.Array or not t.OwnsParts(rt): return false
+    match bd.Of {
+        case typed.BodyOf.Fn(inst) { if (try f.P.L.ViewResults.Get(inst) catch default I64(0)) != 0: return false }
+        case _ { return false }
+    }
+    u := typed.LocalUses.Uses(t, bd)
+    for x in u.Rets {
+        if f.copiedValue(b, x): return true
+    }
+    return false
+}
+
+# copiedRet's value x handed back: one lowering's retCopies copies
+fn (f mut Free&) copiedValue(b I64, x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Away(_, _, y): f.copiedValue(b, y)
+        case typed.Expr.Read(_, _, q, _): q != typed.Lvalue.Local or not f.storedInResult(b, I64(q.id))
+        case typed.Expr.Cond(_, _, c): readChoice(c.A) or readChoice(c.B)
+        case typed.Expr.Match(_, _, m): readArms(m)
+        case _: false
+    }
+}
+
+# whether body b's local l lives where the result goes (the plan's Stored: O26a's returned local)
+fn (f mut Free&) storedInResult(b I64, l I64) Bool {
+    pl := f.Plans.Ref(b)
+    v := f.resultVar(b)
+    return v >= 0 and l < pl.Stored.Len() and pl.Stored[l] == typed.Scope.Var(v)
+}
+
+# whether a choice's value may be a place read (lower's copiesValue)
+fn readChoice(x typed.Expr?&) Bool {
+    if x == null: return false
+    return match x {
+        case typed.Expr.Read(_, _, _, _): true
+        case typed.Expr.Away(_, _, y): readChoice(y)
+        case typed.Expr.Cond(_, _, c): readChoice(c.A) or readChoice(c.B)
+        case typed.Expr.Match(_, _, m): readArms(m)
+        case _: false
+    }
+}
+
+fn readArms(m typed.Match&) Bool {
+    for a in m.Arms {
+        if readChoice(a.Value): return true
+    }
+    return m.NoMatch != null and readChoice(m.NoMatch!.Value)
+}
+
+# O8f, gap 19: a call's value stored into a slot place - its let-go puts a slot back (__olang_slot_release) - whose
+# callee builds part of it in a region of its own made where its result goes (a returned local given more than one
+# value, each in a region of its own): the let-go finds no slot, and the region stays until the place's scope closes.
+# A row of the report for each, which -check fails on (written once the plans' regions are)
+fn (f mut Free&) resultRegionGaps() {
+    for st in f.stores {
+        if st.Kind != SFresh or st.X == null or not f.programCode[st.Body]: continue
+        top := f.topSite(st.X!)
+        if top < 0 or f.Plans.Ref(st.Body).RegionKind[top] != 3: continue
+        c := typed.Call.Of(st.X!)
+        if c == null: continue
+        cb := typed.CalleeBody(c)
+        if not f.resultRegions(cb, 0): continue
+        for g in f.goes {
+            if g.PlaceId != st.PlaceId or g.Body != st.Body or g.Kind != LAssign or not g.Again or g.At.Start > st.Sp.Start or st.Sp.Start >= g.At.End: continue
+            row := $f.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) + ": memory: '" + $f.textOf(g.File, g.Sp) + "' keeps what '" + $f.fnName(cb) + "' builds in a region of its own where its result goes, which the let-go of a slot does not release - kept until its scope closes: a let-go early freeing does not follow (O8f)\n"
+            if row not in f.gapRows: f.gapRows.Push(row)
+        }
+    }
+}
+
+# whether body b makes a region where its result goes - at a site of its own, or through a call it returns, given that
+# scope as its result's (depth: the calls followed, a few at most - recursion ends there)
+fn (f mut Free&) resultRegions(b I64, depth I64) Bool {
+    v := f.resultVar(b)
+    if v < 0 or depth > 8: return false
+    pl := f.Plans.Ref(b)
+    for i in range pl.RegionKind.Len() {
+        if pl.RegionKind[i] == 1 and pl.RegionParent[i] == typed.Scope.Var(v): return true
+    }
+    u := typed.LocalUses.Uses(f.T(), f.Bodies[b])
+    for x in u.Rets {
+        c := typed.Call.Of(x)
+        if c == null or c.Site < typed.SiteId(0): continue
+        cb := typed.CalleeBody(c)
+        if cb >= 0 and pl.Passed(c.Site, f.resultVar(cb)) == typed.Scope.Var(v) and f.resultRegions(cb, depth + 1): return true
     }
     return false
 }

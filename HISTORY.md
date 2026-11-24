@@ -42966,3 +42966,36 @@ Left: `h.last = f()!` - the plan passes no region for a try's call (free.redirec
 that is free.olang's (OLang Cloud). Measured: the cold -quick self-build (same tree, master's compiler against this
 one, -quick builds of both, two runs each) lower+emit 2689/2688 -> 2695/2688 MB, compile phase 2704/2703 -> 2708/2702
 MB: the compiler has none of these shapes on a hot path. Fixed point holds.
+
+## 2026-11-24: freeing gap 19 - a returned text local and a copied choice's locals freed, the rest named (O8f, B18a; mine; wt-gap19)
+
+The fixture gaps19 (wt-gaps1719) had three shapes keeping storage in a receiving element's scope per call, all reported
+freed by -memory -check. Measured apart: `txt` (a text local returned) 32 bytes a call - the local's own 16-byte slot,
+made in the result scope (the slot scope an element of text gives its call) because `Plan.RetFrame` excluded every
+array value: the scope pass's `letMoved` set it only where the local was no `arenaValue`, and lowering's `retFrame`
+refused any array. A run-time array's slot is the pair naming its elements, which nothing can name apart from them
+(T11), and its elements are built where the result goes as a Vec's parts are (`fieldStor`, as a constructor's run-time
+array field already was), so both now admit it - a fixed array, whose slot is its elements, still goes where the result
+goes. 128 MB to flat at 4,000,000 calls (checks' freeing rettext, in `limited`).
+
+`pick` (`return a if c else b` over two Vec locals) ~1.1 KB a call: the scope pass moved both locals to the result
+scope (O26a: the return carries them), and lowering copied the choice there all the same (retOwns, copiesValue: a choice
+with a place read among its values is existing storage) - both locals and the copy kept. Where lowering surely copies -
+a conditional or a match, its value owning storage and sharing no reference (`ownsUnshared`), a body handing back no view
+(ViewResults), a place read among its values - the locals it reads whole are no longer carried to the result
+(`scope.dropCopied`), and `retOne` judges the value where it stands (the copy is what goes; the result scope still
+counted as built in). The locals are built in their block and closed with the frame: 48 bytes a call left, the copy's
+buffer. The first cut took any choice, and the compiler it built crashed building itself: `return w.held(p) if ... else
+w.storage(p)` is a choice of calls alone, which lowering hands back uncopied - its values built in the frame were read
+after it closed. `copiedChoice` now asks for a read among the values, as copiesValue does.
+
+`again` (a text local given a second value, then returned) ~420 bytes a call, and the copy above, are left - each
+needs a choice (docs/freeing.md 2.4, "Gap 19's open part"): the local's values are built each in a region of its own
+(its place is sole, O8d), made in the result scope, and the element's let-go puts back a slot, which text in a region is
+not; a return's copy is built in no part region, which the element's part let-go would find. -memory -check now names
+both, so it no longer calls them freed: `free.resultRegionGaps`, after the plans' regions are written, gives a row for a
+slot place's store of a call whose callee makes a region where its result goes (a site of its own, or a returned call
+given that scope, followed a few deep), and the walker's `unfollowed` one for a call whose callee copies the value it
+returns (`copiedRet`: a choice with a read among its values, or a read of anything but a local living where the result
+goes). checks' freeing gaps19 asserts both rows; -free late, -sanitize and the evaluator agree on every shape.
+
