@@ -348,6 +348,7 @@ bb2a1c419b19a9ee 512d8b336af2cb8a checks/cases/d16cborrowescape.olang
 ba45cbba4fbe735f f9963537b2bf6acd checks/cases/d16cshadow.olang
 50012e50253f0b0a ad6694f15e4e01da checks/cases/d16cstore.olang
 e6c51a748dcd305f 11e8ed605ed69691 checks/cases/d16dcomposeshort.olang
+c1f25c3d5bf0c421 d694de4b3792421b checks/cases/d16dfieldscope.olang
 311a75c36c4745b2 12c81243029521b8 checks/cases/d16dlambdaown.olang
 798cf10b04224c40 12416f10ea4922fa checks/cases/d16dtwoscopes.olang
 514c3440d85450e6 4f0e337d8a3cf5fe checks/cases/d16espawn.olang
@@ -2575,7 +2576,7 @@ e2b2b02653bc4b63 28b9ec011557160d compiler/prompt.olang
 e7ba5bcc74b12eea 1ae5eae57a5881f5 compiler/records.olang
 6a47d4d73d4650d3 55dae3ed6d428fcd compiler/runtime.olang
 26fb4de43982a9c2 06825d8007053e8c compiler/scan.olang
-731a949fe8399820 8400268fe982febd compiler/scope.olang
+349860ac3cd5129f ade989d6fb275322 compiler/scope.olang
 951ea77a9296b657 b5a93bcfb6051dc9 compiler/session.olang
 8981299fcf27ba06 e84af040edacca63 compiler/source.olang
 9bee4e94ca053127 837a4be40276ab63 compiler/spin.olang
