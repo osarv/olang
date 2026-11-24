@@ -1,0 +1,21 @@
+import "std/io"
+
+# O8f (docs/freeing.md gap 19): a function handing back a text local by value (O26a) builds its text where the result
+# goes and keeps the local's own slot in its frame - the slot, 16 bytes in a 32-byte class, was made in the result
+# scope each call before, here the array's: 128 MB at 4,000,000 turns (gaps19's `txt`)
+N I64 = 400000
+
+fn txt(i I64) String {
+    s := $i + " padded out a little"
+    return s
+}
+
+fn main() {
+    c := Array<String>(10)
+    t := 0
+    for i in range N {
+        c[i % 10] = txt(i)
+        t += c[i % 10].Len()
+    }
+    io.PutLn($t + " " + c[3])!
+}

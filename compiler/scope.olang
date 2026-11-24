@@ -5480,6 +5480,7 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
                 xs Vec<I64>
                 s.carried(x, xs)
                 s.returnedArrays(x, xs)
+                s.dropCopied(x, xs)
                 s.flAddDirect(xs)
                 w := wholeValueRead(x)
                 for k in xs {
@@ -5548,6 +5549,60 @@ fn (s mut Scoper&) flInto(r I64, ty types.TypeId, x typed.Expr?&, outside Bool, 
         return
     }
     s.flAdd(r)
+}
+
+# flStmt's return of a choice lowering copies into the result scope (lower's retOwns, retCopies): a conditional or a
+# match giving a value that owns its storage and shares no reference, of a body handing back no view (D9h) - the locals
+# it reads whole as a value it may give are copied, so only the copy goes where the result does and their own storage
+# stays in their blocks (O8f, gap 19: `return a if c else b` over two Vec locals left both, and the copy, in the
+# receiving element's scope each call)
+fn (s mut Scoper&) dropCopied(x typed.Expr&, xs mut Vec<I64>&) {
+    if not s.copiedChoice(x): return
+    reads Vec<I64>
+    choiceReads(s.unAway(x), reads)
+    out Vec<I64>
+    for k in xs {
+        if k not in reads: out.Push(k)
+    }
+    xs.Clear()
+    for k in out: xs.Push(k)
+}
+
+fn (s mut Scoper&) copiedChoice(x typed.Expr&) Bool {
+    y := s.unAway(x)
+    if y != typed.Expr.Cond and y != typed.Expr.Match: return false
+    t := s.P.T.Result(s.B!.Ty)
+    if y.Type() != t or s.P.T.KindOf(s.P.T.Repr(t)) == types.Kind.Array or not s.ownsUnshared(t): return false
+    match s.B!.Of {
+        case typed.BodyOf.Fn(inst) { if (try s.P.L.ViewResults.Get(inst) catch default I64(0)) > 0: return false }
+        case _ { return false }
+    }
+    # (lowering copies a choice only where a value it may give is a place read - copiesValue: one of calls alone is
+    # handed back as it is, built where the result goes)
+    reads Vec<I64>
+    choiceReads(y, reads)
+    return reads.Len() > 0
+}
+
+# the locals a choice's values read whole, by value (copiedChoice)
+fn choiceReads(x typed.Expr?&, out mut Vec<I64>&) {
+    if x == null: return
+    w := wholeValueRead(x)
+    if w >= 0 {
+        out.Push(w)
+        return
+    }
+    match x {
+        case typed.Expr.Cond(_, _, c) {
+            choiceReads(c.A, out)
+            choiceReads(c.B, out)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms: choiceReads(a.Value, out)
+            if m.NoMatch != null: choiceReads(m.NoMatch!.Value, out)
+        }
+        case _ { }
+    }
 }
 
 # the local a return's value x reads whole, by value (no reference crossed, nothing around it), -1 for any other value
@@ -7939,7 +7994,7 @@ fn (s mut Scoper&) letMoved(l typed.LocalId, t types.TypeId, x typed.Expr?&, mov
     if not s.isRef(t) {
         s.stors[I64(l)] = moved
         s.plan.Stored[I64(l)] = s.scopeOf(moved)
-        s.plan.RetFrame[I64(l)] = whole and not s.arenaValue(t)
+        s.plan.RetFrame[I64(l)] = whole
         # its slot made there is a build there (E11c: in a borrowed result's home, where a Str's receiver lives)
         s.buildsInto(moved, x!.Span(), s.B!.File, x!.Span())
     }
@@ -9645,6 +9700,13 @@ fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
         return
     }
     dest := s.resultTerm(k)
+    # (a choice lowering copies where the result goes - flStmt's dropCopied: the copy is what is handed back, built
+    # there, and the storage it reads need not outlive the call)
+    if k == 0 and dest == Term.Var(s.resultVar) and s.copiedChoice(x) {
+        s.val(x, Term.None)
+        s.buildsInto(dest, x.Span(), s.B!.File, x.Span())
+        return
+    }
     v := s.val(x, dest)
     if k == 0 and s.P.T.KindOf(s.B!.Ty) == types.Kind.Func and s.P.T.KindOf(s.P.T.Result(s.B!.Ty)) != types.Kind.Tuple {
         s.noteResBind(x)

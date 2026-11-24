@@ -2448,7 +2448,7 @@ fn (ln mut lowering&) retFrames() Array<Bool> {
 # every lend of it to a body that keeps nothing of it
 fn (ln mut lowering&) retFrame(u typed.LocalUses&, i I64) Bool {
     l := ln.B.Locals[i]
-    if l.Kind != typed.LocalKind.Var or ln.T.IsRef(l.Ty) or ln.T.NeedsDrop(l.Ty) or ln.arrayOf(l.Ty) != types.UnknownT: return false
+    if l.Kind != typed.LocalKind.Var or ln.T.IsRef(l.Ty) or ln.T.NeedsDrop(l.Ty) or ln.arrayOf(l.Ty) != types.UnknownT and not ln.runArrayLocal(l.Ty): return false
     return not ln.L.namesKept(ln.B, u, i)
 }
 
