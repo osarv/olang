@@ -521,6 +521,12 @@ fn (w ViewWalk&) placeRoots(p Lvalue&) I64 {
 fn (w ViewWalk&) refRoots(r Expr&) I64 {
     rt := r.Type()
     if w.T.IsRef(rt) and (w.T.PermOf(rt) & types.Writable) != 0: return -1
+    return w.refsOf(r)
+}
+
+# refRoots for any reference, writable or not: where a reference read out of what it names came from (holderRoots) -
+# what that read-only reference names is no storage the writable one lets the body change
+fn (w ViewWalk&) refsOf(r Expr&) I64 {
     return match r {
         case Expr.Read(_, _, p, _): w.holderRoots(p)
         case Expr.Borrow(_, _, p): w.placeRoots(p)
@@ -541,7 +547,7 @@ fn (w ViewWalk&) holderRoots(p Lvalue&) I64 {
         case Lvalue.Field(_, _, base, _): w.holderRoots(base)
         case Lvalue.Elem(_, _, e): w.holderRoots(e.Base)
         case Lvalue.Payload(_, _, pl): w.holderRoots(pl.Base)
-        case Lvalue.Deref(_, _, r): w.refRoots(r)
+        case Lvalue.Deref(_, _, r): w.refsOf(r)
         case _: -1
     }
 }

@@ -43077,6 +43077,9 @@ of each `String`'s part region - so the caller's copy came too late. Without the
 because vacating a plain element changed nothing the test read; `s.Outs = Vec<Out>()` replaced the buffer and left the
 old one alone. The eligibility of a parameter (ParamWritten) caught a by-value parameter assigned whole, never writes
 through a reference. Fix: `refRoots` gives no root for a writable reference - what a `mut` reference names is never
-handed back as a view, so the copy is made where it is taken. Decided against tracking whether the body writes through
+handed back as a view, so the copy is made where it is taken. A reference read out of what a writable one names (a walk's
+read-only `w.v` behind `w mut Walk&`) still roots views (refsOf): the body cannot change its storage through the
+writable one. A first version refused those too, which left FromIter's entries copied and moved the freeing scenario's
+gaps.olang report. Decided against tracking whether the body writes through
 the reference after the view: a `mut` parameter is nearly always written, and the copy is the value's meaning anyway.
 Test: tests/handover.olang `Take` (run time, -sanitize) and a decided `assert takeKeeps()` the evaluator runs.
