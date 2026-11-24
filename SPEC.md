@@ -7186,7 +7186,13 @@ holder**:
    go of what it likes; no let-go of it runs in a `join` block's code - all it calls included - whose tasks may reach
    the spawner's storage: one handed a reference, or a by-value argument holding one beside the arrays it owns (a
    by-value argument a task's callee keeps nothing of is the task's own copy), one storing its result into anything
-   but a local, or - any task of the program - reading a global. The store into a spawn's target (P1g), made on the
+   but a local, or - any task of the program - reading or storing into a global that may reach the place: the global's
+   own place; a field's or an element's place of a type a value of the global holds, by value or through a reference;
+   a place whose value holds by value a type a reference in the global names; and every place where the global's type
+   holds a function value, an `any` or a type variable. A global that is not `mut`, whose initializer reads and stores
+   into no global and calls through no function value refers only to static data or what its initializer built, held
+   by no other place: it reaches no place where its type holds no writable reference, else only the field and element
+   places of the types it holds. The store into a spawn's target (P1g), made on the
    task's thread, is a let-go of the target's own place there; what the task built for the target, in a stand-in the
    join's wait hands to the spawner (P2), is the spawner's from the wait on, so the places that value holds keep only
    where the join's own code lets one go while its tasks run - unless it is built where no wait hands it over: in a

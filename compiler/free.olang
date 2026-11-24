@@ -397,13 +397,22 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # code is not known or reaches a global (taskAll); else a task's own code changing a place keeps it, and a
     # place let go of in a join's code (joinGoes: the join, by its number in the final walks, and the place - AnyPlace
     # for any) keeps where that join's tasks may reach the spawner's storage (joinReach: what an argument refers into, a
-    # target not a plain local) or any task reads a global (taskReach)
+    # target not a plain local) or a task reads a global that may reach it (taskReach, globReach)
     cAt Vec<Bool>
     cOpaque Vec<Bool>
     cThreads Bool = false
     cAll Bool = false
     taskAll String = ""
     taskReach String = ""
+    # by join (its number in the final walks): the bodies its own spawns call (joinTasks), and by place whether a global
+    # their code reads or stores into may reach it (joinGlobs, globReach); the walk's types: the containers reached
+    # (reachTys) and those reached through a reference (refTys), by type, and whether a type's by-value parts hold one
+    # of refTys (heldRef, 1 no, 2 yes)
+    joinTasks Map<I64, Vec<I64>>
+    joinGlobs Map<I64, Array<Bool>>
+    reachTys Map<I64, Bool>
+    refTys Map<I64, Bool>
+    heldRef Map<I64, I64>
     joins I64 = 0
     joinGoes Vec<pair.Pair<I64, I64>>
     joinReach Map<I64, String>
@@ -7578,6 +7587,11 @@ fn (w mut walker&) taskArgs(c typed.Call&, b2 I64, unknown Bool, args Vec<Vec<I6
     # (a task whose code lets go only of storage built while it runs - ownBody - releases only regions it made itself, on
     # its own thread, into scopes it alone builds into; what it hands back the join's wait hands to the spawner)
     addTo(f.liveSpawned, b2)
+    if w.Final and w.quiet == 0 and w.inJoin.Len() > 0 {
+        j := w.inJoin[w.inJoin.Len() - 1]
+        ts := try f.joinTasks.Get(j) catch default Vec<I64>()
+        if addTo(ts, b2) > 0: f.joinTasks.Put(j, ts)
+    }
     if not f.ownBody(b2) {
         addTo(f.taskRoots, b2)
         for k in f.taskLets[b2]: f.keep(k, RTask, file, sp, "a task lets go of it, on a thread of its own: '" + $w.text(sp) + "'")
@@ -7793,7 +7807,7 @@ fn (f mut Free&) taskKeeps() {
         if (fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0) and f.taskAll == "" {
             f.taskAll = "a task calls through a function value or an any, or code not checked"
         }
-        if (fs.ReadsGlobals or fs.RefGlobals or fs.WritesGlobals) and f.taskReach == "": f.taskReach = "a task reads a global"
+        if (fs.ReadsGlobals or fs.RefGlobals or fs.WritesGlobals) and f.taskReach == "": f.taskReach = "a task reads a global that may reach it"
     }
     if f.taskAll != "" {
         for k in range n: f.keep(k, RTask, -1, source.Span(0, 0), $f.taskAll + ": nothing is freed early where it does")
@@ -7857,17 +7871,197 @@ fn (f mut Free&) taskKeeps() {
 }
 
 # a place let go of in join jk.First's code (jk.Second, AnyPlace for any): kept where that join's tasks may reach the
-# spawner's storage, or any task reads a global
+# spawner's storage, or a task reads a global that may reach the place (globReach)
 fn (f mut Free&) joinReached(jk pair.Pair<I64, I64>, n I64) {
     k := jk.Second
-    why := try f.joinReach.Get(jk.First) catch default f.taskReach
+    why := try f.joinReach.Get(jk.First) catch default ""
+    glob := why == ""
+    if glob: why = f.taskReach
     if why == "": return
     why = $why + ", and the join's code lets go of it while the task may run"
-    if k != AnyPlace {
-        f.keep(k, RTask, -1, source.Span(0, 0), why)
+    if not glob {
+        if k != AnyPlace { f.keep(k, RTask, -1, source.Span(0, 0), why) } else { for q in range n: f.keep(q, RTask, -1, source.Span(0, 0), why) }
         return
     }
-    for q in range n: f.keep(q, RTask, -1, source.Span(0, 0), why)
+    if not f.joinGlobs.Has(jk.First): f.joinGlobs.Put(jk.First, f.globReach(jk.First, n))
+    reached := try f.joinGlobs.Get(jk.First) catch default Array<Bool>(n, true)
+    if k != AnyPlace {
+        if k < reached.Len() and reached[k]: f.keep(k, RTask, -1, source.Span(0, 0), why)
+        return
+    }
+    for q in range reached.Len() {
+        if reached[q]: f.keep(q, RTask, -1, source.Span(0, 0), why)
+    }
+}
+
+# O8f, condition 3 by the globals a join's tasks reach: by place of the n, whether a global its own spawns' code reads
+# or stores into may reach it - the global's own place; a field's or an element's whose container type a value of it
+# holds, by value or through a reference; and any whose value holds, by value, a type a reference in it names. A
+# global not mutable whose initializer reaches no global and calls through nothing refers only to static data or what
+# its initializer built, held by no other place: where its references are all read-only nothing else may change it, so
+# it reaches nothing, else only the containers. A type not known (a function value, an any, a type variable) reaches
+# every place. (A let-go in a join's code nested in this one's is judged against that join's tasks too: it records
+# both, go)
+fn (f mut Free&) globReach(j I64, n I64) Array<Bool> {
+    out := Array<Bool>(n)
+    f.reachTys = Map<I64, Bool>()
+    f.refTys = Map<I64, Bool>()
+    f.heldRef = Map<I64, I64>()
+    run := f.taskBodies(try f.joinTasks.Get(j) catch default Vec<I64>())
+    for b in range run.Len() {
+        if not run[b]: continue
+        for g in f.fx!.GlobalsOf(b) {
+            k := try f.globalOf.Get(pair.Pair(g.Module, I64(g.Name))) catch default -1
+            if k >= 0: out[k] = true
+            fixed := not f.fx!.MutGlobal(g.Module, g.Name) and f.initClean(g.Module, g.Name)
+            if f.Debug: f.debugOut($"free: join " + $j + " task " + $f.fnName(b) + " global " + $f.P.L.Names.Text(g.Name) + " " + $f.P.T.Canon(g.Ty) + (" fixed" if fixed else "") + "\n")
+            if fixed and not f.writableIn(g.Ty, 0): continue
+            if not f.globTy(g.Ty, false, fixed, 0): return Array<Bool>(n, true)
+        }
+    }
+    for k in range n {
+        if out[k]: continue
+        r := I64(f.T().Plain(f.T().Repr(f.keyTy[k])))
+        if f.keyField[k] >= -1 and f.reachTys.Has(r): out[k] = true
+        else if f.refTys.Len() > 0 and f.holdsRefTy(f.valTy[k]): out[k] = true
+    }
+    return out
+}
+
+# the bodies the tasks of roots may run: what those calls call, make as lambdas or give a slot, and so on
+fn (f mut Free&) taskBodies(roots Vec<I64>&) Array<Bool> {
+    n := f.Bodies.Len()
+    seen := Array<Bool>(n)
+    work Vec<I64>
+    for b in roots {
+        if b < 0 or b >= n or seen[b]: continue
+        seen[b] = true
+        work.Push(b)
+    }
+    for at := 0, at < work.Len(), at++ {
+        b := work[at]
+        for c in f.Sc.CalleesOf(b) {
+            if c < 0 or c >= n or seen[c]: continue
+            seen[c] = true
+            work.Push(c)
+        }
+        for c in f.fx!.CallsOf(b) {
+            if c < 0 or c >= n or seen[c]: continue
+            seen[c] = true
+            work.Push(c)
+        }
+    }
+    return seen
+}
+
+# whether global (m, nm) is given its value by an initializer that, with all it calls, reaches no global but this one,
+# writes through nothing it was not given and calls through nothing - one not found counts as not
+fn (f mut Free&) initClean(m I64, nm source.NameId) Bool {
+    for b in range f.Bodies.Len() {
+        match f.Bodies[b].Of {
+            case typed.BodyOf.Global(bm, bn) {
+                if bm != m or bn != nm: continue
+                fs := f.fx!.Of(b)
+                if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0 or fs.WritesOut: return false
+                return f.onlyGlobal(b, m, nm)
+            }
+            case _ { }
+        }
+    }
+    return false
+}
+
+# whether body b, with all it calls, reads or stores into no global but (m, nm)
+fn (f mut Free&) onlyGlobal(b I64, m I64, nm source.NameId) Bool {
+    run := f.taskBodies(Vec<I64>[b])
+    for c in range run.Len() {
+        if not run[c]: continue
+        for g in f.fx!.GlobalsOf(c) {
+            if g.Module != m or g.Name != nm: return false
+        }
+    }
+    return true
+}
+
+# the types a value of ty reaches, into reachTys (and refTys where through a reference, ref) - only the containers where
+# only: false where one is not known
+fn (f mut Free&) globTy(ty types.TypeId, ref Bool, only Bool, depth I64) Bool {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    k := t.KindOf(r)
+    if t.ForeignRef(r) or depth > 64: return depth <= 64
+    if k == types.Kind.Func or k == types.Kind.Var or k == types.Kind.Any or k == types.Kind.Unknown: return false
+    if k == types.Kind.Ref: return f.globTy(t.Referent(r), true, only, depth + 1)
+    ri := I64(r)
+    marked := ref and not only
+    if f.reachTys.Has(ri) and (not marked or f.refTys.Has(ri)): return true
+    f.reachTys.Put(ri, true)
+    if marked: f.refTys.Put(ri, true)
+    for p in f.partsOf(r) {
+        if p != types.TypeId(0) and not f.globTy(p, ref, only, depth + 1): return false
+    }
+    return k != types.Kind.Named or t.HasBody(r)
+}
+
+# the types a value of type r (plain) holds directly: an array's elements, a struct's fields, an enum's payloads (0 for
+# none), a tuple's or record's parts, what a type over another is
+fn (f mut Free&) partsOf(r types.TypeId) Vec<types.TypeId> {
+    t := f.T()
+    k := t.KindOf(r)
+    out Vec<types.TypeId>
+    if k == types.Kind.Array: out.Push(t.Elem(r))
+    if k == types.Kind.Tuple or k == types.Kind.Record: addTys(out, t.Items(t.Parts(r)))
+    if k == types.Kind.AnonEnum: addTys(out, t.Items(t.ShapeCases(r)))
+    if k != types.Kind.Named or not t.HasBody(r): return out
+    dk := t.DeclKindOf(t.DeclOf(r))
+    if dk == types.DeclKind.Struct: addTys(out, t.Items(t.Fields(r)))
+    if dk == types.DeclKind.Enum: addTys(out, t.Items(t.Cases(r)))
+    if dk == types.DeclKind.Over: out.Push(t.Base(r))
+    return out
+}
+
+fn addTys(out mut Vec<types.TypeId>&, tys Array<types.TypeId>&) {
+    for p in tys: out.Push(p)
+}
+
+# whether a value of ty may hold a writable reference, or a type not known
+fn (f mut Free&) writableIn(ty types.TypeId, depth I64) Bool {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    k := t.KindOf(r)
+    if t.ForeignRef(r): return false
+    if depth > 64 or k == types.Kind.Func or k == types.Kind.Var or k == types.Kind.Any or k == types.Kind.Unknown: return true
+    if k == types.Kind.Ref: return (t.PermOf(r) & types.Writable) != 0 or f.writableIn(t.Referent(r), depth + 1)
+    if k == types.Kind.Named and not t.HasBody(r): return true
+    for p in f.partsOf(r) {
+        if p != types.TypeId(0) and f.writableIn(p, depth + 1): return true
+    }
+    return false
+}
+
+# whether a value of ty holds by value - itself, its fields, elements, payloads - a type one of refTys is (heldRef
+# remembers each type asked first, a type met again while asked holding nothing new)
+fn (f mut Free&) holdsRefTy(ty types.TypeId) Bool {
+    ri := I64(f.T().Plain(f.T().Repr(ty)))
+    if f.heldRef.Has(ri) { return (try f.heldRef.Get(ri) catch default 2) == 2 }
+    asked Map<I64, Bool>
+    f.byValue(ty, asked)
+    out := false
+    for x in asked.Keys(): out = out or f.refTys.Has(x)
+    f.heldRef.Put(ri, 2 if out else 1)
+    return out
+}
+
+# the types a value of ty holds by value, itself included, into asked
+fn (f mut Free&) byValue(ty types.TypeId, asked mut Map<I64, Bool>&) {
+    t := f.T()
+    r := t.Plain(t.Repr(ty))
+    ri := I64(r)
+    if asked.Has(ri) or t.KindOf(r) == types.Kind.Ref: return
+    asked.Put(ri, true)
+    for p in f.partsOf(r) {
+        if p != types.TypeId(0): f.byValue(p, asked)
+    }
 }
 
 # O8d, P1g: whether the spawns into local l of body b let go of its old value themselves, on the spawner's thread before

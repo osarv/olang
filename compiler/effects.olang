@@ -302,6 +302,8 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # built here (WritesOut) is followed only then, so a build asking nothing of it pays nothing for it
     WantPure Bool = false
     own Vec<Facts>       # by body: what it does itself, once walked
+    globs Vec<Vec<GlobalAt>>  # by body: the globals it reads or stores into itself - one counted as ReadsGlobals,
+    curGlobs Vec<GlobalAt>    # RefGlobals or WritesGlobals is (GlobalsOf); the body walked's
     calls Vec<Vec<I64>>  # by body: the bodies it calls, makes as lambdas or gives a slot that is called through
     colds Vec<Vec<I64>>  # by body: the indices into its calls made only on a way that fails (G42's cold ways)
     links Vec<Vec<link>> # by body: its arguments rooted at its slots
@@ -385,9 +387,17 @@ type pair struct(A I64, B I64) {
     B
 }
 
+# a global a body reads or stores into (GlobalsOf): its module and name, and its type
+type GlobalAt struct(Module I64, Name source.NameId, Ty types.TypeId) {
+    Module
+    Name
+    Ty
+}
+
 fn (e mut Effects&) grow() {
     for e.state.Len() < e.Bodies.Len() {
         e.own.Push(Facts())
+        e.globs.Push(Vec<GlobalAt>())
         e.calls.Push(Vec<I64>())
         e.colds.Push(Vec<I64>())
         e.links.Push(Vec<link>())
@@ -459,6 +469,32 @@ fn (e mut Effects&) named(b I64) Facts {
 fn (e mut Effects&) ModuleOf(b I64) I64 {
     e.grow()
     return try e.fileMod.Get(e.Bodies[b].File) catch default -1
+}
+
+# the globals body b reads or stores into itself - its calls' not (CallsOf) - each once
+fn (e mut Effects&) GlobalsOf(b I64) Vec<GlobalAt> {
+    if b < 0 or b >= e.Bodies.Len(): return Vec<GlobalAt>()
+    e.grow()
+    if e.state[b] < 2: e.visit(b)
+    return e.globs[b]
+}
+
+# the bodies body b calls, makes as lambdas or gives a slot that is called through (once walked)
+fn (e mut Effects&) CallsOf(b I64) Vec<I64> {
+    if b < 0 or b >= e.Bodies.Len(): return Vec<I64>()
+    e.grow()
+    if e.state[b] < 2: e.visit(b)
+    return e.calls[b]
+}
+
+# whether a global is mutable (as the walk judges ReadsGlobals)
+fn (e mut Effects&) MutGlobal(mi I64, n source.NameId) Bool { return e.mutGlobal(mi, n) }
+
+fn (e mut Effects&) globalSeen(mi I64, n source.NameId, ty types.TypeId) {
+    for g in e.curGlobs {
+        if g.Module == mi and g.Name == n: return
+    }
+    e.curGlobs.Push(GlobalAt(mi, n, ty))
 }
 
 # what an extern or a C import's function may do (X1, X17), as a call of it does
@@ -1275,6 +1311,7 @@ fn (e mut Effects&) walk(b I64) {
     # ended where a by-value holder lets go, a Drop: each counted where it is, O15, O16)
     # a body's lambdas are its own: what they do is what making and calling them may do
     e.own[b] = e.cur
+    e.globs[b] = e.curGlobs
     e.calls[b] = e.curCalls
     e.colds[b] = e.curColds
     e.links[b] = e.curLinks
@@ -1290,6 +1327,7 @@ fn (e mut Effects&) walk(b I64) {
 fn (e mut Effects&) walkBody(b I64) {
     body := e.Bodies[b]
     e.cur = Facts()
+    e.curGlobs = Vec<GlobalAt>()
     e.curCalls = Vec<I64>()
     e.curColds = Vec<I64>()
     e.cold = 0
@@ -2071,8 +2109,10 @@ fn (e mut Effects&) placeParts(p typed.Lvalue&) {
     match p {
         case typed.Lvalue.Local(_, _, _), typed.Lvalue.Target(_, _) { }
         case typed.Lvalue.Global(_, ty, mi, n) {
-            if e.mutGlobal(mi, n): e.cur.ReadsGlobals = true
+            m := e.mutGlobal(mi, n)
+            if m: e.cur.ReadsGlobals = true
             else if not plainData(e.P.T, ty): e.cur.RefGlobals = true
+            if m or not plainData(e.P.T, ty): e.globalSeen(mi, n, ty)
         }
         case typed.Lvalue.Deref(_, _, r) { e.expr(r) }
         case typed.Lvalue.Field(_, _, base, _) { e.placeParts(base) }
