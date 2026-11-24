@@ -1,0 +1,30 @@
+# check: build
+# flags: -memory
+# also: memory: 1 place lets go of storage in code that runs again - 1 frees it at once, 0 keep it
+# never: may let go of any place
+# O8d condition 3: a task's code calls Sort with a lambda calling through what it captured - order's parameter 'less',
+# never assigned - judged where order is called by the lambda sorter gives it, which lets go of nothing (capVia); so
+# the task lets go of nothing and main's 'l.last' frees at once
+type Log struct() {
+    last String = ""
+}
+
+Width I64 = 2
+
+fn order(a mut Array<I64>&, less fn&(x I64, y I64) Bool) {
+    a.Sort(fn(x, y) { return less(y, x) })
+}
+
+fn sorter(a mut Array<I64>&) { order(a, fn(x, y) { return x < y }) }
+
+fn main() ? {
+    a mut Array<I64>& = Array<I64>[3, 1, 2]
+    b mut Array<I64>& = Array<I64>[6, 4, 5]
+    join {
+        spawn sorter(a)
+        spawn sorter(b)
+    }
+    l := Log()
+    for i in range Width + 2: l.last = $a[i % 3] + $b[i % 3]
+    assert a[0] == 3 and b[2] == 4
+}

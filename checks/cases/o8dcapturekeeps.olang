@@ -1,0 +1,35 @@
+# check: build
+# flags: -memory
+# also: note: a task lets go of it, on a thread of its own: 'sorter(a, la)'
+# also: memory: 1 place lets go of storage in code that runs again - 0 free it at once, 1 keeps it
+# O8d condition 3: the lambda sorter gives order lets go of 'log.last', called through order's captured parameter by
+# the lambda order gives Sort (capVia) - composed where sorter calls order, so the task lets go of a Log's 'last' on a
+# thread of its own and every Log's keeps, main's 'l.last' among them
+type Log struct() {
+    last String = ""
+}
+
+fn order(a mut Array<I64>&, less fn&(x I64, y I64) Bool) {
+    a.Sort(fn(x, y) { return less(y, x) })
+}
+
+fn sorter(a mut Array<I64>&, log mut Log&) {
+    order(a, fn(x, y) {
+        log.last = $x
+        return x < y
+    })
+}
+
+fn main() ? {
+    a mut Array<I64>& = Array<I64>[3, 1, 2]
+    b mut Array<I64>& = Array<I64>[6, 4, 5]
+    la mut Log& = Log()
+    lb mut Log& = Log()
+    join {
+        spawn sorter(a, la)
+        spawn sorter(b, lb)
+    }
+    l := Log()
+    for i in range 4: l.last = $a[i % 3] + $b[i % 3]
+    assert a[0] == 3 and b[2] == 4 and l.last == "36"
+}

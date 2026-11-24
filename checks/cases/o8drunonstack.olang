@@ -1,0 +1,20 @@
+# check: build
+# flags: -memory
+# also: memory: 1 place lets go of storage in code that runs again - 1 frees it at once, 0 keep it
+# never: C is given a function value
+# O8d condition 3: os.RunOnStack runs its function on a thread of its own while the call waits, nothing beside it - the
+# call f() would be, judged so: 'l.last', let go of in the lambda each turn, frees at once
+import "std/os"
+
+type Log struct() {
+    last String = ""
+}
+
+fn main() ? {
+    l mut Log& = Log()
+    os.RunOnStack(1 << 20, fn() {
+        for i in range 4: l.last = $i
+    })
+    for i in range 4: l.last = $i + "!"
+    assert l.last == "3!"
+}

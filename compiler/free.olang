@@ -342,6 +342,10 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     # parameter j's value is given as, (p << 40) | (q << 20) | j, kept where what p is given keeps its parameter q
     letsVia Vec<I64>
     viaMut Vec<I64>
+    # ... and a lambda's calls through a function value it captured and never assigns (bit CapBit of letsVia): by body,
+    # each such Capture local, | 1 << 40 where given an argument that may write - composed where the lambda is written
+    # as an argument by what its maker captured (capsThrough); judged anywhere else as letting go of anything
+    capVia Vec<mut Vec<I64>&>
     escVia Vec<mut Vec<I64>&>
     mustRes Vec<I64>
     resFresh Vec<Bool>
@@ -387,13 +391,17 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     onceFor I64 = -1          # the body onceSet holds, by local: declared with no value and assigned once, that once
     onceSet Vec<Bool>         # running once with its declaration (LocalUses.WholeAgain)
     spawned Vec<I64>          # the bodies a task calls directly (Spawned)
-    # condition 3 by origins (O8f): C given a function value (cAt, by body; cThreads where one is reached) keeps every
-    # place, as a task whose code is not known does (taskAll); else a task's own code changing a place keeps it, and a
+    # condition 3 by origins (O8f): C given a function value (cAt, by body; cThreads where one is reached, or C that may
+    # call the program back of its own, X14, X9, X21) runs the export fns C may call (exports) as a task's code, from a
+    # thread of its own and beside anything - every place keeps where one is no export fn (cOpaque), or where their
+    # code is not known or reaches a global (taskAll); else a task's own code changing a place keeps it, and a
     # place let go of in a join's code (joinGoes: the join, by its number in the final walks, and the place - AnyPlace
     # for any) keeps where that join's tasks may reach the spawner's storage (joinReach: what an argument refers into, a
     # target not a plain local) or any task reads a global (taskReach)
     cAt Vec<Bool>
+    cOpaque Vec<Bool>
     cThreads Bool = false
+    cAll Bool = false
     taskAll String = ""
     taskReach String = ""
     joins I64 = 0
@@ -937,6 +945,7 @@ fn (f mut Free&) addBody(b I64, root I64) {
     f.taskWalkLets.Push(Vec<I64>())
     f.letsAll.Push(false)
     f.letsVia.Push(0)
+    f.capVia.Push(Vec<I64>())
     f.viaMut.Push(0)
     f.escVia.Push(Vec<I64>())
     f.mustRes.Push(MustTop)
@@ -953,6 +962,7 @@ fn (f mut Free&) addBody(b I64, root I64) {
     f.callers.Push(Vec<I64>())
     f.taskAt.Push(false)
     f.cAt.Push(false)
+    f.cOpaque.Push(false)
     f.named.Push(false)
     f.saved.Push(Array<I64>(0))
     f.savedAt.Push(Array<I64>(0))
@@ -1710,7 +1720,7 @@ fn (f mut Free&) genLetsOf() Vec<Vec<I64>> {
 fn (f Free&) GenOkNow() Vec<pair.Pair<I64, types.TypeId>> { return f.genOk }
 
 # whether the program may start a task (condition 3): a body that starts one (tasks), or gives C a function value
-# (cThreads), reached from where the program's code may begin - every body but a plain function's (main, a test, an
+# (cThreads; os.RunOnStack's is a call, syncCall), reached from where the program's code may begin - every body but a plain function's (main, a test, an
 # initializer, a lambda, a method a table may call, a constructor, a destructor), a function named as a value or
 # exported - through the calls the scope pass and the walks found. A function nothing reaches starts nothing (std/os's
 # RunOnStack, never called)
@@ -1724,7 +1734,9 @@ fn (f mut Free&) reachedTasks() {
         if not seen[b]: continue
         if f.taskAt[b]: f.tasks = true
         if f.cAt[b]: f.cThreads = true
+        if f.cOpaque[b]: f.cAll = true
     }
+    if f.exports.Len() > 0 and (f.P.L.SharedLib or f.P.L.LinksOwnC()): f.cThreads = true
     f.live = seen
 }
 
@@ -4950,6 +4962,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     helper := false
     foreign := false
     calls := false      # (a C function that may call an export fn back)
+    sync := false       # (the runtime's __olang_run_on_stack: its function called while the call waits, as f() - O8d's condition 3)
     match c.Target {
         case typed.Callee.Body(id) {
             b2 = I64(id)
@@ -4984,6 +4997,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
             # (the runtime's own and the C library's input and output, text, memory and time functions call nothing back)
             nm := f.P.L.Names.Text(f.P.FnDecl(fi).Name)
             calls = not nm.StartsWith("__olang_") and not typed.NoCallbackExtern(nm)
+            sync = nm == "__olang_run_on_stack"
         }
         case _ { }
     }
@@ -5153,9 +5167,15 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         if not helper: w.escape(a, sp, "", false)
     }
     addTo(out, orig(OUnk, 0))
+    if sync {
+        w.syncCall(c, sp)
+        return out
+    }
     if foreign {
         for a in c.Args {
-            if w.T().KindOf(w.T().Repr(a.Type())) == types.Kind.Func: f.cAt[w.Id] = true
+            if w.T().KindOf(w.T().Repr(a.Type())) != types.Kind.Func: continue
+            f.cAt[w.Id] = true
+            if f.cGiven(a) < 0: f.cOpaque[w.Id] = true
         }
         # C may call any export fn (X12) before it returns: where one may let go, the extern call may let go of
         # anything (F6) - walked again when an export fn's summary changes
@@ -5341,7 +5361,12 @@ fn (f mut Free&) placeMayRegister(p typed.Lvalue&) Bool {
 
 # a let-go's callee where no body is: a call through a function value not followed, a call given one (the report's)
 CalleeValue I64 = -2
+CapBit I64 = I64(1) << 62   # letsVia's bit for a lambda's calls through what it captured (capVia)
 CalleeGiven I64 = -3
+# ... a call through a parameter or a capture never assigned (CalleeVia), or a function value given a callee so
+# (CalleeViaGiven): in the body's own walk anything, for its callers composed by the value each gives (letsVia, capVia)
+CalleeVia I64 = -4
+CalleeViaGiven I64 = -5
 
 # a call through function value v (args its arguments' origins): (1) judged as direct calls of the bodies the scope
 # pass followed it to; (2) else one through a function parameter its body never assigns composed at each call of the
@@ -5363,7 +5388,41 @@ fn (w mut walker&) valueCall(c typed.Call&, v typed.Expr&, args Vec<Vec<I64>>&, 
         return
     }
     for a in args: w.escape(a, sp, "", false)
+    cl := w.fixedCapture(v)
+    if cl >= 0 {
+        writes := w.mayWrite(c)
+        if not (w.T().PromisesPure(fty) and not writes): w.throughCapture(cl, writes, sp)
+        return
+    }
     if not (w.T().PromisesPure(fty) and not w.mayWrite(c)): w.goAll(sp, c, CalleeValue)
+}
+
+# os.RunOnStack's __olang_run_on_stack(bytes, f): f runs on a thread of its own while the call waits, nothing beside it,
+# so it is the call f() would be (O8d's condition 3) - a call through f with no arguments
+fn (w mut walker&) syncCall(c typed.Call&, sp source.Span) {
+    v := c.Args[c.Args.Len() - 1]
+    fty := w.T().Repr(v.Type())
+    p := w.fixedParam(v)
+    none Vec<Vec<I64>>
+    if p >= 0 {
+        w.throughParam(c, fty, p, none, sp)
+        return
+    }
+    if not w.T().PromisesPure(fty): w.goAll(sp, c, CalleeValue)
+}
+
+# the export fn's body a function value given to C names (X13), past a conversion to a pointer that may be null - -1
+# for any other value
+fn (f Free&) cGiven(x typed.Expr&) I64 {
+    match x {
+        case typed.Expr.Prim(_, _, op, _, args) { if op == typed.PrimOp.Convert and args.Len() == 1: return f.cGiven(args[0]) }
+        case typed.Expr.Fn(_, _, typed.FnVal.Named(body)) {
+            inst := f.Bodies[I64(body)].Inst()
+            if inst >= 0 and f.P.FnDecl(f.P.InstanceFn(inst)).Export: return I64(body)
+        }
+        case _ { }
+    }
+    return -1
 }
 
 # a call through a value judged as a direct call of body rb (an adapter's Call where shift is 1: its instance the first
@@ -5458,10 +5517,75 @@ fn (w mut walker&) throughParam(c typed.Call&, fty types.TypeId, p I64, args Vec
     writes := w.mayWrite(c)
     if w.T().PromisesPure(fty) and not writes: return
     if w.Final {
-        w.go(AnyPlace, LCall, sp, receiverSpan(c), CalleeValue)
+        w.go(AnyPlace, LCall, sp, receiverSpan(c), CalleeVia)
         return
     }
     w.via(p, writes)
+}
+
+# a lambda's Capture local holding a function value it never assigns (capVia), else -1
+fn (w mut walker&) fixedCapture(v typed.Expr&) I64 {
+    l := readLocalOf(pastAway(v))
+    body := w.body()
+    if l < 0 or body.Gen or l >= body.Locals.Len() or body.Locals[l].Kind != typed.LocalKind.Capture: return -1
+    if w.T().KindOf(w.T().Repr(v.Type())) != types.Kind.Func or w.F.Sc.AssignedLocal(w.Id, l): return -1
+    return l
+}
+
+# a call through Capture local l (fixedCapture) that may let go: composed where the lambda is written (capsThrough) -
+# in the lambda's own walk, of anything
+fn (w mut walker&) throughCapture(l I64, writes Bool, sp source.Span) {
+    f := w.F
+    if w.Final {
+        w.go(AnyPlace, LCall, sp, source.Span(0, 0), CalleeVia)
+        return
+    }
+    if addTo(f.capVia[w.Id], l | ((I64(1) << 40) if writes else 0)) > 0: f.changed = true
+    if (f.letsVia[w.Id] & CapBit) == 0 {
+        f.letsVia[w.Id] = f.letsVia[w.Id] | CapBit
+        f.changed = true
+    }
+}
+
+# lambda rb written as function value a, whose calls through what it captured (capVia) let go as the values its maker -
+# this body - gives those captures: a parameter of this body's, or a capture of its own, never assigned; whether every
+# one was composed so (else the caller judges rb as letting go of anything)
+fn (w mut walker&) capsThrough(a typed.Expr&, rb I64, sp source.Span) Bool {
+    f := w.F
+    caps := lambdaCaps(a, rb)
+    if caps == null: return false
+    for e in f.capVia[rb] {
+        l := e & ((I64(1) << 40) - 1)
+        writes := (e >> 40) != 0
+        outer typed.Expr?& = null
+        for cp in caps {
+            if I64(cp.Inner) == l: outer = cp.Outer
+        }
+        if outer == null: return false
+        if not writes and w.pureValue(outer): continue
+        p := w.fixedParam(outer)
+        ol := w.fixedCapture(outer) if p < 0 else -1
+        if p < 0 and ol < 0: return false
+        if w.Final {
+            w.go(AnyPlace, LCall, sp, source.Span(0, 0), CalleeViaGiven)
+        } else if p >= 0 {
+            w.via(p, writes)
+        } else {
+            w.throughCapture(ol, writes, sp)
+        }
+    }
+    return true
+}
+
+# the captures of lambda rb where function value a is it, written - past a conversion or a move
+fn lambdaCaps(a typed.Expr&, rb I64) Array<typed.Capture&>?& {
+    match a {
+        case typed.Expr.Away(_, _, y) { return lambdaCaps(y, rb) }
+        case typed.Expr.Fn(_, _, typed.FnVal.Lambda(b, caps, _)) { if I64(b) == rb: return caps }
+        case typed.Expr.Prim(_, _, op, _, args) { if op == typed.PrimOp.Convert and args.Len() == 1: return lambdaCaps(args[0], rb) }
+        case _ { }
+    }
+    return null
 }
 
 # this body's parameter p given a call through it that may let go (writes: given an argument that may write)
@@ -5484,6 +5608,8 @@ fn (w mut walker&) viaCall(c typed.Call&, b2 I64, shift I64, args Vec<Vec<I64>>&
     f := w.F
     lv := f.letsVia[b2]
     if lv == 0 and f.escVia[b2].Len() == 0: return
+    # (a lambda's calls through what it captured, not written here: anything)
+    if (lv & CapBit) != 0: w.goAll(sp, c, b2)
     ps := w.T().Items(w.T().Params(f.Bodies[b2].Ty))
     for p in range shift, 62 {
         if (lv & (I64(1) << p)) == 0 or p - shift >= c.Args.Len(): continue
@@ -5543,7 +5669,9 @@ fn (w mut walker&) letsThrough(c typed.Call&, a typed.Expr&, pty types.TypeId, w
         for r in recs {
             rb := r >> 1
             if not w.Final: addTo(f.callers[rb], w.Id)
-            if f.letsAll[rb] or f.letsVia[rb] != 0 {
+            # (a lambda written here calling through what it captured: as what this body gives the captures)
+            capOnly := f.letsVia[rb] == CapBit and w.capsThrough(a, rb, sp)
+            if f.letsAll[rb] or (f.letsVia[rb] != 0 and not capOnly) {
                 w.goAll(sp, c, rb)
                 continue
             }
@@ -5556,7 +5684,7 @@ fn (w mut walker&) letsThrough(c typed.Call&, a typed.Expr&, pty types.TypeId, w
     p := w.fixedParam(a)
     if p >= 0 {
         if w.Final {
-            w.go(AnyPlace, LCall, sp, source.Span(0, 0), CalleeGiven)
+            w.go(AnyPlace, LCall, sp, source.Span(0, 0), CalleeViaGiven)
             return
         }
         w.via(p, writes)
@@ -6243,10 +6371,10 @@ fn (w mut walker&) localName(l I64) String { return $w.F.P.L.Names.Text(w.body()
 # what a call that lets go of place k does to it, as the note says: "removes frames" - the name of the collection a
 # removal in this body is called on - or "lets go of it"
 fn (w mut walker&) removes(k I64, g I64) String {
-    if k < 0 and w.goCallee[g] == CalleeValue {
+    if k < 0 and (w.goCallee[g] == CalleeValue or w.goCallee[g] == CalleeVia) {
         return "may let go of anything: it calls through a function value not followed whose type does not promise 'pure'"
     }
-    if k < 0 and w.goCallee[g] == CalleeGiven {
+    if k < 0 and (w.goCallee[g] == CalleeGiven or w.goCallee[g] == CalleeViaGiven) {
         return "may let go of anything: it is given a function value not followed whose type does not promise 'pure', and calls through it"
     }
     if k < 0: return "may let go of anything"
@@ -6706,9 +6834,8 @@ fn (f mut Free&) decide() {
     for k in f.partWalked: letsHere[k] = true
     f.taskKeeps()
     for k in range n {
-        # C may call an export fn (X12) from a thread of its own - one it is given (X13), or any of a library's (X14) -
-        # condition 3
-        if f.exports.Len() > 0 { f.keep(k, RTask, -1, source.Span(0, 0), "C may call an export fn from a thread of its own: nothing is freed early where C is given one, links C of its own, or is a library") }
+        # (C calling an export fn from a thread of its own - one it is given, X13, or any of a library's, X14 - is
+        # taskKeeps': condition 3)
         if f.hidden or has(f.hiddenAt, k) { f.keep(k, RDtor, -1, source.Span(0, 0), "a destructor, Str, Eq or Hash lets go of it where no call is written") }
     }
     # condition 4 judged by what a region would hold, not only by the value's type (F4): a value made for a place whose
@@ -7610,19 +7737,38 @@ fn (f mut Free&) handlerBuilds(h typed.Expr&) Bool {
     return f.fx!.Of(b).Holds(effects.Fact.Allocates)
 }
 
-# decide's condition 3: C given a function value may run it on a thread of its own, as may a task whose code is not
-# known - every place keeps. Else what the tasks' code (and every body running where no call is written) changes
+# condition 3 for C that may call the program back (cThreads): each export fn C may call runs as a task's code would,
+# on a thread of C's and beside anything, with no join to wait for it - so where one's code is not known or reaches a
+# global, every let-go anywhere may race with it (taskAll); else what its code changes keeps (roots: those letting go of
+# storage they did not build, ownBody). C reaches the program's storage only through a global or a reference the
+# program gave it, which keeps as any reference given to C does (condition 2)
+fn (f mut Free&) cRoots(roots mut Vec<I64>&) {
+    for b in f.exports {
+        fs := f.fx!.Of(b)
+        if (fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0) and f.taskAll == "" {
+            f.taskAll = "C may call " + $f.fnName(b) + " from a thread of its own, and it calls through a function value or an any, or code not checked"
+        }
+        if (fs.ReadsGlobals or fs.RefGlobals or fs.WritesGlobals) and f.taskAll == "" {
+            f.taskAll = "C may call " + $f.fnName(b) + " from a thread of its own, and it reaches a global"
+        }
+        if not f.ownBody(b): roots.Push(b)
+    }
+}
+
+# decide's condition 3: C given a function value that is no export fn may run it on a thread of its own, as may a task
+# whose code is not known - every place keeps; C that may call export fns back runs them as tasks (cRoots). Else what the tasks' code (and every body running where no call is written) changes
 # keeps, and - where a task may reach the spawner's storage - what a join's code lets go of while its tasks run
 fn (f mut Free&) taskKeeps() {
     n := f.keyTy.Len()
-    if f.cThreads {
-        for k in range n: f.keep(k, RTask, -1, source.Span(0, 0), "C is given a function value, which it may call from a thread of its own: nothing is freed early where it is")
+    if f.cAll {
+        for k in range n: f.keep(k, RTask, -1, source.Span(0, 0), "C is given a function value that is no export fn, which it may call from a thread of its own: nothing is freed early where it is")
         return
     }
-    if not f.tasks: return
+    if not f.tasks and not f.cThreads: return
     if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
     roots Vec<I64>
     for b in f.taskRoots: roots.Push(b)
+    if f.cThreads: f.cRoots(roots)
     for b in f.liveSpawned {
         fs := f.fx!.Of(b)
         if (fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0) and f.taskAll == "" {
@@ -7634,23 +7780,25 @@ fn (f mut Free&) taskKeeps() {
         for k in range n: f.keep(k, RTask, -1, source.Span(0, 0), $f.taskAll + ": nothing is freed early where it does")
         return
     }
-    # (every body running where no call is written, and - whatever effects follows of a function value - every function
-    # named as a value, and every lambda where a task reads a global, which may hold one: a lambda made in the tasks'
-    # code is among what that code reaches, its maker its caller - lambdaMade; one made elsewhere reaches a task only
-    # as an argument or through a global, which taskAll and taskReach say)
+    # (every body running where no call is written. A function value runs in a task only where the tasks' code calls
+    # through it, and the walks judge each such call: as calls of the bodies it is - an edge reach follows (asRecord,
+    # letsThrough, lambdaMade) - or through a parameter or a capture, judged where the value is given (letsVia, capVia)
+    # - or else as letting go of anything (goAll) - so neither a function named as a value nor a lambda is a root, and a
+    # body reached letting go through what it is given is judged by its callers, which are reached too; a root's own,
+    # which no caller judges, may let go of anything)
     # (where every task's code lets go only of storage built while it runs - ownBody - a body running in a task where no
     # call is written runs on what the task built too: no root; and the walk from a root stops at such a body, whose
     # let-goes are of what it builds itself wherever it is called)
+    anyRoot := roots.Len() > 0
     for b in range f.Bodies.Len() {
-        if f.taskRoots.Len() == 0: break
-        lambda := f.Bodies[b].Of == typed.BodyOf.Lambda and f.taskReach != ""
-        if f.implicit(b) or f.named[b] or lambda: roots.Push(b)
+        if not anyRoot: break
+        if f.implicit(b): roots.Push(b)
     }
     run := f.reached(roots, true)
     own := "a task's code changes it, on a thread of its own"
     for b in range run.Len() {
         if not run[b]: continue
-        if f.letsAll[b] or f.letsVia[b] != 0 {
+        if f.letsAll[b] or (f.letsVia[b] != 0 and has(roots, b)) {
             for k in range n: f.keep(k, RTask, -1, source.Span(0, 0), "a task's code may let go of any place")
         }
         for k in f.taskLets[b]: f.keep(k, RTask, -1, source.Span(0, 0), own)
@@ -7662,7 +7810,9 @@ fn (f mut Free&) taskKeeps() {
     for gi in range f.goes.Len() {
         g := f.goes[gi]
         if not run[g.Body] or f.goCut[gi]: continue
-        if g.PlaceId == AnyPlace {
+        # (a call through a parameter or a capture, but in a root: its callers, reached too, judge it - as letsVia)
+        via := (g.Callee == CalleeVia or g.Callee == CalleeViaGiven) and not has(roots, g.Body)
+        if g.PlaceId == AnyPlace and not via {
             for k in range n: f.keep(k, RTask, g.File, g.Sp, "a task's code may let go of any place")
         }
         f.keep(g.PlaceId, RTask, g.File, g.Sp, own)
