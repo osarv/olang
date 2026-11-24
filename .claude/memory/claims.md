@@ -68,3 +68,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Debts (cloud, 2026-11-24): wt-evaltriage closed (5255306c8) - none of the three findings reproduces on master; queue empty
 - OLang Debts (cloud, 2026-11-24): full make verify on master f916af036 (wt-verify)
 - OLang Debts (cloud, 2026-11-24): freeing gaps 17/19 repro check
+- OLang Debts (cloud, 2026-11-24): gaps 17/19 reproduced, fixtures merged (c71ce26dd), for OLang Cloud
