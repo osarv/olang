@@ -7184,9 +7184,13 @@ holder**:
    storage (not against what they build), its new value made for it - built where its place is, in storage the task is
    handed whole and builds into alone until the wait. After the wait a join's tasks reach nothing. Only code an entry of the program reaches - `main`, a method, an export, a
    function value, a test, an initializer - starts a task. A program with a task whose code is not known (a lambda or a function value spawned, a task calling
-   through a function value or an `any`) frees nothing early, nor does a program C may call back (X12): one giving
-   an export fn or any function value to a C function (X13), built as a library (X14), or linking C of its own that
-   may name one (a `.c` import, a `link`, X9, X21) - C may call it from a thread of its own;
+   through a function value or an `any`) frees nothing early, nor does one giving a C function a function value that
+   is no export fn. In a program C may call back (X12) - one giving an export fn to a C function (X13), built as a
+   library (X14), or linking C of its own that may name one (a `.c` import, a `link`, X9, X21) - each export fn C may
+   call is a task's code: C may call it from a thread of its own, beside any of the program's code, with no join
+   waiting for it, so where one reaches a global, or calls code not known, nothing is freed early, and else what its
+   code lets go of on storage it did not build keeps. `os.RunOnStack`'s function, run on a thread of its own while the
+   call waits and nothing beside it, is the call `f()` would be;
 4. nothing it holds, nor anything built where it lives - an instance a constructor builds and no reference takes
    (O16) among it - is an instance whose destructor is still to run (O15) - but a value held by value, ended where its holder lets go of it, is reclaimed right after its destructor runs, where
    no value of its type (or of a type holding it) is ever registered with a scope (O16) and no test build may run its
@@ -7240,7 +7244,9 @@ nothing is reclaimed on a guess, and no fact is taken from a fixed point not run
 value is judged by what is known of it (T21c, T22): where every function it may be is followed (T22a) - a value made in
 the function, a lambda or a function written as an argument - as direct calls of those; through a parameter the body
 never assigns, as each call of the body gives it (`apply(xs, fn(x): return x * 2)` lets go of what the lambda does,
-through any number of such calls); else it may keep any argument and let go of anything - but where its type promises
+through any number of such calls); through what a lambda captured - a parameter of its maker's, or a capture of the
+maker's own, never assigned - as the maker's call through it, where the lambda is written as an argument
+(`a.Sort(fn(x, y): return less(y, x))` lets go of what the `less` each call of the maker gives does); else it may keep any argument and let go of anything - but where its type promises
 `pure` and it is given nothing that may write (a writable reference, a value holding a reference), it lets go of
 nothing. A generator (D18) lets go
 as a function does, its `yield` giving a value as a `return` does - and a `yield` is a call that may make any place let

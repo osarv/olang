@@ -1,0 +1,27 @@
+# check: build
+# flags: -memory
+# also: memory: 1 place lets go of storage in code that runs again - 1 frees it at once, 0 keep it
+# never: C is given a function value
+# O8d condition 3: C given an export fn (qsort's comparison, X13) may call it from a thread of its own, so it runs as
+# a task's code would - and this one reaches no global and lets go of nothing it did not build, so the program frees
+# elsewhere: 'l.last', given new text each turn, lets go of the old at once
+type Item struct(key I32, tag U8) {
+    key
+    tag
+}
+
+extern fn qsort(base mut Array<Item>&, n I64, size I64, cmp fn&(a Item&, b Item&) I32)
+
+export fn byKey(a Item&, b Item&) I32 { return a.key - b.key }
+
+type Log struct() {
+    last String = ""
+}
+
+fn main() ? {
+    xs := Array<Item>[Item(5, 'e'), Item(2, 'b'), Item(9, 'i'), Item(1, 'a')]
+    qsort(xs, xs.Len(), 8, byKey)
+    l := Log()
+    for i in range 4: l.last = $xs[i].key
+    assert l.last == "9"
+}

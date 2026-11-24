@@ -1025,7 +1025,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   value's region let go of empty while its anchors name a region made inside it (a builder's part built by a callee
   where the result goes, `Box(build(i), i)` returned) first has that kid moved out to its parent
   (`__olang_region_settle_in`; the evaluator's `settle` likewise), so the part is released with the value, not with
-  the empty region (checks' freeing `builtinside`).
+  the empty region (checks' freeing `builtinside`). **C calling back, condition 3 narrowed (2026-11-24, mine; docs/freeing.md):** the export fns C may call (given to C, a
+  library's, or with C of the program's own) run as tasks' code with no join - one reaching a global or code not known
+  keeps every place, else what it lets go of on storage it did not build keeps; only a function value given C that is no
+  export fn keeps everything; `os.RunOnStack`'s function is a call (`f()`). A lambda's call through what it captured (its
+  maker's parameter or capture, never assigned) is judged where the lambda is written as an argument, as the maker's
+  call through it; functions named as values and lambdas are no task roots (the walks judge every call through a
+  value). The compiler still keeps everything: spin's ticker task reads globals beside `drive`'s join.
   A let-go the compiler does not follow is a gap:
   `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. **Captures and local copies
   (2026-11-21, mine; docs/freeing.md):** a value a lambda captures is the lambda's own copy, its parts split, made in

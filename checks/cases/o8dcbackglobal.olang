@@ -1,0 +1,31 @@
+# check: build
+# flags: -memory
+# also: note: C may call byKey from a thread of its own, and it reaches a global: nothing is freed early where it does
+# also: memory: 2 places let go of storage in code that runs again - 0 free it at once, 2 keep it
+# O8d condition 3: an export fn C is given (X13) that reaches a global may run beside any code of the program, from a
+# thread of C's, with no join to wait for it - so every place keeps, 'Seen' and 'l.last' alike
+type Item struct(key I32, tag U8) {
+    key
+    tag
+}
+
+extern fn qsort(base mut Array<Item>&, n I64, size I64, cmp fn&(a Item&, b Item&) I32)
+
+Seen mut String = ""
+
+export fn byKey(a Item&, b Item&) I32 {
+    Seen = $a.key
+    return a.key - b.key
+}
+
+type Log struct() {
+    last String = ""
+}
+
+fn main() ? {
+    xs := Array<Item>[Item(5, 'e'), Item(2, 'b'), Item(9, 'i'), Item(1, 'a')]
+    qsort(xs, xs.Len(), 8, byKey)
+    l := Log()
+    for i in range 4: l.last = $xs[i].key
+    assert l.last == "9"
+}
