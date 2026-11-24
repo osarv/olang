@@ -2133,7 +2133,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 ac0cb24df228eac5 494276e48e18f7fa checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-fdfc2a5ad9768b78 936f9082fabe2ff5 checks/checks.olang
+5031197ff68787d5 cc407b57d8ed45a5 checks/checks.olang
 e441d89352158de4 51f391891d39e1c7 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 efb54136ad6286dc checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb 11ac830c3b4509ca checks/fixtures/agree/math.olang
@@ -2274,6 +2274,7 @@ ed65e1c871a90895 cdc0031d8a267a5f checks/fixtures/freeing/elements.olang
 8f51a875a88e3c20 69f4b1af25dae733 checks/fixtures/freeing/genviews.olang
 217397296d19aecc 6cdca969946e9604 checks/fixtures/freeing/global.olang
 c92dc198c42716e3 40d3a987c6923deb checks/fixtures/freeing/globalinit.olang
+bf90e5c9c0e19a30 152bb5154f0e79e8 checks/fixtures/freeing/globalview.olang
 79701488917b3ac8 650d8db9e533149b checks/fixtures/freeing/globalviews.olang
 fcb8db7508dca0da 341466fe050821d9 checks/fixtures/freeing/growkept.olang
 612dfdcfb3a4acae a04146984cf5a056 checks/fixtures/freeing/growth.olang
@@ -2557,7 +2558,7 @@ f61fe279c4191d06 ebe696a14ed51d72 compiler/fmt.olang
 8299f0d6f657ceae ba0b78c0c7122d77 compiler/lineedit.olang
 211de0b5ecb13aac 4324dd1a83c4b615 compiler/listing.olang
 d960906d9777ef41 b0933bad0414e163 compiler/load.olang
-f0ee8d6f8aea2dfe e661b5ed8a2a5bbe compiler/lower.olang
+83596ddeff2ab514 87db64af34d72553 compiler/lower.olang
 0a6ba37a53fb9662 26f5ffd009f3d4b4 compiler/lsp.olang
 7dc09dd9a3624990 5eddb899d10cc9ce compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
@@ -2566,7 +2567,7 @@ d232d342b03323aa ee9d313667664e1d compiler/msgs.olang
 9517510027652f1f 9b918dd25e415ea5 compiler/names.olang
 3f072b84e716c304 59b46a3ae1383924 compiler/needs.olang
 79acbc010c9bf08a b1a3323292403dad compiler/notebook.olang
-20fc9986e870276a 0081d658e779b863 compiler/olang.olang
+b95bef2c17d0371e aeaeef95b339c975 compiler/olang.olang
 b39996c18bbe72bf ac116c53952c20fd compiler/paint.olang
 a0db63bdf993f7e7 af54cf8ddd638769 compiler/parse.olang
 2cf0b668dac274b7 b2471504fdad37d8 compiler/profile.olang
@@ -2794,6 +2795,7 @@ f4ebfee9d08f1b94 7b23cbab0f73c6f8 tests/genenums.olang
 c3154015ef1cc50e 1477cf615d58d5df tests/geom/measure.olang
 f4210a439844ee95 81160d5e9014daf4 tests/geom/rect.olang
 6f377ad68087b253 5ba924bc34b786fd tests/globalstart.olang
+4629a1d79f807e5d bcb4b3903615970f tests/globalview.olang
 7a5c2bc482d2ad87 5ab260a743ef6a5f tests/handover.olang
 258685af1bea4cb8 534cfcc35024ca54 tests/handoverglobal.olang
 dde55a3912452137 68d4fdffc6033ba8 tests/heldexact.olang
