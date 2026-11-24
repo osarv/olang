@@ -1,4 +1,4 @@
-# check: fail error[S4e]: the write to 'out' is lost: nothing reads 'out' after it
+# check: fail error[S4e]: 'out' is repointed at a new value: the caller still sees what it passed
 # S4e: '=' on a reference parameter repoints the callee's copy (S4a) - never read again, the caller's value is unchanged
 type Box struct() {
     Xs mut Array<F64>& = Array<F64>(0)

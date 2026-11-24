@@ -129,6 +129,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a `mut Box&` never wrote the caller's value; write its fields, or return the new value. Once a reference parameter is
   repointed at storage the callee gives a value (`p = P()`) on every path, a write through it (`p.A = 5`, `p.A.B = 1`)
   is a store too, lost unless `p` is read after it; `p = q`, a conditional repoint, or a loop repointing elsewhere keep it.
+  A reference parameter or receiver repointed at storage the callee gives a value (E12c: a constructor call, a literal,
+  a call returning a value) is an error whatever reads follow (S4e, `FreshParamRepoint`): `if not ok: p = S(..)` then
+  a read left the caller with the old value. A repoint at existing storage (`p = q`, `p = p.next!`, a call returning a
+  reference) is a cursor and stays; loop names (S9g) keep the read-after rule.
 - **Every path of a function with a result must return (D10a)** - structural, loops never count, `for { }` with no
   `break` of its own leaves, a leaving `join` and a `noreturn` call count. `unreachable` is checked, never assumed
   (S16d), and behaves as a failed assert. `os.Exit(code)` for any status (B5b).

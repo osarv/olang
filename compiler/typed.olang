@@ -3585,6 +3585,7 @@ type LostStores struct(L LocalId) {
     Spans Vec<source.Span>   # each store, where it is written
     Whole Vec<Bool>          # whether it assigns L itself or writes through it, not storage L holds by value
     Through Vec<Bool>        # whether it writes through L, repointed at the body's own storage
+    Fresh Vec<Bool>          # whether it repoints L at storage given it here (E12c), not storage that exists
     at Vec<I64>
     live Vec<Bool>
 }
@@ -3658,6 +3659,7 @@ fn (w mut LostStores&) stmt(s Stmt&) {
             w.Spans.Push(sp)
             w.Whole.Push(p == Lvalue.Local or w.through(p))
             w.Through.Push(w.through(p))
+            w.Fresh.Push(p == Lvalue.Local and freshStorage(x))
             w.at.Push(w.seq)
             w.live.Push(w.later > 0)
             if p != Lvalue.Local: return

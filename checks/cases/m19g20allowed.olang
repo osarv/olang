@@ -13,8 +13,8 @@ fn sum(v Vec<I64>&) I64 {
 }
 fn setAll(v mut Vec<I64>&, x I64) { for i in range v.Len() { v[i] = x } }
 fn other(v Vec<I64>&, w mut Vec<I64>&) { w.Push(v.Len()) }
-fn fresh(w mut Vec<I64>&) {
-    w = Vec<I64>()                              # a parameter given another Vec names that one
+fn regive(w mut Vec<I64>&, o mut Vec<I64>&) {
+    w = o                                       # a parameter given another Vec names that one
     w.Push(1)
 }
 fn main() {
@@ -29,7 +29,7 @@ fn main() {
     setAll(v, 5)                                # sets elements only
     assert d[1] == 5
     other(v, w)                                 # grows w, not v
-    fresh(v)                                    # grows a Vec of its own
+    regive(v, w)                                # grows w, not v
     assert d[0] == 5
     for i in range 100: v.Push(i)
     e := v.View()                               # taken after the growth

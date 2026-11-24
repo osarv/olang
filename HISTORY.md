@@ -43084,6 +43084,28 @@ gaps.olang report. Decided against tracking whether the body writes through
 the reference after the view: a `mut` parameter is nearly always written, and the copy is the value's meaning anyway.
 Test: tests/handover.olang `Take` (run time, -sanitize) and a decided `assert takeKeeps()` the evaluator runs.
 
+## 2026-11-24: a reference parameter repointed at a new value is refused (S4e; the coordinator's decision; wt-mutparam)
+
+S4e refused a store to a parameter only when nothing read the parameter after it. The trap it left: `if not ok: p =
+S("fallback", ...)` followed by a read of `p` compiled, and the caller silently kept its old value; so did `p = S(...);
+p.xs.Push(1)`. Decided: pointing a reference parameter (or receiver) at a value built in the function is refused
+whatever reads follow. The boundary of "built here" is what the checker already knows: the assignment's value is a
+value, not a reference, so E12c gives it storage where it is given (`typed.Expr.Promote`, `freshStorage`) - a
+constructor call, a literal, any call returning a value. A call returning a reference, another reference, or a field
+reached through one is existing storage, and the repoint a cursor (S4a), still allowed. `typed.LostStores` records
+which of its stores repoint L at fresh storage (`Fresh`); `check.freshRepoints` says `FreshParamRepoint` for each and
+then leaves the parameter's lost-store reports out, so one mistake gives one error. The help names the three ways out:
+write the fields (`p.f = ...`), return the new value, or a local `t := S(...)` for a scratch value. S9g's loop names keep
+the read-after rule: a loop name is the body's own local, and a fresh value there is seen by the rest of the turn.
+
+The rule makes S4e's "write through a parameter repointed at the callee's own storage" clause unreachable for
+parameters (it still serves loop names). Tests invalidated and replaced: shared.olang's `paramRepointRead`,
+`paramRepointMaybe`, `paramRepointLoop` (each repointed at `ParamBox()`) gave way to cursor shapes - `p = other`, a
+call returning a reference, a linked-list walk `n = n.Next!`, the last also baked at compile time
+(`ParamNodeLastBaked`) so the evaluator agrees; checks/cases `lostparamwriterepoint` now names the new message, and
+`freshparamrepointread`, `freshparamrepointpush`, `freshparamrepointcall` hold the refused shapes. The evaluator needs
+nothing: the checker refuses before it runs. Nothing in the compiler or std was refused.
+
 ## 2026-11-24: Windows as a target (B12f, X1, X11; mine; wt-windows)
 
 Asked for by the OAgent app, which needs a native Windows desktop build; modelled on Android (B12e). `-target
