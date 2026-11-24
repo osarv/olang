@@ -904,7 +904,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   that hands back the start of an allocation - `StartsAlloc`, a function fact derived while lowering, least fixed
   point: a text, an array made, a local holding one, a copy or conversion of one, such a call - as the region is found
   from the word before it; a callee's `Trim()` of its own text stays copied). A conditional's value is each arm promoted
-  (`promotedCond`), so its chosen arm is built in place where it is fresh; a try's call (`try f()`, `f()!`, no default)
+  (`promotedCond`), so its chosen arm is built in place where it is fresh; a try's call (`try f()`, `f()!`, no default - into a region of early freeing's too, the plan following it to its call)
   is taken as its call is, and a try with a default is its call and each default promoted (`tryAt`). Lowering only
   (`promotedFresh`); a by-value argument never had the double copy.
 - **Lending (O17, O17a, O17b; R1 of docs/refusals.md, 2026-11-08, mine within the user's decisions).** A split value
@@ -1066,9 +1066,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   400-byte-per-copy design, asked of the user, was not needed); an element owning storage only as such arrays of plain
   values (`Array<Vec<I64>>`) frees them where it is given another; a returned value local keeps its slot in the frame,
   its parts where the result goes (gap 19; text and values holding a run-time array too), and the locals a returned
-  choice lowering copies reads whole stay in their blocks (`scope.dropCopied`); -memory -check names a call's value
-  whose callee builds a region where its result goes into a slot place, or copies its returned value (gap 19's open
-  part, docs/freeing.md 2.4). A local lowering
+  choice lowering copies reads whole stay in their blocks (`scope.dropCopied`), its copy built in part regions of its own;
+  a region made in a slot scope (a returned text local given a second value) is released by the slot's let-go (gap 19,
+  docs/freeing.md 2.4). A local lowering
   surely copies a view call's value into owns its parts (a `Map` value copied and changed frees, gap 18). Round 6
   (wt-freeing6): an element holding a Vec of text or a Vec of Vecs frees it all where it is given another - each live
   element's slot or parts released (a walk at the let-go, none per operation), a copy built in a part region split so
