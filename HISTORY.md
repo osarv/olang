@@ -42839,3 +42839,10 @@ for both forms within noise, default target and `-target znver4` (e.g. 512^3 36.
 per construction and already leaves the loop wherever O44's conditions hold. Where a form does keep it, the usual
 cause is one of those conditions - a bound through a local the loop assigns (a running offset `o += 2` rather than
 the counter), a call or a non-scalar store in the loop - which the kernel's shape should avoid, as the shipped one does.
+## Triage of three findings on master (wt-evaltriage, 2026-11-24)
+
+The std/time diag golden, the evaluator runs of tests/canon, tests/cshare and std/time, and checks' freeing `pushtexts`
+were reported failing; on master after ad0147dbe none reproduces. The golden was recaptured by d4961ffef (a re-capture
+changes nothing now); `evaldiff` and `interp@` say "same" for the three files, and std/time's TZ test sets TZ itself
+(`setenv`), so it passes under any ambient TZ (tried Asia/Tokyo, Europe/Stockholm); pushtexts prints
+`104857600 once once once once` on three runs under its 4 GB `ulimit -v`. No code changed.
