@@ -58,3 +58,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - Orchestrator child (cloud, 2026-11-23): olang wt-homestd (time local offset, tls pinned fingerprint) and wt-homecimp (one type per C tag across header imports) - oagent home findings
 - Orchestrator child (cloud, 2026-11-23): olang wt-homestd and wt-homecimp merged - time.LocalOffset, tls pin and DialToLearn, one C type per tag, anonymous C members
 - OLang Debts (cloud, 2026-11-24): olang wt-e73finds - finishing (verify, records, merge)
+- OLang Debts (cloud, 2026-11-24): oann wt-bf16gemm - kernels/gemm register blocking for the BF16 pair dot
