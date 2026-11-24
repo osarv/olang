@@ -2127,7 +2127,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 ac0cb24df228eac5 494276e48e18f7fa checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-3d1689fda250381e ee4c7a77a7a93441 checks/checks.olang
+b56dc710c2a38a54 a697742f83080326 checks/checks.olang
 e441d89352158de4 51f391891d39e1c7 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 efb54136ad6286dc checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb 11ac830c3b4509ca checks/fixtures/agree/math.olang
@@ -2286,7 +2286,7 @@ c58d9bf6a7777b32 4e9e49acc0f351a2 checks/fixtures/freeing/owntrees.olang
 efb6d8584c9317d4 01612d29cc86a7cd checks/fixtures/freeing/ownvalues.olang
 633072645e71ec01 2c4a3d8e7ba0355b checks/fixtures/freeing/poptexts.olang
 5bc4b9a975232e37 1bfa63154bbf9217 checks/fixtures/freeing/pushjoin.olang
-6e5f2f7bb28a88a5 ad3f056da2b78b1b checks/fixtures/freeing/pushtexts.olang
+87774a48926e6bea 42cff901ebaaadf5 checks/fixtures/freeing/pushtexts.olang
 ba29ad90370e1c2e f8d1b1123f659f0b checks/fixtures/freeing/resultargs.olang
 390ddcbc0280f5e1 1fb953760e1d9d05 checks/fixtures/freeing/returned.olang
 6bcabe3d083463ac ffe5ea2a83a59560 checks/fixtures/freeing/slotcopy.olang
@@ -2544,7 +2544,7 @@ edebd8c3c436f824 9c73883339d7a199 compiler/generic.olang
 8299f0d6f657ceae ba0b78c0c7122d77 compiler/lineedit.olang
 211de0b5ecb13aac 4324dd1a83c4b615 compiler/listing.olang
 d960906d9777ef41 b0933bad0414e163 compiler/load.olang
-0c9f7974eca53eb7 ec61b5542094b840 compiler/lower.olang
+0a6cd6cd032de77b d778f0f51c85b601 compiler/lower.olang
 0a6ba37a53fb9662 26f5ffd009f3d4b4 compiler/lsp.olang
 7dc09dd9a3624990 5eddb899d10cc9ce compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
@@ -2775,6 +2775,7 @@ f076b6838bea0f96 b85e74e6619ac51c tests/fixedrows.olang
 2857890196bcd123 75ba29e5fe1a4272 tests/fnrel.olang
 5559f859c15c9003 31a8bba934ed2e88 tests/fnvalues.olang
 5066571f3c50cff8 40844931b4834aa3 tests/follow.olang
+374ec5921b0d24d4 3a5c728f305b594e tests/freshref.olang
 f4ebfee9d08f1b94 7b23cbab0f73c6f8 tests/genenums.olang
 82b322f5a00ce45e 81cfe15fa1aa42e3 tests/generators.olang
 c3154015ef1cc50e 1477cf615d58d5df tests/geom/measure.olang
