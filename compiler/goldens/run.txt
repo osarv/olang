@@ -322,6 +322,7 @@
 | ok - a conditional's chosen arm given to a reference
 | ok - a try's call given to a reference
 | ok - a text stored in a field, its region's own
+| ok - a call's result and a try's with a default stored in a field, its region's own
 === test tests/genenums.olang
 | status 0
 | ok - G6b: generic enums - built, matched, compared, rendered - baked, decided while compiling and run

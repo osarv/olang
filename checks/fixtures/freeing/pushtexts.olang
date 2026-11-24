@@ -6,13 +6,16 @@ import "std/os"
 # built there and copied there again, the first copy left behind until that scope closed: twice the text resident. The
 # measure is the peak address space gained (VmPeak, as growth.olang's): N texts of 256 KB, each in a chunk mapped for
 # itself, are 25 MB at N = 100 for each shape; a program building each twice is at 50, and the limit is midway, 37 MB.
-# (wt-copyonce) The same for a conditional's chosen arm (`s if c else $s`) and a try's call (`try f(s)`)
+# (wt-copyonce) The same for a conditional's chosen arm (`s if c else $s`) and a try's call (`try f(s)`); (wt-copyonce2)
+# a try with a default (`try f(s) catch default ""`), and a call's result stored in a field early freeing gives a region
+# (`h.last = copied(s)`), its body handing back an allocation's start: N such results kept in N holders
 N I64 = 100
 
 type Fail error { No }
 
 type Holder struct() {
     texts Vec<String&>
+    last String&
 }
 
 fn (h mut Holder&) add(s String&) { h.texts.Push($s) }
@@ -33,6 +36,16 @@ fn built(s String&, ok Bool) String ? Fail {
 }
 
 fn (h mut Holder&) tried(s String&) ? Fail { h.texts.Push(try built(s, true)) }
+
+fn (h mut Holder&) defaulted(s String&) { h.texts.Push(try built(s, true) catch default "") }
+
+fn copied(s String&) String {
+    b := StringBuilder()
+    b.Push(s)
+    return b.ToString()
+}
+
+fn (h mut Holder&) kept(s String&) { h.last = copied(s) }
 
 # the peak address space, in KB (VmPeak)
 fn peak() I64 {
@@ -59,7 +72,17 @@ fn main() {
     p3 := peak()
     for _ in range N: h.tried(s)!
     p4 := peak()
+    for _ in range N: h.defaulted(s)
+    p5 := peak()
+    hs Vec<Holder&>
+    for _ in range N {
+        k mut Holder& = Holder()
+        k.kept(s)
+        hs.Push(k)
+    }
+    p6 := peak()
     t := 0
     for x in h.texts: t += x.Len()
-    io.PutLn($t + " " + verdict((p1 - p0) / 1024) + " " + verdict((p2 - p1) / 1024) + " " + verdict((p3 - p2) / 1024) + " " + verdict((p4 - p3) / 1024))!
+    for k in hs: t += k.last.Len()
+    io.PutLn($t + " " + verdict((p1 - p0) / 1024) + " " + verdict((p2 - p1) / 1024) + " " + verdict((p3 - p2) / 1024) + " " + verdict((p4 - p3) / 1024) + " " + verdict((p5 - p4) / 1024) + " " + verdict((p6 - p5) / 1024))!
 }

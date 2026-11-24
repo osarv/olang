@@ -895,11 +895,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`v.Push($s)` into a `Vec<String&>`) or a call's result whose callee hands back no view of its arguments
   (`v.Push(b.ToString())`), promoted to a read-only reference to a run-time-length array, is built in the reference's
   scope and the reference is its pair - not built and then copied there, the first copy left until the scope closed
-  (a text adopts the reference's scope; a call's result only where the plan already passes that scope for it; a region
-  of early freeing's only for a text the plan already builds in the reference's own region - a call's result there may
-  not start where the region's word before it is). A conditional's value is each arm promoted (`promotedCond`), so its
-  chosen arm is built in place where it is fresh; a try's call (`try f()`, `f()!`, no default) is taken as
-  its call is. Lowering only (`promotedFresh`); a by-value argument never had the double copy.
+  (a text adopts the reference's scope; a call's result only where the plan already passes that scope for it; in the
+  region of early freeing's the reference is the value of, a text the plan builds there, or a call's result from a body
+  that hands back the start of an allocation - `StartsAlloc`, a function fact derived while lowering, least fixed
+  point: a text, an array made, a local holding one, a copy or conversion of one, such a call - as the region is found
+  from the word before it; a callee's `Trim()` of its own text stays copied). A conditional's value is each arm promoted
+  (`promotedCond`), so its chosen arm is built in place where it is fresh; a try's call (`try f()`, `f()!`, no default)
+  is taken as its call is, and a try with a default is its call and each default promoted (`tryAt`). Lowering only
+  (`promotedFresh`); a by-value argument never had the double copy.
 - **Lending (O17, O17a, O17b; R1 of docs/refusals.md, 2026-11-08, mine within the user's decisions).** A split value
   (references living elsewhere than its storage) is lent where its references live, so a callee builds where they hang;
   its own storage is lifted there too only where the callee keeps it (stores, captures, returns or hands on the

@@ -98,6 +98,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     # D9h, counted for -memory: returns handing back a view as it is, calls whose view is read where it stands,
     # and calls copying a view into where their result goes
     ViewReturns I64 = 0
+    starts Map<I64, I64>     # StartsAlloc's judgements, by body: 1 holds, 2 not, 3 being judged
     ViewReads I64 = 0
     ViewCopies I64 = 0
     # copies left out - a body's handing back a local holding views of its arguments (ElidedReturns), a
@@ -3294,7 +3295,7 @@ fn (ln mut lowering&) join(sp source.Span, j typed.Join&) {
     try ln.joinS.Pop() catch { }
     ends Vec<mir.BlockId>
     ln.leaveOpen(ends)
-    ln.clauses(done, j.Clauses, mir.NoLocal, types.VoidT, ends)
+    ln.clauses(done, j.Clauses, mir.NoLocal, types.VoidT, ends, typed.SiteId(-1))
     ln.patch(ends)
 }
 
@@ -4702,8 +4703,11 @@ fn (ln mut lowering&) toClause(ti I64, ci I64, code mir.Operand, from types.List
 }
 
 # a try (R8-R11): X with its errors taken by the clauses, its value - or a clause's default - in one slot
-fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Operand {
-    ty := x.Type()
+fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Operand { return ln.tryAt(t, x.Type(), sp, typed.SiteId(-1)) }
+
+# a try's value of type ty - or, site given, promoted there (E12c: promotedTry), its operand and each default promoted
+# on their own
+fn (ln mut lowering&) tryAt(t typed.Try&, ty types.TypeId, sp source.Span, site typed.SiteId) mir.Operand {
     slot := mir.NoLocal
     if ty != types.VoidT and ty != types.NoreturnT: slot = ln.temp(ty, sp)
     rels := ln.tryRels
@@ -4711,7 +4715,7 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     tc mut tryCtx& = tryCtx(ln.levels.Len(), t.Clauses, t.Ends, t.Passes)
     for _ in t.Clauses: tc.entries.Push(mir.NoBlock)
     ln.tries.Push(tc)
-    v := ln.val(t.X)
+    v := ln.val(t.X) if site < typed.SiteId(0) else ln.promote(typed.Promote(t.X!, site), ty, sp)
     # (the clauses' entries the errors reaching them made, as the try's record on the stack has them)
     done := try ln.tries.Pop() catch { return mir.Operand.None }
     ends Vec<mir.BlockId>
@@ -4720,16 +4724,16 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
         if rels.Len() > 0: ln.releaseAt(slot, rels, sp)
     }
     ln.leaveOpen(ends)
-    ln.clauses(done, t.Clauses, slot, ty, ends)
+    ln.clauses(done, t.Clauses, slot, ty, ends, site)
     ln.patch(ends)
     if slot == mir.NoLocal: return mir.Operand.None
     return mir.Operand.Copy(mir.Lvalue.L(slot))
 }
 
-# the clauses errors reached, each from its entry: its code as a block of its own, then its defaults into the slot;
-# each falls through to where ends lead
+# the clauses errors reached, each from its entry: its code as a block of its own, then its defaults into the slot (a
+# one-default's promoted at site, where given); each falls through to where ends lead
 fn (ln mut lowering&) clauses(tc tryCtx, cls Array<typed.Clause&>&, slot mir.LocalId, ty types.TypeId
-                              ends mut Vec<mir.BlockId>&) {
+                              ends mut Vec<mir.BlockId>&, site typed.SiteId) {
     for ci in range cls.Len() {
         if tc.entries[ci] == mir.NoBlock: continue
         cl := cls[ci]
@@ -4738,7 +4742,7 @@ fn (ln mut lowering&) clauses(tc tryCtx, cls Array<typed.Clause&>&, slot mir.Loc
         if cl.Code != null: ln.block(cl.Code!)
         if not ln.dead and slot != mir.NoLocal and cl.Defaults.Len() > 0 {
             if cl.Defaults.Len() == 1 {
-                d := ln.val(cl.Defaults[0])
+                d := ln.val(cl.Defaults[0]) if site < typed.SiteId(0) else ln.promote(typed.Promote(cl.Defaults[0], site), ty, cl.Sp)
                 ln.emit(mir.Stmt.Assign(cl.Sp, mir.Lvalue.L(slot), mir.Rvalue.Use(d)))
             } else {
                 ops := Array<mir.Operand>(cl.Defaults.Len())
@@ -5175,6 +5179,8 @@ fn (ln mut lowering&) promote(pr typed.Promote&, ty types.TypeId, sp source.Span
     if t0.IsRef(t0.Repr(ty)) and a0 != types.UnknownT and ln.fixedLen(a0) < 0 {
         k := condOf(pr.X)
         if k != null: return ln.promotedCond(k, pr.Site, ty, sp)
+        tr := defaultTry(pr.X)
+        if tr != null and ln.tryRels.Len() == 0: return ln.tryAt(tr, ty, sp, pr.Site)
         return try ln.promotedInPlace(pr, ty, sp, a0) catch NotInPlace default ln.promoteNew(pr, ty, sp)
     }
     return ln.promoteNew(pr, ty, sp)
@@ -5186,6 +5192,22 @@ fn condOf(x typed.Expr&) typed.Cond?& {
         case typed.Expr.Cond(_, _, k): k if k.A != null else null
         case _: null
     }
+}
+
+# a try around a call whose clauses give a default (`try f() catch default ""`, one value each), promoted: its call and
+# each default promoted on their own (tryAt) - the call's result built where the reference goes when it is fresh
+# (freshInPlace), a default copied there once - rather than the try's value made, then copied there again. Null for
+# any other value (a try with no default is its call, freshCall)
+fn defaultTry(x typed.Expr&) typed.Try?& {
+    if x != typed.Expr.Try: return null
+    tr := x.t
+    if tr.X == null or tr.X! != typed.Expr.Call: return null
+    some := false
+    for cl in tr.Clauses {
+        if cl.Defaults.Len() > 1: return null
+        if cl.Defaults.Len() == 1: some = true
+    }
+    return tr if some else null
 }
 
 # E12c, O6: a conditional's value promoted to a run-time-length array reference is each arm's value promoted - the
@@ -5260,12 +5282,24 @@ fn (ln mut lowering&) freshInPlace(pr typed.Promote&, ty types.TypeId) Bool {
     if to == typed.Scope.Unset or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() or ln.plan.RegionKind[I64(site)] != 0: return false
     x := pr.X
     if x == typed.Expr.Text and to == typed.Scope.Region and ln.plan.Built[I64(site)] == to: return true
-    if ln.plan.RegionKind[I64(pr.Site)] != 0 or heldRef(ln.built(pr.Site)) or heldRef(ln.built(site)): return false
+    if ln.plan.RegionKind[I64(pr.Site)] != 0: return to == typed.Scope.Region and ln.regionCall(x, to)
+    if heldRef(ln.built(pr.Site)) or heldRef(ln.built(site)): return false
     if x == typed.Expr.Text: return true
     c := freshCall(x)
     if c == null: return false
     id := typed.CalleeBody(c)
     if id < 0 or ln.L.ViewsOf(typed.BodyId(I32(id))) != 0 or ln.freshCtor(c): return false
+    return ln.resultScopeAt(c, id) == to
+}
+
+# a call's result taken in the region of early freeing's (O8d) the reference is the value of: one the plan passes
+# that region for, from a body handing back the start of an allocation (StartsAlloc) - a region is found from the word
+# before its value, which a view a callee hands back (a Trim() of its own text) has not
+fn (ln mut lowering&) regionCall(x typed.Expr&, to typed.Scope) Bool {
+    c := freshCall(x)
+    if c == null: return false
+    id := typed.CalleeBody(c)
+    if id < 0 or ln.L.ViewsOf(typed.BodyId(I32(id))) != 0 or ln.freshCtor(c) or not ln.L.StartsAlloc(id): return false
     return ln.resultScopeAt(c, id) == to
 }
 
@@ -5818,6 +5852,64 @@ fn (ln mut lowering&) freshCtor(c typed.Call&) Bool {
     if lw.Free != null and lw.Free!.Done: return lw.Free!.FreshCtorAt(I64(ln.B.Id), I64(c.Site))
     return typed.FreshViews(ln.plan, c, lw.ViewsOf(typed.BodyId(I32(id))), fn(b typed.BodyId) I64 { return lw.ViewsOf(b) }
                             fn(b typed.BodyId) Array<I64> { return lw.P.T.ScopeVarsOf(lw.Bodies[I64(b)].Ty) })
+}
+
+# ---- results that start an allocation ----
+
+# whether every value body id hands back is the start of an allocation made for it (a function fact, read while
+# lowering only): a text, an array made or filled, a local given only such a value, a conversion of one, a call of a
+# body of which this holds (a try's with no default, either arm of a conditional) - never a constant, a slice, a
+# parameter's or a part's, nor an extern's, a function value's or a constructor's. A least fixed point: a body being
+# judged counts as not, so a recursion holds only where something else makes it hold
+fn (lw mut Lowerer&) StartsAlloc(id I64) Bool {
+    if id < 0 or id >= lw.Bodies.Len() or lw.ViewsOf(typed.BodyId(I32(id))) != 0: return false
+    k := try lw.starts.Get(id) catch default I64(0)
+    if k != 0: return k == 1
+    b := lw.Bodies[id]
+    if b.Of != typed.BodyOf.Fn or b.Root == null: return false
+    lw.starts.Put(id, 3)
+    u := typed.LocalUses.Uses(lw.P.T, b)
+    ok := u.Rets.Len() > 0
+    for x in u.Rets {
+        if ok and not lw.startOf(u, x): ok = false
+    }
+    lw.starts.Put(id, 1 if ok else 2)
+    return ok
+}
+
+# whether x, a value a body hands back, is the start of an allocation (StartsAlloc)
+fn (lw mut Lowerer&) startOf(u typed.LocalUses&, x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Text(_, _, _): true
+        case typed.Expr.Make(_, _, m): lw.startMade(u, m)
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and lw.startOf(u, args[0])
+        case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, l), _): lw.startLocal(u, I64(l))
+        case typed.Expr.Cond(_, _, k): k.A != null and lw.startOf(u, k.A!) and lw.startOf(u, k.B)
+        case typed.Expr.Seq(_, _, q): q.X != null and lw.startOf(u, q.X!)
+        case typed.Expr.Away(_, _, y): lw.startOf(u, y)
+        case _: lw.startCall(freshCall(x))
+    }
+}
+
+# an array made or filled, or a copy of the start of an allocation: a copy D9i leaves out (a local's at its last use)
+# is the local's own storage, and only such a copy's is an allocation's start either way
+fn (lw mut Lowerer&) startMade(u typed.LocalUses&, m typed.Make&) Bool {
+    if m.Site < typed.SiteId(0): return false
+    if m.Kind == typed.MakeKind.Copy: return m.Items.Len() == 1 and lw.startOf(u, m.Items[0])
+    return m.Kind == typed.MakeKind.Array or m.Kind == typed.MakeKind.Fill
+}
+
+# a local declared with the start of an allocation and never given another value whole
+fn (lw mut Lowerer&) startLocal(u typed.LocalUses&, l I64) Bool {
+    loc := u.B.Locals[l]
+    if loc.Kind != typed.LocalKind.Var or lw.P.T.IsRef(loc.Ty) or u.Whole[l] or u.Init[l] == null: return false
+    return lw.startOf(u, u.Init[l]!)
+}
+
+fn (lw mut Lowerer&) startCall(c typed.Call?&) Bool {
+    if c == null: return false
+    id := typed.CalleeBody(c)
+    return id >= 0 and lw.StartsAlloc(id)
 }
 
 # ---- value results handed over uncopied (D9h) ----

@@ -42937,3 +42937,32 @@ captured before those tests were added (recaptured meanwhile on master by wt-con
 stored run lacks is now reported as "not in the stored built run (compiler/goldens/run.txt is older than the test -
 make rungold)", so the next such failure names its remedy instead of reading as a lost test. The token and tree goldens
 (make tokgold, astgold) were recaptured too; every file changed since capture was changed by its committed edits.
+## 2026-11-24: a call's result in its reference's region and a try with a default built where the reference goes (D9i; mine; wt-copyonce2)
+
+wt-copyonce left two shapes copied twice. Both are lowering only (compiler/lower.olang); the evaluator copies every
+time and agrees (tests/freshref.olang, run and under OLANG_EVALUATE=1, and its baked `kept(4)`).
+
+- A try with a default given to a reference (`v.Push(try f() catch default "")`) was the try's value made, then copied
+  where the reference goes. `tryAt` - the try's lowering, given the promotion's site - now promotes its call and each
+  one-value default on their own (`defaultTry` picks such a try around a call), as `promotedCond` does for a
+  conditional's arms: the call's result built in place where it is fresh, the default copied there once.
+  pushtexts' new shape 50 -> 25 MB.
+- A call's result stored in a field early freeing gives a region (`h.last = copied(s)`): the plan passes the region for
+  the call's result already (free.redirect follows a promotion's call), but lowering copied it there again, since
+  `__olang_region_release` finds a region from the word before the value and a callee may hand back a view into
+  storage of its own that does not start there (a `Trim()` of a text it built). A function fact now says when it
+  cannot: `StartsAlloc`, derived while lowering per body as a least fixed point (a body being judged counts as not)
+  - every value it returns is a text, an array made or filled, a local declared with one and never given another
+  whole, a copy or a conversion of one (`String(out)` of `Array<Char>(n)`: StringBuilder.ToString, whose copy check
+  inserts and D9i may leave out - the local's own storage, a start either way), a conditional of two, or a call (a try
+  with no default around one) of a body it holds for; never a constant, a slice, a parameter's or a part's, nor an
+  extern's, a function value's or a constructor's. Where it holds, the view-free call's result the plan builds in the
+  region the reference is the value of is taken as is (`regionCall`); a region's part keeps the earlier rule. It is
+  read through no name (not one of G42's): what a module's IR read of another module's body is covered by the IR
+  record's key, the texts a module reaches, as D9h's view facts are. pushtexts' field shape (N holders, each keeping
+  one): 63 -> 25 MB.
+
+Left: `h.last = f()!` - the plan passes no region for a try's call (free.redirect stops at a Try), so it stays copied;
+that is free.olang's (OLang Cloud). Measured: the cold -quick self-build (same tree, master's compiler against this
+one, -quick builds of both, two runs each) lower+emit 2689/2688 -> 2695/2688 MB, compile phase 2704/2703 -> 2708/2702
+MB: the compiler has none of these shapes on a hot path. Fixed point holds.

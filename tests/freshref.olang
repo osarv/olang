@@ -1,6 +1,8 @@
 # E12c, O6 (D9i): a fresh value given to a read-only reference is built where the reference goes, not built and copied
 # there again - a conditional's chosen arm (`a if c else $b`), a try's call (`try f()`, `f()!`, a constant default), a
-# text stored in a field early freeing gives a region of its own (O8d). Each test reads the references back after an
+# text stored in a field early freeing gives a region of its own (O8d); (wt-copyonce2) a call's result stored there
+# where its body hands back the start of an allocation (a Trim() of its own text stays copied), and a try with a
+# default (`try f() catch default "none"`), its call and its default each promoted. Each test reads the references back after an
 # arena churn: what a reference names must still be its own text, the arms not taken left alone.
 
 type Fail error { No }
@@ -45,6 +47,18 @@ fn (b mut Box&) ended(s String&) { b.texts.Push(maybe(s, true)!) }
 
 fn (b mut Box&) kept(s String&) { b.last = $s + "." }
 
+# a view of its own text: no allocation's start
+fn trimmed(s String&) String {
+    t := made(s) + "  "
+    return t.Trim()
+}
+
+fn (b mut Box&) keptCall(s String&) { b.last = made(s) }
+
+fn (b mut Box&) keptTrim(s String&) { b.last = trimmed(s) }
+
+fn (b mut Box&) keptDefault(s String&, ok Bool) { b.last = try maybe(s, ok) catch default "none" }
+
 test "a conditional's chosen arm given to a reference" {
     b mut Box& = Box()
     t := made("a")
@@ -78,6 +92,38 @@ test "a text stored in a field, its region's own" {
     assert b.last == "4."
 }
 
+test "a call's result and a try's with a default stored in a field, its region's own" {
+    b mut Box& = Box()
+    for i in range 5: b.keptCall($i)
+    settle()
+    assert b.last == "4!"
+    for i in range 5: b.keptTrim($i)
+    settle()
+    assert b.last == "4!"
+    for i in range 5: b.keptDefault($i, i % 2 == 0)
+    settle()
+    assert b.last == "4!"
+    b.keptDefault("q", false)
+    settle()
+    assert b.last == "none"
+}
+
+fn kept(n I64) I64 {
+    b mut Box& = Box()
+    t I64 = 0
+    for i in range n {
+        b.keptCall($i)
+        t += b.last.Len()
+        b.keptTrim($i)
+        t += b.last.Len()
+        b.keptDefault($i, i % 2 == 0)
+        t += b.last.Len()
+        b.defaulted($i, i % 2 == 1)
+    }
+    for x in b.texts: t += x.Len()
+    return t
+}
+
 fn counted(n I64) I64 {
     b mut Box& = Box()
     for i in range n: b.called($i, i % 2 == 0)
@@ -88,3 +134,4 @@ fn counted(n I64) I64 {
 
 # decided while compiling (S18c), as the run time does
 assert counted(4) == 6
+assert kept(4) == 40
