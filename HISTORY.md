@@ -43064,3 +43064,19 @@ Also `h.last = f()!` (left by wt-copyonce2): `free.redirect` stopped at the Try,
 try's call and lowering copied its result into the field's region. A try whose clauses give no default is now followed
 to its call, as lower's `freshCall` takes it, and `regionCall` takes the result in place. pushtexts' seventh shape
 (N holders each keeping `built(s, true)!`): twice (57 MB) -> once.
+
+## 2026-11-24: a value result is never a view of what a `mut` reference names (D9h; mine; wt-vecclear)
+
+oagent found `taken := a.Outs; a.Outs.Clear(); return taken` in a `mut Ap&` method handing back a `Vec<Out>` whose
+elements were garbage once `Out` held a `String`: the length kept, the text released. The spec is clear (a copy of a
+`Vec` value is a `Vec` of its own, its elements copied as values), so this was a lowering bug, not an open question.
+Cause: D9h's result views (typed.ViewWalk.Settle, check's settleViews and lowering's resultViews) judged `taken`'s
+declaration copy a view of parameter `a`'s argument and left it out, its caller to copy the result where it keeps it.
+But the body changed what the view names between taking it and handing it back - Clear vacated every element, letting go
+of each `String`'s part region - so the caller's copy came too late. Without the `String` the bug was hidden only
+because vacating a plain element changed nothing the test read; `s.Outs = Vec<Out>()` replaced the buffer and left the
+old one alone. The eligibility of a parameter (ParamWritten) caught a by-value parameter assigned whole, never writes
+through a reference. Fix: `refRoots` gives no root for a writable reference - what a `mut` reference names is never
+handed back as a view, so the copy is made where it is taken. Decided against tracking whether the body writes through
+the reference after the view: a `mut` parameter is nearly always written, and the copy is the value's meaning anyway.
+Test: tests/handover.olang `Take` (run time, -sanitize) and a decided `assert takeKeeps()` the evaluator runs.

@@ -515,8 +515,12 @@ fn (w ViewWalk&) placeRoots(p Lvalue&) I64 {
 }
 
 # the parameters whose arguments reach what a reference value names: a parameter's own reference, or one held in what a
-# parameter holds or reaches (a reference field of a by-value parameter is the argument's)
+# parameter holds or reaches (a reference field of a by-value parameter is the argument's). Never what a writable
+# reference names (-1): the body may change it between taking the view and handing it back (`taken := a.Outs` then
+# `a.Outs.Clear()`), where its caller's copy would come too late - the copy is made where the view is taken
 fn (w ViewWalk&) refRoots(r Expr&) I64 {
+    rt := r.Type()
+    if w.T.IsRef(rt) and (w.T.PermOf(rt) & types.Writable) != 0: return -1
     return match r {
         case Expr.Read(_, _, p, _): w.holderRoots(p)
         case Expr.Borrow(_, _, p): w.placeRoots(p)

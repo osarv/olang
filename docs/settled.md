@@ -309,6 +309,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   can write it; a mutable global that may be that storage makes only a call that may store into a global (its
   whole-program fact, `D9h NAME`), a destructor run or an atomic store unquiet - no longer every call (2026-11-24,
   wt-fieldborrow: an 8 MB array copied per method call when the program had a `mut` global of the type).
+  A value result is never handed back as a view of what a `mut` reference names (2026-11-24, wt-vecclear: `taken := a.Outs`
+  then `a.Outs.Clear()` returned a view whose elements Clear had ended - typed.ViewWalk.refRoots).
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31: "knowing whether or not a
   function you pass things into mutates what you passed is valuable", and "globals shouldn't be mut unless you say
   so").** `mut T&` writable, `T&` read-only, at every level, shallow. Locals and parameters are always assignable
