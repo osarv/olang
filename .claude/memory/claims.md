@@ -76,3 +76,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Debts (cloud, 2026-11-24): wt-copyonce2 merged (c8f897633); left for OLang Cloud: h.last = f()! (free.redirect stops at try)
 - OLang Debts (cloud, 2026-11-24): wt-fieldborrow merged (485d39816) - D9h in-place read kept when a call can't write a global (DecideWrites)
 - OLang Debts (cloud, 2026-11-24): wt-writesfact merged (7915f3904); session stopped, hand-off in handoff-debts.md
+- OLang Windows (cloud, 2026-11-24): olang wt-windows - x86_64-windows target (mingw-w64, clang+lld, wine), runtime OS layer, Win32 interop
