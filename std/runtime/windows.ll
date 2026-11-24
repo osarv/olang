@@ -583,11 +583,204 @@ fail:
   ret i32 -1
 }
 
-; a program started: not yet on Windows (ENOSYS, 40)
+; errno from the last Win32 call's error, by the classes __olang_err names: not found (2, 3: ENOENT), denied (5: EACCES),
+; exists (80, 183: EEXIST), not a directory (267: ENOTDIR), not empty (145: ENOTEMPTY), anything else EIO
+define void @__olang_win_errno() {
+entry:
+  %e = call i32 @GetLastError()
+  %nf = icmp eq i32 %e, 2
+  %np = icmp eq i32 %e, 3
+  %notfound = or i1 %nf, %np
+  %v1 = select i1 %notfound, i32 2, i32 5
+  %den = icmp eq i32 %e, 5
+  %v2 = select i1 %den, i32 13, i32 %v1
+  %ex1 = icmp eq i32 %e, 80
+  %ex2 = icmp eq i32 %e, 183
+  %exists = or i1 %ex1, %ex2
+  %v3 = select i1 %exists, i32 17, i32 %v2
+  %nd = icmp eq i32 %e, 267
+  %v4 = select i1 %nd, i32 20, i32 %v3
+  %ne = icmp eq i32 %e, 145
+  %v5 = select i1 %ne, i32 41, i32 %v4
+  %p = call ptr @_errno()
+  store i32 %v5, ptr %p
+  ret void
+}
+
+declare i32 @CreateProcessA(ptr, ptr, ptr, ptr, i32, i32, ptr, ptr, ptr, ptr)
+declare ptr @GetStdHandle(i32)
+declare i64 @_get_osfhandle(i32)
+declare i32 @SetHandleInformation(ptr, i32, i32)
+declare ptr @OpenProcess(i32, i32, i32)
+declare i32 @GetExitCodeProcess(ptr, ptr)
+declare i32 @TerminateProcess(ptr, i32)
+declare i32 @GetTempPathA(i32, ptr)
+declare i32 @GetTempFileNameA(ptr, ptr, i32, ptr)
+declare i32 @_open(ptr, i32, ...)
+declare i32 @MoveFileExA(ptr, ptr, i32)
+declare i32 @CreateHardLinkA(ptr, ptr, ptr)
+declare void @ExitProcess(i32) noreturn
+
+; the handle a child is given for one of its standard streams: descriptor fd's, or this process's own (std, a
+; GetStdHandle number) where fd is -1 - made inheritable, as STARTF_USESTDHANDLES needs
+define internal ptr @__olang_win_handle(i32 %fd, i32 %std) {
+entry:
+  %own = icmp slt i32 %fd, 0
+  br i1 %own, label %mine, label %theirs
+mine:
+  %s = call ptr @GetStdHandle(i32 %std)
+  br label %set
+theirs:
+  %o = call i64 @_get_osfhandle(i32 %fd)
+  %op = inttoptr i64 %o to ptr
+  br label %set
+set:
+  %h = phi ptr [ %s, %mine ], [ %op, %theirs ]
+  %r = call i32 @SetHandleInformation(ptr %h, i32 1, i32 1) ; HANDLE_FLAG_INHERIT
+  ret ptr %h
+}
+
+; B12f: a program started by CreateProcess - app the program's path ("" to find the command line's first word as
+; Windows does, through PATH, ".exe" added), cmd its whole command line (std/os quotes each argument as msvcrt's
+; startup takes them apart), in, out and err its standard streams (-1: this process's), dir its working directory (""
+; for this one's). Its process id, or -1 with errno set. The process's handle is kept, so the id names it until it is
+; waited for
+@__olang_win_pid0 = internal constant [1 x i8] zeroinitializer
+define i32 @__olang_win_spawn(ptr %app, ptr %cmd, i32 %in, i32 %out, i32 %err, ptr %dir) {
+entry:
+  %si = alloca [104 x i8], align 8
+  %pi = alloca [24 x i8], align 8
+  call void @llvm.memset.p0.i64(ptr %si, i8 0, i64 104, i1 false)
+  store i32 104, ptr %si
+  %flagsp = getelementptr i8, ptr %si, i64 60
+  store i32 256, ptr %flagsp ; STARTF_USESTDHANDLES
+  %hin = call ptr @__olang_win_handle(i32 %in, i32 -10)
+  %hout = call ptr @__olang_win_handle(i32 %out, i32 -11)
+  %herr = call ptr @__olang_win_handle(i32 %err, i32 -12)
+  %inp = getelementptr i8, ptr %si, i64 80
+  store ptr %hin, ptr %inp
+  %outp = getelementptr i8, ptr %si, i64 88
+  store ptr %hout, ptr %outp
+  %errp = getelementptr i8, ptr %si, i64 96
+  store ptr %herr, ptr %errp
+  %a0 = load i8, ptr %app
+  %noapp = icmp eq i8 %a0, 0
+  %appp = select i1 %noapp, ptr null, ptr %app
+  %d0 = load i8, ptr %dir
+  %nodir = icmp eq i8 %d0, 0
+  %dirp = select i1 %nodir, ptr null, ptr %dir
+  %ok = call i32 @CreateProcessA(ptr %appp, ptr %cmd, ptr null, ptr null, i32 1, i32 0, ptr null, ptr %dirp, ptr %si, ptr %pi)
+  %failed = icmp eq i32 %ok, 0
+  br i1 %failed, label %fail, label %started
+started:
+  %thp = getelementptr i8, ptr %pi, i64 8
+  %th = load ptr, ptr %thp
+  %c = call i32 @CloseHandle(ptr %th)
+  %pidp = getelementptr i8, ptr %pi, i64 16
+  %pid = load i32, ptr %pidp
+  ret i32 %pid
+fail:
+  call void @__olang_win_errno()
+  ret i32 -1
+}
+
+; the program with process id pid waited for (nohang: only asked whether it has ended): pid, with its exit code where
+; a wait status keeps it (bits 8 to 15); 0 while it runs; -1 where there is no such program
+define i32 @__olang_win_wait(i32 %pid, ptr %status, i32 %nohang) {
+entry:
+  %code = alloca i32, align 4
+  %h = call ptr @OpenProcess(i32 1052672, i32 0, i32 %pid) ; SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION
+  %none = icmp eq ptr %h, null
+  br i1 %none, label %fail, label %wait
+wait:
+  %poll = icmp ne i32 %nohang, 0
+  %ms = select i1 %poll, i32 0, i32 -1
+  %w = call i32 @WaitForSingleObject(ptr %h, i32 %ms)
+  %running = icmp eq i32 %w, 258 ; WAIT_TIMEOUT
+  br i1 %running, label %still, label %ended
+still:
+  %c0 = call i32 @CloseHandle(ptr %h)
+  ret i32 0
+ended:
+  %g = call i32 @GetExitCodeProcess(ptr %h, ptr %code)
+  %c1 = call i32 @CloseHandle(ptr %h)
+  %v = load i32, ptr %code
+  %low = and i32 %v, 255
+  %st = shl i32 %low, 8
+  store i32 %st, ptr %status
+  ret i32 %pid
+fail:
+  %p = call ptr @_errno()
+  store i32 10, ptr %p ; ECHILD
+  ret i32 -1
+}
+
+; the program with process id pid ended now, with status 137 - what a shell says of one SIGKILL ended
+define void @__olang_win_kill(i32 %pid) {
+entry:
+  %h = call ptr @OpenProcess(i32 1, i32 0, i32 %pid) ; PROCESS_TERMINATE
+  %none = icmp eq ptr %h, null
+  br i1 %none, label %done, label %kill
+kill:
+  %t = call i32 @TerminateProcess(ptr %h, i32 137)
+  %c = call i32 @CloseHandle(ptr %h)
+  br label %done
+done:
+  ret void
+}
+
+; a file with no name left once closed, read and written through its descriptor - os's memory file: a new file in the
+; temporary directory, opened to be deleted when its last handle closes; -1 with errno set where it cannot be made
+@__olang_win_tmppre = internal constant [4 x i8] c"olg\00"
+define i32 @__olang_win_tempfd() {
+entry:
+  %dir = alloca [272 x i8], align 8
+  %name = alloca [272 x i8], align 8
+  %n = call i32 @GetTempPathA(i32 261, ptr %dir)
+  %nodir = icmp eq i32 %n, 0
+  br i1 %nodir, label %fail, label %make
+make:
+  %u = call i32 @GetTempFileNameA(ptr %dir, ptr @__olang_win_tmppre, i32 0, ptr %name)
+  %nofile = icmp eq i32 %u, 0
+  br i1 %nofile, label %fail, label %open
+open:
+  %fd = call i32 (ptr, i32, ...) @_open(ptr %name, i32 32834) ; _O_RDWR | _O_BINARY | _O_TEMPORARY
+  ret i32 %fd
+fail:
+  call void @__olang_win_errno()
+  ret i32 -1
+}
+
+; rename(2) as POSIX has it, replacing what is at to; and link(2)'s hard link: 0, or -1 with errno set
+define i32 @__olang_win_rename(ptr %from, ptr %to) {
+entry:
+  %ok = call i32 @MoveFileExA(ptr %from, ptr %to, i32 3) ; MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED
+  %failed = icmp eq i32 %ok, 0
+  br i1 %failed, label %fail, label %done
+done:
+  ret i32 0
+fail:
+  call void @__olang_win_errno()
+  ret i32 -1
+}
+
+define i32 @__olang_win_link(ptr %from, ptr %to) {
+entry:
+  %ok = call i32 @CreateHardLinkA(ptr %to, ptr %from, ptr null)
+  %failed = icmp eq i32 %ok, 0
+  br i1 %failed, label %fail, label %done
+done:
+  ret i32 0
+fail:
+  call void @__olang_win_errno()
+  ret i32 -1
+}
+
+; __olang_spawn_as (B19b's measuring, the evaluator's runs): the compiler's own, never on Windows
 define i32 @__olang_spawn_as(ptr %path, ptr %args, i64 %count, i32 %in, i32 %out, i32 %err, ptr %dir) {
 entry:
   %ep = call ptr @_errno()
-  store i32 40, ptr %ep
+  store i32 40, ptr %ep ; ENOSYS
   ret i32 -1
 }
 

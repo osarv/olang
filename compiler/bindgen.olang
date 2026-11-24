@@ -17,7 +17,7 @@
 # static or inline function and one whose symbol is not its name are reached through a wrapper in C the build compiles
 # beside the module (X20).
 #
-# The types, as C's on x86-64 and AArch64 Linux (LP64): "int" I32, "long" I64, "char" I8 (U8 when pointed to - text and
+# The types, as C's on x86-64 and AArch64 Linux (LP64): "int" I32, "long" I64 (I32 on Windows, LLP64: B12f), "char" I8 (U8 when pointed to - text and
 # bytes), "_Bool" Bool, an enum I32, a typedef of a number the number it names. A pointer parameter is an array where it
 # points to numbers ("const T *" an "Array<T>", "T *" a "mut Array<T>&", so text is passed as "t.ToC()"), a reference
 # where it points to a struct ("Db?&", "mut Point?&"), an array of one handle where it points to a pointer
@@ -102,6 +102,7 @@ type Skip error { Why }
 type gen struct(header String&) {
     header
     all := false                                        # an import's translation (X17): every file, every name visible
+    llp64 := false                                      # B12f: Windows' C, whose long is 32 bits wide
     tag String& = ""                                    # an import's: what its wrappers' symbols are named by (X20)
     include String& = ""                                # an import's "#include" line
     typedefs := Map<String&, String&>()
@@ -491,7 +492,7 @@ fn (g mut gen&) numType(word String&, signed I64, longs I64) I64 {
     if word == "__int128": return g.bad("__int128")
     u := signed == 2
     if word == "short" { return g.node(CKind.Num, "U16" if u else "I16") }
-    if longs > 0 { return g.node(CKind.Num, "U64" if u else "I64") }
+    if longs > 1 or (longs == 1 and not g.llp64) { return g.node(CKind.Num, "U64" if u else "I64") }
     return g.node(CKind.Num, "U32" if u else "I32")
 }
 
@@ -1817,6 +1818,9 @@ fn Translation.Translate(include String&, own String&, clang String&, flags Arra
     }
     g := gen($own if own != "" else "")
     g.all = true
+    for f in flags {
+        if f.StartsWith("--target=") and f.Contains("-windows"): g.llp64 = true
+    }
     g.tag = tag
     g.include = include
     # the macros and the files read: the preprocessor's output with its definitions

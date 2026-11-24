@@ -1590,6 +1590,8 @@ fn (fe mut fnEm&) located(sp source.Span, rest String&, column Bool = false) Str
     sym := $"olang_loc_" + $U64(key.Hash()).Format(16) + "_" + $U64(second.Hash()).Format(16)
     if not e.itemAt.Has(sym) {
         def := $"@" + $sym + " = weak_odr constant [" + $(text.Len() + 1) + " x i8] c\"" + $escape(text) + "\\00\"\n"
+        # B12f: COFF has a weak definition two objects may both hold only in a comdat of its own
+        if e.Os == "windows": def = $"$" + $sym + " = comdat any\n" + $def[:def.Len() - 1] + ", comdat\n"
         e.item(sym, HomeLoc, def, $"@" + $sym + " = external constant [0 x i8]\n")
     }
     fe.locSeen.Put($text, $"@" + $sym)

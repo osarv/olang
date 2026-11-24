@@ -182,6 +182,7 @@ type Config struct() {
     MemoryCheck Bool = false    # -check beside -memory: a let-go early freeing does not follow fails the build (B18a)
     Late Bool = false   # -free late: nothing reclaimed before its scope closes - early freeing off, the reviews' oracle (B18b)
     Library Bool = false    # -library: a shared library of the export fns, and its C header (X14)
+    WinInclude String& = "" # B12f: std/runtime/windows, read before mingw-w64's headers - the runtime's pthread.h
     Static Bool = false     # B12e: linked statically - an Android program run here, where bionic's loader is not
     Cell Bool = false       # B22: a session's cell - a shared object the cell worker loads, without the runtime (cells.olang)
     Spill Bool = false      # build memory: the front end writes its objects' text to files (SpillDir), which Objects reads
@@ -319,6 +320,10 @@ fn (c Config&) CFlags() Vec<String&> {
         out.Push($"--target=" + $c.Target.Triple)
         root := target.Sysroot() if c.Target.Clang == "" else "" # B12e: the NDK's clang knows its sysroot
         if root != "": out.Push($"--sysroot=" + $root)
+    }
+    if c.WinInclude != "" {
+        out.Push("-isystem")
+        out.Push(c.WinInclude)
     }
     if c.Target.CpuFlag != "": out.Push(c.Target.CpuFlag)
     out.Push("-D_GNU_SOURCE")
