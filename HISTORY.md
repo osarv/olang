@@ -42874,7 +42874,7 @@ Cases: o8dcback (an export fn given qsort, a place freed elsewhere), o8dcbackglo
 every place keeps), o8drunonstack, o8dcapturevia (tasks sorting through a captured parameter, main's place frees),
 o8dcapturekeeps (the lambda given through the capture lets go of a Log's text: every Log's place keeps).
 
-Measured on the self-build (`build -memory compiler/olang.olang`): 0 of 1004 places free before and after; peak RSS of
+Measured on the self-build (`build -memory compiler/olang.olang`): 0 of 999 places free before, 0 of 1004 after; peak RSS of
 that build 2.69 GB both. The reason moved from C to the tasks: "a task reads a global, and the join's code lets go of it
 while the task may run" (397 rows) - `drive` runs the whole compiler in a join beside spin's ticker task, which reads
 spin's globals (Title, Frames, the atomics), and condition 3 keeps every let-go of a join's code where any task reads a
