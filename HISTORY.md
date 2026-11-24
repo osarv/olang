@@ -43262,3 +43262,10 @@ must. Measured on the self-build (`build -memory compiler/olang.olang`): 0 of 10
 1007 after; peak RSS of that build 2.71 GB before (master's compiler), 2.60 GB after (the compiler built by itself).
 The remaining keeps are views and references kept (126 rows), instances with destructors to run (30) and the rest of
 the -memory report's usual reasons; no let-go keeps for a task's global any more.
+
+Not merged yet: with drive's join freeing, the compiler built by itself crashes in `olang test` of 15 compiler files
+(compiler/needs.olang, lsp, check, ...; -sanitize: "use after scope closed" in Checker.ExprBodyIn). Master's own
+free.olang does the same with drive's join removed by hand (539 places freed), so the bug is an older early-freeing
+one this change exposes, not condition 3's. A bisect over the decisions (each place kept in turn) names one place:
+keeping `Map<I64, mir.ScopeRef>`'s field 2 (`buckets`; lower.olang's `fieldStor` and `regionPar`, let go of by
+Map.Put's first buckets and rehash) alone makes the tests pass. To fix before merging.
