@@ -412,10 +412,17 @@ fn (g mut gen&) bad(why String&) I64 { return g.node(CKind.Bad, why) }
 # the node of a type's text: a typedef name stands for the type it names
 fn (g mut gen&) parseType(t String&, depth I64 = 0) I64 {
     if depth > 32: return g.bad("a typedef that names itself")
-    p := ctp(ctokens(t))
+    p := ctp(ctokens(plainCall(t)))
     r := g.typeName(p, depth)
     if p.pos < p.toks.Len(): return g.bad($"'" + $t + "', which is no C type read here")
     return r
+}
+
+# B12f: a type's text without the calling-convention attributes mingw-w64's headers write on every function (cdecl,
+# stdcall: one convention on x86-64, Win64's, which clang gives a call for the target whatever is written)
+fn plainCall(t String&) String {
+    out := String(t.Replace(" __attribute__((cdecl))", ""))
+    return String(out.Replace(" __attribute__((stdcall))", ""))
 }
 
 # qualifiers that change nothing olang's form of a type says: volatile, restrict, and clang's nullability annotations,

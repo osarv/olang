@@ -22,6 +22,10 @@ FactNames Array<String&> = Array<String&>["STAT_BYTES", "STAT_MODE", "STAT_SIZE"
 # x86-64's uc_mcontext.gregs[REG_RIP], [REG_RBP], [REG_RSP]; AArch64's uc_mcontext.pc, regs[29], sp
 FactX86 Array<I64> = Array<I64>[144, 24, 48, 88, 96, 19, 80, 56, 200, 152, 136, 2, 168, 120, 160]
 FactArm Array<I64> = Array<I64>[128, 16, 48, 88, 96, 19, 80, 64, 312, 152, 136, 1, 440, 416, 432]
+# B12f: x86-64 Windows (mingw-w64 over msvcrt) - the glibc row where the runtime's Windows part (windows.ll) stands in
+# for the structure (stat, posix_spawn's actions, sigaction, pthread_attr_t), else mingw's own: struct dirent's d_name at
+# 8, msvcrt's jmp_buf of 256 bytes, libffi's FFI_WIN64, and a CONTEXT's Rip, Rbp and Rsp
+FactWin Array<I64> = Array<I64>[144, 24, 48, 88, 96, 8, 80, 56, 256, 152, 136, 1, 248, 160, 152]
 
 # a runtime file that is not there or cannot be read as a runtime file: said already
 type Bad error { Unreadable }
@@ -35,7 +39,9 @@ fn archRow(arch String&) I64 {
 
 fn fact(name String&, row I64) I64 ? {
     for i in range FactNames.Len() {
-        if FactNames[i] == name { return FactX86[i] if row == 0 else FactArm[i] }
+        if FactNames[i] != name: continue
+        if row == 2: return FactWin[i]
+        return FactX86[i] if row == 0 else FactArm[i]
     }
     error Bad.Unreadable
 }
@@ -63,14 +69,14 @@ fn directive(line String&) I64 {
 # the runtime file named file (in std/runtime), filled in for architecture arch, with the scope sanitizer or not, and
 # with the profiler's hooks ("; @prof" lines) or not (B20), and with a benchmark build's counting ("; @bench" lines,
 # B19b) or not
-fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = false) String ? Bad {
+fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = false, system String& = "linux") String ? Bad {
     path := $load.StdDir() + "/runtime/" + $file
     bytes := try os.ReadFile(path) catch os.Error {
         try io.PutErrLn($"olang: " + $path + ": cannot open this file") catch io.Error { }
         error Bad.Unreadable
     }
     text := String(bytes)
-    row := archRow(arch)
+    row := 2 if system == "windows" else archRow(arch)
     out := StringBuilder()
     n I64 = 0
     inIf := false
@@ -147,11 +153,11 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = fa
 
 # the runtime's own part (runtime.ll, san.ll under -sanitize, prof.ll in a profile build - B20) filled in, or the
 # dynamic call's (dyncall.ll)
-fn Text(arch String&, san Bool, dyncall Bool, prof Bool = false, bench Bool = false) String ? Bad {
-    if dyncall: return try Fill("dyncall.ll", arch, san, prof, bench)
-    text := try Fill("runtime.ll", arch, san, prof, bench)
-    if san: text = $text + "\n" + $(try Fill("san.ll", arch, san, prof, bench))
-    if prof: text = $text + "\n" + $(try Fill("prof.ll", arch, san, prof, bench))
+fn Text(arch String&, san Bool, dyncall Bool, prof Bool = false, bench Bool = false, system String& = "linux") String ? Bad {
+    if dyncall: return try Fill("dyncall.ll", arch, san, prof, bench, system)
+    text := try Fill("runtime.ll", arch, san, prof, bench, system)
+    if san: text = $text + "\n" + $(try Fill("san.ll", arch, san, prof, bench, system))
+    if prof: text = $text + "\n" + $(try Fill("prof.ll", arch, san, prof, bench, system))
     return text
 }
 
@@ -199,8 +205,9 @@ fn WithAttributes(ir String&, attrs String&, race Bool) String {
 # runtime's object
 fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false, bench Bool = false, tile Bool = false
     system String& = "linux") String ? Bad {
-    body := try Text(arch, san, false, prof, bench)
+    body := try Text(arch, san, false, prof, bench, system)
     if system == "android": body = Bionic(body)
+    if system == "windows": body = try Windows(body, arch)
     # tile.AddDot: the runtime's AMX product runs where the target has it (target.Target's TileDot), declined elsewhere -
     # a constant here rather than a condition of Fill's, which the seed's own filling would not know
     if tile {
@@ -252,6 +259,58 @@ BionicShims := "\n; B12e: bionic's differences from glibc, as runtime.Bionic say
     "  %of = load i32, ptr %bo\n  %ohp = getelementptr i8, ptr %bo, i64 8\n  %oh = load ptr, ptr %ohp\n" + $
     "  store ptr %oh, ptr %old\n  %ofp = getelementptr i8, ptr %old, i64 136\n  store i32 %of, ptr %ofp\n  br label %done\n" + $
     "done:\n  ret i32 %r\n}\n"
+
+# B12f: the runtime filled in for x86-64 made the runtime for Windows: what std/runtime/windows.ll defines - the POSIX
+# calls the runtime makes (mmap and the rest over VirtualAlloc, pthread's threads, locks and conditions over Win32's
+# threads, SRW locks and condition variables, sysconf, getrlimit, ...) and the runtime's own functions that are the
+# operating system's business (a file's facts, a process started, the error classes) - replaces the definition and the
+# declarations of the same name here, and msvcrt's spellings replace glibc's: errno through _errno, stderr and stdout
+# through __acrt_iob_func, setjmp as _setjmp with no frame (a jump restoring registers alone, as glibc's), mingw-w64's
+# C99 printf family and strtod (msvcrt's write three exponent digits), aligned_alloc's chunks given back by
+# _aligned_free. A transformation, as Bionic is, so the seed's own filling knows nothing of it
+fn Windows(text String&, arch String&) String ? Bad {
+    shims := try Fill("windows.ll", arch, false, system = "windows")
+    defined Map<String&, Bool>
+    for line in shims.Lines() {
+        if line.StartsWith("define "): defined.Put($symbolOf(line), true)
+    }
+    b := StringBuilder()
+    skipping := false
+    for line in text.Lines() {
+        if skipping {
+            if line == "}": skipping = false
+            continue
+        }
+        if line.StartsWith("define ") and defined.Has(symbolOf(line)) {
+            skipping = true
+            continue
+        }
+        if line.StartsWith("declare ") and defined.Has(symbolOf(line)): continue
+        b.Push(line)
+        b.PushChar('\n')
+    }
+    out := b.ToString()
+    for i in range WinFrom.Len(): out = String(out.Replace(WinFrom[i], WinTo[i]))
+    return $out + "\n; B12f: the runtime's Windows part, as runtime.Windows says\n" + $shims
+}
+
+# the symbol a define or declare line names: what follows its first '@', to the '('
+fn symbolOf(line String&) String {
+    at := try line.FindByte('@') catch default -1
+    if at < 0: return ""
+    rest := line[at + 1:]
+    open := try rest.FindByte('(') catch default rest.Len()
+    return $rest[:open]
+}
+
+# B12f: glibc's spellings in the runtime and msvcrt's for Windows, in order
+WinFrom := Array<String&>["declare ptr @__errno_location()\n", "call ptr @__errno_location()", "@stderr = external global ptr\n"
+    "@stdout = external global ptr\n", "load ptr, ptr @stderr", "load ptr, ptr @stdout", "declare i32 @setjmp(ptr) returns_twice"
+    "call i32 @setjmp(ptr %jb)", "@snprintf(", "@printf(", "@fprintf(", "@strtod(", "release:\n  call void @free(ptr %c)"
+    "@execv("]
+WinTo := Array<String&>["", "call ptr @_errno()", "", "", "call ptr @__acrt_iob_func(i32 2)", "call ptr @__acrt_iob_func(i32 1)"
+    "declare i32 @_setjmp(ptr, ptr) returns_twice", "call i32 @_setjmp(ptr %jb, ptr null)", "@__mingw_snprintf("
+    "@__mingw_printf(", "@__mingw_fprintf(", "@__mingw_strtod(", "release:\n  call void @_aligned_free(ptr %c)", "@_execv("]
 
 # the end of the type starting at at in line - a bracketed or braced one whole, else one word - in a global's line
 fn typeEnd(line String&, at I64) I64 {

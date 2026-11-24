@@ -299,6 +299,12 @@ fn (c Config&) modeSuffix() String {
     return $(".race" if c.Race else "") + $(".debug" if c.Debug else "") + $(".quick" if c.Quick else "") + $(".san" if c.San else "") + $(".lib" if c.Library else "") + $(".cell" if c.Cell else "") + $(".fuzz" if c.Fuzz != "" else "") + $(".prof" if c.Profile else "") + $(".listing" if c.Listing else "") + $(".bench" if c.Bench else "") + $(".checked" if c.Checked else "") + $(".late" if c.Late else "")
 }
 
+# B12f: a program's path as the target names programs - with ".exe" for Windows, which the linker would add anyway
+fn (c Config&) exe(path String&) String {
+    if c.Target.Os != "windows" or path.EndsWith(".exe"): return $path
+    return $path + ".exe"
+}
+
 # what every function of the build carries (B12): the target's CPU and features, and in a profile build (B20) a frame
 # pointer kept in every function - the sampler's walk up the stack follows them
 fn (c Config&) FnAttrs() String {
@@ -885,7 +891,8 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     for o in objs: args.Push(o)
     for x in links { args.Push(x) }      # X9: after the objects, so a static library's members are found
     for x in c.SystemLibs(): args.Push(x)
-    if c.Static and exports == null: args.Push("-static")
+    if (c.Static or c.Target.Os == "windows") and exports == null: args.Push("-static")
+    if c.Target.Os == "windows": args.Push("-fuse-ld=lld")  # B12f: LLVM's linker, the one that links LTO objects for COFF
     if c.Profile {
         args.Push("-lrt")                   # B20: the sampler's timers, in librt before glibc 2.34
         if not c.Quick and not c.Debug: args.Push("-Wl,-plugin-opt=-enable-shrink-wrap=false")
@@ -913,6 +920,8 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
 # dlsym for the least stack a thread may have); bionic has no libpthread, its threads are in libc (B12e)
 fn (c Config&) SystemLibs() Array<String&> {
     if c.Target.Os == "android": return Array<String&>["-lm", "-ldl"]
+    # B12f: Windows' threads, locks and the rest are the runtime's own over kernel32 (runtime.Windows), sockets ws2_32's
+    if c.Target.Os == "windows": return Array<String&>["-lws2_32"]
     return Array<String&>["-lm", "-lpthread", "-ldl"]
 }
 
@@ -1006,7 +1015,7 @@ fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.D
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
     Phase("compile")
     if c.Library: return c.library(prog, objs, file, d)
-    bin := $c.Output if c.Output != "" else $c.Dir + "/" + $Readable(prog.rootIdentity()) + $c.modeSuffix()
+    bin := c.exe($c.Output if c.Output != "" else $c.Dir + "/" + $Readable(prog.rootIdentity()) + $c.modeSuffix())
     try c.Link(objs, bin, prog.Dyncall != "", prog.Links) catch Failed {
         d.Fatal(diag.Where.Nowhere, msgs.LinkFailed(bin))
         return finish(d)
@@ -1114,7 +1123,7 @@ fn (c mut Config&) testBinary<F Frontend>(fe mut F&, file String&, d mut diag.Di
     try c.ensureDir(d) catch Failed { return finish(d), "" }
     objs := try c.Objects(prog, d) catch Failed { return finish(d), "" }
     Phase("compile")
-    bin := $c.Dir + "/" + $Readable(prog.rootIdentity()) + "_test" + $c.modeSuffix()
+    bin := c.exe($c.Dir + "/" + $Readable(prog.rootIdentity()) + "_test" + $c.modeSuffix())
     try c.Link(objs, bin, prog.Dyncall != "", prog.Links) catch Failed {
         sayln(c.paint("31", $file + ": native compilation failed"))
         return 1, ""
@@ -1293,7 +1302,7 @@ fn (c Config&) fuzzRun(cmd mut Vec<String&>&, prog Program&) I32 {
 # reported where there is none
 fn (c Config&) runner(d mut diag.Diagnostics&) Array<String&> ? Failed {
     return try c.Target.Runner() catch target.Bad {
-        d.Fatal(diag.Where.Nowhere, msgs.TargetNoEmulator(c.Target.Arch))
+        d.Fatal(diag.Where.Nowhere, msgs.TargetNoEmulator(c.Target.Os if c.Target.Os == "windows" else c.Target.Arch))
         error Failed.Reported
     }
 }
