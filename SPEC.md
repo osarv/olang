@@ -2545,8 +2545,9 @@ a parameter's referent lives is its own scope variable (§8 O4b); what the body 
 
 **D9h (a value result handed over).** A value result is the caller's own: it may write it and what it holds. Where a
 function's value result holding storage of its own by value - an array (text included), a struct or an enum holding
-such arrays as parts (T7a), a constructor's instance - is, or holds in its parts, views of what its arguments reach,
-the views may be handed back with no copy and the caller copies them where it keeps them - unless it reads the result
+such arrays as parts (T7a), a constructor's instance - is, or holds in its parts, views of what its arguments reach
+(never of what a `mut` reference names: the body may change it before it hands the view back - `taken := a.xs` then
+`a.xs.Clear()` - so that copy is made where it is taken), the views may be handed back with no copy and the caller copies them where it keeps them - unless it reads the result
 where it stands (an argument for a read-only parameter of a call whose result holds no reference, or of a call itself
 read where it stands - `v[i][2][0]` - a text piece, a discarded value) and nothing the statement does
 can change what it views - no call in it given a writable reference, a value or a read-only reference holding one at any

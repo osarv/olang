@@ -2617,7 +2617,7 @@ e12d25f16febcea4 805f9ab078181038 compiler/tools/nesting.olang
 67f2c232d9fc22f4 c15bde3121236ac1 compiler/tools/seed.olang
 d60c568945ef50db 53ecc35e37b0bcfa compiler/tools/tokdiff.olang
 b5d5a7ffc3c55aed c3739971a0322646 compiler/tools/toolkit.olang
-b7b320c644453b76 3257eba13b858d22 compiler/typed.olang
+b5f4f7e4f139dcb9 059859cab45d5067 compiler/typed.olang
 aa063e5441d4976f 1431c7939691891e compiler/types.olang
 f35d4067a83aca30 3112ac7c03132137 compiler/unparse.olang
 5db2f76d775b6667 111548778fdd83b3 compiler/views.olang
@@ -2796,7 +2796,7 @@ c3154015ef1cc50e 1477cf615d58d5df tests/geom/measure.olang
 f4210a439844ee95 81160d5e9014daf4 tests/geom/rect.olang
 6f377ad68087b253 5ba924bc34b786fd tests/globalstart.olang
 4629a1d79f807e5d bcb4b3903615970f tests/globalview.olang
-7a5c2bc482d2ad87 5ab260a743ef6a5f tests/handover.olang
+e5ae6baf96c4a74d dd1c67782dd3805a tests/handover.olang
 258685af1bea4cb8 534cfcc35024ca54 tests/handoverglobal.olang
 dde55a3912452137 68d4fdffc6033ba8 tests/heldexact.olang
 b92b9f9009878c79 41432e584c1a2460 tests/heldfields.olang

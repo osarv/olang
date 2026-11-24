@@ -140,3 +140,43 @@ test joinedFired "copies a view where a closure an argument holds may write what
     assert joinedFired(text, s) == "abcd!"
     assert text == "[Xbcd]"
 }
+
+# a view of what a writable reference names is never handed back in place of the copy: the body may change it after the
+# copy is taken (Clear ending the elements, their text let go), so the copy is made where it is taken
+type outKind enum {
+    A
+    B
+}
+
+type out struct(kind outKind) {
+    Kind outKind = kind
+    Text String = ""
+}
+
+type outs struct() {
+    Outs Vec<out> = Vec<out>()
+}
+
+fn (a mut outs&) Take() Vec<out> {
+    taken := a.Outs
+    a.Outs.Clear()
+    return taken
+}
+
+fn takeKeeps() Bool {
+    a := outs()
+    a.Outs.Push(out(outKind.B))
+    v := a.Take()
+    return v.Len() == 1 and v[0].Kind == outKind.B
+}
+
+test Take "keeps the copy of a field the body clears before handing it back" {
+    a := outs()
+    a.Outs.Push(out(outKind.B))
+    a.Outs[0].Text = "kept"
+    v := a.Take()
+    assert v.Len() == 1 and a.Outs.Len() == 0
+    assert v[0].Kind == outKind.B and v[0].Text == "kept"
+}
+
+assert takeKeeps()
