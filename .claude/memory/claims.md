@@ -65,3 +65,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Debts (cloud, 2026-11-24): olang wt-copyonce merged (ad0147dbe) - cond arms and try-wrapped calls built where the reference goes (-54 MB lower+emit)
 - OLang Debts (cloud, 2026-11-24): olang wt-slicehoist - a slice's bounds check in a loop (oann pair-dot finding)
 - OLang Debts (cloud, 2026-11-24): olang wt-slicehoist closed (01587e657) - O44 already hoists; no codegen change, finding in HISTORY. wt-evaltriage running (canon/cshare/std/time eval runs, pushtexts)
+- OLang Debts (cloud, 2026-11-24): wt-evaltriage closed (5255306c8) - none of the three findings reproduces on master; queue empty
