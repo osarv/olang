@@ -428,6 +428,7 @@
 | ok - texts: builds text where the result keeps it
 | ok - secondValues: lets go of a local's old value and copies its new one into an element
 | ok - labeledValues: copies a struct holding a Vec of text into an element each turn and reads elements where they stand
+| ok - twoOwners: copies a constructor's instance of two Maps into an element each turn
 | ok - caseLocals: gives locals an enum case holding a parameter's reference
 === test tests/keptfacts.olang
 | status 0
