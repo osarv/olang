@@ -1,0 +1,88 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4, wt-origins): beside heldrefs.olang, the shapes of a struct held in place whose reference
+# field may view a leaf it holds by value - origins per path (free.refsOf) must still keep them: the new value's
+# reference given the old value's own leaf, a reference field set to its own leaf, and one set through a writable
+# reference lent to a call (pathsKnown). Beside them a reference local given an element, which holds lowering's copy of
+# it (its origin that copy, D9h): no view of the leaf, freed. Built, -free late, -sanitize and the evaluator agree
+N I64 = 2000
+
+type K struct(a Vec<String>, b Vec<I64>, r String&) {
+    a
+    b
+    r
+}
+
+type KO struct(inner K, n I64) {
+    inner
+    n
+}
+
+fn mkA(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push(("s" + $(i + k)).PadEnd(200, '.'))
+    return v
+}
+
+fn mkB(i I64) Vec<I64> {
+    v Vec<I64>
+    for k in range 40: v.Push(i * k)
+    return v
+}
+
+# the new value's reference views the old value's own leaf: kept
+fn viewOld(n I64, base String&) I64 {
+    o := KO(K(mkA(0), mkB(0), base), 0)
+    t := 0
+    for i in range n {
+        q := K(mkA(i), mkB(i), o.inner.a[1])
+        o.inner = q
+        t += o.inner.r.Len() + I64(o.inner.r[1]) + o.inner.a[0].Len()
+    }
+    return t
+}
+
+# through a reference local given an element: lowering's copy of it, no view of the leaf - freed
+fn viewLocal(n I64, base String&) I64 {
+    o := KO(K(mkA(0), mkB(0), base), 0)
+    t := 0
+    for i in range n {
+        rr String& = o.inner.a[2]
+        q := K(mkA(i), mkB(i), rr)
+        o.inner = q
+        t += I64(o.inner.r[2]) + o.inner.b[3]
+    }
+    return t
+}
+
+# a reference field set to its own leaf, then the leaf given another value: kept
+fn direct(n I64, base String&) I64 {
+    o := KO(K(mkA(0), mkB(0), base), 0)
+    t := 0
+    for i in range n {
+        o.inner.r = o.inner.a[0]
+        t += I64(o.inner.r[1])
+        o.inner.a = mkA(i)
+        t += o.inner.r.Len()
+    }
+    return t
+}
+
+fn setSelf(o mut KO&) { o.inner.r = o.inner.a[1] }
+
+# the same through a writable reference lent to a call: kept
+fn lent(n I64, base String&) I64 {
+    o := KO(K(mkA(0), mkB(0), base), 0)
+    t := 0
+    for i in range n {
+        setSelf(o)
+        o.inner.a = mkA(i)
+        t += I64(o.inner.r[1]) + o.inner.r.Len()
+    }
+    return t
+}
+
+fn main() {
+    base := "the base text"
+    io.PutLn($viewOld(N, base) + " " + $viewLocal(N, base) + " " + $direct(N, base) + " " + $lent(N, base))!
+}
