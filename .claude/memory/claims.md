@@ -81,4 +81,5 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Cloud (2026-11-25): olang wt-taskdefault merged (fff70dac1) - a task's catch default built in the target's stand-in, not the program's scope (freeing.md 2.4 open)
 - OLang Cloud (2026-11-25): olang wt-fnvalbuild merged (a318c63bb) - a lambda passed as a function value building through a captured helper's field takes O29's lookup (freeing.md 2.4)
 - OLang Cloud (2026-11-25): olang wt-secondval merged (d04c93943) - a struct holding text given a second value read freed storage (free.PartLeaf); Vec<String> already flat
-- OLang Cloud (2026-11-25): olang wt-checkfalse - -memory -check passes falsely for a struct holding a Vec<String> given a second value (~36 B a turn); make it honest, then close the keep
+- OLang Cloud (2026-11-25): olang wt-checkfalse merged (e182d9887) - -memory -check passes falsely for a struct holding a Vec<String> given a second value (~36 B a turn); make it honest, then close the keep
+- OLang Cloud (2026-11-25): olang wt-review1125 (review of the day's relaxations: no use-after-free; probes in review/batch1125) and wt-twoowners - -memory -check passes falsely for a constructor's instance holding two Maps stored into an element (viewCtor's RMade)
