@@ -542,6 +542,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # the local - found once a body, for the moves lowering may make (D9i)
     lastCopied Map<pair.Pair<I64, I64>, I64>
     lastSeen Map<I64, Bool>
+    ctorViewed Map<pair.Pair<I64, I64>, Bool> # ... a copy a constructor's instance views (D9h), by site: never lifted
     wLocals Map<pair.Pair<I64, I64>, Bool>  # ... a local whose uses need it to outlive two scope variables no obligation orders
     partLifts Map<pair.Pair<I64, I64>, Bool> # ... lifted because a part of it - a field, an element - is kept (counted, 2.6)
     partFlow Bool = false                   # the proposal being made is for a part of the local
@@ -5481,6 +5482,7 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
                 s.carried(x, xs)
                 s.returnedArrays(x, xs)
                 s.dropCopied(x, xs)
+                s.dropViewed(x, xs)
                 s.flAddDirect(xs)
                 w := wholeValueRead(x)
                 for k in xs {
@@ -5536,6 +5538,7 @@ fn (s mut Scoper&) flInto(r I64, ty types.TypeId, x typed.Expr?&, outside Bool, 
         if r >= 0 and flHas(s.fl, r) and not (whole and s.plainCopyOf(x, ty)) {
             xs Vec<I64>
             s.carried(x, xs)
+            s.dropViewed(x, xs)
             for k in xs {
                 s.flAdd(k)
                 if not flHas(s.flOther, k): s.flOther.Push(k)
@@ -5560,6 +5563,36 @@ fn (s mut Scoper&) dropCopied(x typed.Expr&, xs mut Vec<I64>&) {
     if not s.copiedChoice(x): return
     reads Vec<I64>
     choiceReads(s.unAway(x), reads)
+    out Vec<I64>
+    for k in xs {
+        if k not in reads: out.Push(k)
+    }
+    xs.Clear()
+    for k in out: xs.Push(k)
+}
+
+# a constructor call whose instance views copies of value locals (D9h), returned or given to what flows where the result
+# goes (`return S(m)`, `s := S(m); return s`): lowering copies the instance where it is kept (free.retCtorOf and
+# letCtorOf, early freeing's copy), never the locals - they stay where they are declared, only read for that copy
+# (lower.keptView), not moved where the result goes for nothing (gap 17)
+fn (s mut Scoper&) dropViewed(x typed.Expr&, xs mut Vec<I64>&) {
+    c := typed.Call.Of(s.unAway(x))
+    if c == null: return
+    b := s.bodyOf(c.Target)
+    if b < 0 or s.Bodies[b].Of != typed.BodyOf.Ctor or not s.viewCtor(s.unAway(x)): return
+    views := match s.Bodies[b].Of {
+        case typed.BodyOf.Ctor(t, _): try s.P.L.CtorViews.Get(I64(t)) catch default I64(0)
+        case _: 0
+    }
+    reads Vec<I64>
+    for k in range c.Args.Len().Min(typed.ViewBits) {
+        if (views & (I64(1) << k)) == 0: continue
+        a := s.unAway(c.Args[k])
+        if a != typed.Expr.Make or a.m.Kind != typed.MakeKind.Copy or a.m.Items.Len() != 1: continue
+        w := wholeValueRead(a.m.Items[0])
+        if w >= 0: reads.Push(w)
+    }
+    if reads.Len() == 0: return
     out Vec<I64>
     for k in xs {
         if k not in reads: out.Push(k)
@@ -10417,9 +10450,29 @@ fn (s mut Scoper&) liftCopied(m typed.Make&, d Term) {
     if not d.Runs() or m.Site < typed.SiteId(0): return
     l := s.lastCopy(I64(m.Site))
     if l < 0 or not s.liftable(l) or s.isRef(s.B!.Locals[l].Ty): return
+    # (nor one a constructor's instance views (D9h): early freeing copies that instance where it is kept, the local's
+    # storage then built there for nothing - kept until that scope closes, gap 17's `S(m)`)
+    if s.ctorViewed.Has(pair.Pair<I64, I64>(s.Id, I64(m.Site))): return
     own := s.blockTerm(s.B!.Locals[l].In)
     if s.joinTerm(own, d) == own: return
     s.liftLocal(l, d, true)
+}
+
+# item 17: the copies call c of body b hands a constructor whose instance views them (D9h, CtorViews' bits), noted by site
+fn (s mut Scoper&) viewedCopies(c typed.Call&, b I64) {
+    if b < 0: return
+    views := match s.Bodies[b].Of {
+        case typed.BodyOf.Ctor(t, twin): (try s.P.L.CtorViews.Get(I64(t)) catch default I64(0)) if twin == types.ListId(0) else 0
+        case _: 0
+    }
+    if views <= 0: return
+    for k in range c.Args.Len() {
+        if k >= typed.ViewBits or (views & (I64(1) << k)) == 0: continue
+        match s.unAway(c.Args[k]) {
+            case typed.Expr.Make(_, _, m) { if m.Kind == typed.MakeKind.Copy and m.Site >= typed.SiteId(0): s.ctorViewed.Put(pair.Pair<I64, I64>(s.Id, I64(m.Site)), true) }
+            case _ { }
+        }
+    }
 }
 
 # the local copy site is a whole copy of at its last mention, plainly named (typed.LastCopies, LocalUses); -1 for none
@@ -10972,6 +11025,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # T22c: a call whose arguments' functions are followed into its callee is judged as a call of the twin they ask for -
     # its summary read in the callee's place while the call is judged
     b := s.bodyOf(c.Target)
+    if s.liftGather: s.viewedCopies(c, b)
     t := -1
     if b >= 0 and not s.inSpawn {
         # (T22d: asked for already where an instance argument's twin was keyed by it)

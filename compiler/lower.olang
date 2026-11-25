@@ -5634,6 +5634,7 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     # (bulk review 7, F3) the hand-ons among the arguments: each holder lets go once the call is made, after every
     # argument - a later one leaving (an error passed on, a clause's return) leaves the value with its holder
     gone mut Vec<typed.Stmt&>& = Vec<typed.Stmt&>()
+    kept := not task and ln.keptCtor(c, t.Result(ty))
     for i in range c.Args.Len() {
         a := ln.handedOver(c.Args[i], gone)
         # (a by-value parameter only where its callee writes nothing of it - one it writes is its own copy, never the
@@ -5648,6 +5649,7 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
             ln.readHere(a)
         }
         if not task: ln.argView(a, body, i)
+        if kept and i < typed.ViewBits and (ln.L.ViewsOf(typed.BodyId(I32(body))) & (I64(1) << i)) != 0: ln.keptView(c, body, i, a)
         ro := i < ps.Len() and t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) == 0
         v := ln.stackArg(a, body, i) if reads and plain and ro else mir.Operand.None
         wasCopy := ln.taskCopy
@@ -5759,6 +5761,44 @@ fn (ln mut lowering&) argView(a typed.Expr&, body I64, i I64) {
             ln.L.ArgViews++
         }
         case _ { }
+    }
+}
+
+# O8f, gap 17: whether constructor call c's instance, of type ty, views what it is given and is copied right where the
+# call returns (D9h: not read where it stands, not fresh) - the copies it is given are then only read until that copy is
+# made (keptView)
+fn (ln mut lowering&) keptCtor(c typed.Call&, ty types.TypeId) Bool {
+    id := typed.CalleeBody(c)
+    if id < 0 or ln.L.Bodies[id].Of != typed.BodyOf.Ctor or not ln.viewCall(c, ty) or ln.T.RunsCopy(ty): return false
+    if ln.vlSites.Has(I64(c.Site)) or (ln.reads.Has(I64(c.Site)) and ln.stableViews(c)): return false
+    return not ln.freshCtor(c)
+}
+
+# a by-value argument's own copy (a MakeKind.Copy) of a value local that constructor call c's instance views, the
+# instance copied as the call returns (keptCtor): left out where nothing could change the local before that copy - the
+# constructor writes nothing of its parameter i (D9a) and every other argument only reads (quietArg) - since the copy of
+# the instance copies the storage it views, the argument's copy was built only to be copied again (gap 17's `S(m)`, its
+# first copy kept where the instance would have lived)
+fn (ln mut lowering&) keptView(c typed.Call&, body I64, i I64, a typed.Expr&) {
+    if a != typed.Expr.Make or ln.L.writesParam(body, i): return
+    m := a.m
+    if m.Kind != typed.MakeKind.Copy or m.Items.Len() != 1 or m.Site < typed.SiteId(0) or ln.T.RunsCopy(a.Type()): return
+    l := valueRootLocal(m.Items[0])
+    if l < 0 or m.Items[0] != typed.Expr.Read or ln.T.IsRef(ln.B.Locals[l].Ty): return
+    for j in range c.Args.Len() {
+        if j != i and not quietArg(c.Args[j]): return
+    }
+    ln.noCopy.Put(I64(m.Site), true)
+}
+
+# whether evaluating argument x changes nothing: a constant, a plain place's read (plainPlace), or a copy of one
+fn quietArg(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Read(_, _, p, _): plainPlace(p)
+        case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Copy and m.Items.Len() == 1 and quietArg(m.Items[0])
+        case typed.Expr.Away(_, _, y): quietArg(y)
+        case _: false
     }
 }
 
