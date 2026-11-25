@@ -4076,7 +4076,10 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
     # frees a Map entry's key text with its value: each is made for its place, the slots' a value null is as good as)
     slotted := one and f.slotSplit(w.Id, I64(c.Site), x.Type(), lvs, arrs)
     for k in arrs {
-        if slotted {
+        # (O8f, 2.4: or a part place - a struct's own text field beside its owner, `Rec{name String, tags Vec<String>}` -
+        # whose let-go releases only an array built in a part region, any other with what it was built in: a copy is
+        # no reason to keep, as untracked says for any copy)
+        if slotted or f.PartPlace(k) {
             f.stores.Push(store(k, w.Id, w.body().File, sp, SOk, -1, -1, x, null))
             continue
         }
@@ -4658,7 +4661,13 @@ fn (w mut walker&) reachTo(p typed.Lvalue&) Vec<I64> {
 fn (w mut walker&) readOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     f := w.F
     if p == typed.Lvalue.Local and I64(p.id) != w.copyRead and w.heldCopy.Has(I64(p.id)) { w.untracked(ty, p.Span(), "a copy of a value holding it", true) }
+    # (O8f, 2.4: a value owning nothing read out of a view call's temporary, `v[i].n` - the temporary only read where it
+    # stands, or copied into the statement's innermost scope, lower.readOut: no value a store gives a place)
+    wasRead := w.readArg
+    rc := readPlaceCall(p) if p != typed.Lvalue.Local and p != typed.Lvalue.Temp and (w.T().IsRef(ty) or not typed.HoldsOwned(w.T(), ty)) else -1
+    if rc >= 0: w.readArg = rc
     o := w.reach(p)
+    w.readArg = wasRead
     w.elemRead(p, o)
     k := f.placeOfPlace(p)
     if k >= 0 {
@@ -4945,9 +4954,16 @@ fn (w mut walker&) fnValOf(sp source.Span, fv typed.FnVal&) Vec<I64> {
 # exprOf's text joined: each rendering walked, and the storage made
 fn (w mut walker&) textOf(tx typed.Text&) Vec<I64> {
     out Vec<I64>
+    # (O8f, 2.4: a rendered piece only read where it stands - its view call's value, `$v[i].name`, read as it is or
+    # copied into the statement's innermost scope, lower.text's readHere: no value a store gives a place)
+    wasRead := w.readArg
     for pc in tx.Pieces {
-        if pc == typed.Piece.Render: w.expr(pc.x)
+        if pc != typed.Piece.Render: continue
+        rc := readCall(pc.x)
+        w.readArg = rc if rc >= 0 else wasRead
+        w.expr(pc.x)
     }
+    w.readArg = wasRead
     addTo(out, orig(ONew, I64(tx.Site)))
     return out
 }
@@ -5855,10 +5871,11 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wh
     # a view of the place itself stored back into it is said as condition 1 says it, below: the new value lives in the
     # old one's storage
     # (O8f: a part place's value held by value in what is stored - a Vec's buffer in a Vec stored whole, through no
-    # reference - goes with it: still that place's value, no reference into it stored elsewhere)
+    # reference - goes with it: still that place's value, no reference into it stored elsewhere; so does an owner
+    # leaf's, a struct's Vec field in the struct stored whole - 2.4's `q := Rec.Make(0)`, its leaves the callee's copy's)
     ownParts := Vec<I64>() if f.refsBeyondParts(x.Type()) else f.heldPlaces(x.Type())
     for y in o {
-        if okind(y) == OPl and f.PartPlace(oval(y)) and has(ownParts, oval(y)): continue
+        if okind(y) == OPl and (f.PartPlace(oval(y)) or f.IsOwner(oval(y))) and has(ownParts, oval(y)): continue
         if okind(y) == OPl and w.Final and oval(y) != w.storeInside and oval(y) != k {
             f.keep(oval(y), RStore, w.body().File, sp, $"a reference into it is stored here, in '" + $where + "'; store a copy, '$(...)'" if where != "" else "a reference into it is stored here; store a copy, '$(...)'")
         }
@@ -6241,14 +6258,15 @@ fn (w mut walker&) views() {
         usesOf.Push(Vec<I64>())
         # (O8f: a local holding by value, through no reference, an array of a part place - a Vec local's buffer - holds
         # its own: a copy, or a value moved there, never another value's storage, so no other value's let-go of the
-        # place reaches it - and its own growth gives it the new storage)
+        # place reaches it - and its own growth gives it the new storage; so for an owner leaf it holds by value, a
+        # struct local's Vec field)
         ty := body.Locals[l].Ty if l < body.Locals.Len() else types.UnknownT
         ownParts := Vec<I64>() if ty == types.UnknownT or f.refsBeyondParts(ty) else f.heldPlaces(ty)
         # (gap 22: and a value local holding a value moved out of a place holds that value's storage alone - the slot it
         # left is empty - so no other value's let-go of the place reaches it: `y := vv.TakeAt(0)!` then `vv.Pop()!`)
         moved := ty != types.UnknownT and not f.T().IsRef(ty) and body.Locals[l].Kind == typed.LocalKind.Var
         for y in w.origins[l] {
-            if okind(y) == OPl and f.PartPlace(oval(y)) and has(ownParts, oval(y)): continue
+            if okind(y) == OPl and (f.PartPlace(oval(y)) or f.IsOwner(oval(y))) and has(ownParts, oval(y)): continue
             if okind(y) == OMov and moved: continue
             if okind(y) == OPl or okind(y) == OMov: viewed[l].Push(oval(y))
         }

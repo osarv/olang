@@ -4,12 +4,29 @@ import "std/io"
 # Vec<String> declared outside the loop or given its second value on a condition, and a struct holding text built by
 # its constructor in the callee, handed back directly or through a local. Each is an owner local of the free pass: the
 # assignment lets go of its old value, the store copies it into the element, whose let-go frees the copy. Before, the
-# struct's text was built in a part region its callee's settle closed (a use after free, its storage kept besides)
+# struct's text was built in a part region its callee's settle closed (a use after free, its storage kept besides). And
+# a struct holding a Vec<String> beside its text (Tagged), its constructor's instance copied where the result goes,
+# given a second value or declared in the loop, an element's field read where it stands (`tagged[j].n`, a rendered
+# `fresh[1].tags[1]`): before, its text kept for a copy of what the constructor is given, the report naming a reference
+# stored in 'q2' and a call's value copied at the read - neither met - and -memory -check passed a program keeping its
+# text each turn
 N I64 = 20000
 
 type Rec struct(name String, n I64) {
     name
     n
+}
+
+type Tagged struct(name String, tags Vec<String>, n I64) {
+    name
+    tags
+    n
+}
+
+fn Tagged.Make(i I64) Tagged {
+    t Vec<String>
+    for k in range 2: t.Push("g" + $(i + k) + " padded out to some length")
+    return Tagged(("m" + $i).PadEnd(400, '.'), t, i)
 }
 
 fn build(i I64) Vec<String> {
@@ -30,9 +47,16 @@ fn main() {
     held := Array<Vec<String>>(4)
     recs Vec<Rec>
     for k in range 4: recs.Push(Rec.Make(k))
+    tagged Vec<Tagged>
+    fresh Vec<Tagged>
+    for k in range 4 {
+        tagged.Push(Tagged.Make(k))
+        fresh.Push(Tagged.Make(k))
+    }
     t := 0
     r := build(0)
     q := Rec.Make(0)
+    q2 := Tagged.Make(0)
     for i in range N {
         r = build(i)
         kept[i % 4] = r
@@ -43,6 +67,12 @@ fn main() {
         if i % 3 == 0: q = Rec.Named(i + 1)
         recs[i % 4] = q
         t += kept[(i + 3) % 4].Len() + held[(i + 1) % 4].Len() + recs[(i + 1) % 4].n + q.name.Len()
+        q2 = Tagged.Make(i)
+        tagged[i % 4] = q2
+        p := Tagged.Make(i + 1)
+        fresh[i % 4] = p
+        t += tagged[(i + 1) % 4].n + q2.name.Len() + fresh[(i + 2) % 4].tags.Len()
     }
     io.PutLn($t + " " + kept[2][1] + " " + held[3][0] + " " + recs[1].name)!
+    io.PutLn($tagged[1].n + " " + fresh[1].tags[1] + " " + tagged[2].tags[0] + " " + $q2.name.Len())!
 }
