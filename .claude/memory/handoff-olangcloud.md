@@ -18,7 +18,7 @@ Stopped by the Orchestrator's pacing guard; no new items until it restarts this 
 ## Queue after it
 1. Per-instance buffer places (decided; Opus xhigh) - should close gap 17b.
 2. Gap 17a (an element holding a struct with a Map field built by S(m) keeps old storage).
-3. freeing.md 2.4 leftovers: lambda passed as a function value building through a captured helper's field; a task's catch default that allocates; storage given back to a retired worker's home.
+3. freeing.md 2.4 leftovers: lambda passed as a function value building through a captured helper's field; storage given back to a retired worker's home; (a task's catch default: closed by wt-taskdefault fff70dac1 for one-target spawns whose handler captures only numbers - several targets or storage captures still keep).
 4. A full verify after the next big merge.
 
 ## Notes
