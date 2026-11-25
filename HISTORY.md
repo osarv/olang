@@ -43549,3 +43549,48 @@ after a churn (and the evaluator decides it). The self-build frees 556 of its 10
 before. Found beside it and left open (docs/freeing.md 2.4): a struct holding a `Vec<String>` given a second value and
 stored into a `Vec` of them keeps ~36 bytes a turn under a condition the program does not meet ("a reference into it is
 stored here, in 'q'").
+
+## 2026-11-25: a false proof - a struct's text kept by a constructor's copy, unreported (O8f, B18; mine; wt-checkfalse)
+
+wt-secondval left open a struct holding a `Vec<String>` (`Rec{name String, tags Vec<String>, n I64}`), built by
+`Rec.Make(i)` (`return Rec(name, t, i)`), given to `q` each turn and stored into a `Vec<Rec>`: ~36 bytes a turn kept,
+and `-memory -check` passed it, naming "a reference into it is stored here, in 'q'" at `q`'s declaration. The program
+holds no reference. That is a false proof of O8f's guarantee, the check's whole point.
+
+The note was about the wrong place, and every reason it gave on that place was false. Peeling them one at a time:
+
+1. `storeAs` (condition 2): the callee's return, a constructor viewing what it is given copied where the result goes
+   (gap 17's `retCtorOf`), carries its leaves' places as the result's origins - `q`'s value is the leaves' new value.
+   Stored whole into `q`'s owner-local place, the owner leaf (tags, `Rec` field 1) read as a reference stored. A part
+   place's value held by value in a value stored whole was already exempt (still that place's value); an owner leaf's
+   is the same thing one level up - a `Rec` holds its `Vec` by value - and is now exempt too.
+2. `views` (condition 6): with that gone, `q` "used after it lets go of it" - `q`'s new value read after its own
+   assignment let go of the old one's leaves, judged a view because its origins hold the leaf. The same exemption: a
+   local holding a value by value through no reference holds its own owner leaf as it holds its own part places.
+3. `untracked` (RCopied, a gap): "a call's value copied" at `recs[(i + 1) % 4].n` and at a rendered `recs[1].name`.
+   Lowering reads both where they stand (`readOut` for a value owning nothing read out of a view call's temporary;
+   `text`'s `readHere` for a rendered piece), or copies them into the statement's innermost scope - dead by the
+   statement's end, no value any store gives a place. The free pass lent only call arguments so (`readArg`, gap 17);
+   `readOf` and `textOf` now lend the call too, as lowering does.
+
+With all three gone `-memory -check` reported every place freeing - and the program still ran out of memory. The leak
+had never been the tags: an empty `tags` kept the same, and it scaled with the name's length. The text field (`Rec`
+field 0), a part place, kept for "its new value is a copy of what a constructor is given" - `viewCtor` making every
+array leaf beside the owner leaf of gap 17's copy keep (RMade) unless it was a prelude slot place split into slots. And
+`reported` skips a place no store gives storage of its own (`owns`: a site, a fresh value, a move), and the copy's store
+was a failed one with no site - so the place that actually kept was never in the report, and `-check` had nothing to
+fail on. A part place's let-go releases only an array built in a part region (it finds the region from the address),
+any other array staying with what it was built in, so a copy is no reason for it to keep - which is what `untracked`
+says for any copy. `viewCtor` now records the part place's store as made and keeps nothing for it. The element's copy
+of the text is built in a part region, and the let-go at `recs[i % 4] = q` frees it.
+
+Left as it is: `reported`'s `owns` would still hide an RMade keep with no owning store elsewhere; the one producer
+(viewCtor's array leaves) now reaches it only for an array leaf that is no part place - a prelude slot place not split
+into slots.
+
+checks' freeing secondval gains `Tagged` (a 400-byte name so a kept text shows under 8 MB): the local given its second
+value outside the loop, one declared in it, elements' fields read where they stand and rendered - master ran out of
+8 MB with `-memory -check` passing; now flat at 20,000 and 200,000 turns, built, `-free late`, `-sanitize` and
+interpreted agreeing. tests/kept.olang's labeledValues reads both shapes back after a churn, the evaluator deciding it.
+The self-build frees 556 of its 1017 places at once, as before; its cold peak 2629 MB (2613 before); `make fixedpoint`
+passes.
