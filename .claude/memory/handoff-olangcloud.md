@@ -18,8 +18,8 @@ Stopped by the Orchestrator's pacing guard; no new items until it restarts this 
 ## Queue after it
 1. Per-instance buffer places: partly done (wt-perinst + wt-gap17a merged 156c5266e, verify green on 6bde41539; plan.md lists what stays per declaration). Gap 17a/17b closed.
 2. wt-fnvalbuild merged a318c63bb; into the next bulk soundness review with gap17a's keptCtor/keptView.
-3. freeing.md 2.4 leftovers: wt-secondval merged d04c93943 (fixed a use-after-free gap17a widened); wt-checkfalse running (a false -memory -check pass, Rec with Vec<String>); storage given back to a retired worker's home; (a task's catch default: closed by wt-taskdefault fff70dac1 for one-target spawns whose handler captures only numbers - several targets or storage captures still keep).
-4. Full verify green on e182d9887 (the whole batch). Next: wt-twoowners (review 1125's false -check pass, a constructor holding two Maps).
+3. freeing.md 2.4 leftovers: wt-secondval d04c93943, wt-checkfalse e182d9887, wt-twoowners 92b56017c, wt-copygaps 3dd2d0b21, wt-origins 302e9d7cd (origins per path) merged; wt-liftcopy running (from wt-origins: a constructor given a named local, `a := mkA(i); q := P(a, ..); o.inner = q`, grows 238 MB at 200k turns while -check passes - make -check honest, then close); storage given back to a retired worker's home; (a task's catch default: closed by wt-taskdefault fff70dac1 for one-target spawns whose handler captures only numbers - several targets or storage captures still keep).
+4. Full verify green on 302e9d7cd (twoowners, copygaps, origins; e182d9887 before). Logs of the steward go to /home/user/steward-logs (verify wipes build/).
 
 ## Notes
 - Disk fills fast (each worktree's build/ is 8-12 GB): delete build/ output and merged worktrees.
