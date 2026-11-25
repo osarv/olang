@@ -2065,6 +2065,8 @@ describe. A declared type over a number (T29) is stored as its base is - T29h's 
 `Array<U8>` reads what was written - while every numeric primitive (T4) is a storage type of its own, two of one
 width included: `U8` storage is never read as `I8`, nor `F16` as `BF16` or `U16`. A reference (T24) is a storage type too:
 storage holding one is never read as a number, a descriptor or anything else, nor theirs as a reference.
+A C union's members (X18a) are no exception: they are no places, only values copied out of the union's bytes and
+into them, so a member is read as the type it is read as, never through a view of the storage.
 
 This is a property an implementation may rely on when deciding whether two accesses can refer to the same
 storage.
@@ -10105,12 +10107,25 @@ each at the offset clang gives it, the bytes between them and at the end (an ano
 named `c_gapOFFSET` (T36: a union's members overlap, so none of them is a field; they are C's to read and write), where
 each member has a field's form and the struct comes out of C's size and alignment; else as a
 struct of **opaque words** of its size and alignment (`bytes := Array<I64>(5)`, never read,
-  C's to read and write), which may be held in place and passed by reference but crosses by value nowhere; else as an
+  C's to read and write - but for X18a's accessors), which may be held in place and passed by reference but crosses by value nowhere; else as an
   extern type (X10);
 - each enumerator, and each macro defined as an object whose value clang computes as an integer constant, as an
   immutable global of that value (`I32` where it fits, else `I64`); a macro whose value is a floating-point literal
   expression as an `F64` (an `F32` for one `f`-suffixed literal), and one whose value is a text literal as a `String`;
 - each macro taking arguments whose body is an expression, as a function (X19).
+
+**X18a (a union's members).** A member of a C union a translation holds in place - a union's own member, held as
+opaque words, or a named member of a struct's anonymous union, reached through anonymous structs to any depth, the
+struct held flat or as opaque words - whose type is a number or `_Bool` is reached through two methods the translation
+declares on the record: `m()`, giving a copy of the member's bytes as its type, and `set_m(v)` (`mut`), writing `v`'s
+bytes over them and leaving the record's other bytes as they were - `at.set_debounce_period_us(5000)`,
+`at.debounce_period_us()` on linux/gpio.h's `gpio_v2_line_attribute`. Copy semantics only (T36): a member is no field
+and no place, so no reference to it is taken, and `at.flags` is a compile-time error naming the accessors. The names are
+C's, `m` the member's and `set_` before it (C names are not M6's); the accessors are declared only where the name is
+usable (X18), and `set_m` only where it names no other member. A member that is a pointer, a record or an array has none:
+its bytes stay C's. The bytes are read and written as the target lays them out (little-endian on every target this
+implementation has), so a member of a union C wrote is the value C wrote, and the compile-time evaluator reads and
+writes them as the run time does.
 
 A typedef of a number is that number (olang declares no aliases); a typedef naming a struct names it; a parameter of a
 GNU C transparent union (glibc's `struct sockaddr *` arguments) is its first member's type. A name olang cannot declare -

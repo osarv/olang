@@ -1,6 +1,7 @@
 # C imports (X18): a struct with anonymous members (C11) - an anonymous struct's members, nested once, reached as the
 # struct's own for reading and writing, and an anonymous union's bytes held for C between the members around it - laid
-# out as C lays it out; linux/gpio.h's line attribute, whose id and padding sit before such a union
+# out as C lays it out; linux/gpio.h's line attribute, whose id and padding sit before such a union. A union's members
+# (X18a), an anonymous one's or a named one's, are read and written by copy through their accessors, `m()` and `set_m(v)`
 import cn "canon/canon.c"
 import gpio "linux/gpio.h"
 
@@ -37,4 +38,67 @@ test "linux/gpio.h's line attribute has its id and padding" {
     at.padding = 0
     assert at.id == 3
     assert gpio.gpio_v2_line_attribute.Size == 16
+}
+
+test "an anonymous union's members are read and written by copy, where C has them" {
+    a := cn.cn_attr()
+    a.id = 7
+    a.after = 9
+    a.set_flags(0x1122334455667788)
+    assert a.flags() == 0x1122334455667788 and cn.cn_attr_flags(a) == 0x1122334455667788 + 16
+    a.set_debounce(5000)
+    assert a.debounce() == 5000 and cn.cn_attr_debounce(a) == 5000
+    assert a.flags() == 0x1122334400001388
+    cn.cn_attr_set(a, 0xFFFFFFFFFFFFFFFF)
+    assert a.flags() == 0xFFFFFFFFFFFFFFFF and a.debounce() == 0xFFFFFFFF
+    assert a.id == 7 and a.after == 9
+}
+
+test "a union member narrower than its words keeps the bytes around it" {
+    s := cn.cn_small()
+    s.id = 1
+    s.after = 2
+    s.set_s(0xABCD)
+    s.set_c(-3)
+    assert s.c() == -3 and cn.cn_small_c(s) == -3
+    assert s.s() == 0xABFD and cn.cn_small_s(s) == 0xABFD
+    cn.cn_small_set(s, 100)
+    assert s.c() == 100 and s.id == 1 and s.after == 2
+}
+
+test "a named union's members, through a struct's field" {
+    b := cn.cn_box()
+    b.n.set_i(-42)
+    assert b.n.i() == -42 and b.n.b() == 0xD6 and b.n.on()
+    b.n.set_f(1.5)
+    assert b.n.f() == 1.5 and b.n.i() == I32(F32(1.5).Bits())
+    cn.cn_box_set(b, 2.25)
+    assert b.n.d() == 2.25
+    b.n.set_d(-0.5)
+    assert cn.cn_box_d(b) == -0.5
+    b.n.set_on(false)
+    assert not b.n.on()
+}
+
+test "linux/gpio.h's line attribute takes a debounce period and gives it back" {
+    at := gpio.gpio_v2_line_attribute()
+    at.id = U32(gpio.GPIO_V2_LINE_ATTR_ID_DEBOUNCE)
+    at.set_debounce_period_us(5000)
+    assert at.debounce_period_us() == 5000 and at.flags() == 5000
+}
+
+# the compile-time evaluator reads and writes a union's members as the run time does (K1, K2)
+fn period() U32 {
+    at := gpio.gpio_v2_line_attribute()
+    at.set_flags(0xFFFFFFFF00000000)
+    at.set_debounce_period_us(1234)
+    return at.debounce_period_us() + (1 if at.flags() >> 32 == 0xFFFFFFFF else 0)
+}
+
+Period := period()
+
+assert period() == 1235
+
+test "the evaluator's union members agree with the run time's" {
+    assert Period == 1235 and period() == 1235
 }

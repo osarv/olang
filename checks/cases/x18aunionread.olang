@@ -1,0 +1,10 @@
+# check: fail error[X18a]: gpio_v2_line_attribute's 'flags' is a member of a C union, not a field
+# X18a, T36: a C union's member is read only as a copy, through flags() - never as a field, a place of one type over
+# bytes another member's type reads too
+import gpio "linux/gpio.h"
+
+fn main() {
+    at := gpio.gpio_v2_line_attribute()
+    f := at.flags
+    Println($f)
+}

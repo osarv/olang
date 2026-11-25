@@ -14718,7 +14718,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
             c.dropArgs(args)
             return c.unknown(sp)
         }
-        if not c.text(n)[0].IsUpper() and c.P.FnModule(m0) != c.fr().Mi: c.err(nsp, msgs.MethodIsPrivate(c.tok(n)))
+        if c.privateMethod(m0, c.text(n)): c.err(nsp, msgs.MethodIsPrivate(c.tok(n)))
         return c.invoke(sp, nsp, m0, rx, args, Array<typed.Expr&>(0), ex)
     }
     name := c.text(n)
@@ -14790,9 +14790,15 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         c.dropArgs(args)
         return c.unknown(sp)
     }
-    # M6: a method is public by its first letter - another module's private one is said, and called still
-    if not name[0].IsUpper() and c.P.FnModule(m) != c.fr().Mi: c.err(nsp, msgs.MethodIsPrivate(c.tok(n)))
+    if c.privateMethod(m, name): c.err(nsp, msgs.MethodIsPrivate(c.tok(n)))
     return c.inPlaceCall(sp, c.invoke(sp, nsp, m, rx, args, Array<typed.Expr&>(0)))
+}
+
+# M6: a method is public by its first letter - another module's private one is said, and called still; a C module's
+# names are C's (X17), its union members' accessors (X18a) public whatever their first letter
+fn (c mut Checker&) privateMethod(m I64, name String&) Bool {
+    mi := c.P.FnModule(m)
+    return not name[0].IsUpper() and mi != c.fr().Mi and not c.P.L.Mods[mi].C
 }
 
 # T29f: the base, reached through what a number extends, whose numeric trait gives a method of this name (Abs, Min,
@@ -15731,6 +15737,10 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Lvalue&, n so
         if cv != null: return cv
     }
     i := c.fieldIndex(t, n)
+    if i < 0 and c.unionMember(t, n) {
+        c.err(nsp, msgs.UnionMemberNoField(c.ty(t), c.text(n)))
+        return null
+    }
     if i < 0 {
         c.needErr(nsp, t, $"a field " + $c.tok(n), msgs.NoSuchMember(c.ty(t), c.text(n), c.memberHint(t, n, true)))
         return null
@@ -15979,6 +15989,14 @@ fn (c mut Checker&) memberHint(t types.TypeId, n source.NameId, fields Bool) Str
         }
     }
     return near.Hint()
+}
+
+# X18a: whether n names a member of a C union in struct t - its accessor, declared by the C module beside the type
+fn (c mut Checker&) unionMember(t types.TypeId, n source.NameId) Bool {
+    dt := c.deref(t)
+    if not c.P.L.Mods[c.P.DeclModule(c.P.T.DeclOf(dt))].C: return false
+    f := c.P.MethodOf(dt, n)
+    return f >= 0 and c.P.FnModule(f) == c.P.DeclModule(c.P.T.DeclOf(dt))
 }
 
 # Place.Here (E40): where it is written - or, in a default a call leaves off (D8a), where that call is - as a Place
