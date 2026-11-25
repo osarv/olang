@@ -2140,7 +2140,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 ac0cb24df228eac5 494276e48e18f7fa checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-c54decf14d301b29 45c4ef0b4d87cc6b checks/checks.olang
+d0bfb81fbad9e772 00c9d3a6b8c8246e checks/checks.olang
 e441d89352158de4 51f391891d39e1c7 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 efb54136ad6286dc checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb 11ac830c3b4509ca checks/fixtures/agree/math.olang
@@ -2253,6 +2253,7 @@ f537cda0e88cd271 8197eedd2e0dd3a5 checks/fixtures/freeing/anyholders.olang
 7cba4e5e7992195e 78f091fa6a14e182 checks/fixtures/freeing/arrays.olang
 691c23345e3150de b27fa5f2dbe35f07 checks/fixtures/freeing/assignkept.olang
 804dba9030a48082 26298113f7ca222d checks/fixtures/freeing/bindcopy.olang
+9b61dd4712d10643 51a0e39a08d1a3e6 checks/fixtures/freeing/bindref.olang
 42a7b801bfe1f6fc 72a00e038a08fada checks/fixtures/freeing/builtinside.olang
 f508978edf64f855 83a329133eb5cb6b checks/fixtures/freeing/builtlib.olang
 f1e1957e861614e4 bcc6b3cab25af26f checks/fixtures/freeing/captures.olang
@@ -2347,6 +2348,7 @@ c3845595cc475bdc 15b4277ab02f9663 checks/fixtures/freeing/viewlocals.olang
 4fc59a4c968365c6 d4b940863933ebdc checks/fixtures/freeing/views.olang
 453a5268906379f5 fa0094022be3dda4 checks/fixtures/freeing/viewself.olang
 c3ad44b6663d515e 22c912e473e0d910 checks/fixtures/freeing/walkcopy.olang
+2c6548643beb8349 e9c3369786158b0c checks/fixtures/freeing/walkref.olang
 17071c5d36fc6b6d 000f1747e537d55e checks/fixtures/freeing/widenlocal.olang
 6c9ea3df3be8e077 6b2575c6ade305ea checks/fixtures/freeing/writeback.olang
 6bde66a6f0ea6c17 847436f5187cffe4 checks/fixtures/freeing/zerofill.olang
@@ -2558,7 +2560,7 @@ c770e3cdf9454803 824ae4dad32ea901 compiler/ast.olang
 05e4e9987734f8af e3f36325656d4c8c compiler/build.olang
 7568a6f00f5eaea3 9304be1f19dd9d16 compiler/cabi.olang
 a63bb2cbd4c666c1 3c3f768ca610769f compiler/cells.olang
-e9e59c21103428ee 03cae19fcbb146a8 compiler/check.olang
+438464afacb1195e 93e2c2b4aa832dc3 compiler/check.olang
 e0a0570ee1ea4f5b aaaf062f329cd03a compiler/cond.olang
 d5d87da3cf156c0a bba2773268c83e42 compiler/definit.olang
 39bf3e31c7a3169b 766a90aa0f2079ad compiler/diag.olang
@@ -2596,7 +2598,7 @@ e2b2b02653bc4b63 5a8b70218b099dfd compiler/prompt.olang
 e7ba5bcc74b12eea e57cc8ec0248335a compiler/records.olang
 6a47d4d73d4650d3 2aa4759d3abac04a compiler/runtime.olang
 26fb4de43982a9c2 929fe21224324c3d compiler/scan.olang
-8a5fdf8b001fad0e 5bf42b87b4c534b2 compiler/scope.olang
+3e359fa8633e2824 5cc683ba9b7ee78d compiler/scope.olang
 951ea77a9296b657 8c3f6543bf080b52 compiler/session.olang
 8981299fcf27ba06 13b1ab50b72ab2a0 compiler/source.olang
 9bee4e94ca053127 882c3c1eac35e714 compiler/spin.olang
@@ -2835,7 +2837,7 @@ c2f50b441dc503ab de37740483416216 tests/keptfacts.olang
 01ffe7335fe6ab32 05af3c33041bc780 tests/literals.olang
 c03507ad87365063 b4791c92521bb797 tests/litmut.olang
 375b5311b95e0319 80551d281a09b141 tests/loopref.olang
-02dc8a3ce8916c6f dce237c5d731af56 tests/loopvals.olang
+c4d397d507aad083 528d9d333d0d92c5 tests/loopvals.olang
 fb9755a13503798b c84eeaf5c905ae67 tests/mapmut.olang
 cb1a5845ede026cf 7846a1adaf912717 tests/match.olang
 bd604793a79e1dd0 d7d4a9777703b2e7 tests/membermod.olang
