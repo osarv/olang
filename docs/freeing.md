@@ -555,6 +555,50 @@ to grow into them, (c) a hand-off at the join. (c) is built:
   callee that is no constructor, Preserves, handing back no view of it), four of them closed. Left, named:
   `lw.fx = effects.Effects(lw.P, lw.Bodies)` (lower.olang, a constructor's instance stored into a field, its argument's
   copy where the field's value lives; runs once).
+- **A local's own copy holding a reference, given fresh storage (review 1125b finding 1, closed by wt-revfix1,
+  2026-11-25).** wt-walkref's copies (`x := rows[k]`, a walk's name, a binding of an element holding a reference beside
+  its storage) took the source's references' term as their claim, and a value local's parts were judged where its
+  references are (`partsTerm`), so `x.v[0] = ("own" + $i)...` built its text where the source's references live - the
+  caller's scope: 191 MB at 1,000,000 calls (12.9 MB before). Now a part of such a copy that holds no reference is the
+  copy's own storage, its block (`scope.ownCopies`, `ownPart`: `partsTerm` and `peekPlace` answer the copy's `stors`);
+  its references stay where the source's are. A part that holds references beside its storage (a `Vec<Row>` field of
+  the copy) is still judged at the source's references' term - storage pushed into it is built there (a keep, never a
+  free too early; none of the probes has the shape). checks' freeing copyown (`limited`), kept's copiesAndDefers.
+- **A defer beside a value local letting go of its leaves (review 1125b finding 3, closed by wt-revfix1).**
+  `free.endsWalk` ended no local of a block holding any defer (a defer runs after the block's end and could read the
+  value), so `q := P(...); defer { t += 1 }; o.inner = q` kept `q`'s leaves, built where its reference must live: wt-origins'
+  370 MB shape back. Now only a local the block's deferred code names (`typed.LastUses` over the defers) is left out -
+  one it does not name it cannot reach, `endsHere` already requiring no lend and no alias. checks' freeing deferends
+  (`limited`), kept's copiesAndDefers.
+- **A call building what the reference it hands back names, outside the turn (review 1125b finding 4, named by
+  wt-revfix1).** `rr := second(o.inner); o.inner = P(mkA(i), mkB(i), rr)`, `second` returning `p.a[1]` - a promotion,
+  text it builds in its result scope. That scope is where `rr` must live, `o`'s (the function's), so each turn builds a
+  text there, and nothing lets go of it: a reference owns nothing (78 MB at 200,000). The review read it as a view of the
+  old leaf; it is not - the leaves free at once. `-memory` now names it and `-check` fails (LiftGaps,
+  `lower.builtResult`): a call whose callee hands back only new values, some of them storage it builds (free.ResBuilds),
+  its result scope one of this body's outside the loop's turn the call is in. checks' freeing builtref. What would close it,
+  for a later round: (a) the reference field the text is stored into owns a text built for it alone - the store
+  treated as made for the place (a slot), its let-go releasing it; it needs the call's result scope made a region of the
+  place, as a constructor's instance is (O28), and a reference field owning its referent is a new idea for section 8;
+  (b) refuse nothing, build it where the turn is and copy it into the place - a copy at every store, a visible cost the
+  program did not write. Recommendation: (a), only if a program needs it; the row says what to write meanwhile
+  (`$` a copy into a text field). The row over-reports where the reference is still held on purpose (the self-build's
+  fix.olang:181, file texts pushed into a `Vec<String&>`): `-check` fails such a program though nothing is wasted.
+- **A text local given existing text each turn (found by wt-revfix1, open).** `last := ""` then `last = rows[1]` or
+  `last = r` (a reference) each turn, or `s := ...; last = s`: ~64 bytes a turn past ~100,000 turns, `-memory -check`
+  passes ("no place lets go of storage in code that runs again", or the own local's place not reported). The same on
+  master before wt-walkref: review 1125b's w1walkesc and w2bindesc grow by this, not by their walk's copy (w6generic's
+  growth is its own `out` and a `head(row)` promotion, the row above). The own local's place keeps (RMade: "existing
+  storage") but `reported` shows a place only where a store owns storage, and these stores do not. Showing every own
+  local's place given existing storage is no fix: walkcopy, walkref, bindcopy and fieldagain would then report keeps
+  while they are flat (their copies are freed by lowering's slot copies). What closes it: tell a store whose value
+  is built where the local lives (item 17's lift for a move at a last use, D9i - `s := ...; last = s`) from one lowering
+  copies into the local's slot, and judge the first as made for the place (SMove-like), so the place frees; measure
+  which of the shapes is which first.
+- **A constructor's value in an element reported for a false reason (review 1125b finding 6, open).** old/twoowners and
+  ctorwrite now say "'rows[i % 10]' keeps ... its new value is existing storage: 'S2.mk(i)'" while flat at 200,000
+  turns - an over-report (`-check` passes), from the store into the element's leaves judging `S2.mk(i)` (a function
+  returning `S2(a, b)`) as existing storage. Not looked into further.
 
 ### 2.5 Per instance: a view of one value, a let-go of another (wt-perinst, 2026-11-25)
 
@@ -659,7 +703,8 @@ text or part places' arrays of plain values - gaps 8, 16, 17); a
 (RCopied, RInPlace - gaps 6, 7); a program's call - a removal, `Put`, `SetAt` - whose library place keeps for a reason in
 the library's code (gaps 10, 15). A turn row (B18a, LiftGaps): storage built outside a loop's turn its statement is in that no place lets go of - a local
 built where its last-use copy goes for a move lowering does not make (liftedCopy), a by-value argument's copy its callee
-only reads (turnKept), a call's value a kept constructor's instance views (keptResult). Every earlyfree fixture passes; `checks/fixtures/freeing/gaps.olang` fails naming its
+only reads (turnKept), a call's value a kept constructor's instance views (keptResult), what a callee builds for the reference it hands back
+(builtResult: its result scope one of the body's own). Every earlyfree fixture passes; `checks/fixtures/freeing/gaps.olang` fails naming its
 element (an `Array<Map<String, I64>>`'s, gap 17's open part). A text element place is reported where the program's own code gives an element
 another value; its removals are the collection's.
 
@@ -1379,3 +1424,17 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   second names) - a keep at most, never a free too early. Checks' freeing walkref, bindref (freed at once; built,
   `-free late`, `-sanitize`, interpreted agree), tests/loopvals.olang's grownCopies (baked, K2). The
   self-build frees 556 of its 1018 places at once, unchanged; warm peak 2588 MB (child maximum resident set, ~2590 before).
+- 2026-11-25 (wt-revfix1): **review 1125b's findings 1, 3 and 4.** (1) a local's own copy holding a reference (wt-walkref)
+  builds what is stored into its parts holding none in its own block (`scope.ownCopies`/`ownPart`): walkrefgrow 191 MB
+  at 1,000,000 calls to flat (12.9 MB); the review's w1walkesc, w2bindesc and w6generic grow the same on master before
+  wt-walkref - by a text local given existing text each turn and their own data (2.4, open). (3) a defer that names no
+  local no longer keeps a block's ended locals (`free.endsWalk`): origdefer 372 MB at 200,000 turns to flat. (4) the
+  text a callee builds for the reference it hands back, built outside the turn, is a gap `-check` fails on
+  (`lower.builtResult`, free.ResBuilds) - origrefcall and o4refvia (78 MB at 200,000) and w6generic's `head(row)`.
+  Finding 6's over-report left (2.4). checks' freeing copyown, deferends (`limited`) and builtref; kept's
+  copiesAndDefers. Every probe of batch1125b and batch1125 agrees across built, `-free late`, `-sanitize` and the
+  evaluator. The self-build frees 556 of its 1018 places at once, unchanged; warm peak 2590 MB (child maximum resident
+  set, ~2590 before). builtResult names three more turn rows there: explain.olang:821 (`effects.CapText`'s text, dead
+  after its turn) and fix.olang:334 are waste; fix.olang:181 (`parts.Push(try os.ReadFile(p) ...)`, a `Vec<String&>`)
+  keeps what it builds on purpose - the row names storage still in use too, so `-check` would fail on such a program
+  (an over-report, open: telling it apart needs to know the reference is still held).

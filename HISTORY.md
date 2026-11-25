@@ -43885,3 +43885,52 @@ fixedpoint` and consistency pass; the goldens moved for the fixtures, the test a
 fixed (predates this branch): `-memory -check` refuses `rows := Array<Row>(2, Row(..)); for k in range 2: rows[k] = ..`
 followed by any walk of `rows` (O8f: "a value holding it is made with no store into it, by a copy of a value holding
 it") - with a struct holding a Vec and no reference too; a keep reported, not a free too early.
+
+## 2026-11-25: review 1125b - a copy's own parts, a defer's reach, a reference's built referent (O8f, O25h, B18a; mine; wt-revfix1)
+
+Review 1125b (soundness of the relaxations merged since review 1125) found no use after free, but programs that grew
+while `-memory -check` passed. Three of them are fixed or named here.
+
+**A local's own copy holding a reference (finding 1, wt-walkref's regression).** wt-walkref gave a local's own copy
+(`x := rows[k]`, a walk's name, a binding) the source's value, so its claim is the source's references' term - right
+for the references, which still name what the source's do. But the scope pass judges a value local's parts where its
+references are (`partsTerm`: a bare field of a struct value, an element of its Vec), so the copy's own storage - built
+in its block by `ownCopy` - was taken to be the source's, and a fresh text stored into `x.v[0]` was built in the
+caller's scope each call: 191 MB at 1,000,000 calls of walkrefgrow (12.9 MB on master). Now the scope pass remembers
+such locals (`ownCopies`); a part of one, reached through fields, elements and payloads and holding no reference itself,
+answers the copy's own storage term (`ownPart`, read by `partsTerm` and `peekPlace`). A part holding references beside
+its storage (a `Vec<Row>` field of the copy) still answers the source's references' term - storage built into it lives
+longer than it must, never shorter. Considered and left: giving the copy two terms in `Val` (references and storage
+apart) - the right model, but every place a value local's term is read would have to choose one. The review's other
+three probes of the family (w1walkesc, w2bindesc, w6generic) grow exactly as much on master before wt-walkref: by a text
+local given existing text each turn (`last = r`, ~64 bytes a turn, open, docs/freeing.md 2.4) and by w6generic's own
+`out` and its `head(row)` promotion (finding 4's row names it).
+
+**A defer beside a local letting go of its leaves (finding 3).** wt-origins' `madeLocal` locals end at their block's
+end (`free.endsWalk`), but no local of a block holding any defer did: a defer runs after the end and could read the
+value. One defer anywhere in the turn brought back the 370 MB shape. Only a local the block's deferred code names
+(`typed.LastUses` over the defers) is left out now; one it does not name it cannot reach, `endsHere` already requiring
+that nothing lends it or names it another way.
+
+**A call building the referent of the reference it hands back (finding 4).** `rr := second(o.inner); o.inner =
+P(mkA(i), mkB(i), rr)`: the review took `rr` for a view of the old leaf, kept unreported. It is not a view: `second`
+returns `p.a[1]`, a promotion - text it builds in its result scope, which the store puts where `o` lives. Each turn
+builds one there and nothing lets go of it, since a reference field owns nothing; the old leaves free at once. Tried
+first and reverted: giving a part held in place lent whole to a callee the part's leaves as the result's origins - a
+view of them is not what the promotion is, and `return p.r` then kept every leaf (321 MB at 200,000 where master is
+flat). Now lowering names such a call as a turn row (`builtResult`, LiftGaps, `-check` fails): its callee hands back only
+new values, some of them storage it builds (`free.ResBuilds`: a promotion, a literal, a text), and the result scope the
+call passes is one of the body's own, outside the loop's turn the call is in - a caller's scope variable is the
+caller's to judge (the prelude's `Line()` returns inside its loop). What would free it is a reference field owning a
+referent built for it alone - new section-8 ground, recorded with the options in docs/freeing.md 2.4.
+
+Finding 6 (old/twoowners' and ctorwrite's false reason, flat) is left, recorded. Also tried and reverted: reporting
+every own local's place given existing storage, to name the text-local growth - walkcopy, walkref, bindcopy and
+fieldagain then reported keeps while flat. Checks: freeing copyown and deferends (`limited`: `-check`, 8 MB, built,
+`-free late`, `-sanitize`, interpreted), builtref (`-check` fails naming the call; the oracles agree); kept's
+copiesAndDefers, baked and run. Every probe of batch1125b and batch1125 agrees across the four oracles. The self-build frees 556 of its 1018 places at once, unchanged;
+warm peak 2590 MB (child maximum resident set, second run; ~2590 before). The new turn row names three calls in the
+compiler: `effects.CapText`'s text in explain.olang and a file's text in fix.olang:334, dead after their turn, and
+fix.olang:181's file texts pushed into a `Vec<String&>` - kept on purpose, an over-report the row cannot tell apart yet
+(docs/freeing.md 2.4). `make fixedpoint`, `make consistency`, the freeing and earlyfree scenarios pass; the goldens moved
+for the fixtures, kept's test and the Scoper's new field.
