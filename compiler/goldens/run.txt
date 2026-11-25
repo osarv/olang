@@ -432,8 +432,9 @@
 | ok - twoOwners: copies a constructor's instance of two Maps into an element each turn
 | ok - copyReads: reads elements where they stand beside their replacement, and views a by-value argument's copy
 | ok - heldRefs: gives a struct held in place, holding a reference beside its owners, a new instance each turn
-| ok - keptArgs: gives a constructor whose instance is copied a value local's copy and a call's value each turn
 | ok - caseLocals: gives locals an enum case holding a parameter's reference
+| ok - keptArgs: gives a constructor whose instance is copied a value local's copy and a call's value each turn
+| ok - taskDefaults: keeps tasks' clause defaults, built where their results would be, past their turn
 === test tests/keptfacts.olang
 | status 0
 | ok - lent: a local kept by nothing is the frame's, and reads back what was written
