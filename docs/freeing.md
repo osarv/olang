@@ -311,15 +311,26 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   of a call's result, running as often as its declaration (`LocalUses.FirstSet`): it is moved at its last mention as a
   `:=` local is (the scope pass's item 17 and lowering's `movable`), is no owner local of the free pass (`free.SetOnce`)
   and its assignment lets go of nothing (`lower.releases` - its storage holds the value the last turn moved on). checks'
-  freeing assignkept. Still open: a local given a second value (`r := build(0)` then `r = build(i)`) - an owner local
-  of the free pass, sole, so the arrays its value holds keep (RCopied) and the move is refused (`MovesLeaves`): the owner
-  local's place would have to give its value's leaves to the element as a move does, its let-go at the assignment kept
-  in step. (A `Vec<I64>` local of this shape is freed already, its one part a part place; `Vec<String>` keeps.) Tried by
-  wt-gaps5: FirstSet widened to a `:=` local of a call's value - no owner local, moved at its last mention, its
-  assignment letting go of nothing. Unsound: lifted where its store goes (item 17), the Let's call builds its value there
-  too, a let-go no release follows, and `-memory -check` passed while the program ran out of 8 MB. To close by that road
-  the scope pass must place the Let's call's result in the local's own block while its storage and the assignment's
-  result go where the store is - or keep the owner local and hand its leaves to the element (above). And the join form (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`, checks' freeing taskvals
+  freeing assignkept. A local given a second value (`r := build(0)` then `r = build(i)` each turn, declared outside the
+  loop or given it on a condition): closed by wt-secondval, with no move - it stays an owner local of the free pass, its
+  assignment letting go of its old value, the store a copy built for the element, whose let-go frees it (one copy a
+  turn; the move `MovesLeaves` refuses is not needed for flatness). Its `Vec<String>` kept because the owner rule made
+  the array's text elements' slot place keep for every value (RCopied) - wt-perinst's owner rule decides a slot place no
+  anchor reaches as its other conditions say (2.5), which closed it. A struct holding text its constructor built in the
+  callee (`return Rec(name, i)`, or `r := Rec(...); return r`) given to such a local was a use after free: the instance
+  is built in the part region made for its text field (a part site), and the callee's settle judged it by its anchors'
+  home - the region the part region is a kid of, never the part region, which it then closed. A part region's value that
+  is no array is settled by that array (`free.PartLeaf`, `lower.settled`), as a split part copy is. checks' freeing
+  secondval (both Vec<String> shapes, a struct holding text built both ways): master ran out of 8 MB and the sanitizer
+  and the evaluator stopped on the read (built and `-free late` printed different text); now flat at 200,000 turns.
+  (Tried by wt-gaps5 and unsound: FirstSet widened to a `:=` local of a call's value - no owner local, moved at its last
+  mention, its assignment letting go of nothing. Lifted where its store goes (item 17), the Let's call builds its value
+  there too, a let-go no release follows, and `-memory -check` passed while the program ran out of 8 MB.) Still open,
+  found beside it: a struct holding a `Vec<String>` (`Rec{name String, tags Vec<String>, n I64}`) given a second value
+  and stored into a `Vec<Rec>` keeps ~36 bytes a turn, named by `-memory` as "a reference into it is stored here, in
+  'q'" at the local's declaration - a condition the program does not meet (it holds no reference); declared in the loop
+  instead it is a named gap ("a value holding it is made with no store into it, by a call's value copied:
+  'recs[i % 4]'"). And the join form (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`, checks' freeing taskvals
   part 2): closed by wt-taskhandoff - question 1 below, answered (c): the task's growth of what it builds itself keeps
   nothing (`ownBody`), the target's type places keep only through its join, and the regions it made are the spawner's
   from the wait, their storage given back to the worker that made them. (Closed by wt-globalfill for a first value nothing reads - `r := build(0)` then
@@ -1227,3 +1238,9 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
 - 2026-11-25 (wt-taskdefault): a joined task's clause default built in a stand-in of its one target's storage
   (`mir.Task.Default`), handed over at the wait like a result; `handedAtWait` admits a default that builds only itself
   (`free.ownDefault`). checks' freeing taskdefault flat at 100,000 turns (master: ~390 bytes a failure).
+
+- 2026-11-25 (wt-secondval): 2.4's local given a second value closed. Its `Vec<String>` was already flat on master
+  (wt-perinst's owner rule); a struct holding text its constructor built in the callee was a use after free - the
+  callee's settle of a part region judged the instance by its anchors' home and closed the part region (`free.PartLeaf`:
+  settled by the part's array). checks' freeing secondval `limited`; kept's secondValues read back after a churn. The
+  self-build frees 556 of its 1017 places at once, peak 2613 MB, both unchanged.

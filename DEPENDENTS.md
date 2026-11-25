@@ -143,7 +143,10 @@ a `Vec`'s buffer, a `Map`'s slots, a text field; `free.olang` PartPlace, PartSit
 `mir.Stmt.ReleasePart` (`__olang_region_release_part`, which finds it from the array's address through
 `__olang_chunk_of`); an owner's anchor in one is read as part of its parent (`__olang_region_home`, in `emit.olang`'s
 `anchorRegion`): the evaluator's part scopes (`eval.olang` `releaseHeld`, `regionHomeOf`) and the C-driven region test
-(`checks/fixtures/regions/drive.c`, its `part` mode) change with them. A region's header names the home of the thread
+(`checks/fixtures/regions/drive.c`, its `part` mode) change with them. A value settled where it is built in a part
+region (`lower.settled`) is settled by the part's array (`free.PartLeaf`), whose `anchorRegion` climbs no home - a
+struct's would climb past the part region and close it; a change to that home rule (emit's `anchorRegion`, the
+evaluator's `settle`) changes which values settle by their array (checks' freeing secondval). A region's header names the home of the thread
 that made it (`%olang.region`'s last word, set by `__olang_region_make`; the header's size in `__olang_region_hdr_new`
 and its memset): `__olang_close_kids` gives a region another thread made back there, and `__olang_home_drain` (in
 `__olang_new_chunk`, `__olang_region_blk_new`, a retiring worker) takes it - condition 3's narrowing for joined tasks
