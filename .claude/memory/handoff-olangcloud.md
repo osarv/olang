@@ -16,9 +16,9 @@ Stopped by the Orchestrator's pacing guard; no new items until it restarts this 
 - wt-joinreach ec4686e35: a join's let-go keeps only if a spawned task reads a global reaching the place. Exposed and fixed two older bugs: D9h (a body with deferred code/destructor, or a local viewing a written parameter, hands back no view) and D16d (a lambda capturing a field built in its derived scope). Self-build frees 547/1008 places, peak 2.68 GB. strheld order fixture migrated to S4e (f4dc86167).
 
 ## Queue after it
-1. Per-instance buffer places (decided; Opus xhigh) - should close gap 17b.
-2. Gap 17a (an element holding a struct with a Map field built by S(m) keeps old storage).
-3. freeing.md 2.4 leftovers: lambda passed as a function value building through a captured helper's field; storage given back to a retired worker's home; (a task's catch default: closed by wt-taskdefault fff70dac1 for one-target spawns whose handler captures only numbers - several targets or storage captures still keep).
+1. Per-instance buffer places: partly done (wt-perinst + wt-gap17a merged 156c5266e, verify green on 6bde41539; plan.md lists what stays per declaration). Gap 17a/17b closed.
+2. wt-fnvalbuild (lambda as function value building through a captured field, O29 lookup): done on its branch, merge with goldens recaptured; into the next bulk soundness review with gap17a's keptCtor/keptView.
+3. freeing.md 2.4 leftovers: wt-secondval running (a local given a second value); storage given back to a retired worker's home; (a task's catch default: closed by wt-taskdefault fff70dac1 for one-target spawns whose handler captures only numbers - several targets or storage captures still keep).
 4. A full verify after the next big merge.
 
 ## Notes
