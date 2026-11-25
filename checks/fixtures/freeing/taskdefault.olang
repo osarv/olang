@@ -1,0 +1,67 @@
+# A joined task's clause default (P4a) built where the task's result would be: the handler, run on the task's thread,
+# is given the stand-in of its target's storage, so what it builds is handed to the spawner at the join's wait like a
+# result and reclaimed with the target's scope (docs/freeing.md 2.4). Tasks fail every other turn into a default that
+# builds a Vec of text (1) or text (2); a few defaults are kept in a long-lived Vec (4). The measure
+# is taskvals.olang's: the resident peak gained over each of the last two quarters of the turns, flat where either gains
+# under 2 MB. -free late, -sanitize, -race and the evaluator agree at a smaller size
+import "std/io"
+import "std/os"
+
+N I64 = 100000
+M I64 = 7
+
+type E error { Odd }
+
+fn pad(i I64) String { return "t" + $i + " padded out to some length ..........................................." }
+
+fn peak() I64 {
+    for line in (try os.ReadFile("/proc/self/status") catch default "").Lines() {
+        if line.StartsWith("VmHWM:"): return try line[6:].Trim().Split(" ")[0].ParseInt(10) catch default -1
+    }
+    return -1
+}
+
+fn vec(i I64) Vec<String> ? E {
+    if i % 2 == 1: error E.Odd
+    v Vec<String>
+    v.Push(pad(i))
+    return v
+}
+
+fn text(i I64) String ? E {
+    if i % 2 == 1: error E.Odd
+    return pad(i)
+}
+
+fn main() {
+    t := 0
+    kept Vec<Vec<String>>
+    for _ in range 4: kept.Push(Vec<String>())
+    p0 := 0
+    p1 := 0
+    for i in range N {
+        if i == N / 2: p0 = peak()
+        if i == N * 3 / 4: p1 = peak()
+        if M % 2 == 1 {
+            r Vec<String>
+            join: spawn r = try vec(i) catch default Vec<String>[pad(i), pad(i + 1)]
+            t += r.Len() + r[0].Len()
+        }
+        if M / 2 % 2 == 1 {
+            s String
+            join: spawn s = try text(i) catch default pad(i) + " defaulted"
+            t += s.Len()
+        }
+        if M / 4 % 2 == 1 {
+            k Vec<String>
+            join: spawn k = try vec(i) catch default Vec<String>[pad(i)]
+            if i % 1000 == 1: kept[i / 1000 % 4] = k
+            t += k.Len()
+        }
+    }
+    total := 0
+    for v in kept: total += v.Len()
+    io.PutLn($t + " " + $total)!
+    p2 := peak()
+    if N >= 100000: io.PutLn("flat" if p1 - p0 < 2048 or p2 - p1 < 2048 else "grew by " + $(p2 - p0) + " KB")!
+}

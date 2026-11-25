@@ -5473,7 +5473,7 @@ fn (m mut Machine&) spawn(fi I64, j mir.ScopeId, ti I32) {
     }
     offs, total := m.taskLayout(f, k, fi)
     nt, nc, ns := I64(k.Targets.N), I64(k.Clauses.N), I64(k.Scopes.N)
-    buf := m.allocate(total + 8 * nt + 16 * nc + 8 * ns + 16 + 8 * nt, aValue, js)
+    buf := m.allocate(total + 8 * nt + 16 * nc + 8 * ns + 16 + 8 * nt + 8, aValue, js)
     if m.halted: return
     for i in range k.Args.N {
         x := f.Ops[I64(k.Args.At) + i]
@@ -5504,6 +5504,8 @@ fn (m mut Machine&) spawn(fi I64, j mir.ScopeId, ti I32) {
         if r != mir.ScopeRef.Frame: w = m.scopeOf(fi, r)
         m.wr(Ptr(buf.Id, at + 8 * i), 8, w)
     }
+    # P4a: where the clauses' handlers build their defaults (mir.Task.Default), 0 for the program's
+    m.wr(Ptr(buf.Id, at + 8 * nt), 8, m.scopeOf(fi, f.Refs[I64(k.Default.At)]) if k.Default.N > I32(0) else 0)
     slot := try m.freeTasks.Pop() catch default m.newTaskSlot()
     tk := task()
     tk.Fn, tk.Task, tk.Buf, tk.Next = m.fs[fi].Fn, I64(ti), buf.Id, -1
@@ -5735,7 +5737,9 @@ fn (m mut Machine&) taskEnded(fr frame) {
                 case _ { passed++ }
             }
         }
-        for v in range passed: m.ws[m.fs[nf].Vars + v] = m.program
+        nt := I64(k.Targets.N)
+        ds := m.rd(Ptr(tk.Buf, total + 8 * nt + 16 * I64(k.Clauses.N) + 8 * I64(k.Scopes.N) + 16 + 8 * nt), 8)
+        for v in range passed: m.ws[m.fs[nf].Vars + v] = ds if ds != 0 else m.program
         m.loadCaptures(nf, g, env, passed)
         return
     }
