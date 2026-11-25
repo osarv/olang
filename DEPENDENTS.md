@@ -176,7 +176,10 @@ made fresh some new way, or that copy made later than the call's return, changes
 `occupy` makes are listed in `typed.Body.Rooms` (check.suppliedOccupy) and are no let-go in free.olang or lower.olang.
 A copy's text of a place built in slots is built in slots too (round 8: `lower.olang` copySlots in the Copy helper's
 `copyAt`), and `free.olang`'s `untracked` then keeps no slot place for a copy lowering makes - a new copy path in
-lowering that builds text elsewhere changes `untracked`'s `made` callers with it. Condition 6 per value (`free.olang`
+lowering that builds text elsewhere changes `untracked`'s `made` callers with it. A view call's value read where it
+stands is lent in the free pass as lowering reads it (`free.olang` readOf and textOf set `readArg` as `lower.olang`'s
+readOut and text's readHere mark `reads`, so `call` names no copy): a new read-in-place site in lowering, or one given
+up, changes the free pass's lends with it (2.4, wt-checkfalse). Condition 6 per value (`free.olang`
 instRoots, instNames, instReaches; docs/freeing.md 2.5) reads `typed.LocalUses`'s escapes and calls (EscHard, EscOwn,
 RetRefs, the lends, references, gives, links and holds), `RefsKept.NoneKept`, `typed.LastCopies` (D9i's moves) and the
 same `effects.olang` facts ownGoes does, and mirrors `lower.viewCand` (a local written, assigned or stored into holds a

@@ -189,6 +189,42 @@ fn secondValues(n I64) I64 {
     return s + q.name.Len()
 }
 
+# the same for a struct holding a Vec of text beside its text (O8f, 2.4): its constructor's instance copied where the
+# result goes, given a second value or declared in the loop, and read where it stands as an element (`v[j].n`)
+type Labeled struct(name String, tags Vec<String>, n I64) {
+    name
+    tags
+    n
+}
+
+fn Labeled.Of(i I64) Labeled {
+    t Vec<String>
+    for k in range 2: t.Push("t" + $(i + k))
+    return Labeled("l" + $i + "-label", t, i)
+}
+
+fn labeledValues(n I64) I64 {
+    outer Vec<Labeled>
+    inner Vec<Labeled>
+    for k in range 4 {
+        outer.Push(Labeled.Of(k))
+        inner.Push(Labeled.Of(k))
+    }
+    q := Labeled.Of(0)
+    s := 0
+    for i in range n {
+        q = Labeled.Of(i)
+        outer[i % 4] = q
+        p := Labeled.Of(i + 10)
+        inner[i % 4] = p
+        s += outer[(i + 1) % 4].n + inner[(i + 2) % 4].tags.Len()
+    }
+    churn()
+    for x in outer: s += x.name.Len() * 100 + x.tags[1].Len() * 10000
+    for x in inner: s += x.name.Len() * 1000000 + x.n
+    return s + q.tags[0].Len()
+}
+
 fn everyTurnSum(n I64) I64 {
     hs := everyTurn(n)
     churn()
@@ -275,11 +311,17 @@ test secondValues "lets go of a local's old value and copies its new one into an
     assert secondValues(10) == 2002967
 }
 
+test labeledValues "copies a struct holding a Vec of text into an element each turn and reads elements where they stand" {
+    assert labeledValues(10) == 36093319
+}
+
 test caseLocals "gives locals an enum case holding a parameter's reference" {
     assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
+assert labeledValues(10) == 36093319
 }
 
 # the same, computed while compiling
 assert everyTurnSum(5) == 105 and someTurnsSum(7) == 96 and vecs(4) == 10606 and arrays(3) == 603
 assert nested(3) == 312 and reassigned(3) == 3030 and rows(4) == 2404 and textsSum(4) == 104
 assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
+assert labeledValues(10) == 36093319

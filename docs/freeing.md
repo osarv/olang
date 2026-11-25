@@ -325,12 +325,19 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   and the evaluator stopped on the read (built and `-free late` printed different text); now flat at 200,000 turns.
   (Tried by wt-gaps5 and unsound: FirstSet widened to a `:=` local of a call's value - no owner local, moved at its last
   mention, its assignment letting go of nothing. Lifted where its store goes (item 17), the Let's call builds its value
-  there too, a let-go no release follows, and `-memory -check` passed while the program ran out of 8 MB.) Still open,
-  found beside it: a struct holding a `Vec<String>` (`Rec{name String, tags Vec<String>, n I64}`) given a second value
-  and stored into a `Vec<Rec>` keeps ~36 bytes a turn, named by `-memory` as "a reference into it is stored here, in
-  'q'" at the local's declaration - a condition the program does not meet (it holds no reference); declared in the loop
-  instead it is a named gap ("a value holding it is made with no store into it, by a call's value copied:
-  'recs[i % 4]'"). And the join form (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`, checks' freeing taskvals
+  there too, a let-go no release follows, and `-memory -check` passed while the program ran out of 8 MB.) Found beside it,
+  closed by wt-checkfalse: a struct holding a `Vec<String>` (`Rec{name String, tags Vec<String>, n I64}`) given a second
+  value and stored into a `Vec<Rec>` kept its text, ~36 bytes a turn, and `-memory -check` passed it. Three false
+  reasons named its owner leaf (tags) instead: "a reference into it is stored here, in 'q'" (storeAs judged the
+  callee's copy's leaves a reference, though a part place's own value in a value stored whole was already none - now an
+  owner leaf's is none too), a view in use after `q`'s let-go (views, the same exemption), and "a call's value copied"
+  at `recs[j].n` and a rendered `recs[1].name`, which lowering reads where they stand or copies into the statement's
+  innermost scope (readOf and textOf now lend that call as lower.readOut and lower.text's readHere do). The place that
+  kept was the text field's, never reported: the constructor's copy made where the result goes (gap 17's viewCtor) kept
+  a part place for "a copy of what a constructor is given" with no store owning anything, so `reported` skipped it. A
+  part place's let-go releases only an array built in a part region, so a copy is no reason to keep, as `untracked`
+  says for any copy. checks' freeing secondval (Tagged, a 400-byte name: master out of 8 MB with `-memory -check`
+  passing) now flat at 200,000 turns; kept's labeledValues. And the join form (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`, checks' freeing taskvals
   part 2): closed by wt-taskhandoff - question 1 below, answered (c): the task's growth of what it builds itself keeps
   nothing (`ownBody`), the target's type places keep only through its join, and the regions it made are the spawner's
   from the wait, their storage given back to the worker that made them. (Closed by wt-globalfill for a first value nothing reads - `r := build(0)` then
@@ -1247,3 +1254,9 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   callee's settle of a part region judged the instance by its anchors' home and closed the part region (`free.PartLeaf`:
   settled by the part's array). checks' freeing secondval `limited`; kept's secondValues read back after a churn. The
   self-build frees 556 of its 1017 places at once, peak 2613 MB, both unchanged.
+- 2026-11-25 (wt-checkfalse): 2.4's struct holding a `Vec<String>` given a second value - `-memory -check` passed it
+  while it kept its text each turn, naming conditions the program does not meet. Its text field, a part place, kept for
+  a constructor's copy and was never reported (no store owning); now no reason to keep (`viewCtor`), and the false
+  reasons on its owner leaf gone (`storeAs`, `views`: an owner leaf held by value as a part place's is; `readOf`,
+  `textOf`: a field read out of an element where it stands lends its call). checks' freeing secondval's Tagged; kept's
+  labeledValues. The self-build frees 556 of its 1017 places at once, as before; peak 2629 MB (2613 before).
