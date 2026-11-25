@@ -9620,6 +9620,10 @@ fn (f mut Free&) EndsMoved(b I64, blk I64, final Bool) Vec<I64> {
     return try m.Get(blk) catch default Vec<I64>()
 }
 
+# whether value local l of body b is one EndsMoved ends at its block's end holding its constructor's instance
+# (madeLocal) - which lowering may still move at its last use (D9i), ending nothing there then (lower.endMoved)
+fn (f mut Free&) EndsMade(b I64, l I64) Bool { return f.EndsLocal(b, l) and not f.movedLocal(b, l) }
+
 # whether value local l of body b is one EndsMoved ends at its block's end (lowering makes no last-use move of it, D9i)
 fn (f mut Free&) EndsLocal(b I64, l I64) Bool {
     for en in f.endsFor(b, true) {

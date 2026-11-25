@@ -1897,10 +1897,20 @@ fn (ln mut lowering&) block(bl typed.Block&) {
 fn (ln mut lowering&) endMoved(bl typed.Block&) {
     if not ln.freeing or ln.dead: return
     for l in ln.L.Free!.EndsMoved(I64(ln.B.Id), I64(bl.Id), true) {
+        # (a constructor's instance moved at its last use, D9i: its leaves are its destination's now)
+        if ln.movedAway(l): continue
         loc := ln.B.Locals[l]
         k := ln.L.Free!.EndPlace(I64(ln.B.Id), l)
         ln.releaseAt(mir.LocalId(I32(l)), ln.movedPath(k) if k >= 0 else ln.leafPaths(loc.Ty), loc.Sp)
     }
+}
+
+# whether value local l is moved at its last use (D9i: a copy of it left out)
+fn (ln mut lowering&) movedAway(l I64) Bool {
+    for m in ln.moved.Values() {
+        if m == l: return true
+    }
+    return false
 }
 
 # the release of a value moved out of candidate place k, whole (a handle's reference, field 0), where k is decided
@@ -6771,8 +6781,9 @@ fn (ln mut lowering&) movable(u typed.LocalUses&, l I64, site I64) Bool {
     if loc.Kind != typed.LocalKind.Var or ln.T.IsRef(loc.Ty): return false
     # (one declared with no value or assigned whole only where that assignment gives its first value - FirstSet)
     if ln.vl.Has(l) or ln.rvl.Has(l) or ln.noLetCopy.Has(l) or (u.Whole[l] or loc.Unset) and not u.FirstSet(l) or ln.escapes(u, l): return false
-    # (a local ended at its block's end holding a moved value releases it there - free.EndsMoved)
-    if ln.freeing and ln.L.Free!.EndsLocal(I64(ln.B.Id), l): return false
+    # (a local ended at its block's end holding a moved value releases it there - free.EndsMoved; one holding its
+    # constructor's instance is moved all the same, and then ends nothing - endMoved)
+    if ln.freeing and ln.L.Free!.EndsLocal(I64(ln.B.Id), l) and not ln.L.Free!.EndsMade(I64(ln.B.Id), l): return false
     for j in range u.AliasOf.Len() {
         if u.AliasOf[j] == l: return false
         if (ln.vl.Has(j) or ln.rvl.Has(j)) and u.Init[j] != null and valueRootLocal(u.Init[j]!) == l: return false
