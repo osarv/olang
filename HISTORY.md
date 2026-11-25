@@ -43517,3 +43517,31 @@ the stand-in of the target's storage is the only place it can go. SPEC O8f's lis
 wait names the narrower case. checks' freeing taskdefault (new): defaults building a Vec of text, text, and a few kept
 in a long-lived Vec - flat at 100,000 turns where master grew 9.5 MB and 6.4 MB over the second half; built, `-free
 late`, `-sanitize`, `-race`, `-memory -check` and the evaluator agree. (Text defaults alone were already flat on master.)
+
+## 2026-11-25: a lambda's build through a captured helper's field found at run time (O29, O23b, T22c; mine; wt-fnvalbuild)
+
+docs/freeing.md 2.4 listed it after field scopes (wt-fieldscopes): a lambda passed as a function value that no judging
+follows into its callee (one of a cycle of calls, past T22c's limits) and that builds through a captured helper's field
+(`via(fn(k I64) { p.C.names.Push($k + "b") }, i)`, `p := Pass(c, i)` a turn's helper) gave the field's declaration
+back - O23b's equality for the whole program - so every turn's helper lived as long as the field's referent. A direct
+call through the same capture (a method of `p`) reaches the binding by O29's run-time lookup instead.
+
+Where it fell back: in the lambda's own judging the capture is a local of kind Capture, not a parameter, so
+`scope.fieldTerm` gave its promoted field's scope as an underestimate (`Derived(-k, w)`, read but never built into); the
+build into it went through `buildsInto`, whose `giveBackDerived` gave the declaration back. Lambdas take no hidden
+derived scope parameters (`takesDerived`: they are called through values), so `derivedBuilt` had nothing to offer.
+
+The decided fix, as built: an underestimate read through a lambda's capture - held by value or read through a captured
+reference - of a field holding a reference records that field, read, as its root (`capFieldRoot`, kept in
+`underRoot` by the underestimate's index). `derivedBuilt` then says a temporary is built there, and `derivedScope`
+gives the plan's `Found` from that root - the scope found while the program runs from the field's referent's address,
+as `derivedRoot` gives a parameter's derived scope where no caller passes it. Where the lambda is followed (a twin) its
+captures' bindings are known and nothing changes; stores of existing storage through such a field still give the
+declaration back, as before (O23b). No rule changed - the program is accepted as before and frees earlier - so SPEC is
+unchanged.
+
+Measured: the probe of 21,000 turns (each helper 4 KB) grew 160 MB of peak before and is flat after; checks' freeing
+fnvalfield (200,000 turns) ran out of memory under 8 MB on master (peak ~95-108 MB) and runs under it now, `-memory
+-check` clean, its output the same built, `-free late`, `-sanitize` and under the evaluator. tests/fnvalues.olang's test
+(the same shape read back after an arena churn, a global the evaluator bakes) agrees across the four. The self-build's
+fixed point holds.

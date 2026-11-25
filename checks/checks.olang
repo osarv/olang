@@ -620,7 +620,8 @@ fn freeing(r mut report&) ? Failed {
     # rule's slot places per value, docs/freeing.md 2.5; gaps17: gap 17's open part, a struct holding a Map built by its
     # constructor and returned - the instance copied where the result goes, the Map local only read for that copy;
     # ctormaps: its neighbours, `s := S(m); return s`, an array's and a Vec<S>'s element given S(m) in the loop, the local
-    # read again after)
+    # read again after; fnvalfield: a lambda passed as a function value no judging follows, building through a captured
+    # helper's field - found where the field's referent lives (O29), the helper let go with its turn)
     limited := Array<String&>["append", "global", "arrays", "fields", "elements", "mapvalues", "unset", "vecelems", "mapcopy"
                               "returned", "vectexts", "vecvecs", "mapelems", "views", "copytext", "ownerelems", "soleelems"
                               "structelems", "copyelems", "fillelems", "elemcopies", "fillread", "ownerpair", "fillreturn", "nestedowners", "ownervecs"
@@ -630,7 +631,7 @@ fn freeing(r mut report&) ? Failed {
                               "fixeddefaults", "textstructs", "textarrays", "pushjoin", "constargs", "fixedfills", "ctortexts", "splitlocal", "widenlocal", "elemarg"
                               "mapfill", "mapcopies", "assignkept", "ctorkept", "zerofill", "litstores", "againkept"
                               "litlocal", "globalinit", "againread", "rettext", "gaps19", "growkept", "viewother", "gaps17b", "gaps17"
-                              "ctormaps"]
+                              "ctormaps", "fnvalfield"]
     full := Array<String&>["88890 88890 15288890\n", "88890\n", "220049997\n", "88890 88890 20000 20000\n"
                     "name 319993 value 319993\n", "1 10 value 99993 padded out to some length .........................\n"
                     "19999 20000\n", "401980000 100 100\n", "5980000 7\n", "80001000000 4\n", "1346674 19998 20\n"
@@ -659,7 +660,7 @@ fn freeing(r mut report&) ? Failed {
                     "Array<I64>[1, 2] Array<String>[\"a\", \"b\"] Array<I64>[4, 4, 4]\n201038890 x19999 padded out to some length 5 19999\n"
                     "679997 t19999 padded out to some length\n", "10288890 399993 padded out a little\n", "80020977780\n", "20005900000\n"
                     "40012200000\n", "2600000\n", "400000\n"
-                    "800000 10\n"]
+                    "800000 10\n", "200000 10 199999-199999 padded out a little\n"]
     part := Array<String&>["490 490 148890\n", "490\n", "220494\n", "490 490 200 200\n", "name 193 value 193\n"
                     "1 10 value 193 padded out to some length .........................\n", "199 200\n", "59800 100 100\n", "59800 7\n"
                     "20500 4\n", "12272 198 20\n", "66300 5 30\n"
@@ -682,7 +683,7 @@ fn freeing(r mut report&) ? Failed {
                     "597 t199 padded out to some length\n", "28390 t201 padded out to some length y199 199\n"
                     "Array<I64>[1, 2] Array<String>[\"a\", \"b\"] Array<I64>[4, 4, 4]\n29990 x199 padded out to some length 5 199\n"
                     "6797 t199 padded out to some length\n", "4490 193 padded out a little\n", "29180\n", "25900\n", "52200\n", "2600\n"
-                    "4000\n", "8000 10\n"]
+                    "4000\n", "8000 10\n", "200 10 200-199 padded out a little\n"]
     for i in range limited.Len() {
         p := limited[i]
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)

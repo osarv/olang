@@ -56,6 +56,52 @@ test "text made in a loop, picked through a value and read in the turn" {
     assert total == 10 * 2 + 40 * 3
 }
 
+# docs/freeing.md 2.4 (wt-fnvalbuild): a lambda passed as a function value not followed into its callee (one of a cycle
+# of calls, T22c) builds through a captured helper's field: what it builds is found where the field's referent lives
+# while the program runs (O29), never in the turn's frame the helper is let go with
+type Notes struct() {
+    names Vec<String&> = Vec<String&>()
+}
+
+type Noter struct(C mut Notes&) {
+    C
+}
+
+fn viaCycle(f fn&(k I64), i I64) {
+    if i % 3 == 1 {
+        viaCycle(f, i + 1)
+        return
+    }
+    f(i)
+}
+
+fn noteTurn(c mut Notes&, i I64) {
+    p := Noter(c)
+    viaCycle(fn(k I64) { p.C.names.Push($k + "b") }, i)
+}
+
+fn noted(n I64) String {
+    c := Notes()
+    for i in range n: noteTurn(c, i)
+    t := churn(100)
+    b := StringBuilder()
+    for x in c.names: b.Push(x + " ")
+    b.Push($t)
+    return b.ToString()
+}
+
+BakedNotes String = noted(5)
+
+test "a lambda passed as a value builds through a captured helper's field where its referent lives" {
+    c := Notes()
+    for i in range 5: noteTurn(c, i)
+    churn(200)
+    b := StringBuilder()
+    for x in c.names: b.Push(x + " ")
+    assert b.ToString() == "0b 2b 2b 3b 5b "
+    assert noted(5) == "0b 2b 2b 3b 5b 0" and BakedNotes == noted(5)
+}
+
 test "a value of a type whose result is built is unchanged" {
     b := built
     assert b(3)[2] == 7

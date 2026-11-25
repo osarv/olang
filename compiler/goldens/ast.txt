@@ -2140,7 +2140,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-eae3444751d7500d 40a08ced8197bb9e checks/checks.olang
+06550dc170fd5d96 869016370e74d09f checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2277,6 +2277,7 @@ ed65e1c871a90895 f027d66ab67504be checks/fixtures/freeing/elements.olang
 6e8ccc84988a6c76 472f3f071fa0f3e5 checks/fixtures/freeing/fills.olang
 635d890092195116 ee301f1a82942b4c checks/fixtures/freeing/fixeddefaults.olang
 478c2c45c6a1d059 3ee0bcd066656c61 checks/fixtures/freeing/fixedfills.olang
+961de335ceb4c7e9 b26656afbc3dd322 checks/fixtures/freeing/fnvalfield.olang
 658cd15b20393216 49056b0a8ff733fb checks/fixtures/freeing/gaps.olang
 9ee054d0d618692b 5c0c382c27340712 checks/fixtures/freeing/gaps17.olang
 77879aef5269e8f7 5574b74420002b43 checks/fixtures/freeing/gaps17b.olang
@@ -2589,7 +2590,7 @@ e2b2b02653bc4b63 28b9ec011557160d compiler/prompt.olang
 e7ba5bcc74b12eea 1ae5eae57a5881f5 compiler/records.olang
 6a47d4d73d4650d3 55dae3ed6d428fcd compiler/runtime.olang
 26fb4de43982a9c2 06825d8007053e8c compiler/scan.olang
-c17521d58cc6c8e8 263feb1ddedb9f91 compiler/scope.olang
+8a5fdf8b001fad0e 0b406a63bddec73c compiler/scope.olang
 951ea77a9296b657 b5a93bcfb6051dc9 compiler/session.olang
 8981299fcf27ba06 e84af040edacca63 compiler/source.olang
 9bee4e94ca053127 837a4be40276ab63 compiler/spin.olang
@@ -2802,7 +2803,7 @@ f076b6838bea0f96 c7c008fcbdf97f72 tests/fixedrows.olang
 4a2423e24091ec53 7088e00c490b61b6 tests/fndefaults.olang
 04dafbddff7a2110 9cc46197fc182a21 tests/fnref.olang
 2857890196bcd123 eae07c66ff5f33ee tests/fnrel.olang
-5559f859c15c9003 b8b57195716d2f2b tests/fnvalues.olang
+756489f2099dca65 09c7d0a3bd34ac6b tests/fnvalues.olang
 5066571f3c50cff8 c620431f0e8526af tests/follow.olang
 ff28dc4a1b204d1e 3eaf045f8a0bacb0 tests/freshref.olang
 f4ebfee9d08f1b94 8ab2ea8ad0cc809c tests/genenums.olang
