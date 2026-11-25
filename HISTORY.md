@@ -43775,3 +43775,47 @@ building a local where its last-use copy goes for a move lowering no longer make
 The self-build frees 556 of its 1018 places at once (1017 before); its warm peak 2622 MB, the base's compiler 2589 MB
 measured the same way (the walker's second set per local). `make fixedpoint` passes; the freeing and earlyfree
 scenarios, consistency and the goldens (tokens, ast and run recaptured for heldrefs, heldkeeps and heldRefs) pass.
+
+## 2026-11-25: a kept constructor's arguments built in the turn, and turn rows (O8f, B18a, D9h; mine; wt-liftcopy)
+
+wt-origins left one shape open: `a := mkA(i); q := P(a, mkB(i), base); o.inner = q` (and `P(a.Copy(), ...)`, `b :=
+mkB(i); P(mkA(i), b, base)`), `P{a Vec<String>, b Vec<I64>, r String&}`, grew ~1.2 KB a turn (238 MB at 200,000) while
+`-memory -check` passed. The guess was scope.liftCopied; traced (lowering's view log, the IR, prints in free's makeOf and
+lowering's copies), it was not: `a` stayed in its turn - the instance views it, so item 17's `ctorViewed` keeps it there.
+`P`'s instance views what it is given, and a copy among the arguments makes it no fresh instance (typed.FreshViews
+counts only calls, texts and fills built where the instance lands), so lowering copies the instance as the call returns
+(D9h, keptCtor), into part regions where `q` lives (viewCtor's `parted`): flat. What leaked were the arguments it
+viewed. The scope pass builds them where the instance would have lived - `q`'s scope, the function's, since `q` holds
+`base`'s reference (O25h) - and there the copy of `a` (keptView leaves it out only where every other argument is quiet;
+`mkB(i)` is a call) and `mkB(i)`'s value were read once, for the instance's copy, then kept until the function
+returned. Half each (the copy ~0.3 KB, the call's Vec<I64> ~0.9 KB with its growth). Neither was named: free's makeOf
+took the copy for a by-value argument its callee only reads (`preservedArg`, exempt: "reclaimed where the scope it is
+built in closes" - true, but that scope was the function's) and the call's value for the instance's own.
+
+Built: lowering builds a kept constructor's viewed argument the constructor only reads (Preserves) in the innermost
+scope open - the copy (keptView records it in `keptArgs`; make's copy takes that scope where early freeing made it no
+region) and a call's value (keptCall; the call's result scope made that scope, keptResult, where the result's copy shares
+nothing with it, SharesRefs - a reference it holds may refer into its result scope, which the copy keeps). Both are read
+only until the instance's copy is made, in the same statement, so the innermost scope still holds them then. And the
+proof is honest where they are not so built: a turn row (B18a, LiftGaps, as wt-freeing's liftedCopy for a local lifted
+for a move not made) for a preserved argument's copy of a type owning parts built in a scope outside a loop's turn the
+call is in (free records the sites it exempts, PreservedSite; lower.turnKept, outsideTurn), and for a kept constructor's
+call value whose copy shares a reference (keptResult). With the placement switched off, the shape fails `-check` naming
+both, at the argument's column.
+
+The rows found five more in the self-build's `-memory`: by-value arguments a function only reads, built where its
+parameter's scope is - `out.Push(pt)` (effects), `args.Push(cur)` (bindgen), `made.Parts.Push($out[k].Identity)` (emit)
+- each copied again by the callee and dead once the call returns. The same rule closes them (lower.readArgCopy: a
+callee that is no constructor, Preserves, its result viewing no such argument): four closed. Left named:
+`lw.fx = effects.Effects(lw.P, lw.Bodies)` - a constructor's instance stored into a field, run once. The row first
+fired for `part` (scalars and a reference), whose copy builds nothing: only a type owning parts (QCE) counts.
+
+The shape is flat at 1.8 MB at 20,000 and 200,000 turns (the base runs out of 8 MB at 20,000); checks' freeing keptargs
+(`limited`: the value local, the explicit copy, the call's value first with the instance read again after the store),
+built, `-free late`, `-sanitize` and the evaluator agreeing; kept's keptArgs reads the stored texts back after a churn,
+the evaluator deciding it. The 18 probes of review 1125 agree under every oracle, their `-memory` reports unchanged.
+
+The self-build frees 556 of its 1018 places at once, unchanged; its warm peak 2588 MB (2622 on wt-origins, measured the
+same way: the build's child maximum resident set, second run). `make fixedpoint`, consistency, the freeing and
+earlyfree scenarios pass; the goldens moved for the new fixture and test (tokens, ast, run) and lowering's new field
+(layout).

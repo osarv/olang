@@ -628,6 +628,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     rvl Map<I64, I64>
     vl Map<I64, Bool>
     noCopy Map<I64, Bool>
+    keptArgs Map<I64, Bool>    # keptView, readArgCopy: by-value argument copies read only until the call (or its instance's copy) is made, built in the innermost scope open
     qCover Map<I64, Bool>      # quietLife: the types whose storage the view held covers (its by-value parts)
     qRoot types.TypeId = types.TypeId(0)   # ... and the type of the object it is a view into
     qSelf I64 = -1             # ... and windowQuiet's view call: its own try's clauses run only where it gave no view
@@ -5676,7 +5677,11 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
             ln.readHere(a)
         }
         if not task: ln.argView(a, body, i)
-        if kept and i < typed.ViewBits and (ln.L.ViewsOf(typed.BodyId(I32(body))) & (I64(1) << i)) != 0: ln.keptView(c, body, i, a)
+        if not task and byValue: ln.readArgCopy(body, i, a)
+        if kept and i < typed.ViewBits and (ln.L.ViewsOf(typed.BodyId(I32(body))) & (I64(1) << i)) != 0 {
+            ln.keptView(c, body, i, a)
+            ln.keptCall(body, i, a)
+        }
         ro := i < ps.Len() and t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) == 0
         v := ln.stackArg(a, body, i) if reads and plain and ro else mir.Operand.None
         wasCopy := ln.taskCopy
@@ -5806,16 +5811,71 @@ fn (ln mut lowering&) keptCtor(c typed.Call&, ty types.TypeId) Bool {
 # constructor writes nothing of its parameter i (D9a) and every other argument only reads (quietArg) - since the copy of
 # the instance copies the storage it views, the argument's copy was built only to be copied again (gap 17's `S(m)`, its
 # first copy kept where the instance would have lived)
+# Where it is made all the same, a copy the constructor only reads (Preserves) is built in the innermost scope open, not
+# where the instance would have lived: it is read only until the instance's copy is made, in the same statement - built
+# there, a scope outside a loop's turn, it stayed until that scope closed though nothing let go of it (O8f, 2.4)
 fn (ln mut lowering&) keptView(c typed.Call&, body I64, i I64, a typed.Expr&) {
-    if a != typed.Expr.Make or ln.L.writesParam(body, i): return
+    if a != typed.Expr.Make: return
     m := a.m
     if m.Kind != typed.MakeKind.Copy or m.Items.Len() != 1 or m.Site < typed.SiteId(0) or ln.T.RunsCopy(a.Type()): return
+    if ln.L.preserves(body, i): ln.keptArgs.Put(I64(m.Site), true)
+    if ln.L.writesParam(body, i): return
     l := valueRootLocal(m.Items[0])
     if l < 0 or m.Items[0] != typed.Expr.Read or ln.T.IsRef(ln.B.Locals[l].Ty): return
     for j in range c.Args.Len() {
         if j != i and not quietArg(c.Args[j]): return
     }
     ln.noCopy.Put(I64(m.Site), true)
+}
+
+# O8f (B18a): a by-value argument's copy a callee that is no constructor only reads (Preserves) and hands back no view
+# of - `out.Push(pt)` - is dead once the call returns: built in the innermost scope open (keptArgs), never where the
+# callee's parameter would have it, a scope outside a loop's turn nothing then lets go of it in
+fn (ln mut lowering&) readArgCopy(body I64, i I64, a typed.Expr&) {
+    if body < 0 or ln.L.Bodies[body].Of == typed.BodyOf.Ctor or a != typed.Expr.Make: return
+    m := a.m
+    if m.Kind != typed.MakeKind.Copy or m.Site < typed.SiteId(0) or ln.T.RunsCopy(a.Type()): return
+    if i < typed.ViewBits and (ln.L.ViewsOf(typed.BodyId(I32(body))) & (I64(1) << i)) != 0: return
+    if ln.L.preserves(body, i): ln.keptArgs.Put(I64(m.Site), true)
+}
+
+# O8f (2.4): a call's value given to a by-value parameter i the constructor only reads (Preserves), of a constructor
+# call whose instance views it and is copied as the call returns (keptCtor) - `P(a, mkB(i), base)` - is read only until
+# that copy is made: its result built in the innermost scope open (keptResult), never where the instance would have
+# lived, a scope outside a loop's turn nothing then lets go of it in
+fn (ln mut lowering&) keptCall(body I64, i I64, a typed.Expr&) {
+    c := plainCall(a)
+    if c == null or c.Site < typed.SiteId(0) or not ln.L.preserves(body, i): return
+    ln.keptArgs.Put(I64(c.Site), true)
+}
+
+# the call an argument is, under its conversions (Away), null for any other
+fn plainCall(x typed.Expr&) typed.Call?& {
+    return match x {
+        case typed.Expr.Call(_, _, c): c
+        case typed.Expr.Away(_, _, y): plainCall(y)
+        case _: null
+    }
+}
+
+# keptCall's: the result scope the call passes, scopes, made the innermost scope open - where its result's copy shares
+# no storage with it (types.SharesRefs: a reference it holds may refer into its result scope, which a copy keeps) and early freeing made it no region
+# of its own (Held). Left where it is, outside a loop's turn the call is in, it keeps until that scope closes though
+# nothing lets go of it: a gap -memory -check fails on (LiftGaps)
+fn (ln mut lowering&) keptResult(callee mir.Callee, fty types.TypeId, scopes mir.Range, sp source.Span) {
+    if callee != mir.Callee.Fn or ln.levels.Len() == 0: return
+    vs := ln.T.ScopeVarsOf(fty)
+    for j in range vs.Len().Min(I64(scopes.N)) {
+        if vs[j] != types.ResultVar: continue
+        at := ln.F.Refs[I64(scopes.At) + j]
+        if heldRef(at): return
+        if not ln.T.SharesRefs(ln.T.Result(fty)) {
+            ln.F.Refs[I64(scopes.At) + j] = mir.ScopeRef.Scope(ln.top().S)
+            return
+        }
+        if ln.freeing and ln.outsideTurn(at) { ln.L.LiftGaps.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) + ": a call's value a constructor's instance views and is copied from keeps until its scope closes: it is built outside the loop's turn the call is in, and no place lets go of it") }
+        return
+    }
 }
 
 # whether evaluating argument x changes nothing: a constant, a plain place's read (plainPlace), or a copy of one
@@ -5842,6 +5902,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     }
     res := t.Result(fty)
     scopes := ln.passedFor(callee, fty, c.Site)
+    if ln.keptArgs.Has(I64(c.Site)): ln.keptResult(callee, fty, scopes, sp)
     ok := ln.F.NewBlock()
     dest := mir.NoLocal
     if res != types.VoidT and res != types.NoreturnT { dest = ln.temp(ty if ty != types.VoidT else res, sp) }
@@ -6743,6 +6804,38 @@ fn (ln mut lowering&) liftedCopy(l I64) {
     }
 }
 
+# B18a: a by-value argument's copy its callee only reads (free.PreservedSite) is let go of through no place - reclaimed
+# where the scope it is built in closes. Built in one outside a loop's turn its call is in, at, it stays there turn
+# after turn though no place's let-go names it: a gap -memory -check fails on (LiftGaps)
+fn (ln mut lowering&) turnKept(site I64, ty types.TypeId, at mir.ScopeRef, sp source.Span) {
+    # (a copy of a value owning no parts builds nothing there: QCE)
+    if not ln.freeing or not ln.T.OwnsParts(ty) or not ln.L.Free!.PreservedSite(I64(ln.B.Id), site) or not ln.outsideTurn(at): return
+    ln.L.LiftGaps.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) + ": a by-value argument's copy its callee only reads keeps until its scope closes: it is built outside the loop's turn the call is in, and no place lets go of it")
+}
+
+# whether storage built in at outlives the turn of the innermost loop open - a scope of a level outside that turn's, the
+# frame's, the program's or a caller's; never a region early freeing made (Held)
+fn (ln lowering&) outsideTurn(at mir.ScopeRef) Bool {
+    turn := -1
+    for i in range ln.levels.Len() {
+        if ln.levels[i].Kind == mir.ScopeKind.Loop: turn = i
+    }
+    if turn < 0: return false
+    return match at {
+        case mir.ScopeRef.Held(_): false
+        case mir.ScopeRef.Scope(s): ln.levelOf(s) < turn
+        case _: true
+    }
+}
+
+# the index of the level whose scope is s, -1 for none open
+fn (ln lowering&) levelOf(s mir.ScopeId) I64 {
+    for i in range ln.levels.Len() {
+        if ln.levels[i].S == s: return i
+    }
+    return -1
+}
+
 # whether every argument constructor call c's instance may view is a local moved into it at its last use (D9i), the
 # instance landing in a block inside each one's
 fn (ln mut lowering&) movedViews(c typed.Call&, id I64) Bool {
@@ -7431,17 +7524,21 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             # (a view kept in place of this copy, where nothing could tell the two apart - never one running a declared
             # Copy, E31d, which may make what the value refers to anew)
             if ln.noCopy.Has(I64(m.Site)) and not t.RunsCopy(ty): return v
-            sv := ln.splitCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
+            at := ln.madeAt(m.Site)
+            # (a copy read only until its call returns, or until a kept constructor's instance's copy is made: keptArgs)
+            if ln.keptArgs.Has(I64(m.Site)) and ln.levels.Len() > 0 and not heldRef(at): at = mir.ScopeRef.Scope(ln.top().S)
+            ln.turnKept(I64(m.Site), ty, at, sp)
+            sv := ln.splitCopy(I64(m.Site), v, ty, at, sp)
             if sv != mir.Operand.None: return sv
-            pv := ln.partCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
+            pv := ln.partCopy(I64(m.Site), v, ty, at, sp)
             if pv != mir.Operand.None: return pv
-            ov := ln.ownerCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
+            ov := ln.ownerCopy(I64(m.Site), v, ty, at, sp)
             if ov != mir.Operand.None: return ov
-            wv := ln.ownersCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
+            wv := ln.ownersCopy(I64(m.Site), v, ty, at, sp)
             if wv != mir.Operand.None: return wv
-            av := ln.arraysCopy(I64(m.Site), v, ty, ln.madeAt(m.Site), sp)
+            av := ln.arraysCopy(I64(m.Site), v, ty, at, sp)
             if av != mir.Operand.None: return av
-            return ln.ownCopyOf(v, ty, ln.madeAt(m.Site), sp)
+            return ln.ownCopyOf(v, ty, at, sp)
         }
     }
 }

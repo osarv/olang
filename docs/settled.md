@@ -908,7 +908,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   the scope of the thing we're storing it in").** A value local kept by reference past its block or turn, or copied
   whole at its last mention into longer-lived storage, has its storage placed where it is kept, a new value each time
   its declaration runs - but not one a constructor's instance views (D9h, `S(m)`): that instance is copied where it is
-  kept, the local only read for the copy and left in its block (O8f, gap 17, 2026-11-25).
+  kept, the local only read for the copy and left in its block (O8f, gap 17, 2026-11-25). What such a copied instance
+  views of its arguments the constructor only reads - a value local's copy, a call's value - is built in the innermost
+  scope open, read only until that copy is made, never where the instance's local lives (wt-liftcopy, 2026-11-25).
 - **A fresh value given to a reference is built where the reference goes (E12c, O6; 2026-11-23, mine).** A text
   (`v.Push($s)` into a `Vec<String&>`) or a call's result whose callee hands back no view of its arguments
   (`v.Push(b.ToString())`), promoted to a read-only reference to a run-time-length array, is built in the reference's

@@ -524,15 +524,29 @@ to grow into them, (c) a hand-off at the join. (c) is built:
   A reference local given an element (`rr String& = o.inner.a[2]`) holds lowering's copy of it (its origin that copy,
   D9h), no view of the leaf: freed, agreeing. Not followed: a value built by any call but a plain constructor (`O(mk(),
   0)`) - all its origins, as before.
-- **A constructor given a value local, its instance in a local whose claim is lifted (open, found by wt-origins).**
-  `a := mkA(i); q := P(a, mkB(i), base); o.inner = q` (or `P(a.Copy(), ...)`, or `b := mkB(i); P(mkA(i), b, base)`)
-  still grows ~1.2 KB a turn (238 MB at 200,000; 558 MB before wt-origins), and `-memory -check` passes: `q`'s claim is
-  lifted to the function's scope (O25h, as above) and storage built for the constructor's argument from the named local
-  lands there with it, in no region a let-go releases (with `q := P(mkA(i), mkB(i), base)` it is flat; without the
-  store into `o` it is flat). No let-go is kept, so no row names it. Not yet traced; the likely cause is scope.liftCopied
-  (item 17) building the local where the argument's copy goes, for a last-use move lowering no longer makes there (the
-  argument's copy is split into part regions, `splitArg`). What closes it: build the local where it is declared, or
-  move its storage into the part regions; section 8.
+- **A constructor given a value local, its instance in a local whose claim is lifted (closed by wt-liftcopy,
+  2026-11-25).** `a := mkA(i); q := P(a, mkB(i), base); o.inner = q` (or `P(a.Copy(), ...)`, or `b := mkB(i);
+  P(mkA(i), b, base)`) grew ~1.2 KB a turn (238 MB at 200,000), and `-memory -check` passed. Not scope.liftCopied: `a`
+  stayed in its turn (the instance views it, `ctorViewed`). `P`'s instance views what it is given, and a value local's
+  copy among its arguments makes it no fresh instance (typed.FreshViews), so lowering copies it as the call returns
+  (D9h, keptCtor) - into part regions where `q` lives (viewCtor's `parted`). But the arguments it views were built where
+  the instance would have lived, `q`'s scope - the function's, lifted there by its reference (O25h): the copy of `a`
+  (keptView leaves it out only where every other argument is quiet, and `mkB(i)` is a call) and `mkB(i)`'s value, each
+  read only until the instance's copy is made, then kept until the function returned; the free pass took the copy for
+  one its callee only reads (`preservedArg`: "reclaimed where the scope it is built in closes") and the call's value for
+  the instance's own, so no row named either. Now, for a kept constructor's argument the constructor only reads
+  (Preserves): its copy is built in the innermost scope open (lower.keptView's `keptArgs`), and a call's value given there
+  has its result scope made that scope (keptCall, keptResult) where its copy shares nothing with it (SharesRefs) and
+  early freeing made it no region - dead with the turn. And where either is still built outside a loop's turn the call
+  is in - a preserved argument's copy no kept constructor takes (free.PreservedSite, lower.turnKept), a call's value
+  whose copy shares a reference with it (keptResult) - `-memory` names it and `-check` fails (LiftGaps), as for a local
+  lifted for a move not made (liftedCopy). Flat at 1.8 MB at 20,000 and 200,000 turns (8 MB limit; the base runs out at
+  20,000). checks' freeing keptargs (`limited`), kept's keptArgs. The new rows found five more in the self-build: a
+  by-value argument's copy a function only reads built where its parameter's scope is, outside the turn - `out.Push(pt)`,
+  `args.Push(cur)` - each dead once its call returns: built in the innermost scope open as well (lower.readArgCopy: a
+  callee that is no constructor, Preserves, handing back no view of it), four of them closed. Left, named:
+  `lw.fx = effects.Effects(lw.P, lw.Bodies)` (lower.olang, a constructor's instance stored into a field, its argument's
+  copy where the field's value lives; runs once).
 
 ### 2.5 Per instance: a view of one value, a let-go of another (wt-perinst, 2026-11-25)
 
@@ -635,7 +649,9 @@ declared outside the loop that is no candidate, a global or field of a kind not 
 text or part places' arrays of plain values - gaps 8, 16, 17); a
 `SetAt` giving an element owning storage (gap 9); a B18 place kept for a copy of its holder or a change in place
 (RCopied, RInPlace - gaps 6, 7); a program's call - a removal, `Put`, `SetAt` - whose library place keeps for a reason in
-the library's code (gaps 10, 15). Every earlyfree fixture passes; `checks/fixtures/freeing/gaps.olang` fails naming its
+the library's code (gaps 10, 15). A turn row (B18a, LiftGaps): storage built outside a loop's turn its statement is in that no place lets go of - a local
+built where its last-use copy goes for a move lowering does not make (liftedCopy), a by-value argument's copy its callee
+only reads (turnKept), a call's value a kept constructor's instance views (keptResult). Every earlyfree fixture passes; `checks/fixtures/freeing/gaps.olang` fails naming its
 element (an `Array<Map<String, I64>>`'s, gap 17's open part). A text element place is reported where the program's own code gives an element
 another value; its removals are the collection's.
 
@@ -1337,3 +1353,8 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   heldRefs. Open: a constructor given a value local, its instance's claim lifted (2.4). The self-build frees 556 of
   its 1018 places at once (the walker's new fields among them); warm peak 2622 MB against 2589 for
   the base's compiler measured the same way.
+- 2026-11-25 (wt-liftcopy): a kept constructor's viewed arguments - a value local's copy, a call's value - built in the
+  innermost scope open (`keptArgs`, keptCall/keptResult), and a by-value argument's copy a function only reads too
+  (readArgCopy); turn rows (B18a) for such storage built outside a loop's turn that no place lets go of (turnKept,
+  keptResult). The 238 MB shape flat at 1.8 MB. checks' freeing keptargs, kept's keptArgs. The self-build frees 556 of
+  its 1018 places at once, one turn row left (`effects.Effects(lw.P, lw.Bodies)`, run once); warm peak 2588 MB (2622).
