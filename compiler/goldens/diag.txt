@@ -2148,11 +2148,11 @@ e31bviewmut.olang:11:24: note: the callee is no view of the element because of t
 e31bviewmut.olang:15:6: help: call it in place, 'x.RefMut(i)' (a Vec), or copy out and back: 't := x[i]', the call on 't', 'x[i] = t'; or hold the elements by reference
 compilation failed with 1 error
 === e31bviewnesteddeep.olang
-e31bviewnesteddeep.olang:8:22: error[S4e]: the write to 'm' is lost: nothing reads 'm' after it
+e31bviewnesteddeep.olang:8:22: error[S4e]: 'm' is repointed at a new value: the caller still sees what it passed
     8 | fn reset(m mut M&) { m = M(m.d, 0) }
       |                      ^~~~~~~~~~~~~
-e31bviewnesteddeep.olang:8:22: note: 'm' is a reference, and '=' repoints the callee's own copy of it (S4a), never writing what the caller passed
-e31bviewnesteddeep.olang:8:22: help: write the fields through the reference - 'm.f = ...' - or return the new value
+e31bviewnesteddeep.olang:8:22: note: 'm' is a reference parameter, and '=' repoints the callee's own copy of it (S4a) - at storage built here, which the caller never sees
+e31bviewnesteddeep.olang:8:22: help: write the fields through the reference - 'm.f = ...' - return the new value, or build a scratch value in a local, 't := ...'
 e31bviewnesteddeep.olang:27:11: error[E31b]: this call writes a copy of x[i]
    27 |     step(s[1])
       |           ^
@@ -2733,6 +2733,31 @@ compilation failed with 1 error
 forintrynothing.olang:5:5: error[S9e]: nothing this loop calls by itself can fail - drop the 'try'
     5 |     for _ in try a { }
       |     ^~~
+compilation failed with 1 error
+=== freshparamrepointcall.olang
+freshparamrepointcall.olang:7:4: error[D19a]: 'make' makes a N its module declares and takes none
+    7 | fn make(v I64) N { return N(v) }
+      |    ^~~~
+freshparamrepointcall.olang:7:4: help: declare it as the type's builder, 'fn N.make(...)', and call it 'N.make(...)'
+freshparamrepointcall.olang:10:5: error[S4e]: 'n' is repointed at a new value: the caller still sees what it passed
+   10 |     n = make(n.v + 1)
+      |     ^~~~~~~~~~~~~~~~~
+freshparamrepointcall.olang:10:5: note: 'n' is a reference parameter, and '=' repoints the callee's own copy of it (S4a) - at storage built here, which the caller never sees
+freshparamrepointcall.olang:10:5: help: write the fields through the reference - 'n.f = ...' - return the new value, or build a scratch value in a local, 't := ...'
+compilation failed with 2 errors
+=== freshparamrepointpush.olang
+freshparamrepointpush.olang:9:5: error[S4e]: 's' is repointed at a new value: the caller still sees what it passed
+    9 |     s = S("new", Vec<I64>())
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~
+freshparamrepointpush.olang:9:5: note: 's' is a reference parameter, and '=' repoints the callee's own copy of it (S4a) - at storage built here, which the caller never sees
+freshparamrepointpush.olang:9:5: help: write the fields through the reference - 's.f = ...' - return the new value, or build a scratch value in a local, 't := ...'
+compilation failed with 1 error
+=== freshparamrepointread.olang
+freshparamrepointread.olang:10:16: error[S4e]: 's' is repointed at a new value: the caller still sees what it passed
+   10 |     if not ok: s = S("fallback", Vec<I64>())
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+freshparamrepointread.olang:10:16: note: 's' is a reference parameter, and '=' repoints the callee's own copy of it (S4a) - at storage built here, which the caller never sees
+freshparamrepointread.olang:10:16: help: write the fields through the reference - 's.f = ...' - return the new value, or build a scratch value in a local, 't := ...'
 compilation failed with 1 error
 === functypename.olang
 functypename.olang:4:6: error[D2]: 'Circle' is already a type's name in this module
@@ -3738,36 +3763,26 @@ lostloopwriteviewmut.olang:11:9: note: 'p' is a copy of the element's value (S9a
 lostloopwriteviewmut.olang:11:9: help: write the element where it is - 'for i, p in a: a[i] = ...' or 'a[i].f = ...' - or store the value somewhere read later
 compilation failed with 1 error
 === lostparamwrite.olang
-lostparamwrite.olang:14:5: error[S4e]: the write to 'out' is lost: nothing reads 'out' after it
+lostparamwrite.olang:14:5: error[S4e]: 'out' is repointed at a new value: the caller still sees what it passed
    14 |     out = Box.Make(3)
       |     ^~~~~~~~~~~~~~~~~
-lostparamwrite.olang:14:5: note: 'out' is a reference, and '=' repoints the callee's own copy of it (S4a), never writing what the caller passed
-lostparamwrite.olang:14:5: help: write the fields through the reference - 'out.f = ...' - or return the new value
+lostparamwrite.olang:14:5: note: 'out' is a reference parameter, and '=' repoints the callee's own copy of it (S4a) - at storage built here, which the caller never sees
+lostparamwrite.olang:14:5: help: write the fields through the reference - 'out.f = ...' - return the new value, or build a scratch value in a local, 't := ...'
 compilation failed with 1 error
 === lostparamwritenested.olang
-lostparamwritenested.olang:10:5: error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
+lostparamwritenested.olang:10:5: error[S4e]: 'p' is repointed at a new value: the caller still sees what it passed
    10 |     p = P()
       |     ^~~~~~~
-lostparamwritenested.olang:10:5: note: 'p' is a reference, and '=' repoints the callee's own copy of it (S4a), never writing what the caller passed
-lostparamwritenested.olang:10:5: help: write the fields through the reference - 'p.f = ...' - or return the new value
-lostparamwritenested.olang:11:5: error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
-   11 |     p.A.B = 1
-      |     ^~~~~~~~~
-lostparamwritenested.olang:11:5: note: 'p' was repointed at the callee's own storage (S4a), so a write through it never reaches what the caller passed
-lostparamwritenested.olang:11:5: help: write through 'p' before repointing it, or return the new value
-compilation failed with 2 errors
+lostparamwritenested.olang:10:5: note: 'p' is a reference parameter, and '=' repoints the callee's own copy of it (S4a) - at storage built here, which the caller never sees
+lostparamwritenested.olang:10:5: help: write the fields through the reference - 'p.f = ...' - return the new value, or build a scratch value in a local, 't := ...'
+compilation failed with 1 error
 === lostparamwriterepoint.olang
-lostparamwriterepoint.olang:8:5: error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
+lostparamwriterepoint.olang:8:5: error[S4e]: 'p' is repointed at a new value: the caller still sees what it passed
     8 |     p = P()
       |     ^~~~~~~
-lostparamwriterepoint.olang:8:5: note: 'p' is a reference, and '=' repoints the callee's own copy of it (S4a), never writing what the caller passed
-lostparamwriterepoint.olang:8:5: help: write the fields through the reference - 'p.f = ...' - or return the new value
-lostparamwriterepoint.olang:9:5: error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
-    9 |     p.A = 5
-      |     ^~~~~~~
-lostparamwriterepoint.olang:9:5: note: 'p' was repointed at the callee's own storage (S4a), so a write through it never reaches what the caller passed
-lostparamwriterepoint.olang:9:5: help: write through 'p' before repointing it, or return the new value
-compilation failed with 2 errors
+lostparamwriterepoint.olang:8:5: note: 'p' is a reference parameter, and '=' repoints the callee's own copy of it (S4a) - at storage built here, which the caller never sees
+lostparamwriterepoint.olang:8:5: help: write the fields through the reference - 'p.f = ...' - return the new value, or build a scratch value in a local, 't := ...'
+compilation failed with 1 error
 === lostparamwritevalue.olang
 lostparamwritevalue.olang:7:5: error[S4e]: the write to 'p' is lost: nothing reads 'p' after it
     7 |     p.A = 5
@@ -8628,6 +8643,25 @@ compilation failed with 1 error
 x17nosource.olang:3:10: error[X17]: no C file at olang_no_such_source_here.c
     3 | import k "olang_no_such_source_here.c"
       |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== x18anotc.olang
+x18anotc.olang:11:16: error[M19]: Attr has no method 'flags'
+   11 |     Println($a.flags())
+      |                ^~~~~
+compilation failed with 1 error
+=== x18aunionfield.olang
+x18aunionfield.olang:8:8: error[X18a]: gpio_v2_line_attribute's 'debounce_period_us' is a member of a C union, not a field
+    8 |     at.debounce_period_us = 5000
+      |        ^~~~~~~~~~~~~~~~~~
+x18aunionfield.olang:8:8: note: a union's members share its bytes, so none is a place of its own: each is copied out and in (T36)
+x18aunionfield.olang:8:8: help: read it with 'debounce_period_us()', write it with 'set_debounce_period_us(v)'
+compilation failed with 1 error
+=== x18aunionread.olang
+x18aunionread.olang:8:13: error[X18a]: gpio_v2_line_attribute's 'flags' is a member of a C union, not a field
+    8 |     f := at.flags
+      |             ^~~~~
+x18aunionread.olang:8:13: note: a union's members share its bytes, so none is a place of its own: each is copied out and in (T36)
+x18aunionread.olang:8:13: help: read it with 'flags()', write it with 'set_flags(v)'
 compilation failed with 1 error
 === x19macro.olang
 x19macro.olang:5:24: error[X19]: the C import has no olang form of 'stdout'

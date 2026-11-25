@@ -101,6 +101,11 @@
 | ok - the members around an anonymous union are the struct's own, its bytes C's
 | ok - a struct with anonymous members is as big as C's
 | ok - linux/gpio.h's line attribute has its id and padding
+| ok - an anonymous union's members are read and written by copy, where C has them
+| ok - a union member narrower than its words keeps the bytes around it
+| ok - a named union's members, through a struct's field
+| ok - linux/gpio.h's line attribute takes a debounce period and gives it back
+| ok - the evaluator's union members agree with the run time's
 === test tests/cfnptr.olang
 | status 0
 | ok - a fresh struct's C function pointers are null, and the struct is laid out as C's
