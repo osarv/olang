@@ -72,6 +72,7 @@ type record struct(Key String&) {
     Widths Vec<I64>                                     # each field's bitfield width, -1 for one that is no bitfield
     Anon Vec<I64>                                       # each field's anonymous struct or union (C11), -1 for a named one
     Lay Vec<I64>                                        # each member C reaches (flat): offset, size, alignment (X18)
+    ULay Vec<I64>                                       # each anonymous union's member C reaches by name: offset (X18a)
 }
 
 # a function the header declares: its name, its C type and its parameters' names ("" where unnamed) and types, whether
@@ -712,6 +713,190 @@ fn gapLine(at I64, n I64, align I64) String {
     return $"    c_gap" + $at + " := Array<" + $elem + ">(" + $(n / w) + ")\n"
 }
 
+# the members of a struct's anonymous unions C reaches by name (X18a), with their C types: an anonymous struct's
+# anonymous unions too, recursively; a union's member that is itself a record of no name is passed over
+fn (g mut gen&) unionFlat(i I64, inUnion Bool, names mut Vec<String&>&, types mut Vec<String&>&) {
+    r := g.recs[i]
+    for k in range r.Names.Len() {
+        a := r.Anon[k] if k < r.Anon.Len() else -1
+        if r.Names[k] != "" and inUnion {
+            names.Push(r.Names[k])
+            types.Push(r.Types[k])
+        } else if r.Names[k] == "" and a >= 0 and not inUnion {
+            g.unionFlat(a, g.recs[a].Union, names, types)
+        }
+    }
+}
+
+# a union member's number type (X18a): a number or a Bool olang holds, "" for any other (a pointer, a record, an array)
+fn (g mut gen&) memberNumber(ctext String&) String {
+    ct := g.parseType(ctext)
+    if g.nodes[ct].Kind != CKind.Num: return ""
+    t := try g.fieldType(ct) catch Skip default ""
+    return t if numBytes(t) > 0 else ""
+}
+
+fn numBytes(t String&) I64 {
+    if t in Array<String&>["U8", "I8", "Bool"]: return 1
+    if t in Array<String&>["U16", "I16", "F16", "BF16"]: return 2
+    if t in Array<String&>["U32", "I32", "F32"]: return 4
+    if t in Array<String&>["U64", "I64", "F64"]: return 8
+    return 0
+}
+
+# the hexadecimal mask of the bytes lo up to hi of a word of w bytes (little-endian)
+fn byteMask(lo I64, hi I64, w I64) String {
+    b := StringBuilder()
+    b.Push("0x")
+    for j in range w {
+        at := w - 1 - j
+        b.Push("FF" if at >= lo and at < hi else "00")
+    }
+    return b.ToString()
+}
+
+# a union member's accessors (X18a): "fn (s S&) m() T", its bytes copied out of the opaque words named arr - each of
+# w bytes, the member p bytes from their start - and "fn (s mut S&) set_m(v T)", copied in; little-endian, as every
+# target is
+fn accessors(st String&, m String&, t String&, arr String&, w I64, p I64) String {
+    s := numBytes(t)
+    b := StringBuilder()
+    # the read: the words' bytes gathered into a U64, then the member's type made of them
+    bits := StringBuilder()
+    for k in range p / w, (p + s - 1) / w + 1 {
+        if bits.Len() > 0: bits.Push(" | ")
+        word := wordBits($"s." + $arr + "[" + $k + "]", w)
+        sh := k * w - p
+        if sh > 0: word = $"(" + $word + " << " + $(8 * sh) + ")"
+        if sh < 0: word = $"(" + $word + " >> " + $(-8 * sh) + ")"
+        bits.Push(word)
+    }
+    all := $bits.ToString()
+    if s < 8: all = $"(" + $all + ") & " + $byteMask(0, s, 8)
+    b.Push("\nfn (s " + $st + "&) " + $m + "() " + $t + " {\n    bits := " + $all + "\n")
+    b.Push("    return " + $fromBits(t, s) + "\n}\n")
+    # the write: the value's bytes, each word's share of them put in place of what it held there
+    b.Push("\nfn (s mut " + $st + "&) set_" + $m + "(v " + $t + ") {\n    bits := " + $toBits(t, s) + "\n")
+    for k in range p / w, (p + s - 1) / w + 1 {
+        sh := k * w - p
+        part := "bits"
+        if sh > 0: part = "(bits >> " + $(8 * sh) + ")"
+        if sh < 0: part = "(bits << " + $(-8 * sh) + ")"
+        lo := (p - k * w).Max(0)
+        hi := (p + s - k * w).Min(w)
+        cell := $"s." + $arr + "[" + $k + "]"
+        if lo == 0 and hi == w {
+            b.Push($"    " + $cell + " = " + $wordOf(part, w) + "\n")
+            continue
+        }
+        keep := ""
+        if lo > 0: keep = byteMask(0, lo, w)
+        if lo > 0 and hi < w: keep = $keep + " | "
+        if hi < w: keep = $keep + $byteMask(hi, w, w)
+        put := $"(" + $wordBits(cell, w) + " & (" + $keep + ")) | (" + $part + " & " + $byteMask(lo, hi, w) + ")"
+        b.Push($"    " + $cell + " = " + $wordOf(put, w) + "\n")
+    }
+    b.Push("}\n")
+    return b.ToString()
+}
+
+# an opaque word's bytes (cell, of w bytes) as a U64, and a U64's low w bytes as such a word
+fn wordBits(cell String&, w I64) String {
+    if w == 8 or w == 1: return $"U64(" + $cell + ")"
+    return $"U64(U" + $(8 * w) + "(" + $cell + "))"
+}
+
+fn wordOf(bits String&, w I64) String {
+    if w == 8: return $"I64(" + $bits + ")"
+    if w == 1: return $"U8(" + $bits + ")"
+    return $"I" + $(8 * w) + "(U" + $(8 * w) + "(" + $bits + "))"
+}
+
+# a member's value from its bytes (bits, a U64 holding s bytes)
+fn fromBits(t String&, s I64) String {
+    if t == "Bool": return "bits != 0"
+    if t.StartsWith("F") or t == "BF16": return $t + ".FromBits(U" + $(8 * s) + "(bits))"
+    if t == "I64": return "I64(bits)"
+    if t.StartsWith("I"): return $t + "(U" + $(8 * s) + "(bits))"
+    return "bits" if t == "U64" else $t + "(bits)"
+}
+
+# a member's bytes from its value v, as a U64
+fn toBits(t String&, s I64) String {
+    if t == "Bool": return "U64(1 if v else 0)"
+    if t.StartsWith("F") or t == "BF16": return "U64(v.Bits())"
+    if t.StartsWith("I") and t != "I64": return $"U64(U" + $(8 * s) + "(v))"
+    return "v" if t == "U64" else "U64(v)"
+}
+
+# a record's union members' accessors (X18a): a union's own members, at its start, or a struct's anonymous unions'
+# members, at the offsets clang gave - each of a number type, over the opaque words holding it: the struct's gap
+# ("c_gapOFFSET") where it is laid out flat, else its "bytes"
+fn (g mut gen&) unionAccessors(i I64, flat Bool) String {
+    names Vec<String&>
+    types Vec<String&>
+    at Vec<I64>
+    r := g.recs[i]
+    if r.Union {
+        for k in range r.Names.Len() {
+            if r.Names[k] == "": continue
+            names.Push(r.Names[k])
+            types.Push(r.Types[k])
+            at.Push(0)
+        }
+    } else {
+        g.unionFlat(i, false, names, types)
+        if g.recs[i].ULay.Len() != names.Len(): return ""
+        for o in g.recs[i].ULay: at.Push(o)
+    }
+    taken := Map<String&, I64>()
+    for n in names: taken.Put(n, 0)
+    if flat {
+        fnames Vec<String&>
+        ftypes Vec<String&>
+        try g.flat(i, fnames, ftypes) catch Skip { }
+        for n in fnames: taken.Put(n, 0)
+    }
+    b := StringBuilder()
+    for k in range names.Len() {
+        t := g.memberNumber(types[k])
+        m := names[k]
+        if t == "" or at[k] < 0 or not usable(m) or $"set_" + $m in taken: continue
+        s := numBytes(t)
+        if not flat {
+            b.Push(accessors(g.recs[i].Name, m, t, "bytes", g.recs[i].Align, at[k]))
+            continue
+        }
+        gap := g.gapAround(i, at[k], s)
+        if gap < 0: continue
+        w := gapWord(gap, g.gapEnd(i, gap) - gap, g.recs[i].Align)
+        b.Push(accessors(g.recs[i].Name, m, t, $"c_gap" + $gap, w, at[k] - gap))
+    }
+    return b.ToString()
+}
+
+# the offset of the gap of a flat struct (X18) holding the bytes at up to at + n, -1 for none
+fn (g mut gen&) gapAround(i I64, at I64, n I64) I64 {
+    pos I64 = 0
+    lay := g.recs[i].Lay
+    for k in range lay.Len() / 3 {
+        off := lay[3 * k]
+        if off > pos and at >= pos and at + n <= off: return pos
+        pos = off + lay[3 * k + 1]
+    }
+    if at >= pos and at + n <= g.recs[i].Size: return pos
+    return -1
+}
+
+# where the gap of a flat struct starting at offset gap ends
+fn (g mut gen&) gapEnd(i I64, gap I64) I64 {
+    lay := g.recs[i].Lay
+    for k in range lay.Len() / 3 {
+        if lay[3 * k] > gap: return lay[3 * k]
+    }
+    return g.recs[i].Size
+}
+
 # X18, X11a: a packed record's members as a packed struct's fields ("name Type" lines; an array "name := ..."), where its
 # layout is T13c's - every member named, a bitfield (of width 1 or more) of an integer or _Bool type, or an integer,
 # _Bool or floating member, or an array of integers, at a whole byte of the running bits - else none
@@ -1075,10 +1260,12 @@ fn (g mut gen&) structDecl(i I64) String {
         # opaque words of its size and alignment (X18): C's to read, the program's to hold in place
         elem := "I64" if r.Align == 8 else "I32" if r.Align == 4 else "I16" if r.Align == 2 else "U8"
         b.Push($"    bytes := Array<" + $elem + ">(" + $(r.Size / r.Align) + ")\n}\n")
+        b.Push(g.unionAccessors(i, false))
         return b.ToString()
     }
     if g.hasAnon(i) {
         b.Push($g.flatFields(i) + "}\n")
+        b.Push(g.unionAccessors(i, true))
         return b.ToString()
     }
     used := Map<String&, I64>()
@@ -1933,11 +2120,24 @@ fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, inclu
             pb.Push("enum __olang_m" + $id + " : long long { __olang_mo" + $id + " = __builtin_offsetof(" + $g.spell(i) + ", " + $names[j] + "), __olang_ms" + $id + " = sizeof(" + $m + "), __olang_ma" + $id + " = __alignof__(" + $m + ") };\n")
         }
     }
+    # a struct's anonymous unions' members (X18a): where each is
+    for k, i in want {
+        if g.recs.Ref(i).Union or not g.hasAnon(i): continue
+        names Vec<String&>
+        types Vec<String&>
+        g.unionFlat(i, false, names, types)
+        g.recs.RefMut(i).ULay.Clear()
+        for j in range names.Len() {
+            g.recs.RefMut(i).ULay.Push(-1)
+            pb.Push("enum __olang_u" + $k + "_" + $j + " : long long { __olang_uo" + $k + "_" + $j + " = __builtin_offsetof(" + $g.spell(i) + ", " + $names[j] + ") };\n")
+        }
+    }
     try os.WriteFile(probe, pb.ToString()) catch os.Error { try g.skip("the probe cannot be written") }
     doc := try g.dump(clang, flags, probe)
     for n in inner(doc) {
         nm := text(n, "name")
         if text(n, "kind") == "EnumDecl" and nm.StartsWith("__olang_m"): g.member(want, nm, n)
+        if text(n, "kind") == "EnumDecl" and nm.StartsWith("__olang_u"): g.unionMember(want, nm, n)
         if text(n, "kind") != "EnumDecl" or not nm.StartsWith("__olang_l"): continue
         k := try nm[9:].ParseInt() catch default -1
         if k < 0 or k >= want.Len(): continue
@@ -1963,6 +2163,16 @@ fn (g mut gen&) member(want Vec<I64>&, nm String&, n json.Json&) {
     j := try ids[1].ParseInt() catch default -1
     if k < 0 or k >= want.Len() or j < 0 or 3 * j + 2 >= g.recs[want[k]].Lay.Len(): return
     for v, c in inner(n): g.recs.RefMut(want[k]).Lay[3 * j + v] = try constValue(c).ParseInt() catch default -1
+}
+
+# a probe's answer for a member of a struct's anonymous union ("__olang_uK_J"): its offset
+fn (g mut gen&) unionMember(want Vec<I64>&, nm String&, n json.Json&) {
+    ids := nm[9:].Split("_")
+    if ids.Len() != 2: return
+    k := try ids[0].ParseInt() catch default -1
+    j := try ids[1].ParseInt() catch default -1
+    if k < 0 or k >= want.Len() or j < 0 or j >= g.recs[want[k]].ULay.Len(): return
+    g.recs.RefMut(want[k]).ULay[j] = try constValue(n).ParseInt() catch default -1
 }
 
 # ---- olang bindgen ----

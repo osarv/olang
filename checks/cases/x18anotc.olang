@@ -1,0 +1,12 @@
+# check: fail has no method 'flags'
+# X18a: the member accessors are a C union's alone, declared by the C module's translation - an olang struct holding
+# opaque words of its own has none (olang has no union, T36)
+type Attr struct() {
+    id U32
+    c_gap8 := Array<I64>(1)
+}
+
+fn main() {
+    a := Attr()
+    Println($a.flags())
+}

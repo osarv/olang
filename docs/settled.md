@@ -1579,7 +1579,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   is one type, the first module's, through either alias (`ssl.X509` is `x509.X509`, 2026-11-23); a tag translated
   differently stays two types. A struct with anonymous members (C11) is a plain struct of the members C reaches by
   name, an anonymous struct's in place, at clang's offsets; an anonymous union's bytes are opaque words `c_gapOFFSET`
-  (T36: no overlapping fields). Left: C extern variables and cast macros have no form; union members unreachable.
+  (T36: no overlapping fields). A union's members of a number or `_Bool` type - a named union's, an anonymous one's -
+  are reached by copy through accessors the translation declares (X18a, the user's call 2026-11-25): `m()` and
+  `set_m(v)`, C's names with `set_` before (C names are not M6's: the accessors are public), the bytes gathered from and
+  put into the opaque words with shifts and masks (little-endian), so the evaluator runs them as written; no reference
+  to a member, `u.m` an X18a error naming them; pointer, record and array members none. Left: C extern variables and
+  cast macros have no form.
 - **std/linalg is gone (2026-10-26, the user: "No linalg in stdlib ... Tensors are part of oann and they declare
   everything themselves").**
 - **std names never repeat their module's (the user's naming rule, 2026-10-24: "we don't integrate the knowledge that

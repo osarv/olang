@@ -1050,6 +1050,7 @@ type Diag enum {
     SetValueLast
     SetSliceAxis
     RowsInPlaceLent
+    UnionMemberNoField
 }
 
 # one function each, under the id it is known by
@@ -1599,6 +1600,7 @@ fn IndexNotInt(ty String&) r.Msg { return r.Msg(Diag.IndexNotInt, "E16", "an ind
 fn IndexOutOfRange(n1 I64, n2 I64) r.Msg { return r.Msg(Diag.IndexOutOfRange, "E16", "index " + $n1 + " is outside the array's " + $n2 + " elements") }
 fn NotSliceable(ty String&) r.Msg { return r.Msg(Diag.NotSliceable, "E16a", $ty + " cannot be sliced") }
 fn SliceBoundNotInt(ty String&) r.Msg { return r.Msg(Diag.SliceBoundNotInt, "E16a", "a slice's bounds are integers, found " + $ty) }
+fn UnionMemberNoField(ty String&, text String&) r.Msg { return r.Msg(Diag.UnionMemberNoField, "X18a", $ty + "'s '" + $text + "' is a member of a C union, not a field", "a union's members share its bytes, so none is a place of its own: each is copied out and in (T36)", "read it with '" + $text + "()', write it with 'set_" + $text + "(v)'") }
 fn NoSuchMember(ty String&, text String&, hint String&) r.Msg { return r.Msg(Diag.NoSuchMember, "", $ty + " has no member '" + $text + "'" + $("" if hint.Contains("(C2a): ") else hint), "it is a parameter of the constructor, not a field (C2a)" if hint.Contains("(C2a): ") else "", "name it alone on a line of the constructor's body" if hint.Contains("(C2a): ") else "") }
 fn MemberIsPrivate(text String&, ty String&) r.Msg { return r.Msg(Diag.MemberIsPrivate, "M6a", "member '" + $text + "' of " + $ty + " is private to its module") }
 fn NotAssignable() r.Msg { return r.Msg(Diag.NotAssignable, "S4", "this cannot be written - a variable, an element or a member can") }

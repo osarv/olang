@@ -43885,3 +43885,43 @@ fixedpoint` and consistency pass; the goldens moved for the fixtures, the test a
 fixed (predates this branch): `-memory -check` refuses `rows := Array<Row>(2, Row(..)); for k in range 2: rows[k] = ..`
 followed by any walk of `rows` (O8f: "a value holding it is made with no store into it, by a copy of a value holding
 it") - with a struct holding a Vec and no reference too; a keep reported, not a free too early.
+
+## 2026-11-25: a C union's members by copy (X18a; the user's call; wt-cunion)
+
+The question left open when anonymous members became fields (2026-11-23, "Decided: an anonymous union's members are not
+fields"): linux/gpio.h's `gpio_v2_line_attribute` holds its debounce period in an anonymous union beside `flags` and
+`values`, and oagent home/'s GPIO debounce needs to set it. Asked (ledger 1): per-member accessors that copy the bytes,
+or leave the union's bytes C's only. The user chose the accessors: copy semantics only, no reference to a member, no
+punning, C types only.
+
+How: bindgen, which already flattens a struct's anonymous members and holds an anonymous union's bytes as opaque words
+(`c_gapOFFSET`), now also collects the named members of each anonymous union the struct reaches (through anonymous
+structs, recursively; `unionFlat`), asks clang their offsets in the probe that gives the other offsets
+(`__olang_uK_J`, `record.ULay`), and declares beside the struct, for each member of a number or `_Bool` type, two
+methods: `fn (s S&) m() T`, which gathers the member's bytes out of the opaque words into a U64 with shifts and a mask
+and makes the type of them (`T(bits)`, `F32.FromBits(U32(bits))`, `bits != 0`), and `fn (s mut S&) set_m(v T)`, which
+puts the value's bytes into each word it covers, keeping the word's other bytes by mask. A named union (held as opaque
+words `bytes`) gets the same for its own members, at offset 0. Nothing new in the checker's typing, codegen or the
+evaluator: the accessors are ordinary olang the translation writes, made of conversions (E26), bit operations and
+`FromBits`/`Bits` (E33), so the compile-time evaluator runs them as the run time does (tests/canon.olang bakes a global
+and decides a top-level assert through them) and no storage is ever read as another type (T36 holds as written: the
+words are read as the integers they are). Little-endian, as every target is; a big-endian target would swap the
+shifts.
+
+Decided (mine): the names. A C module's names are C's (X17: M6 does not apply), and bindgen keeps field names as C
+spells them, so the getter is the member's own name, `debounce_period_us()`, and the setter C's snake form of "set",
+`set_debounce_period_us(v)` - rather than `Setdebounce_period_us`, which mixes the two conventions. Accessors are skipped
+where the name is no usable one or `set_m` would name another member. The checker's method privacy (M6) now exempts a C
+module's methods as it already did its other names (`privateMethod`). Pointer, record and array members get none: a
+pointer made of bytes would be T36's reference-from-number; records and arrays could come later as copies if needed.
+
+Found along the way: two C imports including one header share its types (X17, 2026-11-23: the later translation leaves
+the struct out), but the accessors stayed, declaring the methods twice (M21, in the self-build: signal.h's `sigval`).
+`withoutCTypes` (load.olang) now leaves out a dropped type's accessors with it (`receiverWord`).
+
+Diagnostic: `at.flags` (read or written) was "has no member 'flags'"; it is now X18a's "...'s
+'flags' is a member of a C union, not a field", saying why (the members share the bytes, T36) and what to write
+(`flags()`, `set_flags(v)`). Tests: tests/canon.olang (an anonymous union's U64 and U32 members against C's reads and
+writes, a two-byte union in I16 words whose I8 member keeps its neighbour's byte, a named union held in a struct's field
+- I32, F32, U8, Bool and F64 members - and gpio's debounce period; the evaluator's agreement); checks/cases
+x18aunionfield.olang, x18aunionread.olang, x18anotc.olang.

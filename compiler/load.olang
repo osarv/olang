@@ -859,13 +859,22 @@ fn withoutCTypes(text String&, drop Map<String&, I64>&) String {
             continue
         }
         if line.StartsWith("    type ") and line[9:] in drop: continue
-        if line.StartsWith("type ") and typeWord(line) in drop {
+        if (line.StartsWith("type ") and typeWord(line) in drop) or receiverWord(line) in drop {
             inside = true
             continue
         }
         b.Push($line + "\n")
     }
     return b.ToString()
+}
+
+# the type a translation's union member accessor ("fn (s mut NAME&) set_m(v T) {", X18a) is declared on, "" for none
+fn receiverWord(line String&) String {
+    if not line.StartsWith("fn (s "): return ""
+    rest := line[6:]
+    if rest.StartsWith("mut "): rest = rest[4:]
+    end := try rest.Find("&)") catch default -1
+    return $rest[:end] if end > 0 else ""
 }
 
 # the symbol function name of C module mi links by: its name, or the one the translation says (X20)

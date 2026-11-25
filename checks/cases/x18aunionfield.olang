@@ -1,0 +1,9 @@
+# check: fail error[X18a]: gpio_v2_line_attribute's 'debounce_period_us' is a member of a C union, not a field
+# X18a: a C union's member is no field - its bytes are the union's, shared with the other members - so it is read
+# and written by copy through its accessors, debounce_period_us() and set_debounce_period_us(v)
+import gpio "linux/gpio.h"
+
+fn main() {
+    at := gpio.gpio_v2_line_attribute()
+    at.debounce_period_us = 5000
+}
