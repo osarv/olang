@@ -1,0 +1,68 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4): a constructor's instance viewing two Maps it is given (`return S2(a, b)`), copied where
+# the result goes, stored into an element each turn and given to a local each turn then stored. Before, the copy was
+# built whole in one region, so neither Map field's let-go freed it, and -memory -check passed the program for a
+# condition it meets ("a copy of what a constructor is given, which holds other owners too" - the value is made for
+# the place): now each Map's parts are built in part regions of their own (lower.ownersCopy), freed at the let-go. And
+# one holding its own text beside the two Maps (Named): its text a part place built in its part region with them
+N I64 = 20000
+
+type S2 struct(a Map<String, I64>, b Map<String, String>) {
+    a
+    b
+}
+
+fn S2.mk(i I64) S2 {
+    a Map<String, I64>
+    b Map<String, String>
+    for j in range 10 {
+        a.Put($i + "-" + $j + " padded out a little more than that", j)
+        b.Put($j + "+" + $i + " padded out a little", "v" + $i + " padded out to some length")
+    }
+    return S2(a, b)
+}
+
+type Named struct(name String, a Map<String, I64>, b Map<String, String>) {
+    name
+    a
+    b
+}
+
+fn Named.mk(i I64) Named {
+    a Map<String, I64>
+    b Map<String, String>
+    for j in range 10 {
+        a.Put($i + "-" + $j + " padded out a little more than that", j)
+        b.Put($j + "+" + $i + " padded out a little", "v" + $i + " padded out")
+    }
+    return Named("n" + $i + " padded out to some length", a, b)
+}
+
+fn named() String {
+    rows Vec<Named>
+    for k in range 10: rows.Push(Named.mk(k))
+    q := Named.mk(0)
+    t := 0
+    for i in range N {
+        rows[i % 10] = Named.mk(i)
+        q = Named.mk(i + 1)
+        rows[(i + 4) % 10] = q
+        t += rows[i % 10].a.Len() + rows[(i + 4) % 10].name.Len()
+    }
+    return $t + " " + rows[3].name + " " + (try rows[5].b.Get("2+" + $(N - 5) + " padded out a little") catch default "none")
+}
+
+fn main() {
+    rows := Array<S2>(10, S2(Map<String, I64>(), Map<String, String>()))
+    q := S2.mk(0)
+    t := 0
+    for i in range N {
+        rows[i % 10] = S2.mk(i)
+        q = S2.mk(i + 1)
+        rows[(i + 3) % 10] = q
+        t += rows[i % 10].a.Len() + rows[(i + 3) % 10].b.Len() + q.a.Len()
+    }
+    io.PutLn($t + " " + (try rows[3].b.Get("1+" + $(N - 7) + " padded out a little") catch default "none"))!
+    io.PutLn(named())!
+}
