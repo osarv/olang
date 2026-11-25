@@ -4022,10 +4022,10 @@ fn (f mut Free&) onlyPath(ty types.TypeId, path Array<I64>&, depth I64) Bool {
 
 # a constructor handing back views of what it is given, its instance stored into a struct held in place: the copy its
 # caller makes (D9h) is the owner leaves' new value, built where the call's value lands - made for the one owner leaf
-# there is, in a region of its own; with several, one region would hold them all, so none is made for any. Its array
-# leaves are given that copy's arrays too: recorded as values not made for them, so such a place keeps (it had no store
-# said for them at all - a sole place's let-go would have released storage outside any region; round sec8r2, from the
-# drop-order round's notes: "when in doubt, keep")
+# there is, in a region of its own; with several, each part place's array in a part region of its own where ownersSplit
+# takes them (parted), else one region holding them all - a gap, never condition 1: the copy is made for the place. Its
+# array leaves are given that copy's arrays too: a part place's is made, any other keeps for that gap (round sec8r2,
+# from the drop-order round's notes: "when in doubt, keep")
 fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp source.Span) {
     f := w.F
     if not w.Final or w.quiet > 0: return
