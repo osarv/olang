@@ -6626,11 +6626,13 @@ fn (w mut walker&) instNames(u typed.LocalUses&, r I64, given Vec<String>&) Vec<
         if w.giveLocal[j] < 0 and wordsIn(w.text(w.giveSp[j]), out): error instError.Reached
     }
     # (a local given values no text shows - a binding, a destructured part - that a let-go could go through may hold
-    # anything)
+    # anything: written through, or - a value holding references beside storage of its own, which check gives it in
+    # place, S13b - grown)
     for m in range n {
         ty := body.Locals[m].Ty
         if named[m] or given[m] != "" or body.Locals[m].Kind == typed.LocalKind.Param: continue
         if (t.IsRef(ty) or t.SharesRefs(ty)) and t.ReachesWrite(ty): error instError.Reached
+        if not t.IsRef(ty) and t.SharesRefs(ty) and t.OwnsParts(ty): error instError.Reached
     }
     return out
 }
