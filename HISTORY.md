@@ -43518,6 +43518,37 @@ wait names the narrower case. checks' freeing taskdefault (new): defaults buildi
 in a long-lived Vec - flat at 100,000 turns where master grew 9.5 MB and 6.4 MB over the second half; built, `-free
 late`, `-sanitize`, `-race`, `-memory -check` and the evaluator agree. (Text defaults alone were already flat on master.)
 
+## 2026-11-25: a task's clause default for several targets, and by a handler reading what it captures (P4a, P2, O8f; mine; wt-taskdefault2)
+
+wt-taskdefault left two shapes building their default in the program's scope, their targets' places kept: a spawn with
+several targets (`spawn a, b = try two(i) catch default Vec<String>[pad(i)], pad(i) + " b"`) and a handler capturing
+more than numbers (`catch default Vec<String>[pre + pad(i), pre]`, `pre` a turn's text).
+
+**Several targets.** A handler takes one scope for all its results - ScopeVarsOf gives a function one ResultVar however
+many results it has - so the defaults cannot each go to their own target's storage without a scope per result, which
+no function type has. They go where the task's call's results go: the scope the plan gives the call's ResultVar
+(`lower.callResultScope`, through the new `types.ResultVarAt`), which the plan already chose to outlive every target as
+an assignment of those results must. Where that is a block's or one of the body's scope variables the handler is
+given a stand-in of it (`mir.Task.Default`, emit and the evaluator unchanged) folded at the wait; `free.defaultHanded`
+asks the same question of the same plan, so the two agree, and anything else (a region, a scope found at run time, the
+program's) keeps as before. This is P4a's own wording - "what it builds is built where the call's result lands".
+
+**Captures.** `ownDefault` asked that every capture be a number or a Bool, so a capture holding storage could not be
+handed back as the default. That reason did not hold: a handler that builds nothing (`catch default fb`) already gave
+the target a capture's storage with the places handed over, and the store of such a value into a long-lived place
+copies it (checked with a capture outliving the loop handed back whole and in pieces, each turn's value stored into an
+element: `-sanitize`, `-free late` and `-memory -check` agree, the capture read intact at the end). What can build
+beside the default is a write: so ownDefault now reads effects instead of types - no write through what it captures
+or through what it reads out of it (Writes, Impure, WritesOut), no global, no function value, no spawn, known effects.
+A handler reading a `mut` global still builds in the program's scope and keeps (taskdefault's `M=63`, named by
+`-memory`, its output agreeing under `-race`).
+
+checks' freeing taskdefault gains both shapes, their defaults kept in a long-lived Vec each failure (`M=31` by
+default): flat at 100,000 turns where master grows 22.2 MB (two targets) and 6.3 MB (captured text) over the second
+half; built, `-free late`, `-sanitize`, `-race`, `-memory -check` and the evaluator agree. kept's taskDefaults reads
+both kinds of default back after a churn, decided by the evaluator too. SPEC O8f's list of what is not handed over at
+the wait names the narrower case.
+
 ## 2026-11-25: a lambda's build through a captured helper's field found at run time (O29, O23b, T22c; mine; wt-fnvalbuild)
 
 docs/freeing.md 2.4 listed it after field scopes (wt-fieldscopes): a lambda passed as a function value that no judging

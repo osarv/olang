@@ -821,13 +821,17 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" -sanitize -define M=255 -define N=2000 taskkept.olang > out.txt 2>&1") == 0 and outOf(dir) == "328602 23\n", "taskkept's keeping shapes -sanitize", dir)
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define M=255 -define N=200 taskkept.olang > out.txt 2>&1") == 0 and outOf(dir) == "32446 23\n", "taskkept's keeping shapes interpreted", dir)
     # (taskdefault, docs/freeing.md 2.4: a joined task's clause default built where its result would be - the handler
-    # given a stand-in of the target's storage, handed over at the wait - flat where master grows ~380 bytes a failure;
-    # built, -free late, -sanitize, -race and the evaluator agree)
-    try r.expect(sh(dir, "\"$OLANG\" build -memory -check taskdefault.olang > out.txt 2>&1") == 0, "taskdefault -memory -check", dir)
-    try r.expect(sh(dir, "./build/taskdefault > out.txt 2>&1") == 0 and outOf(dir) == "15927780 4\nflat\n", "taskdefault reclaimed its tasks' defaults", dir)
-    try late(r, dir, "taskdefault", "2000", "312780 2\n")
-    try r.expect(sh(dir, "\"$OLANG\" -race -define N=2000 taskdefault.olang > out.txt 2>&1") == 0 and outOf(dir) == "312780 2\n", "taskdefault -race", dir)
-    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 taskdefault.olang > out.txt 2>&1") == 0 and outOf(dir) == "30880 1\n", "taskdefault interpreted", dir)
+    # given a stand-in of the target's storage, or with two targets of the scope the call's result is given, handed over
+    # at the wait; a handler reading text it captured too - flat where master grows ~380 bytes a failure and with the
+    # defaults kept in a long-lived Vec 22 and 6 MB over the second half; built, -free late, -sanitize, -race and the
+    # evaluator agree; with the shape that keeps on (M=63: a handler reading a mut global), -check passes naming it)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check taskdefault.olang > out.txt 2>&1") == 0 and outOf(dir).Contains(" 2 free it at once, 1 keeps it"), "taskdefault -memory -check", dir)
+    try r.expect(sh(dir, "./build/taskdefault > out.txt 2>&1") == 0 and outOf(dir) == "27811115 8\nflat\n", "taskdefault reclaimed its tasks' defaults", dir)
+    try late(r, dir, "taskdefault", "2000", "546115 8\n")
+    try r.expect(sh(dir, "\"$OLANG\" -race -define N=2000 taskdefault.olang > out.txt 2>&1") == 0 and outOf(dir) == "546115 8\n", "taskdefault -race", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 taskdefault.olang > out.txt 2>&1") == 0 and outOf(dir) == "53915 8\n", "taskdefault interpreted", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check -define M=63 taskdefault.olang > out.txt 2>&1") == 0 and outOf(dir).Contains("taskdefault.olang:59:13: memory: removed elements of 'kept'"), "taskdefault M=63 -memory -check names the global-reading default", dir)
+    try r.expect(sh(dir, "\"$OLANG\" -race -define M=63 -define N=2000 taskdefault.olang > out.txt 2>&1") == 0 and outOf(dir) == "696005 4\n", "taskdefault M=63 -race", dir)
     # (spawnlocal, review12's F3: a spawn's target a local declared outside the loop - its old value let go of by the
     # spawner at the spawn, each new one built in a region of its own the task is handed whole - flat, where master grows
     # ~9 KB a turn and -check counted no keep; built, -free late, -sanitize, -race and the evaluator agree; with the
