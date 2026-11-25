@@ -985,9 +985,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   scope through it), O29's lookup only where no caller knows it. O23b: where an instance is reached through an element,
   another instance's field, a global, an `any` or an unfollowed capture and a store, build or call there needs the
   binding, the declaration keeps none, for the whole program (today's equality) - a superset of the programs accepted
-  before, never placing anything later. A freeing gap (docs/freeing.md 2.4): the equality O23b gives back is per declaration, not per
-  instance (the user wants freeing per instance), and a lambda passed as a function value building through a captured
-  helper's field gives the declaration back instead of O29's lookup. A closure's capture scopes are the plan's (`caps`) in the evaluator as in
+  before, never placing anything later; except a build through an unfollowed capture's field (a lambda passed as a
+  function value no judging follows), built where the field's referent is found at run time (O29, wt-fnvalbuild). A freeing gap (docs/freeing.md 2.4): the equality O23b gives back is per declaration, not per
+  instance (the user wants freeing per instance). A closure's capture scopes are the plan's (`caps`) in the evaluator as in
   the native code, never the environment's for a capture held by value. The compiler's helpers: `lowering` holds the scope pass's plan by reference
   (`Lowerer.planFor`), `explain Lowerer.LowerKey` says "lw outlives return" alone, and the cold self-build's lower+emit
   peak fell 3814 -> 2990 MB.

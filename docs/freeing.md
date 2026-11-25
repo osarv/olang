@@ -365,10 +365,13 @@ Closed by wt-globalfill; checks' freeing globalviews.)
   per instance (with the per-instance buffer places, plan.md), not dropped for the declaration. (2.5, wt-perinst: not
   closed by condition 6 per value - what is per instance here is a scope handle each instance would carry, a word per
   instance; it stays per declaration.)
-- **A lambda passed as a function value that builds through a captured helper's field** (wt-fieldscopes,
-  2026-11-23): the build gives the field's declaration back (O23b's equality) instead of reaching the binding by O29's
-  run-time lookup, as a direct call through the same capture would. To close: a function value's builds through a
-  captured field take O29's lookup where no caller knows the binding.
+- **A lambda passed as a function value that builds through a captured helper's field - closed** (wt-fieldscopes,
+  2026-11-23; closed by wt-fnvalbuild, 2026-11-25): the build gave the field's declaration back (O23b's equality)
+  instead of reaching the binding by O29's run-time lookup, as a direct call through the same capture would, so every
+  turn's helper lived as long as the field's referent. Now a field with a binding of its own read through a lambda's
+  capture, where nothing the lambda's judging knows binds it (the value not followed into its callee, T22c), is built
+  into where the field's referent is found while the program runs (`scope.capFieldRoot`, the plan's Found) - the
+  declaration keeps its binding and the helper goes with its turn. checks' freeing fnvalfield, now `limited`.
 - **Gap 19's open part - closed** (wt-gap19b, 2026-11-24; checks' freeing gaps19, now `limited`). (a) A text local
   given a second value before it is returned: each value's region is made in the result scope, here the slot scope an
   element of text gives its call. A region made in a slot scope is now a kid of the scope that slot scope builds into and
