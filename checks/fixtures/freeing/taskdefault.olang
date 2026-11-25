@@ -1,14 +1,17 @@
 # A joined task's clause default (P4a) built where the task's result would be: the handler, run on the task's thread,
 # is given the stand-in of its target's storage, so what it builds is handed to the spawner at the join's wait like a
 # result and reclaimed with the target's scope (docs/freeing.md 2.4). Tasks fail every other turn into a default that
-# builds a Vec of text (1) or text (2); a few defaults are kept in a long-lived Vec (4). The measure
+# builds a Vec of text (1) or text (2); a few defaults are kept in a long-lived Vec (4); a spawn with two targets, whose
+# default is built where the call's result would be (8); a handler reading text it captured, the default holding it (16)
+# - each failure's default kept in the long-lived Vec, replacing the one before. With 32, a handler reading a mut global
+# builds in the program's scope and its target's places keep. The measure
 # is taskvals.olang's: the resident peak gained over each of the last two quarters of the turns, flat where either gains
 # under 2 MB. -free late, -sanitize, -race and the evaluator agree at a smaller size
 import "std/io"
 import "std/os"
 
 N I64 = 100000
-M I64 = 7
+M I64 = 31
 
 type E error { Odd }
 
@@ -27,6 +30,15 @@ fn vec(i I64) Vec<String> ? E {
     v.Push(pad(i))
     return v
 }
+
+fn two(i I64) Vec<String>, String ? E {
+    if i % 2 == 1: error E.Odd
+    v Vec<String>
+    v.Push(pad(i))
+    return v, pad(i + 1)
+}
+
+tag mut String = "g"
 
 fn text(i I64) String ? E {
     if i % 2 == 1: error E.Odd
@@ -57,6 +69,26 @@ fn main() {
             join: spawn k = try vec(i) catch default Vec<String>[pad(i)]
             if i % 1000 == 1: kept[i / 1000 % 4] = k
             t += k.Len()
+        }
+        if M / 8 % 2 == 1 {
+            a Vec<String>
+            b String
+            join: spawn a, b = try two(i) catch default Vec<String>[pad(i), pad(i + 2)], pad(i) + " b"
+            if i % 2 == 1: kept[i / 2 % 4] = a
+            t += a.Len() + b.Len()
+        }
+        if M / 16 % 2 == 1 {
+            pre := "p" + $(i % 10)
+            c Vec<String>
+            join: spawn c = try vec(i) catch default Vec<String>[pre + pad(i), pre]
+            if i % 2 == 1: kept[i / 2 % 4] = c
+            t += c.Len() + c[c.Len() - 1].Len()
+        }
+        if M / 32 % 2 == 1 {
+            g Vec<String>
+            join: spawn g = try vec(i) catch default Vec<String>[tag + pad(i)]
+            if i % 2 == 1: kept[i / 2 % 4] = g
+            t += g[0].Len()
         }
     }
     total := 0
