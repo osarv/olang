@@ -45,7 +45,7 @@ Scenarios := Array<String&>["fix", "strheld", "reuseall", "fuzz", "testfuzz", "b
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "readfirst", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
-                     "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "freeing", "widealign", "definit"
+                     "nestparse", "catchcontinue", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "freeing", "widealign", "definit"
                      "profile", "apicaps", "listing", "memoryplaced", "scopefind", "twins", "weakmods", "clones", "fieldset"
                      "prompt", "promptkeys", "spinner", "jupyter", "notebook", "checkedbuild", "linkinline", "racetests", "dwarf"
                      "nodump", "cdiffer"]
@@ -493,6 +493,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "listloop" { try listloop(r) }
         case "preludestale" { try preludestale(r) }
         case "nestparse" { try nestparse(r) }
+        case "catchcontinue" { try catchcontinue(r) }
         case "nestdeep" { try nestdeep(r) }
         case "manyifs" { try manyifs(r) }
         case "cgreview" { try cgreview(r) }
@@ -2535,6 +2536,18 @@ fn nestparse(r mut report&) ? Failed {
                            "try g() catch E { ", "k()", " }", "\n}\n", 40)
     try os.WriteFile($dir + "/tries.olang", tries) catch { }
     try r.expect(sh(dir, "timeout 60 env OLANG_EVALUATE=1 \"$OLANG\" tries.olang > out.txt 2>&1") == 0, "nested try-catch", dir)
+}
+
+# T13b's walk of a body (typed.Landings) recorded which locals hold a unique value again each time it walked a statement
+# - twice for a loop's body, once for each catch clause - and a mention went through every record: eight catch-continue
+# blocks in one loop, a value with a destructor live across them, ran past 18 minutes where it now takes a fraction of a
+# second. Interpreted, so no native build is waited for
+test "catch-continue blocks in one loop beside a unique value check in time" { assert passed("catchcontinue") }
+
+fn catchcontinue(r mut report&) ? Failed {
+    dir := fresh("catchcontinue")
+    os.Run("cp checks/fixtures/catchcontinue.olang " + $os.Quote(dir))
+    try r.expect(sh(dir, "timeout 60 env OLANG_EVALUATE=1 \"$OLANG\" catchcontinue.olang > out.txt 2>&1") == 0, "catch-continue", dir)
 }
 
 # every pass recurses once per level of nesting, so a program nested past what the compiler's stack holds is refused by

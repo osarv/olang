@@ -43343,3 +43343,19 @@ The same repro's link failed first: `ld.lld: error: -plugin-opt=: unknown plugin
 ld.lld, the linker of every Android build, refuses `-plugin-opt`'s cache options, as lld's MinGW driver does (B12f,
 1438210eb). Android's ThinLTO link now passes lld's own `--thinlto-cache-dir`, `--thinlto-cache-policy` and `-mllvm
 -import-instr-limit`, as Windows' does.
+
+## 2026-11-25: T13b's walk records each holder once (T13b; mine; wt-thin)
+
+Found by the OAgent app work: a loop of three `try ... catch e { ...; continue }` blocks, a struct holding a socket
+(a destructor's, so unique) built in the loop and live across them, took the compiler from 19 s to past 18 minutes at
+99% CPU; the same loop with one catch-continue and a helper built in 8 s. Reproduced synthetically (a `Conn` with a
+destructor in a `Link` built from a `try ... catch ... continue`, then n blocks each of a `try l.send(...)` and a `try
+l.next(...)` caught with `continue`): the check phase alone took 5 s at n = 1 and ran past 300 s at n = 2. gdb put
+the time in typed.Landings (T13b: whether each read handing a unique value on is its local's last mention). `holds`
+and `keptBy` pushed a (holder, held) pair each time they walked a statement - twice for a loop's body, once again for
+each catch clause, so the pairs grew with every walk - with no check that the pair was there already, and `mention`
+went through every pair recursively, a holder's holder again through each of its copies: the work multiplied along
+holder chains. Now a pair is recorded once (addHolder) and a mention reaches each local through holders once
+(expanding): the relation was a set all along, so nothing judged changes. The repro checks in 0.04 s at every n up to
+8. checks' scenario catchcontinue runs the eight-block program under a 60 s timeout, interpreted; the compiler before
+the fix ran past it.

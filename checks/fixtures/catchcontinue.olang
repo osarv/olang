@@ -1,0 +1,156 @@
+# 8 catch-continue blocks in one loop, a unique value (a destructor's) live across them: the T13b walk (typed.Landings)
+# multiplied its holder pairs with every walk and every mention through them - checks' catchcontinue runs it in time
+type Error error { Lost, Unreachable(why String) }
+type Bad error { Dial(host String), Nope }
+
+type Conn unique struct(fd I64) {
+    fd
+} destruct { Print($"close " + $fd) }
+
+fn Conn.Dial(host String&, port I64) Conn ? Bad {
+    if port < 0: error Bad.Dial(String(host))
+    return Conn(port)
+}
+
+type Link struct(c Conn, queue Vec<String>) {
+    c, queue
+}
+
+fn (l mut Link&) send(t String&) ? Error {
+    if l.c.fd < 0: error Error.Lost
+    l.queue.Push(String(t))
+}
+
+fn (l mut Link&) next(ms I64) String ? Error {
+    if ms < 0: error Error.Lost
+    if l.c.fd == 3: return ""
+    return $"r" + $ms
+}
+
+fn Link.connect(addrs mut Vec<String>&, steps mut Vec<String>&) Link ? Error {
+    why := "none"
+    for i in range addrs.Len() {
+        steps.Push($"connecting to " + addrs[i])
+        l := Link(try Conn.Dial(addrs[i], i) catch e {
+            why = $addrs[i] + ": dial " + $e
+            continue
+        }, Vec<String>())
+        steps.Push("dialed")
+
+        try l.send($"hello 0" + addrs[i]) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        reply0 := try l.next(5000) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        if reply0 == "" {
+            why = "no welcome"
+            continue
+        }
+        try l.send($"hello 1" + addrs[i]) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        reply1 := try l.next(5001) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        if reply1 == "" {
+            why = "no welcome"
+            continue
+        }
+        try l.send($"hello 2" + addrs[i]) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        reply2 := try l.next(5002) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        if reply2 == "" {
+            why = "no welcome"
+            continue
+        }
+        try l.send($"hello 3" + addrs[i]) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        reply3 := try l.next(5003) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        if reply3 == "" {
+            why = "no welcome"
+            continue
+        }
+        try l.send($"hello 4" + addrs[i]) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        reply4 := try l.next(5004) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        if reply4 == "" {
+            why = "no welcome"
+            continue
+        }
+        try l.send($"hello 5" + addrs[i]) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        reply5 := try l.next(5005) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        if reply5 == "" {
+            why = "no welcome"
+            continue
+        }
+        try l.send($"hello 6" + addrs[i]) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        reply6 := try l.next(5006) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        if reply6 == "" {
+            why = "no welcome"
+            continue
+        }
+        try l.send($"hello 7" + addrs[i]) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        reply7 := try l.next(5007) catch e {
+            why = $addrs[i] + ": " + $e
+            continue
+        }
+        if reply7 == "" {
+            why = "no welcome"
+            continue
+        }
+        if i > 0 {
+            a := String(addrs[i])
+            try addrs.RemoveAt(i) catch { }
+            try addrs.Insert(0, a) catch { }
+        }
+        return l
+    }
+    error Error.Unreachable(why)
+}
+
+fn main() {
+    addrs Vec<String>
+    addrs.Push("a")
+    addrs.Push("b")
+    steps Vec<String>
+    l := try Link.connect(addrs, steps) catch e {
+        Print($e)
+        return
+    }
+    Print($l.queue.Len() + $steps.Len())
+}

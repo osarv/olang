@@ -5761,6 +5761,26 @@ type Landings struct(Locals Array<I64>&, Starts Array<I64>&, Holds Array<Bool>&)
     holder Vec<I64>
     holderOf Vec<I64>
     via I64 = -1                                                 # the holder a mention being made came through
+    expand Vec<I64>                                              # the locals a mention is being made of through holders
+}
+
+# whether a mention being made already reaches local m through a holder: each is mentioned once (a holder of a holder
+# of m reaches it twice, and two holders of each other would never end)
+fn (w Landings&) expanding(m I64) Bool {
+    for e in w.expand {
+        if e == m: return true
+    }
+    return false
+}
+
+# local l holds what watched local m is, recorded once: a statement walked again (a loop's second turn, a try's clause)
+# finds it there - recorded each time, the pairs grew with every walk and every mention through them multiplied
+fn (w mut Landings&) addHolder(l I64, m I64) {
+    for j in range w.holder.Len() {
+        if w.holder[j] == l and w.holderOf[j] == m: return
+    }
+    w.holder.Push(l)
+    w.holderOf.Push(m)
 }
 
 # a loop being walked: its body block, and what its breaks and continues leave open
@@ -5841,11 +5861,13 @@ fn (w mut Landings&) mention(id LocalId, at I64, read Bool) {
     w.saidRef.Push(w.lending > 0 or w.via >= 0)
     # (a holder's mention is one of what it names: an alias or a capture used after the landing reads what was handed on)
     for j in range w.holder.Len() {
-        if w.holder[j] != l: continue
+        if w.holder[j] != l or w.expanding(w.holderOf[j]): continue
+        w.expand.Push(w.holderOf[j])
         was := w.via
         w.via = l if was < 0 else was
         w.mention(LocalId(I32(w.holderOf[j])), at, false)
         w.via = was
+        try w.expand.Pop() catch { }
     }
     if w.later > 0 {
         if read and w.deferredLanding(l, at) {
@@ -5945,8 +5967,7 @@ fn (w mut Landings&) holds(l I64, i0 I64) {
     for j in range i0, w.saidL.Len() {
         m := w.saidL[j]
         if m == l or not w.saidRef[j] or not w.watched(m): continue
-        w.holder.Push(l)
-        w.holderOf.Push(m)
+        w.addHolder(l, m)
     }
 }
 
@@ -5959,8 +5980,7 @@ fn (w mut Landings&) keptBy(i0 I64) {
         for q in range i0, w.saidL.Len() {
             l := w.saidL[q]
             if l == w.saidL[j] or not w.saidLend[q] or l < 0 or l >= w.Holds.Len() or not w.Holds[l]: continue
-            w.holder.Push(l)
-            w.holderOf.Push(w.saidL[j])
+            w.addHolder(l, w.saidL[j])
         }
     }
 }
