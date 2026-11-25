@@ -1,10 +1,9 @@
 import "std/io"
 
-# O8f, B18 (review10): a collection's own storage is a place of its type - every Vec<I64>'s buffer is one place - so a
-# view of one Vec<I64> in use across a call that grows another keeps what every Vec<I64> grows out of (condition 6 as
-# the place is judged). Its let-go is in the library's code (Push's growth), so the report named no row and counted
-# nothing kept while the program kept ~450 bytes a turn; it is now a row at the program's call that grows one (mk(i))
-N I64 = 2000
+# O8f, condition 6 per value (review10, docs/freeing.md 2.5): a view of one Vec<I64> - a reference to it, `r Vec<I64>& =
+# base` - in use across a call growing another (mk(i)) and an element given another: every Vec<I64>'s buffer is one
+# place, but the view is of base's, which neither reaches, so the growth and the element free what they let go of - flat
+N I64 = 200000
 
 fn mk(i I64) Vec<I64> {
     w Vec<I64>

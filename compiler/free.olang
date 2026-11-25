@@ -2300,6 +2300,8 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     declAt Vec<I64>           # by local: the statement declaring it
     declLet Vec<Bool>         # by local: whether a Let declares it (declAt is its statement)
     declSp Vec<source.Span>   # by local: its initializer, as written - what a hidden one (a walk's) is said by
+    giveLocal Vec<I64>        # every assignment's root local (-1 none: through a reference, a global) and its value, as
+    giveSp Vec<source.Span>   # written - with declSp, what condition 6 per instance reads second names from (instNames)
     lastAt Vec<I64>           # the statements a return follows
     loops I64 = 0              # the loops the statement being walked is in
     useLocal Vec<I64>         # local uses: the local, the statement, where
@@ -2422,6 +2424,8 @@ fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
     w.declAt.Clear()
     w.declLet.Clear()
     w.declSp.Clear()
+    w.giveLocal.Clear()
+    w.giveSp.Clear()
     w.seen.Clear()
     for i in range n {
         w.seen.Push(false)
@@ -2978,6 +2982,10 @@ fn (w mut walker&) result(o Vec<I64>&) {
 }
 
 fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
+    if w.Final and w.quiet == 0 {
+        w.giveLocal.Push(lvRootLocal(p))
+        w.giveSp.Push(x.Span())
+    }
     wasO := w.ownerSplit
     w.ownerSplit = -1 if p == typed.Lvalue.Local else w.ownerSplitOf(w.F.placeOfPlace(p), x)
     wasW := w.widenLit
@@ -6222,6 +6230,8 @@ fn (w mut walker&) views() {
     for l in range w.origins.Len() {
         if viewed[l].Len() > 0 and not w.params.Has(l): viewers.Push(l)
     }
+    rootNames Map<I64, Vec<String>>
+    roots := w.instRoots(viewers, rootNames)
     # the reads by statement: statement s's from readFrom[s] to readFrom[s + 1] in reads
     readFrom := Array<I64>(w.no + 2, 0)
     for r in range w.readPlace.Len(): readFrom[w.readAt[r] + 1]++
@@ -6279,6 +6289,8 @@ fn (w mut walker&) views() {
                 if has(inside, q) and f.unkept(k): byBuf = true
             }
             if not found and not byBuf: continue
+            # (per instance: a view of a contained root's own storage, across a let-go that cannot reach that root)
+            if roots[l] >= 0 and not w.instReaches(g, try rootNames.Get(roots[l]) catch default Vec<String>()): continue
             # (a local a Let declares with a call letting go of k is given its value after that let-go)
             if kind == LCall and w.goEnd[g] < 0 and w.declLet[l] and w.declAt[l] == s: continue
             u := w.usedAfter(l, s, usesOf[l])
@@ -6368,6 +6380,18 @@ fn localOf(p typed.Lvalue&) I64 {
     }
 }
 
+# the local an assignment to p gives a value to - the root of a place through fields, elements and payloads - -1 for
+# any other (through a reference, a global)
+fn lvRootLocal(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Local(_, _, l): I64(l)
+        case typed.Lvalue.Field(_, _, base, _): lvRootLocal(base)
+        case typed.Lvalue.Elem(_, _, e): lvRootLocal(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): lvRootLocal(pl.Base)
+        case _: -1
+    }
+}
+
 # the owner local place local l of this body is, -1 for none
 fn (w mut walker&) ownLocal(l I64) I64 {
     if l < 0 or not w.F.olIn[w.Id]: return -1
@@ -6435,6 +6459,264 @@ fn (f mut Free&) keepView(k I64, file I64, sp source.Span, text String&, g I64) 
     f.keep(k, RView, file, sp, text)
     if g >= 0: f.viewGo.Put(k, g)
 }
+
+# ---- condition 6 per instance ----
+
+# per instance (the user, 2026-11-23: "do vectors and views not per type, but per instance"; docs/freeing.md 2.5): a
+# place is every value of its declaration - every Vec<I64>'s buffer is Vec<I64>.0 - but a view is of one value's
+# storage, and a let-go is of one value's. A viewer whose every value views the own storage of one local of the body (a
+# root: a by-value local holding no reference, instCand) is in use across a let-go of the place only where that let-go
+# may reach the root (instReaches) - where the root is contained: reached by nothing but its name and its second names
+# in the body's own text (instNames). Any other let-go of the place lets go of another value's storage, which the viewer
+# never reads. By viewer: the root it views, InstNone for none or a root not contained; names: by root, the words its
+# names are
+InstNone I64 = -1
+InstAsk I64 = -2     # not asked yet (instOf)
+InstPlain I64 = -3   # a value holding no reference: it views nothing
+
+fn (w mut walker&) instRoots(viewers Vec<I64>&, names mut Map<I64, Vec<String>>&) Array<I64> {
+    n := w.body().Locals.Len()
+    out := Array<I64>(n, InstNone)
+    if viewers.Len() == 0 or w.goPlace.Len() == 0: return out
+    u := typed.LocalUses.Uses(w.T(), w.body())
+    memo := Array<I64>(n, InstAsk)
+    # (what each local is given, as written, and its name - read once a root is found)
+    given Vec<String>
+    for l in viewers {
+        r := w.instOf(u, memo, l, 0)
+        if r < 0: continue
+        if given.Len() == 0: given = w.instGiven()
+        if not names.Has(r) {
+            nm := try w.instNames(u, r, given) catch default Vec<String>()
+            names.Put(r, nm)
+        }
+        if (try names.Get(r) catch default Vec<String>()).Len() > 0: out[l] = r
+    }
+    return out
+}
+
+# a root: a local declared in the body's text, by value, holding storage of its own and no reference
+fn (w mut walker&) instCand(l I64) Bool {
+    loc := w.body().Locals[l]
+    t := w.T()
+    if loc.Kind != typed.LocalKind.Var or t.IsRef(loc.Ty) or t.SharesRefs(loc.Ty): return false
+    return t.OwnsParts(loc.Ty) or t.OwnedPart(loc.Ty)
+}
+
+# the root local l's every value views: one declared with its value and never given another, or a root itself
+fn (w mut walker&) instOf(u typed.LocalUses&, memo mut Array<I64>&, l I64, depth I64) I64 {
+    if memo[l] != InstAsk: return memo[l]
+    memo[l] = InstNone
+    if w.instCand(l) {
+        memo[l] = l
+        return l
+    }
+    if w.body().Locals[l].Kind == typed.LocalKind.Param or u.Whole[l] or has(u.StoreAt, l) or u.Init[l] == null: return InstNone
+    memo[l] = w.instRoot(u, memo, u.Init[l]!, depth + 1)
+    return memo[l]
+}
+
+# the root whose storage what value x refers to is in: a borrow or slice of a root's part, a reference read out of a
+# local whose value views it, a call of a body reaching nothing but what it is given whose every argument holding a
+# reference views the same root
+fn (w mut walker&) instRoot(u typed.LocalUses&, memo mut Array<I64>&, x typed.Expr&, depth I64) I64 {
+    t := w.T()
+    ty := x.Type()
+    if not t.IsRef(ty) and not t.SharesRefs(ty): return InstPlain
+    if depth > 8: return InstNone
+    return match x {
+        case typed.Expr.Borrow(_, _, p): w.instPlace(u, memo, p, depth)
+        case typed.Expr.Slice(_, _, sl): w.instPlace(u, memo, sl.Base, depth)
+        case typed.Expr.Read(_, _, p, _): w.instHeld(u, memo, p, depth)
+        case typed.Expr.Away(_, _, y): w.instRoot(u, memo, y, depth + 1)
+        case typed.Expr.Call(_, _, c): w.instCall(u, memo, c, depth)
+        case _: InstNone
+    }
+}
+
+# the root whose storage place p is part of
+fn (w mut walker&) instPlace(u typed.LocalUses&, memo mut Array<I64>&, p typed.Lvalue&, depth I64) I64 {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): I64(id) if w.instCand(I64(id)) else InstNone
+        case typed.Lvalue.Field(_, _, base, _): w.instPlace(u, memo, base, depth)
+        case typed.Lvalue.Elem(_, _, e): w.instPlace(u, memo, e.Base, depth)
+        case typed.Lvalue.Payload(_, _, pl): w.instPlace(u, memo, pl.Base, depth)
+        case typed.Lvalue.Deref(_, _, r): w.instRoot(u, memo, r, depth + 1)
+        # (a temporary holding a reference: what that names - `base.View()[2:4]`)
+        case typed.Lvalue.Temp(_, _, v, _): w.instRoot(u, memo, v, depth + 1).Max(InstNone)
+        case _: InstNone
+    }
+}
+
+# the root the references a value read out of place p holds refer into: the root a local's value views
+fn (w mut walker&) instHeld(u typed.LocalUses&, memo mut Array<I64>&, p typed.Lvalue&, depth I64) I64 {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): w.instOf(u, memo, I64(id), depth + 1)
+        case typed.Lvalue.Field(_, _, base, _): w.instHeld(u, memo, base, depth)
+        case typed.Lvalue.Payload(_, _, pl): w.instHeld(u, memo, pl.Base, depth)
+        case _: InstNone
+    }
+}
+
+# a call's result: a body reaching no global, no code not followed and no task refers into what its arguments reach,
+# or into storage it builds
+fn (w mut walker&) instCall(u typed.LocalUses&, memo mut Array<I64>&, c typed.Call&, depth I64) I64 {
+    f := w.F
+    cb := typed.CalleeBody(c)
+    if cb < 0: return InstNone
+    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+    fs := f.fx!.Of(cb)
+    if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0 or fs.Spawns: return InstNone
+    if fs.ReadsGlobals or fs.RefGlobals or fs.WritesOut: return InstNone
+    root := InstPlain
+    for a in c.Args {
+        r := w.instRoot(u, memo, a, depth + 1)
+        if r == InstPlain: continue
+        if r < 0 or (root >= 0 and r != root): return InstNone
+        root = r
+    }
+    return root if root >= 0 else InstNone
+}
+
+# by local: what the body gives it, as written - its declaration's value and every assignment's to it or a part of it
+fn (w mut walker&) instGiven() Vec<String> {
+    out Vec<String>
+    for m in range w.body().Locals.Len(): out.Push($w.text(w.declSp[m]) if w.declLet[m] else "")
+    for j in range w.giveLocal.Len() {
+        m := w.giveLocal[j]
+        if m >= 0: out[m] = out[m] + " " + $w.text(w.giveSp[j])
+    }
+    return out
+}
+
+# root r's names, as words: r's and its second names' - the locals that may hold a view given a value whose text names
+# r or another second name, to a fixed point - where r is reached by nothing but them in the body's text: none of them
+# escapes (stored, captured, handed on, spawned with, kept by a call), no value naming one is given anything but a
+# local (through a reference, a global), r is never moved out (D9i) and holds its own storage, and every second name a
+# let-go could go through (one it may write through) has a name. Reached otherwise
+fn (w mut walker&) instNames(u typed.LocalUses&, r I64, given Vec<String>&) Vec<String> ? instError.Reached {
+    body := w.body()
+    t := w.T()
+    n := body.Locals.Len()
+    if u.EscHard[r] or u.EscOwn[r] or not w.instKept(u, r) or not w.instOwn(u, r): error instError.Reached
+    last := typed.LastCopies(body)
+    for s in last.Keys() {
+        if (try last.Get(s) catch default -1) == r: error instError.Reached
+    }
+    out Vec<String>
+    out.Push(w.localName(r))
+    named := Array<Bool>(n, false)
+    named[r] = true
+    for {
+        grew := false
+        for m in range n {
+            ty := body.Locals[m].Ty
+            # (a value holding no reference views nothing)
+            if named[m] or given[m] == "" or not t.IsRef(ty) and not t.SharesRefs(ty) or not wordsIn(given[m], out): continue
+            if u.EscHard[m] or u.EscOwn[m] or u.RetRefs[m] or not w.instKept(u, m): error instError.Reached
+            nm := w.localName(m)
+            if nm == "" and t.ReachesWrite(ty): error instError.Reached
+            named[m] = true
+            if nm != "": out.Push(nm)
+            grew = true
+        }
+        if not grew: break
+    }
+    for j in range w.giveLocal.Len() {
+        if w.giveLocal[j] < 0 and wordsIn(w.text(w.giveSp[j]), out): error instError.Reached
+    }
+    # (a local given values no text shows - a binding, a destructured part - that a let-go could go through may hold
+    # anything)
+    for m in range n {
+        ty := body.Locals[m].Ty
+        if named[m] or given[m] != "" or body.Locals[m].Kind == typed.LocalKind.Param: continue
+        if (t.IsRef(ty) or t.SharesRefs(ty)) and t.ReachesWrite(ty): error instError.Reached
+    }
+    return out
+}
+
+type instError error {
+    Reached
+}
+
+# whether text holds one of the words as a word of its own
+fn wordsIn(text String&, words Vec<String>&) Bool {
+    for nm in words {
+        if nm != "" and wordIn(text, nm): return true
+    }
+    return false
+}
+
+# whether every call local l (or a reference to its storage) is given keeps nothing of it past the call, and no value
+# made of it is kept elsewhere or held by a lambda
+fn (w mut walker&) instKept(u typed.LocalUses&, l I64) Bool {
+    f := w.F
+    t := w.T()
+    for j in range u.LendAt.Len() {
+        if u.LendAt[j] == l and not f.refsKept.NoneKept(t, f.Bodies, u.LendBody[j], u.LendParam[j]): return false
+    }
+    for j in range u.RefAt.Len() {
+        if u.RefAt[j] == l and not f.refsKept.NoneKept(t, f.Bodies, u.RefBody[j], u.RefParam[j]): return false
+    }
+    for j in range u.GiveAt.Len() {
+        if u.GiveAt[j] == l and not f.refsKept.NoneKept(t, f.Bodies, u.GiveBody[j], u.GiveParam[j]): return false
+    }
+    for j in range u.LinkTo.Len() {
+        if u.LinkTo[j] == l and u.LinkFrom[j] < 0: return false
+    }
+    return not has(u.HoldAt, l)
+}
+
+# whether root r holds storage of its own: lowering copies what it is given where it is written, assigned or stored
+# into (never a view local, lower.viewCand); else its declaration's value is built for it
+fn (w mut walker&) instOwn(u typed.LocalUses&, r I64) Bool {
+    if u.WrOther[r] or u.Whole[r] or has(u.StoreAt, r): return true
+    x := u.Init[r]
+    return x == null or w.instFresh(x)
+}
+
+fn (w mut walker&) instFresh(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Make(_, _, m): m.Kind != typed.MakeKind.Copy
+        case typed.Expr.Collect(_, _, _), typed.Expr.Text(_, _, _), typed.Expr.Lit(_, _, _): true
+        case typed.Expr.Call(_, _, _): w.F.viewCallSite(x) < 0
+        case typed.Expr.Away(_, _, y): w.instFresh(y)
+        case _: false
+    }
+}
+
+# whether let-go g may reach a root whose names are names: one this body's text says where its let-go is - a call, an
+# assignment, a vacate - reaches it only where that text names one of them; any other (a drop where a block is left, a
+# yield) may reach anything
+fn (w mut walker&) instReaches(g I64, names Vec<String>&) Bool {
+    kind := w.goKind[g]
+    if kind != LCall and kind != LAssign and kind != LLeaf and kind != LVacate: return true
+    sp := w.goSp[g]
+    if sp.Start >= sp.End: return true
+    text := w.text(sp)
+    return text == "" or wordsIn(text, names)
+}
+
+# whether name stands in text as a word of its own
+fn wordIn(text String&, name String&) Bool {
+    n := name.Len()
+    for i in range text.Len() - n + 1 {
+        if not textAt(text, i, name): continue
+        if i > 0 and wordChar(text[i - 1]): continue
+        if i + n < text.Len() and wordChar(text[i + n]): continue
+        return true
+    }
+    return false
+}
+
+fn textAt(text String&, i I64, s String&) Bool {
+    for j in range s.Len() {
+        if text[i + j] != s[j]: return false
+    }
+    return true
+}
+
+fn wordChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
 
 # ---- what every value is: the must-summaries ----
 
@@ -6912,8 +7194,10 @@ fn (f mut Free&) decide() {
     for k in range n {
         if not f.Sole[k] or not f.owner[k]: continue
         for a in f.heldPlaces(f.valTy[k]) {
-            # (O8f: a part place's growth builds in a part region, which the owner's release reads as its own)
-            if f.arr[a] and f.Sole[a] and not f.PartPlace(a) {
+            # (O8f: a part place's growth builds in a part region, which the owner's release reads as its own; a slot
+            # place no anchor of the owner is at - a Map's keys - builds in a slot of the scope its map is in, which
+            # within the owner's value is that value's region: per instance, its slot release leaves it there)
+            if f.arr[a] and f.Sole[a] and not f.PartPlace(a) and not (f.SlotPlace(a) and not f.anchorPlace(f.valTy[k], a)) {
                 f.Sole[a] = false
                 f.keep(a, RCopied, -1, source.Span(0, 0), "what holds it is an owner held in a place of early freeing, whose storage is one region")
                 addTo(f.inSoleOwner, a)
@@ -6932,6 +7216,18 @@ fn (f mut Free&) decide() {
         }
         if not found: break
     }
+}
+
+# whether place a is where an anchor of an owner of type ty is (types.Anchors): storage the owner's release finds its
+# one region through
+fn (f mut Free&) anchorPlace(ty types.TypeId, a I64) Bool {
+    t := f.T()
+    for path in t.Anchors(ty) {
+        cur := t.Plain(t.Repr(ty))
+        for j in range path.Len() - 1: cur = t.Plain(t.Repr(t.Items(t.Fields(cur))[path[j]]))
+        if f.placeKey(cur, path[path.Len() - 1]) == a: return true
+    }
+    return false
 }
 
 # where a region made at site top of body b is a kid of: a feeder's declaration's, where its copy would have gone (the
