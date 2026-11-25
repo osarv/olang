@@ -432,6 +432,7 @@
 | ok - twoOwners: copies a constructor's instance of two Maps into an element each turn
 | ok - copyReads: reads elements where they stand beside their replacement, and views a by-value argument's copy
 | ok - heldRefs: gives a struct held in place, holding a reference beside its owners, a new instance each turn
+| ok - copiesAndDefers: builds into a local's own copy of an element holding a reference in the copy's block, beside a defer
 | ok - caseLocals: gives locals an enum case holding a parameter's reference
 | ok - keptArgs: gives a constructor whose instance is copied a value local's copy and a call's value each turn
 | ok - taskDefaults: keeps tasks' clause defaults, built where their results would be, past their turn
