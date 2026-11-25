@@ -71,8 +71,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   conditional's chosen arm, a try's call (with a default too), a text or a call's result stored in a field with a region
   of its own (a Trim() of the callee's own text copied there) - read back after a churn.
 - `fnvalues.olang` - T22a's open point 5: functions handing back what a reference argument refers to - whole, a view of
-  it, through a lambda - as function values, a call through one landing where its argument lives; baked beside the run
-  time.
+  it, through a lambda - as function values, a call through one landing where its argument lives; and a lambda passed
+  as a value no call follows building through a captured helper's field, found where the field's referent lives (O29);
+  baked beside the run time.
 - `unique.olang` - unique types (T13b): fresh values land by value, any other copy is a reference, a by-value parameter
   handed on at its last mention, holders and collections following their parts; baked and decided while compiling.
 - `drops.olang` - destructors run where the holder lets go (O15): a by-value variable's as its block is left, a

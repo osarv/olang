@@ -1,0 +1,40 @@
+import "std/io"
+
+# docs/freeing.md 2.4, a lambda passed as a function value that builds through a captured helper's field (closed by
+# wt-fnvalbuild): the value is not followed into its callee (one of a cycle of calls, T22c), so no caller knows the
+# field's binding - the build finds where the field's referent lives while the program runs (O29), the helper's
+# declaration keeps its binding (O23b gives nothing back) and each turn's helper, its cells with it, is let go with the
+# turn: flat under 8 MB at 200,000 turns, -memory -check clean
+N I64 = 200000
+
+type Ctx struct() {
+    count I64 = 0
+    names Vec<String&> = Vec<String&>()
+}
+
+type Pass struct(C mut Ctx&, k I64) {
+    C
+    cells Array<I64> = Array<I64>(64, k)
+}
+
+fn via(f fn&(k I64), i I64) {
+    if i % 7 == 3 {
+        via(f, i + 1)
+        return
+    }
+    f(i)
+}
+
+fn turn(c mut Ctx&, i I64) {
+    p := Pass(c, i)
+    via(fn(k I64) {
+        p.C.count++
+        if p.C.count % (N / 10) == 0: p.C.names.Push($k + "-" + $p.cells[9] + " padded out a little")
+    }, i)
+}
+
+fn main() {
+    c := Ctx()
+    for i in range N: turn(c, i)
+    io.PutLn($c.count + " " + $c.names.Len() + " " + c.names[c.names.Len() - 1])!
+}
