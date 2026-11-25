@@ -1,0 +1,23 @@
+Soundness review of 2026-11-25's early-freeing relaxations (wt-perinst, gap 17a, wt-fnvalbuild, wt-secondval,
+wt-checkfalse), compiler at 881372b99. Each probe was run built (N=2000), -free late, -sanitize, OLANG_EVALUATE=1 (N=200)
+beside -free late at N=200, and -memory -check.
+
+All outputs agree; no use after free found.
+- condition 6 per value: lambdavec (a second name captured by a lambda a Vec holds), parassign (S4c repoint),
+  destruct (S4b), genwrite (generator writing through a mut reference), fieldrepoint (a struct's reference field
+  repointed, the struct copied), instcall/instcall2 (a call's result viewing an argument other than the traced root),
+  mapget - each keeps the place (sound); base1, the control, frees at once.
+- gap 17a: ctorwrite (the Map local grown after S(m), in the builder and in the loop), ctoruse (return S(m) read in
+  place, lent, chosen by a conditional) - free at once, agree.
+- fnvalbuild: fnvalelem (the captured field's referent an element of a Vec that grows and has elements replaced) - agrees.
+- secondval PartLeaf: partleaf (a struct of two texts built at a part site, the other text copied out, element replaced).
+- checkfalse: textorder (a rendered piece read where it stands, a later piece replacing that element), viewlocal,
+  viewlocal2 (unwritten struct locals read out of elements across the element's replacement, stored whole), growview
+  (a field array of an element read into a local, the Vec grown) - agree.
+
+Finding (not a use after free; -check honesty, predates today): twoowners - a constructor's instance of two Maps
+(`return S2(a, b)`) stored into an element each turn: -memory -check exits 0 while the program grows (~1.9 MB at 2,000
+turns, 27 MB at 20,000, 291 MB at 200,000 resident). The row claims condition 1 (free.viewCtor, the `not one` owners'
+RMade: "its new value is a copy of what a constructor is given, which holds other owners too"); the value is a
+constructor's result made for the place, so the condition a reader checks holds - the same false reason wt-checkfalse
+removed for part-place leaves.

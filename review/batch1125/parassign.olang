@@ -1,0 +1,28 @@
+import "std/io"
+
+# per-value condition 6: a mut reference repointed at the root by a parallel assignment (S4c), then written through -
+# is the second name's value text seen?
+N I64 = 2000
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 30: w.Push(i + j)
+    return w
+}
+
+fn main() {
+    t := 0
+    spare := Array<Vec<I64>>(4, Vec<I64>())
+    for i in range N {
+        rows := Array<Vec<I64>>(4, Vec<I64>())
+        for k in range 4: rows[k] = mk(k + i)
+        p mut Array<Vec<I64>>& = spare
+        n := 0
+        r Array<I64>& = rows[0].View()
+        p, n = rows, 1
+        p[0] = mk(i * 3)
+        junk := mk(777)
+        t += r[1] + junk[1] + rows[0][2] + n
+    }
+    io.PutLn($t)!
+}

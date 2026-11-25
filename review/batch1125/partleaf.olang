@@ -1,0 +1,41 @@
+import "std/io"
+
+# wt-secondval PartLeaf: a struct holding two texts its constructor builds in the callee (the instance built at a part
+# site for one text field, settled by that array), given to a local each turn and stored into an element; the other
+# text read out of an element into a long-lived Vec, the element then replaced
+N I64 = 2000
+
+type R2 struct(name String, alt String, n I64) {
+    name
+    alt
+    n
+}
+
+fn R2.Make(i I64) R2 { return R2(("r" + $i).PadEnd(120, '.'), ("a" + $i).PadEnd(120, '-'), i) }
+
+fn R2.Named(i I64) R2 {
+    r := R2(("s" + $i).PadEnd(120, '.'), ("b" + $i).PadEnd(120, '-'), i)
+    return r
+}
+
+fn main() {
+    recs Vec<R2>
+    for k in range 4: recs.Push(R2.Make(k))
+    alts Vec<String>
+    names Vec<String>
+    t := 0
+    q := R2.Make(0)
+    for i in range N {
+        q = R2.Make(i)
+        if i % 3 == 0: q = R2.Named(i)
+        recs[i % 4] = q
+        a := recs[(i + 1) % 4].alt
+        nm := q.name
+        alts.Push(a)
+        names.Push(nm)
+        recs[(i + 1) % 4] = R2.Named(i + 1)
+        junk := R2.Make(i + 5)
+        t += a.Len() + nm.Len() + junk.n + recs[(i + 1) % 4].alt.Len()
+    }
+    io.PutLn($t + " " + alts[N - 1][0:6] + " " + alts[N / 2][0:6] + " " + names[N - 2][0:6] + " " + q.alt[0:6])!
+}

@@ -1,0 +1,36 @@
+import "std/io"
+
+# wt-checkfalse readArg in textOf: a rendered piece read where it stands (`$recs[0].name`), a later piece of the same
+# text replacing that element (its name let go) - the read must come before the let-go, or be a copy
+N I64 = 2000
+
+type Rec struct(name String, tags Vec<String>, n I64) {
+    name
+    tags
+    n
+}
+
+fn Rec.Make(i I64) Rec {
+    t Vec<String>
+    for k in range 2: t.Push("g" + $(i + k) + " padded out to some length")
+    return Rec(("m" + $i).PadEnd(200, '.'), t, i)
+}
+
+fn bump(recs mut Vec<Rec>&, i I64) I64 {
+    recs[0] = Rec.Make(i)
+    return i
+}
+
+fn main() {
+    recs Vec<Rec>
+    for k in range 4: recs.Push(Rec.Make(k))
+    t := 0
+    last := ""
+    for i in range N {
+        s := $recs[0].name.Len() + " " + recs[0].name + " " + $bump(recs, i) + " " + recs[0].tags[1]
+        junk := Rec.Make(i + 7)
+        t += s.Len() + junk.n
+        last = s
+    }
+    io.PutLn($t + " " + last[0:20] + " " + $last.Len())!
+}

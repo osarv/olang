@@ -1,0 +1,37 @@
+import "std/io"
+
+# wt-checkfalse views/storeAs: a by-value struct local (text and a Vec<String> by value) read out of an element and never
+# written - lowering may leave its copy out (D9h) - in use across its element's replacement, directly and through a
+# call; read after, then its text rendered
+N I64 = 2000
+
+type Rec struct(name String, tags Vec<String>, n I64) {
+    name
+    tags
+    n
+}
+
+fn Rec.Make(i I64) Rec {
+    t Vec<String>
+    for k in range 2: t.Push("g" + $(i + k) + " padded out to some length")
+    return Rec(("m" + $i).PadEnd(200, '.'), t, i)
+}
+
+fn swap(recs mut Vec<Rec>&, j I64, i I64) { recs[j] = Rec.Make(i) }
+
+fn main() {
+    recs Vec<Rec>
+    for k in range 4: recs.Push(Rec.Make(k))
+    t := 0
+    last := ""
+    for i in range N {
+        q := recs[i % 4]
+        recs[i % 4] = Rec.Make(i)
+        p := recs[(i + 1) % 4]
+        swap(recs, (i + 1) % 4, i + 1)
+        junk := Rec.Make(i + 9)
+        t += q.tags[1].Len() + q.name.Len() + q.n + junk.n + p.tags[0].Len() + p.n
+        last = q.tags[1] + "|" + p.tags[0]
+    }
+    io.PutLn($t + " " + last)!
+}

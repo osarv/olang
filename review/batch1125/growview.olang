@@ -1,0 +1,25 @@
+import "std/io"
+
+# wt-checkfalse readOf: a value owning nothing read out of an element (`v[0].pair`, a fixed array) into a local never
+# written, the Vec then grown past its buffer, the local read after
+N I64 = 2000
+
+type P struct(a I64) {
+    a
+    pair Array<I64> = Array<I64>(4, 0)
+}
+
+fn main() {
+    t := 0
+    for i in range N {
+        v Vec<P>
+        v.Push(P(i))
+        v[0].pair[2] = i * 2
+        x := v[0].pair
+        for k in range 40: v.Push(P(k))
+        junk Vec<P>
+        for k in range 40: junk.Push(P(k + 5))
+        t += x[2] + junk[3].a + v[0].pair[2]
+    }
+    io.PutLn($t)!
+}

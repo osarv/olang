@@ -1,0 +1,34 @@
+import "std/io"
+
+# wt-checkfalse's leftover (reported's owns hiding an RMade keep): a constructor's instance viewing two Maps it is
+# given (more than one owner leaf, so its slot places are not split into slots by slotSplit), returned and stored into
+# an element each turn, and given to a local each turn then stored - does -memory -check pass while it grows?
+N I64 = 20000
+
+type S2 struct(a Map<String, I64>, b Map<String, String>) {
+    a
+    b
+}
+
+fn S2.mk(i I64) S2 {
+    a Map<String, I64>
+    b Map<String, String>
+    for j in range 10 {
+        a.Put($i + "-" + $j + " padded out a little more than that", j)
+        b.Put($j + "+" + $i + " padded out a little", "v" + $i + " padded out to some length")
+    }
+    return S2(a, b)
+}
+
+fn main() {
+    rows := Array<S2>(10, S2(Map<String, I64>(), Map<String, String>()))
+    q := S2.mk(0)
+    t := 0
+    for i in range N {
+        rows[i % 10] = S2.mk(i)
+        q = S2.mk(i + 1)
+        rows[(i + 3) % 10] = q
+        t += rows[i % 10].a.Len() + rows[(i + 3) % 10].b.Len() + q.a.Len()
+    }
+    io.PutLn($t + " " + (try rows[3].b.Get("1+" + $(N - 6)) catch default "none"))!
+}

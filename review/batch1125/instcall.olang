@@ -1,0 +1,34 @@
+import "std/io"
+
+# per-value condition 6, instCall: a call's result traced to the one argument holding a reference (the root), while
+# another argument - an array given by value, which a call borrows (T7a) - is what the result views; that other array's
+# element then replaced
+N I64 = 2000
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 30: w.Push(i + j)
+    return w
+}
+
+fn pick(a Array<Vec<I64>>&, b Array<Vec<I64>>) Array<I64>& {
+    if a.Len() > 100: return a[0].View()
+    return b[0].View()
+}
+
+fn main() {
+    t := 0
+    for i in range N {
+        rows := Array<Vec<I64>>(4, Vec<I64>())
+        other := Array<Vec<I64>>(4, Vec<I64>())
+        for k in range 4 {
+            rows[k] = mk(k + i)
+            other[k] = mk(k + 2 * i)
+        }
+        r := pick(rows, other)
+        other[0] = mk(i * 3)
+        junk := mk(777)
+        t += r[1] + junk[1] + other[0][2]
+    }
+    io.PutLn($t)!
+}

@@ -1,0 +1,38 @@
+import "std/io"
+
+# gap 17a dropViewed/keptView: `return S(m)` (the Map local not moved where the result goes) whose result is read in
+# place, lent to a call, bound to a local and returned on through another function
+N I64 = 2000
+
+type S struct(m Map<String, I64>) {
+    m
+}
+
+fn S.mk(i I64) S {
+    m Map<String, I64>
+    for j in range 12: m.Put($i + "-" + $j + " padded out a little", j)
+    return S(m)
+}
+
+fn S.wrap(i I64) S { return S.mk(i + 1) }
+
+fn S.pick(i I64) S {
+    a := S.mk(i)
+    b := S.wrap(i)
+    return a if i % 2 == 0 else b
+}
+
+fn total(s S&) I64 { return s.m.Len() + (try s.m.Get($(s.m.Len()) + "-3 padded out a little") catch default 0) }
+
+fn main() {
+    t := 0
+    for i in range N {
+        t += S.mk(i).m.Len()
+        t += total(S.wrap(i))
+        x := S.pick(i)
+        junk Map<String, I64>
+        for j in range 40: junk.Put($j + "/" + $i + " junk junk junk junk junk", j)
+        t += (try x.m.Get($(i + i % 2) + "-5 padded out a little") catch default -100) + junk.Len()
+    }
+    io.PutLn($t)!
+}

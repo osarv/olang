@@ -1,0 +1,48 @@
+import "std/io"
+
+# wt-fnvalbuild capFieldRoot: a lambda passed as a function value builds text through a captured helper's field whose
+# referent is an element of a Vec that then grows and has elements replaced - found at run time where the referent lives
+N I64 = 2000
+
+type Ctx struct() {
+    count I64 = 0
+    names Vec<String&> = Vec<String&>()
+}
+
+type Pass struct(C mut Ctx&, k I64) {
+    k
+    C
+}
+
+fn via(f fn&(k I64), i I64) {
+    if i % 7 == 3 {
+        via(f, i + 1)
+        return
+    }
+    f(i)
+}
+
+fn turn(c mut Ctx&, i I64) {
+    p := Pass(c, i)
+    via(fn(k I64) {
+        p.C.count++
+        p.C.names.Push($k + "-" + $p.k + " padded out a little")
+    }, i)
+}
+
+fn main() {
+    t := 0
+    for i in range N {
+        cs Vec<Ctx>
+        cs.Push(Ctx())
+        turn(cs.RefMut(0), i)
+        for _ in range 20: cs.Push(Ctx())
+        turn(cs.RefMut(0), i + 1)
+        cs[1] = Ctx()
+        junk Vec<String>
+        for k in range 20: junk.Push($k + "junk" + $i + " padded out a little")
+        t += cs[0].names[0].Len() + cs[0].names[1].Len() + cs[0].count
+        if i == N - 1: io.PutLn(cs[0].names[0] + " " + cs[0].names[1])!
+    }
+    io.PutLn($t)!
+}

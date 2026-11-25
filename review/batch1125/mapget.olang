@@ -1,0 +1,27 @@
+import "std/io"
+
+# per-value condition 6: a Map local as the root, a view of one value's Vec reached by Get, that value replaced through
+# a mut reference Get gave and through a Put, another Map grown beside it
+N I64 = 2000
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 30: w.Push(i + j)
+    return w
+}
+
+fn main() {
+    t := 0
+    for i in range N {
+        m Map<String, Vec<I64>>
+        m.Put("a", mk(i))
+        m.Put("b", mk(i + 1))
+        o Map<String, Vec<I64>>
+        r Array<I64>& = (try m.Get("a") catch default Vec<I64>()).View()
+        o.Put("a", mk(i + 2))
+        for k in range 30: o.Put($k, mk(k))
+        junk := mk(777)
+        t += r[1] + junk[1] + (try m.Get("a") catch default Vec<I64>())[2]
+    }
+    io.PutLn($t)!
+}

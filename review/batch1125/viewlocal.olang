@@ -1,0 +1,37 @@
+import "std/io"
+
+# wt-checkfalse storeAs/views: a by-value struct local holding a Vec and text, never written - lowering may read it in
+# place (D9h) - in use across its element's replacement through a call, then read and stored whole
+N I64 = 2000
+
+type Rec struct(name String, tags Vec<String>, n I64) {
+    name
+    tags
+    n
+}
+
+fn Rec.Make(i I64) Rec {
+    t Vec<String>
+    for k in range 2: t.Push("g" + $(i + k) + " padded out to some length")
+    return Rec(("m" + $i).PadEnd(200, '.'), t, i)
+}
+
+fn swap(recs mut Vec<Rec>&, j I64, i I64) { recs[j] = Rec.Make(i) }
+
+fn main() {
+    recs Vec<Rec>
+    kept Vec<Rec>
+    for k in range 4 {
+        recs.Push(Rec.Make(k))
+        kept.Push(Rec.Make(k))
+    }
+    t := 0
+    for i in range N {
+        q := recs[i % 4]
+        swap(recs, i % 4, i)
+        junk := Rec.Make(i + 9)
+        t += q.tags[1].Len() + q.name.Len() + q.n + junk.n
+        kept[(i + 1) % 4] = q
+    }
+    io.PutLn($t + " " + kept[1].tags[0] + " " + kept[2].name[0:8] + " " + $kept[3].n)!
+}
