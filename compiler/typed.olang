@@ -918,6 +918,7 @@ type LocalUses struct(T types.Table&, B Body&) {
     Ret Vec<Bool>
     AliasOf Vec<I64>
     Init Vec<Expr?&>
+    Bound Vec<Expr?&>       # by match binding: what it is bound to (S13b), as Init is a declaration's value
     StoreAt Vec<I64>
     StoreX Vec<Expr&>
     LendAt Vec<I64>
@@ -1001,6 +1002,7 @@ fn LocalUses.Over(t types.Table&, b Body&, root Block?&) LocalUses {
         u.Ret.Push(false)
         u.AliasOf.Push(-1)
         u.Init.Push(null)
+        u.Bound.Push(null)
         u.EscOwn.Push(false)
         u.EscPart.Push(false)
         u.EscRefs.Push(false)
@@ -1817,7 +1819,10 @@ fn (u mut LocalUses&) pieces(ps Array<Piece&>&) {
 fn (u mut LocalUses&) arm(a Arm&, ctx Ctx) {
     for alt in a.Alts {
         u.expr(alt.Test, Ctx.Op)
-        for bd in alt.Binds: u.expr(bd.From, Ctx.Alias(bd.To))
+        for bd in alt.Binds {
+            u.Bound[I64(bd.To)] = bd.From
+            u.expr(bd.From, Ctx.Alias(bd.To))
+        }
     }
     u.expr(a.Guard, Ctx.Op)
     u.block(a.Code)

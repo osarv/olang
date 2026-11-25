@@ -23825,6 +23825,9 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
         c.rangeEnd = source.Span(-1, -1)
     }
     c.roLet(x, e!) # T25c: an element of a collection reached read-only is a read-only copy
+    # (the walk's name is the element's value, a copy of its own where it owns storage - QCE, as "x := v" is; D9h
+    # leaves the copy out where nothing could tell)
+    if not c.isRef(typeOf(e!)) and c.P.T.OwnsParts(typeOf(e!)): e = c.ownCopy(e!)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(x)), e!))
     if coll >= 0: c.markWalkUnique(x, c.P.T.Elem(at))
     if c.rangeNow.Loop == 0 and coll < 0: c.rangeKnown.Put(pair.Pair(c.fr().Body, x), knownRange(c.rangeNow.Lo, c.rangeNow.Last, id))
@@ -26944,6 +26947,9 @@ fn (c mut Checker&) bindPattern(sp source.Span, n source.NameId, place typed.Lva
         c.altBinding(sp, n, id, t)
     }
     c.roLet(id, bv)   # T25c: a binding of a place reached read-only is a read-only copy
+    # (the binding is the part's value, a copy of its own where it owns storage - QCE, as "x := v" is; D9h leaves the
+    # copy out where nothing could tell)
+    if not c.isRef(typeOf(bv)) and c.P.T.OwnsParts(typeOf(bv)): bv = c.ownCopy(bv)
     binds.Push(typed.Bind(typed.LocalId(I32(id)), bv))
     return c.lit(sp, types.BoolT, 1)
 }

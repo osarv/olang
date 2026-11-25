@@ -6473,7 +6473,8 @@ fn (ln mut lowering&) viewLocals(u typed.LocalUses&) {
             if ln.L.ViewDump and u.Init[i] != null and typed.HoldsOwned(ln.T, ln.B.Locals[i].Ty) { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(ln.B.Locals[i].Sp.Start)) + ": local L" + $i + " no candidate" + $ln.whyNot(u, i)) }
             continue
         }
-        x := u.Init[i]
+        # (a match binding's value is what it is bound to)
+        x := u.Init[i] if u.Init[i] != null else u.Bound[i]
         if x == null: continue
         ln.vlIn = ln.B.Locals[i].In
         held := ln.viewInit(u, x, i)
@@ -6488,7 +6489,7 @@ fn (ln mut lowering&) viewLocals(u typed.LocalUses&) {
 fn (ln mut lowering&) viewCand(u typed.LocalUses&, i I64) Bool {
     l := ln.B.Locals[i]
     k := l.Kind
-    if k != typed.LocalKind.Var and k != typed.LocalKind.Hidden and k != typed.LocalKind.Held: return false
+    if k != typed.LocalKind.Var and k != typed.LocalKind.Hidden and k != typed.LocalKind.Held and k != typed.LocalKind.Binding: return false
     if l.Unset or ln.escapes(u, i) or u.Ret[i] or u.WrOther[i] or u.Whole[i] or not ln.lendsKeep(u, i): return false
     for k2 in range u.StoreAt.Len() {
         if u.StoreAt[k2] == i: return false
