@@ -417,11 +417,22 @@ to grow into them, (c) a hand-off at the join. (c) is built:
   dropped, made by a join inside the task, beside tasks failing into the join and caught in the task): flat at 100,000
   turns where master grows 136 MB over the second half; built, `-free late`, `-sanitize`, `-race` and the evaluator
   agree, and with the shapes that keep on (`M=255`: a target an array element, a join's code letting go of a result
-  type's value, a clause default building text) `-check` passes and the oracles agree.
-- **Found, open.** A clause's default (P4a, `catch default Vec<String>[pad(i)]`) is built by the task's thread in its
-  worker's part of the program's scope (emit's trampoline passes `@__olang_prog_scope` to the handler): it is never
-  reclaimed - ~250 bytes a failure on master, with or without early freeing - and is no hand-off (it keeps). To close:
-  the trampoline gives a handler the stand-in of the target's storage, as a target's copy is given (P1g, `copyF`). (The
+  type's value, a clause default building text - which keeps no more since wt-taskdefault, below) `-check` passes and the oracles agree.
+- **A clause's default built where the result would be (closed by wt-taskdefault, 2026-11-25).** A clause's default
+  (P4a, `catch default Vec<String>[pad(i)]`) was built by the task's thread in its worker's part of the program's scope
+  (emit's trampoline passed `@__olang_prog_scope` to the handler): never reclaimed - ~390 bytes a failure on master,
+  with or without early freeing - and no hand-off (the target place kept). Now a spawn with one target, a local, whose
+  storage is a block's or a scope variable's names it as the handlers' scope (`mir.Task.Default`, `lower.taskDefault`);
+  emit hands the trampoline a stand-in of it as it does a target's copy (P1g), and every scope a handler is passed is
+  that stand-in, folded back at the join's wait with the task's own - the default lands where the result would and is
+  handed over like one (the evaluator gives the handler that scope). `handedAtWait` no longer refuses such a spawn for a
+  handler that builds, where it builds only its default (`free.ownDefault`: a lambda capturing plain numbers alone,
+  reaching no global, calling through no function value - all it builds is in its own frame or its result's scope, the
+  stand-in). With several targets, or a handler capturing anything else, the handler still builds in the program's
+  scope and the place keeps. `plainDefault` (SpawnLets, a target declared outside its loop) is unchanged: its question is
+  whether the default could be existing storage the spawner let go of, not where the handler builds. checks' freeing
+  taskdefault: flat at 100,000 turns, where master grew 9.5 MB over the second half (Vec defaults) and 6.4 MB (a few
+  kept); built, `-free late`, `-sanitize`, `-race`, `-memory -check` and the evaluator agree. (The
   evaluator's "it indexes outside the array" at Vec.SetAt for a `Map<I64, Vec<String>>` stored into a Vec's element and
   copied back out was no divergence: the built program released each entry's parts twice too, by luck unseen there -
   fixed by review12, checks' freeing mapsplit.)
@@ -1084,3 +1095,6 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   (lower `retArrays`). gaps19 passes -memory -check and runs flat under 8 MB; `again` 43.9 -> 1.7 MB and `pick` 26.9 ->
   1.7 MB at 400k calls. Also: `h.last = f()!` built once - free.redirect follows a try with no default to its call
   (pushtexts' seventh shape, 57 MB -> once).
+- 2026-11-25 (wt-taskdefault): a joined task's clause default built in a stand-in of its one target's storage
+  (`mir.Task.Default`), handed over at the wait like a result; `handedAtWait` admits a default that builds only itself
+  (`free.ownDefault`). checks' freeing taskdefault flat at 100,000 turns (master: ~390 bytes a failure).

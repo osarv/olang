@@ -7202,7 +7202,10 @@ holder**:
    task's thread, is a let-go of the target's own place there; what the task built for the target, in a stand-in the
    join's wait hands to the spawner (P2), is the spawner's from the wait on, so the places that value holds keep only
    where the join's own code lets one go while its tasks run - unless it is built where no wait hands it over: in a
-   scope found while the program runs, in the program's scope, or by a clause's default (P4a) that builds. But a
+   scope found while the program runs, in the program's scope, or by a clause's default (P4a) that builds and may build
+   beside its value (its clause captures more than numbers, reaches a global or calls through a function value) or is
+   given to more than one target - a default for a spawn's one target, a local, is built where the task's result would
+   be and handed over with it. But a
    target that is a local declared outside a loop the spawn is in, given values by its declaration and by spawns alone,
    whose every task writes it - none fails into its join (P4d leaves it unwritten, its old value still to be read) and
    no clause gives it a default that is existing storage - is let go of by the **spawner, at the spawn**, before the

@@ -6,8 +6,8 @@
 # (8), tasks failing - into the join, and caught in the task, its clause's default building nothing - beside ones that
 # keep their results (16); and, off by default, shapes that keep (condition 3) though they must still run as built: a
 # target an array element of the spawner's (32), a join whose own code lets go of a value of its tasks' result type while they
-# run (64), and a task's clause whose default builds text, which the task's thread builds where it reaches the program's
-# scope (128) - with any of them, the other parts' places keep too, places being by type (O8d). The measure is
+# run (64), and a task's clause whose default builds text (128: kept until wt-taskdefault, when the program's scope was
+# where the task's thread built it; now built where the result would be) - with any of them, the other parts' places keep too, places being by type (O8d). The measure is
 # taskvals.olang's: the resident peak gained
 # over each of the last two quarters of the turns, flat where either gains under 2 MB. -free late, -sanitize, -race and
 # the evaluator agree at a smaller size

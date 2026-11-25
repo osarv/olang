@@ -43359,3 +43359,29 @@ holder chains. Now a pair is recorded once (addHolder) and a mention reaches eac
 (expanding): the relation was a set all along, so nothing judged changes. The repro checks in 0.04 s at every n up to
 8. checks' scenario catchcontinue runs the eight-block program under a 60 s timeout, interpreted; the compiler before
 the fix ran past it.
+
+## 2026-11-25: a joined task's clause default built where its result would be (P4a, P2, O8f; mine; wt-taskdefault)
+
+docs/freeing.md 2.4 had it open: a spawn's clause default (`join: spawn r = try vec(i) catch default
+Vec<String>[pad(i)]`) runs on the task's thread, and emit's trampoline passed the handler `@__olang_prog_scope`, so
+what the default built went into the worker's part of the program's scope - never reclaimed, ~390 bytes a failure on
+master with or without early freeing, and no hand-off: `free.handedAtWait` refused every spawn whose clause handler
+allocates, so the target's places kept. The fix follows the doc's note: the handler is given the stand-in of the
+target's storage, as a target's copy is (P1g, `copyF`). Lowering names that storage on the task (`mir.Task.Default`,
+`lower.taskDefault`: a spawn with one target, a local whose storage is not the program's; none otherwise); emit makes
+a stand-in of it at the spawn beside the task's own (`__olang_standin_in`, on the merge list the wait folds) and passes
+it, null falling back to the program's, as every scope the handler takes; the evaluator gives the handler that scope
+instead of the program's. So the default lands where the task's result would and is handed over at the wait like one.
+
+The freeing side narrowed only where the argument is plain: `handedAtWait` now admits a building handler for a spawn's
+one target where the handler builds only its default (`free.ownDefault`): a lambda whose captures are all numbers or
+Bools, reaching no global, calling through no function value and of known effects - everything it allocates is in its
+own frame or its result's scope, now the stand-in. A capture holding storage could be handed back as the default
+(existing storage of the spawner's, not the stand-in's), so it still keeps; several targets still take the program's
+scope (which part of a tuple default goes to which target's storage is not one scope). `plainDefault`, which decides
+whether the spawner may let go of a target declared outside its loop at the spawn, asks something else - whether the
+default could be existing storage - and is unchanged; with a building default no region is handed whole (`Fresh`), so
+the stand-in of the target's storage is the only place it can go. SPEC O8f's list of what is not handed over at the
+wait names the narrower case. checks' freeing taskdefault (new): defaults building a Vec of text, text, and a few kept
+in a long-lived Vec - flat at 100,000 turns where master grew 9.5 MB and 6.4 MB over the second half; built, `-free
+late`, `-sanitize`, `-race`, `-memory -check` and the evaluator agree. (Text defaults alone were already flat on master.)
