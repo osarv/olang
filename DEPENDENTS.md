@@ -186,7 +186,14 @@ instRoots, instNames, instReaches; docs/freeing.md 2.5) reads `typed.LocalUses`'
 RetRefs, the lends, references, gives, links and holds), `RefsKept.NoneKept`, `typed.LastCopies` (D9i's moves) and the
 same `effects.olang` facts ownGoes does, and mirrors `lower.viewCand` (a local written, assigned or stored into holds a
 copy, never a view read in place): a local made able to escape or be moved some new way without those records, or a
-view local lowering reads in place another way, changes it. A let-go's text (`goSp`) must cover the call or the place it
+view local lowering reads in place another way, changes it. Origins per path (`free.olang` refView, refsOf, pathsKnown,
+ownLeaves; 2.4, wt-origins) read `typed.LocalUses`'s WrOther, EscHard and LendAt for "nothing points a local's
+references anywhere no give told", and plainCtor reads a constructor body's statements (only field declarations, each
+holding a reference given a parameter): a new way to write through a local, or constructor bodies that build their
+fields some new way, changes them. A local holding its constructor's instance (free.madeLocal) is released at its
+block's end by `lower.olang`'s endMoved as a moved value is - unless lowering moved it at its last use (D9i: EndsMade
+lets movable move it, movedAway skips its release) - and relies on check.ownCopy copying such a struct wherever it is
+stored otherwise. A let-go's text (`goSp`) must cover the call or the place it
 lets go through - a let-go given no source text is judged to reach everything. The owner rule's slot places
 (free.decide, anchorPlace) rely on a key built through a slot scope over a region landing in that region and on
 `__olang_slot_release` leaving text in a region it did not make for one value. A slot scope (`mir.Rvalue.Slots`) is

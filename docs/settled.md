@@ -1105,7 +1105,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   each part place's array in a part region of its own, freed at the let-go, and one built in one region is a gap
   `-memory -check` names, never condition 1 (2.4, wt-twoowners); a view call's value read through a Len or a slice
   (`$v[0].name.Len()`, `v[0].name[0:8]`) is lent as a read where it stands, in use at no let-go, and a by-value
-  argument's copy a callee may hand back a view of has its parts in part regions (2.4, wt-copygaps). A local lowering
+  argument's copy a callee may hand back a view of has its parts in part regions (2.4, wt-copygaps). A struct local whose
+  type holds a reference beside its owners: what its references may view is told from the leaves it holds by value
+  (origins per path), so a read of it after a store into it is no view of those, and a local holding its declaration's
+  constructor instance lets go of its leaves where its block ends (2.4, wt-origins). A local lowering
   surely copies a view call's value into owns its parts (a `Map` value copied and changed frees, gap 18). Round 6
   (wt-freeing6): an element holding a Vec of text or a Vec of Vecs frees it all where it is given another - each live
   element's slot or parts released (a walk at the let-go, none per operation), a copy built in a part region split so
