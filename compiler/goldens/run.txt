@@ -426,6 +426,7 @@
 | ok - reassigned: keeps the local's storage, which a later assignment writes
 | ok - rows: moves a whole local into what outlives its turn
 | ok - texts: builds text where the result keeps it
+| ok - secondValues: lets go of a local's old value and copies its new one into an element
 | ok - caseLocals: gives locals an enum case holding a parameter's reference
 === test tests/keptfacts.olang
 | status 0
