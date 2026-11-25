@@ -43320,3 +43320,26 @@ say). Case d16dfieldscope (-sanitize, the evaluator's run). With both fixes the 
 test` of needs, lsp, check, cells, prompt, jupyter and notebook. Measured on the self-build after both
 (`build -memory compiler/olang.olang`, the compiler built by itself, rebased on master): 547 of 1008 places free at once,
 461 keep; 144 returns hand back a view; peak RSS 2.68 GB under -memory, 2.66 GB for fixedpoint's plain build.
+
+## 2026-11-25: AArch64 ThinLTO links inline what they import; Android's ThinLTO link in lld's own flags (B3i, B12e; mine; wt-thin)
+
+Found by the OAgent app work: liboagent.so for aarch64-linux-android, once its IR passed ThinFrom (32 MB) and it
+linked by ThinLTO, called oann's `kernels/gemm.mulAdd<F32>` per element (203 `bl mulAdd`, 0 against full LTO's 533
+`fmla.4s`; Whisper's encoder 13.5 s on the phone instead of under 1 s). Reproduced with the NDK r28c (clang 19) on a
+library of an export fn calling `gemm.Gemm` beside one loading speech/transcribe's model, ThinLTO forced: 11 `bl
+mulAdd`, none on x86-64. The link's inlining remarks said why: "not inlined ... (cost=never): conflicting
+attributes". The backend's import (`--save-temps`, the .import.bc) showed the imported `mulAdd` carrying
+`"branch-protection-pauth-lr"="false" "branch-target-enforcement"="false" "guarded-control-stack"="false"
+"sign-return-address"="none" "sign-return-address-key"="a_key"` - written by LLVM 19's IR mover on every AArch64
+function it moves from a module that names no branch protection - while the module's own functions, `columns4`
+among them, carried none, and the inliner holds those attributes' absence and presence incompatible. Every small
+function imported across objects on AArch64 stayed a call. Now every AArch64 function of ours carries the same five
+attributes (target.BranchProtection, appended to the target's Attrs by FromProbe): the mover adds nothing to a
+function that has them, so the import and the function it goes into agree. Measured on the repro: 0 `bl mulAdd`, 116
+`fmla.4s` against full LTO's 122. A test in compiler/target.olang pins the attributes on an AArch64 probe and their
+absence on x86-64. The app builds can drop their raised ThinFrom.
+
+The same repro's link failed first: `ld.lld: error: -plugin-opt=: unknown plugin option 'cache-dir=...'` - the NDK's
+ld.lld, the linker of every Android build, refuses `-plugin-opt`'s cache options, as lld's MinGW driver does (B12f,
+1438210eb). Android's ThinLTO link now passes lld's own `--thinlto-cache-dir`, `--thinlto-cache-policy` and `-mllvm
+-import-instr-limit`, as Windows' does.

@@ -366,7 +366,15 @@ fn (t mut Target&) FromProbe(out String&) ? Probe {
     width := t.VectorBits if t.VectorBits > 0 else 128
     t.Attrs = ($"\"target-cpu\"=\"" + $t.Cpu + "\" \"target-features\"=\"" + $features + "\"" + $tuneAttr + $vsAttr +
         " \"prefer-vector-width\"=\"" + $width + "\"")
+    if t.Arch == "aarch64": t.Attrs = $t.Attrs + BranchProtection
 }
+
+# what LLVM's linker (19 on) writes on every AArch64 function it moves from one module into another - a ThinLTO
+# import - where the module says nothing of branch protection: none. Written on every function of ours, so an imported
+# one carries the same as the function it is inlined into; without them the inliner held the two conflicting and kept
+# every small function a backend imported a call (oann's gemm called mulAdd per element, unvectorized: B3i, HISTORY)
+BranchProtection String& = (" \"branch-protection-pauth-lr\"=\"false\" \"branch-target-enforcement\"=\"false\"" + $
+    " \"guarded-control-stack\"=\"false\" \"sign-return-address\"=\"none\" \"sign-return-address-key\"=\"a_key\"")
 
 # the text after key up to the next '"'
 fn field(out String&, key String&) String& ? {
@@ -561,6 +569,11 @@ test "a probe gives the triple, the CPU, the features without the IEEE-unsafe on
     assert amx.TileDot and amx.Attrs.Contains("+amx-bf16")
     assert t.Attrs == "\"target-cpu\"=\"skylake-avx512\" \"target-features\"=\"+avx,-avx512bf16,+avx512f,+fma," + $
         "-avxneconvert,+sse2\" \"tune-cpu\"=\"generic\" \"prefer-vector-width\"=\"512\""
+    # B3i: an AArch64 function carries what LLVM's linker writes on one it imports, so the one inlines into the other
+    arm := Target()
+    arm.Arch = "aarch64"
+    try arm.FromProbe(SkylakeProbe) catch { unreachable }
+    assert arm.Attrs.EndsWith(BranchProtection) and not t.Attrs.Contains("sign-return-address")
     # a 32-bit machine's layout, and no attributes at all
     assert probeOutcome(SkylakeProbe.Replace("e-m:e-p270", "e-m:e-p:32:32-p270")) == "unsupported"
     assert probeOutcome("target triple = \"x\"\n") == "unknown"

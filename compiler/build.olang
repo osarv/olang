@@ -874,8 +874,9 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     for f in c.ModeFlags(): args.Push(f)
     # ThinLTO's link keeps each module's code generated, keyed by what it was made from, so a relink after an edit
     # generates only what the edit changed (the linker's LLVM plugin's cache, within ThinCacheCap: B3i's caps)
-    if c.Thin and c.Target.Os == "windows" {
-        # B12f: lld's MinGW driver names the same three its own way (it takes no -plugin-opt)
+    if c.Thin and (c.Target.Os == "windows" or c.Target.Os == "android") {
+        # B12f: lld names the same three its own way: its MinGW driver takes no -plugin-opt, and the NDK's ld.lld (the
+        # linker of every Android build, B12e) refuses -plugin-opt's cache options
         args.Push($"-Wl,--thinlto-cache-dir=" + $c.Dir + "/thinlto")
         args.Push($"-Wl,--thinlto-cache-policy=cache_size_bytes=" + $(ThinCacheCap >> 20) + "m")
         args.Push($"-Wl,-mllvm,-import-instr-limit=" + $ImportLimit)
