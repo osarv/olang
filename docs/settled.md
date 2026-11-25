@@ -1039,7 +1039,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   and nested spawns cut from what a task passes on, `taskLets`); a spawn target's type places keep only where the join's
   own code lets one go (`joinTargets`), unless the result is built where no wait hands it over (the program's scope, a
   scope found at run time, a clause's default that may build beside its value - writing through its captures, a global, a function value, a spawn; a
-  default is built in a stand-in of one local target's storage, or for several of the call's result scope, handed over at the wait - `mir.Task.Default`, `free.ownDefault`, 2026-11-25); only a
+  default is built in a stand-in of one local target's storage, or for several of the call's result scope, handed over at the wait - `mir.Task.Default`, `free.ownDefault`, 2026-11-25; the handler itself built at its join, or where the targets are where its default hands back its capture - `scope.fnVal`, wt-revfix2); only a
   body an entry reaches starts tasks. Places are by type: one task-shared value of a type keeps every value of it.
   **A spawn's target local declared outside its loop (review12 F3, 2026-11-23, mine):** an owner local, given each
   task's result as an assignment's target is - its let-go the spawner's, at the spawn, before the task starts, judged
@@ -1198,7 +1198,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   writing through no parameter and reaching no global, lets go only of what it built (`free.ownGoes`; elemarg).
   A local moved at its last mention into an element may own several parts' arrays (a Map filled by `Put`) where every
   place it holds is sole (`free.MovesLeaves`; mapfill); a local the scope pass built outside a loop's turn for such a
-  move that lowering copies is a B18a gap (`lower.liftedCopy`). A Map copy's entries split as Put builds them, an
+  move that lowering copies is a B18a gap (`lower.liftedCopy`), as is a call's closure built outside a loop's turn for a function value kept there (`lower.closureKept`; freeing it is 2.4's open design). A Map copy's entries split as Put builds them, an
   entry's owner value not sole copied by its parts (`lower.regionCopy`; mapcopies, wt-gaps3).
   A view call's value given to a by-value parameter its callee keeps nowhere but in what it hands back
   (`lower.HandsOnly`), the result held by a value local of no reference beyond its parts (`h := giveField(v[j])`): At's

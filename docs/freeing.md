@@ -556,6 +556,45 @@ to grow into them, (c) a hand-off at the join. (c) is built:
   `lw.fx = effects.Effects(lw.P, lw.Bodies)` (lower.olang, a constructor's instance stored into a field, its argument's
   copy where the field's value lives; runs once).
 
+**Review 1125b's -check holes (wt-revfix2, 2026-11-25).** Three shapes grew while `-memory -check` passed naming no keep.
+
+- **A task clause's handler capturing a value that owns storage** (taskcapgrow: `catch default Vec<String>[ov[0] +
+  "x"]`, `ov`, `ov.Copy()` with `ov` a `Vec<String>` declared before the loop - 135 MB at 200,000 turns). Not the
+  default: the handler itself. A lambda lives where its captures do (D16d), so every turn's closure, and its own copy of
+  `ov` (D16c), was built in main's scope; the turn rows never looked at a closure. **Closed**: a clause's handler is
+  called on its task's thread only, before the join's wait (P4a), so the scope pass builds it at the join - or, where
+  its default hands back storage of what it captured (its body's relation "capture outlives result", clauseGives),
+  where the task's targets keep the result - wherever what it captured outlives that (`scope.fnVal`'s `inClause`,
+  `clauseAt`, `givesCapture`). Flat at 12.9 MB at 200,000 turns, every default; checks' freeing taskcaps, kept's
+  taskCaptures.
+- **A closure a call makes, kept on some turns** (fnvalgrow: `g := closer(a); if i % 7 == 3: f = g` with `f` a function
+  value local declared before the loop - 40 MB at 20,000 turns). `g` may be `f`'s value, so the call's result scope is
+  `f`'s (reference locals per assignment) and every turn's closure - the callee's copy of `a` - is built there. Lowering
+  now names it (`lower.closureKept`, a B18a turn row: a call to a function whose every return is a lambda capturing
+  something, `free.ClosureResult`, given a result scope outside the loop's turn) and `-check` fails; a closure read in
+  the turn only is built there, flat (checks' freeing closurekept, `M=3` for the named shape). The same shape for a
+  lambda written in the loop (`g := fn() ...`) was already named, as an O27 placement of what it captured. **Open, a
+  design decision** - building the closure in the turn and keeping it only on the turns it is stored needs either:
+  (a) a copy of a closure's environment where it is stored - a third word in every function value (its environment's
+  copy routine) and a copy no one wrote, against "copies are written"; (b) per-value regions for a function value
+  local - each closure a call makes built in a region of its own made at the call, released at the turn's end unless
+  the local it is stored into takes it, that local releasing its old one as it is given another (an owner local's held
+  region, P1g's handover, for a reference local), a region per closure made and a handle per such local, nothing
+  visible; (c) leave it named. Recommendation: (b) - it frees where the program lets go, at a cost the closure's own
+  allocation already pays, and it is the reference-local twin of what owner locals have; a section-8 round (the same
+  handover would close a reference a call hands back of storage it builds, stored on some turns - `r := wrap(a); if c:
+  f = r`, wt-revfix1's rows).
+- **A fill of a struct holding a Vec of text** (wt-walkref's finding: `rows := Array<Row>(2, Row(mk(0), 0))`, elements
+  given new values and walked - `-check` failed; 52 MB at 200,000 turns with the array declared before the loop). The
+  fill's copy of `Row.v` (lower.fillCopy's ownerField) goes through the Vec's Copy helper, which builds the buffer's
+  text in slots of where it goes as any copy's (copySlots), but `untracked` let a slot place pass only for a copy
+  lowering makes (`made`), so the text place kept the Vec's buffer and its text kept everything. **Closed**: a fill whose
+  owner fields fillCopy builds lets its slot places pass too. That uncovered an older hole the keep had hidden: a part
+  place (a struct's text field beside its owner) given a constructor's copy stores no site (SOk) and so was never
+  reported - kept for a fill's value not all new (`Row(mk(0), ("n0").PadEnd(80, '-'))`), it grew 52 MB with no row. Now
+  reported where it keeps (`free.ctorParts`, a named keep: "its new value is not all new"). checks' freeing fillwalk
+  (`limited`; `M=15` for the named text field).
+
 ### 2.5 Per instance: a view of one value, a let-go of another (wt-perinst, 2026-11-25)
 
 The user, 2026-11-23: "We want to free when we can ... do vectors and views not per type, but per instance". A place is
@@ -1379,3 +1418,9 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   second names) - a keep at most, never a free too early. Checks' freeing walkref, bindref (freed at once; built,
   `-free late`, `-sanitize`, interpreted agree), tests/loopvals.olang's grownCopies (baked, K2). The
   self-build frees 556 of its 1018 places at once, unchanged; warm peak 2588 MB (child maximum resident set, ~2590 before).
+- 2026-11-25 (wt-revfix2): review 1125b's -check holes (2.4): a task clause's handler built at its join, or where the
+  targets are where its default hands back its capture (taskcapgrow 135 MB to 12.9 MB at 200,000 turns); a call's
+  closure built outside the loop's turn for a function value kept there named by `-check` (fnvalgrow; options for
+  freeing it in 2.4); a fill's text beneath its owner fields built in slots (wt-walkref's fill-and-walk, 52 MB to 13 MB
+  with the array outside the loop) and a part place given a constructor's copy reported where it keeps. checks' freeing
+  taskcaps, closurekept, fillwalk; kept's taskCaptures.

@@ -6440,7 +6440,9 @@ if any, is discarded (P1).
 when the call fails with an error the clause takes (R11a), its block and its default run on the task's own thread,
 before the task is finished, as the body of a spawned lambda would (D16e) - what they read of the spawner's variables
 is captured (D16c), copied when the `spawn` runs, and must last until the join on the terms P2 states for a lambda's
-captures. A task is a function of its own, and its clauses are its code, so they may not leave it: a `return`, a
+captures. A clause lives until the join: it is built in the join block - or, where its default gives back storage it
+captured, where the targets keep the call's result - wherever what it captured outlives that (D16d's latitude, as
+D16e's for a spawned lambda). A task is a function of its own, and its clauses are its code, so they may not leave it: a `return`, a
 `break` or `continue` not inside a loop written in the clause, an `error` statement, and a `try` an error can leave the
 clause through are compile-time errors. `unreachable` and a `noreturn` call end the process from a task's thread
 (P6, S16) and may be written.
