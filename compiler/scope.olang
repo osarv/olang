@@ -440,6 +440,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     onFrame Bool = false                   # the lambda val judges next is made for a call that keeps nothing of it (D16c)
     anyBox Bool = false                    # the promotion val judges next is an "any"'s box (T32a): a copy
     anyItems Bool = false                  # the make val judges next is what an "any"'s box holds (T32a)
+    copyLocal Bool = false                 # the copy val judges next is a local's own (ownCopy: its claim the source's)
     inSpawn Bool = false                   # the call val judges next is a task's (P2: every scope it binds is built into)
     joins Vec<typed.BlockId>              # the join blocks entered, innermost last (P1a)
     taskJoin Term = Term.None              # the join block of the task call val judges next: its temporaries are built there
@@ -8102,7 +8103,9 @@ fn (s mut Scoper&) letInferred(l typed.LocalId, loc typed.Local, x typed.Expr?&,
     s.landing = land and not part and lift == Term.None
     if part { s.tempLand = 1 if land and lift == Term.None else 0 }
     s.lastGenArg = Term.None
+    s.copyLocal = s.refCopy(x)
     v := s.val(x, dest)
+    s.copyLocal = false
     s.promoteLocal = -1
     s.caseLocal = -1
     s.slotCall = -1
@@ -10454,15 +10457,31 @@ fn (s mut Scoper&) valTry(x typed.Expr&, t typed.Try&, dest Term, d Term) Val {
 
 # QCE: a value's own copy (typed.MakeKind.Copy) - new storage built in d, its parts that are
 # arrays of a run-time length copied there; what it still shares with what it copies, the references that value holds
-# (types.SharesRefs), must outlive d, as an "any"'s copy's do (T32a)
+# (types.SharesRefs), must outlive d, as an "any"'s copy's do (T32a) - but a local's value (a `:=`, a for-in's name, a
+# match binding: copyLocal) keeps them where they are, its claim the source's while its own storage is its block (O25h:
+# a copy of one that already lives somewhere), so an element referring into its own array can be copied out
 fn (s mut Scoper&) ownCopy(m typed.Make&, ty types.TypeId, d Term) Val {
+    keep := s.copyLocal
+    s.copyLocal = false
     if m.Site >= typed.SiteId(0): s.build(m.Site, d)
     if s.liftGather: s.liftCopied(m, d)
     x := m.Items[0]
     v := s.val(x, Term.None)
     # (the copy's type, not what it copies: an array of references to text copied into an array of text shares nothing)
-    if v.K == ValKind.Existing and s.P.T.SharesRefs(ty): s.fit(v.T, d, s.storeThrough(ty), x, FitValue)
+    if v.K != ValKind.Existing or not s.P.T.SharesRefs(ty): return Val.fresh(d)
+    if keep: return v
+    s.fit(v.T, d, s.storeThrough(ty), x, FitValue)
     return Val.fresh(d)
+}
+
+# whether x is a local's own copy of existing storage holding references (ownCopy's copyLocal): the local's claim is
+# then where the source's references are
+fn (s mut Scoper&) refCopy(x typed.Expr?&) Bool {
+    if x == null: return false
+    match x {
+        case typed.Expr.Make(_, ty, m) { return m.Kind == typed.MakeKind.Copy and s.P.T.SharesRefs(ty) }
+        case _ { return false }
+    }
 }
 
 # item 17: a value local copied whole at its last mention into storage kept beyond its block - built where that copy
@@ -10858,7 +10877,9 @@ fn (s mut Scoper&) arm(a typed.Arm?&, dest Term) Val {
     for alt in a.Alts {
         s.val(alt.Test, Term.None)
         for bd in alt.Binds {
+            s.copyLocal = s.refCopy(bd.From)
             v := s.val(bd.From, Term.None)
+            s.copyLocal = false
             l := I64(bd.To)
             # a binding is a local of its clause's block (S13b); alternatives binding one name from different scopes
             # bind it where neither is known (S13c, O12)

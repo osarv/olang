@@ -43850,3 +43850,38 @@ The self-build frees 556 of its 1018 places at once, unchanged; its warm peak 25
 same way: the build's child maximum resident set, second run). `make fixedpoint`, consistency, the freeing and
 earlyfree scenarios pass; the goldens moved for the new fixture and test (tokens, ast, run) and lowering's new field
 (layout).
+
+## 2026-11-25: a walk's name and a binding holding references beside their own storage are copies (S9a, S13b, O25h; mine; wt-walkref)
+
+wt-perinst made a for-in's name of an element and a match binding owning storage copies of their own (check's
+ownCopy), but not for a type holding references beside its own storage (`struct(v Vec<String>, tag String&)`): with the
+copy, the scope pass refused tests/loopvals.olang's `Named`, an element whose writable reference names its own slot
+(O25h's message, "this value holds references into a scope the target outlives"), as it refused `x := a[i]` of such an
+element on master. So `for row in rows { row.v.Push(..) }` and `case Box.Some(x): x.v.Push(..)` grew the element's or
+the payload's Vec through a name that is not it, letting go of its buffer: built, the element read back `s7780` for
+`s2102`; `-free late` agreed with the wrong build; the evaluator stopped on a stale view.
+
+The cause was where the scope pass judged the copy's references. `scope.ownCopy` judged a copy as fresh storage of its
+destination d, and asked the source's references to fit d - exactly, where something can be stored through one (O25g).
+For a local's copy d is its block, the copy's own storage - but O25h says such a local's references are where its
+initializer's are, its own storage being its block. A `:=`, a walk's name and a binding (letInferred, arm) now mark
+their initializer's copy (copyLocal, refCopy: a Make of kind Copy of a type that SharesRefs): ownCopy builds the copy
+at d as before and gives the local the source's Existing value, so its claim is the source's references' term. Stores
+of the copy elsewhere are judged as any existing value holding references - a walk name or binding of a block's
+element stored into a longer-lived local stays refused (O25h). The first try - every ownCopy giving the source's value
+- refused compiler/prompt.olang (`s.Values = vals`, O20): a store's copy goes through the inference's lift by its fit,
+which a plain existing value does not ask for; the copy's own claim is a local's only. check then copies regardless of
+SharesRefs (counted, bindPattern). Condition 6 per value still treats such names conservatively (free.instCand,
+second names): a keep at most, never a free too early.
+
+No rule changes: SPEC's S9a and S13b already said a copy, and O25h where its references are; the program now means
+what they say. Checks: freeing walkref and bindref (`Row(v Vec<String>, tag String&)` elements and payloads grown, read
+back; built, `-free late`, `-sanitize` and interpreted agree; freed at once); tests/loopvals.olang's grownCopies, baked
+(K2) and decided (S17a) - master's evaluator stops on the stale view.
+
+The 18 probes of review 1125 agree under every oracle and pass `-check`. The self-build frees 556 of its 1018 places
+at once, unchanged; warm peak 2588 MB (the build's child maximum resident set, second run). `make test`, `make
+fixedpoint` and consistency pass; the goldens moved for the fixtures, the test and the Scoper's new field. Found, not
+fixed (predates this branch): `-memory -check` refuses `rows := Array<Row>(2, Row(..)); for k in range 2: rows[k] = ..`
+followed by any walk of `rows` (O8f: "a value holding it is made with no store into it, by a copy of a value holding
+it") - with a struct holding a Vec and no reference too; a keep reported, not a free too early.

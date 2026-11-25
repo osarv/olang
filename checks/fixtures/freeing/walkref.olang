@@ -1,0 +1,34 @@
+import "std/io"
+
+# a for-in's name of an element owning storage and holding a reference beside it (O25h) is the element's own copy (S9a,
+# QCE): its references stay where the element's are, its own storage is the turn's - growing it lets go of the copy's
+# buffer, never the element's, whose strings and length read back after the loop; each grown-out buffer freed at once
+N I64 = 2000
+
+type Row struct(v Vec<String>, tag String&) {
+    v
+    tag
+}
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 30: w.Push($"s" + $(i + j))
+    return w
+}
+
+fn main() {
+    t := 0
+    last := ""
+    label := "lab"
+    for i in range N {
+        rows := Array<Row>[Row(mk(i), label), Row(mk(100 + i), label)]
+        for row in rows {
+            for _ in range 100: row.v.Push("x")
+            t += row.v.Len() + row.tag.Len()
+        }
+        junk := mk(7777)
+        t += rows[1].v[3].Len() + rows[1].v.Len() + junk[0].Len()
+        last = rows[1].v[3]
+    }
+    io.PutLn($t + " " + $last)!
+}

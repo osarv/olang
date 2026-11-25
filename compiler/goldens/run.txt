@@ -502,6 +502,7 @@
 | ok - the baked global agrees
 | ok - an element holding text, written through its own reference: the name keeps what the slot held
 | ok - the self-slot snapshot, baked, agrees
+| ok - a walk's name and a binding holding a reference beside their own storage are copies
 === test tests/mapmut.olang
 | status 0
 | ok - S9c: a map of values holding writable references, walked read-only and writably
