@@ -1,0 +1,99 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4, wt-copygaps): a view call's value read where it stands through a Len the compiler supplies
+# or a slice - a rendered `$recs[0].name.Len()` or `recs[0].name[0:8]` beside a later piece replacing that element, and
+# `cs[0].names[1].Len()` in a sum - and a by-value argument's copy a callee hands back a view of (`pick(rows, w)`). Before,
+# lowering copied each where the call's result would live, a copy no let-go releases, and -memory -check failed on it
+# (RCopied); now the reads are lent (lower.readHere, free.readCall) - read in place, or copied into the statement's
+# innermost scope - and the argument's copy has its parts in part regions of their own (lower.ownersCopy), each place
+# freed at its let-go
+N I64 = 20000
+
+type Rec struct(name String, tags Vec<String>, n I64) {
+    name
+    tags
+    n
+}
+
+fn Rec.Make(i I64) Rec {
+    t Vec<String>
+    for k in range 2: t.Push("g" + $(i + k) + " padded out to some length")
+    return Rec(("m" + $i).PadEnd(200, '.'), t, i)
+}
+
+fn bump(recs mut Vec<Rec>&, i I64) I64 {
+    recs[0] = Rec.Make(i)
+    return i
+}
+
+# rendered pieces of an element read where they stand, a later piece replacing that element
+fn pieces(n I64) String {
+    recs Vec<Rec>
+    for k in range 4: recs.Push(Rec.Make(k))
+    t := 0
+    last := ""
+    for i in range n {
+        s := $recs[0].name.Len() + " " + recs[0].name[0:6] + " " + $bump(recs, i) + " " + recs[0].tags[1]
+        recs[i % 3 + 1] = Rec.Make(i + 3)
+        t += s.Len() + recs[(i + 1) % 3 + 1].name[1:4].Len()
+        last = s
+    }
+    return $t + " " + last[0:20]
+}
+
+type Ctx struct(names Vec<String>, n I64) {
+    names
+    n
+}
+
+fn Ctx.Of(i I64) Ctx {
+    v Vec<String>
+    for k in range 3: v.Push(("c" + $(i + k)).PadEnd(120, '-'))
+    return Ctx(v, i)
+}
+
+# a Len of an element's field's element in a sum, the element given another each turn
+fn lens(n I64) I64 {
+    cs Vec<Ctx>
+    for k in range 4: cs.Push(Ctx.Of(k))
+    t := 0
+    for i in range n {
+        cs[i % 4] = Ctx.Of(i)
+        t += cs[0].names[0].Len() + cs[(i + 1) % 4].names[1].Len() + cs[2].n
+    }
+    return t
+}
+
+type W struct(v Vec<I64>) {
+    v
+}
+
+fn mk(i I64) Vec<I64> {
+    w Vec<I64>
+    for j in range 60: w.Push(i + j)
+    return w
+}
+
+fn pick(a Array<Vec<I64>>&, b W) Array<I64>& {
+    if a.Len() > 100: return a[0].View()
+    return b.v.View()
+}
+
+# a by-value argument's copy the callee hands back a view of, the local's Vec given another while the view is in use
+fn args(n I64) I64 {
+    t := 0
+    for i in range n {
+        rows := Array<Vec<I64>>(2, Vec<I64>())
+        for k in range 2: rows[k] = mk(k + i)
+        w := W(mk(i * 5))
+        r := pick(rows, w)
+        w.v = mk(i * 3)
+        t += r[1] + w.v[2]
+    }
+    return t
+}
+
+fn main() {
+    io.PutLn(pieces(N))!
+    io.PutLn($lens(N) + " " + $args(N))!
+}
