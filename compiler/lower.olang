@@ -628,7 +628,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     rvl Map<I64, I64>
     vl Map<I64, Bool>
     noCopy Map<I64, Bool>
-    keptArgs Map<I64, Bool>    # keptView: the copies a kept constructor's instance views, built in the innermost scope open
+    keptArgs Map<I64, Bool>    # keptView, readArgCopy: by-value argument copies read only until the call (or its instance's copy) is made, built in the innermost scope open
     qCover Map<I64, Bool>      # quietLife: the types whose storage the view held covers (its by-value parts)
     qRoot types.TypeId = types.TypeId(0)   # ... and the type of the object it is a view into
     qSelf I64 = -1             # ... and windowQuiet's view call: its own try's clauses run only where it gave no view
@@ -5677,6 +5677,7 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
             ln.readHere(a)
         }
         if not task: ln.argView(a, body, i)
+        if not task and byValue: ln.readArgCopy(body, i, a)
         if kept and i < typed.ViewBits and (ln.L.ViewsOf(typed.BodyId(I32(body))) & (I64(1) << i)) != 0 {
             ln.keptView(c, body, i, a)
             ln.keptCall(body, i, a)
@@ -5825,6 +5826,17 @@ fn (ln mut lowering&) keptView(c typed.Call&, body I64, i I64, a typed.Expr&) {
         if j != i and not quietArg(c.Args[j]): return
     }
     ln.noCopy.Put(I64(m.Site), true)
+}
+
+# O8f (B18a): a by-value argument's copy a callee that is no constructor only reads (Preserves) and hands back no view
+# of - `out.Push(pt)` - is dead once the call returns: built in the innermost scope open (keptArgs), never where the
+# callee's parameter would have it, a scope outside a loop's turn nothing then lets go of it in
+fn (ln mut lowering&) readArgCopy(body I64, i I64, a typed.Expr&) {
+    if body < 0 or ln.L.Bodies[body].Of == typed.BodyOf.Ctor or a != typed.Expr.Make: return
+    m := a.m
+    if m.Kind != typed.MakeKind.Copy or m.Site < typed.SiteId(0) or ln.T.RunsCopy(a.Type()): return
+    if i < typed.ViewBits and (ln.L.ViewsOf(typed.BodyId(I32(body))) & (I64(1) << i)) != 0: return
+    if ln.L.preserves(body, i): ln.keptArgs.Put(I64(m.Site), true)
 }
 
 # O8f (2.4): a call's value given to a by-value parameter i the constructor only reads (Preserves), of a constructor
@@ -6795,8 +6807,9 @@ fn (ln mut lowering&) liftedCopy(l I64) {
 # B18a: a by-value argument's copy its callee only reads (free.PreservedSite) is let go of through no place - reclaimed
 # where the scope it is built in closes. Built in one outside a loop's turn its call is in, at, it stays there turn
 # after turn though no place's let-go names it: a gap -memory -check fails on (LiftGaps)
-fn (ln mut lowering&) turnKept(site I64, at mir.ScopeRef, sp source.Span) {
-    if not ln.freeing or not ln.L.Free!.PreservedSite(I64(ln.B.Id), site) or not ln.outsideTurn(at): return
+fn (ln mut lowering&) turnKept(site I64, ty types.TypeId, at mir.ScopeRef, sp source.Span) {
+    # (a copy of a value owning no parts builds nothing there: QCE)
+    if not ln.freeing or not ln.T.OwnsParts(ty) or not ln.L.Free!.PreservedSite(I64(ln.B.Id), site) or not ln.outsideTurn(at): return
     ln.L.LiftGaps.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) + ": a by-value argument's copy its callee only reads keeps until its scope closes: it is built outside the loop's turn the call is in, and no place lets go of it")
 }
 
@@ -7512,9 +7525,9 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             # Copy, E31d, which may make what the value refers to anew)
             if ln.noCopy.Has(I64(m.Site)) and not t.RunsCopy(ty): return v
             at := ln.madeAt(m.Site)
-            # (a copy a kept constructor's instance views, read only until that instance's copy is made: keptView)
+            # (a copy read only until its call returns, or until a kept constructor's instance's copy is made: keptArgs)
             if ln.keptArgs.Has(I64(m.Site)) and ln.levels.Len() > 0 and not heldRef(at): at = mir.ScopeRef.Scope(ln.top().S)
-            ln.turnKept(I64(m.Site), at, sp)
+            ln.turnKept(I64(m.Site), ty, at, sp)
             sv := ln.splitCopy(I64(m.Site), v, ty, at, sp)
             if sv != mir.Operand.None: return sv
             pv := ln.partCopy(I64(m.Site), v, ty, at, sp)
