@@ -7261,7 +7261,13 @@ no reference into it kept elsewhere. An element owning storage only so - as arra
 (an `Array<Vec<I64>>`'s) - lets go of them where it is given another value (`a[i] = v`, `SetAt`).
 
 A reference read from what a place holds that is still in use after the place lets go - in the function holding the
-reference, or across a call that may make it let go (condition 6) - makes the place keep what it lets go of. Each
+reference, or across a call that may make it let go (condition 6) - makes the place keep what it lets go of. Condition
+6 is of the value let go of: a view of another value of the same place - another `Vec<I64>`'s buffer - is none, and the
+compiler tells the two apart where the function's text shows it: a view of a local's own storage (a local by value,
+holding no reference, reached by nothing but its names there - never stored, captured or kept by a call as a
+reference, never moved out) is in use across a let-go only where that let-go's call or place names the local or a
+local holding a view of it (`for x in base: other.Push(x)` keeps nothing of `other`'s growth). Where a view is in use
+across its own value's let-go the place keeps for every value - a place is decided as one. Each
 condition is the compiler's to prove, over the whole program: where a fact it needs cannot be shown - a body not known
 (a function value, an `extern` - which, in a program C may call back (condition 3), may call any export fn C may call,
 X12, but the C library's input and output, text, memory and time functions, which call nothing back - so a place one

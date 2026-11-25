@@ -43359,3 +43359,71 @@ holder chains. Now a pair is recorded once (addHolder) and a mention reaches eac
 (expanding): the relation was a set all along, so nothing judged changes. The repro checks in 0.04 s at every n up to
 8. checks' scenario catchcontinue runs the eight-block program under a 60 s timeout, interpreted; the compiler before
 the fix ran past it.
+
+## 2026-11-25: condition 6 judged per value, and an owner's slot places per value (O8f, O8d; the user's direction, the design mine; wt-perinst)
+
+The user, 2026-11-23: "We want to free when we can ... do vectors and views not per type, but per instance" - after
+review10 showed a view of one `Vec<I64>` keeping every `Vec<I64>`'s growth (growkept). A place is a declaration's:
+every `Vec<I64>`'s buffer is the one place `Vec<I64>.0`, decided once, a link-time constant every module's sites read
+(B3i). Two reasons a place keeps were judged per declaration too:
+
+- condition 6 took any view of the place in use across any let-go of it. So growkept's `r Vec<I64>& = base` across
+  `rows[i % 4] = mk(i)` kept the growth of every `Vec<I64>` in the program, and so did the everyday
+  `for x in base: other.Push(x + i)` - the walk's hidden local views `base`'s buffer, `other`'s growth lets go of the
+  place (90.6 MB at 200,000 turns of growkept; 79 MB for viewother);
+- the owner rule (free.decide: an owner held in a sole place has its storage in one region, so the array places it holds
+  keep) kept `Map<String, I64>`'s key slots for every such Map because a `Map<String, Map<String, I64>>`'s values are
+  owners (gaps17b, wt-gaps1719: 13 MB to 185 MB at 200,000 turns).
+
+**The directions weighed** (docs/freeing.md 2.5). The growth and let-go code is the prelude's, run for every value, so a
+decision per value has to reach it at run time: (a) a mark the value's storage carries - a "pinned" region flag read
+before every store into a part place builds the new array, set at each construction of a pinned value, a sentinel
+buffer for an empty Vec, modelled by the evaluator - or (b) the library code cloned per decision, chosen at the call by
+the argument's origins, which needs the decision handed down through every user function taking a `mut Vec<T>&` (a
+hidden argument per call, a clone per decision, and B3i's one object per module bent). Neither fixture needs a value
+kept that the other values must not keep: the analysis kept the declaration because it did not tell values apart. So
+the judgement is per value, at compile time, and the decision stays per declaration - no run-time mark, no clone, no
+cost per operation or construction.
+
+**Condition 6 per value (free.olang instRoots, instNames, instReaches).** A viewer whose every value (its declaration's,
+never given another) traces to a root - a by-value local of the body holding storage of its own and no reference
+(`SharesRefs` false), through borrows and slices of its parts, references read out of a local that traced to it, and
+calls of bodies reaching no global, no code not followed and no task whose every argument holding a reference traces
+to the same root (`base.View()`, a for-in's walk) - is in use across a let-go only where that let-go may reach the root.
+The root's names are its own and its second names': the locals that may hold a view given a value whose text names it
+or another second name, to a fixed point over every declaration's and assignment's value. The root counts only where it
+is contained - neither it nor a second name escapes (typed.LocalUses: EscHard, EscOwn, RetRefs, a lambda's hold), every
+call given one keeps nothing past the call (RefsKept.NoneKept of its lends, references and gives; no linked value going
+elsewhere), no value naming one goes through a reference or into a global, it is never moved out at its last mention
+(typed.LastCopies, D9i), it holds its own storage (written, assigned or stored into - lowering copies, lower.viewCand -
+or its declaration's value built for it), and a second name it could be written through has a name. Then a call, an
+assignment or a vacate reaches the root only where its text names one of the names as a word; a drop where a block is
+left, a yield or a let-go with no text reaches everything. Soundness: a value's storage is let go of only through a path
+to it; for a contained root every path is one of its names in this text, so a let-go naming none lets go of another
+value's storage, and the viewer reads only the root's own. Anything else is judged per declaration as before.
+
+**What keeps still.** A view of a root in use across that root's own let-go (viewself: `r := rows[i % 4].View()`
+across `rows[i % 4] = mk(i)`) keeps the place for every value - the program needs the old storage by its own text, and
+M19g refuses the growth form outright; the pin of direction (a) would spare the other values' growth in such a program
+at a cost on every store into the place - recorded in 2.5, not built. Views whose root is a parameter (two parameters
+may name one value), a global, or a local not contained are judged per declaration. SPEC's O8d now says condition 6 is
+of the value let go of, what the compiler shows, and that a view across its own value's let-go keeps the place.
+
+**The owner rule's slot places per value.** A slot place no anchor of the owner's type is at (types.Anchors; a Map's
+keys sit in its slot array) no longer keeps with the owner: a key is built through a slot scope of the scope its map is
+in, which inside the owner's value is that value's region, and `__olang_slot_release` already leaves text in a region it
+did not make for one value - so the owner's keys go with its region and every other Map's keys with their slots
+(free.anchorPlace). gaps17b: 185 MB to 1.9 MB at 200,000 turns, -memory -check passes.
+
+**O23b per value: not by this.** O23b's equality is a field's scope binding needed at run time where an instance is
+reached through an element, a global, an `any` or a capture - per instance that is a scope handle each instance carries,
+a word per instance, which field scopes option B was built to avoid; it stays per declaration.
+
+Checks: freeing growkept and viewother (flat at 200,000 turns under 8 MB: 90.6 and 79 MB on master), gaps17b (moved to
+`limited`, 185 MB to 1.9 MB), viewself (keeps, named); each built, `-free late`, `-sanitize` and interpreted, agreeing.
+The compiler's own build gains nothing yet: 521 of its 1149 places with let-goes sole (master 516 of 1144, the same
+places but the new code's) - its views are of receivers' fields and parameters (`for x in g.fields` across
+`g.fieldType(t)`), which a root by local does not reach; peak 2722 MB (2715), the free pass's final walk 959 ms (1065).
+A local given values no text shows (a binding, a destructured part) that could be written through makes every root of
+its body uncontained. Where to pick up: a parameter or field as a root - contained where every caller's argument is,
+an interprocedural judgement - and direction (a)'s pin.

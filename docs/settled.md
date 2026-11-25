@@ -1056,6 +1056,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   call through it; functions named as values and lambdas are no task roots (the walks judge every call through a
   value). The compiler's self-build frees 538 of its 1007 places at once: spin's ticker task beside `drive`'s join
   reads only numbers, a text and constant text.
+  **Condition 6 and the owner rule per value (the user, 2026-11-23: "do vectors and views not per type, but per
+  instance"; 2026-11-25, the design mine; docs/freeing.md 2.5):** places and their decisions stay per declaration
+  (one link-time constant, B3i); what is judged per value is why one keeps. A view of a by-value local's own storage - a
+  root reached by nothing but its names in the body's text: nothing of it escapes or is kept by a call, it is never
+  moved out, its storage its own - is in use across a let-go only where that let-go's call or place names the root or a
+  local holding a view of it: `for x in base: other.Push(x)` no longer keeps every `Vec<I64>`'s growth. A view across its
+  own value's let-go keeps the place for every value (no run-time mark: the per-value pin is a cost on every store into
+  the place, not built). An owner's slot place no anchor of its type is at (a `Map`'s keys) no longer keeps with the
+  owner: its keys are built in the owner's region, which the slot release leaves them to. O23b stays per declaration
+  (per instance it is a scope handle each instance carries).
   A let-go the compiler does not follow is a gap:
   `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. **Captures and local copies
   (2026-11-21, mine; docs/freeing.md):** a value a lambda captures is the lambda's own copy, its parts split, made in

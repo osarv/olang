@@ -169,7 +169,15 @@ lowering's movable - a change to one of each pair changes the other. The stores
 `occupy` makes are listed in `typed.Body.Rooms` (check.suppliedOccupy) and are no let-go in free.olang or lower.olang.
 A copy's text of a place built in slots is built in slots too (round 8: `lower.olang` copySlots in the Copy helper's
 `copyAt`), and `free.olang`'s `untracked` then keeps no slot place for a copy lowering makes - a new copy path in
-lowering that builds text elsewhere changes `untracked`'s `made` callers with it. A slot scope (`mir.Rvalue.Slots`) is
+lowering that builds text elsewhere changes `untracked`'s `made` callers with it. Condition 6 per value (`free.olang`
+instRoots, instNames, instReaches; docs/freeing.md 2.5) reads `typed.LocalUses`'s escapes and calls (EscHard, EscOwn,
+RetRefs, the lends, references, gives, links and holds), `RefsKept.NoneKept`, `typed.LastCopies` (D9i's moves) and the
+same `effects.olang` facts ownGoes does, and mirrors `lower.viewCand` (a local written, assigned or stored into holds a
+copy, never a view read in place): a local made able to escape or be moved some new way without those records, or a
+view local lowering reads in place another way, changes it. A let-go's text (`goSp`) must cover the call or the place it
+lets go through - a let-go given no source text is judged to reach everything. The owner rule's slot places
+(free.decide, anchorPlace) rely on a key built through a slot scope over a region landing in that region and on
+`__olang_slot_release` leaving text in a region it did not make for one value. A slot scope (`mir.Rvalue.Slots`) is
 laid out by the runtime's `%olang.slotscope` and made in `emit.olang`'s `slotScope` (one over a slot scope builds into its
 tail); an allocation in a scope a local holds goes through `__olang_held_alloc` (`arrayStorage`, `textStorage`), whose
 slot path `__olang_slot_alloc` makes what `__olang_gen_buf` makes, to the byte: a change to the slot header, the class
