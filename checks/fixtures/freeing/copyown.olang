@@ -1,0 +1,42 @@
+import "std/io"
+
+# O8f (O25h, review 1125b): a local's own copy of an element holding a reference beside its own storage - `x := rows[k]`,
+# a walk's name - in a function given the array by reference, the copy's element given a fresh text each call. The
+# copy's references stay where the element's are (its claim the source's), but its own storage is its block: what is
+# built into it is built there, freed with the copy (191 MB at 1,000,000 calls when it was built where the source's
+# references live, the caller's scope); the source's elements read back unchanged
+N I64 = 200000
+
+type Row struct(v Vec<String>, tag String&) {
+    v
+    tag
+}
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 5: w.Push("s" + $(i + j))
+    return w
+}
+
+fn copied(rows Array<Row>&, i I64) I64 {
+    x := rows[i % 2]
+    x.v[0] = ("own" + $i).PadEnd(40, '*')
+    return x.v.Len() + x.v[0].Len()
+}
+
+fn walked(rows Array<Row>&, i I64) I64 {
+    t := 0
+    for row in rows {
+        row.v[0] = ("walk" + $i).PadEnd(40, '#')
+        t += row.v.Len() + row.tag.Len()
+    }
+    return t
+}
+
+fn main() {
+    label := "lab"
+    rows := Array<Row>[Row(mk(1), label), Row(mk(2), label)]
+    t := 0
+    for i in range N: t += copied(rows, i) + walked(rows, i)
+    io.PutLn($t + " " + rows[0].v[0] + " " + rows[1].v[4])!
+}

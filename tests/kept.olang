@@ -334,6 +334,43 @@ fn heldRefs(n I64) I64 {
     return s + o.inner.a[0].Len() * 100000 + o.inner.r.Len() * 1000000
 }
 
+# a local's own copy of an element holding a reference beside its storage (`x := rows[k]`, a walk's name) given fresh
+# text: built in the copy's block, freed with it; the source's elements unchanged (O25h, review 1125b) - and heldRefs'
+# local beside a defer that does not name it, letting go of its leaves at its turn's end all the same
+type KRow struct(v Vec<String>, tag String&) {
+    v
+    tag
+}
+
+fn ownCopies(krows Array<KRow>&, i I64) I64 {
+    x := krows[i % 2]
+    x.v[0] = "own" + $i
+    t := x.v[0].Len()
+    for row in krows {
+        row.v[1] = "walk" + $(i * 7)
+        t += row.v[1].Len() + row.tag.Len()
+    }
+    return t
+}
+
+fn copiesAndDefers(n I64) I64 {
+    label := "lab"
+    krows := Array<KRow>[KRow(Vec<String>["a0", "a1"], label), KRow(Vec<String>["b0", "b1"], label)]
+    s := 0
+    deferred := 0
+    o := HO(HP(Vec<String>["d0", "d1"], Vec<I64>[0, 0], label), 0)
+    for i in range n {
+        s += ownCopies(krows, i)
+        q := HP(Vec<String>["p" + $i, "r" + $(i * 5)], Vec<I64>[i, i * 2], label)
+        defer { deferred += 1 }
+        o.inner = q
+        s += q.a[1].Len() + q.b[1]
+    }
+    churn()
+    if krows[0].v[0] != "a0" or krows[1].v[1] != "b1" or krows[1].tag != "lab": return -1
+    return s * 10 + deferred + o.inner.a[1].Len() * 1000000
+}
+
 # a value local's copy and a call's value given to a constructor whose instance views them and is copied as the call
 # returns (O8f, 2.4): built in the turn, read only until that copy is made, never where the instance's local lives
 fn twoOf(i I64) Vec<I64> {
@@ -510,6 +547,10 @@ test taskDefaults "keeps tasks' clause defaults, built where their results would
     assert taskDefaults(8) == "w0p1bw2p3bw4p5bw6p7b;p4c,p4,;p5a,p5,;u6,;p7a,p7,"
 }
 
+test copiesAndDefers "builds into a local's own copy of an element holding a reference in the copy's block, beside a defer" {
+    assert copiesAndDefers(10) == 3003350
+}
+
 test caseLocals "gives locals an enum case holding a parameter's reference" {
     assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
 }
@@ -522,3 +563,4 @@ assert labeledValues(10) == 36093319 and twoOwners(10) == 18253 and copyReads(10
 assert heldRefs(10) == 4205100
 assert keptArgs(10) == 4305234
 assert taskDefaults(8) == "w0p1bw2p3bw4p5bw6p7b;p4c,p4,;p5a,p5,;u6,;p7a,p7,"
+assert copiesAndDefers(10) == 3003350

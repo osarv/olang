@@ -350,6 +350,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     escVia Vec<mut Vec<I64>&>
     mustRes Vec<I64>
     resFresh Vec<Bool>
+    resBuilds Vec<Bool>   # by body: all its result is new, and some of it storage it builds (ResBuilds)
     # by body: whether it may register a destructor in one of its scope variables - its result, its instance, a
     # parameter's scope - so in a region a call of it builds into (F4): a destructor still to run when the region's
     # place would let go of it (O16, condition 4)
@@ -962,6 +963,7 @@ fn (f mut Free&) addBody(b I64, root I64) {
     f.escVia.Push(Vec<I64>())
     f.mustRes.Push(MustTop)
     f.resFresh.Push(true)
+    f.resBuilds.Push(false)
     f.regOut.Push(false)
     match f.Bodies[b].Of {
         case typed.BodyOf.Fn(i) { if f.P.FnDecl(f.P.InstanceFn(i)).Export and f.handedToC(i) { f.exports.Push(b) } }
@@ -7037,12 +7039,15 @@ fn (f mut Free&) mustOf(b I64) {
     }
     r := MustTop
     fresh := true
+    builds := false
     for x in m.returned {
         # (a local copied into another is handed back copied, lowering's movedRets leaving it out: no moved value)
         c := m.copyRead(x)
         r = meet(r, MustNone if c >= 0 and co[c] else m.exprMust(x))
         if not m.fresh(x, 0): fresh = false
+        if builtValue(x): builds = true
     }
+    f.resBuilds[b] = builds and fresh
     if r != f.mustRes[b] {
         f.mustRes[b] = r
         f.changed = true
@@ -9625,6 +9630,18 @@ fn (f mut Free&) DroppedMove(c typed.Call&) I64 {
 # handing one back) - what its body hands back as it is, with no copy, where nothing else writes it (lower.movedRets)
 fn (f Free&) MovedLocal(b I64, l I64) Bool { return f.Done and f.movedLocal(b, l) }
 
+# B18a: whether body b hands back only new values, some of them storage it builds for its result (a promotion, a
+# literal of an array, a text) - built where its result scope says, which a reference handed back owns none of
+fn (f Free&) ResBuilds(b I64) Bool { return f.Done and b >= 0 and b < f.resBuilds.Len() and f.resBuilds[b] }
+
+fn builtValue(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Promote(_, _, _), typed.Expr.Make(_, _, _), typed.Expr.Text(_, _, _), typed.Expr.Collect(_, _, _): true
+        case typed.Expr.Away(_, _, y): builtValue(y)
+        case _: false
+    }
+}
+
 # O8f (gap 22): the value locals block blk of body b ends holding a value moved out of a place (TakeAt's or Pop's result,
 # `x := v.TakeAt(0)!`) - each lets go of its leaves at the block's end (walker.block's LDrop), released there by lowering
 # (lower.endMoved). Final: the walk deciding (or lowering, Done) - the answer kept, so the two agree
@@ -9670,18 +9687,21 @@ fn (f mut Free&) endsMovedIn(b I64) Map<I64, Vec<I64>> {
 }
 
 # the locals block bl declares at its top level that hold a moved value to its end: nothing after the declaration may
-# leave the block but by its end (typed.RestLeaves), and the block has no deferred code - a holder's drop or a defer
-# runs after its end, and could read the value
+# leave the block but by its end (typed.RestLeaves), and none the block's deferred code names - a defer runs after its
+# end, and could read the value; one it does not name it cannot reach (endsHere: lent nowhere, named by no alias)
 fn (f mut Free&) endsWalk(b I64, bl typed.Block&, u typed.LocalUses&, out mut Map<I64, Vec<I64>>&) {
     found Vec<I64>
-    deferred := false
+    later := typed.LastUses(f.Bodies[b].Locals.Len())
     for st in bl.Stmts {
-        if st == typed.Stmt.Defer: deferred = true
+        match st {
+            case typed.Stmt.Defer(_, d) { later.Block(d) }
+            case _ { }
+        }
     }
     for i in range bl.Stmts.Len() {
         match bl.Stmts[i] {
             case typed.Stmt.Let(_, l, _) {
-                if not deferred and f.endsHere(b, I64(l), u) and not typed.RestLeaves(bl.Stmts, i + 1): found.Push(I64(l))
+                if later.Last[I64(l)] < 0 and f.endsHere(b, I64(l), u) and not typed.RestLeaves(bl.Stmts, i + 1): found.Push(I64(l))
             }
             case typed.Stmt.Block(_, b2) { f.endsWalk(b, b2, u, out) }
             case typed.Stmt.Loop(_, b2, _) { f.endsWalk(b, b2, u, out) }

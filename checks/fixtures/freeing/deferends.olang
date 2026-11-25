@@ -1,0 +1,45 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4, wt-origins, review 1125b): heldrefs' shape - a value local holding its constructor's
+# instance stored into a struct held in place each turn, `q := P(...); o.inner = q` - with a defer in the turn's block
+# that does not name the local. The local lets go of its leaves where the turn ends all the same: the defer, run after
+# that end, cannot reach them (372 MB at 200,000 turns when any defer kept them); a defer naming it is judged apart
+N I64 = 200000
+
+type P struct(a Vec<String>, b Vec<I64>, r String&) {
+    a
+    b
+    r
+}
+
+type O struct(inner P, n I64) {
+    inner
+    n
+}
+
+t mut I64 = 0
+
+fn mkA(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push(("s" + $(i + k)).PadEnd(100, '.'))
+    return v
+}
+
+fn mkB(i I64) Vec<I64> {
+    v Vec<I64>
+    for k in range 40: v.Push(i * k)
+    return v
+}
+
+fn main() {
+    base := "base"
+    s := 0
+    o := O(P(mkA(0), mkB(0), base), 0)
+    for i in range N {
+        q := P(mkA(i), mkB(i), base)
+        defer { t += 1 }
+        o.inner = q
+        s += q.a[1].Len() + q.b[2]
+    }
+    io.PutLn($s + " " + $t + " " + o.inner.a[2][0:7] + " " + $o.inner.b[39])!
+}
