@@ -907,7 +907,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **A kept local is built where it is kept (O28, O17, D9i; item 17, the user's decision 2026-11-03: "creating it at
   the scope of the thing we're storing it in").** A value local kept by reference past its block or turn, or copied
   whole at its last mention into longer-lived storage, has its storage placed where it is kept, a new value each time
-  its declaration runs.
+  its declaration runs - but not one a constructor's instance views (D9h, `S(m)`): that instance is copied where it is
+  kept, the local only read for the copy and left in its block (O8f, gap 17, 2026-11-25).
 - **A fresh value given to a reference is built where the reference goes (E12c, O6; 2026-11-23, mine).** A text
   (`v.Push($s)` into a `Vec<String&>`) or a call's result whose callee hands back no view of its arguments
   (`v.Push(b.ToString())`), promoted to a read-only reference to a run-time-length array, is built in the reference's

@@ -43451,3 +43451,43 @@ refuses `x := a[i]` there on master), so growing such a name stays wrong as on m
 second name and such a binding makes its body's roots uncontained. Checks: freeing walkcopy and bindcopy (`Vec<String>` elements and payloads grown, read
 back; built, `-free late`, `-sanitize` and interpreted agree; freed at once); tests/valueparts.olang's grown copies,
 baked (K2) and run - master's evaluator refuses the bake.
+
+## 2026-11-25: gap 17's open part closed - a constructor's instance viewing a Map local, copied where it is kept (O8f, D9h, D9i; mine; wt-gap17a)
+
+The open part of gap 17 (wt-gaps1719): an array element holding `S struct(m Map<String, I64>)`, given `S.mk(i)` whose
+body ends `return S(m)`, kept the old element's Map until main's scope closed - 13 MB to 100 MB at 20,000 turns,
+-memory -check naming "a call's value copied: 'S(m)'". Measuring the neighbours found more than the report said: the
+same program written `s := S(m); return s`, or `rows[i % 10] = S(m)` in the loop itself, passed -memory -check and grew
+just as much (66 MB and 65 MB at 20,000 turns; a `Vec<String>` field 32 MB; a `Vec<I64>` field stayed flat). Three
+things, each in its own pass:
+
+1. **Early freeing (free.olang `retCtorOf`).** A constructor whose instance views what it is given (D9h) is copied by
+   its caller where the value is kept. At a let into a struct local that copy is the leaves' new value (letCtorOf,
+   viewCtor - a store for each owner leaf at the call's site, lowering's ownerCopy splitting its parts there); at a
+   return it was a call's value copied, untracked, so the element's owner field kept. A return of such a call is now
+   judged as the let would be, the value handed back holding the type's leaves as `return s` does (readOf).
+2. **The scope pass (scope.olang `viewedCopies`, `dropViewed`).** The local was built where its copy goes: item 17
+   lifted a value local copied whole at its last mention (`S(m)`'s argument is m's copy, QCE) to where the instance
+   lands - the element array's scope - and O26a's flow moved a local a returned instance carries to the result scope,
+   which is the caller's element scope again. Lowering then moved the local into the argument (D9i) but copied the
+   instance all the same (early freeing judges an instance viewing a copy never fresh, FreshViews), so every turn's Map
+   was built in a scope that never closed. A copy a constructor's instance views is now never lifted, and the locals a
+   returned or result-bound instance views copies of do not flow to the result scope - as `dropCopied` does for a
+   returned choice (gap 19).
+3. **Lowering (lower.olang `keptCtor`, `keptView`).** With the local in its block its argument copy was built where
+   the instance would live, then the instance copied again: two copies, the first kept. Where the instance is copied as
+   the call returns (a view call neither read in place nor fresh) and the argument copies a value local that nothing
+   in the call writes - the constructor writes nothing of the parameter (D9a) and every other argument is a constant or
+   a plain place's read - the argument's copy is left out: the instance views the local just until its own copy,
+   which copies the same storage.
+
+Considered: building the local in the instance's own region (MovesLeaves, gap 22's move for a `Vec<I64>` field) -
+it holds only where every place the value holds is sole and the copy is no split, and the instance is copied anyway,
+so the local's storage would be a second copy there; leaving it in its block and reading it once is simpler and frees
+it with the block.
+
+Checks: freeing gaps17 moved to `limited` (66 MB to 1.8 MB, flat under 8 MB), ctormaps (new: a builder's let, an
+element given S(m) in the loop, a `Vec<S>`'s element through SetAt, a local read again after the constructor; 81 MB
+to 1.8 MB); each built, `-free late`, `-sanitize` and interpreted (OLANG_EVALUATE=1), agreeing. The self-build frees 556
+of its 1017 places at once (552 of 1016 on wt-perinst), peak 2658 MB (2721); fixed point holds; scopefuzz 200 programs,
+no finding.

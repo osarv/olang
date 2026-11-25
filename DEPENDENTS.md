@@ -165,7 +165,11 @@ array - a change to how a Copy helper builds parts, or to how `Map.add` builds a
 owner fields (gap 22: `free.olang` ReleaseLeaves, the owner first) are released in that order by partReleases, and an
 owner's own let-go records the same leaves (`goParts`) that `lower.olang`'s ownerParts and leafPaths release; a copy
 made for an owner (free.OwnerSite) is split by ownerCopy, and a move into a copy's region (free.MovesLeaves) is
-lowering's movable - a change to one of each pair changes the other. The stores
+lowering's movable - a change to one of each pair changes the other. A constructor's instance viewing a copy of a value
+local (D9h) is copied where it is kept - a return's (`free.olang` retCtorOf) as a let's (letCtorOf) - so the local is
+never lifted or moved where the instance goes (`scope.olang` viewedCopies, dropViewed) and its argument copy is left out
+(`lower.olang` keptCtor, keptView, which mirror the view call's own copy - inPlace, freshCtor); a constructor's instance
+made fresh some new way, or that copy made later than the call's return, changes all three (gap 17). The stores
 `occupy` makes are listed in `typed.Body.Rooms` (check.suppliedOccupy) and are no let-go in free.olang or lower.olang.
 A copy's text of a place built in slots is built in slots too (round 8: `lower.olang` copySlots in the Copy helper's
 `copyAt`), and `free.olang`'s `untracked` then keeps no slot place for a copy lowering makes - a new copy path in
