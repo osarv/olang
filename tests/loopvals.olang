@@ -142,3 +142,50 @@ SelfSlot I64 = selfSlot()
 test "the self-slot snapshot, baked, agrees" {
     assert SelfSlot == 102212 and selfSlot() == 102212
 }
+
+# a walk's name and a match binding of a value owning storage and holding a reference beside it are copies of their own
+# (S9a, S13b, O25h: the copy's references stay where the element's are, its own storage is its block): growing the
+# name's Vec grows the copy, never the element's or the payload's, whose text reads back after a churn
+type Tagged struct(v Vec<String>, tag String&) {
+    v
+    tag
+}
+
+type Held enum {
+    Some(t Tagged)
+    None
+}
+
+fn grownCopies() I64 {
+    label := $"tag" + $churn()
+    rows := Array<Tagged>[Tagged(Vec<String>[$"a0", $"a1"], label), Tagged(Vec<String>[$"b0"], label)]
+    n I64 = 0
+    for row in rows {
+        for i in range 50: row.v.Push($"x" + $i)
+        n += row.v.Len()
+    }
+    h := Held.Some(Tagged(Vec<String>[$"c0"], label))
+    match h {
+        case Held.Some(x) {
+            for i in range 50: x.v.Push($"y" + $i)
+            n += x.v.Len() * 10
+        }
+        case _ { }
+    }
+    c := churn()
+    n = n * 10 + rows[0].v.Len() + rows[1].v.Len()
+    if rows[0].v[1] != "a1" or rows[1].v[0] != "b0" or rows[1].tag != "tag" + $c: return -1
+    match h {
+        case Held.Some(x) { if x.v.Len() != 1 or x.v[0] != "c0" or x.tag != rows[0].tag: return -2 }
+        case _ { return -3 }
+    }
+    return n
+}
+
+# the evaluator copies as the build does
+assert grownCopies() == 6133
+GrownCopies I64 = grownCopies()
+
+test "a walk's name and a binding holding a reference beside their own storage are copies" {
+    assert GrownCopies == 6133 and grownCopies() == 6133
+}

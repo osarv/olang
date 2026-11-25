@@ -737,10 +737,11 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 heldkeeps.olang > out.txt 2>&1") == 0 and outOf(dir) == "90196 70137 50194 50196\n", "heldkeeps interpreted", dir)
     # (walkcopy, bindcopy: a for-in's name of an element and a match binding of a payload owning storage are copies of
     # their own, grown without letting go of the element's or payload's buffer - each grown-out buffer freed at once;
-    # built, -free late, -sanitize and the evaluator agree)
-    walked := Array<String&>["walkcopy", "bindcopy"]
-    wfull := Array<String&>["599103 s2102\n", "338899 s2002\n"]
-    wpart := Array<String&>["59800 s302\n", "33696 s202\n"]
+    # built, -free late, -sanitize and the evaluator agree; walkref, bindref: an element and a payload holding a reference
+    # beside their own storage, copied all the same - O25h, the copy's references where the source's are)
+    walked := Array<String&>["walkcopy", "bindcopy", "walkref", "bindref"]
+    wfull := Array<String&>["599103 s2102\n", "338899 s2002\n", "611103 s2102\n", "338899 s2002\n"]
+    wpart := Array<String&>["59800 s302\n", "33696 s202\n", "61000 s302\n", "33696 s202\n"]
     for i in range walked.Len() {
         p := walked[i]
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0 and outOf(dir).Contains(", 0 keep it"), $p + " frees at once", dir)

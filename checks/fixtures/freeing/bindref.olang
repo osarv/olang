@@ -1,0 +1,47 @@
+import "std/io"
+
+# a match binding of a payload owning storage and holding a reference beside it (O25h) is the payload's own copy (S13b,
+# QCE): its references stay where the payload's are - growing it lets go of the copy's buffer, never the payload's,
+# which matched again holds its strings and its length; each grown-out buffer freed at once
+N I64 = 2000
+
+type Row struct(v Vec<String>, tag String&) {
+    v
+    tag
+}
+
+type Box enum {
+    Some(r Row)
+    None
+}
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 30: w.Push($"s" + $(i + j))
+    return w
+}
+
+fn main() {
+    t := 0
+    last := ""
+    label := "lab"
+    for i in range N {
+        b := Box.Some(Row(mk(i), label))
+        match b {
+            case Box.Some(x) {
+                for _ in range 100: x.v.Push("x")
+                t += x.v.Len()
+            }
+            case _ { }
+        }
+        junk := mk(7777)
+        match b {
+            case Box.Some(x) {
+                t += x.v[3].Len() + x.v.Len() + junk[0].Len()
+                last = x.v[3]
+            }
+            case _ { }
+        }
+    }
+    io.PutLn($t + " " + $last)!
+}
