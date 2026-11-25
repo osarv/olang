@@ -632,7 +632,8 @@ fn freeing(r mut report&) ? Failed {
     # the instance's local letting go of its leaves at its turn's end; keptargs: a value local's copy and a call's value given
     # to a constructor whose instance is copied as the call returns, its local living where its reference must - built in
     # the turn, never where that local lives; closurekept: a closure a call makes each turn, capturing its by-value Vec of
-    # text, read in the turn only - built there)
+    # text, read in the turn only - built there; fillwalk: run-time fills of structs holding a Vec of text, their elements
+    # given new values each turn and walked - the fill's text built in slots by the Vec's Copy helper)
     limited := Array<String&>["append", "global", "arrays", "fields", "elements", "mapvalues", "unset", "vecelems", "mapcopy"
                               "returned", "vectexts", "vecvecs", "mapelems", "views", "copytext", "ownerelems", "soleelems"
                               "structelems", "copyelems", "fillelems", "elemcopies", "fillread", "ownerpair", "fillreturn", "nestedowners", "ownervecs"
@@ -642,7 +643,7 @@ fn freeing(r mut report&) ? Failed {
                               "fixeddefaults", "textstructs", "textarrays", "pushjoin", "constargs", "fixedfills", "ctortexts", "splitlocal", "widenlocal", "elemarg"
                               "mapfill", "mapcopies", "assignkept", "ctorkept", "zerofill", "litstores", "againkept"
                               "litlocal", "globalinit", "againread", "rettext", "gaps19", "growkept", "viewother", "gaps17b", "gaps17"
-                              "ctormaps", "fnvalfield", "secondval", "twoowners", "copyreads", "heldrefs", "keptargs", "closurekept"]
+                              "ctormaps", "fnvalfield", "secondval", "twoowners", "copyreads", "heldrefs", "keptargs", "closurekept", "fillwalk"]
     full := Array<String&>["88890 88890 15288890\n", "88890\n", "220049997\n", "88890 88890 20000 20000\n"
                     "name 319993 value 319993\n", "1 10 value 99993 padded out to some length .........................\n"
                     "19999 20000\n", "401980000 100 100\n", "5980000 7\n", "80001000000 4\n", "1346674 19998 20\n"
@@ -674,7 +675,8 @@ fn freeing(r mut report&) ? Failed {
                     "800000 10\n", "200000 10 199999-199999 padded out a little\n"
                     "409355572 t19999 padded out to some length t1 padded out to some length r19997 padded out to some length, and then some more of it ........\n19997 g19999 padded out to some length g19998 padded out to some length 400\n"
                     "600000 v19993 padded out to some length\n828894 n20000 padded out to some length v19995 padded out\n"
-                    "1017784 200 m19998 19999 g20\n204760008 1599980000\n", "605249995 1400916663\n", "604230000 401059998 1400916663\n", "4120000 103\n"]
+                    "1017784 200 m19998 19999 g20\n204760008 1599980000\n", "605249995 1400916663\n", "604230000 401059998 1400916663\n", "4120000 103\n"
+                    "22397780 r0.................................................................................................. n19999 19999 n0------------------------------------------------------------------------------\n"]
     part := Array<String&>["490 490 148890\n", "490\n", "220494\n", "490 490 200 200\n", "name 193 value 193\n"
                     "1 10 value 193 padded out to some length .........................\n", "199 200\n", "59800 100 100\n", "59800 7\n"
                     "20500 4\n", "12272 198 20\n", "66300 5 30\n"
@@ -700,7 +702,8 @@ fn freeing(r mut report&) ? Failed {
                     "4000\n", "8000 10\n", "200 10 200-199 padded out a little\n"
                     "133170 t199 padded out to some length t1 padded out to some length r197 padded out to some length, and then some more of it ........\n197 g199 padded out to some length g198 padded out to some length 400\n"
                     "6000 v193 padded out to some length\n7892 n200 padded out to some length v195 padded out\n"
-                    "9382 200 m198.. 199 g200 \n67608 159800\n", "112495 149163\n", "102300 50598 149163\n", "41200 103\n"]
+                    "9382 200 m198.. 199 g200 \n67608 159800\n", "112495 149163\n", "102300 50598 149163\n", "41200 103\n"
+                    "223180 r0.................................................................................................. n199 199 n0------------------------------------------------------------------------------\n"]
     for i in range limited.Len() {
         p := limited[i]
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)
@@ -714,6 +717,9 @@ fn freeing(r mut report&) ? Failed {
     # before the loop, every turn's is built where that local lives - -check names the call; the oracles agree)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check -define M=3 closurekept.olang > out.txt 2>&1") != 0 and outOf(dir).Contains("closurekept.olang:31:18: the closure a call makes keeps until its scope closes"), "closurekept M=3 -memory -check names the kept closure", dir)
     try late(r, dir, "closurekept", "200 -define M=3", "61800 103\n")
+    # (fillwalk with M=15: a fill's text field given a value not all new keeps - -check names it, the oracles agree)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check -define M=15 fillwalk.olang > out.txt 2>&1") == 0 and outOf(dir).Contains("fillwalk.olang:62:13: memory: 'padded[k]' keeps what it lets go of"), "fillwalk M=15 -memory -check names the text field", dir)
+    try late(r, dir, "fillwalk", "200 -define M=15", "271180 r0.................................................................................................. n199 199 n0------------------------------------------------------------------------------\n")
     # (splitviews: a split field's and a split local's array given another while a loop walks an element's Vec - kept
     # for that view; built, -free late, -sanitize and the evaluator agree)
     try late(r, dir, "splitviews", "200", "9806\n")

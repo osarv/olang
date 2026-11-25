@@ -1,0 +1,67 @@
+import "std/io"
+
+# O8f (wt-walkref's finding, wt-revfix2): a run-time fill of a struct holding a Vec of text - `Array<Row>(3, Row(mk(0),
+# ...))` - its elements given new values each turn and walked. The fill's copy of each element's Vec builds its text in
+# slots of where it goes, by the Vec's Copy helper, as any copy's does (lower.copySlots): no value made with no store
+# into the text place, which had kept the Vec's buffer and its text, -check failing - 52 MB at 200,000 turns for the
+# array declared before the loop. Rows: a Vec<String> beside a count (1), beside text (2), a Vec<I64> beside the Vec
+# (4); with 8, the fill's text a value not all new (`PadEnd`), the text field keeps - and -check names it, where its
+# let-go had been counted nowhere
+N I64 = 20000
+M I64 = 7
+
+type Row struct(v Vec<String>, n I64) {
+    v
+    n
+}
+
+type Named struct(v Vec<String>, name String) {
+    v
+    name
+}
+
+type Padded struct(v Vec<String>, name String) {
+    v
+    name
+}
+
+type Pair struct(v Vec<String>, w Vec<I64>) {
+    v
+    w
+}
+
+fn mk(i I64) Vec<String> {
+    v Vec<String>
+    v.Push(("r" + $i).PadEnd(100, '.'))
+    return v
+}
+
+fn main() {
+    t := 0
+    rows := Array<Row>(3, Row(mk(0), 0))
+    names := Array<Named>(3, Named(mk(1), "n0"))
+    pairs := Array<Pair>(3, Pair(mk(2), Vec<I64>[1, 2]))
+    padded := Array<Padded>(3, Padded(mk(3), ("n0").PadEnd(80, '-')))
+    for i in range N {
+        if M % 2 == 1 {
+            inner := Array<Row>(2, Row(mk(0), 0))
+            for k in range 2: inner[k] = Row(mk(i + k), k)
+            for k in range 2: rows[k] = Row(mk(i + k), k)
+            for r in rows: t += r.v[0].Len() + r.n
+            for r in inner: t += r.v[0].Len()
+        }
+        if M / 2 % 2 == 1 {
+            for k in range 2: names[k] = Named(mk(i + k), "n" + $i)
+            for r in names: t += r.v[0].Len() + r.name.Len()
+        }
+        if M / 4 % 2 == 1 {
+            for k in range 2: pairs[k] = Pair(mk(i + k), Vec<I64>[i, k])
+            for r in pairs: t += r.v[0].Len() + r.w.Len()
+        }
+        if M / 8 % 2 == 1 {
+            for k in range 2: padded[k] = Padded(mk(i + k), ("n" + $i).PadEnd(80, '-'))
+            for r in padded: t += r.name.Len()
+        }
+    }
+    io.PutLn($t + " " + rows[2].v[0] + " " + names[1].name + " " + $pairs[0].w[0] + " " + padded[2].name)!
+}
