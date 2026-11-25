@@ -43545,3 +43545,35 @@ fnvalfield (200,000 turns) ran out of memory under 8 MB on master (peak ~95-108 
 -check` clean, its output the same built, `-free late`, `-sanitize` and under the evaluator. tests/fnvalues.olang's test
 (the same shape read back after an arena churn, a global the evaluator bakes) agrees across the four. The self-build's
 fixed point holds.
+
+## 2026-11-25: a local given a second value, and a part region's struct settled by its array (O8f, O8d; mine; wt-secondval)
+
+docs/freeing.md 2.4 had it open: `r := build(0)`, then `r = build(i)` each turn and `kept[i % 4] = r` kept ~500 bytes a
+turn for a `Vec<String>`, the local an owner local of the free pass whose one-region storage made the arrays its value
+holds keep (RCopied), the move at the store refused (`MovesLeaves`). The bullet's two roads were a move (wt-gaps5's
+FirstSet widening, unsound) or the owner local handing its leaves to the element. Neither was needed. On master the
+`Vec<String>` shapes - the local declared outside the loop, or given its second value on a condition inside it - were
+already flat and passed `-memory -check`: the place that kept was the array's text elements' slot place, which the owner
+rule had made keep for every value, and wt-perinst's owner rule now decides a slot place no anchor of the owner reaches
+by its other conditions (2.5). The owner local's assignment releases its old value whole, the store is a copy built
+for the element as any element's is, and the element's let-go frees it: one copy a turn, flat.
+
+The same shape for a struct holding text was broken, and worse than kept. `fn Rec.Make(i) Rec { return Rec("r" + $i,
+i) }` given to `q` each turn read freed storage: the sanitizer and the evaluator stopped on `q.name`, and built and
+`-free late` printed different text once storage was reused. gap 17a's `retCtorOf` (and `letCtorOf` before it, for `r :=
+Rec(...); return r`) made the constructor call a store of the text field's place, a part place, so its site was a part
+site and the instance was built whole in a part region a kid of the result's region. Lowering settles such a value where
+it is built (`settled`): the region closed unless an anchor names it. But emit's `anchorRegion` reads a struct's anchors
+through `__olang_region_home`, which climbs out of a part region to the region it is a kid of - the result's region,
+never the part region - so the settle closed the part region holding the text it had just built. Only an array settled
+by its own address (no home climb) stayed. A part copy split already settled by the part's array (`PartSplit`); now
+any value of a part site that is no array is settled by that array (`free.PartLeaf`, which PartSplit reads too).
+
+checks' freeing secondval (new, `limited`): a `Vec<String>` declared outside the loop, one given its second value on a
+condition, and a struct holding text built both ways stored through `SetAt` - master ran out of 8 MB, its sanitized build
+and the evaluator stopped on the read; now flat (13 MB peak at 20,000 and 200,000 turns), built, `-free late`,
+`-sanitize` and interpreted agreeing, `-memory -check` passing. tests/kept.olang's secondValues reads the values back
+after a churn (and the evaluator decides it). The self-build frees 556 of its 1017 places at once, peak 2613 MB, both as
+before. Found beside it and left open (docs/freeing.md 2.4): a struct holding a `Vec<String>` given a second value and
+stored into a `Vec` of them keeps ~36 bytes a turn under a condition the program does not meet ("a reference into it is
+stored here, in 'q'").

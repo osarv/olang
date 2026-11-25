@@ -1097,7 +1097,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   its parts where the result goes (gap 19; text and values holding a run-time array too), and the locals a returned
   choice lowering copies reads whole stay in their blocks (`scope.dropCopied`), its copy built in part regions of its own;
   a region made in a slot scope (a returned text local given a second value) is released by the slot's let-go (gap 19,
-  docs/freeing.md 2.4). A local lowering
+  docs/freeing.md 2.4); a value built whole in a part region - a constructor's instance made for its text field's part
+  place - is settled where it is built by that field's array, never by its anchors' home, the region the part region is
+  a kid of (`free.PartLeaf`; a local given a second value, 2.4). A local lowering
   surely copies a view call's value into owns its parts (a `Map` value copied and changed frees, gap 18). Round 6
   (wt-freeing6): an element holding a Vec of text or a Vec of Vecs frees it all where it is given another - each live
   element's slot or parts released (a walk at the let-go, none per operation), a copy built in a part region split so

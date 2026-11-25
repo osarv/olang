@@ -4834,7 +4834,9 @@ fn (ln mut lowering&) settled(rs I64, held mir.ScopeRef, v mir.Operand, ty types
     # (a part copy split - free.PartSplit - holds the one array its path leads to in the region and its other parts in
     # the parent's scope, whose anchors name no region: settled by that array alone)
     q, qt := pl(mir.Base.Local(l)), ty
-    path := ln.L.Free!.PartSplit(I64(ln.B.Id), rs, ty) if ln.freeing else null
+    # (and a part region's value that is no array - a constructor's instance built for its text field's part place - by
+    # that array: its anchors' home is the region the part region is a kid of, which would close it - free.PartLeaf)
+    path := ln.L.Free!.PartLeaf(I64(ln.B.Id), rs, ty) if ln.freeing else null
     if path != null {
         for k in path {
             q = ln.with(q, mir.Proj.Field(k))
