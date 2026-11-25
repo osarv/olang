@@ -1,9 +1,9 @@
 import "std/io"
 
-# B18a, docs/freeing.md gap 17's open part (2026-11-24, wt-gaps1719): an array's element holding a struct whose field is
-# a Map by value, given another built by its constructor from a local - S(m) is a call's value copied, and a copy
-# holding a Map stays untracked (as gaps.olang's literal): the old element's Map is kept until main's scope closes,
-# 13 MB to 100 MB at 20,000 turns. -memory -check names it
+# O8f, docs/freeing.md gap 17's open part: an array's element holding a struct whose field is a Map by value, given
+# another built by its constructor from a local and returned - `return S(m)` copies the instance where the result goes
+# as `s := S(m)` would (free.retCtorOf), and the local is only read for that copy, never moved there (scope.dropViewed,
+# lower.keptView): the old element's Map released at the store, flat under 8 MB (was 13 MB to 100 MB at 20,000 turns)
 N I64 = 20000
 
 type S struct(m Map<String, I64>) {
