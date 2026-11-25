@@ -3898,3 +3898,12 @@ Answered 2026-11-18 (the user, via the Orchestrator: "Go with B, yes"): no rule;
    whole-program twins/followed functions). Bring emitdump up to the driver, or retire emitdiff? Default: leave as is.
    Recommendation: retire it - the suite and fixedpoint cover it; a second emit path costs more to keep than it catches.
    Answered (the user, 2026-11-23, via the Orchestrator): retire it - emitdiff and emitdump removed.
+
+1. (2026-11-23, asked via the Orchestrator; from oagent home/'s GPIO debounce) An anonymous C union's own members
+   (gpio_v2_line_attribute's flags / values / debounce_period_us) stay unreachable from olang: fields of different types
+   over the same bytes are type punning (T36). Generate per-member accessors that copy the bytes (a get returning the
+   member's value, a set writing it), or leave the union's bytes C's only? Default: C's only. Recommendation: accessors
+   - memcpy semantics, no punning, and they let home/ request the kernel's hardware debounce.
+   Answered (the user, 2026-11-25, via the Orchestrator): accessors - supplied per-member methods for an anonymous C
+   union, `u.Member()` returning a copy of the member's bytes as its type and `u.SetMember(v)` writing them; copy
+   semantics only, no reference to a member, no punning; extern/C types only. First user: oagent home/'s GPIO debounce.
