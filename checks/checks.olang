@@ -833,6 +833,14 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 taskdefault.olang > out.txt 2>&1") == 0 and outOf(dir) == "53915 8\n", "taskdefault interpreted", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check -define M=63 taskdefault.olang > out.txt 2>&1") == 0 and outOf(dir).Contains("taskdefault.olang:59:13: memory: removed elements of 'kept'"), "taskdefault M=63 -memory -check names the global-reading default", dir)
     try r.expect(sh(dir, "\"$OLANG\" -race -define M=63 -define N=2000 taskdefault.olang > out.txt 2>&1") == 0 and outOf(dir) == "696005 4\n", "taskdefault M=63 -race", dir)
+    # (taskcaps, review 1125b's taskcapgrow: a clause's handler capturing a Vec of text made before the loop built at its
+    # join, or where the targets are where its default hands back the copy it captured - flat where it was built where
+    # the Vec lives, 135 MB at 200,000 turns with -check passing; built, -free late, -sanitize, -race and the evaluator agree)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check taskcaps.olang > out.txt 2>&1") == 0, "taskcaps -memory -check", dir)
+    try r.expect(sh(dir, "./build/taskcaps > out.txt 2>&1") == 0 and outOf(dir) == "15983335 4 1\nflat\n", "taskcaps reclaimed its handlers' captures", dir)
+    try late(r, dir, "taskcaps", "2000", "315335 2 1\n")
+    try r.expect(sh(dir, "\"$OLANG\" -race -define N=2000 taskcaps.olang > out.txt 2>&1") == 0 and outOf(dir) == "315335 2 1\n", "taskcaps -race", dir)
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 taskcaps.olang > out.txt 2>&1") == 0 and outOf(dir) == "31235 1 1\n", "taskcaps interpreted", dir)
     # (spawnlocal, review12's F3: a spawn's target a local declared outside the loop - its old value let go of by the
     # spawner at the spawn, each new one built in a region of its own the task is handed whole - flat, where master grows
     # ~9 KB a turn and -check counted no keep; built, -free late, -sanitize, -race and the evaluator agree; with the

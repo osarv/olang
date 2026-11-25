@@ -1,0 +1,63 @@
+# A joined task's clause handler capturing a Vec of text made before the loop (P4a): called on the task's thread only,
+# before the join's wait, it is built at its join - or, where its default hands back the copy it captured, where the
+# task's targets keep the result - so its copy of the Vec goes with the turn (review 1125b's taskcapgrow: built where the
+# Vec lives, 135 MB at 200,000 turns while -memory -check passed). Tasks fail every other turn into a default built from
+# the capture (1), the capture itself (2), its copy (4); a few defaults kept in a long-lived Vec (8). The measure is
+# taskdefault.olang's: the resident peak gained over each of the last two quarters of the turns, flat where either gains
+# under 2 MB. -free late, -sanitize, -race and the evaluator agree at a smaller size
+import "std/io"
+import "std/os"
+
+N I64 = 100000
+M I64 = 15
+
+type E error { Odd }
+
+fn peak() I64 {
+    for line in (try os.ReadFile("/proc/self/status") catch default "").Lines() {
+        if line.StartsWith("VmHWM:"): return try line[6:].Trim().Split(" ")[0].ParseInt(10) catch default -1
+    }
+    return -1
+}
+
+fn vec(i I64) Vec<String> ? E {
+    if i % 2 == 1: error E.Odd
+    v Vec<String>
+    v.Push("t" + $i + " padded out to some length ...........................................")
+    return v
+}
+
+fn main() {
+    ov Vec<String>
+    ov.Push("outer vec padded out to some length ...........................................")
+    kept Vec<Vec<String>>
+    for _ in range 4: kept.Push(Vec<String>())
+    t := 0
+    p0 := 0
+    p1 := 0
+    for i in range N {
+        if i == N / 2: p0 = peak()
+        if i == N * 3 / 4: p1 = peak()
+        if M % 2 == 1 {
+            a Vec<String>
+            join: spawn a = try vec(i) catch default Vec<String>[ov[0] + $i, $ov.Len()]
+            t += a.Len() + a[0].Len()
+        }
+        if M / 2 % 2 == 1 {
+            b Vec<String>
+            join: spawn b = try vec(i) catch default ov
+            t += b[0].Len()
+        }
+        if M / 4 % 2 == 1 {
+            c Vec<String>
+            join: spawn c = try vec(i) catch default ov.Copy()
+            if M / 8 % 2 == 1 and i % 1000 == 1: kept[i / 1000 % 4] = c
+            t += c.Len()
+        }
+    }
+    total := 0
+    for v in kept: total += v.Len()
+    io.PutLn($t + " " + $total + " " + $ov.Len())!
+    p2 := peak()
+    if N >= 100000: io.PutLn("flat" if p1 - p0 < 2048 or p2 - p1 < 2048 else "grew by " + $(p2 - p0) + " KB")!
+}
