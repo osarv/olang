@@ -80,3 +80,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Cloud (2026-11-25): olang wt-perinst + wt-gap17a merged (156c5266e, goldens 6bde41539) - condition 6 per value, owners per value for slot places, gaps 17a/17b closed; left per declaration: views rooted at parameters/fields/globals, a view across its own value's let-go, O23b (freeing.md 2.5)
 - OLang Cloud (2026-11-25): olang wt-taskdefault merged (fff70dac1) - a task's catch default built in the target's stand-in, not the program's scope (freeing.md 2.4 open)
 - OLang Cloud (2026-11-25): olang wt-fnvalbuild - a lambda passed as a function value building through a captured helper's field takes O29's lookup (freeing.md 2.4)
+- OLang Cloud (2026-11-25): olang wt-secondval - a local given a second value before it is stored into an element (freeing.md 2.4, assignkept's open part)
