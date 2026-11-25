@@ -305,6 +305,35 @@ fn copyReads(n I64) I64 {
     return s + v[0].name.Len() * 100000 + v[1].tags[1].Len() * 1000000
 }
 
+# a struct held in place given a value each turn, its type holding a reference beside its owners (O8f, origins per
+# path): the instance's local lets go of its leaves at its turn's end, the struct's old leaves at the store
+type HP struct(a Vec<String>, b Vec<I64>, r String&) {
+    a
+    b
+    r
+}
+
+type HO struct(inner HP, n I64) {
+    inner
+    n
+}
+
+fn heldRefs(n I64) I64 {
+    base := "base"
+    o := HO(HP(Vec<String>["h0", "h1"], Vec<I64>[0, 0, 0], base), 0)
+    names Vec<String>
+    s := 0
+    for i in range n {
+        q := HP(Vec<String>["q" + $i, "w" + $(i * 3)], Vec<I64>[i, i + 1], base)
+        if i % 2 == 0: o.inner = q
+        names.Push(o.inner.a[1] + q.a[0])
+        s += o.inner.b[1] + q.b[0] * 10
+    }
+    churn()
+    for x in names: s += x.Len() * 100
+    return s + o.inner.a[0].Len() * 100000 + o.inner.r.Len() * 1000000
+}
+
 fn everyTurnSum(n I64) I64 {
     hs := everyTurn(n)
     churn()
@@ -403,6 +432,10 @@ test copyReads "reads elements where they stand beside their replacement, and vi
     assert copyReads(10) == 4865248
 }
 
+test heldRefs "gives a struct held in place, holding a reference beside its owners, a new instance each turn" {
+    assert heldRefs(10) == 4205100
+}
+
 test caseLocals "gives locals an enum case holding a parameter's reference" {
     assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
 }
@@ -412,3 +445,4 @@ assert everyTurnSum(5) == 105 and someTurnsSum(7) == 96 and vecs(4) == 10606 and
 assert nested(3) == 312 and reassigned(3) == 3030 and rows(4) == 2404 and textsSum(4) == 104
 assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
 assert labeledValues(10) == 36093319 and twoOwners(10) == 18253 and copyReads(10) == 4865248
+assert heldRefs(10) == 4205100

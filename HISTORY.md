@@ -43713,3 +43713,65 @@ tests/kept.olang's copyReads reads the stored texts and elements back after a ch
 stray assert left inside caseLocals' test block by an earlier merge removed - the file's own top-level assert holds it).
 All 18 probes agree under every oracle; all now pass `-check`. The self-build frees 556 of its 1017 places at once,
 peak 2500 MB (2498 before); `make fixedpoint` passes; the freeing and earlyfree scenarios pass.
+
+## 2026-11-25: origins per path - a struct held in place whose type holds a reference (O8f, B18; mine; wt-origins)
+
+wt-copygaps left `o.inner = q`, `P{a Vec<String>, b Vec<I64>, r String&}`, open: 370 MB at 200,000 turns, `-memory`
+naming condition 6 - `views` exempted a local's own owner leaves from the views its later reads count only for a type
+holding no reference beyond its parts, since a reference field could view a leaf's storage. docs/freeing.md 2.4 gave
+three options: (a) origins per path, (b) exempting a leaf no reference field's referent type can reach (a `String&` can
+reach a `Vec<String>`'s elements, so this shape stays kept), (c) leaving condition 6 alone. Built (a).
+
+The walker's origins are one set per local: what its value may refer into, its by-value leaves (a struct's leaves are
+added whenever one is read whole) and what its references view mixed together. Splitting the set itself (a new origin
+kind for "held by value") would touch every reader of `OPl`; instead the walker keeps a second set beside it for each
+value local of a type holding a reference beyond its parts - `refView`, what those references may refer into - grown
+wherever origins are given: at a declaration, an assignment and a store into a local the body made (`freshRoot`), with
+`refsOf` saying what part of the value's origins its references take - nothing for a value holding no reference, all
+of them for a reference (a reference local's origins; a value local lent whole, its origins and its own storage: the
+leaves it holds, the place it is), a value local's read its own `refView`, a constructor call whose body only declares
+its fields, each holding a reference given a parameter as it is (`plainCtor`), what its arguments' say, and any other
+value - a call, a copy made at a store - all its origins, so nothing is lost. Every other `give` (a match binding, a
+loop's name, a parameter) gives all. `views` then counts as the local's own only the leaves no reference of it may
+view (`ownLeaves`), and only where `refView` is all there is to know (`pathsKnown`): a value local the body made every
+value of (freshLocals), not a parameter or a constructor's field, written by nothing but whole values stored into its
+parts (`WrOther`: no reference stored into a part, nothing written through an alias or a writable lend of a part), not
+lent writably whole (`LendAt`), escaping nowhere but as read-only references given calls (`EscHard`, not `Esc`: `Esc`
+holds for any `o.inner.a[1].Len()`).
+
+That alone left the program growing at the same rate, `-check` now passing: a second keep sat under the first. `q`'s
+claim is lifted to the function's scope by the store (O25h: a value local holding references lives where its
+references must - the copy shares `r`), and its parts with it, so the leaves `P(...)` built for their places, each in a
+region of its own, lived in the function's scope; the store copies them (check.ownCopy, split into part regions), and
+`q` ends with its turn letting go of nothing. A value moved out of a collection held by a local to its block's end
+already lets go of its leaves there (gap 22's `EndsMoved`, released by lowering's `endMoved`, `EndsLocal` stopping a
+last-use move of it). `madeLocal` adds the local holding the instance its declaration's constructor makes - never
+assigned whole, never copied into another local, not an owner local, its constructor viewing nothing but what is moved
+to it or built for it (an instance that views a named argument is copied into the local, letCtorOf, D9h) - under
+`endsHere`'s conditions (handed back nowhere, written nowhere, lent nowhere, no alias, read-only references given only
+calls keeping nothing). The let-go at the block's end is judged as any other (`w.go`, LDrop): a view in use after it
+keeps the place. `EndsLocal` first also stopped lowering's last-use move of such a local, and checks' ownerelems failed
+`-check` on it: `q := Q()` stored into an element at its last mention is built where the copy goes, to be moved there
+(item 17), and was then copied (liftedCopy's gap). A constructor's instance is its own storage, so it is still moved
+(`EndsMade` lifts the stop) and a local moved at its last use ends nothing at its block's end (lowering's `endMoved`
+skips it, `movedAway`); on a path where it is not moved its leaves wait for the scope, as before.
+
+checks' freeing heldrefs (`limited`): the shape, and the instance read again after it is stored on some turns - master
+runs out of 8 MB at 20,000 turns; now 13 MB at 20,000 and 200,000, `-check` passing, built, `-free late`, `-sanitize`
+and interpreted agreeing. heldkeeps, a type of its own (a place is a declaration's: a keep there would keep every
+`P`'s): the new value's reference given the old value's own leaf (an argument that is no local's read - all its
+origins), a reference field set to its own leaf directly (`WrOther`) and through a writable reference lent to a call
+(`LendAt`) - each kept and named - and a reference local given an element, which holds lowering's copy of it (its origin
+the copy, D9h): freed, agreeing, a probe that reads the reference after allocating over what was let go agreeing too.
+tests/kept.olang's heldRefs reads the stored texts back after a churn, the evaluator deciding it; it needed the lent
+value local (`base` given a `String&`), which first fell to "all its origins". The 18 probes of review 1125 agree under
+every oracle, their `-memory` reports unchanged.
+
+Found, left open (docs/freeing.md 2.4): with a named local given the constructor (`a := mkA(i); q := P(a, mkB(i),
+base); o.inner = q`) the program still grows ~1.2 KB a turn (238 MB at 200,000; 558 MB before), `-check` passing - no
+let-go is kept; storage built for the argument lands in the lifted scope. Not traced; scope.liftCopied (item 17),
+building a local where its last-use copy goes for a move lowering no longer makes there, is the likely cause.
+
+The self-build frees 556 of its 1018 places at once (1017 before); its warm peak 2622 MB, the base's compiler 2589 MB
+measured the same way (the walker's second set per local). `make fixedpoint` passes; the freeing and earlyfree
+scenarios, consistency and the goldens (tokens, ast and run recaptured for heldrefs, heldkeeps and heldRefs) pass.

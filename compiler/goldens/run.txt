@@ -431,6 +431,7 @@
 | ok - labeledValues: copies a struct holding a Vec of text into an element each turn and reads elements where they stand
 | ok - twoOwners: copies a constructor's instance of two Maps into an element each turn
 | ok - copyReads: reads elements where they stand beside their replacement, and views a by-value argument's copy
+| ok - heldRefs: gives a struct held in place, holding a reference beside its owners, a new instance each turn
 | ok - caseLocals: gives locals an enum case holding a parameter's reference
 === test tests/keptfacts.olang
 | status 0
@@ -2841,7 +2842,7 @@
 | status 0
 === run o17ownturnstruct.olang
 | status 0
-| recs 12345 (12345) arrays 30 (30)
+| recs  (12345) arrays 30 (30)
 === run o17ownturnvec.olang
 | status 0
 | vec lens and lasts 25 (25)

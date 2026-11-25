@@ -499,18 +499,40 @@ to grow into them, (c) a hand-off at the join. (c) is built:
   viewCtor's (`ctorGaps`), and a split one's places reported too - a copy at a store gives the place storage of its own
   though no site names it, which `reported` skipped. No program reached the unsplit branch in the probes or fixtures:
   a struct is held in place (no place of its own) only where its type holds a reference, and such a copy split.
-- **A struct held in place given a value, its type holding a reference beside its owners (open, wt-copygaps).**
-  `o.inner = q` with `P{a Vec<String>, b Vec<I64>, r String&}`: master grew 370 MB at 200,000 turns with `-memory`
-  reporting nothing - `inOwner` kept the store's own leaves for "changed in place" (RInPlace) and `reported` skipped them
-  (no store owning anything). Now the leaves are let go and given the split copy, and the report names the keep that
-  remains: condition 6, "'o' is used here, after it lets go of it" - `views` exempts a local's own owner leaf only for a
-  type holding no reference beyond its parts (`refsBeyondParts`), since a reference field could view the leaf's storage;
-  `o` is read again for its new value. `-check` passes (a condition), the program still grows. Options: (a) origins per
-  path - what a local holds by value told from what its reference fields may view - exact, a larger walker change; (b)
-  exempt an owner leaf no reference field's referent type can reach (a `String&` can reach a `Vec<String>`'s elements,
-  so this shape stays kept; an `I64&` could not) - cheap, partial; (c) leave condition 6 as it is and have `-check`
-  count a view keep of a local's own leaf as an approximation, failing on it. Recommendation: (a), reviewed as section-8
-  work; (b) only as a stopgap.
+- **A struct held in place given a value, its type holding a reference beside its owners (closed by wt-origins,
+  2026-11-25).** `o.inner = q` with `P{a Vec<String>, b Vec<I64>, r String&}` grew 370 MB at 200,000 turns. Two keeps:
+  condition 6 - `views` exempted a local's own owner leaves only for a type holding no reference beyond its parts
+  (`refsBeyondParts`), so `o` read again after the store "used it after it let go of it" - and, under it, `q`'s own
+  leaves: the scope pass builds a struct holding a reference where its references must live (O25h: `q`'s claim lifted
+  to the function's scope by the store), so the leaves its constructor made for their places were never let go of -
+  the store copies them (check.ownCopy) and `q` ends with its turn. Built option (a), origins per path: the walker keeps,
+  for each value local of such a type, what its references may refer into (`refView`), given by `refsOf` at each
+  declaration, assignment and store into it - none for a value holding no reference, all its origins for a reference
+  (a value local lent, `base` as a `String&`: its origins and its own storage), a value local's read its `refView`, a
+  constructor whose fields holding references are given its parameters as they are (`plainCtor`) what its arguments'
+  say, anything else all the value's origins. Where that is all there is to know (`pathsKnown`: a local the body made
+  every value of, written only by whole values stored into its parts - no reference stored into a part, no writable
+  lend, no escape but read-only references given calls), the leaves it holds by value that no reference of it may view
+  are its own (`ownLeaves`), as for a type holding none. And a value local holding the instance its declaration's
+  constructor makes (`madeLocal`: never assigned whole, never copied into another local, no instance viewing anything
+  but what is moved to it or built for it) lets go of its leaves where its block ends, as a value moved out of a place
+  does (gap 22's `EndsMoved`, `endsHere`'s conditions; lowering's `endMoved` releases them; one moved at its last use,
+  D9i, is still moved and then ends nothing: `EndsMade`, `movedAway`). Flat at 13 MB at 20,000 and 200,000 turns (master runs out of 8 MB at 20,000). Still kept, as
+  they must be (checks' heldkeeps): a new value whose reference is given the old value's own leaf
+  (`P(mkA(i), mkB(i), o.inner.a[1])`, an argument no local's read: all its origins), a reference field set to its own
+  leaf (a reference stored into a part: `WrOther`) and one set through a writable reference lent to a call (`LendAt`).
+  A reference local given an element (`rr String& = o.inner.a[2]`) holds lowering's copy of it (its origin that copy,
+  D9h), no view of the leaf: freed, agreeing. Not followed: a value built by any call but a plain constructor (`O(mk(),
+  0)`) - all its origins, as before.
+- **A constructor given a value local, its instance in a local whose claim is lifted (open, found by wt-origins).**
+  `a := mkA(i); q := P(a, mkB(i), base); o.inner = q` (or `P(a.Copy(), ...)`, or `b := mkB(i); P(mkA(i), b, base)`)
+  still grows ~1.2 KB a turn (238 MB at 200,000; 558 MB before wt-origins), and `-memory -check` passes: `q`'s claim is
+  lifted to the function's scope (O25h, as above) and storage built for the constructor's argument from the named local
+  lands there with it, in no region a let-go releases (with `q := P(mkA(i), mkB(i), base)` it is flat; without the
+  store into `o` it is flat). No let-go is kept, so no row names it. Not yet traced; the likely cause is scope.liftCopied
+  (item 17) building the local where the argument's copy goes, for a last-use move lowering no longer makes there (the
+  argument's copy is split into part regions, `splitArg`). What closes it: build the local where it is declared, or
+  move its storage into the part regions; section 8.
 
 ### 2.5 Per instance: a view of one value, a let-go of another (wt-perinst, 2026-11-25)
 
@@ -1309,3 +1331,9 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   condition 1, and a store's own leaves are no in-place change. Open: a struct held in place whose type holds a
   reference keeps for condition 6 (2.4). checks' freeing copyreads, kept's copyReads. The self-build frees 556 of its
   1017 places at once; peak 2500 MB (2498 before).
+- 2026-11-25 (wt-origins): a struct held in place given a value, its type holding a reference beside its owners -
+  origins per path (`refView`, `refsOf`, `ownLeaves`) and a constructor's instance a local holds let go of at its
+  block's end (`madeLocal`); the 370 MB shape flat at 13 MB. checks' freeing heldrefs (`limited`) and heldkeeps, kept's
+  heldRefs. Open: a constructor given a value local, its instance's claim lifted (2.4). The self-build frees 556 of
+  its 1018 places at once (the walker's new fields among them); warm peak 2622 MB against 2589 for
+  the base's compiler measured the same way.

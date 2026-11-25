@@ -627,7 +627,9 @@ fn freeing(r mut report&) ? Failed {
     # text, read where it stands as an element - each turn and stored into an element; twoowners: a constructor's instance
     # of two Maps, and one of its own text beside them, copied where the result goes and stored into an element each turn;
     # copyreads: an element's text read where it stands through a Len or a slice beside a later piece replacing it, a Len
-    # of an element's field's element in a sum, and a by-value argument's copy a callee hands back a view of)
+    # of an element's field's element in a sum, and a by-value argument's copy a callee hands back a view of; heldrefs:
+    # a struct held in place given a value each turn, its type holding a reference beside its owners - origins per path,
+    # the instance's local letting go of its leaves at its turn's end)
     limited := Array<String&>["append", "global", "arrays", "fields", "elements", "mapvalues", "unset", "vecelems", "mapcopy"
                               "returned", "vectexts", "vecvecs", "mapelems", "views", "copytext", "ownerelems", "soleelems"
                               "structelems", "copyelems", "fillelems", "elemcopies", "fillread", "ownerpair", "fillreturn", "nestedowners", "ownervecs"
@@ -637,7 +639,7 @@ fn freeing(r mut report&) ? Failed {
                               "fixeddefaults", "textstructs", "textarrays", "pushjoin", "constargs", "fixedfills", "ctortexts", "splitlocal", "widenlocal", "elemarg"
                               "mapfill", "mapcopies", "assignkept", "ctorkept", "zerofill", "litstores", "againkept"
                               "litlocal", "globalinit", "againread", "rettext", "gaps19", "growkept", "viewother", "gaps17b", "gaps17"
-                              "ctormaps", "fnvalfield", "secondval", "twoowners", "copyreads"]
+                              "ctormaps", "fnvalfield", "secondval", "twoowners", "copyreads", "heldrefs"]
     full := Array<String&>["88890 88890 15288890\n", "88890\n", "220049997\n", "88890 88890 20000 20000\n"
                     "name 319993 value 319993\n", "1 10 value 99993 padded out to some length .........................\n"
                     "19999 20000\n", "401980000 100 100\n", "5980000 7\n", "80001000000 4\n", "1346674 19998 20\n"
@@ -669,7 +671,7 @@ fn freeing(r mut report&) ? Failed {
                     "800000 10\n", "200000 10 199999-199999 padded out a little\n"
                     "409355572 t19999 padded out to some length t1 padded out to some length r19997 padded out to some length, and then some more of it ........\n19997 g19999 padded out to some length g19998 padded out to some length 400\n"
                     "600000 v19993 padded out to some length\n828894 n20000 padded out to some length v19995 padded out\n"
-                    "1017784 200 m19998 19999 g20\n204760008 1599980000\n"]
+                    "1017784 200 m19998 19999 g20\n204760008 1599980000\n", "605249995 1400916663\n"]
     part := Array<String&>["490 490 148890\n", "490\n", "220494\n", "490 490 200 200\n", "name 193 value 193\n"
                     "1 10 value 193 padded out to some length .........................\n", "199 200\n", "59800 100 100\n", "59800 7\n"
                     "20500 4\n", "12272 198 20\n", "66300 5 30\n"
@@ -695,7 +697,7 @@ fn freeing(r mut report&) ? Failed {
                     "4000\n", "8000 10\n", "200 10 200-199 padded out a little\n"
                     "133170 t199 padded out to some length t1 padded out to some length r197 padded out to some length, and then some more of it ........\n197 g199 padded out to some length g198 padded out to some length 400\n"
                     "6000 v193 padded out to some length\n7892 n200 padded out to some length v195 padded out\n"
-                    "9382 200 m198.. 199 g200 \n67608 159800\n"]
+                    "9382 200 m198.. 199 g200 \n67608 159800\n", "112495 149163\n"]
     for i in range limited.Len() {
         p := limited[i]
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)
@@ -723,6 +725,14 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(outOf(dir).Contains("viewself.olang:19:9: memory: what a Vec<I64> grows out of in calls here is kept until its scope closes") and outOf(dir).Contains(", 1 keeps it"), "viewself names its growth's keep", dir)
     try late(r, dir, "viewself", "2000", "2116880\n")
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" viewself.olang > out.txt 2>&1") == 0 and outOf(dir) == "2116880\n", "viewself interpreted", dir)
+    # (heldkeeps: heldrefs' shapes where a reference field may view a leaf held by value - the new value's reference given
+    # the old value's own leaf, one set to its own leaf directly or through a writable reference lent to a call - keep,
+    # named; a reference local given an element holds lowering's copy and frees; built, -free late, -sanitize and the
+    # evaluator agree)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check heldkeeps.olang > out.txt 2>&1") == 0, "heldkeeps -memory -check", dir)
+    try r.expect(outOf(dir).Contains("heldkeeps.olang:39:9: note: its new value is existing storage a copy shares: 'q'") and outOf(dir).Contains(", 3 keep it"), "heldkeeps names its keeps", dir)
+    try late(r, dir, "heldkeeps", "200", "90196 70137 50194 50196\n")
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 heldkeeps.olang > out.txt 2>&1") == 0 and outOf(dir) == "90196 70137 50194 50196\n", "heldkeeps interpreted", dir)
     # (walkcopy, bindcopy: a for-in's name of an element and a match binding of a payload owning storage are copies of
     # their own, grown without letting go of the element's or payload's buffer - each grown-out buffer freed at once;
     # built, -free late, -sanitize and the evaluator agree)

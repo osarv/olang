@@ -2280,6 +2280,11 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     Id
     Final
     origins Vec<mut Vec<I64>&>   # by local: what it may refer into
+    # by local of a type holding a reference beyond its parts: what those references may refer into (origins per path,
+    # O8f) - the rest of its origins its value holds by value; and, once asked, whether that is all it is told
+    refView Vec<mut Vec<I64>&>
+    pathsAsked Bool = false
+    pathsOk Vec<Bool>
     seen Vec<Bool>            # by local: its origins read in this pass
     grew Bool = false
     params Map<I64, I64>       # a parameter's local: its index in Params
@@ -2423,6 +2428,8 @@ fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
     body := f.Bodies[b]
     n := body.Locals.Len()
     w.origins.Truncate(n)
+    w.refView.Truncate(n)
+    w.pathsAsked = false
     w.declAt.Clear()
     w.declLet.Clear()
     w.declSp.Clear()
@@ -2432,6 +2439,7 @@ fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
     for i in range n {
         w.seen.Push(false)
         if i < w.origins.Len() { w.origins[i].Clear() } else { w.origins.Push(Vec<I64>()) }
+        if i < w.refView.Len() { w.refView[i].Clear() } else { w.refView.Push(Vec<I64>()) }
         w.declAt.Push(0)
         w.declLet.Push(false)
         w.declSp.Push(source.Span(0, 0))
@@ -2808,10 +2816,141 @@ fn (w mut walker&) writable(ty types.TypeId) Bool {
     return t.KindOf(r) == types.Kind.Ref and (t.PermOf(r) & types.Writable) != 0
 }
 
-# a local given more origins
-fn (w mut walker&) give(l I64, o Vec<I64>&) {
+# a local given more origins - all of them what its references may refer into
+fn (w mut walker&) give(l I64, o Vec<I64>&) { w.giveRefs(l, o, o) }
+
+# a local given more origins o, of which its references beyond its parts may refer into rv (refsOf)
+fn (w mut walker&) giveRefs(l I64, o Vec<I64>&, rv Vec<I64>&) {
     # another pass is needed only where a local grows after this pass read it
     if addAllTo(w.origins[l], o) > 0 and w.seen[l]: w.grew = true
+    if not w.pathTyped(l): return
+    for y in rv {
+        k := okind(y)
+        if (k == OPl or k == OMov) and addTo(w.refView[l], y) > 0 and w.seen[l]: w.grew = true
+    }
+}
+
+# whether local l's value is of a type holding a reference beyond its parts, held by value (refView kept)
+fn (w mut walker&) pathTyped(l I64) Bool {
+    b := w.body()
+    if l < 0 or l >= b.Locals.Len(): return false
+    ty := b.Locals[l].Ty
+    return ty != types.UnknownT and not w.T().IsRef(ty) and w.F.refsBeyondParts(ty)
+}
+
+# whether what local l's references may refer into is all refView says (O8f, origins per path): a value local the body
+# made every value of, written only by whole values stored into its parts - no reference stored into a part of it, no
+# writable lend, no escape, so nothing points its references anywhere no give told
+fn (w mut walker&) pathsKnown(l I64) Bool {
+    if not w.pathTyped(l) or w.params.Has(l) or w.fields.Has(l): return false
+    b := w.body()
+    if b.Locals[l].Kind != typed.LocalKind.Var: return false
+    fl := w.F.freshLocals[w.Id]
+    if l >= fl.Len() or not fl[l]: return false
+    if not w.pathsAsked {
+        w.pathsAsked = true
+        u := typed.LocalUses.Uses(w.T(), b)
+        w.pathsOk.Clear()
+        for i in range b.Locals.Len(): w.pathsOk.Push(not u.WrOther[i] and not u.EscHard[i])
+        for i in u.LendAt {
+            if i >= 0 and i < w.pathsOk.Len(): w.pathsOk[i] = false
+        }
+    }
+    return w.pathsOk[l]
+}
+
+# of origins o of value x, what x's references beyond its parts may refer into: none for a type holding none; all of o
+# for a reference; a value local's read, what its own references may (refView); a constructor's instance whose fields
+# holding references are given its parameters as they are, what its arguments for them may; anything else all of o
+fn (w mut walker&) refsOf(x typed.Expr&, o Vec<I64>&) Vec<I64> { return try w.refsIn(x) catch default copyOf(o) }
+
+type refsError error {
+    Unknown
+}
+
+# refsOf's walk: Unknown where only all of the value's origins can be said
+fn (w mut walker&) refsIn(x typed.Expr&) Vec<I64> ? refsError.Unknown {
+    f := w.F
+    t := w.T()
+    out Vec<I64>
+    if not f.refsBeyondParts(x.Type()): return out
+    l := readLocalOf(unaway(x))
+    if t.IsRef(x.Type()) {
+        if l >= 0 {
+            addAllTo(out, w.origins[l])
+            return out
+        }
+        # (a value local lent, `base` given a `String&`: what it refers into, and its own storage - the leaves it holds,
+        # the place it is)
+        bl := borrowedLocal(unaway(x))
+        if bl < 0: error refsError.Unknown
+        addAllTo(out, w.origins[bl])
+        for k in f.heldPlaces(w.body().Locals[bl].Ty): addTo(out, orig(OPl, k))
+        for k in Array<I64>[w.ownLocal(bl), w.feederPlace(bl)] {
+            if k >= 0: addTo(out, orig(OPl, k))
+        }
+        return out
+    }
+    if l >= 0 {
+        if not w.pathsKnown(l): error refsError.Unknown
+        addAllTo(out, w.refView[l])
+        return out
+    }
+    c := typed.Call.Of(x)
+    if c == null or not w.plainCtor(typed.CalleeBody(c)): error refsError.Unknown
+    for a in c.Args: addAllTo(out, try w.refsIn(a))
+    return out
+}
+
+# the local a borrow lends whole, -1 for any other value
+fn borrowedLocal(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Borrow(_, _, p): localOf(p)
+        case _: -1
+    }
+}
+
+# the place feeder local l is built for, -1 for none
+fn (w mut walker&) feederPlace(l I64) I64 {
+    fd := w.feeder(l)
+    return w.F.feeds[fd].PlaceId if fd >= 0 else -1
+}
+
+fn hasLocal(ls Vec<typed.LocalId>&, l I64) Bool {
+    for k in ls {
+        if I64(k) == l: return true
+    }
+    return false
+}
+
+fn unaway(x typed.Expr&) typed.Expr& {
+    return match x {
+        case typed.Expr.Away(_, _, y): unaway(y)
+        case _: x
+    }
+}
+
+# whether body b is a constructor whose every statement declares a field, each field holding a reference beyond its
+# parts given a parameter as it is: its instance's references refer into what its arguments do, nothing it built
+fn (w mut walker&) plainCtor(b I64) Bool {
+    f := w.F
+    if b < 0 or b >= f.Bodies.Len() or f.Bodies[b].Root == null: return false
+    bd := f.Bodies[b]
+    if w.T().Role(bd.Ty) != types.RoleCtor: return false
+    match bd.Of {
+        case typed.BodyOf.Ctor(_, _) { }
+        case _ { return false }
+    }
+    for st in bd.Root!.Stmts {
+        match st {
+            case typed.Stmt.Let(_, l, x) {
+                if not hasLocal(bd.Fields, I64(l)): return false
+                if f.refsBeyondParts(bd.Locals[I64(l)].Ty) and not hasLocal(bd.Params, readLocalOf(unaway(x))): return false
+            }
+            case _ { return false }
+        }
+    }
+    return true
 }
 
 fn (w mut walker&) stmt(st typed.Stmt&) {
@@ -2874,7 +3013,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
                 o = w.F.unowned(o)
                 w.copyLeaves(w.F.leaves(x.Type()), x, sp)
             }
-            w.give(I64(l), o)
+            w.giveRefs(I64(l), o, w.refsOf(x, o))
             k := try w.fields.Get(I64(l)) catch default -1
             if k >= 0: w.storeField(k, x, o, sp)
             if w.ownerHeld != types.UnknownT: w.ownerSettle(-1)
@@ -3063,7 +3202,7 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     }
     match p {
         case typed.Lvalue.Local(_, _, l) {
-            w.give(I64(l), o)
+            w.giveRefs(I64(l), o, w.refsOf(x, o))
             k := try w.fields.Get(I64(l)) catch default -1
             if k >= 0: w.storeField(k, x, o, sp)
             if k >= 0: w.wholeField(k, x)
@@ -3096,7 +3235,7 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     w.storeInside = w.insidePlace(p) if w.sameValue(x, p) else -1
     # into an object this body made, held by a local: it now reaches what was stored
     fr := w.freshRoot(p)
-    if fr >= 0: w.give(fr, o)
+    if fr >= 0: w.giveRefs(fr, o, w.refsOf(x, o))
     match p {
         case typed.Lvalue.Field(_, _, _, _) {
             if k >= 0 {
@@ -6302,6 +6441,21 @@ fn (f mut Free&) keep(k I64, kind I64, file I64, sp source.Span, text String&) {
 # whether place k keeps for no reason a view would not override: none, or RSplit (a keep its parts free all the same)
 fn (f Free&) unkept(k I64) Bool { return f.whyKind[k] == RNone or f.whyKind[k] == RSplit }
 
+# the places local l of type ty holds by value, through no reference, whose let-go a later read of it is no view of:
+# all it holds for a type holding no reference beyond its parts; for one holding some, those no reference it holds
+# may refer into, where that is known (pathsKnown) - its own storage, which a store into it gives new storage
+fn (w mut walker&) ownLeaves(l I64, ty types.TypeId) Vec<I64> {
+    f := w.F
+    if ty == types.UnknownT: return Vec<I64>()
+    if not f.refsBeyondParts(ty): return f.heldPlaces(ty)
+    out Vec<I64>
+    if not w.pathsKnown(l): return out
+    for k in f.heldPlaces(ty) {
+        if not has(w.refView[l], orig(OPl, k)) and not has(w.refView[l], orig(OMov, k)): out.Push(k)
+    }
+    return out
+}
+
 # the final walk's let-goes against the body's views: a local holding a view of place k used after a statement that
 # lets go of k - after it, in a loop around both, or in deferred code - or a view read in the statement itself (other
 # than the value an assignment stores) keeps k. The first one found is the report's note
@@ -6319,7 +6473,9 @@ fn (w mut walker&) views() {
         # place reaches it - and its own growth gives it the new storage; so for an owner leaf it holds by value, a
         # struct local's Vec field)
         ty := body.Locals[l].Ty if l < body.Locals.Len() else types.UnknownT
-        ownParts := Vec<I64>() if ty == types.UnknownT or f.refsBeyondParts(ty) else f.heldPlaces(ty)
+        # (and, for a type holding a reference beyond its parts, an owner leaf none of the references it holds may refer
+        # into - origins per path, ownLeaves)
+        ownParts := w.ownLeaves(l, ty)
         # (gap 22: and a value local holding a value moved out of a place holds that value's storage alone - the slot it
         # left is empty - so no other value's let-go of the place reaches it: `y := vv.TakeAt(0)!` then `vv.Pop()!`)
         moved := ty != types.UnknownT and not f.T().IsRef(ty) and body.Locals[l].Kind == typed.LocalKind.Var
@@ -9464,6 +9620,10 @@ fn (f mut Free&) EndsMoved(b I64, blk I64, final Bool) Vec<I64> {
     return try m.Get(blk) catch default Vec<I64>()
 }
 
+# whether value local l of body b is one EndsMoved ends at its block's end holding its constructor's instance
+# (madeLocal) - which lowering may still move at its last use (D9i), ending nothing there then (lower.endMoved)
+fn (f mut Free&) EndsMade(b I64, l I64) Bool { return f.EndsLocal(b, l) and not f.movedLocal(b, l) }
+
 # whether value local l of body b is one EndsMoved ends at its block's end (lowering makes no last-use move of it, D9i)
 fn (f mut Free&) EndsLocal(b I64, l I64) Bool {
     for en in f.endsFor(b, true) {
@@ -9488,7 +9648,7 @@ fn (f mut Free&) endsMovedIn(b I64) Map<I64, Vec<I64>> {
     if body.Root == null or f.registered.Len() > 0: return out
     cands := false
     for l in range body.Locals.Len() {
-        if f.movedLocal(b, l): cands = true
+        if f.movedLocal(b, l) or f.leafLocal(b, l): cands = true
     }
     if not cands: return out
     u := typed.LocalUses.Uses(f.T(), body)
@@ -9527,7 +9687,8 @@ fn (f mut Free&) endsWalk(b I64, bl typed.Block&, u typed.LocalUses&, out mut Ma
 # nothing of it, named by no alias
 fn (f mut Free&) endsHere(b I64, l I64, u typed.LocalUses&) Bool {
     loc := f.Bodies[b].Locals[l]
-    if loc.Kind != typed.LocalKind.Var or f.T().IsRef(loc.Ty) or not f.movedLocal(b, l) or f.endPlaces(b, l).Len() == 0: return false
+    if loc.Kind != typed.LocalKind.Var or f.T().IsRef(loc.Ty) or f.endPlaces(b, l).Len() == 0: return false
+    if not f.movedLocal(b, l) and not f.madeLocal(b, l, u): return false
     if u.Ret[l] or u.EscHard[l] or u.WrOther[l] or u.WrScalar[l] or u.Whole[l] or l in u.LendAt or l in u.AliasOf: return false
     # (a read-only reference to it given a call keeping nothing of it past the call: `x[1]`, `x.a.Len()`)
     for j in range u.RefAt.Len() {
@@ -9551,6 +9712,31 @@ fn (f mut Free&) EndPlace(b I64, l I64) I64 {
     if not f.movedLocal(b, l) or f.leaves(f.Bodies[b].Locals[l].Ty).Len() > 0: return -1
     v := f.mustLocals[b][l]
     return v - MovBase if v >= MovBase else -1
+}
+
+# whether value local l of body b holds a struct with candidate leaves, given no copy of it (madeLocal's first test)
+fn (f mut Free&) leafLocal(b I64, l I64) Bool {
+    loc := f.Bodies[b].Locals[l]
+    if loc.Kind != typed.LocalKind.Var or f.T().IsRef(loc.Ty) or f.leaves(loc.Ty).Len() == 0: return false
+    return not (l < f.copiedOut[b].Len() and f.copiedOut[b][l])
+}
+
+# O8f (origins per path): whether value local l of body b holds, as its only value, the instance its declaration's
+# constructor call makes - its leaves' values made for them by that call, its own: a copy is made wherever it is stored
+# (check.ownCopy), so it lets go of them where its block ends (endsHere), as a value moved out of a place does. Its
+# storage lives where its references must (a struct holding one beside its parts, O25h), longer than its block
+fn (f mut Free&) madeLocal(b I64, l I64, u typed.LocalUses&) Bool {
+    if not f.leafLocal(b, l) or u.Whole[l] or u.Init[l] == null: return false
+    if f.olIn[b] and f.ownLocalOf.Has(pair.Pair(b, l)): return false
+    t := f.T()
+    c := typed.Call.Of(u.Init[l]!)
+    if c == null: return false
+    cb := typed.CalleeBody(c)
+    if cb < 0 or f.Bodies[cb].Root == null or t.Role(f.Bodies[cb].Ty) != types.RoleCtor or t.Results(f.Bodies[cb].Ty).Len() != 1: return false
+    # (an instance viewing what it is given (D9h) views values moved to it or built for it, or its local is given a
+    # copy of it (walker.letCtorOf) - its own storage all the same; but never one viewing anything else)
+    if (f.viewsOf(cb) & typed.ViewOther) != 0: return false
+    return t.Same(t.Repr(t.Results(f.Bodies[cb].Ty)[0]), t.Repr(f.Bodies[b].Locals[l].Ty))
 }
 
 fn (f Free&) movedLocal(b I64, l I64) Bool {
