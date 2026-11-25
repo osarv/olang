@@ -77,5 +77,6 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Debts (cloud, 2026-11-24): wt-fieldborrow merged (485d39816) - D9h in-place read kept when a call can't write a global (DecideWrites)
 - OLang Debts (cloud, 2026-11-24): wt-writesfact merged (7915f3904); session stopped, hand-off in handoff-debts.md
 - OLang Windows (cloud, 2026-11-24): olang wt-windows - x86_64-windows target (mingw-w64, clang+lld, wine), runtime OS layer, Win32 interop; merged; Winsock+Schannel merged, hand-off handoff-windows.md, session stopped
-- OLang Cloud (2026-11-25): olang wt-perinst - per-instance buffer places (decided 2026-11-23; closes gap 17b, growkept's keep); then gap 17a, freeing.md 2.4 leftovers
+- OLang Cloud (2026-11-25): olang wt-perinst + wt-gap17a merged (156c5266e, goldens 6bde41539) - condition 6 per value, owners per value for slot places, gaps 17a/17b closed; left per declaration: views rooted at parameters/fields/globals, a view across its own value's let-go, O23b (freeing.md 2.5)
 - OLang Cloud (2026-11-25): olang wt-taskdefault merged (fff70dac1) - a task's catch default built in the target's stand-in, not the program's scope (freeing.md 2.4 open)
+- OLang Cloud (2026-11-25): olang wt-fnvalbuild - a lambda passed as a function value building through a captured helper's field takes O29's lookup (freeing.md 2.4)
