@@ -43847,3 +43847,10 @@ No rule changes: SPEC's S9a and S13b already said a copy, and O25h where its ref
 what they say. Checks: freeing walkref and bindref (`Row(v Vec<String>, tag String&)` elements and payloads grown, read
 back; built, `-free late`, `-sanitize` and interpreted agree; freed at once); tests/loopvals.olang's grownCopies, baked
 (K2) and decided (S17a) - master's evaluator stops on the stale view.
+
+The 18 probes of review 1125 agree under every oracle and pass `-check`. The self-build frees 556 of its 1018 places
+at once, unchanged; warm peak 2588 MB (the build's child maximum resident set, second run). `make test`, `make
+fixedpoint` and consistency pass; the goldens moved for the fixtures, the test and the Scoper's new field. Found, not
+fixed (predates this branch): `-memory -check` refuses `rows := Array<Row>(2, Row(..)); for k in range 2: rows[k] = ..`
+followed by any walk of `rows` (O8f: "a value holding it is made with no store into it, by a copy of a value holding
+it") - with a struct holding a Vec and no reference too; a keep reported, not a free too early.

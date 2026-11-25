@@ -1364,4 +1364,5 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   and check copies regardless of SharesRefs; `x := a[i]` of such an element compiles too. Stores of the copy into
   longer-lived places stay refused (O25h). Condition 6 per value still treats such names conservatively (instCand,
   second names) - a keep at most, never a free too early. Checks' freeing walkref, bindref (freed at once; built,
-  `-free late`, `-sanitize`, interpreted agree), tests/loopvals.olang's grownCopies (baked, K2).
+  `-free late`, `-sanitize`, interpreted agree), tests/loopvals.olang's grownCopies (baked, K2). The
+  self-build frees 556 of its 1018 places at once, unchanged; warm peak 2588 MB (child maximum resident set, ~2590 before).
