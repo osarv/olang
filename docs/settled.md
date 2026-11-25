@@ -1034,7 +1034,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   values holding no reference, no global, no write through what it is given, no function value, no spawn - its calls
   and nested spawns cut from what a task passes on, `taskLets`); a spawn target's type places keep only where the join's
   own code lets one go (`joinTargets`), unless the result is built where no wait hands it over (the program's scope, a
-  scope found at run time, a clause's default that builds - which leaks on the worker's program part, open); only a
+  scope found at run time, a clause's default that builds beside its value or for several targets; a default for one local target is built in a
+  stand-in of the target's storage, handed over at the wait - `mir.Task.Default`, `free.ownDefault`, 2026-11-25); only a
   body an entry reaches starts tasks. Places are by type: one task-shared value of a type keeps every value of it.
   **A spawn's target local declared outside its loop (review12 F3, 2026-11-23, mine):** an owner local, given each
   task's result as an assignment's target is - its let-go the spawner's, at the spawn, before the task starts, judged

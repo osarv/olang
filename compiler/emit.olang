@@ -9096,6 +9096,17 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
             }
         }
     }
+    # P4a: where the clauses' handlers build their defaults - a stand-in of the target's storage, folded at the join as
+    # the task's own are (P2); -1 for the program's
+    dfield I64 = -1
+    if k.Default.N > I32(0) {
+        e.runtime("__olang_standin_in")
+        sub := fe.let("call ptr @__olang_standin_in(ptr " + $fe.scope(fe.F.Refs[I64(k.Default.At)]) + ", ptr " + $js + ")")
+        subs.Push($sub)
+        dfield = fields.Len()
+        fields.Push("ptr")
+        vals.Push($sub)
+    }
     et := StringBuilder()
     et.Push("{ ")
     for i in range fields.Len() {
@@ -9128,7 +9139,7 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
     fe.store("i64", "0", fe.let("getelementptr { ptr, i64, ptr, i64, ptr }, ptr " + $node + ", i32 0, i32 1"))
     fe.store("i64", "0", fe.let("getelementptr { ptr, i64, ptr, i64, ptr }, ptr " + $node + ", i32 0, i32 3"))
     fe.store("ptr", "null", fe.let("getelementptr { ptr, i64, ptr, i64, ptr }, ptr " + $node + ", i32 0, i32 4"))
-    name := fe.trampoline(envT, fields, isValue, callee, ty, I64(k.Scopes.N), k, fe.F.Scopes[I64(j)].Errors, copyF)
+    name := fe.trampoline(envT, fields, isValue, callee, ty, I64(k.Scopes.N), k, fe.F.Scopes[I64(j)].Errors, copyF, dfield)
     e.declare("__olang_worker_get", "ptr @__olang_worker_get()")
     e.declare("__olang_worker_start", "void @__olang_worker_start(ptr, ptr, ptr, ptr)")
     w := fe.let("call ptr @__olang_worker_get()")
@@ -9143,7 +9154,7 @@ fn freshScope(k mir.Task, i I64) Bool { return i < 63 and (k.Fresh & (I64(1) << 
 # a task's trampoline, fn(ptr env) ptr: the call made from what the environment holds, its results stored, and the
 # error it fails with re-encoded under the join's list (as a pointer's bits, the runtime's contract), null for none
 fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, callee String&, ty types.TypeId
-                             nscopes I64, k mir.Task, joinErrs types.ListId, copyF Array<I64>&) String {
+                             nscopes I64, k mir.Task, joinErrs types.ListId, copyF Array<I64>&, dfield I64) String {
     e := fe.E
     t := e.T
     ntargets := I64(k.Targets.N)
@@ -9232,7 +9243,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, ca
         code := "%r" if (via or res == types.VoidT) else "%c"
         if code == "%c": b.Push("  %c = extractvalue " + $rt + " %r, 0\n")
         b.Push("  %bad = icmp ne i32 " + $code + ", 0\n  br i1 %bad, label %fail, label %ok\nfail:\n")
-        fe.clauses(b, code, k, ty, at + ps.Len() + nscopes + ntargets, at + ps.Len() + nscopes, copyF)
+        fe.clauses(b, code, k, ty, at + ps.Len() + nscopes + ntargets, at + ps.Len() + nscopes, copyF, dfield)
         if k.Ends.N > I32(0) {
             fe.taskEnds(b, code, k)
             b.Push("ok:\n")
@@ -9336,9 +9347,10 @@ fn (fe mut fnEm&) taskFix(b mut StringBuilder&, k mir.Task, tfield I64, copyF Ar
 
 # a task's clauses (P4a), in order, over the error code its call failed with: the first one taking it runs its handler
 # on the task's thread, the handler's result the targets' value, and the task ends with no error; one with no handler
-# ("catch E { }") just takes it. What none takes falls through to what follows
+# ("catch E { }") just takes it. What none takes falls through to what follows. A handler builds its default where
+# the environment's field dfield says (mir.Task.Default), the program's where it is -1
 fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty types.TypeId, hfield I64, tfield I64
-                          copyF Array<I64>&) {
+                          copyF Array<I64>&, dfield I64) {
     e := fe.E
     t := e.T
     errs := t.Errors(ty)
@@ -9381,8 +9393,15 @@ fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty typ
             }
             for si in range mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), ht) {
                 e.define("__olang_prog_scope", "@__olang_prog_scope = external thread_local(initialexec) global ptr")
-                b.Push("  %hs" + $ci + "_" + $si + " = load ptr, ptr @__olang_prog_scope\n")
-                args.Push(", ptr %hs" + $ci + "_" + $si)
+                hs := "%hs" + $ci + "_" + $si
+                b.Push("  " + $hs + "g = load ptr, ptr @__olang_prog_scope\n")
+                if dfield < 0 {
+                    args.Push(", ptr " + $hs + "g")
+                    continue
+                }
+                b.Push("  " + $hs + "d = load ptr, ptr %f" + $dfield + "\n  " + $hs + "n = icmp eq ptr " + $hs + "d, null\n")
+                b.Push("  " + $hs + " = select i1 " + $hs + "n, ptr " + $hs + "g, ptr " + $hs + "d\n")
+                args.Push(", ptr " + $hs)
             }
             rt := t.RetLlvm(ht)
             value := ""

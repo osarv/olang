@@ -3481,10 +3481,25 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
             if ln.dead: return
             fresh := ln.freshScopes(sw, scopes, I64(c.Site))
             guard := ln.plan.RegionGuard[I64(c.Site)] if fresh != 0 else -1
-            k := ln.F.AddTask(callee, args, scopes, places, cls, ends, sw.Task.Span(), cps, fresh, guard)
+            k := ln.F.AddTask(callee, args, scopes, places, cls, ends, sw.Task.Span(), cps, fresh, guard, ln.taskDefault(sw))
             ln.emit(mir.Stmt.Spawn(sp, j, k))
         }
         case _ { }
+    }
+}
+
+# P4a: where a task's clause handlers build their defaults - the storage of its one target, a local, where the task's
+# result would be (a stand-in of it handed to the spawner at the join's wait); none, the program's, for any other
+fn (ln mut lowering&) taskDefault(sw typed.Spawn&) mir.Range {
+    some := false
+    for cl in sw.Clauses: some = some or cl.Handler != null
+    if not some or sw.Targets.Len() != 1: return mir.Range(0, 0)
+    tg := sw.Targets[0]
+    if tg == null: return mir.Range(0, 0)
+    r := ln.placeStorage(tg)
+    match r {
+        case mir.ScopeRef.Program, mir.ScopeRef.Frame { return mir.Range(0, 0) }
+        case _ { return ln.F.ScopeRefs(Array<mir.ScopeRef>[r]) }
     }
 }
 

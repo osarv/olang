@@ -475,10 +475,12 @@ type Case struct(Value I64, To BlockId) {
 # first of Clauses (f.Clauses) naming it, run on its thread (P4a); one none takes is re-encoded under its join's list
 # and carried to the join (P4b). A target holding an array by value is stored as the assignment it is (P1g, T11b): into
 # the storage it holds where the length is unchanged, else given the result's - a copy of it where Copies (f.Refs, one
-# per target) names where the target's storage is (ScopeRef.Frame: the result taken as it is), made on the task's thread
+# per target) names where the target's storage is (ScopeRef.Frame: the result taken as it is), made on the task's thread.
+# A clause's handler builds its default where Default (f.Refs, one or none) names: the target's storage, a stand-in of
+# it handed to the spawner at the join's wait as a result is - none, the program's, where there is no one target
 type Task struct(Target Callee, Args Range, Scopes Range, Targets Range, Clauses Range, Ends Range = Range(0, 0)
                  EndsSp source.Span = source.Span(0, 0), Copies Range = Range(0, 0), Fresh I64 = 0
-                 FreshGuard I64 = -1) {
+                 FreshGuard I64 = -1, Default Range = Range(0, 0)) {
     Target
     Args
     Scopes
@@ -493,6 +495,7 @@ type Task struct(Target Callee, Args Range, Scopes Range, Targets Range, Clauses
     Fresh
     FreshGuard   # the place whose decision guards that region's making (lower.guarded), -1 for none: where it is not
                  # decided sole the scope is the region's parent, a stand-in made for it
+    Default
 }
 
 # a task's clause: the errors it takes (f.Items: an error type and a word, -1 every word; All for every error) and
@@ -1040,13 +1043,13 @@ fn (f mut Fn&) AddCases(cs Array<Case>&) Range {
 
 fn (f mut Fn&) AddTask(target Callee, args Range, scopes Range, targets Array<Lvalue>&, clauses Array<TaskClause>&
                        ends Range = Range(0, 0), endsSp source.Span = source.Span(0, 0), copies Range = Range(0, 0)
-                       fresh I64 = 0, freshGuard I64 = -1) I32 {
+                       fresh I64 = 0, freshGuard I64 = -1, dflt Range = Range(0, 0)) I32 {
     at := f.Places.Len()
     for p in targets: f.Places.Push(p)
     ct := f.Clauses.Len()
     for c in clauses: f.Clauses.Push(c)
     f.Tasks.Push(Task(target, args, scopes, Range(I32(at), I32(targets.Len())), Range(I32(ct), I32(clauses.Len())), ends
-                      endsSp, copies, fresh, freshGuard))
+                      endsSp, copies, fresh, freshGuard, dflt))
     return I32(f.Tasks.Len() - 1)
 }
 
@@ -1284,6 +1287,8 @@ fn (v mut verifier&) shape() Bool {
         v.refs(k.Scopes)
         v.refs(k.Copies)
         if k.Copies.N != I32(0) and k.Copies.N != k.Targets.N: v.bad("a task's copies are not one per target")
+        v.refs(k.Default)
+        if k.Default.N > I32(1): v.bad("a task's handlers are given more than one scope")
         if v.within(k.Targets, f.Places.Len(), "targets") {
             for i in range k.Targets.N: v.place(f.Places[I64(k.Targets.At) + i])
         }
@@ -2557,6 +2562,7 @@ fn (v mut verifier&) stmtFlow(s Stmt&) {
                 r := f.Refs[I64(task.Copies.At) + i]
                 if r != ScopeRef.Frame: v.usesScope(r)
             }
+            for i in range task.Default.N: v.usesScope(f.Refs[I64(task.Default.At) + i])
             for i in range task.Clauses.N: v.reads(f.Clauses[I64(task.Clauses.At) + i].Handler)
             v.pend[I64(j)] = true
         }
@@ -2929,6 +2935,7 @@ fn (w mut dumper&) task(k Task) String {
     out.Push($w.callee(k.Target) + "(" + $w.operands(k.Args) + ")")
     if k.Scopes.N > I32(0): out.Push(" [" + $w.refs(k.Scopes) + "]")
     if k.Copies.N > I32(0): out.Push(" copies [" + $w.refs(k.Copies) + "]")
+    if k.Default.N > I32(0): out.Push(" default [" + $w.refs(k.Default) + "]")
     for i in range k.Clauses.N {
         cl := w.F.Clauses[I64(k.Clauses.At) + i]
         out.Push(" catch")
