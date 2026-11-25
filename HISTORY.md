@@ -43427,3 +43427,27 @@ local does not reach; peak 2721 MB (2715), the free pass's final walk 959 ms (10
 A local given values no text shows (a binding, a destructured part) that could be written through makes every root of
 its body uncontained. Where to pick up: a parameter or field as a root - contained where every caller's argument is,
 an interprocedural judgement - and direction (a)'s pin.
+
+**The review's two use-after-frees: a walk's name and a match binding were no copies (S9a, S13b).** A review of the
+branch built two programs early freeing broke. `for row in rows { for j in range 100: row.Push(j) }` over an
+`Array<Vec<I64>>`, then `rows[1]` read: early printed 47541000, `-free late` and master 29008500, `-sanitize` and the
+evaluator stopped on storage a closed scope gave back. And `case Box.Some(x)` grown with `x.Push`, the payload matched
+again: the same on master too. The brief read it as condition 6 missing a second name - `row` held in place of
+`rows[k]`'s storage but by value, so instNames did not count it. The cause was below that: check gave a for-in's name the
+element as read and a binding the payload's field as read, with no MakeKind.Copy, though S9a and S13b say each is a copy
+and `x := v` makes one (QCE). A struct copy of a `Vec` shares its buffer; growth retires the old buffer, so `row.Push`
+let go of `rows[k]`'s, and with owned elements moved them out. With `Vec<String>` elements master's `-free late` itself
+printed `rows[1][3]` as an empty string - wrong under every freeing mode; with `Vec<I64>` only early freeing showed it,
+per value for the walk (`row.Push`'s text names `row`, not `rows`), and for the binding already on master, where no
+viewer watched the payload. Counting such locals as second names (tried first) made early agree with late but left the
+meaning wrong and kept a place that need not keep. So the copy is made where the meaning is: check wraps a walk's name
+and a binding owning storage in ownCopy, and lowering leaves it out where nothing could tell (D9h viewLocals) - a
+binding is a view candidate now, its value LocalUses.Bound - so an unwritten walk name or binding still reads in place
+(the self-build's places and peak as before: 552 of 1016, 2530 MB cold against 2538). Soundness of condition 6 per value rests on it: every by-value local holding
+storage is its own copy or a never-written view local, so no let-go goes through a by-value name of another value's
+storage (docs/freeing.md 2.5). Left open: a type holding references beside storage of its own is still given in
+place - with the copy the scope pass refuses tests/loopvals.olang's element referring into its own array (O25h, as it
+refuses `x := a[i]` there on master), so growing such a name stays wrong as on master; per value, such a walk name is a
+second name and such a binding makes its body's roots uncontained. Checks: freeing walkcopy and bindcopy (`Vec<String>` elements and payloads grown, read
+back; built, `-free late`, `-sanitize` and interpreted agree; freed at once); tests/valueparts.olang's grown copies,
+baked (K2) and run - master's evaluator refuses the bake.

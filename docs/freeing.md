@@ -499,8 +499,13 @@ path to that value. For a contained root every such path is one of its names in 
 escapes, no callee keeps one, no lambda or task holds one, its storage is not moved to another holder; and the second
 names are closed over every value given a local whose text names one. A let-go whose text names none of them therefore
 lets go of another value's storage - and the viewer reads only the root's own storage (never a view local's, which
-another value's let-go could release). Where any condition fails the judgement is the declaration's, as before; a view
-read in the let-go's own statement is judged per declaration as before.
+another value's let-go could release). This rests on every by-value local holding storage being its own copy, or a view
+local lowering holds in place of one only where it is never written (lower.viewCand) - so no let-go goes through a
+by-value name of another value's storage. A for-in's name of an element and a match binding of a payload were not
+copies at all (check gave the element's or the payload's bytes, its buffer shared): growing one let go of the
+element's or payload's buffer by a text naming neither (the review's p9c, p13matchbind). They are copies now, and view
+candidates like any local (log, 2026-11-25). Where any condition fails the judgement is the declaration's, as before; a
+view read in the let-go's own statement is judged per declaration as before.
 
 **What still keeps per declaration.** A view of a root in use across a let-go of that same root - `r :=
 rows[i % 4].View()` across `rows[i % 4] = mk(i)` (checks' freeing viewself) - keeps the place for every value: the
@@ -1176,3 +1181,19 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   552 of its 1016 places at once (master's compiler on the same source 551): its views are of receivers' fields and
   parameters, judged per declaration still; peak 2721 MB (2715), the free pass's final walk 959 ms (1065). **Where to pick up**: a root that is a parameter or a field - contained where every caller's argument is, an
   interprocedural judgement - and direction (a)'s pin for a view across its own value's let-go.
+- 2026-11-25, wt-perinst, the review's two use-after-frees: **a for-in's name of an element and a match binding owning
+  storage are copies** (S9a, S13b; QCE). check gave a walk's name the element's value as read and a binding the
+  payload's field as read, with no MakeKind.Copy - a struct copy sharing the element's buffer - so `row.Push(j)` in
+  `for row in rows` let go of `rows[k]`'s buffer (growth retires the old one) and `x.Push` of `case Box.Some(x)` the
+  payload's. Under every freeing mode the program was wrong wherever the elements own storage - `-free late` on master
+  read emptied strings back from `rows[1]` (the retired buffer, its strings moved out); with `Vec<I64>` only early
+  freeing showed it (condition 6 per value let the growth go: its text names `row`, not `rows`; on master already for
+  the binding, which no viewer watched). The fix is where the meaning is: check makes the copy (ownCopy, as `x := v`
+  does), lowering leaves it out where nothing could tell (D9h viewLocals; LocalUses.Bound gives a binding its value, and
+  a binding is a view candidate now) - an unwritten walk name or binding still reads in place. Checks' freeing walkcopy
+  and bindcopy (built, `-free late`, `-sanitize`, interpreted agree; freed at once), tests/valueparts.olang's grown
+  copies. **Left open**: a type holding references beside its own storage (`struct(v Vec<String>, tag String&)`) is still
+  given in place - copying it makes the scope pass refuse an element referring into its own array (O25h; `x := a[i]`
+  is refused there on master too; tests/loopvals.olang's `Named`) - so growing such a walk name or binding is wrong
+  under every mode, as on master; condition 6 per value counts such a walk name as a second name and makes a body with
+  such a binding uncontained, so this branch adds no case. Closing it needs the scope pass to place that copy. Self-build: 552 of 1016 places freed at once (unchanged), peak 2530 MB cold (the branch before the fix on the same source: 552, 2538 MB).
