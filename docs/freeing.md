@@ -443,6 +443,86 @@ to grow into them, (c) a hand-off at the join. (c) is built:
   (named as RCopied's gap as `g = Rec.Of(i)` is); a `String` or array target keeps, named (a text's slot scope is the
   spawner's stack, an array target is written in place by T11b's copy - open). checks' freeing spawnlocal.
 
+### 2.5 Per instance: a view of one value, a let-go of another (wt-perinst, 2026-11-25)
+
+The user, 2026-11-23: "We want to free when we can ... do vectors and views not per type, but per instance". A place is
+a declaration's - every `Vec<I64>`'s buffer is the one place `Vec<I64>.0` - and its decision is one link-time constant
+every module's sites read (B3i). Two of the reasons a place keeps were judged per declaration as well, so one value made
+every value of its type keep:
+
+- **condition 6**: a view of one value's storage in use across a let-go of *another* value's - growkept (`r Vec<I64>& =
+  base` across `rows[i % 4] = mk(i)`), and the everyday `for x in base: other.Push(x)` (the walk's hidden local views
+  `base`'s buffer, `other`'s growth lets go of `Vec<I64>.0`): every `Vec<I64>`'s growth in the program kept;
+- **owners win** for a slot place - gaps17b: every `Map<String, I64>`'s keys kept because some `Map<String, I64>` is a
+  value of a one-region owner place (a `Map<String, Map<String, I64>>`'s values).
+
+**The directions weighed.** The growth and let-go code is the library's, run for every value of the type, so a decision
+per value has to reach it either (a) as a mark the value's storage carries - a region flag "pinned", read at every store
+into a part place (a chunk lookup before the new array is built, not after), set at every construction of a pinned
+value, an empty Vec's sentinel buffer, the evaluator modelling the flag - or (b) as the library code cloned per decision,
+the call site choosing by its argument's origins, which needs the decision passed down through every user function
+taking a `mut Vec<T>&` (a hidden argument per call, a clone per caller's decision, code size and compile time, and B3i's
+one object per module bent). Neither keep above needs a value of the place to be kept: the analysis kept the
+declaration only because it did not tell values apart. So the judgement is made per value, at compile time, and the
+decision stays per declaration: no run-time mark, no cloned code, no cost per operation or per construction.
+
+**Condition 6 per value (free.olang `instRoots`, `instNames`, `instReaches`).** A viewer - a local holding a view of a
+place, in use across a let-go of it - whose every value (its declaration's; never given another, nothing stored into its
+parts) is traced to a **root**: a by-value local of the body (`Var`) holding storage of its own and no reference
+(`SharesRefs` false). The trace goes through borrows and slices of the root's parts, references read out of a local the
+trace reached, and calls of a body reaching no global, no code not followed and no task (effects.Facts: not `Unknown`,
+`Back`, `Through`, `Unchecked`, `Spawns`, `ReadsGlobals`, `RefGlobals`, `WritesOut`, no call through what it is given)
+whose every argument holding a reference traces to the same root - `base.View()`, `base.Ref(i)`, a for-in's walk of
+`base`. Its **names** are the root and its second names: the locals that may hold a reference holding a view (`IsRef`
+or `SharesRefs`) given a value whose text names the root or another second name as a word, to a fixed point, over every
+declaration's and assignment's value in the body. The root is **contained** where it is reached by nothing but its names
+in the body's own text:
+- neither it nor a second name escapes - stored as a reference, captured, spawned with, yielded, handed back as a view
+  (typed.LocalUses: `EscHard`, `EscOwn`, `RetRefs`, a lambda's hold) - and every call given one keeps nothing of it
+  past the call (`RefsKept.NoneKept` of each lend, read-only reference and give; no linked value going elsewhere);
+- no value naming one is given to anything but a local (through a reference, into a global);
+- it is never moved out at its last mention (`typed.LastCopies`, D9i: a move makes its storage another holder's,
+  whose let-goes do not name it);
+- it holds its own storage, never a view local reading another value's in place (lower.viewCand): it is written,
+  assigned or stored into, so lowering copies what it is given - or its declaration's value is built for it (a
+  constructor, a literal, a fill, text, a call handing back no view of its arguments);
+- a second name it could be written through (`ReachesWrite`) has a name.
+Then a let-go whose place the body's text shows - a call, an assignment, a vacate - reaches the root only where the text
+of that call or place names one of its names; a drop where a block is left, a yield, or a let-go with no text may reach
+anything. A viewer of a contained root is in use across a let-go only where that let-go reaches the root.
+
+**Why it is sound.** A value's storage is let go of only by a let-go of the place it is a value of, reached through a
+path to that value. For a contained root every such path is one of its names in this body's text: no reference to it
+escapes, no callee keeps one, no lambda or task holds one, its storage is not moved to another holder; and the second
+names are closed over every value given a local whose text names one. A let-go whose text names none of them therefore
+lets go of another value's storage - and the viewer reads only the root's own storage (never a view local's, which
+another value's let-go could release). Where any condition fails the judgement is the declaration's, as before; a view
+read in the let-go's own statement is judged per declaration as before.
+
+**What still keeps per declaration.** A view of a root in use across a let-go of that same root - `r :=
+rows[i % 4].View()` across `rows[i % 4] = mk(i)` (checks' freeing viewself) - keeps the place for every value: the
+program needs the old storage by its own text, so it keeps memory whatever the place does, and M19g refuses the growth
+form (`base.Push` with a view of `base` in use) outright. Keeping that value alone needs direction (a)'s pin, a cost at
+every store into the place, to spare the other values' growth in a program already keeping - recorded, not built. And a
+view whose root is a parameter, a global or a value not contained is judged per declaration: parameters may name one
+value (`fn f(a, b mut Vec<I64>&)` given the same Vec twice), a global is reached by any callee.
+
+**Owners per value for a slot place (`decide`'s owner rule).** An owner held in a sole place has all of its storage in one
+region, released through its anchors (types.Anchors), so the array places it holds keep. A slot place no anchor of the
+owner's type is at - a `Map`'s keys, inside its slot array - need not: a key is built through a slot scope of the scope
+its map is in, which inside the owner's value is that value's region; the slot release (`__olang_slot_release`) is per
+value at run time already - text in a region (not one a slot scope made) is left for the region's release - and a map
+anywhere else has its keys in slots its removals and its holders' walks release. So such a slot place is decided as its
+other conditions say, for every map of the type: gaps17b flat.
+
+**Cost.** None at run time. Compile time: one `typed.LocalUses` walk and one text scan per body holding a viewer with a
+root, in the final walk only (measured with the self-build, 2.5's log entry).
+
+**O23b per value: not by this.** O23b's equality is a field's scope binding needed at run time where an instance is
+reached through an element, a global, an `any` or a capture; per instance it is a scope handle each instance would carry
+- a word per instance, which field scopes option B was built to avoid - not a condition a compile-time judgement can
+settle. It stays per declaration (2.4).
+
 ## 3. Order of work (phase 2)
 
 1. The gaps that cost real programs: 1-4 (done), 13 (a plain runtime leak), 12, 5, 6-7, then 10, 8-9, 11, 14.
