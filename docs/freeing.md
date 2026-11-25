@@ -453,8 +453,16 @@ to grow into them, (c) a hand-off at the join. (c) is built:
   handed over like one (the evaluator gives the handler that scope). `handedAtWait` no longer refuses such a spawn for a
   handler that builds, where it builds only its default (`free.ownDefault`: a lambda capturing plain numbers alone,
   reaching no global, calling through no function value - all it builds is in its own frame or its result's scope, the
-  stand-in). With several targets, or a handler capturing anything else, the handler still builds in the program's
-  scope and the place keeps. `plainDefault` (SpawnLets, a target declared outside its loop) is unchanged: its question is
+  stand-in). With several targets, or a handler capturing anything else, the handler still built in the program's
+  scope and the place kept - closed by wt-taskdefault2 (2026-11-25): a handler takes one scope for all its results (its
+  type's ResultVar), so with several targets it is given a stand-in of the scope the plan gives the task's call's result
+  (`lower.callResultScope`, a block's or a scope variable's; `free.defaultHanded` asks the same of the plan) - where the
+  call's results would land, outliving every target as they must; and `ownDefault` no longer asks the captures' types:
+  a handler that only reads what it captures - writing through none of it nor through what it reads out of it
+  (effects' Writes, Impure, WritesOut), reaching no global, calling through no function value, spawning nothing -
+  builds only its default (a capture handed back as the default is existing storage, judged as a non-building
+  default's always was: a store into an element copies it). A handler reading a `mut` global still builds where it
+  did and its target's places keep (taskdefault's `M=63`, named by `-memory`). `plainDefault` (SpawnLets, a target declared outside its loop) is unchanged: its question is
   whether the default could be existing storage the spawner let go of, not where the handler builds. checks' freeing
   taskdefault: flat at 100,000 turns, where master grew 9.5 MB over the second half (Vec defaults) and 6.4 MB (a few
   kept); built, `-free late`, `-sanitize`, `-race`, `-memory -check` and the evaluator agree. (The
@@ -1318,6 +1326,11 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
 - 2026-11-25 (wt-taskdefault): a joined task's clause default built in a stand-in of its one target's storage
   (`mir.Task.Default`), handed over at the wait like a result; `handedAtWait` admits a default that builds only itself
   (`free.ownDefault`). checks' freeing taskdefault flat at 100,000 turns (master: ~390 bytes a failure).
+- 2026-11-25 (wt-taskdefault2): the default for several targets built in a stand-in of the scope the call's result is
+  given (`lower.callResultScope`, `free.defaultHanded`), and by a handler that only reads what it captures
+  (`free.ownDefault` by effects, not by capture types). checks' freeing taskdefault `M=31` flat at 100,000 turns where
+  master grows 22.2 MB (two targets) and 6.3 MB (captured text) over the second half; kept's taskDefaults. The
+  self-build frees 556 of its 1018 places at once, unchanged; warm peak 2597 MB (~2588 before).
 
 - 2026-11-25 (wt-secondval): 2.4's local given a second value closed. Its `Vec<String>` was already flat on master
   (wt-perinst's owner rule); a struct holding text its constructor built in the callee was a use after free - the

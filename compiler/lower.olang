@@ -3492,25 +3492,43 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
             if ln.dead: return
             fresh := ln.freshScopes(sw, scopes, I64(c.Site))
             guard := ln.plan.RegionGuard[I64(c.Site)] if fresh != 0 else -1
-            k := ln.F.AddTask(callee, args, scopes, places, cls, ends, sw.Task.Span(), cps, fresh, guard, ln.taskDefault(sw))
+            k := ln.F.AddTask(callee, args, scopes, places, cls, ends, sw.Task.Span(), cps, fresh, guard, ln.taskDefault(sw, c))
             ln.emit(mir.Stmt.Spawn(sp, j, k))
         }
         case _ { }
     }
 }
 
-# P4a: where a task's clause handlers build their defaults - the storage of its one target, a local, where the task's
-# result would be (a stand-in of it handed to the spawner at the join's wait); none, the program's, for any other
-fn (ln mut lowering&) taskDefault(sw typed.Spawn&) mir.Range {
+# P4a: where a task's clause handlers build their defaults, where the task's result would be (a stand-in of it handed to
+# the spawner at the join's wait): the storage of its one target, a local; for several, the scope the plan gives the
+# call's result (its ResultVar), a block's or one of the body's scope variables; none, the program's, for any other
+fn (ln mut lowering&) taskDefault(sw typed.Spawn&, c typed.Call&) mir.Range {
     some := false
     for cl in sw.Clauses: some = some or cl.Handler != null
-    if not some or sw.Targets.Len() != 1: return mir.Range(0, 0)
-    tg := sw.Targets[0]
-    if tg == null: return mir.Range(0, 0)
-    r := ln.placeStorage(tg)
+    if not some or sw.Targets.Len() == 0: return mir.Range(0, 0)
+    r := ln.callResultScope(c)
+    if sw.Targets.Len() == 1 {
+        tg := sw.Targets[0]
+        if tg == null: return mir.Range(0, 0)
+        r = ln.placeStorage(tg)
+    }
     match r {
         case mir.ScopeRef.Program, mir.ScopeRef.Frame { return mir.Range(0, 0) }
         case _ { return ln.F.ScopeRefs(Array<mir.ScopeRef>[r]) }
+    }
+}
+
+# the scope the plan gives call c's result where it is a block's or a scope variable's (free.defaultHanded); else the
+# program's
+fn (ln mut lowering&) callResultScope(c typed.Call&) mir.ScopeRef {
+    b := typed.CalleeBody(c)
+    if not ln.planned or b < 0 or c.Site < typed.SiteId(0) or I64(c.Site) >= ln.plan.Built.Len(): return mir.ScopeRef.Program
+    at := ln.T.ResultVarAt(ln.L.Bodies[b].Ty)
+    if at < 0: return mir.ScopeRef.Program
+    sc := ln.plan.Passed(c.Site, at)
+    return match sc {
+        case typed.Scope.Block(_), typed.Scope.Var(_): ln.scopeRef(sc)
+        case _: mir.ScopeRef.Program
     }
 }
 

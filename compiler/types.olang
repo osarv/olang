@@ -1612,6 +1612,12 @@ fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
     return out.ToArray()
 }
 
+# where ResultVar is among the scope variables ScopeVarsOf gives a function of this type, -1 where it passes none
+fn (t mut Table&) ResultVarAt(f TypeId) I64 {
+    vs := t.ScopeVarsOf(f)
+    return vs.Len() - 1 if vs.Len() > 0 and vs[vs.Len() - 1] == ResultVar else -1
+}
+
 # ---- declared types ----
 
 # registers a module's identity; its index

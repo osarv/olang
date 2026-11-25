@@ -8296,14 +8296,15 @@ fn (w mut walker&) spawnSite(s typed.Spawn&, tc typed.Call?&) {
 # whether what a task builds for its target p is handed to the spawner at the join's wait: p a local, the spawn inside a
 # join, and every scope the task's call is given one the spawner builds into itself - a block or one of its body's scope
 # variables, whose stand-in the wait folds back (none the program's, which a worker builds into a part of its own, nor
-# one found while the program runs); and no clause of its own building the target a value (P4a) but one whose handler
-# builds only that value (ownDefault) for the spawn's one target, which it builds where the task's result is built (a
-# stand-in of the target's storage, mir.Task.Default) - with more targets, the program's scope
+# one found while the program runs); and no clause of its own building the targets a value (P4a) but one whose handler
+# builds only that value (ownDefault), where the task's result would be (mir.Task.Default, a stand-in handed over as
+# the result is): for one target its storage, for several the scope the call's result is given, a block's or a scope
+# variable's (defaultHanded)
 fn (w mut walker&) handedAtWait(s typed.Spawn&, p typed.Lvalue&, tc typed.Call?&) Bool {
     if w.inJoin.Len() == 0 or tc == null or tc.Site < typed.SiteId(0) or w.Id >= w.F.Plans.Len(): return false
     for c in s.Clauses {
         if c.Handler == null or not w.F.handlerBuilds(c.Handler!): continue
-        if s.Targets.Len() != 1 or not w.F.ownDefault(c.Handler!): return false
+        if not w.F.ownDefault(c.Handler!) or not w.defaultHanded(s, tc): return false
     }
     match p {
         case typed.Lvalue.Local(_, _, _) { }
@@ -8322,6 +8323,20 @@ fn (w mut walker&) handedAtWait(s typed.Spawn&, p typed.Lvalue&, tc typed.Call?&
     return true
 }
 
+# whether the scope a spawn's clause handlers build in is one a wait hands over (lowering's taskDefault): its one
+# target's storage, or with several the block or scope variable the plan gives its call's result
+fn (w mut walker&) defaultHanded(s typed.Spawn&, tc typed.Call&) Bool {
+    if s.Targets.Len() == 1: return true
+    b := typed.CalleeBody(tc)
+    if b < 0: return false
+    at := w.T().ResultVarAt(w.F.Bodies[b].Ty)
+    if at < 0: return false
+    return match w.F.Plans.Ref(w.Id).Passed(tc.Site, at) {
+        case typed.Scope.Block(_), typed.Scope.Var(_): true
+        case _: false
+    }
+}
+
 # whether a spawn's clause handler (P4a, a lambda the task's thread calls) may build storage: its body may allocate
 fn (f mut Free&) handlerBuilds(h typed.Expr&) Bool {
     b := match h {
@@ -8336,33 +8351,21 @@ fn (f mut Free&) handlerBuilds(h typed.Expr&) Bool {
     return f.fx!.Of(b).Holds(effects.Fact.Allocates)
 }
 
-# whether a clause's handler builds nothing but its default: a lambda capturing plain numbers alone, reaching no global,
-# calling through no function value - so all it builds is in its own frame or where it is given (its result's scope)
+# whether a clause's handler builds nothing but its default: a lambda that only reads what it captures - writing through
+# none of it, nor through what it reads out of it - reaching no global, calling through no function value and spawning
+# nothing, so all it builds is in its own frame or where it is given (its result's scope)
 fn (f mut Free&) ownDefault(h typed.Expr&) Bool {
     lb := -1
     match h {
-        case typed.Expr.Fn(_, _, typed.FnVal.Lambda(b, caps, _)) {
-            for cp in caps {
-                if not scalarType(f.T(), cp.Outer.Type()): return false
-            }
-            lb = I64(b)
-        }
+        case typed.Expr.Fn(_, _, typed.FnVal.Lambda(b, _, _)) { lb = I64(b) }
         case _ { }
     }
     if lb < 0 or lb >= f.Bodies.Len(): return false
     if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
     fs := f.fx!.Of(lb)
-    if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0: return false
+    if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0 or fs.Spawns: return false
+    if fs.Writes != 0 or fs.Impure or fs.WritesOut: return false
     return not (fs.ReadsGlobals or fs.RefGlobals or fs.WritesGlobals)
-}
-
-# whether a value of type ty is a number or a Bool: it holds no storage
-fn scalarType(t types.Table&, ty types.TypeId) Bool {
-    return match t.KindOf(t.Plain(t.Repr(ty))) {
-        case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16
-             types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64: true
-        case _: false
-    }
 }
 
 # condition 3 for C that may call the program back (cThreads): each export fn C may call runs as a task's code would,

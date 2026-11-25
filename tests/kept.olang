@@ -442,6 +442,45 @@ fn caseLocalsSum() I64 {
     return caseLocals(W(2, t), true) + caseLocals(W(3, t), false)
 }
 
+# a joined task's clause default (P4a) built where the task's result would be - for two targets in the scope the call's
+# result is given, and by a handler reading text it captured - each turn's kept in a long-lived Vec past its turn
+type tdErr error { Odd }
+
+fn tdTwo(i I64) Vec<String>, String ? tdErr {
+    if i % 2 == 1: error tdErr.Odd
+    return Vec<String>["v" + $i], "w" + $i
+}
+
+fn tdVec(i I64) Vec<String> ? tdErr {
+    if i % 3 == 1: error tdErr.Odd
+    return Vec<String>["u" + $i]
+}
+
+fn taskDefaults(n I64) String {
+    kept Vec<Vec<String>>
+    for _ in range 4: kept.Push(Vec<String>())
+    bs := ""
+    for i in range n {
+        pre := "p" + $i
+        a Vec<String>
+        b String
+        c Vec<String>
+        join {
+            spawn a, b = try tdTwo(i) catch default Vec<String>[pre + "a", pre], pre + "b"
+            spawn c = try tdVec(i) catch default Vec<String>[pre + "c", pre]
+        }
+        kept[i % 4] = a if i % 2 == 1 else c
+        bs += b
+    }
+    churn()
+    out := bs
+    for v in kept {
+        out += ";"
+        for x in v: out += x + ","
+    }
+    return out
+}
+
 test secondValues "lets go of a local's old value and copies its new one into an element" {
     assert secondValues(10) == 2002967
 }
@@ -464,6 +503,11 @@ test heldRefs "gives a struct held in place, holding a reference beside its owne
 
 test keptArgs "gives a constructor whose instance is copied a value local's copy and a call's value each turn" {
     assert keptArgs(10) == 4305234
+assert taskDefaults(8) == "w0p1bw2p3bw4p5bw6p7b;p4c,p4,;p5a,p5,;u6,;p7a,p7,"
+}
+
+test taskDefaults "keeps tasks' clause defaults, built where their results would be, past their turn" {
+    assert taskDefaults(8) == "w0p1bw2p3bw4p5bw6p7b;p4c,p4,;p5a,p5,;u6,;p7a,p7,"
 }
 
 test caseLocals "gives locals an enum case holding a parameter's reference" {
@@ -477,3 +521,4 @@ assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
 assert labeledValues(10) == 36093319 and twoOwners(10) == 18253 and copyReads(10) == 4865248
 assert heldRefs(10) == 4205100
 assert keptArgs(10) == 4305234
+assert taskDefaults(8) == "w0p1bw2p3bw4p5bw6p7b;p4c,p4,;p5a,p5,;u6,;p7a,p7,"
