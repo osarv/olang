@@ -460,6 +460,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     ownerAt Map<pair.Pair<I64, I64>, I64>   # O8f (gap 22): the copies made for an owner place, by (body, site): the place (OwnerSite)
     leafPartsAt Map<pair.Pair<I64, I64>, Bool>   # (and the split copies whose owner leaf's value has its parts split too: LeafParts)
     ownersAt Map<pair.Pair<I64, I64>, Bool> # O8f (gap 22): copies of a value with several owner leaves, parts split (OwnersSite)
+    preservedAt Map<pair.Pair<I64, I64>, Bool> # O8f: by-value argument copies a callee only reads, let go through no place (PreservedSite)
     arraysAt Map<pair.Pair<I64, I64>, Bool> # O8f (c1's keep): copies stored into an element array place, its elements' parts split (ArraysSite)
     partsAsked Map<types.TypeId, Bool>      # O8f: PartsOnly by type - true while it is being found (a type holding itself)
     partsNew Vec<types.TypeId>              # ...the types answered, in order (an answer found false forgets those after it)
@@ -5101,7 +5102,12 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     # (a copy makes what it owns anew, deep through values: no view of the source's owner or array leaves)
     if m.Kind == typed.MakeKind.Copy: out = w.F.unowned(out)
     exempt := m.Kind == typed.MakeKind.Copy and w.copyExempt >= 0 and I64(m.Site) == w.copyExempt
-    if m.Kind == typed.MakeKind.Copy and m.Site >= typed.SiteId(0) and I64(m.Site) == w.preservedArg: exempt = true
+    # (one a callee only reads is let go through no place: reclaimed where the scope it is built in closes, which lowering
+    # checks is no scope outside a loop's turn its call is in - PreservedSite, lower.turnKept)
+    if m.Kind == typed.MakeKind.Copy and m.Site >= typed.SiteId(0) and I64(m.Site) == w.preservedArg {
+        exempt = true
+        if w.Final and w.quiet == 0: w.F.preservedAt.Put(pair.Pair(w.Id, I64(m.Site)), true)
+    }
     # (a fill of the zero value, D13c, makes nothing: no storage of any place)
     filled := m.Kind == typed.MakeKind.Fill and m.Items.Len() > 0
     # (gap 17: nor does a fill of a value holding no storage - `Array<Vec<String>>(10)`'s ten empty Vecs)
@@ -9278,6 +9284,10 @@ fn (f Free&) OwnerSite(b I64, site I64) I64 { return try f.ownerAt.Get(pair.Pair
 # O8f (gap 22): whether a copy made at site of body b is of a value with several owner leaves whose parts lowering
 # splits (copyLeaves' ownersSplit, lower.ownersCopy)
 fn (f Free&) OwnersSite(b I64, site I64) Bool { return f.Done and f.ownersAt.Has(pair.Pair(b, site)) }
+
+# O8f: whether the copy at site of body b is a by-value argument's copy its callee only reads (makeOf's preservedArg),
+# held by no place: reclaimed only where the scope it is built in closes
+fn (f Free&) PreservedSite(b I64, site I64) Bool { return f.Done and f.preservedAt.Has(pair.Pair(b, site)) }
 
 # O8f (gap 22): whether the split copy made at site of body b (SplitPath) has its owner leaf's value copied with each
 # part place's array in a part region of its own (lower.splitCopy's partsCopied - free.viewCtor), so that the owners that

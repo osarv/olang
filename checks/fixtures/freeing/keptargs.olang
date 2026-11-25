@@ -1,0 +1,77 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4, wt-liftcopy): a constructor whose instance views what it is given and is copied as the
+# call returns (D9h, kept) - `P(a, mkB(i), base)` with `P{a Vec<String>, b Vec<I64>, r String&}`, its instance held by
+# a local whose storage lives where its reference must (O25h), the function's scope. The copy of the value local `a`
+# and the call's value `mkB(i)` were built there too, read only until the instance's copy was made, and then kept
+# until the function returned though nothing let go of them: ~1.2 KB a turn, and -memory -check passed. Now both are
+# built in the innermost scope open (lower.keptView, keptCall), dead with the turn; where one is not, -memory -check
+# names it (lower.turnKept, keptResult)
+N I64 = 20000
+
+type P struct(a Vec<String>, b Vec<I64>, r String&) {
+    a
+    b
+    r
+}
+
+type O struct(inner P, n I64) {
+    inner
+    n
+}
+
+fn mkA(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push(("s" + $(i + k)).PadEnd(200, '.'))
+    return v
+}
+
+fn mkB(i I64) Vec<I64> {
+    v Vec<I64>
+    for k in range 40: v.Push(i * k)
+    return v
+}
+
+# a value local given as the first argument, a call's value as the second
+fn local(n I64, base String&) I64 {
+    o := O(P(mkA(0), mkB(0), base), 0)
+    t := 0
+    for i in range n {
+        a := mkA(i)
+        q := P(a, mkB(i), base)
+        o.inner = q
+        t += o.inner.a[1].Len() + o.inner.b[3] + o.inner.r.Len()
+    }
+    return t
+}
+
+# the local's copy written out
+fn copied(n I64, base String&) I64 {
+    o := O(P(mkA(0), mkB(0), base), 0)
+    t := 0
+    for i in range n {
+        a := mkA(i)
+        q := P(a.Copy(), mkB(i), base)
+        o.inner = q
+        t += o.inner.b[2] + I64(o.inner.a[2][1]) + a.Len()
+    }
+    return t
+}
+
+# the call's value first, the value local second, the instance read again after the store
+fn second(n I64, base String&) I64 {
+    o := O(P(mkA(0), mkB(0), base), 0)
+    t := 0
+    for i in range n {
+        b := mkB(i)
+        q := P(mkA(i), b, base)
+        if i % 3 != 1: o.inner = q
+        t += o.inner.b[5] + q.b[2] + I64(q.a[2][1])
+    }
+    return t
+}
+
+fn main() {
+    base := "the base text"
+    io.PutLn($local(N, base) + " " + $copied(N, base) + " " + $second(N, base))!
+}

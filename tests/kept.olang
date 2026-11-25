@@ -334,6 +334,32 @@ fn heldRefs(n I64) I64 {
     return s + o.inner.a[0].Len() * 100000 + o.inner.r.Len() * 1000000
 }
 
+# a value local's copy and a call's value given to a constructor whose instance views them and is copied as the call
+# returns (O8f, 2.4): built in the turn, read only until that copy is made, never where the instance's local lives
+fn twoOf(i I64) Vec<I64> {
+    v Vec<I64>
+    v.Push(i)
+    v.Push(i * 2)
+    return v
+}
+
+fn keptArgs(n I64) I64 {
+    base := "base"
+    o := HO(HP(Vec<String>["k0", "k1"], Vec<I64>[0, 0, 0], base), 0)
+    names Vec<String>
+    s := 0
+    for i in range n {
+        a := Vec<String>["a" + $i, "z" + $(i * 5)]
+        q := HP(a, twoOf(i), base)
+        if i % 3 != 2: o.inner = q
+        names.Push(o.inner.a[1] + q.a[0])
+        s += o.inner.b[1] + q.b[0] * 10
+    }
+    churn()
+    for x in names: s += x.Len() * 100
+    return s + o.inner.a[1].Len() * 100000 + o.inner.r.Len() * 1000000
+}
+
 fn everyTurnSum(n I64) I64 {
     hs := everyTurn(n)
     churn()
@@ -436,6 +462,10 @@ test heldRefs "gives a struct held in place, holding a reference beside its owne
     assert heldRefs(10) == 4205100
 }
 
+test keptArgs "gives a constructor whose instance is copied a value local's copy and a call's value each turn" {
+    assert keptArgs(10) == 4305234
+}
+
 test caseLocals "gives locals an enum case holding a parameter's reference" {
     assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
 }
@@ -446,3 +476,4 @@ assert nested(3) == 312 and reassigned(3) == 3030 and rows(4) == 2404 and textsS
 assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
 assert labeledValues(10) == 36093319 and twoOwners(10) == 18253 and copyReads(10) == 4865248
 assert heldRefs(10) == 4205100
+assert keptArgs(10) == 4305234
