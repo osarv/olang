@@ -9318,19 +9318,22 @@ fn (f mut Free&) ElemPlace(arr types.TypeId) I64 { return f.placeKey(arr, -1) if
 # elements' bytes (its elements' storage, another part): a copy made there is then split (lower.partCopy), so that the
 # region holds that one array alone; null where it owns nothing more, or the site is no part site
 fn (f mut Free&) PartSplit(b I64, site I64, ty types.TypeId) Array<I64>?& {
-    k := try f.partAt.Get(pair.Pair(b, site)) catch { return null }
-    t := f.T()
-    path Array<I64>& = Array<I64>(0)
-    if not t.OwnedPart(ty) {
-        found := false
-        for lf in f.leaves(ty) {
-            if lf.PlaceId != k or found: continue
-            path = lf.Path
-            found = true
-        }
-        if not found: return null
-    }
+    path := f.PartLeaf(b, site, ty)
+    if path == null: return null
     return path if f.ownsBeyond(ty, path, 0) else null
+}
+
+# O8f: the fields that reach, from a value of type ty built at site of body b in a part region, the array of the part
+# place the region is made for - none for the array itself; null where the site is no part site or ty holds no such
+# array. A value settled where it is built is settled by that array (lower.settled): a struct holding it - a
+# constructor's instance built for its text field's part place - has its anchors' home past the part region
+fn (f mut Free&) PartLeaf(b I64, site I64, ty types.TypeId) Array<I64>?& {
+    k := try f.partAt.Get(pair.Pair(b, site)) catch { return null }
+    if f.T().OwnedPart(ty): return Array<I64>(0)
+    for lf in f.leaves(ty) {
+        if lf.PlaceId == k: return lf.Path
+    }
+    return null
 }
 
 # whether a value of type ty owns storage beyond the array path leads to: another part owning storage on the way, or
