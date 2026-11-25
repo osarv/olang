@@ -261,6 +261,47 @@ test "a walk of a Vec reads elements in place only where nothing can write them"
     assert vecWalks(VwOne) == VecWalksBaked and VecWalksBaked == 63060033, $VecWalksBaked
 }
 
+# a walk's name of an element and a match binding of a payload are copies of their own where they own storage (S9a,
+# S13b): growing them changes neither the element nor the payload
+type gcBox enum {
+    Some(v Vec<String>)
+    None
+}
+fn gcTexts(k I64) Vec<String> {
+    v Vec<String>
+    for j in range 6 + k: v.Push($"s" + $j)
+    return v
+}
+fn grownCopies(k I64) String {
+    rows := Array<Vec<String>>(2, Vec<String>())
+    for i in range 2: rows[i] = gcTexts(k + i)
+    t I64 = 0
+    for row in rows {
+        for _ in range 20: row.Push("x")
+        t += row.Len()
+    }
+    b := gcBox.Some(gcTexts(k))
+    match b {
+        case gcBox.Some(x) {
+            for _ in range 20: x.Push("y")
+            t += x.Len()
+        }
+        case _ { }
+    }
+    assert churn() > 0
+    got := $t + " " + rows[1][3] + $rows[1].Len()
+    match b {
+        case gcBox.Some(x): got = got + " " + x[3] + $x.Len()
+        case _ { }
+    }
+    return got
+}
+GrownCopiesBaked := grownCopies(1)
+test "a walk's name and a match binding grown leave the element and the payload as they were" {
+    got := grownCopies(VwOne)
+    assert got == GrownCopiesBaked and got == "82 s38 s37", got
+}
+
 # a value built in a loop's turn and stored into a part of x[i] (E31b's write-back, in place through RefMut) is built
 # where the collection's parts live, not in the turn: text, a call's text, a conditional's, an element of an element,
 # a field of a field, through a collection's At and SetAt

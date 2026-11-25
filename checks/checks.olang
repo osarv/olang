@@ -704,6 +704,18 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(outOf(dir).Contains("viewself.olang:19:9: memory: what a Vec<I64> grows out of in calls here is kept until its scope closes") and outOf(dir).Contains(", 1 keeps it"), "viewself names its growth's keep", dir)
     try late(r, dir, "viewself", "2000", "2116880\n")
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" viewself.olang > out.txt 2>&1") == 0 and outOf(dir) == "2116880\n", "viewself interpreted", dir)
+    # (walkcopy, bindcopy: a for-in's name of an element and a match binding of a payload owning storage are copies of
+    # their own, grown without letting go of the element's or payload's buffer - each grown-out buffer freed at once;
+    # built, -free late, -sanitize and the evaluator agree)
+    walked := Array<String&>["walkcopy", "bindcopy"]
+    wfull := Array<String&>["599103 s2102\n", "338899 s2002\n"]
+    wpart := Array<String&>["59800 s302\n", "33696 s202\n"]
+    for i in range walked.Len() {
+        p := walked[i]
+        try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0 and outOf(dir).Contains(", 0 keep it"), $p + " frees at once", dir)
+        try late(r, dir, p, "2000", wfull[i])
+        try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 " + $p + ".olang > out.txt 2>&1") == 0 and outOf(dir) == wpart[i], $p + " interpreted", dir)
+    }
     # (mapsplit, review12: a Map of Vecs copied out of a Vec's element, the element given new values - its slot array walked
     # once, by its live entries (its entries' values keep, -check names them: copies of the element); built, -free late,
     # -sanitize and the evaluator agree)

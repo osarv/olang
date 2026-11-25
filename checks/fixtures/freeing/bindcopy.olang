@@ -1,0 +1,41 @@
+import "std/io"
+
+# a match binding of a payload owning storage is the payload's own copy (S13b, QCE): growing it lets go of the copy's
+# buffer, never the payload's - the payload matched again holds its strings and its length; and early freeing frees each
+# turn's grown-out buffer at once
+N I64 = 2000
+
+type Box enum {
+    Some(v Vec<String>)
+    None
+}
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 30: w.Push($"s" + $(i + j))
+    return w
+}
+
+fn main() {
+    t := 0
+    last := ""
+    for i in range N {
+        b := Box.Some(mk(i))
+        match b {
+            case Box.Some(x) {
+                for _ in range 100: x.Push("x")
+                t += x.Len()
+            }
+            case _ { }
+        }
+        junk := mk(7777)
+        match b {
+            case Box.Some(x) {
+                t += x[3].Len() + x.Len() + junk[0].Len()
+                last = x[3]
+            }
+            case _ { }
+        }
+    }
+    io.PutLn($t + " " + $last)!
+}

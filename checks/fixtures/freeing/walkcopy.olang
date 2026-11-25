@@ -1,0 +1,30 @@
+import "std/io"
+
+# a for-in's name of an element owning storage is the element's own copy (S9a, QCE): growing it lets go of the copy's
+# buffer, never the element's - the element read after the loop holds its strings and its length; and early freeing
+# frees each turn's grown-out buffer at once (condition 6 per value: the walk's view of 'rows' is not reached by
+# 'row.Push')
+N I64 = 2000
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 30: w.Push($"s" + $(i + j))
+    return w
+}
+
+fn main() {
+    t := 0
+    last := ""
+    for i in range N {
+        rows := Array<Vec<String>>(2, Vec<String>())
+        for k in range 2: rows[k] = mk(k * 100 + i)
+        for row in rows {
+            for _ in range 100: row.Push("x")
+            t += row.Len()
+        }
+        junk := mk(7777)
+        t += rows[1][3].Len() + rows[1].Len() + junk[0].Len()
+        last = rows[1][3]
+    }
+    io.PutLn($t + " " + $last)!
+}
