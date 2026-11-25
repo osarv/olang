@@ -832,7 +832,8 @@ test "a session to a server whose certificate is trusted and names the host carr
     assert pin.Len() == 95
     assert firstLine("127.0.0.1", port, "", pin) == "HTTP/1.0 200"
     assert firstLine("127.0.0.1", port, "", String(try os.ReadFile(dir + "/fp2"))) == "HTTP/1.0 200"
-    assert firstLine("localhost", port, "", "00" + pin[2:]) == "pin"
+    # a pin one byte off: the fresh certificate's own first byte may be 00
+    assert firstLine("localhost", port, "", ("11" if pin[0:2] == "00" else "00") + pin[2:]) == "pin"
     assert firstLine("localhost", port, "", "abc") == "pin"
     # trust on first use: learn the fingerprint with no verification, then pin it
     fp := try learnedPrint(port)
