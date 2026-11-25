@@ -1297,11 +1297,8 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   does), lowering leaves it out where nothing could tell (D9h viewLocals; LocalUses.Bound gives a binding its value, and
   a binding is a view candidate now) - an unwritten walk name or binding still reads in place. Checks' freeing walkcopy
   and bindcopy (built, `-free late`, `-sanitize`, interpreted agree; freed at once), tests/valueparts.olang's grown
-  copies. **Left open**: a type holding references beside its own storage (`struct(v Vec<String>, tag String&)`) is still
-  given in place - copying it makes the scope pass refuse an element referring into its own array (O25h; `x := a[i]`
-  is refused there on master too; tests/loopvals.olang's `Named`) - so growing such a walk name or binding is wrong
-  under every mode, as on master; condition 6 per value counts such a walk name as a second name and makes a body with
-  such a binding uncontained, so this branch adds no case. Closing it needs the scope pass to place that copy. Self-build: 552 of 1016 places freed at once (unchanged), peak 2530 MB cold (the branch before the fix on the same source: 552, 2538 MB).
+  copies. A type holding references beside its own storage (`struct(v Vec<String>, tag String&)`) was left given in place
+  here; wt-walkref (below) copies it too. Self-build: 552 of 1016 places freed at once (unchanged), peak 2530 MB cold (the branch before the fix on the same source: 552, 2538 MB).
 
 - 2026-11-25, wt-gap17a: **gap 17's open part closed.** A struct holding a Map by value built by its constructor from a
   Map local (`S(m)`) and given to an element kept the old element's Map - and more: the constructor's instance views
@@ -1358,3 +1355,13 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   (readArgCopy); turn rows (B18a) for such storage built outside a loop's turn that no place lets go of (turnKept,
   keptResult). The 238 MB shape flat at 1.8 MB. checks' freeing keptargs, kept's keptArgs. The self-build frees 556 of
   its 1018 places at once, one turn row left (`effects.Effects(lw.P, lw.Bodies)`, run once); warm peak 2588 MB (2622).
+- 2026-11-25 (wt-walkref): **a walk's name and a binding holding references beside their own storage are copies too**
+  (S9a, S13b, O25h). wt-perinst left them in place because the copy's references were judged where the copy is built -
+  exactly, a writable one (O25g) - so an element referring into its own array (tests/loopvals.olang's `Named`) was
+  refused; growing `for row in rows { row.v.Push(..) }` or `case Box.Some(x): x.v.Push(..)` let go of the element's
+  buffer (`-free late` read `s7780` back for `s2102`). Now `scope.ownCopy` judges a local's own copy (copyLocal: a
+  `:=`, a walk's name, a binding) as O25h says - its claim the source's references' term, its own storage its block -
+  and check copies regardless of SharesRefs; `x := a[i]` of such an element compiles too. Stores of the copy into
+  longer-lived places stay refused (O25h). Condition 6 per value still treats such names conservatively (instCand,
+  second names) - a keep at most, never a free too early. Checks' freeing walkref, bindref (freed at once; built,
+  `-free late`, `-sanitize`, interpreted agree), tests/loopvals.olang's grownCopies (baked, K2).
