@@ -337,7 +337,9 @@ with `Writes == 0` and not `Impure`). checks' freeing elemarg.
   a part place for "a copy of what a constructor is given" with no store owning anything, so `reported` skipped it. A
   part place's let-go releases only an array built in a part region, so a copy is no reason to keep, as `untracked`
   says for any copy. checks' freeing secondval (Tagged, a 400-byte name: master out of 8 MB with `-memory -check`
-  passing) now flat at 200,000 turns; kept's labeledValues. And the join form (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`, checks' freeing taskvals
+  passing) now flat at 200,000 turns; kept's labeledValues. Its neighbour, closed by wt-twoowners: a constructor's
+  instance of two Maps (`return S2(a, b)`) kept whole in one region, -memory -check passing it for condition 1; now
+  split into part regions as copyLeaves' copy is (checks' freeing twoowners). And the join form (`r Vec<String>`, `join: spawn r = build(i)`, `kept[i % 4] = r`, checks' freeing taskvals
   part 2): closed by wt-taskhandoff - question 1 below, answered (c): the task's growth of what it builds itself keeps
   nothing (`ownBody`), the target's type places keep only through its join, and the regions it made are the spawner's
   from the wait, their storage given back to the worker that made them. (Closed by wt-globalfill for a first value nothing reads - `r := build(0)` then
@@ -1257,3 +1259,10 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   reasons on its owner leaf gone (`storeAs`, `views`: an owner leaf held by value as a part place's is; `readOf`,
   `textOf`: a field read out of an element where it stands lends its call). checks' freeing secondval's Tagged; kept's
   labeledValues. The self-build frees 556 of its 1017 places at once, as before; peak 2629 MB (2613 before).
+- 2026-11-25 (wt-twoowners): a constructor's instance of two Maps (`return S2(a, b)`) stored into an element each turn
+  - `-memory -check` passed it for condition 1 (viewCtor's "a copy of what a constructor is given, which holds other
+  owners too") while it kept the copy, 27 MB at 20,000 turns; the copy is made for the place, so the reason was false.
+  Now built split (viewCtor's parted, lower.ownersCopy at the call's site, as copyLeaves' gap 22 split): each part
+  place's array in a part region of its own, a struct's text field beside the Maps too, the owners kept for RSplit
+  alone; a copy that cannot be split is a reported gap (RCopied, `ctorGaps`). checks' freeing twoowners, kept's
+  twoOwners. The self-build frees 556 of its 1017 places at once, unchanged; peak 2498 MB (2508 before).

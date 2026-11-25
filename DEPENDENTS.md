@@ -167,7 +167,9 @@ a Map's other parts and its live entries by partOf and entryCopy, as a Put build
 array - a change to how a Copy helper builds parts, or to how `Map.add` builds an entry, changes it. An element's
 owner fields (gap 22: `free.olang` ReleaseLeaves, the owner first) are released in that order by partReleases, and an
 owner's own let-go records the same leaves (`goParts`) that `lower.olang`'s ownerParts and leafPaths release; a copy
-made for an owner (free.OwnerSite) is split by ownerCopy, and a move into a copy's region (free.MovesLeaves) is
+made for an owner (free.OwnerSite) is split by ownerCopy, a constructor's instance of several owner leaves copied where
+the call's value goes (free.olang viewCtor's parted, OwnersSite) by ownersCopy at the view call's site in `lower.olang`'s
+call - its owners kept for RSplit alone, freed through their parts - and a move into a copy's region (free.MovesLeaves) is
 lowering's movable - a change to one of each pair changes the other. A constructor's instance viewing a copy of a value
 local (D9h) is copied where it is kept - a return's (`free.olang` retCtorOf) as a let's (letCtorOf) - so the local is
 never lifted or moved where the instance goes (`scope.olang` viewedCopies, dropViewed) and its argument copy is left out
