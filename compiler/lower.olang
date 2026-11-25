@@ -5896,6 +5896,24 @@ fn (ln mut lowering&) keptResult(callee mir.Callee, fty types.TypeId, scopes mir
     }
 }
 
+# B18a: a call handing back a closure its callee makes (free.ClosureResult) - its environment, the callee's copies of
+# what it captured, built in the call's result scope - given a result scope outside the loop's turn the call is in
+# (a reference local holding it stored, on some turns, where it outlives the turn): every turn's closure is built there,
+# and no place lets go of one - a function value is no place, and its environment cannot be copied out on the turns it
+# is kept (docs/freeing.md 2.4) - a gap -memory -check fails on (LiftGaps)
+fn (ln mut lowering&) closureKept(callee mir.Callee, fty types.TypeId, scopes mir.Range, b2 I64, sp source.Span) {
+    if not ln.freeing or callee != mir.Callee.Fn or ln.levels.Len() == 0: return
+    res := ln.T.Result(fty)
+    if ln.T.IsRef(res): res = ln.T.Referent(res)
+    if ln.T.KindOf(res) != types.Kind.Func or not ln.L.Free!.ClosureResult(b2): return
+    vs := ln.T.ScopeVarsOf(fty)
+    for j in range vs.Len().Min(I64(scopes.N)) {
+        if vs[j] != types.ResultVar or not ln.outsideTurn(ln.F.Refs[I64(scopes.At) + j]): continue
+        ln.L.LiftGaps.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) + ": the closure a call makes keeps until its scope closes: it is built outside the loop's turn the call is in, for a function value kept there, and no place lets go of it")
+        return
+    }
+}
+
 # whether evaluating argument x changes nothing: a constant, a plain place's read (plainPlace), or a copy of one
 fn quietArg(x typed.Expr&) Bool {
     return match x {
@@ -5924,6 +5942,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     ok := ln.F.NewBlock()
     dest := mir.NoLocal
     if res != types.VoidT and res != types.NoreturnT { dest = ln.temp(ty if ty != types.VoidT else res, sp) }
+    ln.closureKept(callee, fty, scopes, typed.CalleeBody(c), sp)
     errs := t.Errors(fty)
     code := mir.NoLocal
     eb := mir.NoBlock

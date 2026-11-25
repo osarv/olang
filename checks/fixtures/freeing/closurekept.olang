@@ -1,0 +1,37 @@
+import "std/io"
+
+# O8f, B18a (review 1125b's fnvalgrow): a closure a call makes - `closer(a)`, a lambda capturing its by-value Vec of
+# text, its environment built in the call's result scope - made every turn. Read in the turn only (1), it is built
+# there and goes with the turn; given, on some turns, to a function value local declared before the loop (2), every
+# turn's closure is built where that local lives, the function's scope - a function value is no place, and its
+# environment cannot be copied out on the turns it is kept (docs/freeing.md 2.4) - and -memory -check names the call
+# (lower.closureKept) where it passed before, ~2 KB a turn kept
+N I64 = 20000
+M I64 = 1
+
+fn mkA(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push(("s" + $(i + k)).PadEnd(100, '.'))
+    return v
+}
+
+fn closer(v Vec<String>) fn&() I64 {
+    return fn() I64 { return v[0].Len() + v.Len() }
+}
+
+fn main() {
+    f := closer(mkA(0))
+    t := 0
+    for i in range N {
+        if M % 2 == 1 {
+            g := closer(mkA(i))
+            t += f() + g()
+        }
+        if M / 2 % 2 == 1 {
+            h := closer(mkA(i + 1))
+            if i % 7 == 3: f = h
+            t += h()
+        }
+    }
+    io.PutLn($t + " " + $f())!
+}

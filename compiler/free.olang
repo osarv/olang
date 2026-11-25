@@ -8351,6 +8351,38 @@ fn (f mut Free&) handlerBuilds(h typed.Expr&) Bool {
     return f.fx!.Of(b).Holds(effects.Fact.Allocates)
 }
 
+# B18a: whether body b hands back only closures it makes - lambdas capturing something, whose environments (their copies
+# of what they captured) it builds where its result goes - directly or through a local given only such values
+fn (f mut Free&) ClosureResult(b I64) Bool {
+    if b < 0 or b >= f.Bodies.Len() or f.Bodies[b].Root == null: return false
+    m mut mustW& = mustW(f, b)
+    m.block(f.Bodies[b].Root!)
+    if m.returned.Len() == 0: return false
+    for x in m.returned {
+        if not m.madeClosure(x, 0): return false
+    }
+    return true
+}
+
+fn (m mut mustW&) madeClosure(x typed.Expr&, depth I64) Bool {
+    if depth > 8: return false
+    match x {
+        case typed.Expr.Fn(_, _, typed.FnVal.Lambda(_, caps, _)) { return caps.Len() > 0 }
+        case typed.Expr.Away(_, _, y) { return m.madeClosure(y, depth + 1) }
+        case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, l), _) {
+            if m.isParam(I64(l)): return false
+            found := false
+            for a in range m.assigned.Len() {
+                if m.assigned[a] != I64(l): continue
+                if not m.madeClosure(m.values[a], depth + 1): return false
+                found = true
+            }
+            return found
+        }
+        case _ { return false }
+    }
+}
+
 # whether a clause's handler builds nothing but its default: a lambda that only reads what it captures - writing through
 # none of it, nor through what it reads out of it - reaching no global, calling through no function value and spawning
 # nothing, so all it builds is in its own frame or where it is given (its result's scope)
