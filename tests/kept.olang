@@ -225,6 +225,42 @@ fn labeledValues(n I64) I64 {
     return s + q.tags[0].Len()
 }
 
+# O8f: a constructor's instance viewing two Maps it is given, copied where the result goes - each Map's parts in part
+# regions of their own (free.viewCtor's parted, lower.ownersCopy), freed at the element's let-go
+type TwoMaps struct(a Map<String, I64>, b Map<String, String>) {
+    a
+    b
+}
+
+fn TwoMaps.Of(i I64) TwoMaps {
+    a Map<String, I64>
+    b Map<String, String>
+    for j in range 3 {
+        a.Put("a" + $i + "-" + $j, i * 10 + j)
+        b.Put("b" + $j, "v" + $i + "-" + $j)
+    }
+    return TwoMaps(a, b)
+}
+
+fn twoOwners(n I64) I64 {
+    held Vec<TwoMaps>
+    for k in range 4: held.Push(TwoMaps.Of(k))
+    q := TwoMaps.Of(0)
+    s := 0
+    for i in range n {
+        held[i % 4] = TwoMaps.Of(i)
+        q = TwoMaps.Of(i + 1)
+        held[(i + 2) % 4] = q
+        s += held[(i + 1) % 4].a.Len() + q.b.Len()
+    }
+    churn()
+    for x in held {
+        for v in x.a.Values(): s += v
+        s += (try x.b.Get("b2") catch default "").Len() * 1000
+    }
+    return s + (try q.a.Get("a" + $n + "-1") catch default -1)
+}
+
 fn everyTurnSum(n I64) I64 {
     hs := everyTurn(n)
     churn()
@@ -315,13 +351,17 @@ test labeledValues "copies a struct holding a Vec of text into an element each t
     assert labeledValues(10) == 36093319
 }
 
+test twoOwners "copies a constructor's instance of two Maps into an element each turn" {
+    assert twoOwners(10) == 18253
+}
+
 test caseLocals "gives locals an enum case holding a parameter's reference" {
     assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
-assert labeledValues(10) == 36093319
+assert labeledValues(10) == 36093319 and twoOwners(10) == 18253
 }
 
 # the same, computed while compiling
 assert everyTurnSum(5) == 105 and someTurnsSum(7) == 96 and vecs(4) == 10606 and arrays(3) == 603
 assert nested(3) == 312 and reassigned(3) == 3030 and rows(4) == 2404 and textsSum(4) == 104
 assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
-assert labeledValues(10) == 36093319
+assert labeledValues(10) == 36093319 and twoOwners(10) == 18253

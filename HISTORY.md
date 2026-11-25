@@ -43622,3 +43622,39 @@ value outside the loop, one declared in it, elements' fields read where they sta
 interpreted agreeing. tests/kept.olang's labeledValues reads both shapes back after a churn, the evaluator deciding it.
 The self-build frees 556 of its 1017 places at once, as before; its cold peak 2629 MB (2613 before); `make fixedpoint`
 passes.
+
+## 2026-11-25: a constructor's instance of two Maps, kept for a condition it meets (O8f, B18; mine; wt-twoowners)
+
+The review of the day's relaxations (review/batch1125, twoowners) found a second false proof beside wt-checkfalse's: a
+constructor's instance viewing two Maps it is given (`return S2(a, b)`), stored into an element each turn and given
+to a local each turn then stored. `-memory -check` exited 0 while the program grew - 1.9 MB at 2,000 turns, 27 MB at
+20,000, 291 MB at 200,000 resident. Its row named condition 1: `free.viewCtor` made each owner leaf keep (RMade) for
+"its new value is a copy of what a constructor is given, which holds other owners too". But that copy is the
+constructor's result built for the place, where the call's value lands - the value is made for it, and the condition a
+reader would check holds. What actually kept it was the region: with several owner leaves the copy was built whole in
+one region, which no owner's let-go could release without the other's storage - a let-go early freeing does not
+follow, a gap.
+
+Closed the way a copy stored into a struct held in place already is (copyLeaves' gap 22 split): where every owner leaf
+is one `ownersSplit` takes (PartsOnly, no declared Copy, each owner's value owning storage only as part places' arrays
+or owners of such) and the call is the value's top site, `viewCtor` marks the site (`ownersAt`, read as `OwnersSite`)
+and lowering's view-call copy, which already tried `ownersCopy` after `ownerCopy` at that site, builds each part place's
+array in a part region of its own. The owners then keep for RSplit alone, freed through their parts (partsFree). An
+array leaf beside them that is a part place - a struct's own text field next to the two Maps - goes into the split
+too, built in its part region as its stores build it.
+
+Where the split cannot be made (an owner that is no `ownersSplit` owner, or an array leaf that is no part place) the
+copy is still built in one region, and that is now said for what it is: RCopied, a gap `-memory -check` fails on,
+"its new value, a copy of what a constructor is given, is built in one region with ...". Such a keep has no store
+owning anything (the store records a failed one with no site), so `reported` would have skipped it as wt-checkfalse
+found; the places are listed (`ctorGaps`) and reported all the same. A first cut of the split took no array leaf at
+all, and a struct holding its own text beside the two Maps (`Named{name String, a Map, b Map}`) came out as such a
+reported gap, though the compiler before ran it flat: taking part-place array leaves into the split closed it, and the
+fixture holds that shape so it stays closed.
+
+checks' freeing twoowners (both shapes, `limited`): before, -memory -check passed while it grew; now 14 places, all
+freeing at once, flat under 8 MB at 20,000 and 200,000 turns, built, `-free late`, `-sanitize` and interpreted agreeing.
+tests/kept.olang's twoOwners reads the elements and the local back after a churn, the evaluator deciding it. The
+review's other probes agree under every oracle as before, their `-check` verdicts unchanged (fnvalelem, instcall2,
+textorder and viewlocal name RCopied gaps of their own, as with the compiler before). The self-build frees 556 of its
+1017 places at once, its report unchanged; peak 2498 MB (2508 before, the same warm state); `make fixedpoint` passes.

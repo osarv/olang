@@ -2140,7 +2140,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 ac0cb24df228eac5 f61d05370fb77327 checks/cases/zerofails.olang
 94ae6b408242df2d edd6508fd3a5c47c checks/cases/zeroshared.olang
-56c57416b11b8c05 eb3df1e885dbf35e checks/checks.olang
+88e6d35c7c7b8e7f c29c8a647a9fdf8f checks/checks.olang
 e441d89352158de4 bcb9314b919c0940 checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 75dbd629a7691d6a checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb fa82568af3784ac0 checks/fixtures/agree/math.olang
@@ -2331,6 +2331,7 @@ f1c20ff3f5a169be eb36ebc438018c23 checks/fixtures/freeing/tasks.olang
 6f8f63e1e574c89d 293ddd3d54b9ec54 checks/fixtures/freeing/texts.olang
 fb2c0fa85ead9c75 d905d25037ac6516 checks/fixtures/freeing/textstructs.olang
 65090776a1973a56 279acdd1025cfdfd checks/fixtures/freeing/tryreads.olang
+ed14ab27fe4ff0ea c1d1123a9b6224dd checks/fixtures/freeing/twoowners.olang
 394cffd18c1d96c5 2d0d4f787fbf2db4 checks/fixtures/freeing/unset.olang
 4d356536c1ea86a1 3dc396d7a428f1c5 checks/fixtures/freeing/veccopies.olang
 0a06a1705b347351 daf6c80fe585a765 checks/fixtures/freeing/vecelems.olang
@@ -2567,7 +2568,7 @@ eba7fd72c9763b72 53f1eceaec8f69d8 compiler/explain.olang
 5b0d1d8455b9f604 e712b1628a5b4f17 compiler/fetch.olang
 b8bc27635ac86610 ffb0981f3fa1091f compiler/fix.olang
 f61fe279c4191d06 92d39a83fc5991a9 compiler/fmt.olang
-82c9e1c913c22248 c420b86743ec57a8 compiler/free.olang
+9d8e0d7fdfee28b6 974fde10465f2dd5 compiler/free.olang
 37f310a1bd9cb7d1 72a05bd5fb599a97 compiler/generic.olang
 37e3f05b4e6d1b7c e19e490a25b421af compiler/interp.olang
 23a885a6497e989e f7e7d7e9dda32d9d compiler/jupyter.olang
@@ -2821,7 +2822,7 @@ d4f05d57d6a40715 37043a366ff21d11 tests/immut.olang
 ef74496ac1efc479 2597c26849901793 tests/inplace.olang
 088eb892c113e59d 7ad2238e873d4f2e tests/intsweep.olang
 432084bd41b5333d c6954ef6aff36237 tests/intwidths.olang
-e0c7095aea7dded9 993da318c2f3abb8 tests/kept.olang
+48a886036a42b152 430dfecaff8151e2 tests/kept.olang
 c2f50b441dc503ab 5d569021b19bb941 tests/keptfacts.olang
 32026d6663c936db d92efb1f91d9f2dd tests/keptparams.olang
 4c4d9485d7579430 23bce712b3e98630 tests/keyenummod.olang

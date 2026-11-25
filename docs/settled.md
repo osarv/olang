@@ -1101,7 +1101,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   place - is settled where it is built by that field's array, never by its anchors' home, the region the part region is
   a kid of (`free.PartLeaf`; a local given a second value, 2.4); a constructor's copy made where its result goes keeps
   no part place it holds (a struct's text beside its Vec), and an owner leaf held by value is no reference stored and no
-  view, as a part place's value is (2.4, wt-checkfalse). A local lowering
+  view, as a part place's value is (2.4, wt-checkfalse); one of several owner leaves (`return S2(a, b)`, two Maps) has
+  each part place's array in a part region of its own, freed at the let-go, and one built in one region is a gap
+  `-memory -check` names, never condition 1 (2.4, wt-twoowners). A local lowering
   surely copies a view call's value into owns its parts (a `Map` value copied and changed frees, gap 18). Round 6
   (wt-freeing6): an element holding a Vec of text or a Vec of Vecs frees it all where it is given another - each live
   element's slot or parts released (a walk at the let-go, none per operation), a copy built in a part region split so

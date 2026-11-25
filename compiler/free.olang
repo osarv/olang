@@ -335,6 +335,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     walkLets Vec<mut Vec<I64>&>
     partWalked Vec<I64>                     # O8f (c1's keep): the places an owner's let-go walks (goParts): the live elements of its Vecs
     inSoleOwner Vec<I64>                    # (the array places kept because a sole owner's value holds them: ownerCovered)
+    ctorGaps Vec<I64>                       # (the places a constructor's copy made for them keeps, one region holding it all: reported)
     bufReachAt Map<I64, Vec<I64>>   # bufReach by buffer place
     # docs/fnvalues.md 4.6, item (3): by body, its calls through a function parameter it never assigns, composed at each
     # call by the argument given - the parameters (bit p) a call through which may let go (letsVia), those of them given
@@ -4021,10 +4022,10 @@ fn (f mut Free&) onlyPath(ty types.TypeId, path Array<I64>&, depth I64) Bool {
 
 # a constructor handing back views of what it is given, its instance stored into a struct held in place: the copy its
 # caller makes (D9h) is the owner leaves' new value, built where the call's value lands - made for the one owner leaf
-# there is, in a region of its own; with several, one region would hold them all, so none is made for any. Its array
-# leaves are given that copy's arrays too: recorded as values not made for them, so such a place keeps (it had no store
-# said for them at all - a sole place's let-go would have released storage outside any region; round sec8r2, from the
-# drop-order round's notes: "when in doubt, keep")
+# there is, in a region of its own; with several, each part place's array in a part region of its own where ownersSplit
+# takes them (parted), else one region holding them all - a gap, never condition 1: the copy is made for the place. Its
+# array leaves are given that copy's arrays too: a part place's is made, any other keeps for that gap (round sec8r2,
+# from the drop-order round's notes: "when in doubt, keep")
 fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp source.Span) {
     f := w.F
     if not w.Final or w.quiet > 0: return
@@ -4048,6 +4049,15 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
         split = true
         f.leafPartsAt.Put(pair.Pair(w.Id, I64(c.Site)), true)
     }
+    # (O8f: several owner leaves - a struct holding two Maps, `return S2(a, b)` - copied with each part place's array in
+    # a part region of its own where that place is decided sole, as copyLeaves' split builds them (lower.ownersCopy at
+    # the call's site): no owner leaf is sole, but each lets go of all it holds through its parts, RSplit)
+    # (beside them, a struct's own text field, a part place, is built in its part region too)
+    splits Vec<I64>
+    for k in owners: splits.Push(k)
+    for k in arrs: splits.Push(k)
+    parted := not split and owners.Len() > 1 and c.Site >= typed.SiteId(0) and f.topSite(x) == I64(c.Site) and f.ownersSplit(x.Type(), splits)
+    if parted: f.ownersAt.Put(pair.Pair(w.Id, I64(c.Site)), true)
     # (the places the copy's parts hold in turn - a Vec part's buffer, an array part's text elements - are given values
     # with no store into them, as at any copy: untracked, which the call this copy is exempt from would have said)
     for k in f.heldPlaces(x.Type()) {
@@ -4056,7 +4066,7 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
         # stores build it - copyAt's copySlots, split or not: splitArray's slots, as untracked's slots; a team's
         # Vec<String> part reached the elements of every Array<String>, keeping a global row's let-go, falseb18)
         if not w.T().RunsCopy(x.Type()) and f.SlotPlace(k): continue
-        if split {
+        if split or parted {
             f.keep(k, RSplit, w.body().File, sp, $"a value holding it is made with no store into it, its parts each built for their own places, by a call's value copied: '" + $w.text(x.Span()) + "'")
             continue
         }
@@ -4083,13 +4093,19 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
             f.stores.Push(store(k, w.Id, w.body().File, sp, SOk, -1, -1, x, null))
             continue
         }
+        # (the value is made for the place - a constructor's result built where it goes - so no condition of the rule's
+        # holds: built in one region with the copy's other storage, a gap)
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFail, -1, -1, x, null))
-        f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given: '" + $w.text(x.Span()) + "'")
+        f.keep(k, RCopied, w.body().File, sp, $"its new value, a copy of what a constructor is given, is built in one region with the copy's other storage: '" + $w.text(x.Span()) + "'")
+        addTo(f.ctorGaps, k)
     }
     if owners.Len() == 0: return
     for k in owners {
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh if one else SFail, -1, I64(c.Site) if one else -1, x, null))
-        if not one: f.keep(k, RMade, w.body().File, sp, $"its new value is a copy of what a constructor is given, which holds other owners too: '" + $w.text(x.Span()) + "'")
+        if parted: f.keep(k, RSplit, w.body().File, sp, $"its new value is a copy of what a constructor is given holding other owners too, its parts each built for their own places: '" + $w.text(x.Span()) + "'")
+        if parted or one: continue
+        f.keep(k, RCopied, w.body().File, sp, $"its new value, a copy of what a constructor is given, is built in one region with the other owners it holds: '" + $w.text(x.Span()) + "'")
+        addTo(f.ctorGaps, k)
     }
 }
 
@@ -9739,6 +9755,9 @@ fn (f mut Free&) reported(k I64) Bool {
     for st in f.stores {
         if st.PlaceId == k and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove or st.X != null and f.widened(st.X) != null): owns = true
     }
+    # (a constructor's copy made for it, built in one region with other storage, gives it storage of its own all the
+    # same: the gap it keeps for is reported - viewCtor)
+    if has(f.ctorGaps, k): owns = true
     if not owns: return false
     # (text elements: where the program's own code gives one another value, or drops or ends one moved out of the
     # collection - its other removals are the collection's, kept with what holds them where that is an owner)
