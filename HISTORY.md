@@ -43658,3 +43658,58 @@ tests/kept.olang's twoOwners reads the elements and the local back after a churn
 review's other probes agree under every oracle as before, their `-check` verdicts unchanged (fnvalelem, instcall2,
 textorder and viewlocal name RCopied gaps of their own, as with the compiler before). The self-build frees 556 of its
 1017 places at once, its report unchanged; peak 2498 MB (2508 before, the same warm state); `make fixedpoint` passes.
+
+## 2026-11-25: copies made where a read stands, an argument's copy, and copyLeaves' condition 1 (O8f, B18, D9h; mine; wt-copygaps)
+
+wt-twoowners took away the false reason that had hidden four of the review's probes (review/batch1125: fnvalelem,
+instcall2, textorder, viewlocal), which then failed `-memory -check` on RCopied - "a value holding it is made with no
+store into it, by a call's value copied". The compiler before them kept the same storage; only the reason was new.
+
+Three of them were one cause. A view call's value read only through a Len the compiler supplies (`$recs[0].name.Len()`,
+`cs[0].names[1].Len()` inside a sum) or a slice (`kept[2].name[0:8]`, rendered) was no read where it stands for
+lowering's `readHere`, which followed conversions and temporaries' fields but not a `Len` primitive or a `Slice`. So
+lowering copied the element (OLANG_VIEWDUMP: "kept") where the callee's result would live - the collection's region, a
+copy no let-go releases - and free, which mirrors `readHere` in `readCall`, walked the call as a copied one. Both now
+follow a Len and a slice: lowering's `readHere` (and `primExpr`, which lends any Len's operand - its value is dead once
+the length is taken; a slice's bounds are evaluated while the temporary is alive, so a slice's window is the whole
+statement) and free's `readCall` and exprOf's Len. Lowering then reads the temporary in place where nothing writes what
+it views while it is alive, else copies it into the statement's innermost scope - dead by the statement's end.
+
+That uncovered the next false reason. textorder (`$recs[0].name.Len() + ... + $bump(recs, i) + ...`, `bump` replacing
+`recs[0]`) kept both of `Rec`'s leaves for "a value of it read in this statement is in use when 'bump(recs, i)' lets go
+of it". The walk counted what a lent call reads - its arguments' borrows, its result's views, the part of its temporary
+read - as views in use for the whole statement. But a lent call's value is in use at no let-go: lowering reads it in
+place only where nothing in its window writes what it views (the window ends before any later let-go matters), and
+copies it otherwise. Condition 6 asks for a reference read from the place in use after the let-go, and there is none.
+The walk now reads nothing in use through a lent call (`lentCall` walks its arguments as a copy's, as `viewArg` does,
+and its result counts as no view read; `readOf` and `borrowOf` read no view through a lent temporary's part).
+
+instcall2 was another: `r := pick(rows, w)` with `pick(a Array<Vec<I64>>&, b W)` handing back `b.v.View()`. The
+argument's own copy (D9b) is not preserved (the callee hands back a view of it), so it was built whole and its `W.v`
+leaf kept for RCopied. A by-value argument's copy of a PartsOnly value is now built split, each part place's array in a
+part region of its own (`splitArg` in free's `untracked`, lower.make's `ownersCopy`, the same split a plain local's
+copy of a view call's value gets) - the owners keep for RSplit alone. instcall2 still keeps `w.v`, for the view `r` holds
+(condition 6 per value, as the review found it), with no gap.
+
+Task 2: copyLeaves still gave RMade, "its new value is a copy holding other owners too", where a copy made right at a
+store into a struct held in place could not be split. That copy is made for the place, so condition 1 holds and the
+reason was false as viewCtor's was; it is now RCopied, "built in one region with the copy's other storage", reported
+through `ctorGaps`. Looking for a program that reaches it found none - a struct is held in place (no place of its own)
+only where its type holds a reference, and every such copy probed was split - but found the false proof beside it:
+`o.inner = q` with `P{a Vec<String>, b Vec<I64>, r String&}` grew 370 MB at 200,000 turns while `-memory` reported
+nothing. `inOwner` kept the store's own leaves for "its value is changed in place, by a store into it" - the store's
+target's leaves are let go of and given the copy, never changed in place - and `reported` skipped them, no store
+giving them storage of their own (the split copy's store has no site). The store's own leaves are no longer kept for
+an in-place change (`notLeaves`), and a copy at a store, split or not, puts its places on `ctorGaps`, so the report
+names what keeps. What keeps is condition 6: `views` exempts a local's own owner leaf only for a type holding no
+reference beyond its parts, since a reference field could view that leaf's storage, so `o` read again after the store
+"uses it after it lets go of it". That is left open (docs/freeing.md 2.4, three options): telling apart what a local
+holds by value from what its reference fields may view is section-8 work.
+
+checks' freeing copyreads (`limited`): the rendered Len and slice beside a later piece replacing the element, a Len of an
+element's field's element in a sum, and a by-value argument's copy viewed by the result - master runs out of memory
+under 8 MB at 20,000 turns; now flat, `-check` passes, built, `-free late`, `-sanitize` and interpreted agreeing.
+tests/kept.olang's copyReads reads the stored texts and elements back after a churn, the evaluator deciding it (and a
+stray assert left inside caseLocals' test block by an earlier merge removed - the file's own top-level assert holds it).
+All 18 probes agree under every oracle; all now pass `-check`. The self-build frees 556 of its 1017 places at once,
+peak 2500 MB (2498 before); `make fixedpoint` passes; the freeing and earlyfree scenarios pass.

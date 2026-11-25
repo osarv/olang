@@ -478,6 +478,39 @@ to grow into them, (c) a hand-off at the join. (c) is built:
   Measured: flat (2 MB peak at 200,000 turns where master grows 911 MB); a struct target frees as its assignment does
   (named as RCopied's gap as `g = Rec.Of(i)` is); a `String` or array target keeps, named (a text's slot scope is the
   spawner's stack, an array target is written in place by T11b's copy - open). checks' freeing spawnlocal.
+- **Copies made where a read stands, and an argument's copy (closed by wt-copygaps, 2026-11-25).** Four review probes
+  (batch1125's fnvalelem, instcall2, textorder, viewlocal) failed `-check` on RCopied once wt-twoowners took away the
+  false reason that hid it - real keeps, the compiler before them kept the same. A view call's value read only through a
+  Len the compiler supplies (`$recs[0].name.Len()`, `cs[0].names[1].Len()` in a sum) or a slice (`kept[2].name[0:8]`)
+  was no read where it stands for lowering's `readHere`, so lowering copied it where the callee's result would live,
+  the collection's region - a copy no let-go releases. Both are reads where they stand now, in lowering (`readHere`,
+  `primExpr` for any Len) and in free (`readCall`, exprOf's Len): read in place where nothing writes what it views
+  while it is alive, else copied into the statement's innermost scope. And what such a lent call reads - its arguments,
+  its result, the part of its temporary read - is in use at no let-go (`lentCall`, `readOf`, `borrowOf`): textorder's
+  "a value of it read in this statement is in use when 'bump(recs, i)' lets go of it", held for every leaf of the
+  element, was false (condition 6 asks for a reference read from it in use; lowering's copy is none). A by-value
+  argument's own copy (D9b) of a PartsOnly value the callee may hand back a view of (`pick(rows, w)`) has its parts in
+  part regions (`splitArg`, lower.make's `ownersCopy`), its owners keeping for RSplit alone; instcall2 keeps `w.v` for
+  the view `r` holds as before (condition 6 per value). checks' freeing copyreads: master runs out of memory under 8 MB
+  at 20,000 turns; now flat, built, `-free late`, `-sanitize` and interpreted agreeing.
+- **copyLeaves' "a copy holding other owners too" (wt-copygaps, 2026-11-25).** The RMade (condition 1) it gave a copy
+  made right at a store into a struct held in place, where the copy could not be split, was false as viewCtor's was:
+  the copy is made for the place. Now a gap (RCopied, "built in one region with the copy's other storage") reported as
+  viewCtor's (`ctorGaps`), and a split one's places reported too - a copy at a store gives the place storage of its own
+  though no site names it, which `reported` skipped. No program reached the unsplit branch in the probes or fixtures:
+  a struct is held in place (no place of its own) only where its type holds a reference, and such a copy split.
+- **A struct held in place given a value, its type holding a reference beside its owners (open, wt-copygaps).**
+  `o.inner = q` with `P{a Vec<String>, b Vec<I64>, r String&}`: master grew 370 MB at 200,000 turns with `-memory`
+  reporting nothing - `inOwner` kept the store's own leaves for "changed in place" (RInPlace) and `reported` skipped them
+  (no store owning anything). Now the leaves are let go and given the split copy, and the report names the keep that
+  remains: condition 6, "'o' is used here, after it lets go of it" - `views` exempts a local's own owner leaf only for a
+  type holding no reference beyond its parts (`refsBeyondParts`), since a reference field could view the leaf's storage;
+  `o` is read again for its new value. `-check` passes (a condition), the program still grows. Options: (a) origins per
+  path - what a local holds by value told from what its reference fields may view - exact, a larger walker change; (b)
+  exempt an owner leaf no reference field's referent type can reach (a `String&` can reach a `Vec<String>`'s elements,
+  so this shape stays kept; an `I64&` could not) - cheap, partial; (c) leave condition 6 as it is and have `-check`
+  count a view keep of a local's own leaf as an approximation, failing on it. Recommendation: (a), reviewed as section-8
+  work; (b) only as a stopgap.
 
 ### 2.5 Per instance: a view of one value, a let-go of another (wt-perinst, 2026-11-25)
 
@@ -1269,3 +1302,10 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   place's array in a part region of its own, a struct's text field beside the Maps too, the owners kept for RSplit
   alone; a copy that cannot be split is a reported gap (RCopied, `ctorGaps`). checks' freeing twoowners, kept's
   twoOwners. The self-build frees 556 of its 1017 places at once, unchanged; peak 2498 MB (2508 before).
+- 2026-11-25 (wt-copygaps): the four probes wt-twoowners left failing `-check` on RCopied (fnvalelem, instcall2,
+  textorder, viewlocal) - a view call's value read through a Len or a slice is a read where it stands (lowering's
+  `readHere` and `primExpr`, free's `readCall`), what a lent call reads in use at no let-go (`lentCall`), and a by-value
+  argument's copy split into part regions (`splitArg`, `ownersCopy`); copyLeaves' unsplit copy is a reported gap, never
+  condition 1, and a store's own leaves are no in-place change. Open: a struct held in place whose type holds a
+  reference keeps for condition 6 (2.4). checks' freeing copyreads, kept's copyReads. The self-build frees 556 of its
+  1017 places at once; peak 2500 MB (2498 before).

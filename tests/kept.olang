@@ -261,6 +261,50 @@ fn twoOwners(n I64) I64 {
     return s + (try q.a.Get("a" + $n + "-1") catch default -1)
 }
 
+# O8f (wt-copygaps): a view call's value read where it stands through a Len or a slice, beside a later piece replacing
+# the element (lower.readHere, free.readCall), and a by-value argument's copy a callee hands back a view of, its parts in
+# part regions of their own (lower.ownersCopy) - each element read back after a churn
+type Tagged struct(name String, tags Vec<String>) {
+    name
+    tags
+}
+
+fn Tagged.Of(i I64) Tagged {
+    t Vec<String>
+    for k in range 2: t.Push("t" + $(i + k))
+    return Tagged("n" + $i + "-name", t)
+}
+
+fn swapFirst(v mut Vec<Tagged>&, i I64) I64 {
+    v[0] = Tagged.Of(i)
+    return i
+}
+
+type Holder struct(v Vec<I64>) {
+    v
+}
+
+fn viewOf(b Holder) Array<I64>& { return b.v.View() }
+
+fn copyReads(n I64) I64 {
+    v Vec<Tagged>
+    for k in range 3: v.Push(Tagged.Of(k))
+    out Vec<String>
+    s := 0
+    for i in range n {
+        out.Push($v[0].name.Len() + " " + v[0].name[0:3] + " " + $swapFirst(v, i * 10) + " " + v[0].tags[1])
+        v[i % 2 + 1] = Tagged.Of(i + 100)
+        s += v[1].tags[0].Len() + v[2].name[1:3].Len()
+        h := Holder(Vec<I64>[i, i + 1, i + 2])
+        r := viewOf(h)
+        h.v = Vec<I64>[7]
+        s += r[2] * 1000 + h.v[0]
+    }
+    churn()
+    for x in out: s += x.Len()
+    return s + v[0].name.Len() * 100000 + v[1].tags[1].Len() * 1000000
+}
+
 fn everyTurnSum(n I64) I64 {
     hs := everyTurn(n)
     churn()
@@ -355,13 +399,16 @@ test twoOwners "copies a constructor's instance of two Maps into an element each
     assert twoOwners(10) == 18253
 }
 
+test copyReads "reads elements where they stand beside their replacement, and views a by-value argument's copy" {
+    assert copyReads(10) == 4865248
+}
+
 test caseLocals "gives locals an enum case holding a parameter's reference" {
     assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
-assert labeledValues(10) == 36093319 and twoOwners(10) == 18253
 }
 
 # the same, computed while compiling
 assert everyTurnSum(5) == 105 and someTurnsSum(7) == 96 and vecs(4) == 10606 and arrays(3) == 603
 assert nested(3) == 312 and reassigned(3) == 3030 and rows(4) == 2404 and textsSum(4) == 104
 assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
-assert labeledValues(10) == 36093319 and twoOwners(10) == 18253
+assert labeledValues(10) == 36093319 and twoOwners(10) == 18253 and copyReads(10) == 4865248
