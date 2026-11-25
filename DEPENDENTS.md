@@ -135,6 +135,10 @@ change to one: SPEC B18's quoted text, the `checks` scenarios `memoryplaced` (it
 earlyfree fixtures that grep it. A gap row (O8f, B18a: `free.olang`'s `gap`, `unfollowed`, `libraryGaps`, counted in
 `Gaps`, which `olang.olang` turns into `msgs.MemoryGaps` under `-check`): SPEC O8f and B18a, docs/freeing.md's gap
 table, the `checks` scenario `freeing` (its `gaps.olang` greps the row; every earlyfree fixture must stay gap-free). A
+turn row (B18a: storage built outside a loop's turn that no place lets go of - `lower.olang`'s `liftedCopy`, `turnKept`
+and `keptResult`, pushed to `LiftGaps`, which `olang.olang` prints and counts under `-check`) reads free's facts
+(`PreservedSite`) and the scopes lowering builds in (`keptArgs`): a change to where lowering builds an argument's copy
+or a call's value changes it, and docs/freeing.md section 4. A
 part built in slots (a `Map` entry's text, an array's text element: `free.olang` SlotPlace, SlotParts) is released by
 `mir.Stmt.ReleaseSlot` and modelled by the evaluator's slot scope (`eval.olang`, each allocation a region of its own):
 a change to one changes the other. A part place's value (O8f: an array a struct holds by value that is no slot place -
