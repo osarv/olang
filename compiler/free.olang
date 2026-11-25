@@ -335,7 +335,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     walkLets Vec<mut Vec<I64>&>
     partWalked Vec<I64>                     # O8f (c1's keep): the places an owner's let-go walks (goParts): the live elements of its Vecs
     inSoleOwner Vec<I64>                    # (the array places kept because a sole owner's value holds them: ownerCovered)
-    ctorGaps Vec<I64>                       # (the places a constructor's copy made for them keeps, one region holding it all: reported)
+    ctorGaps Vec<I64>                       # (the places a copy made for them - a constructor's, or one at a store - gives storage no site names: reported)
     bufReachAt Map<I64, Vec<I64>>   # bufReach by buffer place
     # docs/fnvalues.md 4.6, item (3): by body, its calls through a function parameter it never assigns, composed at each
     # call by the argument given - the parameters (bit p) a call through which may let go (letsVia), those of them given
@@ -2329,6 +2329,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     copyExempt I64 = -1
     splitArr I64 = -1          # the site of a copy stored into an element array place of PartsOnly values (untracked's split)
     splitLet I64 = -1          # the site of the view call a plain value local is declared with (splitLetOf)
+    splitArg I64 = -1          # the site of a by-value argument's own copy of a PartsOnly value (untracked's parted)
     ownerSplit I64 = -1        # the site of a copy stored whole into an owner place (ownerSplitOf), judged after its store
     ownerHeld types.TypeId = types.UnknownT  # (that copy's type, untracked's judgement held until the store says how it is built)
     ownerHeldSp source.Span
@@ -2607,6 +2608,17 @@ fn (w mut walker&) holds(ty types.TypeId) Bool {
 # an owner's value changed in place: the owner places whose values o may be part of keep - but place `but`, the store's
 # own target. What a change of an owner held in place builds is built where the container lives, outside the value's
 # region, which a let-go would never release (and an anchor in another region would release that region)
+# o without the places of ty's own leaves
+fn (w mut walker&) notLeaves(o Vec<I64>&, ty types.TypeId) Vec<I64> {
+    ks Vec<I64>
+    for lf in w.F.leaves(ty): ks.Push(lf.PlaceId)
+    out Vec<I64>
+    for y in o {
+        if okind(y) != OPl or not ks.Has(oval(y)): out.Push(y)
+    }
+    return out
+}
+
 fn (w mut walker&) inOwner(o Vec<I64>&, but I64, sp source.Span, how String&) {
     if not w.Final or w.quiet > 0: return
     for y in o {
@@ -2637,6 +2649,9 @@ fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made 
     # (review4's a5: the copy of a view call's value a plain value local is declared with, `c := v[j]` - its parts split
     # as well, lower.ownersCopy)
     parted = parted or (made and site >= 0 and (site == w.splitLet or capture) and w.F.PartsOnly(ty) and not w.T().RunsCopy(ty))
+    # (or a by-value argument's own copy (D9b) the callee may hand back a view of, `pick(rows, w)` - its parts split as
+    # well, lower.make's ownersCopy: no let-go of the source's places reaches them)
+    parted = parted or (made and site >= 0 and site == w.splitArg and w.F.PartsOnly(ty) and not w.T().RunsCopy(ty))
     if parted: w.F.ownersAt.Put(pair.Pair(w.Id, site), true)
     # (O8f, round 8: a copy lowering makes - made: not a fill's, nor one a declared Copy makes, E31d - builds the text
     # of a place built in slots in slots of where it goes, as the place's own stores do: lower.copySlots)
@@ -3070,7 +3085,11 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         case _ { }
     }
     k := w.F.placeOfPlace(p)
-    w.inOwner(w.reach(p), k, sp, "a store into it")
+    # (a struct held in place given another value, `o.inner = q`: its own leaves are the store's targets - let go of
+    # and given the value's (copyInto) - no value of theirs changed in place)
+    ro := w.reach(p)
+    if k < 0 and p != typed.Lvalue.Local: ro = w.notLeaves(ro, p.Type())
+    w.inOwner(ro, k, sp, "a store into it")
     if w.Final: w.orStoreOf(p, x)
     w.storeWithin = w.withinOf(p)
     # a value of the container's place stays where it was only where it is the container's own value: reached through
@@ -3837,8 +3856,14 @@ fn (w mut walker&) copyLeaves(lvs Vec<leaf>&, cm typed.Expr&, sp source.Span) {
         if owners.Has(k) {
             f.stores.Push(store(k, w.Id, w.body().File, sp, SFresh if one else SFail, -1, site if one else -1, cm, null))
             # (O8f: a part place's copy built with other owners is in no part region: left where it is at a let-go)
-            if split and not f.PartPlace(k): f.keep(k, RSplit, w.body().File, sp, $"its new value is a copy holding other owners too, its parts each built for their own places: '" + $w.text(cm.Span()) + "'")
-            else if not one and not f.PartPlace(k): f.keep(k, RMade, w.body().File, sp, $"its new value is a copy holding other owners too: '" + $w.text(cm.Span()) + "'")
+            if one or f.PartPlace(k): continue
+            # (O8f: the copy is made for the place, built right at the store - it gives the place storage of its own,
+            # though no site names it, so the report speaks of the place - split, its parts each in a part region;
+            # else in one region with the copy's other storage, which no let-go of one leaf can release: a gap, never
+            # condition 1, reported as viewCtor's is)
+            addTo(f.ctorGaps, k)
+            if split: f.keep(k, RSplit, w.body().File, sp, $"its new value is a copy holding other owners too, its parts each built for their own places: '" + $w.text(cm.Span()) + "'")
+            else: f.keep(k, RCopied, w.body().File, sp, $"its new value, a copy made for it, is built in one region with the copy's other storage: '" + $w.text(cm.Span()) + "'")
             continue
         }
         f.stores.Push(store(k, w.Id, w.body().File, sp, SFail, -1, -1, cm, null))
@@ -4680,6 +4705,10 @@ fn (w mut walker&) readOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     # (O8f, 2.4: a value owning nothing read out of a view call's temporary, `v[i].n` - the temporary only read where it
     # stands, or copied into the statement's innermost scope, lower.readOut: no value a store gives a place)
     wasRead := w.readArg
+    # (a part of a temporary lent for reading, `$v[i].name`: lowering reads it where it stands only where nothing writes
+    # what it views until it is dead, else copies it into the statement's innermost scope (lower.readHere) - no view
+    # of the place in use at any let-go)
+    lent := wasRead >= 0 and p != typed.Lvalue.Local and readPlaceCall(p) == wasRead
     rc := readPlaceCall(p) if p != typed.Lvalue.Local and p != typed.Lvalue.Temp and (w.T().IsRef(ty) or not typed.HoldsOwned(w.T(), ty)) else -1
     if rc >= 0: w.readArg = rc
     o := w.reach(p)
@@ -4693,7 +4722,7 @@ fn (w mut walker&) readOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     }
     # (an array place's value holds no reference by type, but read where it stands - lent to a call, a piece rendered
     # after the statement's other operands - it is its storage: `show(G, growG())`, `$G + $growG()`)
-    if w.holds(ty) or k >= 0 and f.arr[k]: w.viewRead(o)
+    if (w.holds(ty) or k >= 0 and f.arr[k]) and not lent: w.viewRead(o)
     return o
 }
 
@@ -4715,6 +4744,8 @@ fn (w mut walker&) borrowOf(p typed.Lvalue&) Vec<I64> {
     block := f.BlockCopy(w.Id, tempPlaceCall(p)) >= 0
     if k >= 0 and not block: return w.readOf(p, p.Type())
     o := w.tempReach(p) if block else w.reach(p)
+    # (a part of a temporary lent for reading: no view in use at any let-go - readOf)
+    if w.readArg >= 0 and readPlaceCall(p) == w.readArg: return o
     # (O8f: a place holding by value, through no reference, an array of a part place - a Vec local, a Vec element -
     # holds its own: borrowing it reads no view of that place's values, and a call growing it through the borrow gives
     # it the new storage)
@@ -4824,7 +4855,13 @@ fn (w mut walker&) exprOf(x typed.Expr&) Vec<I64> {
             if l >= 0 {
                 if w.Final: w.F.retires.Push(retire(w.Id, psp, w.origins[l]))
             } else {
+                # (a Len the compiler supplies reads its value where it stands, `v[i].name.Len()`: its view call's value
+                # lent for reading, as lowering's primExpr lends it - readHere)
+                wasR := w.readArg
+                rc := readCall(args[0]) if isLen(op, args) else -1
+                if rc >= 0: w.readArg = rc
                 for a in args: addAllTo(out, w.expr(a))
+                w.readArg = wasR
             }
             if op == typed.PrimOp.Drop and args.Len() == 1: w.dtorCalls(psp, args[0])
         }
@@ -5085,6 +5122,10 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     }
     args Vec<Vec<I64>>
     ps := w.T().Items(w.T().Params(f.Bodies[b2].Ty)) if b2 >= 0 else Array<types.TypeId>(0)
+    # (a call itself lent for reading, `$v[i].name`: its value read where it stands only where nothing writes what it
+    # views until it is dead, else copied into the statement's innermost scope (lower.readHere) - what its arguments
+    # read is in use at no let-go, as a view call's value given to a by-value parameter (viewArg))
+    lentCall := c.Site >= typed.SiteId(0) and I64(c.Site) == w.readArg
     for j in range c.Args.Len() {
         a := c.Args[j]
         wasRead := w.readArg
@@ -5114,7 +5155,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         # once the regions are written: taskCopied)
         taskArg := w.taskCopy(c, b2, unknown, copied, j, ps, a)
         viewArg = viewArg or taskArg
-        if copied or viewArg: w.copying++
+        if copied or viewArg or lentCall: w.copying++
         # (O8f, gap 22: a by-value argument's copy a callee only reads - Preserves: written through nowhere, kept nowhere,
         # handed back nowhere - is let go through no place: the callee's parameter is all that holds it, until the scope
         # it was built in closes; what the callee copies out of it is judged where that copy goes)
@@ -5128,15 +5169,16 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         }
         # (c1's keep: a by-value argument's own copy (D9b) of an element array of PartsOnly values, its elements' parts
         # in part regions - lower.arraysCopy - as the store it is made for builds them)
-        wasS, wasG := w.splitArr, w.argOf
+        wasS, wasG, wasT := w.splitArr, w.argOf, w.splitArg
         if copySiteOf(a) >= 0 and w.F.partsArray(a.Type()): w.splitArr = copySiteOf(a)
+        w.splitArg = copySiteOf(a)
         # (review4's g1: a place lent writably to the call, `t.kids.Push(...)` - what the call lets go of through it is
         # the container's value, which the reference reaches as it is then, never an old one: no view read across it)
         w.argOf = spanCode(sp) if j < ps.Len() and w.writable(ps[j]) and writableLend(a) else -1
         o := w.expr(a)
-        w.splitArr, w.argOf = wasS, wasG
+        w.splitArr, w.argOf, w.splitArg = wasS, wasG, wasT
         w.preservedArg, w.exemptSite = wasP, wasE
-        if copied or viewArg: w.copying--
+        if copied or viewArg or lentCall: w.copying--
         w.readArg = wasRead
         # (a feeder handed to a call the body of which is known: what it builds there is built in its region - feedFits)
         fd := w.feederArg(a) if b2 >= 0 and not unknown and c.Site >= typed.SiteId(0) else -1
@@ -5231,7 +5273,8 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
             if okind(y) == OPl and f.PartPlace(oval(y)) and has(ownParts, oval(y)): continue
             if okind(y) == OPl: rv.Push(y)
         }
-        w.viewRead(rv, (I64(sp.Start) << 32) | I64(sp.End))
+        # (none for a call lent for reading: its value in use at no let-go, lentCall)
+        if not lentCall: w.viewRead(rv, (I64(sp.Start) << 32) | I64(sp.End))
         return out
     }
     # a call through a function value: judged by what is followed of it, else by its type (docs/fnvalues.md 4.6)
@@ -9302,10 +9345,15 @@ fn readCall(a typed.Expr&) I64 {
         # where the call gave none; a conversion of one value, a sequence of no statements)
         case typed.Expr.Try(_, _, tr): readCall(tr.X!) if tr.X != null else -1
         case typed.Expr.Seq(_, _, q): readCall(q.X!) if q.X != null and q.Stmts.Len() == 0 else -1
-        case typed.Expr.Prim(_, _, op, _, args): readCall(args[0]) if isConversion(op, args) else -1
+        case typed.Expr.Prim(_, _, op, _, args): readCall(args[0]) if isConversion(op, args) or isLen(op, args) else -1
+        # (a slice of it only read, `$v[i].name[0:8]` - lowering's readHere)
+        case typed.Expr.Slice(_, _, sl): readPlaceCall(sl.Base)
         case _: -1
     }
 }
+
+# a Len the compiler supplies, of one value: read where it stands, as a conversion is (readCall, lower.readHere)
+fn isLen(op typed.PrimOp, args Array<typed.Expr&>&) Bool { return op == typed.PrimOp.Len and args.Len() == 1 }
 
 fn readPlaceCall(p typed.Lvalue&) I64 {
     return match p {
@@ -9755,8 +9803,8 @@ fn (f mut Free&) reported(k I64) Bool {
     for st in f.stores {
         if st.PlaceId == k and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove or st.X != null and f.widened(st.X) != null): owns = true
     }
-    # (a constructor's copy made for it, built in one region with other storage, gives it storage of its own all the
-    # same: the gap it keeps for is reported - viewCtor)
+    # (a constructor's copy made for it, or a copy made at a store into a struct held in place, gives it storage of its
+    # own all the same, where no site names it: what it keeps for is reported - viewCtor, copyLeaves)
     if has(f.ctorGaps, k): owns = true
     if not owns: return false
     # (text elements: where the program's own code gives one another value, or drops or ends one moved out of the
