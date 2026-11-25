@@ -17,8 +17,8 @@ Stopped by the Orchestrator's pacing guard; no new items until it restarts this 
 
 ## Queue after it
 1. Per-instance buffer places: partly done (wt-perinst + wt-gap17a merged 156c5266e, verify green on 6bde41539; plan.md lists what stays per declaration). Gap 17a/17b closed.
-2. wt-fnvalbuild (lambda as function value building through a captured field, O29 lookup): done on its branch, merge with goldens recaptured; into the next bulk soundness review with gap17a's keptCtor/keptView.
-3. freeing.md 2.4 leftovers: wt-secondval running (a local given a second value); storage given back to a retired worker's home; (a task's catch default: closed by wt-taskdefault fff70dac1 for one-target spawns whose handler captures only numbers - several targets or storage captures still keep).
+2. wt-fnvalbuild merged a318c63bb; into the next bulk soundness review with gap17a's keptCtor/keptView.
+3. freeing.md 2.4 leftovers: wt-secondval merged d04c93943 (fixed a use-after-free gap17a widened); wt-checkfalse running (a false -memory -check pass, Rec with Vec<String>); storage given back to a retired worker's home; (a task's catch default: closed by wt-taskdefault fff70dac1 for one-target spawns whose handler captures only numbers - several targets or storage captures still keep).
 4. A full verify after the next big merge.
 
 ## Notes
