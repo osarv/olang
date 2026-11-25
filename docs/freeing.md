@@ -1172,8 +1172,7 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   let-go only where the let-go's text names the root or a second name; an owner's slot place no anchor of its type is at
   keeps no more. growkept 90.6 MB -> 1.6 MB, viewother (new: a reference, a View() and a for-in's walk of one Vec across
   another's growth, an element given another and a local pushed to) 79 MB -> 1.6 MB, gaps17b 185 MB -> 1.9 MB, at
-  200,000 turns - all three now `limited` (under 8 MB); viewself (new) keeps, named. The compiler's self-build: 521 of
-  its 1149 places with let-goes sole (master 516 of 1144 - the same places, the new code's aside): its views are of
-  receivers' fields and parameters, judged per declaration still; peak 2722 MB (2715), the free pass's final walk 959 ms
-  (1065). **Where to pick up**: a root that is a parameter or a field - contained where every caller's argument is, an
+  200,000 turns - all three now `limited` (under 8 MB); viewself (new) keeps, named. The compiler's self-build frees
+  552 of its 1016 places at once (master's compiler on the same source 551): its views are of receivers' fields and
+  parameters, judged per declaration still; peak 2721 MB (2715), the free pass's final walk 959 ms (1065). **Where to pick up**: a root that is a parameter or a field - contained where every caller's argument is, an
   interprocedural judgement - and direction (a)'s pin for a view across its own value's let-go.

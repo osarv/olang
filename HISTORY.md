@@ -43421,9 +43421,9 @@ a word per instance, which field scopes option B was built to avoid; it stays pe
 
 Checks: freeing growkept and viewother (flat at 200,000 turns under 8 MB: 90.6 and 79 MB on master), gaps17b (moved to
 `limited`, 185 MB to 1.9 MB), viewself (keeps, named); each built, `-free late`, `-sanitize` and interpreted, agreeing.
-The compiler's own build gains nothing yet: 521 of its 1149 places with let-goes sole (master 516 of 1144, the same
-places but the new code's) - its views are of receivers' fields and parameters (`for x in g.fields` across
-`g.fieldType(t)`), which a root by local does not reach; peak 2722 MB (2715), the free pass's final walk 959 ms (1065).
+The compiler's own build gains one place: it frees 552 of its 1016 places at once (master's compiler on the same source
+551) - its views are of receivers' fields and parameters (`for x in g.fields` across `g.fieldType(t)`), which a root by
+local does not reach; peak 2721 MB (2715), the free pass's final walk 959 ms (1065).
 A local given values no text shows (a binding, a destructured part) that could be written through makes every root of
 its body uncontained. Where to pick up: a parameter or field as a root - contained where every caller's argument is,
 an interprocedural judgement - and direction (a)'s pin.
