@@ -3087,8 +3087,7 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     k := w.F.placeOfPlace(p)
     # (a struct held in place given another value, `o.inner = q`: its own leaves are the store's targets - let go of
     # and given the value's (copyInto) - no value of theirs changed in place)
-    ro := w.reach(p)
-    if k < 0 and p != typed.Lvalue.Local: ro = w.notLeaves(ro, p.Type())
+    ro := w.notLeaves(w.reach(p), p.Type()) if k < 0 and p != typed.Lvalue.Local else w.reach(p)
     w.inOwner(ro, k, sp, "a store into it")
     if w.Final: w.orStoreOf(p, x)
     w.storeWithin = w.withinOf(p)
