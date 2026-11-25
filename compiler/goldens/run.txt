@@ -1504,6 +1504,7 @@
 | ok - a part stored through a parameter outlives the call
 | ok - a clone of an array is its own, its elements' parts too
 | ok - a walk of a Vec reads elements in place only where nothing can write them
+| ok - a walk's name and a match binding grown leave the element and the payload as they were
 | ok - a value stored into a part of x[i] in a loop lives where the collection does
 | ok - a struct of texts pushed with a joined text built in the call
 | ok - a fill whose item holds a reference to text it makes keeps that text where the fill goes
