@@ -1,0 +1,48 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4): a local given a call's value and then another each turn, stored into an element - a
+# Vec<String> declared outside the loop or given its second value on a condition, and a struct holding text built by
+# its constructor in the callee, handed back directly or through a local. Each is an owner local of the free pass: the
+# assignment lets go of its old value, the store copies it into the element, whose let-go frees the copy. Before, the
+# struct's text was built in a part region its callee's settle closed (a use after free, its storage kept besides)
+N I64 = 20000
+
+type Rec struct(name String, n I64) {
+    name
+    n
+}
+
+fn build(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push("t" + $(i + k) + " padded out to some length")
+    return v
+}
+
+fn Rec.Make(i I64) Rec { return Rec("r" + $i + " padded out to some length, and then some more of it ........", i) }
+
+fn Rec.Named(i I64) Rec {
+    r := Rec("s" + $i + " padded out to some length, and then some more of it ........", i)
+    return r
+}
+
+fn main() {
+    kept := Array<Vec<String>>(4)
+    held := Array<Vec<String>>(4)
+    recs Vec<Rec>
+    for k in range 4: recs.Push(Rec.Make(k))
+    t := 0
+    r := build(0)
+    q := Rec.Make(0)
+    for i in range N {
+        r = build(i)
+        kept[i % 4] = r
+        c := build(1)
+        if i % 2 == 0: c = build(i + 2)
+        held[i % 4] = c
+        q = Rec.Make(i)
+        if i % 3 == 0: q = Rec.Named(i + 1)
+        recs[i % 4] = q
+        t += kept[(i + 3) % 4].Len() + held[(i + 1) % 4].Len() + recs[(i + 1) % 4].n + q.name.Len()
+    }
+    io.PutLn($t + " " + kept[2][1] + " " + held[3][0] + " " + recs[1].name)!
+}

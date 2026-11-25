@@ -146,6 +146,49 @@ fn textsSum(n I64) I64 {
     return s
 }
 
+# a local given a call's value and another each turn, then stored into an element (O8f, docs/freeing.md 2.4): its old
+# value let go of at each assignment, the store a copy - a Vec of text, and a struct holding text its constructor built
+# in the callee (handed back directly or through a local), whose text a settle closed before
+type Named struct(name String, n I64) {
+    name
+    n
+}
+
+fn Named.Of(i I64) Named { return Named("n" + $i + "-name", i) }
+
+fn Named.Via(i I64) Named {
+    r := Named("v" + $i + "-name", i)
+    return r
+}
+
+fn words(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push("w" + $(i + k))
+    return v
+}
+
+fn secondValues(n I64) I64 {
+    kept := Array<Vec<String>>(4)
+    recs Vec<Named>
+    for k in range 4: recs.Push(Named.Of(k))
+    r := words(0)
+    q := Named.Of(0)
+    for i in range n {
+        r = words(i)
+        kept[i % 4] = r
+        q = Named.Of(i)
+        if i % 3 == 0: q = Named.Via(i + 1)
+        recs[i % 4] = q
+    }
+    churn()
+    s := 0
+    for v in kept {
+        for w in v: s += w.Len()
+    }
+    for x in recs: s += x.name.Len() * 100 + x.n + (1000000 if x.name[0] == 'v' else 0)
+    return s + q.name.Len()
+}
+
 fn everyTurnSum(n I64) I64 {
     hs := everyTurn(n)
     churn()
@@ -228,11 +271,15 @@ fn caseLocalsSum() I64 {
     return caseLocals(W(2, t), true) + caseLocals(W(3, t), false)
 }
 
+test secondValues "lets go of a local's old value and copies its new one into an element" {
+    assert secondValues(10) == 2002967
+}
+
 test caseLocals "gives locals an enum case holding a parameter's reference" {
-    assert caseLocalsSum() == 15253
+    assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
 }
 
 # the same, computed while compiling
 assert everyTurnSum(5) == 105 and someTurnsSum(7) == 96 and vecs(4) == 10606 and arrays(3) == 603
 assert nested(3) == 312 and reassigned(3) == 3030 and rows(4) == 2404 and textsSum(4) == 104
-assert caseLocalsSum() == 15253
+assert caseLocalsSum() == 15253 and secondValues(10) == 2002967
