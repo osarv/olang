@@ -5830,20 +5830,6 @@ s3joinnextline.olang:6:9: error[L18]: a line cannot begin with '+'
 s3joinnextline.olang:6:9: note: the line before ended its statement
 s3joinnextline.olang:6:9: help: end that line with '+', or put the expression in parentheses
 compilation failed with 1 error
-=== s4fdefinefresh.olang
-s4fdefinefresh.olang:4:10: error[S4f]: ':~' declares a reference to storage that exists, and '3' is a new value
-    4 |     r :~ 3
-      |          ^
-s4fdefinefresh.olang:4:10: note: a new value linked with '~' is built where the reference is held
-s4fdefinefresh.olang:4:10: help: write ':=' to declare it a value of its own
-compilation failed with 1 error
-=== s4flinkfresh.olang
-s4flinkfresh.olang:7:10: error[S4f]: ':~' declares a reference to storage that exists, and 'Node(2)' is a new value
-    7 |     r :~ Node(2)
-      |          ^~~~~~~
-s4flinkfresh.olang:7:10: note: a new value linked with '~' is built where the reference is held
-s4flinkfresh.olang:7:10: help: write ':=' to declare it a value of its own
-compilation failed with 1 error
 === s4flinkvalue.olang
 s4flinkvalue.olang:6:7: error[S4f]: '~' links a reference, and 'x' holds a value (I64)
     6 |     x ~ y

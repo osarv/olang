@@ -148,3 +148,36 @@ test "a write through a reference into a list, read back after an arena churn" {
     }
     assert h.next!.v == 7 and h.next!.next!.v == 8
 }
+
+# ":~" of a new value (S4f): the value held as "r := x" would hold it, in the declaring block, and r a writable
+# reference to it - it outlives an arena churn and is ended once as its block closes
+fn freshLinks() I64 {
+    r :~ Node(2, null)
+    k :~ 3
+    r.v += k
+    k = 4
+    return r.v * 10 + k
+}
+
+Fresh I64 = freshLinks()
+
+assert freshLinks() == 54
+
+test "':~' of a new value declares a reference to it, held in the block - at run time and while compiling" {
+    assert freshLinks() == 54 and Fresh == 54
+    c :~ Cell(1, Cell(2, null))
+    for i in range 1000 {
+        junk := Cell(i, Cell(i, null))
+        assert junk.next!.v == i
+    }
+    assert c.v == 1 and c.next!.v == 2
+}
+
+test "':~' of a new value with a destructor ends it once, as its block closes" {
+    log := Log()
+    if log.seen.Len() == 0 {
+        r :~ Res(7, log)
+        assert r.id == 7 and log.seen.Len() == 0
+    }
+    assert log.seen.Len() == 1 and log.seen[0] == 7
+}

@@ -20386,12 +20386,9 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
 }
 
 # S4f: what "r :~ x" links r to - x a reference, or the storage x names borrowed, writable where x may be written; a
-# new value (a literal, a constructor's call, a call giving a value) is no storage to link to
+# new value (a literal, a constructor's call, a call giving a value) is held by a hidden local of the declaring block,
+# as "r := x" would hold it, and r links to that - writable
 fn (c mut Checker&) linkTo(value ast.Expr&) typed.Expr& {
-    if c.freshWritten(value) {
-        c.err(value.Span(), msgs.LinkFresh(c.src(value.Span())))
-        return c.expr(value, types.UnknownT)
-    }
     x :~ c.expr(value, types.UnknownT)
     t := typeOf(x)
     if t == types.NullT {
@@ -20400,12 +20397,26 @@ fn (c mut Checker&) linkTo(value ast.Expr&) typed.Expr& {
     }
     if t == types.UnknownT or c.isRef(t) or c.P.T.KindOf(t) == types.Kind.Func or c.typeArg(t): return x
     p :~ readPlace(x)
-    if p is null {
-        c.err(value.Span(), msgs.LinkFresh(c.src(value.Span())))
-        return x
-    }
+    if p is null or c.freshWritten(value): return c.linkFresh(value, x)
     perm := types.Writable if c.linkWritable(p) else types.ReadOnly
     return c.fit(x, c.P.T.Ref(t, perm), value.Span())
+}
+
+# S4f: "r :~ x" of a new value - x held by a hidden local of the declaring block, built and ended as "r := x" would be,
+# and r a writable reference to it
+fn (c mut Checker&) linkFresh(value ast.Expr&, x typed.Expr&) typed.Expr& {
+    sp := value.Span()
+    v :~ x
+    t := c.inferred(value, x, true)
+    hv :~ heldValue(x)
+    if hv is not null and c.needsDrop(typeOf(hv)) {
+        v ~ hv
+        t = typeOf(hv)
+    }
+    if c.P.T.KindOf(t) == types.Kind.Array and not c.P.T.Same(t, typeOf(v)): v ~ c.fit(v, t, sp)
+    h := c.hidden(sp, t)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), v))
+    return c.fit(c.readLocal(sp, h), c.P.T.Ref(t, types.Writable), sp)
 }
 
 # whether a place ":~" links to may be written through the reference (S4f): a local of the body's own, a "mut"

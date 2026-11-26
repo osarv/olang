@@ -1,6 +1,7 @@
-# check: fail error[S4f]: ':~' declares a reference to storage that exists, and '3' is a new value
-# S4f: ":~" declares a reference to storage that exists; a literal has none
+# check: run
+# S4f: ":~" of a new value declares a reference to it, the value held in the declaring block as ":=" would hold it
 fn main() {
     r :~ 3
-    assert r == 3
+    r = 4
+    assert r == 4
 }

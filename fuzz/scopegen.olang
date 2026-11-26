@@ -434,6 +434,9 @@ fn (g mut SG&) newNode() String& {
     return "Node(" + $v + ")"
 }
 
+# a new node's declaration: a value, or a reference to it held in the block (S4f)
+fn (g mut SG&) declOp() String& { return " :~ " if g.chance(50) else " := " }
+
 # a statement storing a new node through the node a (a writable reference)
 fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
     if g.chance(8): return g.scopeArgNode(a, ind)
@@ -447,7 +450,7 @@ fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
     if k == 3: return $ind + "link(" + $a + ", " + $g.newNode() + ")\n"
     if k == 4 {    # made in a block of its own and stored outward: refused unless it lives where a does
         q :~ g.name("q")
-        return $ind + "{\n" + $ind + "    " + $q + " := " + $g.newNode() + "\n" + $ind + "    " + $a + ".next ~ " + $q + "\n" + $ind + "}\n"
+        return $ind + "{\n" + $ind + "    " + $q + g.declOp() + $g.newNode() + "\n" + $ind + "    " + $a + ".next ~ " + $q + "\n" + $ind + "}\n"
     }
     if k == 5 {    # a lambda capturing a reference to the node builds through it
         h :~ g.name("h")
@@ -476,7 +479,7 @@ fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
     }
     if k == 12 {    # a node made where a churn runs between its making and its storing
         q :~ g.name("q")
-        return $ind + $q + " := " + $g.newNode() + "\n" + $ind + "churn()\n" + $ind + $a + ".next ~ " + $q + "\n"
+        return $ind + $q + g.declOp() + $g.newNode() + "\n" + $ind + "churn()\n" + $ind + $a + ".next ~ " + $q + "\n"
     }
     return $ind + $a + ".next ~ " + $g.newNode() + "\n"
 }
@@ -661,7 +664,7 @@ fn (g mut SG&) listOp(l String&, ind String&) String& {
     v := g.val()
     if k == 1 {
         q :~ g.name("q")
-        return $ind + "{\n" + $ind + "    " + $q + " := " + $g.newNode() + "\n" + $ind + "    " + $l + ".Push(" + $q + ")\n" + $ind + "}\n"
+        return $ind + "{\n" + $ind + "    " + $q + g.declOp() + $g.newNode() + "\n" + $ind + "    " + $l + ".Push(" + $q + ")\n" + $ind + "}\n"
     }
     if k == 2 {
         i :~ g.name("i")
@@ -679,7 +682,7 @@ fn (g mut SG&) listOp(l String&, ind String&) String& {
     }
     if k == 7 {    # a node made here, a churn, then pushed
         q :~ g.name("q")
-        return $ind + $q + " := " + $g.newNode() + "\n" + $ind + "churn()\n" + $ind + $l + ".Push(" + $q + ")\n"
+        return $ind + $q + g.declOp() + $g.newNode() + "\n" + $ind + "churn()\n" + $ind + $l + ".Push(" + $q + ")\n"
     }
     return $ind + $l + ".Push(" + $g.newNode() + ")\n"
 }
@@ -724,7 +727,7 @@ fn (g mut SG&) mapOp(m String&, ind String&) String& {
     v := g.val()
     if k == 1 {
         q :~ g.name("q")
-        return $ind + "{\n" + $ind + "    " + $q + " := " + $g.newNode() + "\n" + $ind + "    " + $m + ".Put(" + $key + ", " + $q + ")\n" + $ind + "}\n"
+        return $ind + "{\n" + $ind + "    " + $q + g.declOp() + $g.newNode() + "\n" + $ind + "    " + $m + ".Put(" + $key + ", " + $q + ")\n" + $ind + "}\n"
     }
     if k == 2 {
         i :~ g.name("i")
@@ -750,7 +753,7 @@ fn (g mut SG&) arrOp(a String&, ind String&, d I64) String& {
     v := g.val()
     if k == 1 {
         q :~ g.name("q")
-        return $ind + "{\n" + $ind + "    " + $q + " := " + $g.newNode() + "\n" + $ind + "    " + $a + "[" + $at + "] ~ " + $q + "\n" + $ind + "}\n"
+        return $ind + "{\n" + $ind + "    " + $q + g.declOp() + $g.newNode() + "\n" + $ind + "    " + $a + "[" + $at + "] ~ " + $q + "\n" + $ind + "}\n"
     }
     if k == 2 {
         i :~ g.name("i")
