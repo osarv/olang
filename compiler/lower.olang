@@ -5983,7 +5983,7 @@ fn (ln mut lowering&) pushedInto(c typed.Call&, body I64, a typed.Expr&) I64 {
     if not ln.freeing or body < 0 or c.Args.Len() != 2 or not ln.preludePush(body): return -1
     l := lentLocal(c.Args[0])
     x := pushedCall(a)
-    if l < 0 or x == null or x.Site < typed.SiteId(0): return -1
+    if l < 0 or x == null or x.Site < typed.SiteId(0) or not ln.L.Free!.ResBuilds(typed.CalleeBody(x)): return -1
     u := typed.LocalUses.Uses(ln.T, ln.B)
     if u.Whole[l] or u.WrOther[l] or u.EscHard[l]: return -1
     for j in range u.AliasOf.Len() {
