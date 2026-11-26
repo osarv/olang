@@ -133,14 +133,14 @@ if TargetOs == "windows" {
         out := Array<CVoid?&>(1)
         rc := getaddrinfo(host.ToC(), "0".ToC(), hints, out)
         if rc != 0: try lookupFailed(rc, host)
-        head := out[0]
+        head :~ out[0]
         ips := Vec<IP>()
-        p := head
+        p :~ head
         for p is not null {
             f := winAddrinfo()
             cstring.memcpy(f, p, 48)
             if f.addr is not null and (f.family == afInet or f.family == afInet6): addOnce(ips, f.addr, f.addrlen)
-            p = f.next
+            p ~ f.next
         }
         if head is not null: freeaddrinfo(head)
         return ips.ToArray()

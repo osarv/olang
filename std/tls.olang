@@ -346,7 +346,7 @@ if TargetOs == "windows" {
     # argument's address); the array is an extern call's argument, so it is kept (docs/memory.md, 2.6)
     fn addressOf(a mut Array<U8>&) U64 {
         p := Array<CVoid?&>(1)
-        p[0] = cstring.memcpy(a, a, 0)
+        p[0] ~ cstring.memcpy(a, a, 0)
         v := Array<U64>(1)
         cstring.memcpy(v, p, 8)
         return v[0]
@@ -494,7 +494,7 @@ if TargetOs == "windows" {
             st = InitializeSecurityContextA(c.cred, prev, c.target, iscFlags, 0, 0, inDesc, 0, c.ctx, outDesc, attrs
                 expiry)
         }
-        token := pointerAt(outBufs, 8)
+        token :~ pointerAt(outBufs, 8)
         if token is not null {
             out := bytesAt(token, I64(u32At(outBufs, 0)))
             FreeContextBuffer(token)
@@ -538,7 +538,7 @@ if TargetOs == "windows" {
     }
 
     fn (c Conn&) peerDigest() Array<U8> {
-        cert := c.peerCert()
+        cert :~ c.peerCert()
         if cert is null: return Array<U8>(0)
         der := derOf(cert)
         CertFreeCertificateContext(cert)
@@ -552,7 +552,7 @@ if TargetOs == "windows" {
             if not sameDigest(c.peerDigest(), pin): error Error.Pin
             return
         }
-        cert := c.peerCert()
+        cert :~ c.peerCert()
         if cert is null: error Error.Verify("no certificate")
         defer: CertFreeCertificateContext(cert)
         why := try verifyChain(cert, host, ca)
@@ -586,7 +586,7 @@ if TargetOs == "windows" {
         simple := bytesAt(pointerAt(bytesAt(pointerAt(context, 16), 8), 0), 24)
         n := I64(u32At(simple, 12))                             # CERT_SIMPLE_CHAIN: cElement, rgpElement
         if n == 0: return Array<U8>(0)
-        last := pointerAt(bytesAt(pointerAt(simple, 16), 8 * n), 8 * (n - 1))
+        last :~ pointerAt(bytesAt(pointerAt(simple, 16), 8 * n), 8 * (n - 1))
         return derOf(pointerAt(bytesAt(last, 16), 8))           # CERT_CHAIN_ELEMENT: pCertContext
     }
 
@@ -595,17 +595,17 @@ if TargetOs == "windows" {
     # named, the chain must end at one of its certificates, and the system's roots do not count
     fn verifyChain(cert CVoid?&, host String&, ca String&) String ? Error {
         anchors := try anchorsIn(ca)
-        store := CertOpenStore(2, 0, 0, 0, null)                # CERT_STORE_PROV_MEMORY
+        store :~ CertOpenStore(2, 0, 0, 0, null)                # CERT_STORE_PROV_MEMORY
         if store is null: error Error.Failed
         defer: CertCloseStore(store, 0)
-        sent := pointerAt(bytesAt(cert, 40), 32)                # the store of what the server sent
-        e := CertEnumCertificatesInStore(sent, null)
+        sent :~ pointerAt(bytesAt(cert, 40), 32)                # the store of what the server sent
+        e :~ CertEnumCertificatesInStore(sent, null)
         for e is not null {
             CertAddCertificateContextToStore(store, e, 4, null)     # CERT_STORE_ADD_ALWAYS
-            e = CertEnumCertificatesInStore(sent, e)
+            e ~ CertEnumCertificatesInStore(sent, e)
         }
         for der in anchors {
-            x := CertCreateCertificateContext(0x10001, der, U32(der.Len()))   # X509_ASN_ENCODING | PKCS_7_ASN_ENCODING
+            x :~ CertCreateCertificateContext(0x10001, der, U32(der.Len()))   # X509_ASN_ENCODING | PKCS_7_ASN_ENCODING
             if x is null: error Error.Failed
             CertAddCertificateContextToStore(store, x, 4, null)
             CertFreeCertificateContext(x)
@@ -614,7 +614,7 @@ if TargetOs == "windows" {
         putU32(para, 0, 24)
         out := Array<CVoid?&>(1)
         if CertGetCertificateChain(null, cert, null, store, para, 0, null, out) == 0: error Error.Failed
-        chain := out[0]
+        chain :~ out[0]
         defer: CertFreeCertificateChain(chain)
         if ca != "" and rootOf(chain) not in anchors: return "unable to get local issuer certificate"
         return policy(chain, host, ca != "")
@@ -665,7 +665,7 @@ if TargetOs == "windows" {
         attrs := Array<U32>(1)
         expiry := Array<I64>(1)
         InitializeSecurityContextA(cred, ctx, "".ToC(), iscFlags, 0, 0, null, 0, next, outDesc, attrs, expiry)
-        sent := pointerAt(outBufs, 8)
+        sent :~ pointerAt(outBufs, 8)
         if sent is null: return
         out := bytesAt(sent, I64(u32At(outBufs, 0)))
         FreeContextBuffer(sent)
