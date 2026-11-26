@@ -135,4 +135,6 @@ larger change, open an issue first so the design can be discussed before the cod
 
 ## Licence
 
-olang is licensed under the MIT licence; see [LICENSE](LICENSE).
+olang is licensed under either of the MIT licence ([LICENSE-MIT](LICENSE-MIT)) or the Apache License, Version 2.0
+([LICENSE-APACHE](LICENSE-APACHE)), at your option. Unless you state otherwise, a contribution you submit for
+inclusion in olang is licensed under both, without any additional terms or conditions.
