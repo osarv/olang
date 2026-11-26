@@ -636,7 +636,8 @@ fn freeing(r mut report&) ? Failed {
     # references live (O25h); deferends: heldrefs' local letting go of its leaves at its turn's end beside a defer that
     # does not name it;
     # closurekept: a closure a call makes each turn, capturing its by-value Vec of
-    # text, read in the turn only - built there; fillwalk: run-time fills of structs holding a Vec of text, their elements
+    # text, read in the turn only - built there - and given on some turns to a function value local declared before the
+    # loop - built in a region of its own handed to that local (lower.handMake); fillwalk: run-time fills of structs holding a Vec of text, their elements
     # given new values each turn and walked - the fill's text built in slots by the Vec's Copy helper)
     limited := Array<String&>["append", "global", "arrays", "fields", "elements", "mapvalues", "unset", "vecelems", "mapcopy"
                               "returned", "vectexts", "vecvecs", "mapelems", "views", "copytext", "ownerelems", "soleelems"
@@ -682,7 +683,7 @@ fn freeing(r mut report&) ? Failed {
                     "600000 v19993 padded out to some length\n828894 n20000 padded out to some length v19995 padded out\n"
                     "1017784 200 m19998 19999 g20\n204760008 1599980000\n", "605249995 1400916663\n", "604230000 401059998 1400916663\n"
                     "12200000 s1 s6\n", "40019800000 200000 s200001 7799961\n"
-                    "4120000 103\n"
+                    "6180000 103 103\n"
                     "22397780 r0.................................................................................................. n19999 19999 n0------------------------------------------------------------------------------\n"]
     part := Array<String&>["490 490 148890\n", "490\n", "220494\n", "490 490 200 200\n", "name 193 value 193\n"
                     "1 10 value 193 padded out to some length .........................\n", "199 200\n", "59800 100 100\n", "59800 7\n"
@@ -711,7 +712,7 @@ fn freeing(r mut report&) ? Failed {
                     "6000 v193 padded out to some length\n7892 n200 padded out to some length v195 padded out\n"
                     "9382 200 m198.. 199 g200 \n67608 159800\n", "112495 149163\n", "102300 50598 149163\n", "12200 s1 s6\n"
                     "59800 200 s201... 7761\n"
-                    "41200 103\n"
+                    "61800 103 103\n"
                     "223180 r0.................................................................................................. n199 199 n0------------------------------------------------------------------------------\n"]
     for i in range limited.Len() {
         p := limited[i]
@@ -722,10 +723,10 @@ fn freeing(r mut report&) ? Failed {
         try r.expect(outOf(dir) == part[i], $p + " interpreted output", dir)
         try late(r, dir, p, "200", part[i])
     }
-    # (closurekept, review 1125b's fnvalgrow: with a call's closure kept on some turns in a function value local declared
-    # before the loop, every turn's is built where that local lives - -check names the call; the oracles agree)
-    try r.expect(sh(dir, "\"$OLANG\" build -memory -check -define M=3 closurekept.olang > out.txt 2>&1") != 0 and outOf(dir).Contains("closurekept.olang:31:18: the closure a call makes keeps until its scope closes"), "closurekept M=3 -memory -check names the kept closure", dir)
-    try late(r, dir, "closurekept", "200 -define M=3", "61800 103\n")
+    # (closurekept with M=4: such a local also given to a call, `apply(e)`, which is not followed there - every turn's
+    # closure is built where that local lives: -check names the call; the oracles agree)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -check -define M=4 closurekept.olang > out.txt 2>&1") != 0 and outOf(dir).Contains("closurekept.olang:40:18: the closure a call makes keeps until its scope closes"), "closurekept M=4 -memory -check names the kept closure", dir)
+    try late(r, dir, "closurekept", "200 -define M=4", "20600 103 103\n")
     # (fillwalk with M=15: a fill's text field given a value not all new keeps - -check names it, the oracles agree)
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check -define M=15 fillwalk.olang > out.txt 2>&1") == 0 and outOf(dir).Contains("fillwalk.olang:62:13: memory: 'padded[k]' keeps what it lets go of"), "fillwalk M=15 -memory -check names the text field", dir)
     try late(r, dir, "fillwalk", "200 -define M=15", "271180 r0.................................................................................................. n199 199 n0------------------------------------------------------------------------------\n")

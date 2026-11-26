@@ -1,13 +1,14 @@
 import "std/io"
 
-# O8f, B18a (review 1125b's fnvalgrow): a closure a call makes - `closer(a)`, a lambda capturing its by-value Vec of
-# text, its environment built in the call's result scope - made every turn. Read in the turn only (1), it is built
-# there and goes with the turn; given, on some turns, to a function value local declared before the loop (2), every
-# turn's closure is built where that local lives, the function's scope - a function value is no place, and its
-# environment cannot be copied out on the turns it is kept (docs/freeing.md 2.4) - and -memory -check names the call
-# (lower.closureKept) where it passed before, ~2 KB a turn kept
+# O8f, B18a (review 1125b's fnvalgrow, docs/freeing.md 2.4): a closure a call makes - `closer(a)`, a lambda capturing its
+# by-value Vec of text, its environment built in the call's result scope - made every turn. Read in the turn only (1),
+# it is built there and goes with the turn. Given, on some turns, to a function value local declared before the loop
+# (2), each run of the call builds it in a region of its own (lower.handMake), handed to that local on the turns it is
+# stored - the one the local held released - and released at the next run of the call on the others: flat. Where such
+# a local is also given to a call (4, `apply(e)`), what that call does with it is not followed here: every turn's
+# closure is built where the local lives and -memory -check names the call (lower.closureKept), ~2 KB a turn kept
 N I64 = 20000
-M I64 = 1
+M I64 = 3
 
 fn mkA(i I64) Vec<String> {
     v Vec<String>
@@ -19,8 +20,11 @@ fn closer(v Vec<String>) fn&() I64 {
     return fn() I64 { return v[0].Len() + v.Len() }
 }
 
+fn apply(h fn&() I64) I64 { return h() }
+
 fn main() {
     f := closer(mkA(0))
+    e := closer(mkA(0))
     t := 0
     for i in range N {
         if M % 2 == 1 {
@@ -32,6 +36,11 @@ fn main() {
             if i % 7 == 3: f = h
             t += h()
         }
+        if M / 4 % 2 == 1 {
+            k := closer(mkA(i + 2))
+            if i % 7 == 3: e = k
+            t += apply(e)
+        }
     }
-    io.PutLn($t + " " + $f())!
+    io.PutLn($t + " " + $f() + " " + $e())!
 }
