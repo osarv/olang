@@ -613,21 +613,32 @@ to grow into them, (c) a hand-off at the join. (c) is built:
   taskCaptures.
 - **A closure a call makes, kept on some turns** (fnvalgrow: `g := closer(a); if i % 7 == 3: f = g` with `f` a function
   value local declared before the loop - 40 MB at 20,000 turns). `g` may be `f`'s value, so the call's result scope is
-  `f`'s (reference locals per assignment) and every turn's closure - the callee's copy of `a` - is built there. Lowering
-  now names it (`lower.closureKept`, a B18a turn row: a call to a function whose every return is a lambda capturing
-  something, `free.ClosureResult`, given a result scope outside the loop's turn) and `-check` fails; a closure read in
-  the turn only is built there, flat (checks' freeing closurekept, `M=3` for the named shape). The same shape for a
-  lambda written in the loop (`g := fn() ...`) was already named, as an O27 placement of what it captured. **Open, a
-  design decision** - building the closure in the turn and keeping it only on the turns it is stored needs either:
-  (a) a copy of a closure's environment where it is stored - a third word in every function value (its environment's
-  copy routine) and a copy no one wrote, against "copies are written"; (b) per-value regions for a function value
-  local - each closure a call makes built in a region of its own made at the call, released at the turn's end unless
-  the local it is stored into takes it, that local releasing its old one as it is given another (an owner local's held
-  region, P1g's handover, for a reference local), a region per closure made and a handle per such local, nothing
-  visible; (c) leave it named. Recommendation: (b) - it frees where the program lets go, at a cost the closure's own
-  allocation already pays, and it is the reference-local twin of what owner locals have; a section-8 round (the same
-  handover would close a reference a call hands back of storage it builds, stored on some turns - `r := wrap(a); if c:
-  f = r`, wt-revfix1's rows).
+  `f`'s (reference locals per assignment) and every turn's closure - the callee's copy of `a` - was built there.
+  **Closed for function value locals (wt-fnregion, option (b))**: each run of the call builds into a region of its own,
+  a kid of `f`'s block's scope, made at the call (a cost per construction, which the closure's own allocation already
+  pays); the region is handed to `f` on the turns `f = g` runs - `f` releasing the one it held - and released at the
+  call's next run on the others (`lower.handsPlan`, `handMake`, `handCall`, `handCopy`, `handOver`; `mir.Stmt.Drop`).
+  Two handles, zero at `f`'s declaration. Where it applies: `g` declared by a call to a function handing back only
+  closures it makes (free.ClosureResult) whose relations hold its result scope to outlive nothing (`scope.ResultOwn`);
+  `g` read only to call through and to give one `f`; `f` given nothing else and read only to call through; calls through
+  either taking and handing back nothing holding a reference (`handSig`); no task, join or suspension in the body; the
+  plan's result scope `f`'s block's. Every argument builds into the region or nothing: a constant or a place read as it
+  is, or, for a by-value parameter its callee's relations keep nowhere but where the result lives (`scope.KeptInResult`,
+  a capture), a copy, a local declared by a call in `g`'s block and mentioned only there (moved at its last use - the
+  region is then made at that local's call, `handEarly`), or a call whose result scope is its own given plain values;
+  the callee's scope variable for such a parameter is passed the region too. Anything else - the local lent, returned,
+  stored in a global or a collection, captured, given to a task; an argument built deeper - leaves the call as it was,
+  named by `lower.closureKept`. fnvalgrow and xmod/l1xmod (the closure from another module: the callee's relations are
+  its facts) flat at 12.9 MB at 20,000 and 200,000 turns, `-check` passing; built, `-free late`, `-sanitize`, the
+  evaluator agree, and `-race` where a task is given the local (which keeps it named). checks' freeing closurekept
+  (`limited`, flat; `M=4` names the local lent to a call), kept's closuresKept.
+  **Not closed by it: a call building what the reference it hands back names** (builtref, the entry above): the
+  handover follows a function value local, whose let-go is its own assignment and whose every use the walk sees. There
+  the reference is a field of a struct a local holds (`o.inner.r`), let go of when `o.inner` or `o` is given another
+  value, and read wherever `o` or `o.inner` is read whole (a copy of `P` shares the reference): a region per such place
+  needs a handle per field path and a use walk over every read of the struct that may copy the reference - the per-place
+  work of docs/fieldscopes.md and O23b, not a lowering of locals. Left named (`lower.builtResult`); its option (a) stays
+  the recommendation, as a round of its own.
 - **A fill of a struct holding a Vec of text** (wt-walkref's finding: `rows := Array<Row>(2, Row(mk(0), 0))`, elements
   given new values and walked - `-check` failed; 52 MB at 200,000 turns with the array declared before the loop). The
   fill's copy of `Row.v` (lower.fillCopy's ownerField) goes through the Vec's Copy helper, which builds the buffer's
@@ -1477,6 +1488,13 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   after its turn) and fix.olang:334 are waste; fix.olang:181 (`parts.Push(try os.ReadFile(p) ...)`, a `Vec<String&>`)
   keeps what it builds on purpose - the row names storage still in use too, so `-check` would fail on such a program
   (an over-report, open: telling it apart needs to know the reference is still held).
+- 2026-11-26 (wt-fnregion): **a closure a call makes, in a region of its own** (2.4, option (b)): the region made at
+  the call, handed to the function value local that keeps it, released at the next call otherwise (`lower.handMake`,
+  `mir.Stmt.Drop`). fnvalgrow and l1xmod flat (40 MB / 394 MB at 20,000 / 200,000 turns to 12.9 MB), honest under
+  `-check`; a local lent, returned, stored or given to a task stays named (closureKept). builtref is not closed by it (a
+  field path, not a local: 2.4). Every probe of batch1125b and batch1125 agrees across the four oracles, `-check`'s
+  verdicts unchanged but fnvalgrow's. The self-build frees 562 of its 1024 places at once (master's source: 560 of 1022,
+  as master's compiler); warm peak 2633 MB (master's compiler on master's source 2603, noise ~30).
 - 2026-11-25 (wt-revfix2): review 1125b's -check holes (2.4): a task clause's handler built at its join, or where the
   targets are where its default hands back its capture (taskcapgrow 135 MB to 12.9 MB at 200,000 turns); a call's
   closure built outside the loop's turn for a function value kept there named by `-check` (fnvalgrow; options for

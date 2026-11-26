@@ -1199,7 +1199,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   writing through no parameter and reaching no global, lets go only of what it built (`free.ownGoes`; elemarg).
   A local moved at its last mention into an element may own several parts' arrays (a Map filled by `Put`) where every
   place it holds is sole (`free.MovesLeaves`; mapfill); a local the scope pass built outside a loop's turn for such a
-  move that lowering copies is a B18a gap (`lower.liftedCopy`), as is a call's closure built outside a loop's turn for a function value kept there (`lower.closureKept`; freeing it is 2.4's open design). A Map copy's entries split as Put builds them, an
+  move that lowering copies is a B18a gap (`lower.liftedCopy`), as is a call's closure built outside a loop's turn for a function value kept there (`lower.closureKept`) - but where the local is given only that call's closures and only called through, each run of the call builds into a region of its own handed to the local on the turns it is stored and released otherwise (`lower.handMake`, `mir.Stmt.Drop`; closurekept). A Map copy's entries split as Put builds them, an
   entry's owner value not sole copied by its parts (`lower.regionCopy`; mapcopies, wt-gaps3).
   A view call's value given to a by-value parameter its callee keeps nowhere but in what it hands back
   (`lower.HandsOnly`), the result held by a value local of no reference beyond its parts (`h := giveField(v[j])`): At's
