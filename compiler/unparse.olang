@@ -935,7 +935,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
         case ast.Expr.Binary(_, op, a, b) {
             w.expr(a)
             if op != token.Tok.Colon: w.put(" ")   # a keyed literal's entry is "k: v" (E19)
-            w.put(op.Text())
+            w.put(w.opWritten(op, a, b))
             w.put(" ")
             w.expr(b)
         }
@@ -1098,4 +1098,14 @@ fn startsWithMinus(x ast.Expr&) Bool {
         case ast.Expr.Index(_, a, _): startsWithMinus(a)
         case _: false
     }
+}
+
+# an operator as written: the parser makes "x is null" the tree of "x == null" (E10c), told apart here by the text
+# between the operands
+fn (w writer&) opWritten(op token.Tok, a ast.Expr&, b ast.Expr&) String {
+    if op != token.Tok.EqEq and op != token.Tok.NotEq: return $op.Text()
+    at, end := I64(a.Span().End), I64(b.Span().Start)
+    if at < 0 or end > w.text.Len() or at >= end: return $op.Text()
+    if not w.text[at:end].Contains("is"): return $op.Text()
+    return "is" if op == token.Tok.EqEq else "is not"
 }
