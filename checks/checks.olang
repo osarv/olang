@@ -3753,6 +3753,17 @@ fn fixing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" n.olang > out.txt 2>&1") == 0 and outOf(dir) == "127.0.0.1 127.0.0.1:80 1970 3\n"
                  "the program using std's renamed builders runs", dir)
     try r.expect(sh(dir, "\"$OLANG\" t.olang > out.txt 2>&1") == 0 and outOf(dir) == "bag.Bag(5) 3\n", "code of today runs as before", dir)
+    # S4f, E10d, E10c (2026-11-26): assign_migrate, from the checker's report, writes the links, reference locals,
+    # identity and null tests of old code in today's spellings - the program computes what it did, and a second run
+    # changes nothing
+    os.Run("cp checks/fixtures/assign/old.olang " + $os.Quote(dir) + "/a.olang && cp checks/fixtures/assign/new.want " + $os.Quote(dir) + "/assign.want")
+    am := os.Quote($root() + "/tools/assign_migrate.olang")
+    try r.expect(sh(dir, $"\"$OLANG\" build -output am " + $am + " > out.txt 2>&1 && ./am --olang \"$OLANG\" a.olang > out.txt 2>&1") == 0 and
+                 outOf(dir) == "assign: 3 links, 2 reference locals, 2 identity tests, 3 null tests\n", "assign_migrate's count", dir)
+    try r.expect(sh(dir, "cmp -s a.olang assign.want") == 0, "assign_migrate's result", dir)
+    try r.expect(sh(dir, "\"$OLANG\" a.olang > out.txt 2>&1") == 0 and outOf(dir) == "3 5\n", "the migrated program computes what it did", dir)
+    try r.expect(sh(dir, "./am --olang \"$OLANG\" a.olang > out.txt 2>&1 && cmp -s a.olang assign.want") == 0 and
+                 outOf(dir) == "assign: 0 links, 0 reference locals, 0 identity tests, 0 null tests\n", "assign_migrate a second time", dir)
 }
 
 # B1: the command line is words - a mode, options checked against the modes they apply to, help - and a one-character

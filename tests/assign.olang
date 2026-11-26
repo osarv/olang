@@ -1,0 +1,67 @@
+# S4f, E10d, E10c: "r ~ x" links a reference to storage that exists, "r :~ x" declares one; "a is b" asks whether two
+# references name one object - never calling Eq - and "x is null" is the null test. Baked is computed while compiling
+# (K2) and the top-level assert decided there (S17a), so the evaluator agrees with the run time.
+
+# a type whose Eq compares contents: "is" never calls it
+type Node struct(v I64, next Node?&) {
+    v
+    next
+}
+fn (a Node&) Eq(b Node&) Bool { return a.v == b.v }
+fn (n Node&) Hash() I64 { return n.v }
+
+# a cursor linked along the list
+fn walk(head Node?&) I64 {
+    n I64 = 0
+    at :~ head
+    for at is not null {
+        n += at.v
+        at ~ at.next
+    }
+    return n
+}
+
+fn score() I64 {
+    t I64 = 0
+    list := Node(1, Node(2, Node(3, null)))
+    t += walk(list)
+    a :~ list
+    a.v = 10
+    t += list.v * 10
+    b := Node(10, null)
+    if a == b: t += 1000
+    if a is not b: t += 10000
+    c :~ a
+    if c is a: t += 100000
+    c ~ b
+    if c is b and c is not a: t += 1000000
+    n :~ list.next
+    if n is not null: n ~ n.next
+    if n is not null and n.v == 3 and n.next is null: t += 10000000
+    return t
+}
+
+Baked I64 = score()
+
+assert score() == 11111106
+
+test "'~' and ':~' link, 'is' tests one object, at run time and while compiling" {
+    assert score() == 11111106 and Baked == score()
+}
+
+test "a link through a field and an element, and a reference unlinked with null" {
+    x := Node(1, null)
+    y := Node(2, null)
+    h Node?& = x
+    h ~ y
+    assert h is y and h is not x
+    h ~ null
+    assert h is null
+    m := Node(5, null)
+    m.next ~ y
+    assert m.next is y
+    assert m.next!.v == 2
+    rs := Array<Node?&>(2)
+    rs[1] ~ x
+    assert rs[1] is x and rs[0] is null
+}

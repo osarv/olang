@@ -178,13 +178,14 @@ type Pattern enum {
 # a declaration of names: "x T = v", "x := v", "a, b T = 1, 2", and a constructor's fields - its puns too ("x",
 # "x, y"), which have no type and no value. NameSps gives each name's span, Values one value per name or none
 type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty TypeRef?&, Values Array<Expr&>&
-                    Infer Bool, Field Bool) {
+                    Infer Bool, Field Bool, Link Bool = false) {
     Names
     NameSps
-    Ty         # null for ":=" and for a pun
+    Ty         # null for ":=", ":~" and for a pun
     Values
-    Infer      # ":="
+    Infer      # ":=" or ":~"
     Field      # a constructor's field
+    Link       # ":~" (S4f): a reference local linked to what its value names
 }
 
 # an if: its condition and branches. The diagnostics a branch's parse met are held in its group (diag.Hold), said only

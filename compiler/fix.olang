@@ -12,7 +12,9 @@
 # Not in the table, because they are not idempotent - run on code of today they would damage it - and are for one change
 # only: io_print, io_try and io_fix (M19f: they take the `try` and the `catch` off a call of io.Put and put it back
 # where it was not), precedence_migrate (E5: it reads every `a & b == c` as written for the old precedence) and
-# total_migrate (G4a: it gives every total left to the call the type it was worked in before T.Accumulator).
+# total_migrate (G4a: it gives every total left to the call the type it was worked in before T.Accumulator). And
+# nulltest_migrate (E10c of 2026-11-15: "x is null" made "x == null"), reversed on 2026-11-26 by assign_migrate (S4f,
+# E10d: the null test is "is null" again) - run now, it would undo today's null tests.
 import "std/os"
 import "std/io"
 import "std/filepath"
@@ -34,9 +36,9 @@ ToolNames Array<String&> = Array<String&>["bare_typevars", "perm_mut", "int_lite
     "try_migrate", "as_migrate", "errortype_migrate", "list_vec", "link_migrate", "match_migrate", "question_migrate"
     "unused_migrate", "errorcase_rename", "variadic_migrate", "scopes_migrate", "fnref_migrate", "clone_migrate"
     "textbuild_migrate", "unique_migrate", "builder_migrate", "literal_migrate", "keyword_rename", "destroy_migrate", "io_rename", "oneline_migrate"
-    "nulltest_migrate", "textjoin_migrate", "requires_migrate", "chaninit_migrate", "file_migrate"
-    "putln_rename", "defer_migrate", "attrs_migrate"]
-ToolKinds Array<I64> = Array<I64>[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+    "textjoin_migrate", "requires_migrate", "chaninit_migrate", "file_migrate"
+    "putln_rename", "defer_migrate", "attrs_migrate", "assign_migrate"]
+ToolKinds Array<I64> = Array<I64>[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 2]
 
 fn driven(kind I64) Bool { return kind >= DrivenOpt }
 
@@ -125,7 +127,7 @@ fn ToolsDir(exe String&, std String&) String {
 ToolTriggers Array<String&> = Array<String&>["", "mut", "", "", "olang|flags", "done|fail|abort", "", "math", "Array<", ""
     "is", "Any|All", "", "Builtin", "Error", "checked|Check", "[", "try", "as", "error", "List", "link", "nomatch|=>", ""
     "", "", "Exec|Start|http.|Record", "&", "fn", "Clone", "String", "destruct", "", "[", ToolKeywords, "Destroy", "Print"
-    "{", "is", "\"|$", "[", "Init(", "Open(|Create(|Close(|Reader(|Writer(|Lines(", "Line", "defer", "@"]
+    "{", "\"|$", "[", "Init(", "Open(|Create(|Close(|Reader(|Writer(|Lines(", "Line", "defer", "@", "="]
 
 # keyword_rename's words (L9, one tier)
 ToolKeywords String& = "any|unique|immut|packed|commutes|weak|returns|noalloc|noblock|nospawn|norecurse|noextern|pure|keeps|borrows|noborrow"
@@ -475,7 +477,7 @@ test "the text tools run before the driven ones, each group in the order the cha
         assert t > last
         last = t
     }
-    assert ToolNames[o[0]] == "bare_typevars" and ToolNames[o[o.Len() - 1]] == "unused_migrate"
+    assert ToolNames[o[0]] == "bare_typevars" and ToolNames[o[o.Len() - 1]] == "assign_migrate"
 }
 
 test "a tool's command line has its compiler or std before the files" {
@@ -498,11 +500,12 @@ test "a tool runs only where one of its texts stands, one with none always" {
     texts.Push("import \"std/chan\"\n")
     assert triggered("", texts) and triggered("main|zzz", texts) and triggered("std/chan", texts)
     assert not triggered("Init(", texts) and not triggered("nomatch|=>", texts)
-    k := Array<String&>["destroy_migrate", "chaninit_migrate", "nulltest_migrate"]
+    k := Array<String&>["destroy_migrate", "chaninit_migrate", "assign_migrate"]
     for t in range ToolNames.Len() {
         if ToolNames[t] == k[0]: assert ToolTriggers[t] == "Destroy"
         if ToolNames[t] == k[1]: assert ToolTriggers[t] == "Init("
-        if ToolNames[t] == k[2]: assert ToolTriggers[t] == "is"
+        if ToolNames[t] == k[2]: assert ToolTriggers[t] == "="
+        assert ToolNames[t] != "nulltest_migrate"
     }
 }
 

@@ -1,0 +1,11 @@
+# check: fail error[S4f]: 'Node(2)' is a new value, and a reference links only to storage that exists
+# S4f: a reference links to a variable, a field or what another reference names - never to a value built where it
+# is given
+type Node struct(v I64) { v }
+
+fn main() {
+    a := Node(1)
+    r :~ a
+    r ~ Node(2)
+    assert r.v == 2
+}

@@ -1956,7 +1956,7 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
 # L9a: the keywords a field may be named by
 fn keywordNamesField(k token.Tok) Bool {
     return match k {
-        case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable, token.Tok.In, token.Tok.As, token.Tok.And, token.Tok.Or: true
+        case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable, token.Tok.In, token.Tok.Is, token.Tok.As, token.Tok.And, token.Tok.Or: true
         case token.Tok.Xor, token.Tok.Range, token.Tok.Case, token.Tok.Type, token.Tok.Struct: true
         case token.Tok.Enum, token.Tok.Trait, token.Tok.Extends, token.Tok.Import, token.Tok.Test: true
         case token.Tok.Extern, token.Tok.Default: true
@@ -2020,7 +2020,7 @@ fn (p mut Parser&) idenStmt() ast.Stmt& ? Fail {
                          null, Array<ast.Expr&>(0), false, true)
         return ast.Stmt.Var(sp, v)
     }
-    if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut or k2 == token.Tok.Any or
+    if k2 == token.Tok.Define or k2 == token.Tok.DefineLink or k2 == token.Tok.Iden or k2 == token.Tok.Mut or k2 == token.Tok.Any or
        k2 == token.Tok.Fn or k2 == token.Tok.Enum or k2 == token.Tok.Struct or k2 == token.Tok.Weak or
        k2 == token.Tok.Extern {
         nt := p.tk()
@@ -2078,6 +2078,12 @@ fn (p mut Parser&) declRest(names NameList&, field Bool) ast.VarDecl& ? Fail {
         if names.Names.Len() > 1 and values.Len() != names.Names.Len(): p.countDiag(names, values.Len())
         return ast.VarDecl(names.Names, names.Sps, null, values, true, field)
     }
+    if p.accept(token.Tok.DefineLink) {
+        # S4f: "r :~ x" declares a reference local linked to x
+        values := try p.values(names, field)
+        if names.Names.Len() > 1 and values.Len() != names.Names.Len(): p.countDiag(names, values.Len())
+        return ast.VarDecl(names.Names, names.Sps, null, values, true, field, true)
+    }
     ty := try p.typeExpr()
     values Array<ast.Expr&>& = Array<ast.Expr&>(0)
     if p.accept(token.Tok.Assign) {
@@ -2132,7 +2138,7 @@ fn (p Parser&) one(n source.NameId, sp source.Span) NameList& {
 fn isAssignOp(k token.Tok) Bool {
     return match k {
         case token.Tok.Assign, token.Tok.PlusEq, token.Tok.MinusEq, token.Tok.StarEq, token.Tok.SlashEq: true
-        case token.Tok.StarStarEq: true
+        case token.Tok.StarStarEq, token.Tok.Tilde: true
         case token.Tok.PercentEq, token.Tok.ShlEq, token.Tok.ShrEq, token.Tok.AmpEq, token.Tok.PipeEq: true
         case token.Tok.CaretEq: true
         case _: false
@@ -2457,15 +2463,16 @@ fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt& ? Fail {
             return ast.Stmt.ForIn(sp, ast.ForIn(key, name, src, tried, body, cl, unrolled))
         }
         # three clauses: an initializer like a declaration, then "," cond "," post
-        if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut {
+        if k2 == token.Tok.Define or k2 == token.Tok.DefineLink or k2 == token.Tok.Iden or k2 == token.Tok.Mut {
             iat := p.here()
             nt := p.tk()
             name := try p.name()
             names := p.one(name, source.Span(nt.Start, nt.End))
             v ast.VarDecl?& = null
-            if p.accept(token.Tok.Define) {
+            if p.accept(token.Tok.Define) or p.accept(token.Tok.DefineLink) {
+                link := p.prevKind == token.Tok.DefineLink
                 x := try p.expr()
-                v = ast.VarDecl(names.Names, names.Sps, null, Array<ast.Expr&>[x], true, false)
+                v = ast.VarDecl(names.Names, names.Sps, null, Array<ast.Expr&>[x], true, false, link)
             } else {
                 ty := try p.typeExpr()
                 try p.want(token.Tok.Assign)
@@ -2885,7 +2892,7 @@ fn (p Parser&) prec(k token.Tok) I64 {
         case token.Tok.Pipe: 4 if p.OldBitwise else 6
         case token.Tok.Caret: 5 if p.OldBitwise else 7
         case token.Tok.Amp: 6 if p.OldBitwise else 8
-        case token.Tok.EqEq, token.Tok.NotEq: 7 if p.OldBitwise else 4
+        case token.Tok.EqEq, token.Tok.NotEq, token.Tok.Is: 7 if p.OldBitwise else 4
         case token.Tok.In, token.Tok.Not: 8 if p.OldBitwise else 5
         case token.Tok.Lt, token.Tok.Le, token.Tok.Gt, token.Tok.Ge: 0 if p.noGt else (8 if p.OldBitwise else 5)
         case token.Tok.Shl, token.Tok.Shr: 0 if p.noGt else 9
@@ -2900,12 +2907,20 @@ fn (p Parser&) prec(k token.Tok) I64 {
 fn comparison(x ast.Expr&) Bool {
     match x {
         case ast.Expr.Binary(_, op, _, _) {
-            return op == token.Tok.EqEq or op == token.Tok.NotEq or isOrdering(op) or op == token.Tok.In
+            return op == token.Tok.EqEq or op == token.Tok.NotEq or op == token.Tok.Is or op == token.Tok.IsNot or isOrdering(op) or op == token.Tok.In
         }
         case ast.Expr.Chain(_, _), ast.Expr.NotIn(_, _, _) {
             return true
         }
         case _ { return false }
+    }
+}
+
+# whether x is the null literal
+fn nullLit(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Lit(_, kind): kind == token.Tok.NullLit
+        case _: false
     }
 }
 
@@ -2938,6 +2953,8 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&, min I64) ast.Expr& ? Fail {
             links++
             continue
         }
+        # E10d: "is not" is one operator, the negation of "is"
+        if k == token.Tok.Is and p.accept(token.Tok.Not): k = token.Tok.IsNot
         right := try p.binary(pr + 1)
         if isOrdering(k) and isOrdering(p.peek()) and p.prec(p.peek()) > 0 {
             # a chain: a < b <= c (E30)
@@ -2958,6 +2975,11 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&, min I64) ast.Expr& ? Fail {
             }
             left = ast.Expr.Chain(source.Span(start, p.prevEnd), ast.Chain(ops.ToArray(), gather(p.exprs, from)))
             continue
+        }
+        # E10c: "x is null" is the null test, one tree with the comparison of x with the null literal, so every pass
+        # that reads a null test (S8e's narrowing, the evaluator) reads it as it reads "x == null"
+        if (k == token.Tok.Is or k == token.Tok.IsNot) and (nullLit(left) or nullLit(right)) {
+            k = token.Tok.EqEq if k == token.Tok.Is else token.Tok.NotEq
         }
         if k == token.Tok.Amp or k == token.Tok.Pipe or k == token.Tok.Caret {
             if comparison(left): p.Mixed.Push(left.Span())
@@ -3620,7 +3642,7 @@ fn isJoiningOp(k token.Tok) Bool {
     return match k {
         case token.Tok.Plus, token.Tok.Minus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At: true
         case token.Tok.StarStar: true
-        case token.Tok.And, token.Tok.Or, token.Tok.Xor, token.Tok.EqEq, token.Tok.NotEq, token.Tok.Lt, token.Tok.Le: true
+        case token.Tok.And, token.Tok.Or, token.Tok.Xor, token.Tok.EqEq, token.Tok.NotEq, token.Tok.Is, token.Tok.Lt, token.Tok.Le: true
         case token.Tok.Gt, token.Tok.Ge, token.Tok.Amp, token.Tok.Pipe, token.Tok.Caret, token.Tok.Shl, token.Tok.Shr: true
         case _: false
     }

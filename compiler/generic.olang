@@ -2821,9 +2821,9 @@ fn (p mut Program&) literalType(kind token.Tok) types.TypeId {
 
 # T6a: arithmetic of literals declares what its value as one literal would; of anything else the checker's
 fn (p mut Program&) binaryType(c Context&, known Map<source.NameId, types.TypeId>&, op token.Tok, a ast.Expr&, b ast.Expr&) types.TypeId {
-    # a comparison is a Bool whatever its operands: "x == null" (E10c) as much as "a < b"
+    # a comparison is a Bool whatever its operands: "x is null" (E10c) and "a is b" (E10d) as much as "a < b"
     if op == token.Tok.EqEq or op == token.Tok.NotEq or op == token.Tok.Lt or op == token.Tok.Le or op == token.Tok.Gt or
-       op == token.Tok.Ge or op == token.Tok.And or op == token.Tok.Or {
+       op == token.Tok.Ge or op == token.Tok.And or op == token.Tok.Or or op == token.Tok.Is or op == token.Tok.IsNot {
         return types.BoolT
     }
     ta := p.Infer(c, known, a)

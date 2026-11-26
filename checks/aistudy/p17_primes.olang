@@ -1,19 +1,19 @@
 # spec: sieve of Eratosthenes up to n, count primes, nth prime, prime factorization of a number
 fn sieve(n I64) Array<Bool> {
-    is := Array<Bool>(n + 1)
-    for i in range 2, n + 1: is[i] = true
+    prime := Array<Bool>(n + 1)
+    for i in range 2, n + 1: prime[i] = true
     i := 2
     for i * i <= n {
-        if is[i] {
+        if prime[i] {
             j := i * i
             for j <= n {
-                is[j] = false
+                prime[j] = false
                 j += i
             }
         }
         i++
     }
-    return is
+    return prime
 }
 
 fn factors(n I64) Vec<I64> {

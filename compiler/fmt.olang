@@ -435,8 +435,9 @@ fn (f formatter&) before(r I64) I64 {
 # whether the token at index j (real index r) is a prefix operator: "-", "~", "$", or "++"/"--" before its operand
 fn (f formatter&) prefix(j I64, r I64) Bool {
     k := f.kind(j)
-    if k == token.Tok.Tilde or k == token.Tok.Dollar: return true
-    if k != token.Tok.Minus and k != token.Tok.Inc and k != token.Tok.Dec: return false
+    if k == token.Tok.Dollar: return true
+    # "~" after an operand is S4f's link, "r ~ x"
+    if k != token.Tok.Minus and k != token.Tok.Tilde and k != token.Tok.Inc and k != token.Tok.Dec: return false
     p := f.before(r)
     return p < 0 or not f.operandEnd(p)
 }

@@ -1,0 +1,7 @@
+# check: fail error[E10d]: 'is' asks whether two references name one object, and this is I64
+# E10d: two values have no storage of their own to be the same as - "==" compares them
+fn main() {
+    a := 1
+    b := 2
+    assert a is not b
+}

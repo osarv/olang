@@ -446,6 +446,7 @@ fn operator(t String&, i I64) token.Tok, I64 {
         }
         case ':' {
             if d == '=': return token.Tok.Define, i + 2
+            if d == '~': return token.Tok.DefineLink, i + 2
             return token.Tok.Colon, i + 1
         }
         case '=' {

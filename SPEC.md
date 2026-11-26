@@ -146,7 +146,7 @@ spelling: see §4.3 (visibility).
 ```
 if        else    try     catch   return  assert  noreturn
 for       do      in      range   match   case    break   continue
-as
+as        is
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
 trait     spawn   join    defer   errdefer yield   become
@@ -169,7 +169,7 @@ A field may be named by a word above that is a whole statement by itself - `brea
 after which nothing can follow on its line - or that begins no statement and no value: `in`,
 `as`, `and`, `or`, `xor`, `range`, `case`, `type`, `struct`, `enum`, `trait`, `extends`, `import`,
 `test`, `extern`, `default`, and the words `any`, `unique`, `immut`, `packed`, `commutes`, `returns`, `noalloc`,
-`noblock`, `nospawn`, `norecurse`, `noextern`, `pure`, `keeps`, `borrows`, `noborrow`, `weak` (each stands only in the
+`noblock`, `nospawn`, `norecurse`, `noextern`, `pure`, `keeps`, `borrows`, `noborrow`, `weak`, `is` (each stands only in the
 one place its rule gives it: `any` before a type's name where a type is written, `weak` before a reference type (T2d), `immut`, `unique` and `packed` before a type
 declaration's body, `commutes` after an operator method's result, the others after a function type's signature). It is declared with its type or `:=` (`break I64 = 0`, `in Bool`, `type := Kind.A`), never
 as a pun, and is reached only after `.` (`s.break`, `s.break++`) - a word after `.` is always a member's name, and a line
@@ -296,7 +296,7 @@ compile-time errors.
 valid token starting at the current position):
 
 ```
-+  -  *  **  /  %  ,  .  ?  =  :=
++  -  *  **  /  %  ,  .  ?  =  :=  :~
 +=  -=  *=  **=  /=  %=  <<=  >>=  &=  |=  ^=
 ++  --  !
 ==  !=
@@ -308,7 +308,9 @@ valid token starting at the current position):
 `@` is the matrix product's operator (E31's `MatMul`) between two operands.
 
 `and`, `or` and `xor` (keywords, L9) are the boolean and/or/exclusive-or operators, and `not` is boolean negation
-(E7a); `&`, `|`, `^`, `~`, `<<`, `>>` are the bitwise operators. The logic words have no compound assignment. There is no ternary conditional operator, no null/optional-coalescing operator,
+(E7a); `&`, `|`, `^`, `~`, `<<`, `>>` are the bitwise operators - `~` in prefix position; after an operand, at the head
+of a statement, it links a reference (S4f), and `:~` declares one. `is` and `is not` ask whether two references name
+one object (E10d), and `is null` / `is not null` is the null test (E10c). The logic words have no compound assignment. There is no ternary conditional operator, no null/optional-coalescing operator,
 and no `;`.
 
 ### 1.7 Automatic statement termination
@@ -3870,7 +3872,7 @@ operators groups left-to-right):
 | 2 | `xor` |
 | 3 | `and` |
 | 3½ | prefix `not` (E7a) |
-| 4 | `==` `!=` |
+| 4 | `==` `!=` `is` `is not` (E10d, E10c) |
 | 5 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30) |
 | 6 | `\|` |
 | 7 | `^` |
@@ -4017,14 +4019,31 @@ comparison evaluated while compiling (K1), or under the evaluator (B3e), stops w
 counting as a call does against the evaluator's depth limit. A struct or enum reference with no `Eq` (identity) ends any
 such walk.
 
-**E10c (the null test).** A comparison whose operand is the `null` literal is the **null test**: `x == null` is whether
-a reference, or a function value, holds none, or whether an error value (T20) holds no error; `x != null` is its
-negation, `null == x` and `null != x` the same tests, and `not x == null` the same question (E7a). It is an ordinary
-`==` or `!=` (precedence 4, E5) and never calls a type's `Eq` or `eq` (E10a): it compares what the operand stores with
-null, whatever the type declares. The null test of an `x` that cannot be null - a number, a `Bool`, a struct or enum
+**E10c (the null test).** `x is null` is the **null test**: whether a reference, or a function value, holds none, or
+whether an error value (T20) holds no error; `x is not null` is its negation, `null is x` and `null is not x` the same
+tests, and `not x is null` the same question (E7a). It stands at precedence 4 (E5) and never calls a type's `Eq` or
+`eq` (E10a): it compares what the operand stores with null, whatever the type declares. (Transition, 2026-11-26: the
+comparison of an operand with the `null` literal by `==` or `!=` is the same test until the repository is migrated by
+`olang fix` (tools/assign_migrate); then `x == null` is refused, its help naming `x is null`.) The null test of an `x` that cannot be null - a number, a `Bool`, a struct or enum
 value, an array not marked `?&` (T2c), a reference or a function value never null (T2c, T21), an error value a test
 or a word written says holds one (T20) - and `null == null` are compile-time errors. Where it holds, or fails, it
 narrows a local, a parameter or a field path of one (S8e, S8d).
+
+**E10d (identity, `is`).** `a is b` is whether two references name **one object** - the same storage, or both null -
+and `a is not b` its negation. It never calls a type's `Eq` (E10a) and never follows a reference into what it names: two
+distinct instances equal by `==` are not one object. An operand that is a value is the object its place is (a variable,
+a field, an element): `r is v` is whether `r` names `v`; a value with no place of its own (a literal, a call's result)
+and two values (`a is b` of two `I64`) are compile-time errors - a value has no storage of its own to be the same as;
+`==` compares contents. Both operands are of one type, references' permissions and `?` aside. Two function values are
+one object where `==` says they are (T21). `is` and `is not` stand at precedence 4 (E5), with `==`:
+
+```
+is-expr ::= expr "is" [ "not" ] expr
+```
+
+(Transition, 2026-11-26: until the repository is migrated, `==` and `!=` on two references to a type with no `Eq` still
+compare identity, as E10 says; `olang fix` rewrites each as `is` / `is not`, and then `==` compares contents through
+references too.)
 
 **E10a (`Eq`).** A type takes over `==` by declaring the method `Eq`, or `eq` to keep it to its own module (M6b): then
 `==` on it is an error anywhere else, the prelude's `Map` and an array's `Has` included. It takes one parameter, of the
@@ -5464,6 +5483,31 @@ S(); p.xs.Push(1)`). A repoint at storage that **exists** - another reference (`
 (`p = p.next!`), a call returning a reference - is a cursor and stays allowed. Write the fields through the reference
 (`p.f = ...`), return the new value, or give the scratch value a local of its own (`t := S(...)`). S9g's loop names
 keep the rule above (a loop name is the body's own local).
+
+**S4f (linking a reference: `~` and `:~`).** `r ~ x` makes the reference place `r` (a local, a parameter, a field or an
+element of reference type) **link** to `x`: where `x` is a reference, to what it names (never to `x` itself - there are
+no references to references); where `x` is a place holding a value (a variable, a field, an element), to that place. A
+`?&` place is unlinked with `r ~ null`. `r :~ x` declares the local `r` linked to `x` the same way: its type is `x`'s
+where `x` is a reference, else a reference to `x`'s type, writable where `x` may be written (a local, a `mut` global,
+what a writable reference names, a field of one of these), read-only otherwise. Dereferencing stays implicit: reading
+`r`, a field `r.f` or a method call reads what `r` names, and there is no unary `&` or `*`.
+
+```
+link-stmnt ::= lvalue "~" expr STMNT_END
+link-decl  ::= IDENT ":~" expr STMNT_END
+```
+
+A **new value** - a literal other than `null`, a constructor's call, a call giving a value, any value with no storage
+of its own (E12c) - after `~` or `:~` is a compile-time error: a reference links only to storage that exists; give the
+value a local, `v := ...`, and link to that. `~` whose left side holds a value (not a reference) is a compile-time error:
+`=` stores into it. The place is evaluated before `x`, as for `=` (S4), and S4e holds for a reference parameter
+linked as it holds for one repointed.
+
+(Transition, 2026-11-26: until the repository is migrated by `olang fix` (tools/assign_migrate), `=` on a reference
+still repoints it (S4a), `:=` of storage that exists by a reference still declares a reference local, and `==` on two
+references still compares identity; once migrated, `a = b` assigns contents through a reference too - writing the whole
+referent and ending the old value as a store does - `:=` always declares a value, and the old spellings are refused with
+a hint naming `~`, `:~` and `is`.)
 
 **S4.** `assign-stmnt ::= lvalue assign-op expr STMNT_END`, where `lvalue` is a postfix expression
 (§5.1 E1) whose outermost form is a variable read, an index (`E16`), or a member access (`E17`) —

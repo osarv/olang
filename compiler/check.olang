@@ -270,6 +270,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     callWant types.TypeId = types.UnknownT  # G4b: the type the call at callWantAt is wanted as, for a variable only its result names
     callWantAt source.Span = source.Span(0, 0)
     totals Map<String, String>              # OLANG_TOTALS: each total worked in a type other than its values' (totalSite)
+    oldForms Map<String, String>            # OLANG_ASSIGNS: each old spelling of a link or an identity test (oldForm)
+    oldAsked I64 = -1                       # ... whether OLANG_ASSIGNS is set: -1 not looked yet, 0 no, 1 yes
     spawning I64 = 0                       # E31b: inside a spawn's task, where no call through x[i] is made in place
     lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
     tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
@@ -746,6 +748,7 @@ fn (c mut Checker&) CheckProgram() {
             c.P.L.MutStorage = c.mutStorage()
             if (try os.Env("OLANG_HANDLES") catch default "") != "": c.handleReport()
             if (try os.Env("OLANG_TOTALS") catch default "") != "": c.totalsReport()
+            if c.oldAsked == 1: c.oldFormsReport()
             return
         }
         c.P.L.Diags.Forget(mark)
@@ -9075,6 +9078,7 @@ fn (c mut Checker&) binaryOf(sp source.Span, op token.Tok, a ast.Expr&, b ast.Ex
     if op == token.Tok.StarStar: return c.power(sp, a, b, want)
     # E11b: "+" with text written on either side joins text
     if op == token.Tok.Plus and (textWritten(a) or textWritten(b)): return c.textPlus(sp, a, b)
+    if op == token.Tok.Is or op == token.Tok.IsNot: return c.identity(sp, op, a, b)
     if op == token.Tok.EqEq or op == token.Tok.NotEq {
         # E10c: a comparison with the null literal is the null test, never a call of Eq (E10a)
         if isNullLit(a) or isNullLit(b): return c.nullTest(sp, a, b, op == token.Tok.NotEq)
@@ -9300,6 +9304,7 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
             c.eqAt = opSp
             r := c.equality(sp, op, x, y)
             c.eqAt = at
+            if c.isRef(ta) and c.isRef(tb) and identityPrim(r): c.oldForm(opSp, "identity")
             return r
         }
         if operatorName(op) != "" and c.notOperator(c.deref(ta), operatorName(op), opSp, msgs.Tok(op.Text()), 1, false) { return c.unknown(sp) }
@@ -9900,6 +9905,44 @@ fn (c mut Checker&) typeHasEq(t types.TypeId, depth I64) Bool {
     if c.isNamed(d) and c.eqMethod(d) != -1: return true
     if c.isRef(t) and not (c.P.T.KindOf(d) == types.Kind.Array): return false
     return c.partsHaveEq(d, depth + 1)
+}
+
+# E10d: "a is b", "a is not b": whether two references name one object, never a call of Eq; two function values
+# compare as "==" compares them (T21). Anything else has no storage of its own to be the same as. ("x is null" is the
+# null test, made "==" by the parser)
+fn (c mut Checker&) identity(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&) typed.Expr& {
+    isp := c.between(a.Span(), b.Span(), op.Text().Len())
+    x := c.expr(a, types.UnknownT)
+    y := c.expr(b, types.UnknownT)
+    ta, tb := typeOf(x), typeOf(y)
+    if ta == types.UnknownT or tb == types.UnknownT: return c.unknown(sp)
+    if c.P.T.KindOf(ta) == types.Kind.Func and c.P.T.KindOf(tb) == types.Kind.Func {
+        return c.equality(sp, token.Tok.EqEq if op == token.Tok.Is else token.Tok.NotEq, x, y)
+    }
+    # a value's place beside a reference is the object it is (r is v): borrowed, never copied
+    if c.isRef(ta) != c.isRef(tb) {
+        if c.isRef(ta) { y = c.placeObject(y) } else { x = c.placeObject(x) }
+        ta, tb = typeOf(x), typeOf(y)
+    }
+    if not c.isRef(ta) or not c.isRef(tb) {
+        c.err(isp, msgs.IdentityOfValue(c.ty(tb if c.isRef(ta) else ta)))
+        return c.lit(sp, types.BoolT, 0)
+    }
+    da, db := c.deref(ta), c.deref(tb)
+    if not c.P.T.Same(da, db) {
+        c.err(sp, msgs.TypeMismatch(c.ty(da), c.ty(db)))
+        return c.lit(sp, types.BoolT, 0)
+    }
+    r := c.prim(sp, types.BoolT, typed.PrimOp.Same, x, y)
+    return c.negate(sp, r) if op == token.Tok.IsNot else r
+}
+
+# E10d: a value's place as the object it is - a read-only reference to it; the value itself where it has no place
+fn (c mut Checker&) placeObject(x typed.Expr&) typed.Expr& {
+    t := typeOf(x)
+    if readPlace(x) == null or c.P.T.KindOf(t) == types.Kind.Func: return x
+    y := c.fit(x, c.P.T.Ref(t, types.ReadOnly), x.Span())
+    return x if freshValue(y) else y
 }
 
 # "x == null", "x != null" (negated): whether a reference, a function value or an error value holds none (E10c)
@@ -20314,6 +20357,91 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
     for i in range v.Names.Len(): c.declName(v, i, declared, mark, kind)
 }
 
+# S4f: what "r :~ x" links r to - x a reference, or the storage x names borrowed, writable where x may be written; a
+# new value (a literal, a constructor's call, a call giving a value) is no storage to link to
+fn (c mut Checker&) linkTo(value ast.Expr&) typed.Expr& {
+    if c.freshWritten(value) {
+        c.err(value.Span(), msgs.LinkFresh(c.src(value.Span())))
+        return c.expr(value, types.UnknownT)
+    }
+    x := c.expr(value, types.UnknownT)
+    t := typeOf(x)
+    if t == types.NullT {
+        c.err(value.Span(), msgs.DeclFromNull())
+        return c.unknown(value.Span())
+    }
+    if t == types.UnknownT or c.isRef(t) or c.P.T.KindOf(t) == types.Kind.Func: return x
+    p := readPlace(x)
+    if p == null {
+        c.err(value.Span(), msgs.LinkFresh(c.src(value.Span())))
+        return x
+    }
+    perm := types.Writable if c.linkWritable(p) else types.ReadOnly
+    return c.fit(x, c.P.T.Ref(t, perm), value.Span())
+}
+
+# whether a place ":~" links to may be written through the reference (S4f): a local of the body's own, a "mut"
+# global, what a writable reference names, a field of one of these
+fn (c mut Checker&) linkWritable(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): c.cur().Local(id).Kind == typed.LocalKind.Var and not c.roLocal(I64(id))
+        case typed.Lvalue.Global(_, _, mi, n): c.globalMut(mi, n)
+        case typed.Lvalue.Deref(_, _, ref): c.isRef(typeOf(ref)) and (c.P.T.PermOf(typeOf(ref)) & types.Writable) != 0
+        case typed.Lvalue.Field(_, _, base, _): c.linkWritable(base)
+        case _: false
+    }
+}
+
+fn (c mut Checker&) globalMut(mi I64, n source.NameId) Bool {
+    v := c.P.GlobalDecl(mi, n)
+    return v != null and generic.WrittenMut(v.Ty)
+}
+
+# S4f: whether a value as written is new storage - a literal other than null, a constructor's call
+fn (c mut Checker&) freshWritten(x ast.Expr&) Bool {
+    match x {
+        case ast.Expr.Paren(_, y) { return c.freshWritten(y) }
+        case ast.Expr.Lit(_, kind) { return kind != token.Tok.NullLit }
+        case ast.Expr.Call(_, f, _) {
+            ref := c.P.R.Use(c.fr().File, f.Span().Start)
+            return ref.Kind == names.What.Type
+        }
+        case _ { return false }
+    }
+}
+
+# S4f: whether the store emitted since from gives its place storage built there (E12c) - a value promoted, or text
+# written in the program
+fn (c mut Checker&) storedFresh(from I64) Bool {
+    for k in range from, c.stmts.Len() {
+        match c.stmts[k] {
+            case typed.Stmt.Assign(_, _, x) { if freshValue(x): return true }
+            case _ { }
+        }
+    }
+    return false
+}
+
+# whether a comparison was made the test of one storage (E10's identity): Same, or its negation
+fn identityPrim(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Same: return true
+            return op == typed.PrimOp.Not and args.Len() == 1 and identityPrim(args[0])
+        }
+        case _ { return false }
+    }
+}
+
+fn freshValue(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Promote(_, _, _): true
+        case typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Away(_, _, y): freshValue(y)
+        case _: false
+    }
+}
+
 # T7c: a reference local to an array of arrays held by value, given an array whose rows have one known length (fixed
 # storage, a slice of it), names it with that length, as an instance's parameter does (G29) - its rows are laid out in
 # place there, never as pairs naming storage elsewhere, so the reference reads and writes them where they are
@@ -20408,6 +20536,9 @@ fn (c mut Checker&) declName(v ast.VarDecl&, i I64, declared types.TypeId, mark 
         # T7d: an array of arrays held by value takes its elements' length from its value - typed alone first
         x = c.expr(v.Values[i], types.UnknownT)
         if c.P.LengthsOnly(typeOf(x), want) and c.P.T.KindOf(typeOf(x)) == types.Kind.Array { t = typeOf(x) } else { x = c.fit(x!, want, v.Values[i].Span()) }
+    } else if v.Link and i < v.Values.Len() {
+        x = c.linkTo(v.Values[i])
+        t = typeOf(x)
     } else if i < v.Values.Len() {
         wasNull := c.nullDecl
         if v.Ty != null and not v.Infer: c.nullDecl = c.typeWrittenAt(v.Ty!)
@@ -20440,6 +20571,10 @@ fn (c mut Checker&) declName(v ast.VarDecl&, i I64, declared types.TypeId, mark 
         }
     } else {
         x, pend = c.zeroDecl(v, nsp, t)
+    }
+    # S4f: ":=" naming storage that exists by a reference is ":~" from now on
+    if not v.Link and not v.Field and v.Ty == null and i < v.Values.Len() and v.Names.Len() == 1 and c.isRef(t) and c.isRef(typeOf(x)) and not freshValue(x!) and not c.freshWritten(v.Values[i]) {
+        c.oldForm(c.opAfter(nsp, 2), "define")
     }
     if t == c.textType() and c.isRef(typeOf(x)): x = c.read(nsp, typed.Lvalue.Deref(nsp, t, x!))
     # T25c: ":=" of a read-only copy is one, and a reference read out of one is read-only; a written type declares
@@ -20994,8 +21129,11 @@ fn (c mut Checker&) storeLambdaInto(sp source.Span, p typed.Lvalue&, value ast.E
     c.selfFrame, c.selfName, c.selfCaught = sf, sn, sc
 }
 
-fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value ast.Expr&) {
-    if op == token.Tok.Assign and c.assignSlice(sp, target, value): return
+fn (c mut Checker&) assign(sp source.Span, written token.Tok, target ast.Expr&, value ast.Expr&) {
+    # S4f: "r ~ x" links a reference - the store "=" makes of one today, to storage that exists
+    link := written == token.Tok.Tilde
+    op := token.Tok.Assign if link else written
+    if op == token.Tok.Assign and not link and c.assignSlice(sp, target, value): return
     if slicedTarget(target) {
         # E16f: what Slice gives has no place of its own
         c.err(target.Span(), msgs.SliceNoPlace())
@@ -21018,6 +21156,12 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         c.expr(value, types.UnknownT)
         return
     }
+    if link and not c.isRef(p.Type()) and p.Type() != types.UnknownT {
+        c.err(osp0, msgs.LinkToValue(c.src(target.Span()), c.ty(p.Type())))
+        c.expr(value, types.UnknownT)
+        return
+    }
+    if op == token.Tok.Assign and not link and c.isRef(p.Type()): c.oldForm(osp0, "repoint")
     if op == token.Tok.Assign and c.wholeColumn(p) {
         c.columnStore(sp, p, value)
         return
@@ -21032,7 +21176,9 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     t := p.Type()
     if op == token.Tok.Assign {
         c.weakFresh(p, value)   # T2d
+        from := c.stmts.Len()
         c.storeLambdaInto(sp, p, value, osp, target)
+        if link and (c.freshWritten(value) or c.storedFresh(from)): c.err(value.Span(), msgs.LinkFresh(c.src(value.Span())))
         return
     }
     bop := compoundOp(op)
@@ -28009,7 +28155,7 @@ fn exprAssigns(x ast.Expr?&, n Array<source.NameId>&) Bool {
 # whether a statement is "p = v" assigning the path n or one it starts with, its value reading n before the store (S8e)
 fn assignsWhole(st ast.Stmt&, n Array<source.NameId>&) Bool {
     match st {
-        case ast.Stmt.Assign(_, op, t, v) { return op == token.Tok.Assign and hitsPath(t, n) and not exprAssigns(v, n) }
+        case ast.Stmt.Assign(_, op, t, v) { return (op == token.Tok.Assign or op == token.Tok.Tilde) and hitsPath(t, n) and not exprAssigns(v, n) }
         case _ { return false }
     }
 }
@@ -29365,6 +29511,24 @@ fn (c mut Checker&) totalSite(nsp source.Span, t types.TypeId) {
     c.spellMod = -1
     was := try c.totals.Get(at) catch default ty
     c.totals.Put(at, ty if was == ty else "?")
+}
+
+# OLANG_ASSIGNS (tools/assign_migrate.olang): a spelling S4f and E10d replace, noted at its operator with what it
+# becomes - "repoint" ("=" given a reference: "~"), "define" (":=" naming storage that exists by a reference: ":~"),
+# "identity" ("==" or "!=" comparing references by identity: "is", "is not"). A site two instances note differently is
+# noted "?"; the prelude's are not noted
+fn (c mut Checker&) oldForm(sp source.Span, kind String&) {
+    if c.oldAsked < 0: c.oldAsked = 1 if (try os.Env("OLANG_ASSIGNS") catch default "") != "" else 0
+    if c.oldAsked == 0 or c.frames.Len() == 0: return
+    mi := c.fr().Mi
+    if c.P.L.Mods[mi].Prelude: return
+    at := c.P.L.Diags.Locate(c.fr().File, I64(sp.Start))
+    was := try c.oldForms.Get(at) catch default kind
+    c.oldForms.Put(at, kind if was == kind else "?")
+}
+
+fn (c mut Checker&) oldFormsReport() {
+    for e in c.oldForms: try io.PutErrLn("assigns: " + $e.Key + ": " + $e.Value) catch io.Error { }
 }
 
 fn (c mut Checker&) totalsReport() {

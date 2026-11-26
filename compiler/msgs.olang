@@ -643,6 +643,7 @@ type Diag enum {
     SpreadAlone
     VariadicArgCount
     NullTestOfValue
+    IdentityOfValue
     NullTestOfNull
     CaseTestNotEnum
     CaseTestOther
@@ -749,6 +750,8 @@ type Diag enum {
     LostLoopWrite
     LostParamWrite
     FreshParamRepoint
+    LinkToValue
+    LinkFresh
     AltBindsOtherNames
     BoundTwice
     AltBindingType
@@ -1701,6 +1704,7 @@ fn CaseTestNotEnum(text String&, ty String&) r.Msg { return r.Msg(Diag.CaseTestN
 fn CaseTestOther(text String&, ty String&) r.Msg { return r.Msg(Diag.CaseTestOther, "E32", $text + " is no case of " + $ty + ", the type this tests") }
 fn NullTestOfNull() r.Msg { return r.Msg(Diag.NullTestOfNull, "E10c", "'null == null' tests nothing", "'== null' compares a reference, a function value or an error value with null") }
 fn NullTestOfValue(ty String&) r.Msg { return r.Msg(Diag.NullTestOfValue, "E10c", $"only a reference, a function value or an error value can be null, and this is " + $ty) }
+fn IdentityOfValue(ty String&) r.Msg { return r.Msg(Diag.IdentityOfValue, "E10d", "'is' asks whether two references name one object, and this is " + $ty, "a value has no storage of its own to be the same as", "write '==' to compare contents") }
 fn MayBeNull(text String&, ty1 String&, ty2 String&, bang String&) r.Msg { return r.Msg(Diag.MayBeNull, "T2c", "'" + $text + "' is a " + $ty1 + ", which may be null, and " + $ty2 + " never is", "", "test it first ('if x != null'), or write '" + $bang + "!'") }
 fn NullToNonNull(ty1 String&, ty2 String&) r.Msg { return r.Msg(Diag.NullToNonNull, "T2c", $ty1 + " is never null - a reference that may be is written " + $ty2) }
 fn NoteNullableDecl() r.Msg { return r.Msg(Diag.NoteNullableDecl, "", "the type is written here - write '?&' for '&' where it may be null") }
@@ -1885,6 +1889,8 @@ fn NotIterable(ty String&) r.Msg { return r.Msg(Diag.NotIterable, "S9a", $ty + "
 fn LostLoopWrite(n String&, repoints Bool, counter Bool) r.Msg { return r.Msg(Diag.LostLoopWrite, "S9g", "the write to '" + n + "' is lost: nothing reads '" + n + "' after it", ("'" + n + "' is the reference the element holds, and '=' repoints the name (S4a), never writing the element" if repoints else ("'" + n + "' holds a copy of the turn's count (S9a), and nothing reads it again this turn" if counter else "'" + n + "' is a copy of the element's value (S9a), and nothing reads it again this turn")), ("keep a count of your own in a local declared before the loop" if counter else "write the element where it is - 'for i, " + n + " in a: a[i] = ...' or 'a[i].f = ...' - or store the value somewhere read later")) }
 fn LostParamWrite(n String&, repoints Bool, through Bool) r.Msg { return r.Msg(Diag.LostParamWrite, "S4e", "the write to '" + n + "' is lost: nothing reads '" + n + "' after it", ("'" + n + "' was repointed at the callee's own storage (S4a), so a write through it never reaches what the caller passed" if through else "'" + n + "' is a reference, and '=' repoints the callee's own copy of it (S4a), never writing what the caller passed" if repoints else "'" + n + "' is the callee's own copy (D9), and nothing reads it again"), ("write through '" + n + "' before repointing it, or return the new value" if through else "write the fields through the reference - '" + n + ".f = ...' - or return the new value" if repoints else "return the new value, or take a 'mut' reference to change the caller's")) }
 fn FreshParamRepoint(n String&) r.Msg { return r.Msg(Diag.FreshParamRepoint, "S4e", "'" + n + "' is repointed at a new value: the caller still sees what it passed", "'" + n + "' is a reference parameter, and '=' repoints the callee's own copy of it (S4a) - at storage built here, which the caller never sees", "write the fields through the reference - '" + n + ".f = ...' - return the new value, or build a scratch value in a local, 't := ...'") }
+fn LinkToValue(n String&, ty String&) r.Msg { return r.Msg(Diag.LinkToValue, "S4f", "'~' links a reference, and '" + n + "' holds a value (" + $ty + ")", "", "write '=' to store into '" + n + "'") }
+fn LinkFresh(text String&) r.Msg { return r.Msg(Diag.LinkFresh, "S4f", "'" + $text + "' is a new value, and a reference links only to storage that exists", "'~' and ':~' link to a variable, a field or what a reference names", "give the value a local of its own, 'v := ...', and link to it - or write '=' to store it") }
 fn AltBindsOtherNames() r.Msg { return r.Msg(Diag.AltBindsOtherNames, "S13c", "the alternatives of a clause bind different names", "every alternative binds the same names", "bind it in each, write '_', or split the case") }
 fn BoundTwice(tok String&) r.Msg { return r.Msg(Diag.BoundTwice, "S13c", $tok + " is bound twice in one alternative") }
 fn AltBindingType(tok String&, ty String&) r.Msg { return r.Msg(Diag.AltBindingType, "S13c", $tok + " is bound as " + $ty + " by an earlier alternative - split the case") }

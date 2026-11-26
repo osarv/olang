@@ -19,7 +19,7 @@ fn name(n I64) String {
 }
 
 fn count(s String?&) I64 {
-    if s == null: return 0
+    if s is null: return 0
     return s.Len()
 }
 

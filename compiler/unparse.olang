@@ -625,7 +625,7 @@ fn (w mut writer&) varDecl(v ast.VarDecl&) {
             w.put(" ")
             w.ty(v.Ty!)
         }
-        w.put(" := ")
+        w.put(" :~ " if v.Link else " := ")
         w.exprs(v.Values)
         return
     }

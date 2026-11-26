@@ -65,6 +65,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `putln_rename.olang` | PutLn (2026-11-16, the user's call): the output verbs end in `Ln` - `io.PutLine` -> `io.PutLn`, `io.PutErrLine` -> `io.PutErrLn`, `Writer.PutLine` -> `PutLn`; in code a name after a `.`, in comments, text and non-olang files every whole word, inside std/io.olang every whole word; the nouns (`Reader.Line`, `io.Lines`) stay; idempotent | `build/tools_putln_rename [--check] [-v] FILE\|DIR...` |
 | `defer_migrate.olang` | S19, S19e (2026-11-16, one way to write each thing): the bare `defer stmt` and `errdefer stmt` are gone - a deferral starting a statement and followed by neither `{` nor `:` gains the `:` of S1b's one-line body, `defer f.Close()` -> `defer: f.Close()`; code only; idempotent | `build/tools_defer_migrate FILE...` |
 | `attrs_migrate.olang` | G39, G40 removed (2026-11-16, the user's call): a type's keys are a key enum declared as its member (D4a) - `@json.Key`/`@json.Skip` become `type T.Json enum`, `@csv.Column`/`@csv.Skip` `type T.Csv enum`, `@flags.Help` `type T.Flags enum` and `@flags.Short` `type T.Short enum`, each listing the members not skipped in the order declared, written after the type; `keys = json.Naming.X` becomes `naming = json.X`; a type's own `@json.Naming`, an attribute on a generic type and any other attribute are left for a person; code only; idempotent | `build/tools_attrs_migrate FILE...` |
+| `assign_migrate.olang` | S4f, E10d, E10c (2026-11-26, the user's call): a reference is linked with `~`, a value assigned with `=` - from the checker's own report (`OLANG_ASSIGNS=1`): `r = x` repointing a reference becomes `r ~ x`, `r := x` declaring a reference to storage that exists `r :~ x`, `a == b` / `a != b` comparing references by identity `a is b` / `a is not b`; and on the text (the compiler's scanner, Markdown's olang blocks and code spans of a file named) `x == null` / `x != null` become `x is null` / `x is not null`; a site a generic body's instances note differently listed `by hand:`; idempotent | `build/tools_assign_migrate [--olang PATH] [-j N] FILE\|DIR...` |
 | `total_migrate.olang` | G4a, G4b, G32 (2026-11-16): `Sum()`, `Product()` and `Cumsum()` left to the call are worked in the type it is wanted as, else `T.Accumulator` (`Array<U8>.Sum()` a `U64`) - each call whose type changed is given the one it had (`b.Sum()` -> `b.Sum<U8>()`), from the compiler's report (`OLANG_TOTALS=1`); a generic body's call whose instances differ is listed. Not in `olang fix`: run on code written since, it would undo what it means | `build/tools_total_migrate [--olang PATH] [-j N] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
@@ -108,7 +109,7 @@ compiler, std and the tool's own sources, so later runs build nothing. A tool ru
 the driven tools only over the files the compiler reports an error in (on a copy of oann: 555 s cold and 408 s warm
 before, 128 s and 49 s after, 2026-11-15). The table is in `compiler/fix.olang`, in the order the changes were made, with the
 tools that read the text alone first and the ones driven by the compiler's diagnostics (`perm_mut`, `int_literal_i64`,
-`errors_migrate`, `null_migrate`, `as_migrate`, `question_migrate`, `unused_migrate`) after them - an old file does not parse, so the
+`errors_migrate`, `null_migrate`, `as_migrate`, `question_migrate`, `unused_migrate`, `assign_migrate`) after them - an old file does not parse, so the
 compiler has nothing to say about it until the text tools have run:
 
 `bare_typevars`, `perm_mut`, `int_literal_i64`, `errors_migrate`, `cli_words`, `donefail_migrate`, `syntax_migrate`,
@@ -116,10 +117,11 @@ compiler has nothing to say about it until the text tools have run:
 `checkerror_rename`, `stutter_rename`, `checked_migrate`, `contracts_migrate`, `try_migrate`, `as_migrate`,
 `errortype_migrate`, `list_vec`, `link_migrate`, `match_migrate`, `question_migrate`, `unused_migrate`, `errorcase_rename`,
 `variadic_migrate`, `scopes_migrate`, `fnref_migrate`, `clone_migrate`, `textbuild_migrate`, `unique_migrate`,
-`builder_migrate`, `literal_migrate`, `keyword_rename`, `destroy_migrate`, `io_rename`, `oneline_migrate`, `nulltest_migrate`, `textjoin_migrate`, `requires_migrate`, `chaninit_migrate`, `file_migrate`, `putln_rename`, `defer_migrate`, `attrs_migrate` (the table's order; the tools that read the text run first and those driven by diagnostics after,
-so `unused_migrate` runs last: D3b is said only of a file with no other error).
+`builder_migrate`, `literal_migrate`, `keyword_rename`, `destroy_migrate`, `io_rename`, `oneline_migrate`, `textjoin_migrate`, `requires_migrate`, `chaninit_migrate`, `file_migrate`, `putln_rename`, `defer_migrate`, `attrs_migrate`, `assign_migrate` (the table's order; the tools that read the text run first and those driven by diagnostics after,
+so `unused_migrate` and `assign_migrate` run last: D3b is said only of a file with no other error).
 
-**Not run by `fix`**, because they are not idempotent - on code of today they would damage it: `io_print`, `io_try` and
+**Not run by `fix`**, because they are not idempotent - on code of today they would damage it: `nulltest_migrate` (E10c
+of 2026-11-15, reversed by `assign_migrate`: it would turn today's `x is null` back into `x == null`), `io_print`, `io_try` and
 `io_fix` (M19f: they take `try` and `catch` off a call of `io.Print` and put `try` back without the `catch`, and `!`
 forms are lost), `precedence_migrate` (E5: it reads every `a & b == c` as written for the old precedence and wraps
 the comparison), `handles_migrate` (QCE: a reference it made of a copy reads back as a sharing to keep, and a

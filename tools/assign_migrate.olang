@@ -1,0 +1,303 @@
+# assign_migrate - a reference is linked with "~", a value assigned with "=" (S4f, E10d, the user's decision of
+# 2026-11-26): "=" given a reference repointed it, "==" given two references asked whether they name one object, and a
+# reference was tested for null with "== null". This rewrites olang sources written before into the spellings that say
+# the same thing:
+#   - "r = x" where r is a reference becomes "r ~ x" (S4f);
+#   - "r := x" declaring a reference to storage that exists (another reference, a field reached through one, a call
+#     giving a reference) becomes "r :~ x" (S4f);
+#   - "a == b" and "a != b" comparing two references by identity become "a is b" and "a is not b" (E10d);
+#   - "x == null" and "x != null" become "x is null" and "x is not null" (E10c), "null == x" "null is x".
+# The first three need types: each .olang file is compiled (test when it has tests, compile otherwise) with
+# OLANG_ASSIGNS=1, and the checker notes each such operator (check.oldForm); a site that a generic body's instances
+# note differently is listed for a person. The null tests are read with the compiler's scanner (comments and text are
+# left alone), in .olang files and in the "```olang" blocks and code spans of a Markdown file named on the command line.
+# "is" binds as "==" does, so nothing is parenthesized. Idempotent: the new spellings are noted by nothing.
+#
+#     $OLANG build tools/assign_migrate.olang && build/tools_assign_migrate [--olang PATH] [-j N] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "diagedit"
+import "../compiler/scan"
+import "../compiler/token"
+
+# a token of the text: kind and span
+type VT struct(k token.Tok, start I64, end I64) {
+    k
+    start
+    end
+}
+
+fn vtokens(src String&) Vec<VT> {
+    ts := scan.Tokens.Scan(src)
+    out Vec<VT>
+    for tk in ts.Toks: out.Push(VT(tk.Kind, I64(tk.Start), I64(tk.End)))
+    return out
+}
+
+type Count struct() {
+    nulls I64 = 0
+    links I64 = 0
+    defines I64 = 0
+    same I64 = 0
+}
+
+# the null tests of a text: "==" and "!=" beside the null literal become "is" and "is not"
+fn nullTests(src String&, n mut Count&) String {
+    v := vtokens(src)
+    out := StringBuilder()
+    from I64 = 0
+    for i in range v.Len() {
+        k := v[i].k
+        if k != token.Tok.EqEq and k != token.Tok.NotEq: continue
+        after := i + 1 < v.Len() and v[i + 1].k == token.Tok.NullLit
+        before := i > 0 and v[i - 1].k == token.Tok.NullLit
+        if not after and not before: continue
+        out.Push(src[from:v[i].start])
+        out.Push("is" if k == token.Tok.EqEq else "is not")
+        from = v[i].end
+        n.nulls++
+    }
+    if from == 0: return $src
+    out.Push(src[from:])
+    return out.ToString()
+}
+
+# a line of Markdown outside a code block: its inline code spans migrated, the rest kept
+fn nullSpans(line String&, n mut Count&) String {
+    out := StringBuilder()
+    from I64 = 0
+    for {
+        a := try line[from:].Find("`") catch default -1
+        if a < 0: break
+        b := try line[from + a + 1:].Find("`") catch default -1
+        if b < 0: break
+        lo, hi := from + a + 1, from + a + 1 + b
+        out.Push(line[from:lo])
+        out.Push(nullTests(line[lo:hi], n))
+        out.PushChar('`')
+        from = hi + 1
+    }
+    out.Push(line[from:])
+    return out.ToString()
+}
+
+# a Markdown file: the null tests of its olang code blocks and inline code spans migrated, the rest kept
+fn nullMarkdown(src String&, n mut Count&) String {
+    out := StringBuilder()
+    block := StringBuilder()
+    fence := ""
+    lines := src.Split("\n")
+    for k in range lines.Len() {
+        line := lines[k]
+        if fence == "olang" and line.StartsWith("```") {
+            out.Push(nullTests(block.ToString(), n))
+            block.Clear()
+            fence = ""
+        } else if fence == "olang" {
+            block.Push(line)
+            block.PushChar('\n')
+            continue
+        } else if fence != "" {
+            if line.StartsWith("```"): fence = ""
+        } else if line.StartsWith("```") {
+            fence = "olang" if line.StartsWith("```olang") else "other"
+        } else {
+            out.Push(nullSpans(line, n))
+            if k < lines.Len() - 1: out.PushChar('\n')
+            continue
+        }
+        out.Push(line)
+        if k < lines.Len() - 1: out.PushChar('\n')
+    }
+    if fence == "olang": out.Push(block.ToString())
+    return out.ToString()
+}
+
+# a line with the operator at column index at rewritten as kind says; "" where the text there is not that operator
+fn rewriteAt(text String&, at I64, kind String&) String {
+    if at < 0 or at + 1 > text.Len(): return ""
+    two := text[at:at + 2] if at + 2 <= text.Len() else ""
+    if kind == "repoint" {
+        if text[at] != '=' or two == "==": return ""
+        return $text[:at] + "~" + $text[at + 1:]
+    }
+    if kind == "define" and two == ":=": return $text[:at] + ":~" + $text[at + 2:]
+    if kind == "identity" and two == "==": return $text[:at] + "is" + $text[at + 2:]
+    if kind == "identity" and two == "!=": return $text[:at] + "is not" + $text[at + 2:]
+    return ""
+}
+
+# one report row, "assigns: PATH:LINE:COL: KIND", read; the kind "" where the row is none
+fn site(row String&) diagedit.Request {
+    none := diagedit.Request("", 0, 0, "", "", "")
+    if not row.StartsWith("assigns: "): return none
+    rest := row[9:]
+    k := try rest.Find(": ") catch { return none }
+    loc := rest[:k].Split(":")
+    if loc.Len() < 3: return none
+    line := try loc[loc.Len() - 2].ParseInt() catch default 0
+    col := try loc[loc.Len() - 1].ParseInt() catch default 0
+    path := loc[:loc.Len() - 2].Join(":")
+    return diagedit.Request($path, line, col, "assign", $rest[k + 2:], $row)
+}
+
+Taken mut I64 = 0
+
+fn compileOne(olang String&, file String&, dir String&) String {
+    src := try srcmask.ReadText(file) catch { return "" }
+    mode := "test" if src.Contains("\ntest ") or src.StartsWith("test ") or src.Contains("TestBuild") else "compile"
+    return try srcmask.Capture(Array<String&>["env", "OLANG_ASSIGNS=1", olang, mode, file], dir, 900000) catch default ""
+}
+
+fn worker(olang String&, files Array<String&>&, dir String&, outputs mut Array<String&>&) {
+    for {
+        k := Taken.AtomicAdd(1)
+        if k >= files.Len(): break
+        outputs[k] = compileOne(olang, files[k], dir)
+    }
+}
+
+fn main() ? {
+    olang := srcmask.Compiler()
+    jobs I64 = 3
+    paths Vec<String&>
+    args := os.Args()
+    i I64 = 1
+    for i < args.Len() {
+        if (args[i] == "--olang" or args[i] == "-j") and i + 1 < args.Len() {
+            if args[i] == "--olang" { olang = $args[i + 1] } else { jobs = try args[i + 1].ParseInt() catch default 3 }
+            i += 2
+            continue
+        }
+        paths.Push($args[i])
+        i++
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: build/tools_assign_migrate [--olang PATH] [-j N] FILE|DIR...")
+        os.Exit(2)
+    }
+    if jobs < 1: jobs = 1
+    olang = $diagedit.RealPathOf(olang)
+    files Vec<String&>
+    diagedit.OlangFiles(paths, files)
+    allowed Vec<String&>
+    for p in paths: allowed.Push(diagedit.RealPathOf(p))
+    tmp := try os.MkTemp("", "assign_migrate") catch {
+        srcmask.SayErr("assign_migrate: cannot make a temporary directory")
+        os.Exit(1)
+        unreachable
+    }
+    defer: try os.RemoveAll(tmp) catch { }
+    fileArray := files.ToArray()
+    outputs mut Array<String&>& = Array<String&>(fileArray.Len())
+    for k in range fileArray.Len(): outputs[k] = ""
+    join {
+        for w in range jobs {
+            dir := $tmp + "/w" + $w
+            try os.MkDirAll(dir) catch { }
+            spawn worker(olang, fileArray, dir, outputs)
+        }
+    }
+    requests Vec<diagedit.Request>
+    for o in outputs {
+        for row in o.Split("\n") {
+            r := site(row)
+            if r.Arg == "": continue
+            full := diagedit.RealPathOf(r.Path)
+            if diagedit.Allowed(full, allowed): requests.Push(diagedit.Request($full, r.Line, r.Col, r.Kind, r.Arg, r.Why))
+        }
+    }
+    n := Count()
+    left Vec<String&>
+    apply(requests, n, left)
+    for path in files: nullFile(path, false, n, left)
+    for p in paths {
+        if p.EndsWith(".md"): nullFile(p, true, n, left)
+    }
+    srcmask.Say("assign: " + $n.links + " links, " + $n.defines + " reference locals, " + $n.same + " identity tests, " + $n.nulls + " null tests")
+    for l in left: srcmask.Say("by hand: " + $l)
+}
+
+# a file's null tests rewritten in place
+fn nullFile(path String&, markdown Bool, n mut Count&, left mut Vec<String&>&) {
+    src := try srcmask.ReadText(path) catch { return }
+    out := nullMarkdown(src, n) if markdown else nullTests(src, n)
+    if out == src: return
+    try os.WriteFile(path, out) catch { left.Push($path + ": not written") }
+}
+
+# the edits applied to their files, the rightmost on a line first; what could not be made in left
+fn apply(requests Vec<diagedit.Request>&, n mut Count&, left mut Vec<String&>&) {
+    paths Vec<String&>
+    for r in requests {
+        if not (r.Path in paths): paths.Push($r.Path)
+    }
+    for path in paths {
+        src := try srcmask.ReadText(path) catch { continue }
+        lines := src.Split("\n")
+        mine Vec<diagedit.Request>
+        for r in requests {
+            if r.Path == path: mine.Push(r)
+        }
+        mine.Sort(fn(a, b) {
+            if a.Line != b.Line: return a.Line < b.Line
+            return a.Col > b.Col
+        })
+        seen Vec<String&>
+        changed := false
+        for r in mine {
+            key := $r.Line + ":" + $r.Col
+            if key in seen or r.Line - 1 >= lines.Len(): continue
+            seen.Push($key)
+            out := rewriteAt(lines[r.Line - 1], r.Col - 1, r.Arg)
+            if out == "" {
+                left.Push($path + ":" + $r.Line + ":" + $r.Col + ": " + $r.Arg)
+                continue
+            }
+            lines[r.Line - 1] = $out
+            changed = true
+            if r.Arg == "repoint": n.links++
+            else if r.Arg == "define": n.defines++
+            else: n.same++
+        }
+        if changed: try os.WriteFile(path, lines.Join("\n")) catch { left.Push($path + ": not written") }
+    }
+}
+
+test "an operator the checker noted, rewritten" {
+    assert rewriteAt("    r = p.next!", 6, "repoint") == "    r ~ p.next!"
+    assert rewriteAt("    r := p.next!", 6, "define") == "    r :~ p.next!"
+    assert rewriteAt("    if a == b {", 9, "identity") == "    if a is b {"
+    assert rewriteAt("    if a != b {", 9, "identity") == "    if a is not b {"
+    assert rewriteAt("    if a == b {", 9, "repoint") == "" and rewriteAt("    r += 1", 6, "repoint") == ""
+    assert rewriteAt("    r ~ x", 6, "repoint") == "" and rewriteAt("    r :~ x", 6, "define") == ""
+}
+
+test "null tests are 'is null' and 'is not null'" {
+    n := Count()
+    assert nullTests("    if x == null { }\n", n) == "    if x is null { }\n"
+    assert nullTests("    if x.next != null and y { }\n", n) == "    if x.next is not null and y { }\n"
+    assert nullTests("    b := a == (p.q == null)\n", n) == "    b := a == (p.q is null)\n"
+    assert nullTests("    b := null == f(x)\n", n) == "    b := null is f(x)\n"
+    assert n.nulls == 4
+}
+
+test "comments, text and code already new are left as they are" {
+    n := Count()
+    src := "    # x == null\n    s := \"x != null\"\n    if x is null or y is not null or a == b { }\n"
+    assert nullTests(src, n) == src and n.nulls == 0
+}
+
+test "a Markdown file's olang blocks and code spans" {
+    n := Count()
+    src := "Test it with `p == null`; a reference is null.\n```olang\nif p != null { }\n```\n```sh\nx == null\n```\n"
+    want := "Test it with `p is null`; a reference is null.\n```olang\nif p is not null { }\n```\n```sh\nx == null\n```\n"
+    assert nullMarkdown(src, n) == want
+}
+
+test "a report row read" {
+    r := site("assigns: /a/b.olang:12:9: repoint")
+    assert r.Path == "/a/b.olang" and r.Line == 12 and r.Col == 9 and r.Arg == "repoint"
+    assert site("a.olang:1:1: error[E39]: x").Arg == ""
+}
