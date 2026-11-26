@@ -474,7 +474,9 @@ bb021ec60b0fd8a6 7494037a875778b4 checks/cases/derivedpassedloop.olang
 ba0479d6feea9505 17a66a6dc45f9e6e checks/cases/e10bhashshape.olang
 dd0d397479881b50 9b00061c4f96b4cb checks/cases/e10cnevernull.olang
 ca9c78f52200a72e 131e3a109c883735 checks/cases/e10cnullcompared.olang
+51b5a96491a9910b e399cbf78042987a checks/cases/e10cnulleq.olang
 ac76fa8bb055af66 dc3d3d33b19cb09d checks/cases/e10cnullvalue.olang
+7024f70b5c6335be 24cacc5466eabca5 checks/cases/e10deqany.olang
 1be4ff1ca54e052f 9e7c53caab24b29e checks/cases/e10disvalues.olang
 75c2050ba05a9e67 b664fbd55aaa335f checks/cases/e11bjoinvalue.olang
 33f47469d4454373 e3fa04759d5bb977 checks/cases/e11bparenafterpiece.olang
@@ -1513,6 +1515,8 @@ c992296504d41cd3 9d2ae17ba262a41e checks/cases/s20yieldheld.olang
 66b372ed3ee59fc4 e9ad8851703a59bf checks/cases/s4fdefinefresh.olang
 74e754516d19204e cc379e910cb4143b checks/cases/s4flinkfresh.olang
 a71379e91e210fc7 986ea83688e6563c checks/cases/s4flinkvalue.olang
+6ebc2187db3568cf 3d629d3916cf81f5 checks/cases/s4fwritenull.olang
+82fdd7a65339f65a 07e863ec407d1370 checks/cases/s4fwritethrough.olang
 6d6796f63a26becf 6e76df8341ea5d75 checks/cases/s5atbuilds.olang
 d63933bbc2581497 1881fa7f0293f0cc checks/cases/s5atnosetat.olang
 3d1d282495a9dbaa 9bbf6530c3686d93 checks/cases/s5callresultfield.olang

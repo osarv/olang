@@ -92,6 +92,11 @@
 | FN 5:1-7:2
 | -- diagnostics
 | error D8g 3:19
+=== checks/cases/e10cnulleq.olang
+| FIELD 3:27-3:28
+| TYPE 3:1-3:30
+| -- diagnostics
+| error E10c 7:13
 === checks/cases/e19mixed.olang
 | -- diagnostics
 | error  4:39
