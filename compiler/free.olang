@@ -336,6 +336,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     partWalked Vec<I64>                     # O8f (c1's keep): the places an owner's let-go walks (goParts): the live elements of its Vecs
     inSoleOwner Vec<I64>                    # (the array places kept because a sole owner's value holds them: ownerCovered)
     ctorGaps Vec<I64>                       # (the places a copy made for them - a constructor's, or one at a store - gives storage no site names: reported)
+    ctorParts Vec<I64>                      # (part places a constructor's copy gives text it built, in a part region where sole: reported)
     bufReachAt Map<I64, Vec<I64>>   # bufReach by buffer place
     # docs/fnvalues.md 4.6, item (3): by body, its calls through a function parameter it never assigns, composed at each
     # call by the argument given - the parameters (bit p) a call through which may let go (letsVia), those of them given
@@ -2675,8 +2676,10 @@ fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made 
         # (O8f: a part place's values a copy makes are built in no part region, which its let-go leaves where they are)
         if w.F.PartPlace(k): continue
         if slots and w.F.SlotPlace(k): continue
-        # (gap 22: nor a fill's element's owner field - built as the place's stores build it: lower.fillCopy)
+        # (gap 22: nor a fill's element's owner field - built as the place's stores build it: lower.fillCopy - nor the
+        # text beneath its fields, built by their Copy helpers in slots of where they go as a copy's is: copySlots)
         if filled and (has(fills, k) or k == text): continue
+        if fills.Len() > 0 and w.F.SlotPlace(k): continue
         if parted or (arrays and w.F.IsOwner(k)) {
             w.F.keep(k, RSplit, w.body().File, sp, $"a value holding it is made with no store into it, its parts each built for their own places, by " + $how + ": '" + $w.text(sp) + "'")
             continue
@@ -4257,6 +4260,7 @@ fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp sou
         # no reason to keep, as untracked says for any copy)
         if slotted or f.PartPlace(k) {
             f.stores.Push(store(k, w.Id, w.body().File, sp, SOk, -1, -1, x, null))
+            if not slotted: addTo(f.ctorParts, k)
             continue
         }
         # (the value is made for the place - a constructor's result built where it goes - so no condition of the rule's
@@ -8356,6 +8360,38 @@ fn (f mut Free&) handlerBuilds(h typed.Expr&) Bool {
     return f.fx!.Of(b).Holds(effects.Fact.Allocates)
 }
 
+# B18a: whether body b hands back only closures it makes - lambdas capturing something, whose environments (their copies
+# of what they captured) it builds where its result goes - directly or through a local given only such values
+fn (f mut Free&) ClosureResult(b I64) Bool {
+    if b < 0 or b >= f.Bodies.Len() or f.Bodies[b].Root == null: return false
+    m mut mustW& = mustW(f, b)
+    m.block(f.Bodies[b].Root!)
+    if m.returned.Len() == 0: return false
+    for x in m.returned {
+        if not m.madeClosure(x, 0): return false
+    }
+    return true
+}
+
+fn (m mut mustW&) madeClosure(x typed.Expr&, depth I64) Bool {
+    if depth > 8: return false
+    match x {
+        case typed.Expr.Fn(_, _, typed.FnVal.Lambda(_, caps, _)) { return caps.Len() > 0 }
+        case typed.Expr.Away(_, _, y) { return m.madeClosure(y, depth + 1) }
+        case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, l), _) {
+            if m.isParam(I64(l)): return false
+            found := false
+            for a in range m.assigned.Len() {
+                if m.assigned[a] != I64(l): continue
+                if not m.madeClosure(m.values[a], depth + 1): return false
+                found = true
+            }
+            return found
+        }
+        case _ { return false }
+    }
+}
+
 # whether a clause's handler builds nothing but its default: a lambda that only reads what it captures - writing through
 # none of it, nor through what it reads out of it - reaching no global, calling through no function value and spawning
 # nothing, so all it builds is in its own frame or where it is given (its result's scope)
@@ -10024,6 +10060,9 @@ fn (f mut Free&) reported(k I64) Bool {
     # (a constructor's copy made for it, or a copy made at a store into a struct held in place, gives it storage of its
     # own all the same, where no site names it: what it keeps for is reported - viewCtor, copyLeaves)
     if has(f.ctorGaps, k): owns = true
+    # (nor a part place given a constructor's copy - its value built for it, which a let-go releases where it is sole:
+    # where it keeps, what it keeps is reported - review 1125b's fill of a struct of text beside a Vec, wt-revfix2)
+    if has(f.ctorParts, k): owns = true
     if not owns: return false
     # (text elements: where the program's own code gives one another value, or drops or ends one moved out of the
     # collection - its other removals are the collection's, kept with what holds them where that is an owner)

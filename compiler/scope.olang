@@ -443,6 +443,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     anyItems Bool = false                  # the make val judges next is what an "any"'s box holds (T32a)
     copyLocal Bool = false                 # the copy val judges next is a local's own (ownCopy: its claim the source's)
     inSpawn Bool = false                   # the call val judges next is a task's (P2: every scope it binds is built into)
+    inClause Bool = false                  # the lambda val judges next is a task clause's handler (P4a: dead at its join's wait)
+    clauseAt Term = Term.None              # ... where the task's targets keep its result
     joins Vec<typed.BlockId>              # the join blocks entered, innermost last (P1a)
     taskJoin Term = Term.None              # the join block of the task call val judges next: its temporaries are built there
     taskTemp Bool = false                  # judging a temporary a task is handed: what it holds must last until taskAt's join
@@ -9876,8 +9878,11 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
         # a clause runs on the task's thread: what it captured is handed to the task (P2), and the default it gives is
         # built where the targets are (P4a, R9a)
         s.inSpawn = true
+        s.inClause = true
+        s.clauseAt = dest
         v := s.val(c.Handler, j)
         s.inSpawn = false
+        s.inClause = false
         short := v.K == ValKind.Existing and not s.lastsUntil(v.T, j)
         # (the inference: what the clause captured built at the join's level - R4)
         if short and s.liftGather: s.propose(c.Handler!, j)
@@ -9939,6 +9944,16 @@ fn (s mut Scoper&) giveTargets(sp source.Span, sw typed.Spawn&, t Term, x typed.
         s.fit(t, sl.T, sl.Exact, x, sl.Kind)
         s.fitAt, s.fitSp = savedAt, savedSp
     }
+}
+
+# whether lambda lb's body hands back storage of what it captured (its relation "capture outlives result", clauseGives)
+fn (s mut Scoper&) givesCapture(lb I64) Bool {
+    vs := s.Bodies[lb].Vars
+    for rl in s.sum(lb).Rels {
+        lo := varOf(rl.Lo)
+        if varOf(rl.Hi) >= 0 and lo >= 0 and lo < vs.Len() and vs[lo] == typed.ScopeVar.Result: return true
+    }
+    return false
 }
 
 # P4a, R11: a task clause's default is the targets' value - what it gives back of what the clause captured (its body's
@@ -10951,8 +10966,10 @@ fn (s mut Scoper&) arm(a typed.Arm?&, dest Term) Val {
 fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
     spawned := s.inSpawn
     frame := s.onFrame
+    clause := s.inClause
     s.inSpawn = false
     s.onFrame = false
+    s.inClause = false
     match f {
         case typed.FnVal.Named(_): return Val.existing(Term.Program)
         case typed.FnVal.Lambda(id, caps, site) {
@@ -10999,6 +11016,12 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
             # (built where its captures live - a derived scope too, passed or found at run time (O23a, O29); where no
             # build there is possible, in this block, which it then lives no longer than)
             at := home if home.Runs() or s.finds(home) or s.capPassed(home) or s.derivedBuilt(home) else s.here()
+            # (P4a: a task clause's handler is called on the task's thread only, before the join's wait - built at the join,
+            # d, where what it captured outlives that, or where the targets keep the result where its default hands back
+            # storage of what it captured (clauseGives): its copies of captured values go with it, a new one each turn of a
+            # loop reclaimed with the turn)
+            to := s.clauseAt if clause and s.givesCapture(lb) else d
+            if clause and to.Runs() and at == home and s.order(home, to) == Holds: at = to
             s.build(site, at)
             s.plan.Pass(site, scopes.ToArray())
             # D16d: it lives no longer than any of its captures - one not shown to outlive the innermost found is a term

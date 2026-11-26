@@ -43973,3 +43973,42 @@ compiler: `effects.CapText`'s text in explain.olang and a file's text in fix.ola
 fix.olang:181's file texts pushed into a `Vec<String&>` - kept on purpose, an over-report the row cannot tell apart yet
 (docs/freeing.md 2.4). `make fixedpoint`, `make consistency`, the freeing and earlyfree scenarios pass; the goldens moved
 for the fixtures, kept's test and the Scoper's new field.
+## 2026-11-25: review 1125b's -check holes - a clause's handler, a kept closure, a fill's text (O8f, B18a, P4a, D16d; mine; wt-revfix2)
+
+Review 1125b (/home/user/review/batch1125b) found programs growing while `-memory -check` passed naming no keep.
+
+**taskcapgrow** (from wt-taskdefault2's admission of handlers that read captures): a joined task's clause default built
+from a `Vec<String>` the handler captures - 135 MB at 200,000 turns, ~650 bytes a turn, failing or not. The default
+was not the cause: `catch default Vec<String>[$ov.Len()]` grew the same. The handler is a lambda, and a lambda lives
+where its captures do (D16d) - main's scope, where `ov` is - so every turn's closure and its own copy of `ov` (D16c,
+lower.lambda's ownCopyOf) were built there; no turn row looks at a closure, so nothing was named. A clause runs on its
+task's thread before the join's wait and is never seen after (P4a), so the scope pass now builds it at the join
+(`fnVal`, flagged `inClause` by the spawn's clause loop) wherever what it captured outlives the join. One exception:
+a default handing back storage of what it captured (the body's relation "capture outlives result", which clauseGives
+already fits against each target) - there the closure goes where the targets keep the result (`clauseAt`), so the
+storage the targets are given lives as long as they do; `catch default ov` grew the same 135 MB with the join alone
+excluded, and is flat built there. Flat at 12.9 MB at 200,000 turns for all three defaults. SPEC's P4a says where a
+clause lives (D16d's latitude, as D16e gives a spawned lambda). Fixtures: checks' freeing taskcaps (flat, `-free
+late`, `-sanitize`, `-race`, interpreted agree), kept's taskCaptures (decided while compiling too).
+
+**fnvalgrow** (older; master the same): `g := closer(a); if i % 7 == 3: f = g`. `g` may become `f`'s value, so the
+call's result scope is `f`'s and every turn's closure - its copy of `a` - is built where `f` lives. Freeing it needs
+the closure built in the turn and kept only on the turns it is stored, which a function value cannot do: its
+environment has no copy routine, and a closure's region handed over per value is section-8 design (docs/freeing.md
+2.4 lays out the options; recommended: per-value regions for function value locals). So it is named: lowering's
+`closureKept` adds a B18a turn row at a call whose callee hands back only lambdas capturing something
+(`free.ClosureResult`, walking the body's returns with the must-walker) given a result scope outside the loop's turn,
+and `-check` fails. The lambda written in the loop was already named, as an O27 placement of its capture. Placed in
+its own function and its own call line beside wt-revfix1's builtResult (the reference-returning twin of the shape)
+rather than inside it. Fixture: checks' freeing closurekept (flat when read in the turn; `M=3` named).
+
+**wt-walkref's fill-and-walk** (`rows := Array<Row>(2, Row(mk(0), 0))`, elements replaced and walked): `-check` failed
+on "a value holding it is made with no store into it" for the Vec's text place - honest for the program as built (52
+MB at 200,000 turns with the array declared before the loop) but a lowering gap: the fill's copy of the owner field
+goes through the Vec's Copy helper, which already builds the text in slots of where it goes (copySlots), and only
+`made` copies were let pass for slot places. A fill fillCopy builds now lets them pass too: flat at 13 MB, every
+oracle agreeing. That unmasked a hole the keep had hidden: `Named(v Vec<String>, name String)` filled with a name not
+all new (`("n0").PadEnd(80, '-')`) keeps `Named.name`, a part place whose constructor stores record no site (SOk), so
+`reported` never counted it - 52 MB, no row, before and after. A part place a constructor's copy gives text is now
+reported (`ctorParts`): a named keep, "its new value is not all new". Fixture: checks' freeing fillwalk (`limited`;
+`M=15` names the padded field).

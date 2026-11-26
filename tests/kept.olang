@@ -543,6 +543,35 @@ test keptArgs "gives a constructor whose instance is copied a value local's copy
 assert taskDefaults(8) == "w0p1bw2p3bw4p5bw6p7b;p4c,p4,;p5a,p5,;u6,;p7a,p7,"
 }
 
+# a clause's handler capturing a Vec of text made before the loop (P4a) - built at its join, or where the targets are
+# where its default hands back the copy it captured - each turn's default kept in a long-lived Vec past its turn
+fn taskCaptures(n I64) String {
+    ov Vec<String>
+    ov.Push("o")
+    kept Vec<Vec<String>>
+    for _ in range 3: kept.Push(Vec<String>())
+    for i in range n {
+        a Vec<String>
+        b Vec<String>
+        join {
+            spawn a = try tdVec(i) catch default Vec<String>[ov[0] + $i, $ov.Len()]
+            spawn b = try tdVec(i + 1) catch default ov
+        }
+        kept[i % 3] = a if i % 2 == 0 else b
+    }
+    churn()
+    out := ""
+    for v in kept {
+        out += ";"
+        for x in v: out += x + ","
+    }
+    return out
+}
+
+test taskCaptures "keeps tasks' clause defaults made by handlers capturing a Vec of text, past their turn" {
+    assert taskCaptures(6) == ";o,;o4,1,;u6,"
+}
+
 test taskDefaults "keeps tasks' clause defaults, built where their results would be, past their turn" {
     assert taskDefaults(8) == "w0p1bw2p3bw4p5bw6p7b;p4c,p4,;p5a,p5,;u6,;p7a,p7,"
 }
@@ -564,3 +593,4 @@ assert heldRefs(10) == 4205100
 assert keptArgs(10) == 4305234
 assert taskDefaults(8) == "w0p1bw2p3bw4p5bw6p7b;p4c,p4,;p5a,p5,;u6,;p7a,p7,"
 assert copiesAndDefers(10) == 3003350
+assert taskCaptures(6) == ";o,;o4,1,;u6,"
